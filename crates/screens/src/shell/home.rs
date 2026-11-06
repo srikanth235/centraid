@@ -113,8 +113,9 @@ enum Ask {
 }
 
 struct Home {
-    /// One per app, in [`policy::ORDER`].
-    tiles: Vec<(String, Made)>,
+    /// Each widget read, with the app it belongs to: one per app in
+    /// [`policy::ORDER`], and Agenda's second while something is owed.
+    tiles: Vec<(String, String, Made)>,
     read: bool,
     /// The one in front, the roster in the shelf's order, and whether the phone
     /// holds none: all told.
@@ -149,10 +150,7 @@ impl Home {
     fn new(secrets: VaultSecrets) -> Self {
         Self {
             secrets,
-            tiles: policy::ORDER
-                .iter()
-                .map(|app| ((*app).to_owned(), tiles::loading()))
-                .collect(),
+            tiles: loading_tiles(),
             read: false,
             vault: None,
             vaults: Vec::new(),
@@ -168,6 +166,14 @@ impl Home {
             keeping: None,
         }
     }
+}
+
+/// Every app's widget, still reading.
+fn loading_tiles() -> Vec<(String, String, Made)> {
+    policy::ORDER
+        .iter()
+        .map(|app| ((*app).to_owned(), (*app).to_owned(), tiles::loading()))
+        .collect()
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -214,7 +220,11 @@ impl Home {
         }
         self.tiles = policy::ORDER
             .iter()
-            .map(|app| ((*app).to_owned(), tiles::read(ctx, app)))
+            .flat_map(|app| {
+                tiles::read(ctx, app)
+                    .into_iter()
+                    .map(move |(widget, made)| (widget.to_owned(), (*app).to_owned(), made))
+            })
             .collect();
     }
 
@@ -325,10 +335,7 @@ impl Home {
                 if switched {
                     self.sheet_open = false;
                     self.ask = Ask::None;
-                    self.tiles = policy::ORDER
-                        .iter()
-                        .map(|app| ((*app).to_owned(), tiles::loading()))
-                        .collect();
+                    self.tiles = loading_tiles();
                 }
                 // Founding a vault leaves the failed Home (its tiles ask to be read),
                 // and a switch reads again; any other change of roster or lockup
@@ -447,17 +454,19 @@ impl Home {
 
     // -- the view -------------------------------------------------------------
 
-    fn dress(&self, locale: Locale, app: &str, made: &Made) -> wire::HomeTile {
-        let name = app_name(locale, app);
+    /// A widget, finished. `app` is the mark and the colour (Reminders wears
+    /// Agenda's); `widget` is its identity and the key a row lists. Its size,
+    /// height and place are the fold's ([`policy::fold`]).
+    fn dress(&self, locale: Locale, widget: &str, app: &str, made: &Made) -> wire::HomeTile {
+        let name = widget_name(locale, widget, app);
         let open = fill(&words::open_app(locale), &[("name", &name)]);
         wire::HomeTile {
             app_id: app.to_owned(),
+            widget: widget.to_owned(),
             name,
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            size: policy::size_of(app) as i32,
-            wide: policy::is_wide(app),
             empty_copy: empty_copy(locale, app),
             body: made
                 .body
@@ -465,7 +474,8 @@ impl Home {
                 .map(|kind| wire::HomeTileBody { kind: Some(kind) }),
             accessibility_label: spoken(&open, made),
             open_label: open,
-            route: tile_route(app, made),
+            route: tile_route(widget, app, made),
+            ..Default::default()
         }
     }
 
@@ -473,15 +483,15 @@ impl Home {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(app, made)| self.dress(locale, app, made))
+            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
             .collect();
-        let springboard = policy::springboard(&tiles);
+        let folded = policy::fold(tiles);
         wire::HomeData {
-            springboard: springboard as i32,
-            grid_rows: policy::rows(&tiles),
+            springboard: folded.springboard as i32,
+            grid_rows: folded.rows,
             day_one_title: words::home_day_one_title(locale),
             day_one_body: words::home_day_one_body(locale),
-            tiles,
+            tiles: folded.tiles,
         }
     }
 
@@ -733,10 +743,15 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
 /// WHERE A TILE'S TAP GOES: the app's home. Notes opens its shelf when it has
 /// notes and a new note when it has none, and nothing while it is unread; a tile
 /// that is still reading opens nothing.
-fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
+fn tile_route(widget: &str, app: &str, made: &Made) -> Option<wire::Route> {
     use wire::HomeTileStatus as Status;
     match (app, made.status) {
         (_, Status::Loading) => None,
+        // What is owed opens Agenda's to-dos, not its day.
+        ("agenda", _) if widget == tiles::REMINDERS => Some(crate::agenda::routes::home(
+            wire::AgendaDestination::Todo,
+            "",
+        )),
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
         _ => row_routes::app_home(app),
@@ -759,6 +774,15 @@ fn keychain_set(value: &str) -> wire::Effect {
     }))
 }
 
+/// A widget's name: its app's, except Reminders, which is Agenda's second.
+fn widget_name(locale: Locale, widget: &str, app: &str) -> String {
+    if widget == tiles::REMINDERS {
+        words::app_reminders(locale)
+    } else {
+        app_name(locale, app)
+    }
+}
+
 /// An app's name, by the catalogue's id: Home's tiles and the Backup screen's
 /// rows say it the same way.
 pub(crate) fn app_name(locale: Locale, app: &str) -> String {
@@ -775,7 +799,7 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     }
 }
 
-/// What an empty tile says to do.
+/// What an empty widget says to do.
 fn empty_copy(locale: Locale, app: &str) -> String {
     match app {
         "agenda" => words::tile_empty_agenda(locale),
@@ -890,7 +914,8 @@ mod tests {
             count_label: String::new(),
             body: None,
         };
-        let screen = |app: &str, status| tile_route(app, &made(status)).map(|route| route.screen);
+        let screen =
+            |app: &str, status| tile_route(app, app, &made(status)).map(|route| route.screen);
         assert_eq!(
             screen("notes", Status::Content).as_deref(),
             Some("notes.home")
@@ -912,6 +937,19 @@ mod tests {
             Some("photos.home")
         );
         assert_eq!(screen("photos", Status::Loading), None);
+        // What Agenda is owed opens its to-dos; the day opens its day.
+        let owed = tile_route("reminders", "agenda", &made(Status::Content)).expect("a route");
+        assert_eq!(owed.screen, "agenda.home");
+        assert_eq!(
+            owed.args,
+            crate::agenda::routes::home(wire::AgendaDestination::Todo, "").args
+        );
+        assert_ne!(
+            owed.args,
+            tile_route("agenda", "agenda", &made(Status::Content))
+                .expect("a route")
+                .args
+        );
     }
 
     #[test]
