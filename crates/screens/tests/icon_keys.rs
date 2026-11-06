@@ -1,4 +1,4 @@
-//! EVERY ICON KEY A SCREEN NAMES IS ONE THE EMITTED SET HOLDS (#1020 wave A, #1135).
+//! EVERY ICON KEY A SCREEN NAMES IS ONE THE ICON SET HOLDS (#1020 wave A, #1135).
 //!
 //! Both shells draw `CentraidCatalog.icons[key] ?? []`, so a key the set lacks
 //! is a blank mark and nothing fails. The keys are Rust's now — a row's
@@ -6,23 +6,17 @@
 //! source the way `CatalogSpec` once read the Kotlin policies: every quoted
 //! PascalCase or lower-case word on a line that speaks of an icon, outside
 //! comments and `#[cfg(test)]` modules, and every literal a `fn …icon…`
-//! returns, must be a key of `design/native-catalog.json`.
+//! returns, must be a key of `design/icons.toml`.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 fn catalogue() -> BTreeSet<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../design/native-catalog.json");
-    let json: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&path).expect("design/native-catalog.json"))
-            .expect("the catalogue is JSON");
-    json["icons"]
-        .as_object()
-        .expect("the catalogue has icons")
-        .keys()
-        .cloned()
-        .collect()
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let tokens = centraid_design::tokens::Tokens::load(&root)
+        .unwrap_or_else(|error| panic!("design/tokens.toml and design/icons.toml: {error}"));
+    tokens.icons.keys().cloned().collect()
 }
 
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -104,7 +98,7 @@ fn every_icon_key_a_screen_names_resolves() {
     assert!(seen >= 20, "the scan saw {seen} icon key(s)");
     assert!(
         missing.is_empty(),
-        "icon keys the emitted set does not hold (a blank mark on both shells):\n{}",
+        "icon keys `design/icons.toml` does not hold (a blank mark on both shells):\n{}",
         missing.join("\n")
     );
 }

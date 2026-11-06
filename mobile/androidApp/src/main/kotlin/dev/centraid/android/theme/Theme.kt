@@ -36,9 +36,9 @@ import kotlin.math.min
  *
  * The mapping from Centraid's roles to Material's slots is hand-written and
  * belongs here; the VALUES are not. `dev.centraid.design.CentraidTokens` is
- * emitted by `contracts/tools/export-native-theme.ts` from `packages/design`,
- * and `git diff --exit-code design copy mobile` in the `mobile-jvm` gate step
- * is what stops it drifting.
+ * emitted by `cargo xtask design` from `design/tokens.toml`, and the gate's
+ * `design` step (`cargo xtask design --check`, also run by `mobile-jvm`) is what
+ * stops it drifting.
  */
 @Composable
 public fun CentraidTheme(
@@ -148,8 +148,8 @@ public fun centraidColor(role: String): Color = LocalCentraidTokens.current.colo
 public fun centraidType(role: String, scales: Boolean = true): TextStyle {
     val style = requireNotNull(LocalCentraidTokens.current.type[role]) {
         "no such type role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     }
     // `Dp.toSp()` against the density in force is the `sp` that draws as that
     // many `dp` whatever the font scale (and its nonlinear curve) is, which is
@@ -196,8 +196,8 @@ public fun centraidType(role: String, scales: Boolean = true): TextStyle {
  * Every type token says `family: "sans"` and this shell has never drawn it:
  * with no `fontFamily`, Compose renders Roboto, and nothing about that is an
  * error — which is how it went unnoticed for the project's whole life. The
- * files come from `packages/design/fonts`, the one source, copied into
- * `res/font` by `contracts/tools/export-native-theme.ts`.
+ * files come from `design/fonts`, the one source, copied into
+ * `res/font` by `cargo xtask design`.
  *
  * A `val` and not an expression inside [centraidType]: `FontFamily(...)` builds
  * a new instance per call, and a new instance is a new cache key for Compose's
@@ -231,27 +231,27 @@ private val CentraidSans: FontFamily = FontFamily(
  * GUARD: `aapt2` fails the build outright if `res/font/instrument_sans_*.ttf`
  * is missing or misnamed, and `R.font.instrument_sans_book` above does not
  * resolve. This value is the readable half — it names the emitted rows so a
- * reader can see which `packages/design` fact the ids above are bound to.
+ * reader can see which `design/tokens.toml` fact the ids above are bound to.
  */
 internal val CentraidSansFaces: Map<Int, String> =
     requireNotNull(NATIVE_TYPE_FACES["sans"]) {
         "the emitted face table has no 'sans' family; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "`cargo xtask design`."
     }
 
 /**
  * A role, or a loud failure.
  *
  * `requireNotNull` and not a fallback colour: a role that has been renamed in
- * `packages/design` and not here would otherwise paint something plausible and
+ * `design/tokens.toml` and not here would otherwise paint something plausible and
  * wrong, and the emitted `NATIVE_COLOR_ROLES` list is what a test checks this
  * against.
  */
 internal fun NativeTheme.color(role: String): Color = Color(
     requireNotNull(colors[role]) {
         "no such colour role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     },
 )
 

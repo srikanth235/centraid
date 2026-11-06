@@ -13,7 +13,7 @@ use super::{folders, routes};
 use crate::kit::civil;
 use crate::strings::{Locale, docs as words, shared};
 
-/// The `design/native-catalog.json` key of a trash glyph.
+/// The `design/icons.toml` key of a trash glyph.
 pub const TRASH_ICON: &str = "trash";
 
 // The keys a `DocsAction` carries, and so what `ActionPicked` sends.
@@ -170,7 +170,7 @@ pub fn surface_of(surface: wire::DocsSurface) -> wire::DocsSurfaceKind {
     }
 }
 
-/// A `design/native-catalog.json` key for a kind.
+/// A `design/icons.toml` key for a kind.
 #[must_use]
 pub fn icon_of(kind: wire::DocsKind) -> &'static str {
     match kind {

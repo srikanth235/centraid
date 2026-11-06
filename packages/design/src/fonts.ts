@@ -15,7 +15,13 @@ import type { BundledFace } from "./typography";
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
 
 /** Absolute path to the vendored `.woff2` directory. Hosts serve this; nothing imports the files. */
-export const FONTS_DIR: string = path.join(PACKAGE_ROOT, "fonts");
+export const FONTS_DIR: string = path.join(
+  PACKAGE_ROOT,
+  "..",
+  "..",
+  "design",
+  "fonts"
+); // moved out of this package by #1173; the package is on its way out
 
 /**
  * Specifiers are written out one per call rather than built from a table: a

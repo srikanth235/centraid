@@ -50,6 +50,14 @@ targets:
     platform: iOS
     settings:
       base:
+        # NO APP-ICON SET IN THE ASSET CATALOGUE YET (#1173). XcodeGen's iOS
+        # application preset passes `--app-icon AppIcon` to `actool`, and the
+        # first catalogue in this target (`Resources/Assets.xcassets`, the
+        # redesign's colour sets) holds no `AppIcon` set, so `actool` fails with
+        # "None of the input catalogs contained a matching ... app icon set".
+        # Empty says there is none; drop this line when the icon work adds the
+        # set (the squared-circle icon, #1173).
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
         #
         # Every file in `Tests/` says `@testable import CentraidApp`. XcodeGen's
@@ -121,6 +129,14 @@ targets:
       # entitlements are not ALSO copied in as loose resources beside their
       # generated selves.
       - path: Resources/Fonts
+        buildPhase: resources
+      # THE REDESIGN'S COLOURS, with light and dark built into each set (#1173).
+      # `cargo xtask design` writes `Assets.xcassets/Colors/*.colorset` from
+      # `design/tokens.toml`; an `.xcassets` source is compiled into the
+      # bundle's asset catalogue, and `Color(CentraidAsset.appAgenda)` reads it.
+      # Re-run `xcodegen generate` after the first generation: the catalogue is
+      # a new source the project does not list until then.
+      - path: Resources/Assets.xcassets
         buildPhase: resources
     # THE SWIFT PROTOBUF TYPES ARE BUILT, NOT CARRIED (#1020).
     #
@@ -213,9 +229,8 @@ targets:
         # entire life, so `CentraidTypeModifier` now fails loudly instead, and
         # `FontRegistrationTests` asserts both names resolve.
         #
-        # The files are copied into `Resources/Fonts` by
-        # `contracts/tools/export-native-theme.ts` from `packages/design/fonts`,
-        # the one source, and the emitted `centraidFontFiles` in
+        # The files are copied into `Resources/Fonts` by `cargo xtask design`
+        # from `design/fonts`, the one source, and the emitted `centraidFontFiles` in
         # `Design/Theme.swift` is this list's other half — they must agree.
         #
         # `InstrumentSans_470Book.ttf` IS THE 400 REGISTER'S FACE HERE, and is

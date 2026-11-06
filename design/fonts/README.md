@@ -1,6 +1,6 @@
 # The font files
 
-`packages/design/src/typography.ts` says every type role is `family: "sans"`, and "sans" has always meant Instrument Sans. This directory is the ONE SOURCE for the bytes behind that word — the web build reads the `.woff2` subsets, and `contracts/tools/export-native-theme.ts` copies the `.ttf` faces into `mobile/iosApp/Resources/Fonts/` and `mobile/androidApp/src/main/res/font/`. Nothing else fetches a face, and no shell may reference a font CDN.
+`design/tokens.toml` says every type role is `family: "sans"`, and "sans" has always meant Instrument Sans. This directory is the ONE SOURCE for the bytes behind that word — the sites read the `.woff2` subsets (copied by `cargo xtask design` into each site's `assets/fonts`), and `cargo xtask design` copies the `.ttf` faces into `mobile/iosApp/Resources/Fonts/` and `mobile/androidApp/src/main/res/font/`. Nothing else fetches a face, and no shell may reference a font CDN.
 
 ## What is here, and where it came from
 

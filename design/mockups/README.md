@@ -13,4 +13,4 @@ The mockups for the native redesign tracked in #1173: one HTML file per screen, 
 
 These files are the source of the design. A visual or UX change edits the light screen here first, in the same change as the code. The files are written by a design tool, so `oxfmt.config.ts` leaves them unformatted.
 
-Only the light screens are drawn. The dark screens are derived from them, so a dark screen is never edited by hand. Phase 2 of #1173 moves the colour values into `design/tokens.toml` with a generator for the dark screens, so the mockups and the apps cannot disagree.
+Only the light screens are drawn. The dark screens are derived from them, so a dark screen is never edited by hand. The colour values now live in `design/tokens.toml`, which `cargo xtask design` lowers into the iOS colour sets, the Android resources and the two sites; the Design rules board carries the same dark fill and dark text pairs. The generator for the dark screens (`make_dark.py`) is not committed yet and is still to read its dark values from that file, so the mockups and the apps cannot disagree (#1173 Phase 1 and 2).

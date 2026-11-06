@@ -12,6 +12,8 @@ name = "centraid_design"
 path = "src/lib.rs"
 
 [dependencies]
-serde_json.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
 
 [dev-dependencies]

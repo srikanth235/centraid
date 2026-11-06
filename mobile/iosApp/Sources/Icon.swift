@@ -4,7 +4,7 @@ import SwiftUI
 /// ONE ICON SET, DRAWN FROM THE EMITTED SILHOUETTES (#1020, wave A).
 ///
 /// The path data is `packages/design`'s, lowered by
-/// `contracts/tools/export-native-catalog.ts` — the same 24×24 silhouettes the
+/// `cargo xtask design` — the same 24×24 silhouettes the
 /// web renderer and Compose draw. SF Symbols are deliberately NOT used here: a
 /// second set is a second product, and Home's invariant header promises that
 /// seven unlike bodies read as one grid. A `lock.fill` beside Compose's Lucide

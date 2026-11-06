@@ -21,6 +21,9 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
+# The tokens model (`design/tokens.toml`) and its validation, for `cargo xtask
+# design` (#1173). Pulls serde and toml, both already in the lock.
+centraid-design = { path = "../design" }
 # THE ONLY sha2 LEFT UNDER `crates/` (#1025 S4, D-1025-S4-5). `artifact-key`
 # feeds GitHub Actions' cache key and `ci.rs` reads Subresource Integrity
 # attributes; both are somebody else's protocol, and neither names anything

@@ -29,7 +29,7 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 7. **Add the Compose view** under `screens/<app>/`, take the `ViewState` arm in `RustRoot.kt`, send `ScreenEvent`s with the `send` lambda. Use only kit controls and tokens.
 8. **Add the SwiftUI view** under `Sources/<App>/`, take the arm in `RustScreenHost.swift`. A new `.swift` file or new `.proto` file needs `xcodegen generate` (the target globs a directory; the Xcode project is generated and not committed).
 9. **A new effect** (platform work Rust asks for) is an arm in `Effect.kind` plus a performer on BOTH shells. The shell answers with `EffectResult` under the same `effect_id`, in the order asked; a cancel or refused grant answers `EffectFailed`; an effect that answers more than once (a file pick, a network browse) keeps its one id. Never reach the platform from a view outside an effect.
-10. **Tokens and kit words.** Edit `packages/design/src` (tokens) or `strings/shared.rs` (kit words), then run `bun contracts/tools/export-native-theme.ts` (it also emits the catalogue and the words) and `bun run format`, and commit the regenerated files.
+10. **Tokens and kit words.** Edit `design/tokens.toml` (tokens), `design/icons.toml` (icons) or `strings/shared.rs` (kit words), then run `cargo xtask design` (it emits the tables, colour sets, resources and the words) and commit the regenerated files.
 11. **Parity.** Run `cargo xtask rules` and fix each finding by reading the field in the other shell.
 
 ## 3. What must stay true
@@ -46,8 +46,8 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 ## 4. Pitfalls
 
 - **A stale core.** iOS links `libcentraid_core_ffi.a` by path and Android loads a copied `.so` from `jniLibs`; nothing rebuilds either when Rust changes. The app can show old behavior without an error. Rebuild the core for the target platform before running the shell; see [mobile-verify](../mobile-verify/SKILL.md) for the canonical commands and platform requirements. The Android core script currently uses a macOS NDK toolchain.
-- **Hand-edited generated files** are overwritten by the next emit, and the gate fails on a diff over `design` and `mobile`. Fix the source (emitter, `packages/design`, `strings/shared.rs`), not the output. A guard belongs on the source too.
-- **Tokens.** Never write a hex colour or a parallel colour table in a view; a value that is not a token belongs in `packages/design`, then re-emit.
+- **Hand-edited generated files** are overwritten by the next emit, and the gate's `design` step fails on a diff. Fix the source (`design/tokens.toml`, `design/icons.toml`, `strings/shared.rs`), not the output. A guard belongs on the source too.
+- **Tokens.** Never write a hex colour or a parallel colour table in a view; a value that is not a token belongs in `design/tokens.toml`, then re-emit.
 - **A view that works on one platform.** Add the field to the other shell the same day; the parity rule counts spellings, not rendering.
 - **`UIImage(contentsOfFile:)`** returns nil for the content store's extensionless files; use `UIImage(data:)`.
 - **Swift written without a compiler** is unproven until a Mac compiles it; say so.

@@ -10,6 +10,7 @@ cargo xtask gate --profile nightly --lane <name>   # one step, or one device lan
 cargo xtask gate --profile release   # nightly + the restore drill + the VPS smoke
 cargo xtask gate --profile mobile-jvm  # the Kotlin half, on its own
 cargo xtask rules                    # the structural rules alone
+cargo xtask design [--check]         # every design artifact from design/tokens.toml; --check fails on any stale file
 cargo xtask doc-links                # every relative markdown link and in-repo anchor resolves
 cargo xtask test-plan                # which crates `local`'s `test` step would run, and why (--reads: the table it trusts)
 cargo xtask repo-root                # which tree the path-based rules will scan
@@ -29,7 +30,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Where it runs |
 | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | by hand, before a push |
-| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `emitters`, `lockfile`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `fault-door` — and its `test` step runs the **whole** workspace | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | `.github/workflows/nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | `.github/workflows/nightly.yml`; on demand from `mobile/` |
@@ -52,11 +53,17 @@ The step says so in three places: a banner before its line naming every crate an
 
 **No profile fails for taking long** (owner ruling 2026-11-04). The wall-clock budgets that used to be enforced here — a per-profile ceiling in `gate-budgets.json`, the warm/cold `local` scoring against `coldLocalProfileSeconds`, the compile-time ceilings (`releaseBuildSeconds` and the rest of `compile-time.json`), the `call-budget` and `search-budget` p95 steps and `cargo xtask measure` — are removed: they flaked on a shared or loaded machine (a `search-budget` p95, a `write_costs` call ceiling and the `pr` profile's 1500 s all failed in one afternoon while several gates ran at once) and blocked unrelated changes. `cargo xtask gate` still prints each step's seconds and a total, as information. What stays is a hang backstop, not a budget: each CI job's `timeout-minutes`. Work that must stay bounded is bounded by construction (keyset pages, `LIMIT`s) and by tests that **count** work — statements, calls, rows — never seconds.
 
-`mobile-jvm` is the Kotlin half, and it is **not** a superset of anything. Its one step builds `centraid-core-ffi` (without the `llama` feature: no Kotlin spec loads a model, and llama.cpp's cold build is too slow for this profile), runs `./gradlew -p mobile mobileJvm` (`:core:jvmTest` — a real ABI round trip against the real cdylib), then regenerates the committed native design tables and fails on drift. It is kept out of `pr` because Kotlin/Gradle is a different toolchain with a different cold cost (D-1020-B2-3).
+`mobile-jvm` is the Kotlin half, and it is **not** a superset of anything. Its one step builds `centraid-core-ffi` (without the `llama` feature: no Kotlin spec loads a model, and llama.cpp's cold build is too slow for this profile), runs `./gradlew -p mobile mobileJvm` (`:core:jvmTest` — a real ABI round trip against the real cdylib), then runs the design drift check (`cargo xtask design --check`, in process) and fails on drift. It is kept out of `pr` because Kotlin/Gradle is a different toolchain with a different cold cost (D-1020-B2-3).
 
 **A missing mobile tree FAILS, it does not skip.** What the step does not do, it says rather than passing over: it does not compile Compose, does not link Kotlin/Native, does not run a simulator and does not touch a device. Those are `nightly`'s `device-lanes` — four lanes (`backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`) that run only on a machine with one iPhone and one Android attached and `CENTRAID_DEVICE_RUNNER=1` set (`cargo xtask gate --profile nightly --lane <name>`), and are a loud `Skipped` otherwise — and the hand-off table in [`mobile/README.md`](../../mobile/README.md).
 
 `restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)). It is a `local` step, so every profile carries it.
+
+### The `design` step
+
+`cargo xtask design` generates every design artifact from `design/tokens.toml` ([#1173](https://github.com/srikanth235/centraid/issues/1173)): `mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift`, the `Assets.xcassets/Colors` colour sets (light and dark built in), the font copies, the Android `Tokens.kt`, `Catalog.kt`, `Words.kt`, `res/values/{colors,dimens}.xml`, `res/values-night/colors.xml`, and both sites' `centraid-tokens.css` and `fonts/`. The kit's words are read from the text of `crates/screens/src/strings/{shared,home}.rs` (a row it cannot parse, an unknown escape or a missing key is an error), so this tool does not depend on the screens crate. Output is generated already formatted: nothing runs after it.
+
+`cargo xtask design --check` regenerates into memory and fails listing every file that differs (changed, missing, or stray in a directory the generator owns). The gate's `design` step (`pr` and up; also the last part of `mobile-jvm`) runs the same comparison in process, and also fails on a generated file that is not tracked by git. It replaced the `emitters` step, which ran two bun scripts and `bun run format`.
 
 ### The `fault-door` step
 
