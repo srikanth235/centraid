@@ -94,7 +94,7 @@ struct DocsBadge: View {
             .foregroundStyle(Color.white)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
-            .background(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Color(CentraidAsset.textInk)))
+            .background(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Color.black.opacity(0.78)))
     }
 }
 
@@ -125,14 +125,14 @@ struct DocsLabelChips: View {
                             DocsDot(colorKey: chip.colorKey)
                             Text(chip.label)
                                 .centraidType("annotLabel")
-                                .foregroundStyle(Color(chip.selected ? CentraidAsset.appDocsText : CentraidAsset.textBody))
+                                .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
                                 .lineLimit(1)
                         }
                         .padding(.horizontal, 10)
                         .frame(minHeight: 32)
                         .background(
                             Capsule().fill(chip.selected
-                                ? Color(CentraidAsset.appDocs).opacity(0.16)
+                                ? AppAccent("docs").fill.opacity(0.16)
                                 : Color(CentraidAsset.surfaceLine))
                         )
                         .contentShape(Capsule())
@@ -221,7 +221,7 @@ struct DocsFolderTile: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 6) {
-                CentraidIconView(iconKey: "Folder", tint: Color(CentraidAsset.appDocs), size: 56)
+                CentraidIconView(iconKey: "Folder", tint: AppAccent("docs").fill, size: 56)
                     .frame(width: 96, height: 120)
                     .accessibilityHidden(true)
                 Text(node.name)

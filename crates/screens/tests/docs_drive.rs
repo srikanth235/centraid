@@ -973,7 +973,8 @@ fn the_screens_palette_is_the_vaults_and_a_label_without_a_stored_colour_gets_a_
     assert!(centraid_design::tokens::LIST_IDS.contains(&first.as_str()));
     assert_eq!(first, docs::fold::color_key("", "tag:old"));
     assert_eq!(docs::fold::color_key("orchid", "tag:old"), "orchid");
-    assert_eq!(docs::fold::color_key("#ff0000", "tag:old"), first);
+    // A stored colour that is not a palette key is mapped onto one, red onto raspberry (red means a state).
+    assert_eq!(docs::fold::color_key("#ff0000", "tag:old"), "raspberry");
 }
 
 #[test]

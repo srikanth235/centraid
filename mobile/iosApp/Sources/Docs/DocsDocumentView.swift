@@ -268,7 +268,7 @@ struct DocsDocumentView: View {
 
     private func barTint(_ action: Centraid_Core_V1_DocsAction) -> Color {
         if action.destructive { return Theme.color("net", scheme) }
-        if action.key == "unstar" || action.key == "share" { return Color(CentraidAsset.appDocsText) }
+        if action.key == "unstar" || action.key == "share" { return AppAccent("docs").text }
         return Theme.color("text", scheme)
     }
 

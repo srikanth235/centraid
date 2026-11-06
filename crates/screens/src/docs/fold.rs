@@ -143,12 +143,7 @@ pub fn chip(label: &wire::DocsLabel) -> wire::DocsLabelChip {
 /// changes colour between reads and a view never has to choose.
 #[must_use]
 pub fn color_key(stored: &str, tag_id: &str) -> String {
-    let palette = centraid_design::tokens::LIST_IDS;
-    if palette.contains(&stored) {
-        return stored.to_owned();
-    }
-    let at = centraid_design::identity_hash(tag_id) % palette.len() as u64;
-    palette[usize::try_from(at).unwrap_or_default()].to_owned()
+    centraid_design::list_color_key(tag_id, Some(stored)).to_owned()
 }
 
 /// The kind badge on a thumbnail: the file's own extension when it has a short

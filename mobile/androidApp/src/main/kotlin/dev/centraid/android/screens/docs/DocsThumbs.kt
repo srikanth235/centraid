@@ -52,6 +52,7 @@ import centraid.core.v1.DocsLabelChip
 import centraid.core.v1.DocsRowView
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.theme.centraidColor
@@ -162,7 +163,7 @@ internal fun DocsDocTile(
                     .align(Alignment.BottomStart)
                     .padding(6.dp)
                     .clip(RoundedCornerShape(KitGeometry.RADIUS / 3))
-                    .background(androidx.compose.ui.res.colorResource(R.color.centraid_text_ink))
+                    .background(Color.Black.copy(alpha = 0.78f))
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
@@ -199,7 +200,7 @@ internal fun DocsFolderTile(folder: DocsFolderNode, modifier: Modifier = Modifie
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(Modifier.width(96.dp).height(120.dp), contentAlignment = Alignment.Center) {
-            CentraidIcon("Folder", tint = androidx.compose.ui.res.colorResource(R.color.centraid_app_docs), size = 56.dp)
+            CentraidIcon("Folder", tint = appAccent("docs").fill, size = 56.dp)
         }
         Text(folder.name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         Text(folder.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
@@ -214,7 +215,7 @@ internal fun DocsLabelChips(chips: List<DocsLabelChip>, onPick: (String) -> Unit
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         for (chip in chips) {
-            val accent = androidx.compose.ui.res.colorResource(R.color.centraid_app_docs)
+            val accent = appAccent("docs").fill
             Row(
                 Modifier
                     .heightIn(min = 32.dp)
@@ -231,7 +232,7 @@ internal fun DocsLabelChips(chips: List<DocsLabelChip>, onPick: (String) -> Unit
                 Text(
                     chip.label,
                     style = centraidType("annotLabel"),
-                    color = if (chip.selected) androidx.compose.ui.res.colorResource(R.color.centraid_app_docs_text) else centraidColor("text"),
+                    color = if (chip.selected) appAccent("docs").text else centraidColor("text"),
                     maxLines = 1,
                 )
             }
@@ -266,7 +267,7 @@ internal fun DocsQuickLookBar(actions: List<DocsAction>, onPick: (DocsAction) ->
                     action.icon_key,
                     tint = when {
                         action.destructive -> centraidColor("net")
-                        action.key == "unstar" || action.key == "share" -> androidx.compose.ui.res.colorResource(R.color.centraid_app_docs_text)
+                        action.key == "unstar" || action.key == "share" -> appAccent("docs").text
                         else -> centraidColor("text")
                     },
                     size = 22.dp,
