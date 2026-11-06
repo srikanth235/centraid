@@ -63,7 +63,7 @@ import dev.centraid.android.theme.centraidDark
 @Composable
 internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit) {
     val dark = centraidDark()
-    val page = centraidResource(if (dark) R.color.centraid_surface_page else R.color.centraid_surface_plain_page_light)
+    val page = centraidResource(R.color.centraid_surface_plain_page)
     Column(
         Modifier
             .fillMaxSize()
