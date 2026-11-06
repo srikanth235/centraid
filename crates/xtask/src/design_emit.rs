@@ -1121,9 +1121,21 @@ fn design_scale_kotlin(tokens: &Tokens) -> String {
     out.push_str("package dev.centraid.design\n\n");
     out.push_str("public object CentraidScale {\n");
     for (name, step) in &tokens.scale {
-        let _ = writeln!(out, "    public const val {name}Size: Float = {}f", step.size);
-        let _ = writeln!(out, "    public const val {name}Weight: Int = {}", step.weight);
-        let _ = writeln!(out, "    public const val {name}Caps: Boolean = {}", step.caps);
+        let _ = writeln!(
+            out,
+            "    public const val {name}Size: Float = {}f",
+            step.size
+        );
+        let _ = writeln!(
+            out,
+            "    public const val {name}Weight: Int = {}",
+            step.weight
+        );
+        let _ = writeln!(
+            out,
+            "    public const val {name}Caps: Boolean = {}",
+            step.caps
+        );
     }
     let _ = writeln!(
         out,

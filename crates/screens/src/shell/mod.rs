@@ -6,6 +6,7 @@
 //! |---|---|---|
 //! | The springboard | [`HOME`] | [`home`] |
 //! | Search over every app | [`SEARCH`] | [`search`] |
+//! | Settings | [`SETTINGS`] | [`settings`] |
 //!
 //! Home is the root of the `home` tab; an app opens as a page pushed on that
 //! tab and back returns to Home. A tile and a search row carry the
@@ -20,10 +21,12 @@ pub mod home;
 pub mod policy;
 pub mod row_routes;
 pub mod search;
+pub mod settings;
 pub mod tiles;
 
 pub const HOME: &str = "home.springboard";
 pub const SEARCH: &str = "home.search";
+pub const SETTINGS: &str = "home.settings";
 
 /// The tab Home is the root of.
 pub const TAB: &str = band::HOME;
@@ -34,11 +37,12 @@ pub fn registry(secrets: &crate::custody::secrets::VaultSecrets) -> Registry {
     Registry::default()
         .with(HOME, home::build(secrets))
         .with(SEARCH, search::build)
+        .with(SETTINGS, settings::build(secrets))
 }
 
 /// The routes the shell's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{HOME, SEARCH, wire};
+    use super::{HOME, SEARCH, SETTINGS, wire};
 
     /// Home, the springboard.
     #[must_use]
@@ -55,6 +59,15 @@ pub mod routes {
         wire::Route {
             screen: SEARCH.to_owned(),
             args: Some(wire::route::Args::HomeSearch(wire::HomeSearchRoute {})),
+        }
+    }
+
+    /// Settings: the appearance, the vault, the backup, the recovery key and the version.
+    #[must_use]
+    pub fn settings() -> wire::Route {
+        wire::Route {
+            screen: SETTINGS.to_owned(),
+            args: Some(wire::route::Args::Settings(wire::SettingsRoute {})),
         }
     }
 

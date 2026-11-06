@@ -96,6 +96,7 @@ message Route {
     HomeRoute home = 1000;
     HomeSearchRoute home_search = 1001;
     ShellAskRoute ask = 1002;
+    SettingsRoute settings = 1010;
   }
 }
 
@@ -590,6 +591,9 @@ message HomeRoute {}
 
 // Home's search takes no arguments.
 message HomeSearchRoute {}
+
+// Settings takes no arguments.
+message SettingsRoute {}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the

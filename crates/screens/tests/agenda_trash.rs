@@ -123,6 +123,8 @@ fn delete_forever_asks_in_full_sentences_and_destroys_only_when_confirmed() {
     assert!(confirm_of(d.view(i)).is_none());
     assert!(ids(d.view(i)).is_empty());
     let trash_gone = trash_data(d.view(i));
+    // A trash of no rows names no scope: the count line is empty, never "Trash · 0".
+    assert_eq!(trash_gone.count_label, "");
     assert_eq!(
         trash_gone.empty.as_ref().unwrap().headline,
         "Trash is empty."

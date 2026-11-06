@@ -146,6 +146,7 @@ pub mod photos;
 pub mod photos_home;
 pub mod photos_lightbox;
 pub mod photos_shelf;
+pub mod settings;
 pub mod shared;
 pub mod task;
 pub mod vault;
