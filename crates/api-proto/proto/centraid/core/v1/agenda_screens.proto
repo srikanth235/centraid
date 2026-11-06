@@ -100,6 +100,12 @@ message AgendaHomeState {
   // known): the page the Plus pushes where `add_opens_quick_add` is false, and
   // the empty state's `empty_action` too. Absent while denied.
   Route new_event = 30;
+  // THE CALENDAR'S VIEW MENU (#1173): the views of the Calendar tab, in order,
+  // each naming the destination `DestinationChanged` carries. Empty off the
+  // Calendar tab (Reminders and Invites have none).
+  repeated AgendaCalendarView calendar_views = 31;
+  // The menu key's accessibility label, "View".
+  string calendar_view_label = 32;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -114,6 +120,17 @@ message AgendaHomeState {
     // The new-project name sheet.
     SHEET_NEW_PROJECT = 5;
   }
+}
+
+// One entry of the Calendar's view menu: Day or List today (Week, Month and
+// Year follow).
+message AgendaCalendarView {
+  // `day`, `list`.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  AgendaDestination destination = 4;
+  bool current = 5;
 }
 
 message AgendaToolbar {
@@ -258,6 +275,30 @@ message AgendaTodo {
   // The verb that opens the new-project sheet, "New project" — drawn at the
   // foot of the list whatever it holds (the sheet is reachable always).
   string new_project_label = 7;
+  // THE REMINDERS HOME (#1173): the smart-list cards (Today, Scheduled, All,
+  // Flagged, Completed) with their counts, then "My Lists" over `projects`.
+  repeated AgendaSmartList smart_lists = 8;
+  string my_lists_title = 9;
+  // "Add List": the home's quiet verb, which opens the new-project sheet.
+  string add_list_label = 10;
+}
+
+// One smart-list card on the Reminders home.
+message AgendaSmartList {
+  // `today`, `scheduled`, `all`, `flagged`, `completed`.
+  string key = 1;
+  string label = 2;
+  // The Agenda catalogue's glyph key.
+  string icon_key = 3;
+  // The card's colour: an app/state/list key from `design/tokens.toml`
+  // (`agenda`, `red`, `graphite`, ...). Never a hex.
+  string color_key = 4;
+  // The count as digits; empty when the card shows none (Completed).
+  string count = 5;
+  // What a screen reader says: "Today, 5".
+  string accessibility_label = 6;
+  // `agenda.todo_list` on the card's view.
+  Route route = 7;
 }
 
 message AgendaLanding {
@@ -442,6 +483,8 @@ message AgendaHomeEvent {
     // The empty state's Import (`EmptyState.import_source` = calendar): Rust asks
     // the shell to read the phone's calendars, imports them, and follows.
     ImportRequested import_requested = 37;
+    // The swipe on a task row (#1173).
+    TaskFlagged task_flagged = 38;
   }
   // 13 was `due_toggled`; 17, 18 and 33-36 were the intents (`new_event`,
   // `event_picked`, `task_picked`, `project_picked`, `group_verb`,
@@ -452,6 +495,11 @@ message AgendaHomeEvent {
   message Refreshed {}
 
   message ImportRequested {}
+
+  message TaskFlagged {
+    string task_id = 1;
+    bool flagged = 2;
+  }
 
   message DestinationChanged {
     AgendaDestination destination = 1;
@@ -1019,6 +1067,13 @@ message TodoRow {
   bool can_file = 14;
   // WHERE A TAP GOES: this task's page, as the route the shell pushes.
   Route route = 16;
+  // The task carries the Flag (#1173): the row draws the flag glyph, and its
+  // swipe verb is `unflag_verb` instead of `flag_verb`.
+  bool flagged = 17;
+  // The list's colour key (`blue`, `raspberry`, ... the `[list]` names in
+  // `design/tokens.toml`) for the check circle and the dot; empty when the
+  // task is in no list.
+  string list_color_key = 18;
 }
 
 // A group of rows under one head.
@@ -1092,6 +1147,31 @@ message TodoChrome {
   // A row's filing verb (`TodoRow.can_file`), "Move to project": a
   // long press on the row offers it.
   string file_verb = 25;
+  // THE ROW'S SWIPE (#1173): Details, Flag, Delete. The same verbs sit on the
+  // long press as a context menu.
+  string details_verb = 26;
+  string flag_verb = 27;
+  string unflag_verb = 28;
+  string delete_verb = 29;
+  // The inline add row's placeholder on a list page, "New Reminder".
+  string new_reminder = 30;
+  // Completed work on a list: "Show", "Hide" and "Clear".
+  string show_completed_verb = 31;
+  string hide_completed_verb = 32;
+  string clear_completed_verb = 33;
+  // The non-drag way to reorder (a screen reader's action, a long-press item).
+  string move_up_verb = 34;
+  string move_down_verb = 35;
+}
+
+// A list's completed work (#1173): a one-line summary with Show/Hide and Clear.
+// The rows are present only while shown.
+message TodoCompleted {
+  // "2 completed"; the summary is drawn only when `count` > 0.
+  uint32 count = 1;
+  string count_label = 2;
+  bool shown = 3;
+  repeated TodoRow rows = 4;
 }
 
 // A notice over a list: one sentence and at most one verb.
@@ -1140,6 +1220,10 @@ message TodoProjectRow {
   ListRow row = 1;
   // `agenda.project`, named so its head has words before the read lands.
   Route route = 2;
+  // The list's colour key (the `[list]` names): the big count and the dot.
+  string list_color_key = 3;
+  // The open count as digits.
+  string count = 4;
 }
 
 // `agenda.todo_list`: Anytime, All, Logbook or Reminders. The route names the
@@ -1167,6 +1251,9 @@ message TodoListData {
   // "100 tasks · more not shown" when the window is not everything.
   string window_label = 5;
   bool can_show_more = 6;
+  // Today's date line: "Wednesday 4 November · 5 to do · 1 done"; empty on
+  // the other views.
+  string subtitle = 7;
 }
 
 message TodoListEvent {
@@ -1176,6 +1263,19 @@ message TodoListEvent {
     RowChecked row_checked = 3;
     StatusActed status_acted = 4;
     NextPageRequested next_page = 10;
+    // THE SWIPE (#1173): Flag/Unflag and Delete (to the trash, with Undo).
+    RowFlagged row_flagged = 11;
+    RowDeleted row_deleted = 12;
+  }
+
+  // The row's flag is set (`flagged` true) or cleared.
+  message RowFlagged {
+    string task_id = 1;
+    bool flagged = 2;
+  }
+
+  message RowDeleted {
+    string task_id = 1;
   }
 
   message Refreshed {}
@@ -1245,6 +1345,10 @@ message TodoProjectData {
   string rename_title = 8;
   string rename_placeholder = 9;
   string rename_verb = 10;
+  // The list's colour key (the `[list]` names): the title is drawn in it.
+  string list_color_key = 11;
+  // Completed work in this list; `count` 0 draws nothing.
+  TodoCompleted completed = 12;
 }
 
 message TodoProjectEvent {
@@ -1262,7 +1366,35 @@ message TodoProjectEvent {
     RenameRequested rename = 12;
     RenameNameChanged rename_name = 13;
     RenameSubmitted rename_submitted = 14;
+    // #1173: the swipe, drag to reorder, and the completed summary.
+    RowFlagged row_flagged = 15;
+    RowDeleted row_deleted = 16;
+    RowMoved row_moved = 17;
+    CompletedToggled completed_toggled = 18;
+    CompletedCleared completed_cleared = 19;
   }
+
+  message RowFlagged {
+    string task_id = 1;
+    bool flagged = 2;
+  }
+
+  message RowDeleted {
+    string task_id = 1;
+  }
+
+  // A row was dropped before `before_id` (empty: at the end of its group).
+  // Rust finds the position between the neighbours.
+  message RowMoved {
+    string task_id = 1;
+    string before_id = 2;
+  }
+
+  // Show or hide the completed rows.
+  message CompletedToggled {}
+
+  // Move the list's completed work to the trash.
+  message CompletedCleared {}
 
   message Refreshed {}
 

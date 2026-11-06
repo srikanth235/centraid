@@ -9,13 +9,14 @@ use super::fold::long_day;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
-use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
+use crate::strings::{
+    Locale, agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
+};
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
-pub const BAND_DAY: &str = "day";
-pub const BAND_SCHEDULE: &str = "schedule";
-pub const BAND_WAITING: &str = "waiting";
-pub const BAND_TODO: &str = "todo";
+pub const BAND_CALENDAR: &str = "calendar";
+pub const BAND_REMINDERS: &str = "reminders";
+pub const BAND_INVITES: &str = "invites";
 pub const BAND_MORE: &str = "more";
 
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
@@ -29,37 +30,64 @@ pub const MORE_TRASH: &str = "trash";
 /// The Tasks places a More row opens as a page.
 pub const TASK_PLACES: [&str; 4] = [MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH];
 
-/// The band: places only, then More (R-CHROME-5). SEARCH IS A MODE OVER THE
-/// PLACE, not a place: the destination's tab stays lit while the field is open.
+/// The band (#1173): Calendar, Reminders, Invites, then More: places only
+/// (R-CHROME-5). Calendar holds Day and List (and later Week, Month and Year)
+/// behind its view menu ([`calendar_views`]); Reminders is the smart lists and
+/// My Lists; Invites is the old Waiting. SEARCH IS A MODE OVER THE PLACE, not
+/// a place: the destination's tab stays lit while the field is open.
 #[must_use]
 pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::AgendaBandTab> {
-    let tab = |key: &str, label: String, icon: &str, of: Dest| wire::AgendaBandTab {
+    let tab = |key: &str, label: String, icon: &str, current: bool| wire::AgendaBandTab {
         key: key.to_owned(),
         label,
         icon_key: icon.to_owned(),
-        current: destination == of,
+        current,
     };
     vec![
-        tab(BAND_DAY, words::band_day(locale), "Clock", Dest::Day),
         tab(
-            BAND_SCHEDULE,
-            words::band_schedule(locale),
-            "List",
-            Dest::Schedule,
+            BAND_CALENDAR,
+            reminders::band_calendar(locale),
+            "Calendar",
+            matches!(destination, Dest::Day | Dest::Schedule),
         ),
         tab(
-            BAND_WAITING,
-            words::band_waiting(locale),
+            BAND_REMINDERS,
+            reminders::band_reminders(locale),
+            "Todo",
+            destination == Dest::Todo,
+        ),
+        tab(
+            BAND_INVITES,
+            reminders::band_invites(locale),
             "Inbox",
-            Dest::Waiting,
+            destination == Dest::Waiting,
         ),
-        tab(BAND_TODO, words::band_todo(locale), "Todo", Dest::Todo),
         wire::AgendaBandTab {
             key: BAND_MORE.to_owned(),
             label: words::band_more(locale),
             icon_key: "MoreHoriz".to_owned(),
             current: sheet_up,
         },
+    ]
+}
+
+/// The Calendar's view menu: Day and List. Empty off the Calendar tab, where
+/// there is nothing to switch.
+#[must_use]
+pub fn calendar_views(locale: Locale, destination: Dest) -> Vec<wire::AgendaCalendarView> {
+    if !matches!(destination, Dest::Day | Dest::Schedule) {
+        return Vec::new();
+    }
+    let view = |key: &str, label: String, icon: &str, of: Dest| wire::AgendaCalendarView {
+        key: key.to_owned(),
+        label,
+        icon_key: icon.to_owned(),
+        destination: of as i32,
+        current: destination == of,
+    };
+    vec![
+        view("day", reminders::view_day(locale), "Clock", Dest::Day),
+        view("list", reminders::view_list(locale), "List", Dest::Schedule),
     ]
 }
 

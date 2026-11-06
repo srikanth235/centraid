@@ -841,6 +841,48 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Star a task through flag.set: Agenda calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.
+        #[derive(Clone, Debug, Default)]
+        pub struct StarTask {
+            pub task_id: String,
+        }
+        impl StarTask {
+            pub const NAME: &str = "star-task";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("starred"));
+                map.insert("id".to_owned(), text(self.task_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StarTask> for wire::ActRequest {
+            fn from(value: StarTask) -> Self {
+                value.request()
+            }
+        }
+
+        /// Take the flag off a task through flag.clear. Idempotent.
+        #[derive(Clone, Debug, Default)]
+        pub struct UnstarTask {
+            pub task_id: String,
+        }
+        impl UnstarTask {
+            pub const NAME: &str = "unstar-task";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text("starred"));
+                map.insert("id".to_owned(), text(self.task_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UnstarTask> for wire::ActRequest {
+            fn from(value: UnstarTask) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {
