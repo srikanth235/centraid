@@ -30,6 +30,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,10 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -49,6 +53,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Failure
 import centraid.core.v1.HomeData
@@ -179,13 +184,28 @@ public fun HomeScreen(
         // never scrolled away, so it is a sibling of the scrolling page and not
         // a part of it, and nothing subtracts its height from the page because
         // it is a flex peer.
-        Box(Modifier.weight(1f)) {
-            when {
-                failure != null -> FailureBody(failure)
-                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, onEvent)
-                data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
-                    DayOne(data, state.loading_label, onOpen, onEvent)
-                else -> SpringboardGrid(data, state.loading_label, onOpen, onEvent)
+        val viewConfiguration = LocalViewConfiguration.current
+        val viewportConfiguration = remember(viewConfiguration) {
+            object : ViewConfiguration by viewConfiguration {
+                override val minimumTouchTargetSize = DpSize.Zero
+            }
+        }
+        // Compose expands clipping ancestors by half the minimum touch size
+        // when exporting accessibility bounds. The viewport itself has no
+        // controls, so give only this boundary zero expansion. Restore the
+        // platform configuration for its children: their normal touch targets
+        // remain intact, but cannot reach into the sibling navigation band.
+        CompositionLocalProvider(LocalViewConfiguration provides viewportConfiguration) {
+            Box(Modifier.weight(1f).clipToBounds()) {
+                CompositionLocalProvider(LocalViewConfiguration provides viewConfiguration) {
+                    when {
+                        failure != null -> FailureBody(failure)
+                        data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, onEvent)
+                        data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
+                            DayOne(data, state.loading_label, onOpen, onEvent)
+                        else -> SpringboardGrid(data, state.loading_label, onOpen, onEvent)
+                    }
+                }
             }
         }
         // THE IMPORT'S LINE, on the band (product-intuition screen contracts's one status line).

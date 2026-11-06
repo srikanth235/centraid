@@ -14,9 +14,11 @@ name: Seeded Home widgets
     id: home-tile-agenda
 - waitForAnimationToEnd
 - takeScreenshot: home-top
+# Reveal the following row so the complete Photos preview is above the fold,
+# rather than stopping as soon as a clipped edge enters the viewport.
 - scrollUntilVisible:
     element:
-      id: home-tile-photos
+      id: home-tile-money
     direction: DOWN
     timeout: 60000
 - assertVisible:
@@ -24,7 +26,7 @@ name: Seeded Home widgets
 - takeScreenshot: home-photos
 - scrollUntilVisible:
     element:
-      id: home-tile-docs
+      text: "Touch and hold a widget to resize or rearrange it[.]"
     direction: DOWN
     timeout: 60000
 - assertVisible:

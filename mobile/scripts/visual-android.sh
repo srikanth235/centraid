@@ -51,7 +51,20 @@ done
 # Stream before the app can start, so a crash remains inspectable even if CI
 # cancels the capture matrix before it returns to this script.
 adb logcat -c
-adb logcat -v threadtime > "$artifacts/logcat.log" 2>&1 &
+# ADB can briefly disconnect while the test driver starts. Resume the stream
+# without clearing the device buffer so later crashes still reach the artifact.
+stream_logcat() {
+  stream_pid=
+  trap 'if [ -n "$stream_pid" ]; then kill "$stream_pid" 2>/dev/null || true; wait "$stream_pid" 2>/dev/null || true; fi; exit 0' INT TERM
+  while kill -0 "$emulator_pid" 2>/dev/null; do
+    adb logcat -v threadtime &
+    stream_pid=$!
+    wait "$stream_pid" || true
+    stream_pid=
+    sleep 1
+  done
+}
+stream_logcat > "$artifacts/logcat.log" 2>&1 &
 logcat_pid=$!
 adb shell input keyevent 82
 adb shell settings put global window_animation_scale 0

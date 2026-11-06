@@ -49,12 +49,40 @@ capture() {
   # Maestro still installs a missing driver when reinstallation is disabled.
   local driver_option=--reinstall-driver
   if [ "$driver_ready" = 1 ]; then driver_option=--no-reinstall-driver; fi
-  if ! maestro test "$driver_option" --device "$device" --format junit --output "$output/results.xml" \
-    --flatten-debug-output --debug-output "$output/debug" --test-output-dir "$output/screenshots" \
-    -e "APP_ID=$app_id" -e "WIDGET=$widget" -e "CONTENT=$content" \
-    "$root/mobile/maestro/visual/$flow.yaml" > "$output/maestro.log" 2>&1; then
+  local attempt
+  for attempt in 1 2; do
+    passed=1
+    if maestro test "$driver_option" --device "$device" --format junit --output "$output/results.xml" \
+      --flatten-debug-output --debug-output "$output/debug" --test-output-dir "$output/screenshots" \
+      -e "APP_ID=$app_id" -e "WIDGET=$widget" -e "CONTENT=$content" \
+      "$root/mobile/maestro/visual/$flow.yaml" > "$output/maestro.log" 2>&1; then
+      break
+    fi
     passed=0
-  fi
+    # The emulator's ADB transport can disconnect while the pinned driver starts.
+    # Preserve that attempt and retry once only for this explicit infrastructure
+    # error. Assertion failures and app crashes are never retried here.
+    if [ "$platform" != android ] || [ "$attempt" != 1 ] || \
+      ! grep -Fq "Unable to launch app $app_id" "$output/maestro.log" || \
+      ! grep -Fq '): device offline' "$output/debug/maestro.log" 2>/dev/null; then break; fi
+    printf 'Visual capture %s / %s: ADB offline; preserving attempt and reconnecting\n' "$profile" "$name"
+    mkdir -p "$output/transport-attempt-1"
+    local evidence
+    for evidence in maestro.log results.xml debug screenshots; do
+      if [ -e "$output/$evidence" ]; then mv "$output/$evidence" "$output/transport-attempt-1/"; fi
+    done
+    mkdir -p "$output/screenshots" "$output/debug"
+    local ready=0 poll
+    for poll in $(seq 1 60); do
+      if [ "$(adb get-state 2>/dev/null)" = device ]; then ready=1; break; fi
+      sleep 1
+    done
+    if [ "$ready" != 1 ]; then
+      cp "$output/transport-attempt-1/maestro.log" "$output/maestro.log"
+      break
+    fi
+    driver_option=--reinstall-driver
+  done
   if [ -z "$(find "$output/screenshots" -name '*.png' -type f -print -quit)" ]; then passed=0; fi
   if [ "$passed" = 0 ]; then
     result=1
