@@ -1060,9 +1060,10 @@ message OpenRoute {
   Route route = 1;
 }
 
-// Pick one file for the drive's Add sheet: Upload is the system file picker,
-// Scan the document camera (its pages written to one PDF). The shell copies the
-// choice to a file on this device, STREAMS it through the stage door (a 900 MB
+// Pick one file to save in Docs or attach: Upload is the system file picker,
+// Scan the document camera (its pages written to one PDF), or Photo the system
+// photo picker for one image, without granting access to the whole library.
+// The shell copies the choice to a file on this device, STREAMS it through the stage door (a 900 MB
 // scan never exists in memory at once), and answers `FilePicked` with the hash
 // the core named. While it streams it may answer `FileProgress` any number of
 // times under the same `effect_id`. A closed picker is `EffectDone`; a refusal
@@ -1074,6 +1075,7 @@ message PickFile {
     KIND_UNSPECIFIED = 0;
     KIND_UPLOAD = 1;
     KIND_SCAN = 2;
+    KIND_PHOTO = 3;
   }
 }
 

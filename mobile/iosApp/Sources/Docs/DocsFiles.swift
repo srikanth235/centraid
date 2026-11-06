@@ -1,5 +1,6 @@
 import AVFoundation
 import PDFKit
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import VisionKit
@@ -7,8 +8,9 @@ import VisionKit
 /// PICKING A FILE FOR THE DRIVE'S ADD SHEET (#1047, R-1047-Q4; the `PickFile`
 /// effect, #1135). Two things only the shell can do, and nothing else:
 ///
-/// - **The picker and the scanner.** Upload is the system file importer (the
-///   picked file copied into this app's temporary directory), Scan is
+/// - **The pickers and the scanner.** Upload is the system file importer,
+///   Photo is the system photo picker (only the selected image is granted;
+///   either choice is copied into this app's temporary directory), Scan is
 ///   VisionKit's document camera (the pages written to one PDF).
 /// - **The bytes.** The copy is streamed through the stage door (`StageDoor`)
 ///   so a 900 MB scan never exists in memory at once, and the answer carries
@@ -26,6 +28,8 @@ final class DocsFiles: ObservableObject {
     @Published var importing = false
     /// The document camera is up.
     @Published var scanning = false
+    /// The system photo picker is up; it never requests the whole library.
+    @Published var pickingPhoto = false
 
     /// The core the copy is staged into, given with the ask.
     private var core: (any ScreenCore)?
@@ -48,9 +52,28 @@ final class DocsFiles: ObservableObject {
             } else {
                 fail("unavailable")
             }
+        } else if kind == .photo {
+            pickingPhoto = true
         } else {
             importing = true
         }
+    }
+
+    // MARK: The photo picker
+
+    func photoPicked(_ copied: DocsFileCopies.Copied) {
+        pickingPhoto = false
+        stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+    }
+
+    func photoCancelled() {
+        pickingPhoto = false
+        done()
+    }
+
+    func photoFailed() {
+        pickingPhoto = false
+        fail("the photo cannot be read")
     }
 
     // MARK: The importer
@@ -161,13 +184,80 @@ struct DocsFilesRoot: View {
                 )
                 .ignoresSafeArea()
             }
+            .fullScreenCover(isPresented: $model.pickingPhoto) {
+                DocsPhotoPicker(
+                    onSelected: { model.pickingPhoto = false },
+                    onPicked: { model.photoPicked($0) },
+                    onCancelled: { model.photoCancelled() },
+                    onFailed: { model.photoFailed() }
+                )
+                .ignoresSafeArea()
+            }
+    }
+}
+
+/// The original image is copied while the provider's URL is valid, then streamed
+/// through the same staging door as Files. No image bytes cross the screen wire.
+private struct DocsPhotoPicker: UIViewControllerRepresentable {
+    let onSelected: @MainActor () -> Void
+    let onPicked: @MainActor (DocsFileCopies.Copied) -> Void
+    let onCancelled: @MainActor () -> Void
+    let onFailed: @MainActor () -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        configuration.preferredAssetRepresentationMode = .current
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    @MainActor
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        private let parent: DocsPhotoPicker
+
+        init(_ parent: DocsPhotoPicker) { self.parent = parent }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider else {
+                parent.onCancelled()
+                return
+            }
+            let type = provider.registeredTypeIdentifiers.first {
+                UTType($0)?.conforms(to: .image) == true
+            } ?? UTType.image.identifier
+            let mediaType = UTType(type)?.preferredMIMEType ?? ""
+            let name = provider.suggestedName ?? ""
+            let onPicked = parent.onPicked
+            let onFailed = parent.onFailed
+            parent.onSelected()
+            provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+                // The provider may remove this URL as soon as the callback returns.
+                let copied = url.flatMap { DocsFileCopies.copy($0) }.map {
+                    DocsFileCopies.Copied(
+                        path: $0.path,
+                        name: name.isEmpty ? $0.name : name,
+                        mediaType: mediaType.isEmpty ? $0.mediaType : mediaType
+                    )
+                }
+                Task { @MainActor in
+                    if let copied { onPicked(copied) } else { onFailed() }
+                }
+            }
+        }
     }
 }
 
 /// Where a picked or scanned file waits for the stage: this app's own temporary
 /// directory, under a name nothing else will pick. A copy is deleted once staged.
 enum DocsFileCopies {
-    struct Copied {
+    struct Copied: Sendable {
         let path: String
         let name: String
         let mediaType: String

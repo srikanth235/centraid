@@ -233,6 +233,10 @@ The iOS presenter uses `UNUserNotificationCenter`; Android uses `AlarmManager` a
 
 Each device keeps an atomic, non-backed-up journal of the active vault’s plan, snoozes and unacknowledged actions. iOS protects the file until the first unlock; Android uses the app’s private no-backup directory. A tap is saved before reporting it, and a background action holds the session while Rust acknowledges it. The scheduler waits for the vault roster to finish loading, validates the vault, source identity and source revision, and uses a durable invocation key for Mark as done. Snoozes change the alert only: In 1 hour is an elapsed hour and Tomorrow at 9 is the next local day at 09:00, including daylight-saving changes. Edits, completion, deletion and vault switches cancel obsolete pending and delivered alerts. A failed journal read or write is reported through the effect result and the inline remedy; the presenter does not replace an unread journal with empty data.
 
+### Agenda attachments
+
+Task and event details offer **Add attachment** for Files and **Add photo** for the system photo picker. iOS uses `PHPickerViewController`; Android uses `PickVisualMedia` with images only. Neither needs access to the whole photo library. Each selected file is copied into the app's temporary storage and streamed through the existing stage door. Rust saves it as a Docs document and attaches its identity to the task or event; removing that attachment keeps the document. Cancelling saves nothing, and a failed photo selection retries the photo picker.
+
 ### Calendar and Reminders imports
 
 iOS imports EventKit reminders, optionally including completed reminders. Public `EKReminder` does not expose flags or subtask hierarchy, and the import result names those limits. Both platforms can import a VTODO file with explicit flagged markers and `RELATED-TO` parent links. All signed minute-based time alarms are preserved; location alerts cannot be converted and are reported in the result. Android has no system Reminders provider.

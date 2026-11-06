@@ -9,6 +9,7 @@ import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,8 +44,8 @@ internal class DocsFiles(val core: () -> CentraidCore?)
 
 /**
  * THE PLATFORM'S HALF OF `PickFile`, `FollowFolder` AND `StopFollowing` (#1047 R-1047-Q4,
- * #1127): the system file picker (`OpenDocument`), the system camera (`TakePicture`, written
- * out as a one-page PDF), the CAMERA grant and the folder picker (`OpenDocumentTree`). Rust
+ * #1127): the system file picker (`OpenDocument`), photo picker (`PickVisualMedia`), camera
+ * (`TakePicture`, written out as a one-page PDF), CAMERA grant and folder picker (`OpenDocumentTree`). Rust
  * asks; this raises the right picker and answers with [EffectResult]s under the effect's one id —
  * progress while the bytes stream through the stage door, then `FilePicked`; `Done` for a
  * closed picker; `Failed` (`denied` for a refused grant, `unavailable` for a phone with
@@ -57,6 +58,7 @@ internal class DocsPickers(
 ) {
     private var answer: ((EffectResult) -> Unit)? = null
     internal var upload: ManagedActivityResultLauncher<Array<String>, Uri?>? = null
+    internal var photo: ManagedActivityResultLauncher<PickVisualMediaRequest, Uri?>? = null
     internal var scan: ManagedActivityResultLauncher<Uri, Boolean>? = null
     internal var cameraGrant: ManagedActivityResultLauncher<String, Boolean>? = null
     internal var folders: ManagedActivityResultLauncher<Uri?, Uri?>? = null
@@ -69,6 +71,7 @@ internal class DocsPickers(
         try {
             when (kind) {
                 PickFile.Kind.KIND_SCAN -> scan()
+                PickFile.Kind.KIND_PHOTO -> photo?.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) ?: fail(UNAVAILABLE)
                 else -> upload?.launch(arrayOf("*/*")) ?: fail(UNAVAILABLE)
             }
         } catch (why: ActivityNotFoundException) {
@@ -255,6 +258,7 @@ internal fun rememberDocsPickers(files: DocsFiles): DocsPickers {
     pickers.setScanTarget = { target = it }
     pickers.scanTarget = target
     pickers.upload = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pickers.uploaded(it) }
+    pickers.photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pickers.uploaded(it) }
     pickers.scan = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { pickers.scanned(it, target) }
     pickers.cameraGrant = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { pickers.cameraAnswered(it) }
     pickers.folders = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pickers.treePicked(it) }

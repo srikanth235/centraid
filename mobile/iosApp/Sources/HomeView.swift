@@ -434,6 +434,10 @@ private struct TileCard: View {
             .padding(.vertical, tilePad)
             .background(Theme.color(tile.backgroundRole, scheme))
             .clipShape(RoundedRectangle(cornerRadius: tileRadius))
+            // Clipping only changes drawing. Filled thumbnails can extend
+            // beyond the card, so its interaction and accessibility shape
+            // must use the visible label's bounds.
+            .contentShape(RoundedRectangle(cornerRadius: tileRadius))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -450,6 +454,7 @@ private struct TileCard: View {
         }
         // Keyed on the app id. The label carries the live count, so it changes
         // with the vault; the id does not.
+        .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("home-tile-\(tile.appID)")
         .accessibilityLabel(tile.accessibilityLabel)
     }

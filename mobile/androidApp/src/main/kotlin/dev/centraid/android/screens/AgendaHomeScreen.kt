@@ -10,10 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.platform.LocalDensity
-import kotlin.math.roundToInt
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -896,7 +893,7 @@ private fun AgendaGrid(
                 grid.hour_days.forEach { day -> item(key = day.day) { AgendaHourColumn(day, chrome, actions, onEvent, onOpen) } }
             }
             if (grid.hour_days.isEmpty() && grid.view_key != "year") data.days.forEach { day ->
-                item(key = "selected-${day.day}") { Column { Text(day.heading, style = centraidType("title"), color = centraidColor("text")); day.items.forEach { AgendaGridItem(it, actions, onEvent, onOpen) } } }
+                item(key = "selected-${day.day}") { Column { Text(day.heading, style = centraidType("title"), color = centraidColor("text")); day.items.forEach { AgendaGridItem(it, actions, onOpen) } } }
             }
             if (data.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CALENDAR) {
                 item(key = "calendar-import") { OutlineButton(label = data.import_label, testTag = "kit-empty-import") { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) } }
@@ -917,42 +914,15 @@ private fun AgendaHourColumn(day: AgendaHourDay, chrome: AgendaChrome, actions: 
     }
     Column {
         Text(day.heading, style = centraidType("title"), color = centraidColor("text"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
-        day.all_day.forEach { AgendaGridItem(it, actions, onEvent, onOpen) }
-        day.hours.forEach { slot ->
-            Row(Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(slot.label, style = hourStyle, color = centraidColor("textSoft"), maxLines = 1, softWrap = false, modifier = Modifier.width(gutter))
-                Column(Modifier.weight(1f).heightIn(min = 64.dp)
-                    .combinedClickable(onClick = {}, onLongClick = { slot.create_route?.let(onOpen) }, onLongClickLabel = chrome.new_event)
-                    .testTag("agenda-slot-${slot.key}")) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(centraidColor("line")))
-                    slot.items.forEach { AgendaGridItem(it, actions, onEvent, onOpen) }
-                }
-            }
-        }
+        day.all_day.forEach { AgendaGridItem(it, actions, onOpen) }
+        dev.centraid.android.screens.agenda.AgendaTimeline(day, chrome, gutter, actions, onEvent, onOpen)
     }
 }
 
 @Composable
-private fun AgendaGridItem(item: AgendaRowItem, actions: AgendaTaskActions, onEvent: (AgendaHomeEvent) -> Unit, onOpen: (Route) -> Unit) {
-    val hourHeight = with(LocalDensity.current) { 64.dp.toPx() }
+private fun AgendaGridItem(item: AgendaRowItem, actions: AgendaTaskActions, onOpen: (Route) -> Unit) {
     item.event?.let { row ->
-        val adjust: (Int, Boolean) -> Unit = { delta, resize -> onEvent(AgendaHomeEvent(event_adjusted = AgendaHomeEvent.EventAdjusted(instance_key = row.instance_key, delta_minutes = delta, resize = resize))) }
-        Column(Modifier.pointerInput(row.instance_key) {
-            var drag = 0f
-            detectDragGesturesAfterLongPress(onDragStart = { drag = 0f }, onDrag = { change, amount -> drag += amount.y; change.consume() }, onDragEnd = { adjust((drag / hourHeight * 4).roundToInt() * 15, false) })
-        }.semantics {
-            customActions = row.adjustments.map { option -> CustomAccessibilityAction(option.label) { adjust(option.delta_minutes, option.resize); true } }
-        }) {
-            EventRow(row, onOpen)
-            row.adjustments.lastOrNull()?.let { option ->
-                Box(Modifier.fillMaxWidth().height(44.dp).pointerInput(row.instance_key) {
-                    var drag = 0f
-                    detectVerticalDragGestures(onDragStart = { drag = 0f }, onVerticalDrag = { change, amount -> drag += amount; change.consume() }, onDragEnd = { adjust((drag / hourHeight * 4).roundToInt() * 15, true) })
-                }.clickable { adjust(option.delta_minutes, true) }.semantics { contentDescription = option.label }.testTag("agenda-resize-${row.instance_key}"), contentAlignment = Alignment.Center) {
-                    Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape).background(centraidColor("agendaText")))
-                }
-            }
-        }
+        EventRow(row, onOpen)
     }
     item.task?.let { TodoRowView(it, onCheck = actions.onCheck, onOpen = onOpen, onFile = actions.onFile, fileVerb = actions.fileVerb, idPrefix = AGENDA_TASK_ROW, onAction = actions.onAction) }
     item.now_line?.let { NowLine(it) }

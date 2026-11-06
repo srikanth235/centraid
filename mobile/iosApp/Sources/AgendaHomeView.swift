@@ -904,51 +904,14 @@ private struct AgendaGridView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(day.heading).centraidType("title").foregroundStyle(Theme.color("text", scheme)).padding(.horizontal, CentraidGeometry.pageMargin)
             ForEach(Array(day.allDay.enumerated()), id: \.offset) { _, item in gridItem(item) }
-            ForEach(day.hours, id: \.key) { slot in
-                HStack(alignment: .top, spacing: 8) {
-                    Text(slot.label).centraidType("annotLabel").foregroundStyle(Theme.color("textSoft", scheme))
-                        .monospacedDigit().fixedSize(horizontal: true, vertical: false).frame(minWidth: 48, alignment: .trailing)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Divider()
-                        ForEach(Array(slot.items.enumerated()), id: \.offset) { _, item in gridItem(item) }
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-                    .contentShape(Rectangle())
-                    .onLongPressGesture { if slot.hasCreateRoute { open(slot.createRoute) } }
-                    .accessibilityAction(named: Text(chrome.newEvent)) { if slot.hasCreateRoute { open(slot.createRoute) } }
-                    .accessibilityIdentifier("agenda-slot-\(slot.key)")
-                }
-                .padding(.leading, CentraidGeometry.pageMargin)
-            }
+            AgendaTimelineView(day: day, chrome: chrome, send: send, open: open)
         }
-    }
-
-    private func adjust(_ row: Centraid_Core_V1_AgendaEventRow, delta: Int32, resize: Bool) {
-        send(AgendaEvents.make { $0.eventAdjusted = .with { $0.instanceKey = row.instanceKey; $0.deltaMinutes = delta; $0.resize = resize } })
     }
 
     @ViewBuilder private func gridItem(_ item: Centraid_Core_V1_AgendaRowItem) -> some View {
         switch item.kind {
         case let .event(row):
-            VStack(spacing: 0) {
-                AgendaEventRowView(row: row, open: open)
-                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.4).sequenced(before: DragGesture()).onEnded { value in
-                        if case let .second(true, drag?) = value { adjust(row, delta: Int32((drag.translation.height / 64 * 60 / 15).rounded()) * 15, resize: false) }
-                    })
-                    .contextMenu {
-                        ForEach(Array(row.adjustments.enumerated()), id: \.offset) { _, option in
-                            Button(option.label) { adjust(row, delta: option.deltaMinutes, resize: option.resize) }
-                        }
-                    }
-                if let resize = row.adjustments.last {
-                    Capsule().fill(Theme.color("agendaText", scheme)).frame(width: 36, height: 4)
-                        .frame(height: 44).contentShape(Rectangle())
-                        .gesture(DragGesture(minimumDistance: 5).onEnded { drag in adjust(row, delta: Int32((drag.translation.height / 64 * 60 / 15).rounded()) * 15, resize: true) })
-                        .accessibilityLabel(resize.label)
-                        .accessibilityAction { adjust(row, delta: resize.deltaMinutes, resize: true) }
-                        .accessibilityIdentifier("agenda-resize-\(row.instanceKey)")
-                }
-            }
+            AgendaEventRowView(row: row, open: open)
         case let .task(row): TodoRowView(row: row, onCheck: check, onPick: open, embedded: true, identifierPrefix: "agenda-task-row",
                                 onAction: { action in send(AgendaEvents.make { $0.taskAction = action }) })
         case let .nowLine(now): AgendaNowLineView(now: now)

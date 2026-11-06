@@ -80,7 +80,7 @@ struct CentraidApp: App {
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
             .onOpenURL { AgendaEntrypoint.open($0) }
-            .onChange(of: scenePhase) { _, phase in
+            .onChange(of: scenePhase, initial: true) { _, phase in
                 switch phase {
                 case .active:
                     shell.unmask()

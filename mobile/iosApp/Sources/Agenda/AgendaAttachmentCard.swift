@@ -21,6 +21,8 @@ struct AgendaAttachmentCard: View {
             }
             KitLink(label: value.addLabel, identifier: "agenda-attachment-add") { send(.with { $0.add = .init() }) }
                 .disabled(value.busy).padding(.horizontal, 8)
+            KitLink(label: value.addPhotoLabel, identifier: "agenda-attachment-add-photo") { send(.with { $0.addPhoto = .init() }) }
+                .disabled(value.busy).padding(.horizontal, 8)
             StatusLineView(status: value.status, identifier: "agenda-attachment-retry") { send(.with { $0.retry = .init() }) }
         }
         .padding(.vertical, 8)

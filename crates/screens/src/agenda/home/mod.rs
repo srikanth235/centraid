@@ -876,7 +876,7 @@ impl Screen for Home {
                     calendar_grid: (!denied
                         && !self.search_open
                         && matches!(self.destination, Dest::Day | Dest::Schedule))
-                    .then(|| grid::build(self, locale)),
+                    .then(|| grid::build(self, locale, ctx.zone())),
                     more_rows: if denied {
                         Vec::new()
                     } else {

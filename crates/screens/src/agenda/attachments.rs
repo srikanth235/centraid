@@ -9,6 +9,7 @@ use centraid_api_proto::core_v1 as wire;
 #[derive(Default)]
 pub struct Attachments {
     picking: bool,
+    picking_photo: bool,
     file: Option<wire::FilePicked>,
     document: Option<String>,
     remove: Option<String>,
@@ -28,6 +29,13 @@ impl Attachments {
         match &event.kind {
             Some(Kind::Add(_)) if !self.picking => {
                 *self = Self::default();
+                self.pick(ctx)
+            }
+            Some(Kind::AddPhoto(_)) if !self.picking => {
+                *self = Self {
+                    picking_photo: true,
+                    ..Self::default()
+                };
                 self.pick(ctx)
             }
             Some(Kind::Remove(remove)) if !self.picking && known.contains(&remove.id) => {
@@ -53,12 +61,20 @@ impl Attachments {
     fn pick(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.picking = true;
         self.status = Some(wire::StatusLine {
-            sentence: words::attachment_picking(ctx.locale()),
+            sentence: if self.picking_photo {
+                words::attachment_picking_photo(ctx.locale())
+            } else {
+                words::attachment_picking(ctx.locale())
+            },
             ..Default::default()
         });
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::PickFile(wire::PickFile {
-                kind: wire::pick_file::Kind::Upload as i32,
+                kind: if self.picking_photo {
+                    wire::pick_file::Kind::Photo
+                } else {
+                    wire::pick_file::Kind::Upload
+                } as i32,
             })),
         }]
     }
@@ -193,6 +209,7 @@ impl Attachments {
         wire::AgendaAttachments {
             heading: words::attachments_heading(locale),
             add_label: words::attachment_add(locale),
+            add_photo_label: words::attachment_add_photo(locale),
             remove_label: words::attachment_remove(locale),
             rows,
             status: self.status.clone(),

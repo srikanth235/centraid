@@ -46,35 +46,38 @@ button{font:inherit;color:inherit}
     <span style="font-size: 13px; padding: 4px 8px; border-radius: 6px; background: var(--ds-notesTint); color: var(--ds-notesText); display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 5px; border: 1.4px solid var(--ds-notesText);"></span>Pay bill</span>
   </div>
 
-  <div style="position: relative; height: 470px; overflow: hidden;">
+  <!-- Hour spacing grows with measured event content; event starts and ends stay on this same time scale. -->
+  <div style="position: relative; height: 470px; overflow-y: auto;">
+    <div style="position: relative; height: 906px;">
     <div style="position: absolute; left: 0; right: 0; top: 0; height: 1px;"></div>
     <div style="position: absolute; left: 20px; right: 0; top: 10px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">09:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 80px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">10:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 150px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">11:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 220px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">12:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 290px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">13:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 360px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">14:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
-    <div style="position: absolute; left: 20px; right: 0; top: 430px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">15:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 138px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">10:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 266px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">11:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 394px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">12:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 522px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">13:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 650px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">14:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
+    <div style="position: absolute; left: 20px; right: 0; top: 778px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 12px; color: var(--ds-textFaint); width: 40px;">15:00</span><span style="flex-grow: 1; height: 1px; background: var(--ds-line);"></span></div>
 
-    <div style="position: absolute; left: 72px; right: 16px; top: 46px; height: 64px; border-radius: 8px; background: var(--ds-agendaTint); border-left: 3px solid var(--ds-listBlue); padding: 6px 8px; box-sizing: border-box;">
+    <div style="position: absolute; left: 72px; right: 16px; top: 74px; height: 96px; border-radius: 8px; background: var(--ds-agendaTint); border-left: 3px solid var(--ds-listBlue); padding: 6px 8px; box-sizing: border-box;">
       <div style="font-size: 14px; font-weight: 600; color: #1E4C80;">Team standup</div>
       <div style="font-size: 12px; color: #3D638F;">09:30 – 10:15 · Call</div>
     </div>
-    <div style="position: absolute; left: 72px; width: 146px; top: 160px; height: 96px; border-radius: 8px; background: var(--ds-agendaTint); border-left: 3px solid var(--ds-listPetrol); padding: 6px 8px; box-sizing: border-box;">
+    <div style="position: absolute; left: 72px; width: 146px; top: 298px; height: 160px; border-radius: 8px; background: var(--ds-agendaTint); border-left: 3px solid var(--ds-listPetrol); padding: 6px 8px; box-sizing: border-box;">
       <div style="font-size: 14px; font-weight: 600; color: #1F4A36;">Lunch with Ana</div>
       <div style="font-size: 12px; color: #3E6B55;">11:15 – 12:30 · Café Lume</div>
     </div>
-    <div style="position: absolute; left: 224px; right: 16px; top: 195px; height: 72px; border-radius: 8px; background: var(--ds-peopleTint); border-left: 3px solid var(--ds-listViolet); padding: 6px 8px; box-sizing: border-box;">
+    <div style="position: absolute; left: 224px; right: 16px; top: 362px; height: 128px; border-radius: 8px; background: var(--ds-peopleTint); border-left: 3px solid var(--ds-listViolet); padding: 6px 8px; box-sizing: border-box;">
       <div style="font-size: 14px; font-weight: 600; color: #4E3C86;">Lease call</div>
       <div style="font-size: 12px; color: #6A5A99;">11:45 – 12:45</div>
     </div>
-    <div style="position: absolute; left: 72px; right: 16px; top: 432px; height: 30px; border-radius: 8px; border: 1px dashed var(--ds-listYellow); padding: 5px 8px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;">
+    <div style="position: absolute; left: 72px; right: 16px; top: 778px; min-height: 44px; border-radius: 8px; border: 1px dashed var(--ds-listYellow); padding: 5px 8px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;">
       <span style="width: 12px; height: 12px; border-radius: 6px; border: 1.6px solid var(--ds-listYellow);"></span>
       <span style="font-size: 13px; color: var(--ds-notesText);">Pick up dry cleaning · Errands</span>
     </div>
-    <div style="position: absolute; left: 14px; right: 0; top: 330px; display: flex; align-items: center;">
+    <div style="position: absolute; left: 14px; right: 0; top: 598.8px; display: flex; align-items: center;">
       <span style="font-size: 11px; font-weight: 600; color: #FFFFFF; background: var(--ds-agendaFill); border-radius: 8px; padding: 2px 6px;">13:36</span>
       <span style="flex-grow: 1; height: 2px; background: var(--ds-agendaFill);"></span>
+    </div>
     </div>
   </div>
 

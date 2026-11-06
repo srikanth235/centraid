@@ -30,6 +30,7 @@ import centraid.core.v1.LinkReading
 import centraid.core.v1.PassNoted
 import centraid.core.v1.PhoneChanged
 import dev.centraid.android.notifications.AgendaNotifications
+import dev.centraid.android.notifications.NotificationPermissionPrompt
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
@@ -44,6 +45,7 @@ import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -93,6 +95,9 @@ internal class ShellEffects(
     private val scope: CoroutineScope,
 ) {
     private val context: Context = context.applicationContext
+    private val notificationPermission = NotificationPermissionPrompt(
+        File(this.context.noBackupFilesDir, "agenda-notification-permission-requested"),
+    )
 
     /** The activity's half, while one is up. */
     @Volatile var ui: UiHost? = null
@@ -154,8 +159,15 @@ internal class ShellEffects(
             // ---- the pass service (`crates/screens/src/passes`) --------------------------------
             effect.agenda_notifications != null -> {
                 val sync = effect.agenda_notifications!!
-                if (Build.VERSION.SDK_INT >= 33 && sync.ask_permission && !AgendaNotifications.allowed(context)) {
-                    allowed(Manifest.permission.POST_NOTIFICATIONS, true)
+                if (Build.VERSION.SDK_INT >= 33) {
+                    val prompt: (suspend () -> Boolean)? = ui?.let { host ->
+                        { host.ask(Manifest.permission.POST_NOTIFICATIONS) }
+                    }
+                    notificationPermission.requestIfNeeded(
+                        needed = sync.ask_permission,
+                        granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+                        prompt = prompt,
+                    )
                 }
                 EffectResult(agenda_notifications = AgendaNotifications.sync(context, sync))
             }

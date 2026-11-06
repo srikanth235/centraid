@@ -5,12 +5,14 @@ catalog! {
     plain attachment_photo = ("Photo", "Photo");
     plain attachments_heading = ("Attachments", "Attachments");
     plain attachment_add = ("Add attachment", "Add attachment");
+    plain attachment_add_photo = ("Add photo", "Add photo");
     plain attachment_remove = ("Remove attachment", "Remove attachment");
     plain attachment_untitled = ("Untitled attachment", "Untitled attachment");
     plain attachment_added = ("Attachment added", "Attachment added");
     plain attachment_removed = ("Attachment removed. The file is still in your vault.", "Attachment removed. The file is still in your vault.");
     plain attachment_failed = ("Could not add this attachment.", "Could not add this attachment.");
     plain attachment_picking = ("Choose a file to attach", "Choose a file to attach");
+    plain attachment_picking_photo = ("Choose a photo to attach", "Choose a photo to attach");
 
     plain calendar_new = ("New calendar", "New calendar");
     plain calendar_edit = ("Calendar details", "Calendar details");

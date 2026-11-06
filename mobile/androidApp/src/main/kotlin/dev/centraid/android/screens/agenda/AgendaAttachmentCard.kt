@@ -24,6 +24,7 @@ internal fun AgendaAttachmentCard(value: AgendaAttachments, onEvent: (AgendaAtta
             }
         }
         SheetRow(label = value.add_label, iconKey = "Plus", enabled = !value.busy, testTag = "agenda-attachment-add", onTap = { onEvent(AgendaAttachmentEvent(add = AgendaAttachmentEvent.Add())) })
+        SheetRow(label = value.add_photo_label, iconKey = "Image", enabled = !value.busy, testTag = "agenda-attachment-add-photo", onTap = { onEvent(AgendaAttachmentEvent(add_photo = AgendaAttachmentEvent.AddPhoto())) })
         StatusLine(value.status) { onEvent(AgendaAttachmentEvent(retry = AgendaAttachmentEvent.Retry())) }
     }
 }

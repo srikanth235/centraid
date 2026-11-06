@@ -31,7 +31,7 @@ jobs:
   # UIKit needs a real Apple SDK; Linux's JVM gate cannot compile the shell.
   ios:
     runs-on: macos-26
-    # Full native rebuild, XCTest and 66 Maestro cases include simulator-driver
+    # Full native rebuild, XCTest and 70 Maestro cases include simulator-driver
     # startup per case. This is a runner backstop, not an app timing assertion.
     timeout-minutes: 240
     steps:
@@ -120,11 +120,12 @@ jobs:
           set -euo pipefail
           mkdir -p target/android-visual
           bash mobile/scripts/android-core.sh x86_64 2>&1 | tee target/android-visual/rust-core.log
-      - name: Build the Compose app
+      - name: Build the Compose app and run native unit tests
         working-directory: mobile
         run: |
           set -euo pipefail
-          ./gradlew --no-daemon -Pcentraid.android=true :androidApp:assembleDebug 2>&1 | tee ../target/android-visual/gradle.log
+          trap 'if [ -d androidApp/build/test-results/testDebugUnitTest ]; then cp -R androidApp/build/test-results/testDebugUnitTest ../target/android-visual/unit-tests; fi' EXIT
+          ./gradlew --no-daemon -Pcentraid.android=true :androidApp:assembleDebug :androidApp:testDebugUnitTest 2>&1 | tee ../target/android-visual/gradle.log
       - name: Capture asserted emulator screens
         run: bash mobile/scripts/visual-android.sh
       - name: Upload Android compiler, test and visual evidence

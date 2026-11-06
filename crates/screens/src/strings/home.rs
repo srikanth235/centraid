@@ -49,6 +49,9 @@ catalog! {
     plain intent_reminders = ("Open Reminders", "Open Reminders");
     plain intent_new_reminder = ("New Reminder", "New Reminder");
     plain intent_reminder_title = ("Reminder title", "Reminder title");
+    plain shortcut_calendar = ("Open Calendar in {app}", "Open Calendar in {app}");
+    plain shortcut_reminders = ("Open Reminders in {app}", "Open Reminders in {app}");
+    plain shortcut_new_reminder = ("New Reminder in {app}", "New Reminder in {app}");
     plain home_search_chat_group = ("Chats", "Chats");
     plain home_search_group = ("{name}, {n} results", "{name}, {n} results");
     plain home_search_group_one = ("{name}, 1 result", "{name}, 1 result");

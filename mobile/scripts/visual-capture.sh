@@ -111,9 +111,10 @@ fi
 for variant in light-default dark-default light-largest dark-largest; do
   configure "$variant"
   if [ "$variant" != light-default ]; then capture home home; fi
-  capture calendar widget agenda 'agenda-calendar-day-.*'
+  capture calendar calendar
   capture reminders widget reminders 'agenda-task-row-.*'
   capture reminder-draft reminder-draft
+  capture reminder-details reminder-details
   capture photos widget photos 'photos[.]cell[.].*'
   capture notes widget notes 'notes-row-.*'
   capture docs widget docs 'docs-row-.*'

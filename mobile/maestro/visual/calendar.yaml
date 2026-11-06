@@ -1,0 +1,32 @@
+appId: ${APP_ID}
+name: Calendar toolbar and timed event blocks
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: home-tile-agenda
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: home-tile-agenda
+- extendedWaitUntil:
+    visible:
+      id: "agenda-calendar-day-.*"
+    timeout: 60000
+- takeScreenshot: calendar-top
+# The public demo has a timed event today. A week-strip cell alone cannot
+# establish that the hour grid and event blocks actually rendered.
+- scrollUntilVisible:
+    element:
+      id: "agenda-row-.*"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "agenda-row-.*"
+- takeScreenshot: calendar-event

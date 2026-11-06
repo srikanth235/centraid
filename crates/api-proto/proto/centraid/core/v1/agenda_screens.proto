@@ -155,13 +155,26 @@ message AgendaHourDay {
   string heading = 2;
   repeated AgendaRowItem all_day = 3;
   repeated AgendaHourSlot hours = 4;
+  // Day-clipped wall-clock geometry. The shells measure text, not dates.
+  repeated AgendaTimelineItem timeline = 5;
+  int64 duration_ms = 6;
 }
 
 message AgendaHourSlot {
   string key = 1;
   string label = 2;
   Route create_route = 3;
-  repeated AgendaRowItem items = 4;
+  reserved 4;
+  reserved "items";
+  int64 offset_ms = 5;
+}
+
+message AgendaTimelineItem {
+  AgendaRowItem row = 1;
+  int64 start_offset_ms = 2;
+  int64 end_offset_ms = 3;
+  uint32 lane = 4;
+  uint32 lane_count = 5;
 }
 
 message AgendaToolbar {
@@ -1737,11 +1750,13 @@ message AgendaAttachments {
   repeated AgendaAttachmentRow rows = 4;
   optional StatusLine status = 5;
   bool busy = 6;
+  string add_photo_label = 7;
 }
 message AgendaAttachmentRow { string id = 1; string title = 2; string meta = 3; Route route = 4; }
 message AgendaAttachmentEvent {
-  oneof kind { Add add = 1; Remove remove = 2; Retry retry = 3; }
+  oneof kind { Add add = 1; Remove remove = 2; Retry retry = 3; AddPhoto add_photo = 4; }
   message Add {}
   message Remove { string id = 1; }
   message Retry {}
+  message AddPhoto {}
 }

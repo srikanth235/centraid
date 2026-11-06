@@ -57,7 +57,7 @@ const cases = (
       results: `${profile}/${name}/results.xml`,
     };
   });
-const expected = platform === "ios" ? 66 : 57;
+const expected = platform === "ios" ? 70 : 61;
 const passed = cases.filter((item) => item.passed).length;
 const status =
   cases.length === expected && passed === expected

@@ -126,7 +126,8 @@ fn task_file_picker_attaches_a_document_and_removal_keeps_the_document() {
                 .effect
                 .as_ref()
                 .and_then(|effect| effect.kind.as_ref()),
-            Some(wire::effect::Kind::PickFile(_))
+            Some(wire::effect::Kind::PickFile(pick))
+                if pick.kind == wire::pick_file::Kind::Upload as i32
         )
     }));
     d.send(
@@ -170,6 +171,106 @@ fn task_file_picker_attaches_a_document_and_removal_keeps_the_document() {
         panic!("document")
     };
     assert!(document.document.is_some());
+}
+
+#[test]
+fn task_photo_picker_retries_the_same_source_and_saves_the_image_attachment() {
+    let mut d = driver();
+    let task = task(&d, "Check the meter");
+    let i = d.push(agenda::TAB, agenda::routes::task(&task));
+    assert_eq!(
+        detail_data(d.view(i))
+            .attachments
+            .as_ref()
+            .unwrap()
+            .add_photo_label,
+        "Add photo"
+    );
+    let event = |kind| {
+        E::TodoDetail(wire::TodoDetailEvent {
+            kind: Some(de::Kind::Attachment(wire::AgendaAttachmentEvent {
+                kind: Some(kind),
+            })),
+        })
+    };
+    d.effects.clear();
+    d.send(
+        i,
+        event(wire::agenda_attachment_event::Kind::AddPhoto(
+            wire::agenda_attachment_event::AddPhoto {},
+        )),
+    );
+    let picker_is_photo = |d: &centraid_screens::testing::Driver| {
+        assert!(matches!(
+            d.effects.last().and_then(|request| request.effect.as_ref()).and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::PickFile(pick)) if pick.kind == wire::pick_file::Kind::Photo as i32
+        ));
+    };
+    picker_is_photo(&d);
+    assert_eq!(
+        detail_data(d.view(i))
+            .attachments
+            .as_ref()
+            .unwrap()
+            .status
+            .as_ref()
+            .unwrap()
+            .sentence,
+        "Choose a photo to attach"
+    );
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        reason: "the photo cannot be read".into(),
+        ..Default::default()
+    }));
+    let view = detail_data(d.view(i)).attachments.as_ref().unwrap();
+    assert!(!view.busy);
+    assert!(view.rows.is_empty());
+    assert!(view.status.as_ref().unwrap().refused);
+    d.send(
+        i,
+        event(wire::agenda_attachment_event::Kind::Retry(
+            wire::agenda_attachment_event::Retry {},
+        )),
+    );
+    picker_is_photo(&d);
+    d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
+    let view = detail_data(d.view(i)).attachments.as_ref().unwrap();
+    assert!(!view.busy);
+    assert!(view.status.is_none());
+    assert!(view.rows.is_empty());
+    d.send(
+        i,
+        event(wire::agenda_attachment_event::Kind::AddPhoto(
+            wire::agenda_attachment_event::AddPhoto {},
+        )),
+    );
+    d.answer_effect(wire::effect_result::Outcome::FilePicked(wire::FilePicked {
+        blob: "c".repeat(64),
+        byte_size: 2048,
+        name: "Meter.heic".into(),
+        media_type: "image/heic".into(),
+    }));
+    let view = detail_data(d.view(i)).attachments.as_ref().unwrap();
+    assert!(!view.busy);
+    assert_eq!(view.rows.len(), 1, "{:?}", view.status);
+    let row = &view.rows[0];
+    assert_eq!(row.title, "Meter.heic");
+    assert_eq!(
+        row.route.as_ref().unwrap().screen,
+        centraid_screens::docs::DOCUMENT
+    );
+    let wire::app_query_response::Answer::DocsDocument(image) = answer(
+        &d,
+        load::docs::History {
+            document_id: row.id.clone(),
+        },
+    ) else {
+        panic!("document");
+    };
+    let image = image.document.unwrap();
+    assert_eq!(image.content_id, "c".repeat(64));
+    assert_eq!(image.media_type, "image/heic");
+    assert_eq!(image.kind, wire::DocsKind::Image as i32);
 }
 
 #[test]

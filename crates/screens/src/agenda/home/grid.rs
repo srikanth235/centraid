@@ -25,7 +25,7 @@ pub fn window(view: &str, anchor: &str) -> (String, i64) {
     }
 }
 
-pub fn build(home: &Home, locale: Locale) -> wire::AgendaCalendarGrid {
+pub fn build(home: &Home, locale: Locale, zone: &str) -> wire::AgendaCalendarGrid {
     let key = home.calendar_view.as_str();
     let labels = [
         words::view_day(locale),
@@ -107,7 +107,10 @@ pub fn build(home: &Home, locale: Locale) -> wire::AgendaCalendarGrid {
         } else {
             vec![home.anchor.clone()]
         };
-        result.hour_days = days.iter().map(|day| hours(home, locale, day)).collect();
+        result.hour_days = days
+            .iter()
+            .map(|day| hours(home, locale, day, zone))
+            .collect();
     }
     result
 }
@@ -190,10 +193,104 @@ fn panel(
     wire::AgendaCalendarPanel { title, days }
 }
 
-fn hours(home: &Home, locale: Locale, day: &str) -> wire::AgendaHourDay {
+const DAY_MS: i64 = 86_400_000;
+
+fn event_offsets(event: &wire::AgendaEvent, day: &str, zone: &str) -> Option<(i64, i64, bool)> {
+    use centraid_vault::time::{
+        recurrence::{Semantics, parse_instant_ms},
+        zone::{FireZone, parse_wall_iso, wall_epoch},
+    };
+    if event.all_day {
+        return None;
+    }
+    let semantics = Semantics::from_stored(event.recurrence_semantics.as_deref());
+    let zone = FireZone::named(zone).ok()?;
+    let wall = |value: &str| match semantics {
+        Semantics::Zoned => parse_instant_ms(value).map(|instant| zone.zoned_parts(instant)),
+        Semantics::Floating => parse_wall_iso(value),
+        Semantics::AllDay => None,
+    };
+    let midnight = wall_epoch(parse_wall_iso(day)?);
+    let start = wall_epoch(wall(&event.dtstart)?) - midnight;
+    let mut end = event
+        .dtend
+        .as_deref()
+        .and_then(wall)
+        .map_or(start, |value| wall_epoch(value) - midnight);
+    // The second occurrence of a fall-back hour can end before its start on
+    // the civil ruler. Draw its positive elapsed span instead of an empty
+    // block; the row still states both original wall-clock labels. Gesture
+    // deltas remain civil minutes, as adjusted_times requires.
+    if end <= start
+        && semantics == Semantics::Zoned
+        && let Some(elapsed) = event
+            .dtend
+            .as_deref()
+            .and_then(parse_instant_ms)
+            .zip(parse_instant_ms(&event.dtstart))
+            .map(|(end, start)| end - start)
+            .filter(|elapsed| *elapsed > 0)
+    {
+        end = start + elapsed;
+    }
+    Some((
+        start.clamp(0, DAY_MS),
+        end.max(start).clamp(0, DAY_MS),
+        end <= DAY_MS,
+    ))
+}
+
+/// Reuse lanes only after an item ends; all members of an overlapping group
+/// share its maximum lane count so multi-hour blocks never cover one another.
+fn lanes(items: &mut [wire::AgendaTimelineItem]) {
+    let mut order: Vec<usize> = (0..items.len())
+        .filter(|&i| {
+            !matches!(
+                items[i].row.as_ref().and_then(|row| row.kind.as_ref()),
+                Some(wire::agenda_row_item::Kind::NowLine(_))
+            )
+        })
+        .collect();
+    order.sort_by_key(|&i| (items[i].start_offset_ms, items[i].end_offset_ms, i));
+    let mut group = Vec::new();
+    let mut ends: Vec<i64> = Vec::new();
+    let finish = |group: &mut Vec<usize>, count: usize, items: &mut [wire::AgendaTimelineItem]| {
+        for index in group.drain(..) {
+            items[index].lane_count = u32::try_from(count).unwrap_or(u32::MAX);
+        }
+    };
+    for index in order {
+        let start = items[index].start_offset_ms;
+        if !ends.is_empty() && ends.iter().all(|end| *end <= start) {
+            finish(&mut group, ends.len(), items);
+            ends.clear();
+        }
+        let lane = ends
+            .iter()
+            .position(|end| *end <= start)
+            .unwrap_or(ends.len());
+        let end = items[index].end_offset_ms.max(start + 1);
+        if lane == ends.len() {
+            ends.push(end);
+        } else {
+            ends[lane] = end;
+        }
+        items[index].lane = u32::try_from(lane).unwrap_or(u32::MAX);
+        group.push(index);
+    }
+    finish(&mut group, ends.len(), items);
+}
+
+fn clock_offset(day: &str, time: &str) -> Option<i64> {
+    use centraid_vault::time::zone::{parse_wall_iso, wall_epoch};
+    Some(wall_epoch(parse_wall_iso(&format!("{day}T{time}"))?) - wall_epoch(parse_wall_iso(day)?))
+}
+
+fn hours(home: &Home, locale: Locale, day: &str, zone: &str) -> wire::AgendaHourDay {
     let mut result = wire::AgendaHourDay {
         day: day.to_owned(),
         heading: fold::long_day(locale, day),
+        duration_ms: DAY_MS,
         ..Default::default()
     };
     for hour in 0..24 {
@@ -206,7 +303,7 @@ fn hours(home: &Home, locale: Locale, day: &str) -> wire::AgendaHourDay {
             key: format!("{day}T{time}"),
             label: time,
             create_route: Some(route),
-            items: Vec::new(),
+            offset_ms: hour * 3_600_000,
         });
     }
     let data = fold::events(&fold::Fold {
@@ -217,12 +314,12 @@ fn hours(home: &Home, locale: Locale, day: &str) -> wire::AgendaHourDay {
         hidden: &home.hidden,
         held: &home.held,
     });
-    for item in data
+    for mut item in data
         .into_iter()
         .flat_map(|data| data.days)
         .flat_map(|section| section.items)
     {
-        let time = match &item.kind {
+        let offsets = match &mut item.kind {
             Some(wire::agenda_row_item::Kind::Event(row)) => home
                 .held
                 .upcoming
@@ -233,35 +330,37 @@ fn hours(home: &Home, locale: Locale, day: &str) -> wire::AgendaHourDay {
                         .iter()
                         .find(|event| event.instance_key == row.instance_key)
                 })
-                .and_then(|event| {
-                    if event.all_day {
-                        None
-                    } else {
-                        Some(if event.local_start.get(..10) == Some(day) {
-                            civil::clock(&event.local_start)
-                        } else {
-                            "00:00".to_owned()
-                        })
+                .and_then(|event| event_offsets(event, day, zone))
+                .map(|(start, end, ends_here)| {
+                    // A clipped continuation has no end handle on this day.
+                    if !ends_here {
+                        row.adjustments.retain(|option| !option.resize);
                     }
+                    (start, end)
                 }),
             Some(wire::agenda_row_item::Kind::Task(row)) => home
                 .held
                 .find(&row.task_id)
-                .and_then(|task| (!task.due_time.is_empty()).then_some(task.due_time)),
-            Some(wire::agenda_row_item::Kind::NowLine(now)) => Some(now.label.clone()),
+                .and_then(|task| clock_offset(day, &task.due_time))
+                .map(|offset| (offset, offset)),
+            Some(wire::agenda_row_item::Kind::NowLine(now)) => {
+                clock_offset(day, &now.label).map(|offset| (offset, offset))
+            }
             None => None,
         };
-        let hour = time
-            .as_ref()
-            .and_then(|time| time.get(..2))
-            .and_then(|hour| hour.parse::<usize>().ok())
-            .filter(|hour| *hour < 24);
-        if let Some(hour) = hour {
-            result.hours[hour].items.push(item);
+        if let Some((start_offset_ms, end_offset_ms)) = offsets {
+            result.timeline.push(wire::AgendaTimelineItem {
+                row: Some(item),
+                start_offset_ms,
+                end_offset_ms,
+                lane: 0,
+                lane_count: 1,
+            });
         } else {
             result.all_day.push(item);
         }
     }
+    lanes(&mut result.timeline);
     result
 }
 
@@ -330,6 +429,83 @@ pub fn in_event_zone(value: &str, display_zone: &str, event_zone: &str) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn now_line_uses_the_core_clock_label_and_untimed_tasks_stay_outside_the_axis() {
+        let now = civil::clock("2026-06-17T09:42");
+        assert_eq!(clock_offset("2026-06-17", &now), Some(34_920_000));
+        assert_eq!(clock_offset("2026-06-17", ""), None);
+    }
+
+    #[test]
+    fn timeline_clips_each_day_without_rounding_canonical_milliseconds() {
+        let event = wire::AgendaEvent {
+            dtstart: "2026-06-16T23:15:30.125".into(),
+            dtend: Some("2026-06-17T01:45:15.750".into()),
+            recurrence_semantics: Some("floating".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            event_offsets(&event, "2026-06-16", "UTC"),
+            Some((83_730_125, DAY_MS, false))
+        );
+        assert_eq!(
+            event_offsets(&event, "2026-06-17", "UTC"),
+            Some((0, 6_315_750, true))
+        );
+        let zoned = wire::AgendaEvent {
+            dtstart: "2026-06-17T03:15:30.125Z".into(),
+            dtend: Some("2026-06-17T05:45:15.750Z".into()),
+            recurrence_semantics: Some("zoned".into()),
+            ..event
+        };
+        assert_eq!(
+            event_offsets(&zoned, "2026-06-16", "America/New_York"),
+            Some((83_730_125, DAY_MS, false))
+        );
+        assert_eq!(
+            event_offsets(&zoned, "2026-06-17", "America/New_York"),
+            Some((0, 6_315_750, true))
+        );
+    }
+
+    #[test]
+    fn a_positive_duration_across_the_repeated_hour_never_collapses() {
+        let event = wire::AgendaEvent {
+            dtstart: "2026-11-01T05:45:00.125Z".into(),
+            dtend: Some("2026-11-01T06:15:00.750Z".into()),
+            recurrence_semantics: Some("zoned".into()),
+            ..Default::default()
+        };
+        let (start, end, ends_here) =
+            event_offsets(&event, "2026-11-01", "America/New_York").expect("placed");
+        assert!(ends_here);
+        assert_eq!(start, 6_300_125);
+        assert_eq!(end - start, 1_800_625);
+    }
+
+    #[test]
+    fn overlap_groups_get_distinct_lanes_and_touching_events_reuse_them() {
+        let block = |start, end| wire::AgendaTimelineItem {
+            start_offset_ms: start,
+            end_offset_ms: end,
+            row: Some(wire::AgendaRowItem {
+                kind: Some(wire::agenda_row_item::Kind::Event(
+                    wire::AgendaEventRow::default(),
+                )),
+            }),
+            ..Default::default()
+        };
+        let mut items = vec![block(9, 12), block(10, 11), block(11, 13), block(13, 14)];
+        lanes(&mut items);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| (item.lane, item.lane_count))
+                .collect::<Vec<_>>(),
+            vec![(0, 2), (1, 2), (1, 2), (0, 1)]
+        );
+    }
+
     #[test]
     fn moving_keeps_duration_and_resizing_cannot_reverse_an_event() {
         let event = wire::AgendaEvent {

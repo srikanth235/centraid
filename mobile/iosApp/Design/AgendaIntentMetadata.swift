@@ -17,3 +17,26 @@ struct NewReminderIntent: AppIntent {
     @Parameter(title: "Reminder title")
     var reminderTitle: String
 }
+
+struct AgendaShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: OpenCalendarIntent(),
+            phrases: ["Open Calendar in \(.applicationName)"],
+            shortTitle: "Open Calendar",
+            systemImageName: "calendar"
+        )
+        AppShortcut(
+            intent: OpenRemindersIntent(),
+            phrases: ["Open Reminders in \(.applicationName)"],
+            shortTitle: "Open Reminders",
+            systemImageName: "checklist"
+        )
+        AppShortcut(
+            intent: NewReminderIntent(),
+            phrases: ["New Reminder in \(.applicationName)"],
+            shortTitle: "New Reminder",
+            systemImageName: "plus"
+        )
+    }
+}

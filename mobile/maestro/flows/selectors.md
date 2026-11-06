@@ -60,7 +60,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-calendar-name`, `agenda-color-<listRole>`, `agenda-icon-<Icon>` | Calendar/list editor | name, color and icon choices |
 | `agenda-import-completed`, `agenda-import-calendar`, `agenda-import-reminders`, `agenda-import-reminders-file` | Agenda import | include completed or choose the import source |
 | `tasks-tag-<conceptId>` | Reminder tag filter | select a tag; the empty suffix selects All tags |
-| `agenda-attachment-add`, `agenda-attachment-<id>`, `agenda-attachment-remove-<id>`, `agenda-attachment-retry` | Agenda attachments | add, open, remove, or retry an attachment |
+| `agenda-attachment-add`, `agenda-attachment-add-photo`, `agenda-attachment-<id>`, `agenda-attachment-remove-<id>`, `agenda-attachment-retry` | Agenda attachments | choose a file or photo, open, remove, or retry an attachment |
 | `agenda-event-status-action`, `agenda-editor-status-action` | Agenda event/editor | the inline notification Settings or Retry action when shown |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
