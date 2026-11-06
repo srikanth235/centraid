@@ -230,3 +230,44 @@ fn a_series_and_the_follow_view_read_the_days_and_the_latests() {
             .all(|day| parse_day(&day.day) >= Some(view.totals_from))
     );
 }
+
+#[test]
+fn six_months_keeps_empty_months_and_summary_keeps_missing_days() {
+    let world = World::founded();
+    world.ok(
+        "measurement.record",
+        json!({ "days": [
+        { "day": "2026-05-01", "metric": "steps", "value": 4000 },
+        { "day": "2026-10-18", "metric": "steps", "value": 6000 },
+        { "day": "2026-10-20", "metric": "steps", "value": 8000 },
+        { "day": "2026-04-30", "metric": "steps", "value": 2000 }
+    ] }),
+    );
+    let series = world.read(|door| {
+        queries::series(door, Metric::Steps, Range::SixMonths, today()).expect("six months")
+    });
+    assert_eq!(series.buckets.len(), 6);
+    assert_eq!(
+        series.buckets.first().unwrap().first,
+        parse_day("2026-05-01").unwrap()
+    );
+    assert_eq!(series.buckets.last().unwrap().last, today());
+    assert!(
+        series.buckets[1..5]
+            .iter()
+            .all(|bucket| bucket.value.is_none())
+    );
+    assert_eq!(series.typical, Some(2000.0));
+    let summary = world.read(|door| queries::today(door, today(), "a", "b").expect("summary"));
+    let steps = summary
+        .metrics
+        .iter()
+        .find(|metric| metric.metric == Metric::Steps)
+        .unwrap();
+    assert_eq!(steps.week.len(), 7);
+    assert_eq!(
+        steps.week.iter().filter(|day| day.value.is_some()).count(),
+        2
+    );
+    assert!(steps.week[5].value.is_none());
+}

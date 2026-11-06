@@ -204,6 +204,8 @@ message ChatPending {
   bool destructive = 7;
   string settled_line = 8;
   string accessibility_label = 9;
+  // Visible heading; every write remains pending until the member confirms.
+  string title = 10;
 
   enum State {
     STATE_UNSPECIFIED = 0;

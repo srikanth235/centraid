@@ -95,18 +95,48 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .get("position")
         .and_then(serde_json::Value::as_f64);
     ctx.connection().execute(
-        "INSERT INTO container (id, kind, parent_id, color, position)
+        "INSERT INTO container (id, kind, parent_id, color, position, icon_key)
          VALUES (?1, ?2, ?3, ?4, COALESCE(?5,
            (SELECT COALESCE(MAX(position), 0) + 1 FROM container
-             WHERE kind = ?2 AND parent_id IS ?3)))",
+             WHERE kind = ?2 AND parent_id IS ?3)), ?6)",
         rusqlite::params![
             id,
             kind.as_str(),
             parent,
             ctx.input.get("color").and_then(serde_json::Value::as_str),
-            position
+            position,
+            ctx.optional_str("icon_key")
         ],
     )?;
+    Ok(serde_json::json!({ "id": id }))
+}
+
+fn pre_style(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
+        Ok(found) => found,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    Ok((!found.kind.is_container())
+        .then(|| format!("a {} has no container style", found.kind.noun())))
+}
+
+fn style(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let id = ctx.required_str("id")?;
+    for field in ["color", "icon_key"] {
+        if let Some(value) = ctx.input.get(field) {
+            let sql = match field {
+                "color" => "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+                _ => "UPDATE container SET icon_key = ?2 WHERE id = ?1 AND icon_key IS NOT ?2",
+            };
+            if ctx
+                .connection()
+                .execute(sql, rusqlite::params![id, value.as_str()])?
+                > 0
+            {
+                ctx.touch(id)?;
+            }
+        }
+    }
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -186,7 +216,7 @@ pub(crate) fn follow_calendar(
         }
         if let Some(color) = home.color
             && connection.execute(
-                "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+                "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2 AND (color IS NULL OR color NOT LIKE 'list%')",
                 [fills, color],
             )? > 0
         {
@@ -242,6 +272,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "title": { "type": "string", "maxLength": 1000 },
                 "parent": { "type": ["string", "null"] },
                 "color": { "type": ["string", "null"] },
+                "icon_key": { "type": ["string", "null"], "maxLength": 64 },
                 "position": { "type": ["number", "null"] }
               }
             }"#,
@@ -251,6 +282,21 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_create,
             }],
             create,
+        ),
+        CommandDefinition::plain(
+            "container.style",
+            "container",
+            r#"{"type":"object","required":["id"],"additionalProperties":false,"properties":{
+              "id":{"type":"string","minLength":1},
+              "color":{"type":["string","null"],"enum":[null,"listBlue","listYellow","listViolet","listPetrol","listNavy","listGraphite","listRaspberry","listOrchid"]},
+              "icon_key":{"type":["string","null"],"enum":[null,"List","Calendar","Home","Heart","Star","Folder","Book","Gift","Music"]}
+            }}"#,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "container_is_live",
+                check: pre_style,
+            }],
+            style,
         ),
         CommandDefinition::plain(
             "container.move",

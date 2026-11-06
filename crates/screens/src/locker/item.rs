@@ -917,7 +917,20 @@ impl Item {
             actions.push(action("trash", words::trash(locale), true));
             actions
         };
+        let code_card = sections.iter_mut().find_map(|section| {
+            let at = section.rows.iter().position(|row| row.key == SEED)?;
+            Some(section.rows.remove(at))
+        });
         wire::LockerItemData {
+            code_card,
+            change_password_label: if item.r#type == "login"
+                && !item.trashed
+                && !item.url.trim().is_empty()
+            {
+                words::change_password(locale)
+            } else {
+                String::new()
+            },
             title: item.title.clone(),
             type_label: (kind.label)(locale),
             type_chip: kind.chip(locale),

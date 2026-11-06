@@ -1,5 +1,22 @@
 package dev.centraid.android.screens.agenda
 
+import android.content.ClipData
+import android.content.ClipDescription
+import androidx.compose.foundation.draganddrop.dragAndDropSource
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.DragAndDropTransferData
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import centraid.core.v1.TodoRowAction
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -84,9 +101,23 @@ internal fun TodoRowView(
     depth: Int = 0,
     idPrefix: String = "tasks-row",
     indent: Dp = 0.dp,
+    onAction: ((TodoRowAction) -> Unit)? = null,
 ) {
+    var showingActions by remember(row.task_id) { mutableStateOf(false) }
+    val act: (String) -> Unit = { key -> if (key == "details") row.route?.let(onOpen) else onAction?.invoke(TodoRowAction(task_id = row.task_id, key = key)) }
+    val dropTarget = remember(row.task_id, onAction) { object : DragAndDropTarget {
+        override fun onDrop(event: DragAndDropEvent): Boolean {
+            val id = event.toAndroidDragEvent().clipData?.getItemAt(0)?.text?.toString() ?: return false
+            onAction?.invoke(TodoRowAction(task_id = id, key = "reorder", before_id = row.task_id)) ?: return false
+            return true
+        }
+    } }
+    val gestures = if (onAction == null) Modifier else Modifier
+        .dragAndDropSource(transferData = { _: androidx.compose.ui.geometry.Offset -> DragAndDropTransferData(ClipData.newPlainText("task", row.task_id)) })
+        .dragAndDropTarget(shouldStartDragAndDrop = { ClipDescription.MIMETYPE_TEXT_PLAIN in it.mimeTypes() }, target = dropTarget)
+        .pointerInput(row.task_id) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { change, amount -> drag += amount; change.consume() }, onDragEnd = { if (kotlin.math.abs(drag) > 80f) showingActions = !showingActions }) }
     Row(
-        Modifier
+        Modifier.then(gestures)
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
             .padding(start = KitGeometry.GUTTER / 2 + indent + (depth * 24).dp, end = 4.dp),
@@ -104,7 +135,8 @@ internal fun TodoRowView(
                 .clearAndSetSemantics {
                     contentDescription = row.accessibility_label.ifEmpty { row.title }
                     role = Role.Button
-                    if (file != null) customActions = listOf(CustomAccessibilityAction(fileVerb) { file(); true })
+                    customActions = row.actions.map { choice -> CustomAccessibilityAction(choice.label) { act(choice.key); true } } +
+                        if (file != null) listOf(CustomAccessibilityAction(fileVerb) { file(); true }) else emptyList()
                 },
         ) {
             Text(
@@ -121,7 +153,7 @@ internal fun TodoRowView(
                         Text(
                             row.due_label,
                             style = centraidType("annotLabel"),
-                            color = centraidColor(if (row.overdue) "warning" else "textSoft"),
+                            color = centraidColor(if (row.overdue) "dangerText" else "textSoft"),
                             maxLines = 1,
                         )
                     }
@@ -155,8 +187,13 @@ internal fun TodoRowView(
             )
         }
     }
+    if (showingActions) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER)) {
+            row.actions.forEach { choice -> OutlineButton(label = choice.label, testTag = "tasks-action-${choice.key}-${row.task_id}") { act(choice.key); showingActions = false } }
+        }
+    }
     row.children.forEach { child ->
-        TodoRowView(child, onCheck, onOpen, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent)
+        TodoRowView(child, onCheck, onOpen, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent, onAction = onAction)
     }
 }
 
@@ -207,6 +244,7 @@ internal fun LazyListScope.todoGroups(
     onFile: ((String) -> Unit)? = null,
     fileVerb: String = "",
     idPrefix: String = "tasks-row",
+    onAction: ((TodoRowAction) -> Unit)? = null,
 ) {
     groups.forEach { group ->
         item(key = "group-${group.key}") {
@@ -228,7 +266,7 @@ internal fun LazyListScope.todoGroups(
         }
         group.rows.forEach { row ->
             item(key = "row-${group.key}-${row.task_id}") {
-                TodoRowView(row, onCheck, onOpen, onFile, fileVerb, idPrefix = idPrefix)
+                TodoRowView(row, onCheck, onOpen, onFile, fileVerb, idPrefix = idPrefix, onAction = onAction)
             }
         }
     }
@@ -255,6 +293,7 @@ internal fun TodoQuickAddBar(
     verb: String,
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onTool: (String) -> Unit = {},
     onBlur: () -> Unit = {},
     testTag: String = "tasks-quick-add",
 ) {
@@ -276,6 +315,11 @@ internal fun TodoQuickAddBar(
     LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            quickAdd.tools.forEach { tool ->
+                OutlineButton(tool.label, testTag = "agenda-quick-tool-${tool.key}", onPress = { onTool(tool.key) })
+            }
+        }
         Row(
             Modifier
                 .fillMaxWidth()
@@ -296,8 +340,8 @@ internal fun TodoQuickAddBar(
                     singleLine = true,
                     textStyle = centraidType("body").copy(color = centraidColor("text")),
                     cursorBrush = SolidColor(centraidColor("text")),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (quickAdd.can_submit) submit() }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { if (quickAdd.can_submit) submit() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focus)
@@ -316,6 +360,9 @@ internal fun TodoQuickAddBar(
             if (quickAdd.can_submit) {
                 OutlineButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
+        }
+        if (quickAdd.preview.isNotEmpty()) {
+            Text(quickAdd.preview, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.testTag("agenda-quick-preview"))
         }
     }
 }

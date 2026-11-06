@@ -26,17 +26,48 @@ struct TodoRowView: View {
     var embedded: Bool = false
     /// The ids a flow taps: `<prefix>-<task id>` on the row, `<prefix>-check-<task id>` on its box.
     var identifierPrefix: String = "tasks-row"
+    var onAction: ((Centraid_Core_V1_TodoRowAction) -> Void)? = nil
 
+    @State private var showingActions = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: 0) {
             line
+                .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
+                    if abs(value.translation.width) > abs(value.translation.height), onAction != nil { showingActions.toggle() }
+                })
+                .draggable(row.taskID)
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let id = ids.first, let onAction else { return false }
+                    onAction(.with { $0.taskID = id; $0.key = "reorder"; $0.beforeID = row.taskID })
+                    return true
+                }
+                .contextMenu {
+                    ForEach(row.actions, id: \.key) { choice in
+                        Button(choice.label) { act(choice.key) }
+                    }
+                }
+            if showingActions {
+                HStack {
+                    ForEach(row.actions, id: \.key) { choice in
+                        Button(choice.label) { act(choice.key); showingActions = false }
+                            .centraidType("bodyStrong")
+                            .foregroundStyle(Theme.color(choice.key == "delete" ? "dangerText" : "agendaText", scheme))
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("tasks-action-\(choice.key)-\(row.taskID)")
+                    }
+                }
+            }
             ForEach(row.children, id: \.taskID) { child in
-                TodoRowView(row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix)
+                TodoRowView(row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix, onAction: onAction)
                     .padding(.leading, 28)
             }
         }
+    }
+
+    private func act(_ key: String) {
+        if key == "details" { onPick(row.route) } else { onAction?(.with { $0.taskID = row.taskID; $0.key = key }) }
     }
 
     private var settled: Bool { row.check == .done || row.check == .wontDo }
@@ -86,7 +117,7 @@ struct TodoRowView: View {
                                 Text(row.dueLabel)
                                     .centraidType("annotLabel")
                                     .monospacedDigit()
-                                    .foregroundStyle(Theme.color(row.overdue ? "warning" : "textSoft", scheme))
+                                    .foregroundStyle(Theme.color(row.overdue ? "dangerText" : "textSoft", scheme))
                             }
                             if !row.meta.isEmpty {
                                 Text(row.meta)
@@ -140,6 +171,7 @@ struct TodoGroupView: View {
     var fileVerb: String = ""
     var onFile: ((String) -> Void)? = nil
     var identifierPrefix: String = "tasks-row"
+    var onAction: ((Centraid_Core_V1_TodoRowAction) -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
 
@@ -160,7 +192,7 @@ struct TodoGroupView: View {
                 onVerb: group.verbKey.isEmpty ? nil : { onVerb(group.verbKey) }
             )
             ForEach(group.rows, id: \.taskID) { row in
-                TodoRowView(row: row, onCheck: onCheck, onPick: onPick, fileVerb: fileVerb, onFile: onFile, identifierPrefix: identifierPrefix)
+                TodoRowView(row: row, onCheck: onCheck, onPick: onPick, fileVerb: fileVerb, onFile: onFile, identifierPrefix: identifierPrefix, onAction: onAction)
             }
         }
     }
@@ -175,6 +207,7 @@ struct TodoQuickAddBar: View {
     let verb: String
     let onChange: (String) -> Void
     let onSubmit: () -> Void
+    var onTool: (String) -> Void = { _ in }
     /// The field took or gave up the keyboard. The screen that hosts the bar
     /// uses it to put its band away while the keyboard is up, so the bar sits
     /// on the keyboard and not under it.
@@ -188,6 +221,15 @@ struct TodoQuickAddBar: View {
     var body: some View {
         if quickAdd.shown && quickAdd.drawn {
             let prompt = quickAdd.landsLabel.isEmpty ? placeholder : quickAdd.landsLabel
+            VStack(alignment: .leading, spacing: 4) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(quickAdd.tools, id: \.key) { tool in
+                            KitLink(label: tool.label, identifier: "agenda-quick-tool-\(tool.key)") { onTool(tool.key) }
+                                .accessibilityAddTraits(tool.selected ? .isSelected : [])
+                        }
+                    }.padding(.horizontal, CentraidGeometry.pageMargin)
+                }
             HStack(spacing: 8) {
                 // RUST SAYS WHEN THE BAR TAKES THE KEYBOARD: the Plus
                 // opened it, or Notes' "Send to Agenda" landed with words in it.
@@ -200,7 +242,7 @@ struct TodoQuickAddBar: View {
                     onFocusChange: onFocusChange
                 )
                 .centraidType("body")
-                .submitLabel(.done)
+                .submitLabel(.next)
                 .accessibilityLabel(prompt)
                 .accessibilityIdentifier(fieldIdentifier)
                 // ADD ONLY ONCE THERE ARE WORDS: a greyed verb read as a second
@@ -215,6 +257,13 @@ struct TodoQuickAddBar: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 6)
+            if !quickAdd.preview.isEmpty {
+                Text(quickAdd.preview).centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .accessibilityIdentifier("agenda-quick-preview")
+            }
+            }
         }
     }
 }

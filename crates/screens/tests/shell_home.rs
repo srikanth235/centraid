@@ -1,4 +1,4 @@
-//! Home, the springboard, through the door a shell uses: eight tiles read through
+//! Home, the springboard, through the door a shell uses: nine widgets read through
 //! their apps' own queries, graded as a whole, with the vaults the shell tells it
 //! about. Ports the cases of the KMP `HomeMachineSpec`, `SpringboardPolicySpec`,
 //! `HomeReadsSpec` and the tile specs over a real vault; every sentence is Rust's.
@@ -69,7 +69,15 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     assert_eq!(
         order,
         [
-            "photos", "docs", "agenda", "notes", "money", "health", "people", "locker"
+            "agenda",
+            "reminders",
+            "photos",
+            "money",
+            "health",
+            "people",
+            "locker",
+            "notes",
+            "docs"
         ]
     );
     // Every tile names its app, says how to open it and carries where a tap goes.
@@ -79,13 +87,13 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
         assert!(tile.accessibility_label.starts_with(&tile.open_label));
         let route = tile.route.as_ref().expect("a tile opens its app");
         assert!(
-            route.screen.starts_with(&format!("{}.", tile.app_id)),
+            route.screen.starts_with(&format!("{}.", tile.source_app)),
             "{} opens {}",
             tile.app_id,
             route.screen
         );
     }
-    // The rows follow the policy: a wide tile alone, small ones in twos.
+    // Rows preserve the saved order in four columns, with spans 1, 2 and 4.
     let rows: Vec<Vec<&str>> = data
         .grid_rows
         .iter()
@@ -94,12 +102,81 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     assert_eq!(
         rows,
         vec![
+            vec!["agenda", "reminders"],
             vec!["photos"],
-            vec!["docs", "notes"],
-            vec!["agenda"],
-            vec!["money", "health"],
-            vec!["people", "locker"],
+            vec!["money", "health", "people", "locker"],
+            vec!["notes", "docs"],
         ]
+    );
+}
+
+#[test]
+fn widget_layout_changes_only_after_storage_acknowledges_and_survives_a_refresh() {
+    use centraid_screens::testing::FakeShell;
+    let (mut d, i) = started();
+    let before = data(&d, i);
+    let choice = tile(&before, "notes")
+        .widget_actions
+        .iter()
+        .find_map(|action| {
+            action
+                .change
+                .as_ref()
+                .filter(|change| change.size() == wire::HomeTileSize::Large)
+        })
+        .expect("large widget action")
+        .clone();
+    tell(&mut d, i, H::WidgetChanged(choice.clone()));
+    assert_eq!(
+        tile(&data(&d, i), "notes").size(),
+        wire::HomeTileSize::Medium
+    );
+    let mut phone = FakeShell::default();
+    assert_eq!(d.serve(&mut phone), 1);
+    assert!(phone.device["home-widgets"].contains("notes\tlarge"));
+    assert_eq!(
+        tile(&data(&d, i), "notes").size(),
+        wire::HomeTileSize::Large
+    );
+    tell(&mut d, i, H::Shown(wire::home_event::Shown {}));
+    assert_eq!(
+        tile(&data(&d, i), "notes").size(),
+        wire::HomeTileSize::Large
+    );
+
+    let change = wire::home_event::WidgetChanged {
+        position: wire::home_event::widget_changed::Position::First as i32,
+        ..choice
+    };
+    tell(&mut d, i, H::WidgetChanged(change));
+    d.serve(&mut phone);
+    assert_eq!(data(&d, i).grid_rows[0].app_ids, ["notes"]);
+}
+
+#[test]
+fn failed_widget_write_keeps_the_saved_layout_and_offers_an_honest_retry() {
+    let (mut d, i) = started();
+    // The unrelated appearance read is still waiting; answer it before the widget write.
+    d.answer_effect(wire::effect_result::Outcome::Keychain(
+        wire::KeychainValue::default(),
+    ));
+    tell(
+        &mut d,
+        i,
+        H::WidgetChanged(wire::home_event::WidgetChanged {
+            app_id: "notes".into(),
+            size: wire::HomeTileSize::Large as i32,
+            ..Default::default()
+        }),
+    );
+    d.answer_effect(wire::effect_result::Outcome::Secrets(wire::SecretBatched {
+        answers: vec![wire::SecretAnswer::default()],
+    }));
+    let data = data(&d, i);
+    assert_eq!(tile(&data, "notes").size(), wire::HomeTileSize::Medium);
+    assert_eq!(
+        state(&d, i).status.unwrap().copy,
+        "Couldn't save your widgets. Try again."
     );
 }
 
@@ -199,16 +276,20 @@ fn a_phone_with_no_vault_opens_onto_the_first_launch_gate_and_its_doors_make_and
         (gate.make_label.as_str(), gate.restore_label.as_str()),
         ("Get started", "Restore backup")
     );
-    // THE HOUSE IS HOME'S ROSTER: every tile's app, in Home's order.
-    assert_eq!(
-        gate.apps,
-        shell::policy::ORDER
-            .iter()
-            .map(|a| (*a).to_owned())
-            .collect::<Vec<_>>()
-    );
+    assert_eq!(gate.title, "Welcome to Centraid");
     assert_eq!(gate.slides.len(), 3);
-    assert!(!gate.next_label.is_empty() && !gate.skip_label.is_empty());
+    assert_eq!(
+        gate.slides
+            .iter()
+            .map(|row| row.icon_key.as_str())
+            .collect::<Vec<_>>(),
+        ["Grid", "Sparkle", "Lock"]
+    );
+    assert!(
+        gate.slides
+            .iter()
+            .all(|row| !row.title.is_empty() && !row.body.is_empty())
+    );
     for (event, wanted) in [
         (
             H::Make(wire::home_event::MakePressed {}),
@@ -630,7 +711,7 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
     let founded = vault("v1", "Personal");
     tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
     let data = data(&d, i);
-    assert_eq!(data.tiles.len(), 8);
+    assert_eq!(data.tiles.len(), 9);
 }
 
 #[test]
@@ -680,28 +761,21 @@ fn home_reads_again_when_a_table_a_tile_read_moves_with_no_pull_and_no_gesture()
     assert_eq!(notes(&d), before + 1, "the Notes tile moved on its own");
 }
 
-/// THE SEAM THE HUE CORPUS CANNOT SEE (`crates/design/tests/corpus.rs` holds every
-/// row of the wheel): both native Home views turn a face's hue key into a colour
-/// role. A hue spelled in one shell and forgotten in the other draws nothing on
-/// Compose and traps on SwiftUI, and neither failure looks like a missing token.
-/// This reads the SOURCE, because the Swift half has no other enforcer on a
-/// machine with no Xcode. (Ported from the shared module's `PartyHueWheelSpec`.)
+/// Home carries palette role keys across the wire; native renderers only look
+/// them up, so a palette migration cannot leave a second native wheel behind.
 #[test]
-fn both_native_home_views_name_all_eight_hue_roles_and_the_solved_foreground() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let views = [
-        "mobile/iosApp/Sources/HomeView.swift",
-        "mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt",
-    ];
-    for view in views {
-        let source = std::fs::read_to_string(root.join(view)).expect("a native Home view");
-        for key in centraid_design::IDENTITY_HUE_KEYS {
-            let role = format!("c{}{}", key[..1].to_uppercase(), &key[1..]);
-            assert!(source.contains(&role), "{view} never names {role}");
-        }
-        // And the solved foreground, without which a saturated disc keeps the ink
-        // that failed contrast on it.
-        assert!(source.contains("textInv"), "{view} never names textInv");
+fn home_people_faces_carry_generated_palette_roles() {
+    let (d, i) = started();
+    let data = data(&d, i);
+    let body = tile(&data, "people").body.as_ref().expect("People body");
+    let Some(wire::home_tile_body::Kind::People(people)) = &body.kind else {
+        panic!("People body");
+    };
+    for face in &people.faces {
+        assert_eq!(
+            face.color.as_deref(),
+            Some(centraid_design::identity_fill_key(&face.party_id))
+        );
     }
 }
 
@@ -711,6 +785,9 @@ fn an_outside_entry_is_answered_with_the_route_and_the_shell_names_no_screen() {
     for (entry, screen) in [
         (Entry::LockerLock, "locker.lock"),
         (Entry::HealthConnect, "health.connect"),
+        (Entry::AgendaCalendar, "agenda.home"),
+        (Entry::AgendaReminders, "agenda.home"),
+        (Entry::AgendaNewReminder, "agenda.editor"),
     ] {
         let (mut d, i) = started();
         let before = d.effects.len();
@@ -719,6 +796,7 @@ fn an_outside_entry_is_answered_with_the_route_and_the_shell_names_no_screen() {
             i,
             H::EntryAsked(wire::home_event::EntryAsked {
                 entry: entry as i32,
+                ..Default::default()
             }),
         );
         let routes: Vec<_> = d.effects[before..]
@@ -762,4 +840,32 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
     let bar = state(&d, i).bar.unwrap();
     assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "Backed up today. Open backup");
+}
+
+#[test]
+fn a_reminder_intent_opens_its_words_as_an_editable_quick_add_without_writing() {
+    use wire::home_event::entry_asked::Entry;
+    let (mut d, i) = started();
+    let before = d.effects.len();
+    tell(
+        &mut d,
+        i,
+        H::EntryAsked(wire::home_event::EntryAsked {
+            entry: Entry::AgendaNewReminder as i32,
+            title: "Call tomorrow at 9am".into(),
+        }),
+    );
+    let route = d.effects[before..]
+        .iter()
+        .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::OpenRoute(open) => open.route.as_ref(),
+            _ => None,
+        })
+        .expect("open draft");
+    let Some(wire::route::Args::AgendaHome(home)) = route.args.as_ref() else {
+        panic!("not reminders")
+    };
+    assert_eq!(home.destination(), wire::AgendaDestination::Todo);
+    assert_eq!(home.quick_add_title, "Call tomorrow at 9am");
+    assert_eq!(d.effects.len() - before, 1, "an entry opens only its draft");
 }

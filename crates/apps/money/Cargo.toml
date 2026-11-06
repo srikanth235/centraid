@@ -16,6 +16,7 @@ path = "src/lib.rs"
 # hash this repo defines itself. See `import::keys`.
 blake3.workspace = true
 centraid-apps-kit = { path = "../kit" }
+centraid-design = { path = "../../design" }
 # The full-text door, asked for a term and never matched by hand: a search is
 # the vault's own question, and Money has no text index of its own.
 centraid-search = { path = "../../search" }

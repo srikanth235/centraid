@@ -143,7 +143,7 @@ CREATE INDEX rule_by_category ON rule(category_id);
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
 
 -- index source_key on source
-CREATE UNIQUE INDEX source_key    ON source(origin_id, external_id, ifnull(device_id, ''));
+CREATE UNIQUE INDEX source_key ON source(origin_id, external_id, ifnull(device_id, ''));
 
 -- index task_by_done on task
 CREATE INDEX task_by_done    ON task(status, done_at, id);
@@ -162,6 +162,9 @@ CREATE INDEX task_by_section ON task(section_id) WHERE section_id IS NOT NULL;
 
 -- index task_by_series on task
 CREATE INDEX task_by_series  ON task(series_id) WHERE series_id IS NOT NULL;
+
+-- index task_siblings on task
+CREATE INDEX task_siblings ON task(project_id, section_id, parent_id, position, id);
 
 -- index txn_by_account_day on txn
 CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
@@ -243,7 +246,7 @@ CREATE TABLE concept (
   id        TEXT PRIMARY KEY,
   kind      TEXT NOT NULL CHECK (kind IN ('tag','flag','category','workout_kind','activity_kind','relation')),
   key       TEXT NOT NULL,
-  parent_id TEXT REFERENCES concept(id),
+  parent_id TEXT REFERENCES concept(id), color TEXT CHECK (color IS NULL OR (kind = 'tag' AND color IN ('listBlue','listYellow','listViolet','listPetrol','listNavy','listGraphite','listRaspberry','listOrchid'))),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (kind, key)
 ) STRICT;
@@ -268,7 +271,7 @@ CREATE TABLE container (
   parent_id TEXT REFERENCES container(id),
   color     TEXT,
   cover     TEXT REFERENCES blob(hash),
-  position  REAL NOT NULL DEFAULT 0,
+  position  REAL NOT NULL DEFAULT 0, icon_key TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 
@@ -360,7 +363,7 @@ CREATE TABLE event (
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
   reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
-  description    TEXT,
+  description    TEXT, travel_minutes INTEGER NOT NULL DEFAULT 0 CHECK (travel_minutes >= 0 AND travel_minutes <= 10080),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (calendar_id, calendar_kind) REFERENCES entity(id, kind),
   CHECK (timing <> 'zoned' OR (zone IS NOT NULL AND substr(starts, -1) = 'Z'))
@@ -547,9 +550,9 @@ CREATE TABLE occurrence (
 ) STRICT, WITHOUT ROWID;
 
 -- table origin on origin
-CREATE TABLE origin (
+CREATE TABLE "origin" (
   id         TEXT PRIMARY KEY,
-  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement')),
+  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement','reminders')),
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT,
@@ -674,7 +677,7 @@ CREATE TABLE search_word (
 ) STRICT;
 
 -- table source on source
-CREATE TABLE source (
+CREATE TABLE "source" (
   id          TEXT PRIMARY KEY,
   origin_id   TEXT NOT NULL,
   system      TEXT NOT NULL,
@@ -687,12 +690,12 @@ CREATE TABLE source (
   -- When the follower trashed the row because its record left a complete read: the trash it may
   -- undo if the record returns and the member has not touched the row since (#1146).
   gone_at     TEXT,
-  FOREIGN KEY (origin_id, system) REFERENCES origin(id, system),
+  FOREIGN KEY (origin_id, system) REFERENCES "origin"(id, system),
   FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE SET NULL,
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
   CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
-    ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
+    ('contacts/person','calendar/event','files/document','health/activity','statement/txn','reminders/task'))
 ) STRICT;
 
 -- table task on task
@@ -715,7 +718,7 @@ CREATE TABLE task (
   section_id        TEXT,
   section_kind      TEXT GENERATED ALWAYS AS ('section') VIRTUAL,
   description       TEXT,
-  position          REAL NOT NULL DEFAULT 0,
+  position          REAL NOT NULL DEFAULT 0, url TEXT, reminders TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (project_id, project_kind) REFERENCES entity(id, kind),
   FOREIGN KEY (section_id, section_kind) REFERENCES entity(id, kind),

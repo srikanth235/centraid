@@ -2,15 +2,31 @@ package dev.centraid.android.screens.notes
 
 import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
@@ -26,7 +42,6 @@ import centraid.core.v1.NotesSheet
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
-import centraid.core.v1.StatusChip
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -53,6 +68,9 @@ import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.android.theme.LocalCentraidTokens
+import dev.centraid.android.kit.CentraidIcon
+import androidx.compose.material3.HorizontalDivider
 
 /**
  * `notes.home` (#1135): Notes · Notebooks · Journal under one band, with Search
@@ -220,50 +238,78 @@ private fun LazyListScope.sections(
         if (head != null && head.title.isNotEmpty()) {
             item(key = "head-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
         }
-        items(section.rows, key = { "$index-" + it.note_id }) { row -> NoteRow(row, menuLabel, onOpen, onEvent) }
+        itemsIndexed(section.rows, key = { _, row -> "$index-" + row.note_id }) { rowIndex, row ->
+            val radius = (LocalCentraidTokens.current.radii["lg"] ?: 0).dp
+            val shape = RoundedCornerShape(
+                topStart = if (rowIndex == 0) radius else 0.dp,
+                topEnd = if (rowIndex == 0) radius else 0.dp,
+                bottomStart = if (rowIndex == section.rows.lastIndex) radius else 0.dp,
+                bottomEnd = if (rowIndex == section.rows.lastIndex) radius else 0.dp,
+            )
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER).clip(shape).background(centraidColor("bgElev"))) {
+                NoteRow(row, menuLabel, onOpen, onEvent)
+            }
+        }
     }
 }
 
-/** One note: title over snippet and meta, the checklist word as a chip, and the menu key. */
+/** One note: title and checklist progress, then the preview and edited date. */
 @Composable
 private fun NoteRow(row: NotesNoteRow, menuLabel: String, onOpen: (Route) -> Unit, onEvent: (NotesHomeEvent) -> Unit) {
     val matchInk = centraidColor("text")
-    CentraidRow(
-        title = row.title,
-        meta = listOf(row.snippet, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-        chips = listOfNotNull(if (row.check_label.isNotEmpty()) StatusChip(label = row.check_label) else null),
-        // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked
-        // them (`snippet_runs`); the meta follows as on any row.
-        metaRuns = row.snippet_runs.takeIf { it.isNotEmpty() }?.let { runs ->
-            androidx.compose.ui.text.buildAnnotatedString {
-                runs.forEach { run ->
-                    if (run.highlighted) {
-                        pushStyle(
-                            androidx.compose.ui.text.SpanStyle(
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.W600,
-                                color = matchInk,
-                            ),
-                        )
-                        append(run.text)
-                        pop()
-                    } else {
-                        append(run.text)
+    val summaryLines = if (LocalDensity.current.fontScale > 1.3f) Int.MAX_VALUE else 1
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                Modifier.weight(1f).heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable { row.route?.let(onOpen) }
+                    .clearAndSetSemantics {
+                        contentDescription = row.accessibility_label.ifEmpty { row.title }
+                        role = Role.Button
+                    }
+                    .testTag("notes-row-${row.note_id}")
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+                    if (row.pinned) CentraidIcon(iconKey = "Pin", tint = centraidColor("notesText"), size = 16.dp)
+                    Text(
+                        row.title,
+                        style = centraidType("bodyStrong"),
+                        color = matchInk,
+                        maxLines = summaryLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (row.check_label.isNotEmpty()) {
+                        Text(row.check_label, style = centraidType("smallStrong"), color = centraidColor("notesText"))
                     }
                 }
-                if (row.meta.isNotEmpty()) append(" · ${row.meta}")
+                val snippet = androidx.compose.ui.text.buildAnnotatedString {
+                    if (row.snippet_runs.isEmpty()) append(row.snippet)
+                    row.snippet_runs.forEach { run ->
+                        if (run.highlighted) pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.W600, color = matchInk))
+                        append(run.text)
+                        if (run.highlighted) pop()
+                    }
+                }
+                if (snippet.isNotEmpty()) {
+                    Text(snippet, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = summaryLines, overflow = TextOverflow.Ellipsis)
+                }
+                if (row.meta.isNotEmpty()) {
+                    Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textFaint"), maxLines = summaryLines, overflow = TextOverflow.Ellipsis)
+                }
             }
-        },
-        testTag = "notes-row-${row.note_id}",
-        onTap = { row.route?.let(onOpen) },
-    ) {
-        if (menuLabel.isNotEmpty()) {
-            IconKey(
-                iconKey = "MoreHoriz",
-                label = "$menuLabel, ${row.title}",
-                testTag = "notes-row-menu-${row.note_id}",
-                bordered = false,
-            ) { onEvent(NotesHomeEvent(row_menu = NotesHomeEvent.RowMenuOpened(row.note_id))) }
+            if (menuLabel.isNotEmpty()) {
+                IconKey(
+                    iconKey = "MoreHoriz",
+                    label = "$menuLabel, ${row.title}",
+                    testTag = "notes-row-menu-${row.note_id}",
+                    bordered = false,
+                ) { onEvent(NotesHomeEvent(row_menu = NotesHomeEvent.RowMenuOpened(row.note_id))) }
+            }
         }
+        HorizontalDivider(color = centraidColor("line"))
     }
 }
 

@@ -1,4 +1,4 @@
-//! ONE METRIC OVER A WEEK, A MONTH OR A YEAR (#1129), opened from a Today or a
+//! ONE METRIC OVER A WEEK, A MONTH, SIX MONTHS OR A YEAR (#1129), opened from a Today or a
 //! Trends row: the period's per-day average against the member's typical, the
 //! chart's buckets with the typical line across them, and the facts. Every figure
 //! is `health.series`'s (R-1129-12); the identity hue marks only the bucket today
@@ -20,6 +20,7 @@ use crate::strings::{Locale, fill, health as words};
 
 const RANGE_WEEK: &str = "week";
 const RANGE_MONTH: &str = "month";
+const RANGE_SIX_MONTHS: &str = "six_months";
 const RANGE_YEAR: &str = "year";
 const WEEK: usize = 7;
 const QUARTER: usize = 3;
@@ -33,11 +34,13 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         metric: Metric::of_key(&args.metric).unwrap_or(Metric::Steps),
         range: match wire::HealthMetricRange::try_from(args.range) {
             Ok(wire::HealthMetricRange::Month) => wire::HealthMetricRange::Month,
+            Ok(wire::HealthMetricRange::SixMonths) => wire::HealthMetricRange::SixMonths,
             Ok(wire::HealthMetricRange::Year) => wire::HealthMetricRange::Year,
             _ => wire::HealthMetricRange::Week,
         },
         parent: args.parent.clone(),
         phase: Phase::Loading,
+        selected_index: None,
     }))
 }
 
@@ -46,6 +49,7 @@ struct MetricPage {
     range: wire::HealthMetricRange,
     parent: String,
     phase: Phase<wire::HealthSeries>,
+    selected_index: Option<usize>,
 }
 
 impl MetricPage {
@@ -61,6 +65,7 @@ impl MetricPage {
         let range = match self.range {
             wire::HealthMetricRange::Month => load::health::SeriesRange::Month,
             wire::HealthMetricRange::Year => load::health::SeriesRange::Year,
+            wire::HealthMetricRange::SixMonths => load::health::SeriesRange::SixMonths,
             _ => load::health::SeriesRange::Week,
         };
         self.phase = Phase::of(read::read(
@@ -78,10 +83,12 @@ impl MetricPage {
             RANGE_WEEK => wire::HealthMetricRange::Week,
             RANGE_MONTH => wire::HealthMetricRange::Month,
             RANGE_YEAR => wire::HealthMetricRange::Year,
+            RANGE_SIX_MONTHS => wire::HealthMetricRange::SixMonths,
             _ => return,
         };
         if range != self.range {
             self.range = range;
+            self.selected_index = None;
             self.phase = Phase::Loading;
             self.reload(ctx);
         }
@@ -90,7 +97,10 @@ impl MetricPage {
     fn data(&self, ctx: &Ctx, series: &wire::HealthSeries) -> wire::HealthMetricData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
         let metric = self.metric;
-        let year = self.range == wire::HealthMetricRange::Year;
+        let year = matches!(
+            self.range,
+            wire::HealthMetricRange::Year | wire::HealthMetricRange::SixMonths
+        );
         let caption = caption(locale, self.range, &series.buckets);
         if series.buckets.iter().all(|bucket| bucket.value.is_none()) {
             return wire::HealthMetricData {
@@ -205,6 +215,18 @@ impl MetricPage {
             facts: facts(locale, metric, series, year, units),
             foot: foot(locale, metric, &Store::of(ctx).name(locale)),
             empty: None,
+            selected_index: self.selected_index.unwrap_or(last).min(last) as u32,
+            selected_bucket: series
+                .buckets
+                .get(self.selected_index.unwrap_or(last).min(last))
+                .map(|bucket| wire::HealthFact {
+                    label: bucket_words(locale, self.range, bucket),
+                    detail: bucket
+                        .value
+                        .map(|value| figures::phrase(locale, metric, value, units))
+                        .unwrap_or_else(|| words::no_reading(locale)),
+                }),
+            scrubber_label: words::scrubber_label(locale),
         }
     }
 }
@@ -291,7 +313,7 @@ fn caption(
     };
     match range {
         wire::HealthMetricRange::Month => words::caption_month(locale),
-        wire::HealthMetricRange::Year => {
+        wire::HealthMetricRange::Year | wire::HealthMetricRange::SixMonths => {
             format!(
                 "{} – {}",
                 month_of(locale, &first.start),
@@ -311,7 +333,10 @@ fn bucket_words(
     range: wire::HealthMetricRange,
     bucket: &wire::HealthBucket,
 ) -> String {
-    if range == wire::HealthMetricRange::Year {
+    if matches!(
+        range,
+        wire::HealthMetricRange::Year | wire::HealthMetricRange::SixMonths
+    ) {
         month_of(locale, &bucket.start)
     } else {
         civil::day_month(locale, &bucket.start)
@@ -333,6 +358,10 @@ pub fn ticks(
         wire::HealthMetricRange::Month => back(buckets, WEEK)
             .iter()
             .map(|bucket| figures::short_date(locale, &bucket.start))
+            .collect(),
+        wire::HealthMetricRange::SixMonths => buckets
+            .iter()
+            .map(|bucket| month_of(locale, &bucket.start).chars().take(3).collect())
             .collect(),
         wire::HealthMetricRange::Year => back(buckets, QUARTER)
             .iter()
@@ -373,6 +402,14 @@ impl Screen for MetricPage {
             Some(E::HealthMetric(event)) => match event.kind {
                 Some(M::Refreshed(_)) => self.reload(ctx),
                 Some(M::Range(range)) => self.pick(ctx, &range.key),
+                Some(M::Bucket(picked)) => {
+                    if let Phase::Ready(series) = &self.phase {
+                        let index = picked.index as usize;
+                        if index < series.buckets.len() {
+                            self.selected_index = Some(index);
+                        }
+                    }
+                }
                 None => {}
             },
             _ => {}
@@ -419,6 +456,11 @@ impl Screen for MetricPage {
                             RANGE_MONTH,
                             wire::HealthMetricRange::Month,
                             words::range_month(locale),
+                        ),
+                        segment(
+                            RANGE_SIX_MONTHS,
+                            wire::HealthMetricRange::SixMonths,
+                            words::range_six_months(locale),
                         ),
                         segment(
                             RANGE_YEAR,

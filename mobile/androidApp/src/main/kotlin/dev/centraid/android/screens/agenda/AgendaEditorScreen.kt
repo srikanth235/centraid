@@ -1,5 +1,8 @@
 package dev.centraid.android.screens.agenda
 
+import dev.centraid.android.kit.SheetRoom
+import dev.centraid.android.kit.SheetRow
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.selection.toggleable
@@ -85,7 +88,7 @@ internal fun AgendaEditorScreen(
             GoneCard(gone, leave)
             return@EditorRoom
         }
-        StatusLine(state.status?.sentence.orEmpty())
+        StatusLine(state.status, actTag = "agenda-editor-status-action") { onEvent(AgendaEditorEvent(status_acted = AgendaEditorEvent.StatusActed())) }
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
@@ -155,6 +158,20 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
             onTime = { picking = "start-time" },
         )
         // A TASK IS A TITLE AND A DUE DAY: the event's fields are not drawn.
+        if (!data.show_event_fields) {
+            EditableFieldRow(key = chrome.field_notes, value = draft.notes, reload = if (clean) draft.notes else null, placeholder = chrome.notes_placeholder, singleLine = false,
+                onEdit = { onEvent(AgendaEditorEvent(notes = AgendaEditorEvent.NotesChanged(text = it))) }, testTag = "agenda-editor-notes")
+            if (data.more_details_open) {
+                ChoiceFieldRow(chrome.field_repeat, data.repeat_label, testTag = "agenda-editor-repeat", onTap = { onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REPEAT))) })
+                ChoiceFieldRow(chrome.field_reminder, data.reminder_label, testTag = "agenda-editor-reminder", onTap = { onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REMINDER))) })
+                EditableFieldRow(key = chrome.field_link, value = draft.link, reload = if (clean) draft.link else null, placeholder = chrome.link_placeholder,
+                    onEdit = { onEvent(AgendaEditorEvent(link = AgendaEditorEvent.LinkChanged(text = it))) }, testTag = "agenda-editor-link")
+            }
+        }
+        data.extra_fields.forEach { field ->
+            AgendaExtraField(field) { value -> onEvent(AgendaEditorEvent(extra_changed = AgendaEditorEvent.ExtraChanged(key = field.key, value_ = value))) }
+        }
+        if (data.more_details_label.isNotEmpty()) OutlineButton(label = data.more_details_label, testTag = "agenda-editor-more-details", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER)) { onEvent(AgendaEditorEvent(more_details = AgendaEditorEvent.MoreDetails())) }
         if (data.show_event_fields) {
             WhenRow(
                 key = chrome.field_ends,
@@ -333,5 +350,21 @@ private fun EditorSheets(state: AgendaEditorState, onEvent: (AgendaEditorEvent) 
             onDismiss = close,
         )
         else -> Unit
+    }
+}
+
+
+@Composable
+private fun AgendaExtraField(field: centraid.core.v1.TodoField, changed: (String) -> Unit) {
+    var open by remember(field.key) { mutableStateOf(false) }
+    if (field.edit_text) {
+        EditableFieldRow(key = field.label, value = field.text_value, reload = null, placeholder = field.add_placeholder, onEdit = changed, testTag = "agenda-editor-extra-${field.key}")
+    } else {
+        ChoiceFieldRow(key = field.label, value = field.choices.firstOrNull { it.selected }?.label.orEmpty(), testTag = "agenda-editor-extra-${field.key}", onTap = { open = true })
+        if (open) {
+            SheetRoom(title = field.label, onDismiss = { open = false }) {
+                field.choices.forEach { choice -> SheetRow(label = choice.label, selected = choice.selected, onTap = { changed(choice.key); open = false }) }
+            }
+        }
     }
 }

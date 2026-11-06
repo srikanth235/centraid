@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="utf-8">
 <title>Health summary, Android (dark)</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -14,111 +12,112 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: #F2EFEA;">
+<div style="width: 412px; height: 915px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--ds-bgList); font-family: 'Roboto Flex', Roboto, system-ui, sans-serif; color: var(--ds-text);">
   <div style="height: 40px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 500;">
     <span>9:30</span>
     <span style="display: flex; align-items: center; gap: 6px;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><path d="M12 20l-10-12a16 16 0 0120 0z"/></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><path d="M3 21h18V3z"/></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"/><rect x="10" y="1.5" width="4" height="2" rx="1"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ds-text)" aria-hidden="true"><path d="M12 20l-10-12a16 16 0 0120 0z"></path></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ds-text)" aria-hidden="true"><path d="M3 21h18V3z"></path></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ds-text)" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"></rect><rect x="10" y="1.5" width="4" height="2" rx="1"></rect></svg>
     </span>
   </div>
 
   <div style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 0 16px;">
-    <span aria-hidden="true" style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 9px; background: #CB4669; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"/></svg></span>
+    <span aria-hidden="true" style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 9px; background: var(--ds-healthFill); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"></path></svg></span>
     <div style="flex-grow: 1;">
       <h1 style="margin: 0; font-size: 28px; font-weight: 500; line-height: 36px;">Summary</h1>
-      <p style="margin: 0; font-size: 14px; color: #C9C4BA;">Wednesday 4 November · read from Health Connect</p>
+      <p style="margin: 0; font-size: 14px; color: var(--ds-textSoft);">Wednesday 4 November · read from Health Connect</p>
     </div>
   </div>
 
   <div style="display: flex; align-items: baseline; justify-content: space-between; margin: 12px 24px 8px;">
     <h2 style="margin: 0; font-size: 22px; font-weight: 500;">Pinned</h2>
-    <span style="font-size: 12px; font-weight: 500; color: #A39E95;">against your own typical</span>
+    <span style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint);">against your own typical</span>
   </div>
 
   <div style="margin: 0 16px; display: flex; flex-direction: column; gap: 8px;">
-    <a href="HealthMetricDark.dc.html" style="text-decoration: none; color: inherit; background: #2A2826; border-radius: 24px; padding: 16px; display: block;">
-      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #F76E8E;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"/></svg>Steps
-        <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: #A39E95;">So far today</span>
+    <a href="HealthMetricDark.dc.html" style="text-decoration: none; color: inherit; background: var(--ds-bgSunken); border-radius: 24px; padding: 16px; display: block;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"></path></svg>Steps
+        <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ds-textFaint);">So far today</span>
       </div>
       <div style="display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px;">
         <div>
-          <div><span style="font-size: 32px; font-weight: 500; line-height: 40px;">9,108</span> <span style="font-size: 14px; color: #C9C4BA;">steps</span></div>
-          <div style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background: #233E2E; font-size: 12px; font-weight: 500; color: #62D092; margin-top: 4px;">Above your typical 6,900–8,100</div>
+          <div><span style="font-size: 32px; font-weight: 500; line-height: 40px;">9,108</span> <span style="font-size: 14px; color: var(--ds-textSoft);">steps</span></div>
+          <div style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background: var(--ds-successTint); font-size: 12px; font-weight: 500; color: var(--ds-healthText); margin-top: 4px;">Above your typical 6,900–8,100</div>
         </div>
         <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px;" role="img" aria-label="Last 7 days">
-          <span style="width: 8px; height: 22px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 30px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 18px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 26px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 34px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 24px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 38px; border-radius: 4px; background: #CB4669;"></span>
+          <span style="width: 8px; height: 22px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 30px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 18px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 26px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 34px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 24px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 38px; border-radius: 4px; background: #BB365C;"></span>
         </div>
       </div>
     </a>
 
-    <div style="background: #2A2826; border-radius: 24px; padding: 16px;">
-      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #F76E8E;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M20 14A8 8 0 019 4a8 8 0 1011 10z"/></svg>Sleep
-        <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: #A39E95;">Last night</span>
+    <div style="background: var(--ds-bgSunken); border-radius: 24px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M20 14A8 8 0 019 4a8 8 0 1011 10z"></path></svg>Sleep
+        <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ds-textFaint);">Last night</span>
       </div>
       <div style="display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px;">
         <div>
-          <div><span style="font-size: 32px; font-weight: 500; line-height: 40px;">7</span> <span style="font-size: 14px; color: #C9C4BA;">h</span> <span style="font-size: 32px; font-weight: 500; line-height: 40px;">12</span> <span style="font-size: 14px; color: #C9C4BA;">min</span></div>
-          <div style="font-size: 12px; font-weight: 500; color: #A39E95; margin-top: 4px;">Within your typical 6 h 50 – 7 h 40</div>
+          <div><span style="font-size: 32px; font-weight: 500; line-height: 40px;">7</span> <span style="font-size: 14px; color: var(--ds-textSoft);">h</span> <span style="font-size: 32px; font-weight: 500; line-height: 40px;">12</span> <span style="font-size: 14px; color: var(--ds-textSoft);">min</span></div>
+          <div style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint); margin-top: 4px;">Within your typical 6 h 50 – 7 h 40</div>
         </div>
         <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px;" role="img" aria-label="Last 7 nights">
-          <span style="width: 8px; height: 30px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 26px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 33px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 22px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 29px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 35px; border-radius: 4px; background: #3A3733;"></span><span style="width: 8px; height: 31px; border-radius: 4px; background: #CB4669;"></span>
+          <span style="width: 8px; height: 30px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 26px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 33px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 22px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 29px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 35px; border-radius: 4px; background: #E4E0D8;"></span><span style="width: 8px; height: 31px; border-radius: 4px; background: #BB365C;"></span>
         </div>
       </div>
     </div>
 
     <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
-      <div style="background: #2A2826; border-radius: 24px; padding: 16px;">
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #F76E8E;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 5 6 5 10a5 5 0 01-10 0c0-2 1-4 2-5 0 2 1 3 2 3 0-3 0-5 1-8z"/></svg>Active energy</div>
-        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">412</span> <span style="font-size: 14px; color: #C9C4BA;">kcal</span></div>
-        <div style="font-size: 12px; font-weight: 500; color: #A39E95; margin-top: 2px;">Typical 520</div>
+      <div style="background: var(--ds-bgSunken); border-radius: 24px; padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 5 6 5 10a5 5 0 01-10 0c0-2 1-4 2-5 0 2 1 3 2 3 0-3 0-5 1-8z"></path></svg>Active energy</div>
+        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">412</span> <span style="font-size: 14px; color: var(--ds-textSoft);">kcal</span></div>
+        <div style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint); margin-top: 2px;">Typical 520</div>
       </div>
-      <div style="background: #2A2826; border-radius: 24px; padding: 16px;">
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #F76E8E;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg>Exercise</div>
-        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">28</span> <span style="font-size: 14px; color: #C9C4BA;">min</span></div>
-        <div style="font-size: 12px; font-weight: 500; color: #A39E95; margin-top: 2px;">Typical 31</div>
+      <div style="background: var(--ds-bgSunken); border-radius: 24px; padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg>Exercise</div>
+        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">28</span> <span style="font-size: 14px; color: var(--ds-textSoft);">min</span></div>
+        <div style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint); margin-top: 2px;">Typical 31</div>
       </div>
-      <div style="background: #2A2826; border-radius: 24px; padding: 16px;">
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #F76E8E;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#F76E8E" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"/></svg>Resting heart rate</div>
-        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">58</span> <span style="font-size: 14px; color: #C9C4BA;">bpm</span></div>
-        <div style="font-size: 12px; font-weight: 500; color: #A39E95; margin-top: 2px;">Typical 56–60</div>
+      <div style="background: var(--ds-bgSunken); border-radius: 24px; padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--ds-healthText)" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"></path></svg>Resting heart rate</div>
+        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">58</span> <span style="font-size: 14px; color: var(--ds-textSoft);">bpm</span></div>
+        <div style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint); margin-top: 2px;">Typical 56–60</div>
       </div>
-      <div style="background: #2A2826; border-radius: 24px; padding: 16px;">
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #F76E8E;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 10l3 3 3-4"/></svg>Weight</div>
-        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">72.4</span> <span style="font-size: 14px; color: #C9C4BA;">kg</span></div>
-        <div style="font-size: 12px; font-weight: 500; color: #A39E95; margin-top: 2px;">Yesterday</div>
+      <div style="background: var(--ds-bgSunken); border-radius: 24px; padding: 16px;">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ds-healthText);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"></rect><path d="M9 10l3 3 3-4"></path></svg>Weight</div>
+        <div style="margin-top: 8px;"><span style="font-size: 24px; font-weight: 500;">72.4</span> <span style="font-size: 14px; color: var(--ds-textSoft);">kg</span></div>
+        <div style="font-size: 12px; font-weight: 500; color: var(--ds-textFaint); margin-top: 2px;">Yesterday</div>
       </div>
     </div>
   </div>
 
   <h2 style="margin: 20px 24px 8px; font-size: 22px; font-weight: 500;">Highlights</h2>
-  <div style="margin: 0 16px; background: #2A2826; border-radius: 24px; padding: 16px; display: flex; gap: 12px; align-items: center;">
-    <span style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; background: #441D29; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 16l6-6 4 4 6-6M14 8h6v6"/></svg></span>
+  <div style="margin: 0 16px; background: var(--ds-bgSunken); border-radius: 24px; padding: 16px; display: flex; gap: 12px; align-items: center;">
+    <span style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; background: var(--ds-healthTint); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-healthText)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 16l6-6 4 4 6-6M14 8h6v6"></path></svg></span>
     <div style="font-size: 14px; line-height: 20px;">Over the last 30 days you walked <b style="font-weight: 600;">12% more</b> than the 30 days before.</div>
   </div>
 
   <div style="position: absolute; left: 18px; right: 18px; bottom: 21px; height: 54px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: #2A2826; box-shadow: 0 3px 10px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9C4BA" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>
+    <button aria-label="Home" style="width: 54px; height: 54px; flex-shrink: 0; border-radius: 27px; border: none; background: var(--ds-bgSunken); box-shadow: 0 3px 10px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textSoft)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
     </button>
-    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: #2A2826; box-shadow: 0 3px 10px rgba(0,0,0,0.5); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
-      <span aria-hidden="true" style="position: absolute; top: 5px; left: 31px; width: 22px; height: 2px; border-radius: 1px; background: #3A3733;"></span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #F2EFEA; font-weight: 600;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"/></svg>Summary</span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #C9C4BA;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A39E95" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>Trends</span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #C9C4BA;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A39E95" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/></svg>Workouts</span>
-      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #C9C4BA;"><svg width="22" height="22" viewBox="0 0 24 24" fill="#A39E95" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</span>
+    <div style="flex-grow: 1; height: 54px; box-sizing: border-box; padding: 4px; position: relative; border-radius: 27px; background: var(--ds-bgSunken); box-shadow: 0 3px 10px rgba(0,0,0,0.08); display: flex; align-items: stretch; font-size: 11px; line-height: 15px;">
+      <span aria-hidden="true" style="position: absolute; top: 5px; left: 31px; width: 22px; height: 2px; border-radius: 1px; background: var(--ds-text);"></span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--ds-text); font-weight: 600;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" aria-hidden="true"><path d="M12 21s-8-5-8-11a5 5 0 019-3 5 5 0 019 3c0 6-8 11-8 11z"></path></svg>Summary</span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--ds-textSoft);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textFaint)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 20V10M12 20V4M18 20v-7"></path></svg>Trends</span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--ds-textSoft);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textFaint)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"></path></svg>Workouts</span>
+      <span style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--ds-textSoft);"><svg width="22" height="22" viewBox="0 0 24 24" fill="var(--ds-textFaint)" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
     </div>
   </div>
-  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: #3A3733;"></div>
+  <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: var(--ds-text);"></div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:412,&quot;height&quot;:915}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

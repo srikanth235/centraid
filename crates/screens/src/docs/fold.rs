@@ -17,6 +17,7 @@ use crate::strings::{Locale, docs as words, shared};
 pub const TRASH_ICON: &str = "trash";
 
 // The keys a `DocsAction` carries, and so what `ActionPicked` sends.
+pub const KEY_SHARE: &str = "share";
 pub const KEY_EDIT: &str = "edit";
 pub const KEY_STAR: &str = "star";
 pub const KEY_UNSTAR: &str = "unstar";
@@ -104,6 +105,8 @@ pub fn row(
     wire::DocsRowView {
         document_id: row.document_id.clone(),
         content_id: row.content_id.clone(),
+        preview_path: row.preview_path.clone(),
+        media_type: row.media_type.clone(),
         route: Some(routes::document(&row.document_id, &title, parent)),
         title,
         kind_icon_key: icon_of(row.kind()).to_owned(),
@@ -117,6 +120,7 @@ pub fn row(
             .labels
             .iter()
             .map(|label| wire::DocsLabelChip {
+                color_key: label_color(&label.tag_id, &label.color_key),
                 tag_id: label.tag_id.clone(),
                 label: label.label.clone(),
             })
@@ -124,6 +128,34 @@ pub fn row(
         snippet: snippet(&row.snippet),
         accessibility_label,
     }
+}
+
+pub fn color_action(tag_id: &str, key: &str) -> Option<crate::catalog::act::docs::ColorLabel> {
+    use crate::catalog::act::docs::{ColorLabel, ColorLabelColor as C};
+    let color = match key {
+        "listBlue" => C::ListBlue,
+        "listYellow" => C::ListYellow,
+        "listViolet" => C::ListViolet,
+        "listPetrol" => C::ListPetrol,
+        "listNavy" => C::ListNavy,
+        "listGraphite" => C::ListGraphite,
+        "listRaspberry" => C::ListRaspberry,
+        "listOrchid" => C::ListOrchid,
+        _ => return None,
+    };
+    Some(ColorLabel {
+        tag_id: tag_id.to_owned(),
+        color,
+    })
+}
+
+fn label_color(id: &str, stored: &str) -> String {
+    if stored.is_empty() {
+        centraid_design::list_hue_key(id)
+    } else {
+        centraid_design::hue_role_key(stored)
+    }
+    .to_owned()
 }
 
 /// The index's highlight, `⟦`/`⟧` around the matched words, as runs.
@@ -273,6 +305,7 @@ pub fn labels_sheet(
             .labels
             .iter()
             .map(|chip| wire::DocsLabelChip {
+                color_key: label_color(&chip.tag_id, &chip.color_key),
                 tag_id: chip.tag_id.clone(),
                 label: chip.label.clone(),
             })
@@ -287,6 +320,23 @@ pub fn labels_sheet(
         add_label: words::label_add(locale),
         placeholder: words::label_placeholder(locale),
         remove_label: words::label_remove(locale),
+        color_label: words::label_color(locale),
+        colors: [
+            ("listBlue", words::color_blue(locale)),
+            ("listYellow", words::color_yellow(locale)),
+            ("listViolet", words::color_violet(locale)),
+            ("listPetrol", words::color_petrol(locale)),
+            ("listNavy", words::color_navy(locale)),
+            ("listGraphite", words::color_graphite(locale)),
+            ("listRaspberry", words::color_raspberry(locale)),
+            ("listOrchid", words::color_orchid(locale)),
+        ]
+        .into_iter()
+        .map(|(key, label)| wire::DocsLabelColor {
+            key: key.to_owned(),
+            label,
+        })
+        .collect(),
     }
 }
 
@@ -330,11 +380,19 @@ pub fn document(
         facts: facts(locale, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
-        actions: head_actions(locale, found),
+        actions: {
+            let mut actions = head_actions(locale, found);
+            if !answer.file_path.is_empty() {
+                actions.insert(0, action(KEY_SHARE, words::action_share(locale), "Share"));
+            }
+            actions
+        },
         trashed_note: trashed_note(locale, found),
         folders: nodes,
         labels: drive.map(|d| d.labels.clone()).unwrap_or_default(),
         row: Some(view),
+        file_path: answer.file_path.clone(),
+        preview_label: words::preview(locale),
     }
 }
 

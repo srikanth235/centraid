@@ -10,7 +10,7 @@ catalog! {
     plain cancel = ("Cancel", "Cancel");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
-    plain current_version = ("Current version", "Current version");
+    plain current_version = ("Current", "Current");
     plain delete_note_body = (
         "It stays restorable for 30 days, with its links, tags and files.",
         "It stays restorable for 30 days, with its links, tags and files."

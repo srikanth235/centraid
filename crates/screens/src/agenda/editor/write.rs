@@ -38,7 +38,11 @@ impl Times {
                 starts: format!("{}T{}:00", draft.start_day, draft.start_time),
                 ends: format!("{}T{}:00", draft.end_day, draft.end_time),
                 all_day: false,
-                zone: zone.to_owned(),
+                zone: if draft.time_zone.is_empty() {
+                    zone.to_owned()
+                } else {
+                    draft.time_zone.clone()
+                },
             }
         }
     }
@@ -62,7 +66,19 @@ fn reminder_of(draft: &Draft) -> Option<i64> {
 }
 
 fn reminders(draft: &Draft) -> String {
-    reminder_of(draft).map_or_else(|| "[]".to_owned(), |minutes| format!("[{minutes}]"))
+    let mut alerts: Vec<i64> = reminder_of(draft)
+        .into_iter()
+        .chain(
+            draft
+                .second_reminder_key
+                .parse::<i64>()
+                .ok()
+                .filter(|value| *value >= 0),
+        )
+        .collect();
+    alerts.sort_unstable();
+    alerts.dedup();
+    serde_json::to_string(&alerts).unwrap_or_else(|_| "[]".to_owned())
 }
 
 fn json_list(ids: &[String]) -> String {
@@ -73,6 +89,14 @@ fn non_blank(text: &str) -> Option<String> {
     Some(text.trim())
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
+}
+
+fn rule(draft: &Draft) -> Option<String> {
+    if draft.repeat_key == super::draft::REPEAT_CUSTOM {
+        non_blank(&draft.custom_rule)
+    } else {
+        rule_of(&draft.repeat_key).map(str::to_owned)
+    }
 }
 
 /// `propose`: a new event.
@@ -88,9 +112,12 @@ pub fn propose(draft: &Draft, zone: &str) -> act::Propose {
         starts: times.starts,
         calendar_id: Some(draft.calendar_id.clone()),
         attendees: (!draft.guest_ids.is_empty()).then(|| json_list(&draft.guest_ids)),
-        rule: rule_of(&draft.repeat_key).map_or(Field::Keep, |rule| Field::Is(rule.to_owned())),
+        rule: rule(draft).map_or(Field::Keep, Field::Is),
         url: non_blank(&draft.link).map_or(Field::Keep, Field::Is),
-        reminders: reminder_of(draft).map_or(Field::Keep, |_| Field::Is(reminders(draft))),
+        reminders: Field::Is(reminders(draft)),
+        place_id: non_blank(&draft.place_id).map_or(Field::Keep, Field::Is),
+        busy: Some(draft.busy),
+        travel_minutes: Some(i64::from(draft.travel_minutes)),
         ..act::Propose::default()
     }
 }
@@ -115,16 +142,15 @@ pub fn edit_event(
     if draft.notes.trim() != base.notes.trim() {
         edit.description = non_blank(&draft.notes).map_or(Field::Clear, Field::Is);
     }
-    if times_changed(draft, base) {
+    if times_changed(draft, base) || draft.time_zone != base.time_zone {
         let times = Times::of(draft, zone);
         edit.zone = times.zone();
         edit.timing = times.all_day.then_some(act::EditEventTiming::AllDay);
         edit.ends = Field::Is(times.ends);
         edit.starts = Some(times.starts);
     }
-    if draft.repeat_key != base.repeat_key {
-        edit.rule =
-            rule_of(&draft.repeat_key).map_or(Field::Clear, |rule| Field::Is(rule.to_owned()));
+    if draft.repeat_key != base.repeat_key || draft.custom_rule != base.custom_rule {
+        edit.rule = rule(draft).map_or(Field::Clear, Field::Is);
     }
     if draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty() {
         edit.calendar_id = Some(draft.calendar_id.clone());
@@ -132,8 +158,19 @@ pub fn edit_event(
     if draft.link.trim() != base.link.trim() {
         edit.url = non_blank(&draft.link).map_or(Field::Clear, Field::Is);
     }
-    if draft.reminder_key != base.reminder_key {
+    if draft.reminder_key != base.reminder_key
+        || draft.second_reminder_key != base.second_reminder_key
+    {
         edit.reminders = Field::Is(reminders(draft));
+    }
+    if draft.place_id != base.place_id {
+        edit.place_id = non_blank(&draft.place_id).map_or(Field::Clear, Field::Is);
+    }
+    if draft.busy != base.busy {
+        edit.busy = Some(draft.busy);
+    }
+    if draft.travel_minutes != base.travel_minutes {
+        edit.travel_minutes = Some(i64::from(draft.travel_minutes));
     }
     if guests_changed(draft, base) {
         let mut everyone = owner_ids.to_vec();

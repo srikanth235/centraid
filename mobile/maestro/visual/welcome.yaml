@@ -1,0 +1,29 @@
+appId: ${APP_ID}
+name: Welcome with both entry controls
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: first-launch
+    timeout: 60000
+- assertNotVisible:
+    id: home-grid
+- takeScreenshot: welcome
+- scrollUntilVisible:
+    element:
+      id: first-launch-primary
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: first-launch-primary
+- scrollUntilVisible:
+    element:
+      id: first-launch-secondary
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: first-launch-secondary
+- takeScreenshot: welcome-actions

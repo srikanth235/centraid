@@ -1,13 +1,23 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.horizontalScroll
+import dev.centraid.android.kit.KitChip
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCatchUpEvent
 import centraid.core.v1.TodoCatchUpState
@@ -22,6 +32,7 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
@@ -45,6 +56,18 @@ internal fun TodoListScreen(
     val chrome = state.chrome
     PushedPage(title = state.title, parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
         Column(Modifier.fillMaxSize()) {
+            if (state.can_show_completed) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(state.show_completed_label, style = centraidType("body"), color = centraidColor("text"))
+                    Switch(
+                        checked = state.show_completed,
+                        onCheckedChange = { onEvent(TodoListEvent(completed_changed = TodoListEvent.CompletedChanged(on = it))) },
+                        colors = kitSwitchColors(),
+                        modifier = Modifier.testTag("tasks-show-completed").semantics { contentDescription = state.show_completed_label },
+                    )
+                }
+            }
+            if (state.clear_completed_label.isNotEmpty()) KitLink(label = state.clear_completed_label, onClick = { onEvent(TodoListEvent(clear_completed = TodoListEvent.ClearCompleted())) }, modifier = Modifier.testTag("tasks-clear-completed"))
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
                 onRetry = { onEvent(TodoListEvent(refreshed = TodoListEvent.Refreshed())) },
@@ -52,6 +75,13 @@ internal fun TodoListScreen(
                 modifier = Modifier.weight(1f),
             ) { list ->
                 val empty = list.empty
+                Column {
+                if (list.tag_choices.isNotEmpty()) {
+                    SectionHeader(SectionHead(title = list.tag_heading))
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = KitGeometry.GUTTER)) {
+                        list.tag_choices.forEach { choice -> KitChip(label = choice.label, selected = choice.selected, onClick = { onEvent(TodoListEvent(tag_picked = TodoListEvent.TagPicked(key = choice.key))) }, modifier = Modifier.testTag("tasks-tag-${choice.key}")) }
+                    }
+                }
                 if (list.groups.isEmpty() && empty != null) {
                     EmptyStateView(empty, onAction = null)
                 } else {
@@ -61,6 +91,7 @@ internal fun TodoListScreen(
                             onCheck = { onEvent(TodoListEvent(row_checked = TodoListEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
                             onVerb = { },
+                            onAction = { onEvent(TodoListEvent(row_action = it)) },
                         )
                         item(key = "foot") {
                             Column {
@@ -76,6 +107,7 @@ internal fun TodoListScreen(
                             }
                         }
                     }
+                }
                 }
             }
             StatusLine(state.status) { onEvent(TodoListEvent(status_acted = TodoListEvent.StatusActed())) }
@@ -97,6 +129,7 @@ internal fun TodoProjectScreen(
     val rename = data?.rename_label.orEmpty()
     PushedPage(
         title = state.title,
+        titleColorRole = state.title_color_role,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         trailing = if (addSection.isNotEmpty()) {
@@ -106,6 +139,11 @@ internal fun TodoProjectScreen(
         },
     ) {
         Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(state.show_completed_label, style = centraidType("body"))
+                Switch(checked = state.show_completed, onCheckedChange = { onEvent(TodoProjectEvent(completed_changed = TodoProjectEvent.CompletedChanged(on = it))) }, colors = kitSwitchColors(), modifier = Modifier.testTag("tasks-show-completed").semantics { contentDescription = state.show_completed_label })
+            }
+            if (state.clear_completed_label.isNotEmpty()) KitLink(label = state.clear_completed_label, onClick = { onEvent(TodoProjectEvent(clear_completed = TodoProjectEvent.ClearCompleted())) }, modifier = Modifier.testTag("tasks-clear-completed"))
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
                 onRetry = { onEvent(TodoProjectEvent(refreshed = TodoProjectEvent.Refreshed())) },
@@ -137,6 +175,7 @@ internal fun TodoProjectScreen(
                             onCheck = { onEvent(TodoProjectEvent(row_checked = TodoProjectEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
                             onVerb = { onEvent(TodoProjectEvent(group_verb = TodoProjectEvent.GroupVerb(key = it))) },
+                            onAction = { onEvent(TodoProjectEvent(row_action = it)) },
                         )
                     }
                 }
@@ -148,6 +187,7 @@ internal fun TodoProjectScreen(
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TodoProjectEvent(quick_add_changed = TodoProjectEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TodoProjectEvent(quick_add_submitted = TodoProjectEvent.QuickAddSubmitted())) },
+                onTool = { onEvent(TodoProjectEvent(quick_add_tool = centraid.core.v1.TodoQuickAddTool(key = it))) },
             )
         }
     }
@@ -171,11 +211,13 @@ internal fun TodoProjectScreen(
         }
         state.sheet == TodoProjectState.Sheet.SHEET_RENAME && data != null -> SheetRoom(
             title = data.rename_title,
+            status = state.status?.sentence.orEmpty(),
             onDismiss = closeSheet,
             primary = SheetPrimary(data.rename_verb, enabled = state.rename_can_submit) {
                 onEvent(TodoProjectEvent(rename_submitted = TodoProjectEvent.RenameSubmitted()))
             },
         ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
             // THE FIELD OPENS ON THE PROJECT'S OWN NAME (the machine's `rename_name`) and is typed over.
             EditableFieldRow(
                 key = "",
@@ -185,6 +227,8 @@ internal fun TodoProjectScreen(
                 onEdit = { onEvent(TodoProjectEvent(rename_name = TodoProjectEvent.RenameNameChanged(name = it))) },
                 testTag = "tasks-rename-field",
             )
+            state.appearance?.let { AgendaAppearancePicker(it) { changed -> onEvent(TodoProjectEvent(appearance = changed)) } }
+            }
         }
     }
 }

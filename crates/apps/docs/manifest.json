@@ -123,6 +123,16 @@
         "schema": "container",
         "table": "create",
         "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "tag",
+        "table": "color",
+        "verbs": "act"
       }
     ]
   },
@@ -976,6 +986,59 @@
           }
         }
       }
+    },
+    {
+      "name": "color-label",
+      "inverse": null,
+      "verb": "edit:color",
+      "kind": "tag",
+      "sealed": [],
+      "command": "tag.color",
+      "phrasings": [
+        "make the travel label violet",
+        "set the tax label to blue",
+        "change the home label color to petrol"
+      ],
+      "description": "Choose one palette color for a shared label. Every document wearing it reads the same color.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "listBlue",
+              "listYellow",
+              "listViolet",
+              "listPetrol",
+              "listNavy",
+              "listGraphite",
+              "listRaspberry",
+              "listOrchid"
+            ]
+          }
+        },
+        "required": ["id", "color"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -1121,7 +1184,11 @@
         }
       ],
       "links": [
-        { "kind": "folder", "label": "folder", "via": "folder_column" }
+        {
+          "kind": "folder",
+          "label": "folder",
+          "via": "folder_column"
+        }
       ],
       "trash": true,
       "container": false

@@ -59,7 +59,7 @@ name: health-connect
 # CONNECTED POPS BACK to Health, which now reads: Today's hero is steps.
 - extendedWaitUntil:
     visible:
-      id: "health-hero"
+      id: "health-metric-steps"
     timeout: 60000
 - assertNotVisible:
     id: "health-connect-open"
@@ -69,6 +69,10 @@ name: health-connect
       id: "health-today-foot"
     direction: DOWN
 # A metric opens on its own page.
+- scrollUntilVisible:
+    element:
+      id: "health-metric-active_energy_kcal"
+    direction: UP
 - tapOn:
     id: "health-metric-active_energy_kcal"
 - assertVisible:

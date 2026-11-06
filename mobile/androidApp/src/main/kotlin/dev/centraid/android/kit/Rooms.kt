@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -57,7 +59,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
- * THE ROOMS (DESIGN.md "The seven rooms"; K5, #1029).
+ * THE ROOMS (product-intuition screen contracts "The seven rooms"; K5, #1029).
  *
  * A screen is one of these and supplies content and copy; the room owns the
  * header, the back or close control, search, the status host and the band
@@ -196,7 +198,14 @@ public fun AppPlace(
             }
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (trailing != null) IconKey(
+                trailing.iconKey, trailing.label, trailing.testTag,
+                bordered = false,
+                tint = if (trailing.iconKey == "Plus") "onAccent" else "text",
+                fill = if (trailing.iconKey == "Plus") app + "Fill" else null,
+                floating = trailing.iconKey != "Plus",
+                onPress = trailing.onPress,
+            )
         }
         BandStage(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -261,6 +270,7 @@ public fun PushedPage(
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
+    titleColorRole: String = "text",
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize().testTag("pushed-page")) {
@@ -294,7 +304,7 @@ public fun PushedPage(
             if (filter != null) FilterMenuButton(app, filter)
             if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
         }
-        RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
+        RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp), titleColorRole)
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
@@ -407,14 +417,14 @@ public fun SheetRoom(
 ) {
     val canLeave by rememberUpdatedState(swipeable)
     val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = expanded,
+        skipPartiallyExpanded = expanded || LocalDensity.current.fontScale > 1.3f,
         confirmValueChange = { target -> target != SheetValue.Hidden || canLeave },
     )
     ModalBottomSheet(
         onDismissRequest = { if (canLeave) onDismiss() },
         sheetState = sheetState,
         sheetGesturesEnabled = swipeable,
-        containerColor = centraidColor("bg"),
+        containerColor = centraidColor("bgChrome"),
         properties = ModalBottomSheetProperties(
             securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
             shouldDismissOnBackPress = swipeable,
@@ -506,13 +516,11 @@ public fun InkButton(
 
 /** A room's title: the `title` rung, a heading to a screen reader. */
 @Composable
-internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
+internal fun RoomTitle(title: String, modifier: Modifier = Modifier, colorRole: String = "text") {
     Text(
         title,
         style = centraidType("title"),
-        color = centraidColor("text"),
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
+        color = centraidColor(colorRole),
         modifier = modifier.semantics { heading() },
     )
 }
@@ -621,6 +629,9 @@ public fun IconKey(
     modifier: Modifier = Modifier,
     bordered: Boolean = true,
     enabled: Boolean = true,
+    tint: String? = null,
+    fill: String? = null,
+    floating: Boolean = false,
     onPress: () -> Unit,
 ) {
     Box(
@@ -638,9 +649,13 @@ public fun IconKey(
     ) {
         Box(
             Modifier
-                .size(36.dp)
+                .size(if (fill != null || floating) 40.dp else 36.dp)
                 .then(
-                    if (bordered) {
+                    if (fill != null) {
+                        Modifier.background(centraidColor(if (enabled) fill else "bgSunken"), CircleShape)
+                    } else if (floating) {
+                        Modifier.bandGround(CircleShape)
+                    } else if (bordered) {
                         Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
                     } else {
                         Modifier
@@ -648,7 +663,7 @@ public fun IconKey(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor(if (enabled) "textSoft" else "textDisabled"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = centraidColor(if (enabled) tint ?: "textSoft" else "textDisabled"), size = 18.dp)
         }
     }
 }

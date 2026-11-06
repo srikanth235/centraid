@@ -198,6 +198,7 @@ pub fn roster(
     locale: Locale,
     answer: &wire::PeopleRoster,
     current: wire::PeopleChipKey,
+    order: wire::PeopleOrder,
 ) -> wire::PeopleRosterData {
     use wire::PeopleChipKey as K;
     let rows: Vec<wire::PeopleRow> = answer
@@ -222,7 +223,43 @@ pub fn roster(
     } else {
         Some(chip_empty(locale))
     };
+    let mut sections: Vec<wire::PeopleRosterSection> = Vec::new();
+    if order == wire::PeopleOrder::Name {
+        for row in &rows {
+            let key = row
+                .name
+                .trim()
+                .chars()
+                .next()
+                .filter(|letter| letter.is_alphabetic())
+                .map(|letter| letter.to_uppercase().to_string())
+                .unwrap_or_else(|| "#".to_owned());
+            if let Some(section) = sections.last_mut().filter(|section| section.key == key) {
+                section.rows.push(row.clone());
+            } else {
+                sections.push(wire::PeopleRosterSection {
+                    title: key.clone(),
+                    key,
+                    rows: vec![row.clone()],
+                });
+            }
+        }
+    }
     wire::PeopleRosterData {
+        sections,
+        my_card: answer.my_card.as_ref().map(|person| {
+            let mut card = row(locale, person, &answer.today);
+            card.meta = words::my_card(locale);
+            card.accessibility_label = [card.name.as_str(), card.role.as_str(), card.meta.as_str()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            card.star_label.clear();
+            card.chips.clear();
+            card
+        }),
+        my_card_label: words::my_card(locale),
         rows,
         empty,
         status_line: fill(

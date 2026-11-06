@@ -68,7 +68,6 @@ struct VaultHeader: View {
                 Text(status)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .lineLimit(1)
             }
             .frame(minHeight: 18)
             .contentShape(Rectangle())
@@ -94,7 +93,7 @@ struct VaultHeader: View {
                 Text(vault.initial)
                     .centraidType("smallStrong")
                     .foregroundStyle(mark.ink)
-                    .frame(width: 30, height: 30)
+                    .frame(minWidth: 30, minHeight: 30)
                     // A static control rung, not `iconChipRadius` — that
                     // ratio is for app chips.
                     .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
@@ -109,8 +108,7 @@ struct VaultHeader: View {
                     Text(vault.name)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("text", scheme))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -123,14 +121,12 @@ struct VaultHeader: View {
                     Text(vault.stateLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
-                }
+                    }
                 if !vault.originalsLine.isEmpty {
                     Text(vault.originalsLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
-                        .accessibilityIdentifier("home-originals-waiting")
+                            .accessibilityIdentifier("home-originals-waiting")
                 }
             }
 
@@ -182,7 +178,7 @@ struct VaultHeader: View {
 /// A vault's own hue, and the one wash that is not emitted.
 ///
 /// Every APP hue is resolved and composited by
-/// `contracts/tools/export-native-catalog.ts`, because the seven apps are known
+/// `cargo xtask design`, because the seven apps are known
 /// at build time. A vault's colour is the member's, chosen at runtime, so it
 /// cannot be in that table — and this is the one place the blend is computed
 /// rather than read. It uses the SAME tint share the emitter uses, from the

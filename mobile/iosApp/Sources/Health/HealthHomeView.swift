@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// `health.home` — Today · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
+/// `health.home` — Summary · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the filter menu,
 /// every word, figure and unit, and every length as basis points; this file lays them out and
@@ -132,20 +132,22 @@ struct HealthHomeView: View {
 
     @ViewBuilder
     private func today(_ today: Centraid_Core_V1_HealthTodayData) -> some View {
-        hero(today.hero)
-        if !today.metrics.isEmpty {
-            HealthCard(padding: 0) {
-                if !today.metricsHeading.isEmpty {
-                    Text(today.metricsHeading)
-                        .centraidType("eyebrow")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .accessibilityAddTraits(.isHeader)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                }
-                ForEach(Array(today.metrics.enumerated()), id: \.offset) { index, line in
-                    if index > 0 { KitHairline() }
-                    HealthMetricLineView(line: line) { open(line.route) }
+        Text(today.metricsHeading)
+            .centraidType("title")
+            .accessibilityAddTraits(.isHeader)
+        if !today.pinnedEmpty.isEmpty { Text(today.pinnedEmpty).centraidType("body").foregroundStyle(Theme.color("textSoft", scheme)) }
+        if today.hasHero { hero(today.hero) }
+        ForEach(today.metrics, id: \.metric) { line in
+            hero(line)
+        }
+        if !today.highlights.isEmpty {
+            Text(today.highlightsHeading)
+                .centraidType("title")
+                .accessibilityAddTraits(.isHeader)
+            ForEach(Array(today.highlights.enumerated()), id: \.offset) { _, fact in
+                HealthCard {
+                    Text(fact.label).centraidType("smallStrong").foregroundStyle(Theme.color("healthText", scheme))
+                    Text(fact.detail).centraidType("body").padding(.top, 4)
                 }
             }
         }
@@ -174,7 +176,7 @@ struct HealthHomeView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(hero.label)
                         .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .foregroundStyle(Theme.color("healthText", scheme))
                     Spacer(minLength: 8)
                     Text(hero.whenLabel)
                         .centraidType("annotLabel")
@@ -197,6 +199,9 @@ struct HealthHomeView: View {
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
+                if !hero.pointsBp.isEmpty {
+                    HealthSparkline(points: hero.pointsBp, average: -1).padding(.top, 8)
+                }
                 if hero.hasBar {
                     HealthRangeBarView(bar: hero.bar, hero: true).padding(.top, 16)
                 }
@@ -207,7 +212,7 @@ struct HealthHomeView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(hero.accessibilityLabel)
         .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("health-hero")
+        .accessibilityIdentifier("health-metric-\(hero.metric)")
     }
 
     @ViewBuilder

@@ -104,6 +104,7 @@ final class ShellModel: ObservableObject {
 
     /// THE LINK AND THE CHARGER, reported to the pass scheduler (`PassFacts.swift`).
     private let links = LinkReporter()
+    private let screenLifecycle = ScreenLifecycle()
     private var enteredBackground: NotificationObservation?
     private var memoryWarning: NotificationObservation?
 
@@ -202,6 +203,9 @@ final class ShellModel: ObservableObject {
         Task {
             store.reportEnvironment()
             await store.start()
+            screenLifecycle.attach { [weak self] foreground in
+                self?.reportLifecycle(foreground: foreground)
+            }
             refreshUploadPins()
         }
     }
@@ -338,6 +342,10 @@ final class ShellModel: ObservableObject {
     /// the pass service decides what coming back is worth, the follower reads its
     /// folders again), and the photo library is watched while the app is in view.
     func lifecycle(foreground: Bool) {
+        screenLifecycle.changed(foreground: foreground)
+    }
+
+    private func reportLifecycle(foreground: Bool) {
         guard let screens else { return }
         if foreground {
             screens.reportEnvironment()

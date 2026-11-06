@@ -1,6 +1,17 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import centraid.core.v1.AgendaFormChanged
+import dev.centraid.android.kit.hueColor
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,9 +19,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaHomeEvent
 import centraid.core.v1.AgendaHomeState
@@ -19,6 +33,7 @@ import centraid.core.v1.Route
 import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoNotice
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -51,6 +66,7 @@ internal class AgendaTaskActions(
     val onFile: (String) -> Unit,
     val onVerb: (String) -> Unit,
     val fileVerb: String,
+    val onAction: (centraid.core.v1.TodoRowAction) -> Unit,
 )
 
 internal fun agendaTaskActions(
@@ -65,6 +81,7 @@ internal fun agendaTaskActions(
         onFile = { onEvent(AgendaHomeEvent(file_requested = AgendaHomeEvent.FileRequested(task_id = it))) },
         onVerb = { key -> if (key == CATCH_UP) catchUp?.let(onOpen) },
         fileVerb = words.file_verb,
+        onAction = { onEvent(AgendaHomeEvent(task_action = it)) },
     )
 
 /** The verb key (`TodoRowGroup.verb_key`, `TodoNotice.verb_key`) that opens Catch up. */
@@ -84,6 +101,7 @@ internal const val CATCH_UP: String = "catch_up"
  * list WHATEVER IT HOLDS (the sheet is reachable always); under an empty state
  * that already carries it as its action, it is not drawn twice.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AgendaTodoPlace(
     todo: AgendaTodo,
@@ -95,7 +113,7 @@ internal fun AgendaTodoPlace(
     val openNewProject = {
         onEvent(AgendaHomeEvent(sheet_opened = AgendaHomeEvent.SheetOpened(sheet = AgendaHomeState.Sheet.SHEET_NEW_PROJECT)))
     }
-    if (todo.groups.isEmpty() && todo.projects.isEmpty() && empty != null) {
+    if (todo.smart_lists.isEmpty() && todo.groups.isEmpty() && todo.projects.isEmpty() && empty != null) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
@@ -118,6 +136,34 @@ internal fun AgendaTodoPlace(
         return
     }
     LazyColumn(Modifier.fillMaxSize().testTag("agenda-todo-list")) {
+        item(key = "smart-lists") {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                maxItemsInEachRow = 2,
+                modifier = Modifier.fillMaxWidth().padding(KitGeometry.GUTTER),
+            ) {
+                todo.smart_lists.forEach { list ->
+                    Surface(
+                        onClick = { list.route?.let(actions.onOpen) },
+                        color = centraidColor(list.color_role),
+                        contentColor = centraidColor("onAccent"),
+                        shape = RoundedCornerShape(KitGeometry.RADIUS),
+                        modifier = Modifier.weight(1f).widthIn(min = 150.dp)
+                            .testTag("agenda-smart-${list.key}")
+                            .semantics { contentDescription = list.accessibility_label },
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                CentraidIcon(list.icon_key, tint = centraidColor("onAccent"), size = 24.dp)
+                                Text(list.count_label, style = centraidType("display"))
+                            }
+                            Text(list.title, style = centraidType("bodyStrong"))
+                        }
+                    }
+                }
+            }
+        }
         todoGroups(
             todo.groups,
             onCheck = actions.onCheck,
@@ -126,12 +172,17 @@ internal fun AgendaTodoPlace(
             onFile = actions.onFile,
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
+            onAction = actions.onAction,
         )
+        if (todo.projects.isNotEmpty()) {
+            item(key = "my-lists") { SectionHeader(SectionHead(title = todo.lists_title)) }
+        }
         todo.projects.forEach { group ->
             item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
             items(group.rows, key = { "project-${it.row?.id}" }) { project ->
                 project.row?.let { row ->
-                    Box(Modifier.testTag("agenda-project-${row.id}")) {
+                    Row(Modifier.testTag("agenda-project-${row.id}"), verticalAlignment = Alignment.CenterVertically) {
+                        CentraidIcon(project.icon_key, tint = hueColor(row.hue_key), size = 20.dp, modifier = Modifier.padding(start = KitGeometry.GUTTER))
                         CentraidRow(row) { project.route?.let(actions.onOpen) }
                     }
                 }
@@ -198,11 +249,13 @@ internal fun AgendaTaskSheet(state: AgendaHomeState, words: TodoChrome, onEvent:
         }
         AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> SheetRoom(
             title = words.new_project_title,
+            status = state.status?.sentence.orEmpty(),
             onDismiss = close,
             primary = SheetPrimary(words.new_project_verb, enabled = state.new_project_can_submit) {
                 onEvent(AgendaHomeEvent(new_project_submitted = AgendaHomeEvent.NewProjectSubmitted()))
             },
         ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
             EditableFieldRow(
                 key = "",
                 value = state.new_project_name,
@@ -211,6 +264,8 @@ internal fun AgendaTaskSheet(state: AgendaHomeState, words: TodoChrome, onEvent:
                 onEdit = { onEvent(AgendaHomeEvent(new_project_name = AgendaHomeEvent.NewProjectNameChanged(name = it))) },
                 testTag = "tasks-new-project-field",
             )
+            state.new_project_appearance?.let { AgendaAppearancePicker(it) { changed -> onEvent(AgendaHomeEvent(container_form = changed)) } }
+            }
         }
         else -> Unit
     }

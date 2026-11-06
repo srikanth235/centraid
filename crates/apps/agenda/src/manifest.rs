@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_ten_queries_and_twenty_four_actions() {
+    fn it_declares_eleven_queries_and_thirty_two_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 10);
-        assert_eq!(manifest.actions.len(), 24);
+        assert_eq!(manifest.queries.len(), 11);
+        assert_eq!(manifest.actions.len(), 32);
         for name in [
             "upcoming",
             "search",
@@ -59,6 +59,8 @@ mod tests {
             "projects",
             "catch-up",
             "trash",
+            "notifications",
+            "notifications",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -81,6 +83,23 @@ mod tests {
                 row.action
             );
         }
+    }
+
+    #[test]
+    fn the_calendar_follow_input_is_the_vault_commands_schema() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the registry builds");
+        let command = registry
+            .get("follow.calendar")
+            .expect("a calendar follower");
+        assert_eq!(
+            &manifest()
+                .action("follow-calendar")
+                .expect("declared")
+                .input,
+            command.schema(),
+            "the phone's calendar batch must pass both action and command validation"
+        );
     }
 
     /// **AGENDA CONFIRMS NOTHING IN v0, INCLUDING `cancel-event`** (census §A0,

@@ -11,7 +11,7 @@
 //! | Module | The seam |
 //! |---|---|
 //! | [`zone`] | THE vault's zone, resolved in two tiers with v0's host-local third DELETED; the DST policy; all civil arithmetic |
-//! | [`rrule`] | ONE parser, three call shapes, a refused-never-dropped subset, and the ONE member-facing summariser |
+//! | [`rrule`] | ONE parser, three call shapes, RFC parts that are honored or explicitly refused, and the ONE member-facing summariser |
 //! | [`recurrence`] | the expander, the exception matcher, the next occurrence and the missed-period collapse |
 //! | [`occurrence`] | `original_start_local` — the ONE place the stored spelling appears (#996 R21, drift ONT-25) |
 //! | [`temporal`] | which of the four readings a temporal column is holding (#996 R21, drift ONT-31) |
@@ -57,3 +57,5 @@ pub use rrule::{
 };
 pub use temporal::{Kind as TemporalKind, classify as classify_temporal};
 pub use zone::{FireZone, WallClock, WallTime, ZoneUnset, sunday_zero};
+
+mod candidates;

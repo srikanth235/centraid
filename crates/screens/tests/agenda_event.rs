@@ -43,6 +43,65 @@ fn facts(data: &wire::AgendaEventData) -> Vec<(&str, &str)> {
 }
 
 #[test]
+fn event_photo_picker_saves_an_openable_image_attachment() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Site visit",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |_| {},
+    );
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+    assert_eq!(
+        world
+            .event_data(page)
+            .attachments
+            .as_ref()
+            .unwrap()
+            .add_photo_label,
+        "Add photo"
+    );
+    world.driver.effects.clear();
+    world.send_event(
+        page,
+        K::Attachment(wire::AgendaAttachmentEvent {
+            kind: Some(wire::agenda_attachment_event::Kind::AddPhoto(
+                wire::agenda_attachment_event::AddPhoto {},
+            )),
+        }),
+    );
+    assert!(matches!(
+        world.driver.effects.last().and_then(|request| request.effect.as_ref()).and_then(|effect| effect.kind.as_ref()),
+        Some(wire::effect::Kind::PickFile(pick)) if pick.kind == wire::pick_file::Kind::Photo as i32
+    ));
+    world
+        .driver
+        .answer_effect(wire::effect_result::Outcome::FilePicked(wire::FilePicked {
+            blob: "d".repeat(64),
+            byte_size: 1024,
+            name: "Site.jpg".into(),
+            media_type: "image/jpeg".into(),
+        }));
+    let attachments = world.event_data(page).attachments.as_ref().unwrap();
+    assert!(!attachments.busy);
+    assert_eq!(attachments.rows.len(), 1, "{:?}", attachments.status);
+    let row = &attachments.rows[0];
+    assert_eq!(row.title, "Site.jpg");
+    assert_eq!(
+        row.route.as_ref().unwrap().screen,
+        centraid_screens::docs::DOCUMENT
+    );
+    let wire::app_query_response::Answer::DocsDocument(document) =
+        world.load(centraid_screens::catalog::load::docs::History {
+            document_id: row.id.clone(),
+        })
+    else {
+        panic!("image document");
+    };
+    assert_eq!(document.document.unwrap().media_type, "image/jpeg");
+}
+
+#[test]
 fn opening_reads_the_occurrence_by_its_key_and_names_its_calendar() {
     let mut world = World::new();
     let id = world.propose(
@@ -57,11 +116,7 @@ fn opening_reads_the_occurrence_by_its_key_and_names_its_calendar() {
     let (calendar_id, name) = world.calendar_names().remove(0);
     assert!(!calendar_id.is_empty());
     assert_eq!(data.calendar_name, name);
-    assert!(
-        data.calendar_hue_key.starts_with('c'),
-        "{}",
-        data.calendar_hue_key
-    );
+    assert_eq!(data.calendar_hue_key, "listPetrol");
     assert_eq!(
         world
             .event_state(page)
@@ -131,7 +186,17 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
     );
     let initials: Vec<&str> = data.guests.iter().map(|g| g.initial.as_str()).collect();
     assert_eq!(initials, ["M", "J", "M"]);
-    assert!(data.guests.iter().all(|g| g.hue_key.starts_with('c')));
+    assert!(data.guests.iter().all(|g| matches!(
+        g.hue_key.as_str(),
+        "listBlue"
+            | "listYellow"
+            | "listViolet"
+            | "listPetrol"
+            | "listNavy"
+            | "listGraphite"
+            | "listRaspberry"
+            | "listOrchid"
+    )));
     assert_eq!(
         data.guests[0].accessibility_label,
         "Me · you, No answer yet"

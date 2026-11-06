@@ -20,62 +20,57 @@ pub const ORDER: [&str; 8] = [
 ];
 
 /// Columns on a phone.
-pub const COLUMNS: usize = 2;
+pub const COLUMNS: usize = 4;
+
+pub const WIDGETS: [&str; 9] = [
+    "agenda",
+    "reminders",
+    "photos",
+    "money",
+    "health",
+    "people",
+    "locker",
+    "notes",
+    "docs",
+];
+
+pub fn span(size: Size) -> u32 {
+    match size {
+        Size::Large => 4,
+        Size::Medium => 2,
+        _ => 1,
+    }
+}
 
 /// How big an app's tile is.
 #[must_use]
 pub fn size_of(app: &str) -> Size {
     match app {
         "photos" => Size::Large,
-        "agenda" => Size::Medium,
+        "agenda" | "reminders" | "notes" | "docs" => Size::Medium,
         _ => Size::Small,
     }
 }
 
-/// Whether an app's tile takes a whole row.
-#[must_use]
-pub fn is_wide(app: &str) -> bool {
-    size_of(app) != Size::Small
-}
-
-/// The tiles in the order they sit: a small tile pulls the next small ones up
-/// beside it, so a wide tile between two small ones does not leave a hole.
-#[must_use]
-pub fn pack(tiles: &[wire::HomeTile]) -> Vec<&wire::HomeTile> {
-    let mut queue: Vec<&wire::HomeTile> = tiles.iter().collect();
-    let mut packed = Vec::with_capacity(queue.len());
-    while !queue.is_empty() {
-        let next = queue.remove(0);
-        packed.push(next);
-        if next.wide {
-            continue;
-        }
-        for _ in 1..COLUMNS {
-            let Some(partner) = queue.iter().position(|tile| !tile.wide) else {
-                break;
-            };
-            packed.push(queue.remove(partner));
-        }
-    }
-    packed
-}
-
-/// The packed tiles cut into rows: a wide tile alone, small ones in `COLUMNS`.
+/// Pack in the saved order, preserving the member's arrangement. Small widgets
+/// occupy one column, medium two, large four; a full-width accessibility layout
+/// is the native renderer's reflow of these same rows.
 #[must_use]
 pub fn rows(tiles: &[wire::HomeTile]) -> Vec<wire::HomeTileRow> {
     let mut out = Vec::new();
-    let mut current: Vec<String> = Vec::new();
-    for tile in pack(tiles) {
-        if tile.wide {
-            if !current.is_empty() {
-                out.push(row(std::mem::take(&mut current)));
-            }
-            out.push(row(vec![tile.app_id.clone()]));
-            continue;
+    let mut current = Vec::new();
+    let mut occupied = 0;
+    for tile in tiles {
+        let width = span(tile.size()) as usize;
+        if occupied + width > COLUMNS {
+            out.push(row(std::mem::take(&mut current)));
+            occupied = 0;
         }
         current.push(tile.app_id.clone());
-        if current.len() == COLUMNS {
+        occupied += width;
+        if occupied == COLUMNS {
             out.push(row(std::mem::take(&mut current)));
+            occupied = 0;
         }
     }
     if !current.is_empty() {
@@ -120,13 +115,13 @@ mod tests {
         wire::HomeTile {
             app_id: app.to_owned(),
             status: status as i32,
-            wide: is_wide(app),
+            size: size_of(app) as i32,
             ..wire::HomeTile::default()
         }
     }
 
     fn all(status: Status) -> Vec<wire::HomeTile> {
-        ORDER.iter().map(|app| tile(app, status)).collect()
+        WIDGETS.iter().map(|app| tile(app, status)).collect()
     }
 
     fn ids(rows: &[wire::HomeTileRow]) -> Vec<Vec<&str>> {
@@ -136,29 +131,63 @@ mod tests {
     }
 
     #[test]
-    fn the_grid_packs_small_tiles_beside_each_other_around_the_wide_ones() {
+    fn the_grid_packs_compact_medium_and_large_widgets_in_the_saved_order() {
         assert_eq!(
             ids(&rows(&all(Status::Loading))),
             vec![
+                vec!["agenda", "reminders"],
                 vec!["photos"],
-                vec!["docs", "notes"],
-                vec!["agenda"],
-                vec!["money", "health"],
-                vec!["people", "locker"],
+                vec!["money", "health", "people", "locker"],
+                vec!["notes", "docs"],
             ]
         );
     }
 
     #[test]
-    fn a_small_tile_pulls_the_next_small_one_up_past_a_wide_tile() {
+    fn the_order_is_preserved_in_a_mixed_size_layout() {
         let tiles: Vec<_> = ["notes", "agenda", "money", "health"]
             .iter()
             .map(|app| tile(app, Status::Content))
             .collect();
         assert_eq!(
             ids(&rows(&tiles)),
-            vec![vec!["notes", "money"], vec!["agenda"], vec!["health"]]
+            vec![vec!["notes", "agenda"], vec!["money", "health"]]
         );
+    }
+
+    #[test]
+    fn every_resize_combination_preserves_order_and_stays_within_four_columns() {
+        for first in [Size::Small, Size::Medium, Size::Large] {
+            for second in [Size::Small, Size::Medium, Size::Large] {
+                for third in [Size::Small, Size::Medium, Size::Large] {
+                    let tiles: Vec<_> = ["notes", "agenda", "money"]
+                        .into_iter()
+                        .zip([first, second, third])
+                        .map(|(app, size)| wire::HomeTile {
+                            size: size as i32,
+                            ..tile(app, Status::Content)
+                        })
+                        .collect();
+                    let rows = rows(&tiles);
+                    assert_eq!(
+                        rows.iter()
+                            .flat_map(|row| row.app_ids.iter())
+                            .collect::<Vec<_>>(),
+                        tiles.iter().map(|tile| &tile.app_id).collect::<Vec<_>>()
+                    );
+                    for row in rows {
+                        let used: u32 = row
+                            .app_ids
+                            .iter()
+                            .map(|id| {
+                                span(tiles.iter().find(|tile| &tile.app_id == id).unwrap().size())
+                            })
+                            .sum();
+                        assert!((1..=4).contains(&used));
+                    }
+                }
+            }
+        }
     }
 
     #[test]

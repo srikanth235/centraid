@@ -64,6 +64,7 @@ struct Home {
     destination: wire::LockerDestination,
     sheet: wire::locker_home_state::Sheet,
     filter: String,
+    overview: bool,
     search_open: bool,
     term: String,
     items: Phase<wire::LockerItems>,
@@ -81,6 +82,7 @@ impl Home {
             destination,
             sheet: wire::locker_home_state::Sheet::None,
             filter: ALL.to_owned(),
+            overview: true,
             search_open: false,
             term: String::new(),
             items: Phase::Loading,
@@ -212,18 +214,37 @@ impl Home {
         match event.kind {
             Some(H::Band(band)) => match band.key.as_str() {
                 "more" => self.sheet = wire::locker_home_state::Sheet::More,
-                "items" if self.destination != D::Items => self.goto(ctx, D::Items),
+                "items" => {
+                    self.overview = true;
+                    self.set_filter(ctx, ALL);
+                    self.goto(ctx, D::Items);
+                }
                 "review" if self.destination != D::Review => self.goto(ctx, D::Review),
                 "generate" if self.destination != D::Generate => self.goto(ctx, D::Generate),
+                _ => {}
+            },
+            Some(H::Category(picked)) => match picked.key.as_str() {
+                "review" => self.goto(ctx, D::Review),
+                "all" | "codes" | "card" | "wifi" => {
+                    self.overview = false;
+                    self.set_filter(ctx, &picked.key);
+                    if self.destination != D::Items {
+                        self.goto(ctx, D::Items);
+                    }
+                }
                 _ => {}
             },
             Some(H::FilterMenuPicked(picked)) => {
                 let pick = menu::Pick::of(&picked);
                 if pick.section == FILTER {
+                    self.overview = false;
                     self.set_filter(ctx, pick.option);
                 }
             }
-            Some(H::FilterMenuCleared(_)) => self.set_filter(ctx, ALL),
+            Some(H::FilterMenuCleared(_)) => {
+                self.overview = false;
+                self.set_filter(ctx, ALL);
+            }
             Some(H::SheetOpened(opened)) => {
                 self.sheet = wire::locker_home_state::Sheet::try_from(opened.sheet)
                     .unwrap_or(wire::locker_home_state::Sheet::None);
@@ -290,7 +311,8 @@ impl Home {
         let filter = self.filter.as_str();
         let shown: Vec<&wire::LockerItemRow> = match filter {
             ALL | ARCHIVED => answer.items.iter().collect(),
-            STARRED => answer.items.iter().filter(|row| row.starred).collect(),
+            STARRED => answer.starred_items.iter().collect(),
+            "codes" => answer.code_items.iter().collect(),
             kind => answer
                 .items
                 .iter()
@@ -304,7 +326,7 @@ impl Home {
             total.unwrap_or(0),
             filter == ALL,
         )];
-        let starred = answer.items.iter().filter(|row| row.starred).count();
+        let starred = answer.starred_items.len();
         if starred > 0 || filter == STARRED {
             options.push(menu::counted(
                 STARRED,
@@ -372,13 +394,95 @@ impl Home {
             (true, _) => words::window_unknown(locale),
             _ => String::new(),
         };
+        let count_of = |kind: &str| {
+            answer
+                .total
+                .and_then(|_| {
+                    answer
+                        .by_type
+                        .iter()
+                        .find(|row| row.r#type == kind)
+                        .map(|row| row.count)
+                })
+                .or_else(|| answer.total.map(|_| 0))
+        };
+        let category = |key: &str,
+                        label: String,
+                        icon: &str,
+                        count: Option<u32>,
+                        route: Option<wire::Route>| wire::LockerCategory {
+            key: key.to_owned(),
+            label,
+            icon_key: icon.to_owned(),
+            count_label: count.map(|n| n.to_string()).unwrap_or_default(),
+            selected: filter == key,
+            route,
+        };
+        let parent = words::app_name(locale);
         wire::LockerHomeData {
+            categories: vec![
+                category(ALL, words::filter_all(locale), "Key", answer.total, None),
+                category(
+                    "codes",
+                    words::category_codes(locale),
+                    "Clock",
+                    answer.code_count,
+                    None,
+                ),
+                category(
+                    "card",
+                    (super::types::of("card").plural)(locale),
+                    "CreditCard",
+                    count_of("card"),
+                    None,
+                ),
+                category(
+                    "wifi",
+                    (super::types::of("wifi").plural)(locale),
+                    "Wifi",
+                    count_of("wifi"),
+                    None,
+                ),
+                category("review", words::band_review(locale), "Shield", None, None),
+                category(
+                    "trash",
+                    words::more_trash(locale),
+                    "Trash",
+                    answer.trashed_count,
+                    Some(routes::trash()),
+                ),
+            ],
+            starred_rows: if self.overview && filter == ALL {
+                answer
+                    .starred_items
+                    .iter()
+                    .map(|row| shared::row(locale, row, &parent))
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            recent_rows: if self.overview && filter == ALL {
+                answer
+                    .recent_items
+                    .iter()
+                    .map(|row| shared::row(locale, row, &parent))
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            starred_title: words::filter_starred(locale),
+            recent_title: words::recently_used(locale),
+            items_title: words::filter_all(locale),
             status_line: words::items_status(locale),
             filter_menu,
-            rows: shown
-                .into_iter()
-                .map(|row| shared::row(locale, row, &words::app_name(locale)))
-                .collect(),
+            rows: if self.overview {
+                Vec::new()
+            } else {
+                shown
+                    .into_iter()
+                    .map(|row| shared::row(locale, row, &words::app_name(locale)))
+                    .collect()
+            },
             window,
             items_empty: empty,
             ..wire::LockerHomeData::default()

@@ -14,10 +14,11 @@
 //!   `instance_key` and `original_start_local` are the series-local wall clock,
 //!   never the resolved instant, and the spelling appears once, in
 //!   [`centraid_vault::time::occurrence`].
-//! - **THE RECURRENCE SUBSET IS REFUSED, NEVER DROPPED.** A rule outside
-//!   `FREQ ∈ DAILY|WEEKLY|MONTHLY|YEARLY` with `INTERVAL/COUNT/UNTIL/BYDAY`
-//!   expands to nothing, and the anchor stays visible rather than the event
-//!   vanishing from the agenda ([`expansion`], D-1020-S1).
+//! - **RFC RULES ARE HONORED, NEVER SILENTLY SIMPLIFIED.** All seven frequencies,
+//!   standard BY* selectors, positions and week starts use the vault engine.
+//!   Invalid combinations and unknown extensions are refused at writes. An
+//!   invalid imported rule keeps its anchor visible; a valid rule with no
+//!   occurrence in the window stays empty ([`expansion`], #1173).
 //! - **CIVIL TIME IS THE VAULT'S, NEVER THE HOST'S.** A gateway on a VPS runs
 //!   UTC; a series expands in its own `start_tz`, resolved through the one
 //!   [`centraid_vault::time::zone::FireZone`] cron already used.
@@ -47,6 +48,7 @@ pub mod detail;
 pub mod expansion;
 pub mod local;
 pub mod manifest;
+pub mod notifications;
 pub mod queries;
 pub mod task;
 pub mod window;

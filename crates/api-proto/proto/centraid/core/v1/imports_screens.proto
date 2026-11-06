@@ -368,18 +368,8 @@ message FolderFileStaged {
 
 // Read the open reminders (iOS EventKit) and answer `RemindersSnapshot`. `ask_permission`
 // is the made vault's own prompt.
-message RemindersRead {
-  bool ask_permission = 1;
-}
 
-message RemindersSnapshot {
-  repeated PhoneReminder reminders = 1;
-}
 
-// One OPEN reminder: a completed one is never handed over.
-message PhoneReminder {
-  string title = 1;
-  string notes = 2;
-  // `YYYY-MM-DD` or empty.
-  string due = 3;
-}
+
+
+// One reminder, with source identity and the source's civil date and zone.

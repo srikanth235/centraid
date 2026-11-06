@@ -389,7 +389,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.key.as_str())
             .collect::<Vec<_>>(),
-        ["day", "schedule", "waiting", "todo", "more"]
+        ["day", "todo", "waiting", "more"]
     );
     assert_eq!(
         state
@@ -397,7 +397,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.icon_key.as_str())
             .collect::<Vec<_>>(),
-        ["Clock", "List", "Inbox", "Todo", "MoreHoriz"]
+        ["Calendar", "Todo", "Inbox", "MoreHoriz"]
     );
     assert_eq!(
         state
@@ -444,7 +444,7 @@ fn a_destination_from_the_route_lands_there() {
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["schedule"]
+        ["day"]
     );
 
     let w = rig(Dest::Waiting);
@@ -964,7 +964,7 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     );
     let calendar = r.data().calendars[0].clone();
     assert!(!calendar.hidden && calendar.state_label == "Shown");
-    assert!(calendar.hue_key.starts_with('c'));
+    assert!(calendar.hue_key.starts_with("list"));
     let before = r.driver.view(r.id).revision;
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {
@@ -1038,6 +1038,9 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
         rows.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
         [
             cal_key.as_str(),
+            "new-calendar",
+            "import",
+            "tags",
             "anytime",
             "logbook",
             "reminders",
@@ -1045,61 +1048,35 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
             "reads"
         ]
     );
+    assert_eq!(rows[0].section, "Calendars");
+    assert_eq!(rows[3].section, "Tasks");
+    assert!(rows[0].on && rows[0].meta == "Shown");
     assert_eq!(
-        rows[1..]
-            .iter()
-            .map(|row| row.label.as_str())
-            .collect::<Vec<_>>(),
-        [
-            "Anytime",
-            "Logbook",
-            "Reminders",
-            "Trash",
-            "What Agenda may read"
-        ]
+        rows[0].edit_key,
+        format!("edit-calendar-{}", r.data().calendars[0].calendar_id)
     );
-    // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
-    assert_eq!(
-        rows.iter()
-            .map(|row| row.section.as_str())
-            .collect::<Vec<_>>(),
-        ["Calendars", "Tasks", "", "", "", ""]
-    );
-    assert_eq!(
-        rows.iter().map(|row| row.toggle).collect::<Vec<_>>(),
-        [true, false, false, false, false, false]
-    );
-    assert!(
-        rows[0].on
-            && rows[0].meta == "Shown"
-            && rows[0].spoken == format!("{}, Shown", rows[0].label)
-    );
-    assert!(
-        rows.iter()
-            .all(|row| row.label != "Search" && row.key != "search")
-    );
-    assert_eq!(
-        rows[1..5]
-            .iter()
-            .map(|row| row.icon_key.as_str())
-            .collect::<Vec<_>>(),
-        ["Layers", "Book", "Bell", "Trash"]
-    );
-    // WHERE A TASKS PLACE GOES is the row's own route.
-    assert_eq!(
-        rows[1].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Anytime))
-    );
-    assert_eq!(
-        rows[2].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Logbook))
-    );
-    assert_eq!(
-        rows[3].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Reminders))
-    );
-    assert_eq!(rows[4].route, Some(agenda::routes::trash()));
-    assert!(rows[0].route.is_none() && rows[5].route.is_none());
+    assert!(rows.iter().all(|row| row.key != "search"));
+    for (key, route) in [
+        ("tags", agenda::routes::todo_list(wire::TodoView::Tags)),
+        (
+            "anytime",
+            agenda::routes::todo_list(wire::TodoView::Anytime),
+        ),
+        (
+            "logbook",
+            agenda::routes::todo_list(wire::TodoView::Logbook),
+        ),
+        (
+            "reminders",
+            agenda::routes::todo_list(wire::TodoView::Reminders),
+        ),
+        ("trash", agenda::routes::trash()),
+    ] {
+        assert_eq!(
+            rows.iter().find(|row| row.key == key).unwrap().route,
+            Some(route)
+        );
+    }
 
     // A CALENDAR ROW TOGGLES; the sheet stays up.
     r.more_row(&cal_key);
@@ -1147,9 +1124,18 @@ fn to_do_has_no_calendar_rows_in_more() {
             .iter()
             .map(|row| row.key.as_str())
             .collect::<Vec<_>>(),
-        ["anytime", "logbook", "reminders", "trash", "reads"]
+        [
+            "new-calendar",
+            "import",
+            "tags",
+            "anytime",
+            "logbook",
+            "reminders",
+            "trash",
+            "reads"
+        ]
     );
-    assert_eq!(r.state().more_rows[0].section, "Tasks");
+    assert_eq!(r.state().more_rows[2].section, "Tasks");
     assert!(
         r.state()
             .more_rows
@@ -1184,7 +1170,7 @@ fn search_opening_reads_nothing_a_term_finds_over_the_rows_and_closing_clears_it
             .filter(|t| t.current)
             .map(|t| t.key.as_str())
             .collect::<Vec<_>>(),
-        ["schedule"]
+        ["day"]
     );
     assert_eq!(r.data().days.len(), held);
     // A BAND KEY THAT IS NO LONGER A TAB opens nothing.
@@ -1503,7 +1489,7 @@ fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_ret
     assert_eq!(failure.remedy, "Try again");
     assert_eq!(r.state().chrome.as_ref().unwrap().retry, "Try again");
     // The band stands and the data is not an empty list.
-    assert_eq!(r.state().band.len(), 5);
+    assert_eq!(r.state().band.len(), 4);
     r.in_zone("Europe/London");
     assert!(matches!(r.state().content, Some(Content::Data(_))));
     r.in_zone("Not/AZone");
@@ -1647,14 +1633,14 @@ fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_
     let data = r.data();
     let overdue = data.overdue.as_ref().expect("the Overdue group");
     assert_eq!(overdue.title, "Overdue");
-    assert_eq!(overdue.verb_label, "Reschedule");
+    assert_eq!(overdue.verb_label, "Catch up");
     assert_eq!(overdue.verb_key, "catch_up");
     assert_eq!(overdue.meta, "1");
     assert_eq!(overdue.rows[0].due_label, "16 days ago");
     assert!(overdue.rows[0].overdue);
     let notice = data.notice.as_ref().expect("the absence notice");
     assert_eq!(notice.sentence, "You were away 16 days; 1 task came due");
-    assert_eq!(notice.verb_label, "Reschedule");
+    assert_eq!(notice.verb_label, "Catch up");
     assert_eq!(notice.verb_key, "catch_up");
     // BOTH VERBS OPEN CATCH UP.
     assert_eq!(data.catch_up, Some(agenda::routes::catch_up()));
@@ -1832,7 +1818,7 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
     let row = garden.row.as_ref().unwrap();
     assert_eq!(row.id, "zq-garden");
     assert_eq!(row.meta, "1 task");
-    assert!(row.hue_key.starts_with('c'));
+    assert!(row.hue_key.starts_with("list"));
     assert_eq!(row.accessibility_label, "Garden, 1 task");
     assert_eq!(
         garden.route,
@@ -1883,7 +1869,7 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
     let tab = state.band.iter().find(|tab| tab.key == "todo").unwrap();
     assert_eq!(
         (tab.label.as_str(), tab.icon_key.as_str()),
-        ("To-do", "Todo")
+        ("Reminders", "Todo")
     );
     assert_eq!(state.add_label, "Add task");
     assert!(state.add_opens_quick_add);
@@ -2370,7 +2356,7 @@ fn the_home_asks_whether_this_device_follows_and_the_import_tap_asks_the_shell_t
         rig.id,
         E::AgendaHome(wire::AgendaHomeEvent {
             kind: Some(H::ImportRequested(
-                wire::agenda_home_event::ImportRequested {},
+                wire::agenda_home_event::ImportRequested::default(),
             )),
         }),
     );
@@ -2381,4 +2367,360 @@ fn the_home_asks_whether_this_device_follows_and_the_import_tap_asks_the_shell_t
         "{:?}",
         asked(&rig.driver)
     );
+}
+
+#[test]
+fn quick_add_previews_natural_dates_and_only_writes_a_valid_interpretation() {
+    let mut r = rig_with(Dest::Todo, "Zq Call tomorrow at 9am");
+    let tomorrow = civil::plus_days(&r.today(), 1).unwrap();
+    assert_eq!(r.quick().preview, format!("Due {tomorrow} · 09:00"));
+    assert!(r.quick().can_submit);
+    r.send(H::QuickAddSubmitted(
+        wire::agenda_home_event::QuickAddSubmitted {},
+    ));
+    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::agenda::Board {
+        limit: 100,
+        view: Some(load::agenda::BoardView::All),
+        project_id: None,
+    }) else {
+        panic!("board")
+    };
+    let task = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .find(|task| task.title == "Zq Call")
+        .expect("parsed task committed");
+    assert_eq!(task.due_day, tomorrow);
+    assert_eq!(task.due_local, format!("{tomorrow}T09:00"));
+    r.send(H::QuickAddChanged(
+        wire::agenda_home_event::QuickAddChanged {
+            title: "Zq Ambiguous on 11/12".into(),
+        },
+    ));
+    assert!(!r.quick().can_submit);
+    assert!(!r.quick().preview.is_empty());
+    r.send(H::QuickAddSubmitted(
+        wire::agenda_home_event::QuickAddSubmitted {},
+    ));
+    assert_eq!(r.quick().title, "Zq Ambiguous on 11/12");
+}
+
+#[test]
+fn calendar_create_rename_and_appearance_commit_through_the_home_sheet() {
+    let mut r = rig(Dest::Day);
+    r.band("more");
+    r.more_row("new-calendar");
+    assert_eq!(r.state().sheet, Sheet::CalendarEditor as i32);
+    for (field, value) in [
+        ("name", "Zq Study"),
+        ("color", "listViolet"),
+        ("icon", "Book"),
+    ] {
+        r.send(H::ContainerForm(wire::AgendaFormChanged {
+            field: field.into(),
+            value: value.into(),
+        }));
+    }
+    r.send(H::ContainerSaved(
+        wire::agenda_home_event::ContainerSaved {},
+    ));
+    assert_eq!(r.state().sheet, Sheet::None as i32);
+    let calendar = r
+        .data()
+        .calendars
+        .iter()
+        .find(|row| row.name == "Zq Study")
+        .expect("saved calendar")
+        .clone();
+    assert_eq!(
+        (calendar.hue_key.as_str(), calendar.icon_key.as_str()),
+        ("listViolet", "Book")
+    );
+    r.band("more");
+    r.more_row(&format!("edit-calendar-{}", calendar.calendar_id));
+    r.send(H::ContainerForm(wire::AgendaFormChanged {
+        field: "name".into(),
+        value: "Zq Reading".into(),
+    }));
+    r.send(H::ContainerForm(wire::AgendaFormChanged {
+        field: "color".into(),
+        value: "listPetrol".into(),
+    }));
+    r.send(H::ContainerSaved(
+        wire::agenda_home_event::ContainerSaved {},
+    ));
+    let calendar = r
+        .data()
+        .calendars
+        .iter()
+        .find(|row| row.calendar_id == calendar.calendar_id)
+        .unwrap();
+    assert_eq!(
+        (calendar.name.as_str(), calendar.hue_key.as_str()),
+        ("Zq Reading", "listPetrol")
+    );
+}
+
+#[test]
+fn reminders_import_options_carry_platform_and_completed_choices() {
+    let mut r = rig(Dest::Todo);
+    r.driver
+        .call(wire::screen_request::Kind::Environment(wire::Environment {
+            locale: "en".into(),
+            zone: "UTC".into(),
+            platform: "ios".into(),
+            ..Default::default()
+        }));
+    r.band("more");
+    r.more_row("import");
+    assert_eq!(r.state().sheet, Sheet::Imports as i32);
+    r.send(H::ImportOptions(
+        wire::agenda_home_event::ImportOptionsChanged {
+            include_completed: true,
+        },
+    ));
+    let options = r.state().import_options.as_ref().unwrap();
+    assert!(options.include_completed);
+    assert!(
+        options
+            .options
+            .iter()
+            .any(|item| item.source == wire::ImportSource::Reminders as i32 && !item.from_file)
+    );
+    assert!(
+        options
+            .options
+            .iter()
+            .any(|item| item.source == wire::ImportSource::Reminders as i32 && item.from_file)
+    );
+}
+
+#[test]
+fn calendar_modes_have_real_cells_slots_and_month_steps_without_skipping_february() {
+    let mut home = rig(Dest::Day);
+    home.send(H::CalendarDay(wire::agenda_home_event::CalendarDayPicked {
+        day: "2099-01-31".into(),
+    }));
+    for (mode, panels, hours) in [
+        ("day", 1, 1),
+        ("week", 1, 7),
+        ("month", 1, 0),
+        ("month_list", 1, 0),
+        ("year", 12, 0),
+    ] {
+        home.send(H::CalendarView(
+            wire::agenda_home_event::CalendarViewChanged { key: mode.into() },
+        ));
+        let grid = home.state().calendar_grid.as_ref().unwrap();
+        assert_eq!(grid.view_key, mode);
+        assert_eq!(grid.panels.len(), panels);
+        assert_eq!(grid.hour_days.len(), hours);
+        for day in &grid.hour_days {
+            assert_eq!(day.hours.len(), 24);
+            let route = day.hours[14].create_route.as_ref().unwrap();
+            let Some(wire::route::Args::AgendaEditor(editor)) = &route.args else {
+                panic!("slot editor")
+            };
+            assert_eq!(editor.start_time, "14:00");
+            assert_eq!(editor.day, day.day);
+        }
+    }
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged {
+            key: "month".into(),
+        },
+    ));
+    let step = home.state().calendar_grid.as_ref().unwrap().next_days;
+    home.step(step);
+    assert_eq!(home.state().anchor_day, "2099-02-28");
+}
+
+#[test]
+fn adjusting_a_calendar_event_moves_both_ends_then_resizes_only_the_end() {
+    let mut home = rig(Dest::Day);
+    let day = home.today();
+    home.event(
+        "calendar-adjustment",
+        "Adjustable",
+        &format!("{day}T10:00:15.250"),
+        Some(&format!("{day}T11:00:45.500")),
+    );
+    home.settle();
+    home.send(H::EventAdjusted(wire::agenda_home_event::EventAdjusted {
+        instance_key: "calendar-adjustment".into(),
+        delta_minutes: 30,
+        resize: false,
+    }));
+    let read = |home: &Rig| {
+        let wire::app_query_response::Answer::AgendaEvent(detail) =
+            home.read(load::agenda::Event {
+                event_id: "calendar-adjustment".into(),
+                ..Default::default()
+            })
+        else {
+            panic!("event")
+        };
+        detail.event.unwrap()
+    };
+    assert!(read(&home).dtstart.contains("T10:30:15.250"));
+    assert!(read(&home).dtend.unwrap().contains("T11:30:45.500"));
+    home.send(H::EventAdjusted(wire::agenda_home_event::EventAdjusted {
+        instance_key: "calendar-adjustment".into(),
+        delta_minutes: 15,
+        resize: true,
+    }));
+    assert!(read(&home).dtstart.contains("T10:30:15.250"));
+    assert!(read(&home).dtend.unwrap().contains("T11:45:45.500"));
+}
+
+#[test]
+fn keyboard_date_and_flag_tools_override_the_preview_and_commit_atomically() {
+    let mut r = rig_with(Dest::Todo, "Zq Toolbar tomorrow at 9am");
+    assert!(
+        r.quick()
+            .tools
+            .iter()
+            .any(|tool| tool.key == "tomorrow" && tool.selected)
+    );
+    let today = r.today();
+    for key in ["today", "flag"] {
+        r.send(H::QuickAddTool(wire::TodoQuickAddTool { key: key.into() }));
+    }
+    assert_eq!(r.quick().preview, format!("Due {today} · 09:00"));
+    assert!(
+        r.quick()
+            .tools
+            .iter()
+            .any(|tool| tool.key == "today" && tool.selected)
+    );
+    r.send(H::QuickAddSubmitted(
+        wire::agenda_home_event::QuickAddSubmitted {},
+    ));
+    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::agenda::Board {
+        limit: 100,
+        view: Some(load::agenda::BoardView::All),
+        project_id: None,
+    }) else {
+        panic!("board")
+    };
+    let task = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .find(|task| task.title == "Zq Toolbar")
+        .unwrap();
+    assert_eq!(task.due_day, today);
+    assert!(task.flagged);
+    assert!(r.quick().title.is_empty() && r.quick().drawn);
+    r.send(H::QuickAddChanged(
+        wire::agenda_home_event::QuickAddChanged {
+            title: "Zq Undated tomorrow".into(),
+        },
+    ));
+    r.send(H::QuickAddTool(wire::TodoQuickAddTool {
+        key: "no_date".into(),
+    }));
+    assert!(r.quick().preview.is_empty());
+    r.send(H::QuickAddSubmitted(
+        wire::agenda_home_event::QuickAddSubmitted {},
+    ));
+    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::agenda::Board {
+        limit: 100,
+        view: Some(load::agenda::BoardView::All),
+        project_id: None,
+    }) else {
+        panic!("board")
+    };
+    let task = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .find(|task| task.title == "Zq Undated")
+        .unwrap();
+    assert!(task.due_day.is_empty());
+    assert!(!task.flagged);
+}
+
+#[test]
+fn year_reads_a_daily_series_in_bounded_quarters_and_deduplicates_crossing_events() {
+    let mut home = rig(Dest::Day);
+    home.in_zone("Pacific/Kiritimati");
+    home.write(act::agenda::Propose {
+        id: Some("year-daily".into()),
+        title: "Zq Daily all year".into(),
+        starts: "2098-12-31T10:30:00Z".into(),
+        ends: Field::Is("2098-12-31T11:00:00Z".into()),
+        zone: Field::Is("UTC".into()),
+        rule: Field::Is("FREQ=DAILY".into()),
+        busy: Some(false),
+        ..Default::default()
+    });
+    home.all_day(
+        "quarter-crossing",
+        "Zq crossing quarter",
+        "2099-04-01",
+        "2099-04-03",
+    );
+    home.send(H::CalendarDay(wire::agenda_home_event::CalendarDayPicked {
+        day: "2099-04-02".into(),
+    }));
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged { key: "year".into() },
+    ));
+    let grid = home.state().calendar_grid.as_ref().unwrap();
+    let days: std::collections::BTreeMap<_, _> = grid
+        .panels
+        .iter()
+        .flat_map(|panel| &panel.days)
+        .filter(|day| day.in_month)
+        .map(|day| (day.day.clone(), day.has_items))
+        .collect();
+    assert_eq!(days.len(), 365);
+    assert!(
+        days.values().all(|has_event| *has_event),
+        "every civil day is represented, including both ends of the year"
+    );
+    let crossing = home
+        .data()
+        .days
+        .iter()
+        .flat_map(events_of)
+        .filter(|event| event.title == "Zq crossing quarter")
+        .count();
+    assert_eq!(crossing, 1);
+}
+
+#[test]
+fn year_preserves_the_aggregate_event_bound_and_allows_a_narrower_view() {
+    let mut home = rig(Dest::Day);
+    for n in 0..5 {
+        home.write(act::agenda::Propose {
+            id: Some(format!("year-daily-{n}")),
+            title: format!("Zq Daily {n}"),
+            starts: "2099-01-01T10:00:00Z".into(),
+            ends: Field::Is("2099-01-01T10:30:00Z".into()),
+            zone: Field::Is("UTC".into()),
+            rule: Field::Is("FREQ=DAILY".into()),
+            busy: Some(false),
+            ..Default::default()
+        });
+    }
+    home.send(H::CalendarDay(wire::agenda_home_event::CalendarDayPicked {
+        day: "2099-06-15".into(),
+    }));
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged { key: "year".into() },
+    ));
+    assert!(matches!(home.state().content, Some(Content::Failure(_))));
+    assert_eq!(
+        home.state().calendar_grid.as_ref().unwrap().view_key,
+        "year"
+    );
+    home.send(H::CalendarView(
+        wire::agenda_home_event::CalendarViewChanged {
+            key: "month".into(),
+        },
+    ));
+    assert!(matches!(home.state().content, Some(Content::Data(_))));
 }

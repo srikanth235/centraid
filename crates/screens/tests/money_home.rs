@@ -12,9 +12,34 @@ use wire::money_home_event::{self as he, Kind as H};
 use wire::money_home_state::{Destination, Sheet};
 
 #[test]
-fn spending_is_the_default_and_is_drawn_per_currency() {
+fn activity_is_the_default_with_month_overview_and_complete_day_totals() {
     let d = driver();
     let i = home(&d);
+    let state = home_state(d.view(i));
+    assert_eq!(state.destination, Destination::Activity as i32);
+    assert_eq!(state.band[0].key, "activity");
+    let activity = home_data(d.view(i)).activity.as_ref().unwrap();
+    assert!(!activity.overview.is_empty());
+    assert_eq!(activity.overview_title, "Month overview");
+    assert!(
+        activity
+            .sections
+            .iter()
+            .any(|section| !section.total.is_empty())
+    );
+    assert!(
+        activity
+            .sections
+            .iter()
+            .flat_map(|section| &section.rows)
+            .all(|row| !row.color_key.is_empty())
+    );
+}
+
+#[test]
+fn spending_is_drawn_per_currency_with_weekly_categories() {
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let state = home_state(d.view(i));
     assert_eq!(state.destination, Destination::Spending as i32);
     assert_eq!(state.chrome.as_ref().unwrap().title, "Money");
@@ -30,15 +55,34 @@ fn spending_is_the_default_and_is_drawn_per_currency() {
         );
     }
     assert!(!spending.definitions.is_empty());
+    assert!(!spending.weekly_series.is_empty());
+    for series in &spending.weekly_series {
+        assert!((4..=5).contains(&series.weeks.len()));
+        for week in &series.weeks {
+            assert!(
+                week.segments
+                    .iter()
+                    .map(|segment| segment.height_bp)
+                    .sum::<u32>()
+                    <= 10_000
+            );
+            assert!(!week.accessibility_label.is_empty());
+            assert!(
+                week.segments
+                    .iter()
+                    .all(|segment| segment.color_key.starts_with("list"))
+            );
+        }
+    }
     let band: Vec<_> = state.band.iter().map(|t| t.key.as_str()).collect();
-    assert_eq!(band, ["spending", "activity", "cashflow", "more"]);
-    assert!(state.band[0].current);
+    assert_eq!(band, ["activity", "spending", "cashflow", "more"]);
+    assert!(state.band[1].current);
 }
 
 #[test]
 fn a_category_row_opens_its_target_for_the_month_in_view() {
-    let d = driver();
-    let i = home(&d);
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let data = home_data(d.view(i));
     let spending = data.spending.as_ref().unwrap();
     let line = spending
@@ -58,8 +102,8 @@ fn a_category_row_opens_its_target_for_the_month_in_view() {
 
 #[test]
 fn the_header_search_and_recurring_rows_are_routes() {
-    let d = driver();
-    let i = home(&d);
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let chrome = home_state(d.view(i)).chrome.as_ref().unwrap();
     assert_eq!(chrome.import_route.as_ref().unwrap().screen, "money.import");
     assert_eq!(chrome.search_route.as_ref().unwrap().screen, "money.search");
@@ -228,7 +272,7 @@ fn activity_has_the_filter_menu_and_the_month_under_the_title_and_nothing_else_d
         );
         let state = home_state(d.view(i));
         assert!(state.filter_menu.is_none(), "{key}");
-        assert!(state.subtitle.is_none(), "{key}");
+        assert_eq!(state.subtitle.is_some(), key == "spending", "{key}");
     }
 }
 
@@ -444,6 +488,6 @@ fn moving_a_tab_reads_that_tab_and_keeps_the_month() {
     let state = home_state(d.view(i));
     assert_eq!(state.destination, Destination::Activity as i32);
     assert_eq!(state.month, month);
-    assert_eq!(state.band[1].key, "activity");
-    assert!(state.band[1].current);
+    assert_eq!(state.band[0].key, "activity");
+    assert!(state.band[0].current);
 }

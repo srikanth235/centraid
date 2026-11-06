@@ -147,9 +147,9 @@ pub fn item_data(d: &Driver, id: u64) -> wire::LockerItemData {
 }
 
 pub fn row_of<'a>(data: &'a wire::LockerItemData, key: &str) -> &'a wire::LockerFieldRow {
-    data.sections
+    data.code_card
         .iter()
-        .flat_map(|section| &section.rows)
+        .chain(data.sections.iter().flat_map(|section| &section.rows))
         .find(|row| row.key == key)
         .unwrap_or_else(|| panic!("no row `{key}`"))
 }

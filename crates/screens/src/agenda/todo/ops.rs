@@ -1,9 +1,8 @@
 //! THE LAWS OF A TO-DO LIST'S ROW WRITES — check off, undo, add, file — for
 //! Day, To-do, a list, a project and Catch up alike.
 //!
-//! A DONE ROW IS DRAWN IN THE LOGBOOK ONLY (owner ruling): checking a row off
-//! says "Task done" with Undo on the status line, and the Logbook's box
-//! reopens.
+//! Checking a row says "Task done" with Undo on the status line. A completed
+//! row, in Completed or a list with Show Completed on, reopens.
 //!
 //! `act` answers at once (the phone is the vault), so there is no in-flight
 //! map, no hidden-until-answered set and no pending row: a screen submits, the
@@ -40,6 +39,55 @@ pub struct Ops {
 }
 
 impl Ops {
+    /// Quick add interprets only the explicit suffix the preview shows. Editors
+    /// keep using `add`, whose title is literal and whose due field is explicit.
+    pub fn add_quick(
+        &mut self,
+        ctx: &Ctx,
+        title: &str,
+        today: &str,
+        lands_in: &str,
+        options: super::quick::Options<'_>,
+    ) -> bool {
+        let parsed = super::quick::with_due(title, today, options.due, ctx.locale());
+        if !parsed.valid {
+            self.status = Some(wire::StatusLine {
+                sentence: parsed.preview,
+                refused: true,
+                ..Default::default()
+            });
+            return false;
+        }
+        use crate::field::Field;
+        let request = act::agenda::AddTask {
+            title: parsed.title.clone(),
+            due: if parsed.due.is_empty() {
+                Field::Keep
+            } else {
+                Field::Is(parsed.due.clone())
+            },
+            zone: if parsed.due.contains('T') {
+                Field::Is(ctx.zone().to_owned())
+            } else {
+                Field::Keep
+            },
+            project_id: options
+                .project
+                .map_or(Field::Keep, |id| Field::Is(id.to_owned())),
+            section_id: options
+                .section
+                .map_or(Field::Keep, |id| Field::Is(id.to_owned())),
+            flagged: Some(options.flagged),
+            ..Default::default()
+        };
+        self.created(
+            ctx,
+            request,
+            &parsed.title,
+            format!("{} {lands_in}", words::added_to(ctx.locale())),
+        )
+    }
+
     fn next_seq(&mut self) -> u64 {
         self.seq = kit_act::fresh();
         self.seq
@@ -146,6 +194,56 @@ impl Ops {
         }
     }
 
+    /// Explicit row actions; the caller resolves ids against the current answer.
+    pub fn row_action(&mut self, ctx: &Ctx, task: &wire::AgendaTask, action: &wire::TodoRowAction) {
+        let request: wire::ActRequest = match action.key.as_str() {
+            "flag" if task.flagged => act::agenda::UnflagTask {
+                task_id: task.task_id.clone(),
+            }
+            .into(),
+            "flag" => act::agenda::FlagTask {
+                task_id: task.task_id.clone(),
+            }
+            .into(),
+            "delete" => act::agenda::DeleteTask {
+                task_id: task.task_id.clone(),
+            }
+            .into(),
+            "reorder" => act::agenda::ReorderTask {
+                task_id: task.task_id.clone(),
+                before_id: if action.before_id.is_empty() {
+                    crate::field::Field::Clear
+                } else {
+                    crate::field::Field::Is(action.before_id.clone())
+                },
+            }
+            .into(),
+            _ => return,
+        };
+        let key = kit_act::key(&[&action.key, &task.task_id], self.next_seq());
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            self.refused(&settled);
+            return;
+        }
+        let locale = ctx.locale();
+        self.undo = settled.inverse;
+        self.status = Some(wire::StatusLine {
+            sentence: match action.key.as_str() {
+                "delete" => words::row_deleted(locale),
+                "reorder" => words::row_reordered(locale),
+                _ if task.flagged => words::not_flagged(locale),
+                _ => words::flagged(locale),
+            },
+            action_label: if self.undo.is_some() {
+                words::undo(locale)
+            } else {
+                String::new()
+            },
+            refused: false,
+        });
+    }
+
     /// A QUICK ADD: a bare title, optionally dated and filed, landing in
     /// `lands_in` (the words the status line names). Returns whether it
     /// committed, so a screen clears its field only then.
@@ -165,6 +263,11 @@ impl Ops {
                 Default::default()
             } else {
                 crate::field::Field::Is(due_day.to_owned())
+            },
+            zone: if due_day.contains('T') {
+                crate::field::Field::Is(ctx.zone().to_owned())
+            } else {
+                Default::default()
             },
             project_id: project_id.map_or(Default::default(), |id| {
                 crate::field::Field::Is(id.to_owned())

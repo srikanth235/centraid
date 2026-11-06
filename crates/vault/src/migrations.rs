@@ -1,10 +1,10 @@
-//! The forward-only ladder, and the one rung it holds.
+//! The forward-only migration ladder for existing and newly founded vaults.
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
 //! A vault file carries `PRAGMA application_id = 0x43454E32` (`CEN2`, [`crate::format`]) and
 //! `PRAGMA user_version = <the ladder's length>`. There is no compatibility
-//! with any earlier file ([#1135](https://github.com/srikanth235/centraid/issues/1135),
+//! with the earlier CEN1 format ([#1135](https://github.com/srikanth235/centraid/issues/1135),
 //! R-FP-10): the version axis starts at 1 and counts this ladder's own rungs.
 //!
 //! ## Forward-only, and what happens at each end
@@ -15,20 +15,15 @@
 //! - A file ABOVE the binary is `DowngradeRefused`. Never guessed down: a
 //!   newer rung may have moved data this binary does not know the shape of.
 //!
-//! ## One rung, hand-written
+//! ## Append-only migrations
 //!
-//! `contracts/migrations/001_baseline.sql` is the whole schema a new vault is
-//! founded with and the rows that founding seeds: the vault model of #1135, one
-//! file. **Until the first release** it is the only rung and a schema change
-//! edits it directly: no file in the field has run it yet, and the digest in
-//! `format.rs` refuses a development vault founded from an older text. **From
-//! the first release on it is FROZEN like any rung**, and the next schema change
-//! appends rung two (`002_<name>.sql`, an `include_str!` constant and a
-//! [`Migration`] in [`LADDER`]), never an edit to rung one: a file in the field
-//! has already run the old text, and compatibility between releases is a
-//! requirement. A rung two is proved the way a climb is: found a vault, wind its
-//! file back to `user_version = 1` by undoing the rung's own statements, write
-//! the rows the old shape let through, and open it.
+//! `contracts/migrations/001_baseline.sql` is the frozen #1135 model and its
+//! seed rows. Existing development and restored vaults already carry it.
+//! A schema change appends the next numbered SQL file and a [`Migration`] in
+//! [`LADDER`]; it never edits a rung that a vault may already have run.
+//! New vaults run the entire ladder. An existing vault runs its missing rungs
+//! after a safety snapshot. Upgrade tests start from the preceding schema,
+//! retain representative rows and compare the result to a freshly founded file.
 //!
 //! The file is BOTH the migration and the fixture (D-1020-D1-13): one copy,
 //! where the language-neutral fixtures live, reached with `include_str!` so a
@@ -54,15 +49,41 @@ pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_b
 
 /// The ladder, in order. Rung one is the baseline.
 ///
-/// A NEW RUNG IS APPENDED, NEVER INSERTED. Before the first release the
-/// baseline is edited in place; once released, no rung is ever edited: a file
-/// in the field has already run the old text, so an edit changes what a fresh
-/// file gets and nothing else, which is two schemas with one number.
-pub const LADDER: &[Migration] = &[Migration {
-    version: 1,
-    name: "baseline",
-    sql: BASELINE_SQL,
-}];
+/// A new rung is appended, never inserted. Existing rungs are never edited:
+/// a development or restored vault may already have run their old text, and
+/// changing it would create two schemas carrying the same version.
+pub const LADDER: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "baseline",
+        sql: BASELINE_SQL,
+    },
+    Migration {
+        version: 2,
+        name: "label_colors",
+        sql: include_str!("../../../contracts/migrations/002_label_colors.sql"),
+    },
+    Migration {
+        version: 3,
+        name: "agenda_details",
+        sql: include_str!("../../../contracts/migrations/003_agenda_details.sql"),
+    },
+    Migration {
+        version: 4,
+        name: "reminder_sources",
+        sql: include_str!("../../../contracts/migrations/004_reminder_sources.sql"),
+    },
+    Migration {
+        version: 5,
+        name: "task_alarms",
+        sql: include_str!("../../../contracts/migrations/005_task_alarms.sql"),
+    },
+    Migration {
+        version: 6,
+        name: "task_siblings",
+        sql: include_str!("../../../contracts/migrations/006_task_siblings.sql"),
+    },
+];
 
 /// The `user_version` a file this build wrote carries.
 #[must_use]
@@ -184,6 +205,58 @@ mod tests {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("the version reads")
+    }
+
+    #[test]
+    fn reminder_sources_upgrade_keeps_calendar_links_tombstones_and_task_alarms() {
+        let connection = founded_at_baseline();
+        run_rungs(&connection, &LADDER[..3], 1).expect("previous head");
+        connection.execute_batch("INSERT INTO entity (id,kind,title,created_at,updated_at) VALUES ('meeting','event','Meeting','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z'),('task','task','Call','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z'),('calendar','calendar','Work','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+          INSERT INTO container (id,kind) VALUES ('calendar','calendar');
+          INSERT INTO event (id, starts, timing, calendar_id) VALUES ('meeting','2026-11-05','all-day','calendar');
+          INSERT INTO task (id, due, remind_before_min) VALUES ('task','2026-11-05',15);
+          INSERT INTO origin (id,system,ref,label,created_at) VALUES ('origin','calendar','calendar:work','Work','2026-01-01T00:00:00Z');
+          INSERT INTO source (id,origin_id,system,external_id,entity_id,entity_kind,stated,seen_at) VALUES ('source','origin','calendar','uid:event','meeting','event','{\"title\":\"Meeting\"}','2026-11-05T00:00:00Z'),('tombstone','origin','calendar','uid:purged',NULL,NULL,'{}','2026-11-05T00:00:00Z');").expect("representative old data");
+        run_rungs(&connection, LADDER, 3).expect("new head");
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM source WHERE id = 'source' AND entity_id = 'meeting' AND json_extract(stated, '$.title') = 'Meeting'"
+            ),
+            1
+        );
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM source WHERE id = 'tombstone' AND entity_id IS NULL"
+            ),
+            1
+        );
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT remind_before_min FROM task WHERE id = 'task'"
+            ),
+            15
+        );
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM task WHERE reminders IS NULL"
+            ),
+            1
+        );
+        assert!(connection.execute("UPDATE source SET entity_id = 'meeting', entity_kind = 'event' WHERE id = 'tombstone'", []).is_err());
+        assert_eq!(
+            count(&connection, "SELECT COUNT(*) FROM pragma_foreign_key_check"),
+            0
+        );
+        let fresh = Connection::open_in_memory().expect("fresh");
+        run_rungs(&fresh, LADDER, 0).expect("fresh head");
+        assert_eq!(
+            centraid_ontology::schema_objects_of(&connection).unwrap(),
+            centraid_ontology::schema_objects_of(&fresh).unwrap()
+        );
     }
 
     fn count(connection: &Connection, sql: &str) -> i64 {

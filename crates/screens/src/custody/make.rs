@@ -425,6 +425,7 @@ impl Make {
                     text: self.phrase.join(" "),
                     url: String::new(),
                     subject: words::save_subject(ctx.locale()),
+                    ..Default::default()
                 }))]
             }
             _ => Vec::new(),

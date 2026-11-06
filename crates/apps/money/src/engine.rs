@@ -214,6 +214,54 @@ pub fn spending(rows: &[TxnRow], month: &str, ctx: &Context<'_>) -> Vec<Currency
     out.into_values().collect()
 }
 
+/// A seven-day part of a month. Refunds use the same category semantics as
+/// monthly spending; a refund past purchases is separately reported as credit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpendingWeek {
+    pub start: String,
+    pub end: String,
+    pub currencies: Vec<CurrencySpending>,
+}
+
+/// At most five bounded folds over rows already loaded for the monthly read.
+/// Transfers, voids, future rows, off-budget accounts and income keep exactly
+/// the monthly fold's exclusions; currencies are never combined.
+#[must_use]
+pub fn weekly_spending(rows: &[TxnRow], month: &str, ctx: &Context<'_>) -> Vec<SpendingWeek> {
+    let days = civil::month_length(month);
+    let currencies: Vec<_> = spending(rows, month, ctx)
+        .into_iter()
+        .map(|line| line.currency)
+        .collect();
+    (1..=days)
+        .step_by(7)
+        .map(|first| {
+            let start = format!("{month}-{first:02}");
+            let end = format!("{month}-{:02}", (first + 6).min(days));
+            let window: Vec<_> = rows
+                .iter()
+                .filter(|row| row.posted_on >= start && row.posted_on <= end)
+                .cloned()
+                .collect();
+            let mut values = spending(&window, month, ctx);
+            for currency in &currencies {
+                if !values.iter().any(|value| &value.currency == currency) {
+                    values.push(CurrencySpending {
+                        currency: currency.clone(),
+                        ..Default::default()
+                    });
+                }
+            }
+            values.sort_by(|a, b| a.currency.cmp(&b.currency));
+            SpendingWeek {
+                currencies: values,
+                start,
+                end,
+            }
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Cash flow.
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 //! - **A schema digest**, [`SCHEMA_DIGEST`]: BLAKE3 over the file's `sqlite_schema`, so a file whose
 //!   tables are not the ones this build was written against is refused, whoever changed them.
 //!
-//! **Any change to `contracts/migrations/001_baseline.sql` changes the digest**, and the test
+//! **A schema change in `contracts/migrations/` changes the digest**, and the test
 //! `the_schema_digest_is_the_founded_files` fails with the new value until [`SCHEMA_DIGEST`] is
 //! updated in the same change. That is the point: a schema change cannot land without the
 //! constant that names it.
@@ -26,8 +26,8 @@ pub const APPLICATION_ID: i64 = 0x4345_4e32;
 pub const EARLIER_APPLICATION_ID: i64 = 0x4345_4e31;
 
 /// The digest of the schema this build founds: see [`schema_digest`]. Updated with every change
-/// to the baseline, and held to the founded file by a test.
-pub const SCHEMA_DIGEST: &str = "4f8377f0737eb66d4498691c6c21fbdb57b2e08d6897a400b2d22ef5b4b27ad1";
+/// to the migration ladder, and held to the founded file by a test.
+pub const SCHEMA_DIGEST: &str = "dc64e7245617b68f0e0ab531530597c2a809e512a705eb9f9c0413ca71b9ec37";
 
 /// BLAKE3, in hex, over the file's `sqlite_schema` rows: type, name, table name and statement,
 /// ordered by name.
@@ -137,7 +137,7 @@ mod tests {
         assert_ne!(APPLICATION_ID, crate::backup::ledger::LEDGER_APPLICATION_ID);
     }
 
-    /// THE CONSTANT IS THE FOUNDED FILE'S DIGEST. A change to the baseline moves it; when this
+    /// THE CONSTANT IS THE FOUNDED FILE'S DIGEST. A new migration moves it; when this
     /// fails, the value to put in [`SCHEMA_DIGEST`] is the `found` line.
     #[test]
     fn the_schema_digest_is_the_founded_files() {

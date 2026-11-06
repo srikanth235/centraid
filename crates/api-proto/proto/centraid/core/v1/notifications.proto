@@ -1,0 +1,19 @@
+// The scheduler's query result. Native presenters receive only its replacement plan.
+syntax = "proto3";
+package centraid.core.v1;
+import "centraid/core/v1/notifications_screens.proto";
+
+message AgendaAlerts {
+  int64 now_ms = 1;
+  repeated AgendaAlert alerts = 2;
+  repeated AgendaAlertSource sources = 3;
+}
+
+// Current source revisions validate delivered and journaled alerts independently
+// of the bounded future-occurrence window.
+message AgendaAlertSource {
+  string entity_id = 1;
+  string source_stamp = 2;
+  bool task = 3;
+  string title = 4;
+}

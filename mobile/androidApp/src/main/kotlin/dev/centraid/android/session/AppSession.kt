@@ -162,6 +162,7 @@ internal object AppSession {
         imports.start()
         environment(screens)
         screens.start()
+        dev.centraid.android.widgets.AgendaWidgetBridge.attach(context, screens, scope)
         LinkFacts.start(context, screens)
         return open
     }

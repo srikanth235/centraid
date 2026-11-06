@@ -89,6 +89,7 @@ pub(crate) mod people;
 // and the correction.
 pub(crate) mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
+pub(crate) mod agenda_notifications;
 pub(crate) mod agenda_task;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
@@ -858,6 +859,8 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
             .attachments
             .into_iter()
             .map(|attachment| wire::AgendaAttachment {
+                title: attachment.title.clone(),
+                kind: attachment.kind.clone(),
                 attachment_id: attachment.attachment_id,
                 content_id: attachment.content_id,
                 media_type: attachment.media_type,
@@ -885,6 +888,8 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         next_instance_key: String::new(),
         next_original_start_local: String::new(),
         next_local_start: String::new(),
+        busy: event.busy,
+        travel_minutes: event.travel_minutes,
     }
 }
 
@@ -893,6 +898,7 @@ fn calendar_to_wire(calendar: agenda::CalendarRow) -> wire::AgendaCalendar {
         calendar_id: calendar.calendar_id,
         name: calendar.name,
         color: calendar.color,
+        icon_key: calendar.icon_key.unwrap_or_else(|| "Calendar".to_owned()),
     }
 }
 
@@ -926,6 +932,15 @@ fn day_context_to_wire(
 
 fn parties_to_wire(data: agenda::PartiesData) -> wire::AgendaParties {
     wire::AgendaParties {
+        places: data
+            .places
+            .into_iter()
+            .map(|place| wire::AgendaParty {
+                party_id: place.party_id,
+                name: place.name,
+                is_you: false,
+            })
+            .collect(),
         parties: data
             .parties
             .into_iter()
@@ -1501,9 +1516,9 @@ mod tests {
             .expect("the vault is open");
     }
 
-    /// A CEILING IS A TYPED REFUSAL. Eight daily series over most of a year is
-    /// 1,600 occurrences against the expansion's 1,500: the loader stops with
-    /// `FanOutExceeded`, and the shell reads `READ_BOUND_REACHED` — not a
+    /// A ceiling is a typed refusal. A daily series over most of a year
+    /// reaches the per-series 200 limit before the aggregate 1,500 limit:
+    /// the loader stops with `FanOutExceeded`, and the shell reads `READ_BOUND_REACHED` — not a
     /// panic, not an `Internal` that would restart the core, and not a short
     /// agenda that reads as a whole one.
     #[test]
@@ -1522,7 +1537,7 @@ mod tests {
             .expect_err("the expansion reaches its cap");
         assert_eq!(refused.code(), wire::ErrorCode::ReadBoundReached);
         assert!(
-            matches!(&refused, CoreError::ReadBoundReached { cap: 1_500, .. }),
+            matches!(&refused, CoreError::ReadBoundReached { query, cap: 200 } if query == "agenda.upcoming.expansion"),
             "{refused}"
         );
         assert!(!refused.sentence().is_empty());

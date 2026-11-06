@@ -7,7 +7,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -17,7 +16,6 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -29,14 +27,13 @@ import dev.centraid.design.NativeTheme
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Locale
-import kotlin.math.min
 
 /**
  * Material 3 over the GENERATED token table (#1020, D-1020-E6).
  *
  * The mapping from Centraid's roles to Material's slots is hand-written and
  * belongs here; the VALUES are not. `dev.centraid.design.CentraidTokens` is
- * emitted by `contracts/tools/export-native-theme.ts` from `packages/design`,
+ * emitted by `cargo xtask design` from `design/tokens.toml`,
  * and `git diff --exit-code design copy mobile` in the `mobile-jvm` gate step
  * is what stops it drifting.
  */
@@ -47,23 +44,13 @@ public fun CentraidTheme(
     content: @Composable () -> Unit,
 ) {
     val tokens = if (dark) CentraidTokens.dark else CentraidTokens.light
-    // THE SYSTEM FONT SCALE, CAPPED ONCE (DESIGN.md, Dynamic Type). Every `sp` in
-    // the tree — ours through [centraidType], Material's own — resolves against
-    // THIS density, so the cap is not something a screen can forget. A scale at
-    // or under the cap passes through untouched, nonlinear scaling and all; a
-    // larger one is read as [MAX_FONT_SCALE]. `density` (pixels per dp) is the
-    // display's and is never touched: only the text size is capped. Keyed on both
-    // numbers so a changed setting rebuilds it and nothing else does.
-    val system = LocalDensity.current
-    val density = remember(system.density, system.fontScale) {
-        if (system.fontScale <= MAX_FONT_SCALE) system else Density(system.density, MAX_FONT_SCALE)
-    }
-    CompositionLocalProvider(LocalCentraidTokens provides tokens, LocalDensity provides density) {
+    // Preserve the system's complete accessibility font scale (#1173).
+    CompositionLocalProvider(LocalCentraidTokens provides tokens) {
         MaterialTheme(
             colorScheme = if (tokens.scheme == "dark") {
                 darkColorScheme(
                     primary = tokens.color("accent"),
-                    onPrimary = tokens.color("accentText"),
+                    onPrimary = tokens.color("onAccent"),
                     background = tokens.color("bg"),
                     surface = tokens.color("bgElev"),
                     onSurface = tokens.color("text"),
@@ -72,7 +59,7 @@ public fun CentraidTheme(
             } else {
                 lightColorScheme(
                     primary = tokens.color("accent"),
-                    onPrimary = tokens.color("accentText"),
+                    onPrimary = tokens.color("onAccent"),
                     background = tokens.color("bg"),
                     surface = tokens.color("bgElev"),
                     onSurface = tokens.color("text"),
@@ -83,21 +70,6 @@ public fun CentraidTheme(
         )
     }
 }
-
-/**
- * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS caps Dynamic Type at
- * `DynamicTypeSize.xxxLarge`, Android caps the system font scale here
- * (DESIGN.md, Dynamic Type). A member who sets text larger than this reads this.
- */
-private const val MAX_FONT_SCALE: Float = 1.3f
-
-/**
- * The roles that hold their size at every font scale. `band` is the only one,
- * and the hold is arithmetic and not preference: invariant 1 caps a band at five
- * destinations plus More, and those six labels come to 338px inside a 358px band
- * at 11 / 15 on a 390-wide phone — a larger face does not fit at any padding.
- */
-private val HOLDS_SIZE: Set<String> = setOf("band")
 
 /**
  * The whole emitted table, reachable from any composable.
@@ -136,31 +108,27 @@ public fun centraidColor(role: String): Color = LocalCentraidTokens.current.colo
  * leading is a rung at the wrong measure — most visible on the tile bodies,
  * where three stacked lines drift a whole row out of alignment.
  *
- * THE SIZE FOLLOWS THE SYSTEM FONT SCALE, up to the cap [CentraidTheme] puts on
- * it, and the line height scales with it because both are `sp`. A role in
- * [HOLDS_SIZE] — and a call that says `scales = false` — holds instead: the size
- * is given in `dp`, which no font scale touches. The band's ACTIVE half is
- * `control`, a role that scales everywhere else, so a band's call site says
- * `scales = false` for the half it draws.
+ * Every role follows the complete system font scale. Explicit `scales = false`
+ * is reserved for decorative marks, never navigation or reading text.
  */
 @Composable
 @ReadOnlyComposable
 public fun centraidType(role: String, scales: Boolean = true): TextStyle {
     val style = requireNotNull(LocalCentraidTokens.current.type[role]) {
         "no such type role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     }
     // `Dp.toSp()` against the density in force is the `sp` that draws as that
     // many `dp` whatever the font scale (and its nonlinear curve) is, which is
     // what a held role needs; `size / fontScale` would be wrong off the linear
     // part of the curve.
-    val holds = !scales || role in HOLDS_SIZE
+    val holds = !scales
     val density = LocalDensity.current
     val fontSize = if (holds) with(density) { style.fontSize.dp.toSp() } else style.fontSize.sp
     val lineHeight = if (holds) with(density) { style.lineHeight.dp.toSp() } else style.lineHeight.sp
     return TextStyle(
-        fontFamily = if (style.family == "code") FontFamily.Monospace else CentraidSans,
+        fontFamily = if (style.family == "code") CentraidMono else CentraidSans,
         fontSize = fontSize,
         lineHeight = lineHeight,
         fontWeight = FontWeight(style.weight),
@@ -180,7 +148,7 @@ public fun centraidType(role: String, scales: Boolean = true): TextStyle {
         // token is copied from does. `includeFontPadding = false` drops
         // Android's legacy extra padding on top of that — it is a pre-Compose
         // compatibility affordance whose size depends on the FACE, so leaving it
-        // on would make Instrument Sans and Roboto measure differently for
+        // on would make Geist and Roboto measure differently for
         // reasons no token describes.
         lineHeightStyle = LineHeightStyle(
             alignment = LineHeightStyle.Alignment.Center,
@@ -190,68 +158,43 @@ public fun centraidType(role: String, scales: Boolean = true): TextStyle {
     )
 }
 
-/**
- * INSTRUMENT SANS, BUILT ONCE.
- *
- * Every type token says `family: "sans"` and this shell has never drawn it:
- * with no `fontFamily`, Compose renders Roboto, and nothing about that is an
- * error — which is how it went unnoticed for the project's whole life. The
- * files come from `packages/design/fonts`, the one source, copied into
- * `res/font` by `contracts/tools/export-native-theme.ts`.
- *
- * A `val` and not an expression inside [centraidType]: `FontFamily(...)` builds
- * a new instance per call, and a new instance is a new cache key for Compose's
- * font resolver, so a per-call family would re-resolve the face on every
- * recomposition of every label.
- *
- * THE `R.font` IDS CANNOT BE EMITTED — Kotlin has no way to turn the string
- * `"instrument_sans_book"` into an `R` id without reflection. So the emitted
- * [NATIVE_TYPE_FACES] table carries the NAMES and [CentraidSansFaces] is what a
- * reader compares these two references against; a face renamed upstream changes
- * that table and the resource file together, and this file stops compiling.
- *
- * `W400` IS BOUND TO `instrument_sans_book`, WHICH IS A 470, AND THAT IS THE
- * WHOLE POINT. It is a lowering and not a third weight: the ramp says 400, this
- * shell's `FontWeight` says `W400`, and only the bytes behind that rung differ
- * from the web's. The touch step [NativeTheme] already carries scales the glyph
- * without scaling the stroke, so a true 400 reads thin in the hand.
- * Declaring the file at `W400` rather than at some
- * invented `W470` is also what stops Compose from synthesising anything: the
- * resolver is asked for the weight it is handed, and it finds an exact face.
- */
+/** Geist faces emitted from design/fonts; resource compilation verifies the names. */
 private val CentraidSans: FontFamily = FontFamily(
-    Font(R.font.instrument_sans_book, FontWeight.W400),
-    Font(R.font.instrument_sans_semibold, FontWeight.W600),
+    Font(R.font.geist_regular, FontWeight.W400),
+    Font(R.font.geist_semibold, FontWeight.W600),
+    Font(R.font.geist_bold, FontWeight.W700),
 )
+
+private val CentraidMono: FontFamily = FontFamily(Font(R.font.geist_mono_regular, FontWeight.W400))
 
 /**
  * The emitted resource names this file's `R.font` references stand for.
  *
  * `androidApp` has no unit-test source set, so THE RESOURCE COMPILE IS THE
- * GUARD: `aapt2` fails the build outright if `res/font/instrument_sans_*.ttf`
- * is missing or misnamed, and `R.font.instrument_sans_book` above does not
+ * GUARD: `aapt2` fails the build outright if `res/font/geist_*.ttf`
+ * is missing or misnamed, and `R.font.geist_regular` above does not
  * resolve. This value is the readable half — it names the emitted rows so a
- * reader can see which `packages/design` fact the ids above are bound to.
+ * reader can see which `design/tokens.toml` fact the ids above are bound to.
  */
 internal val CentraidSansFaces: Map<Int, String> =
     requireNotNull(NATIVE_TYPE_FACES["sans"]) {
         "the emitted face table has no 'sans' family; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "`cargo xtask design`."
     }
 
 /**
  * A role, or a loud failure.
  *
  * `requireNotNull` and not a fallback colour: a role that has been renamed in
- * `packages/design` and not here would otherwise paint something plausible and
+ * `design/tokens.toml` and not here would otherwise paint something plausible and
  * wrong, and the emitted `NATIVE_COLOR_ROLES` list is what a test checks this
  * against.
  */
 internal fun NativeTheme.color(role: String): Color = Color(
     requireNotNull(colors[role]) {
         "no such colour role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     },
 )
 
@@ -259,7 +202,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
  * MONEY, WITH THE VAULT'S LOCALE AND THE CURRENCY'S OWN EXPONENT.
  *
  * v0's formatter is wrong in two ways at once
- * (`packages/design/src/format.ts:38`, `:49`; census §E8): it divides minor
+ * (`design/tokens.toml/src/format.ts:38`, `:49`; census §E8): it divides minor
  * units by 100 UNCONDITIONALLY, so JPY is rendered a hundred times too small
  * and BHD ten times too large, and it calls
  * `new Intl.NumberFormat(undefined, …)` — the HOST's locale — so the same vault

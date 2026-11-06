@@ -145,16 +145,9 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         step("ci-policy", run_ci_policy),
         step("release-build", run_release_build),
         step("ts-static", run_ts_static),
-        // THE GENERATED TREES NO `changes` FILTER CLAIMED (#1020, close pass,
-        // D-1020-CL7). `design/` and the shells' design tables (Tokens, Catalog
-        // and the kit's words, Kotlin and Swift, #1135) are GENERATED, and the
-        // only other step that regenerates them is `mobile-jvm` — which
-        // D-1020-B2-3 keeps out of `pr` because it is a second toolchain with an
-        // expensive cold build. Without this a `packages/design` token or a
-        // `strings/shared.rs` word shipped a committed artifact nobody
-        // re-derived, merged green and unexercised. Two bun scripts and a
-        // clean-tree assertion, on the profile that runs on a pull request.
-        step("emitters", run_emitters),
+        // Rust regenerates native resources, word tables and dark mockups
+        // in memory and compares every artifact without requiring Bun.
+        step("design", run_design),
         // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
         // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
         step("lockfile", run_lockfile),
@@ -219,7 +212,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
 ///      Rust by the `engine` job in `gate.yml`.
 ///   2. `./gradlew mobileJvm` = `:core:jvmTest`, the JVM binding's specs.
 ///      Screen behaviour is pinned by Rust's `Driver` tests, `cargo xtask
-///      rules` and `packages/design`'s `native-emission.test.ts`.
+///      rules` and the Rust design generator tests.
 ///   3. The generated-artifact drift check. The token table, the catalogue,
 ///      the kit's words are all emitted and committed;
 ///      one emitter, N committed artifacts, one lint that fails on drift.
@@ -263,94 +256,32 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(gradle, Outcome::Ok(_)) {
         return Ok(gradle);
     }
-    // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
-    // the check is a regeneration followed by a clean-tree assertion.
-    let emitted = process(
-        ctx,
-        "mobile-jvm",
-        "bun",
-        &["contracts/tools/export-native-theme.ts"],
-    )?;
-    if !matches!(emitted, Outcome::Ok(_)) {
-        return Ok(emitted);
-    }
-    // THEN FORMAT, because the committed artifacts are formatted and the
-    // emitters do not format. Without this the check fails on every run over a
-    // clean tree — a JSON array is one line from `JSON.stringify` and three
-    // from oxfmt — which is a drift check that reports drift that is not there, and a gate nobody believes is a gate
-    // nobody reads (#1020 wave 3 lane X3). JSON and YAML in this repository are
-    // oxfmt-owned, so the emitter's output is not the committed form until this
-    // has run.
-    let formatted = process(ctx, "mobile-jvm", "bun", &["run", "format"])?;
-    if !matches!(formatted, Outcome::Ok(_)) {
-        return Ok(formatted);
-    }
-    assert_clean_tree(ctx, "mobile-jvm", &["design", "mobile"])
+    run_design(ctx)
 }
 
-/// `emitters` — the generated trees, regenerated and asserted clean.
-///
-/// `mobile-jvm` diffs the same trees after its own emitters; this step is the
-/// half that costs no Gradle, so it can sit on the per-PR profile. The two overlap on purpose: a drift check that only exists
-/// in a nightly profile is a drift check that reports a day late.
-fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
-    for emitter in [
-        "contracts/tools/export-design-corpus.ts",
-        "contracts/tools/export-native-theme.ts",
-    ] {
-        let emitted = process(ctx, "emitters", "bun", &[emitter])?;
-        if !matches!(emitted, Outcome::Ok(_)) {
-            return Ok(emitted);
-        }
+/// Compare every generated artifact with its Rust source, without mutating the tree.
+fn run_design(ctx: &Ctx) -> Result<Outcome> {
+    let count = crate::design::generate(&ctx.root, true)?;
+    let paths = ["design", "mobile"];
+    let untracked = untracked_files(&ctx.root, &paths)?;
+    if !untracked.is_empty() {
+        return Ok(Outcome::Failed(untracked_message(&untracked, &paths)));
     }
-    // THEN FORMAT, for `mobile-jvm`'s reason: JSON in this repository is
-    // oxfmt-owned and the emitters do not format, so without this the clean-tree
-    // assertion reports drift that is not there.
-    let formatted = process(ctx, "emitters", "bun", &["run", "format"])?;
-    if !matches!(formatted, Outcome::Ok(_)) {
-        return Ok(formatted);
-    }
-    assert_clean_tree(ctx, "emitters", &["design", "mobile"])
+    Ok(Outcome::Ok(format!("{count} design artifacts current")))
 }
 
-/// THE CLEAN-TREE ASSERTION BOTH DRIFT CHECKS END WITH: nothing under `paths`
-/// differs from the index, AND nothing under them is untracked.
-///
-/// `git diff --exit-code` alone reads only files git already knows, so an
-/// emitter that started writing a NEW file (a second Swift table, a fixture
-/// for a screen added this week) left the tree "clean" and the step green with
-/// the file uncommitted — the drift check passed on exactly the drift it
-/// exists to find. Untracked files are listed with `--exclude-standard`, so
-/// anything `.gitignore` already names (`Sources/Generated`, `build/`) is
-/// not drift; a file staged with `git add` is tracked and passes, as an edited
-/// one does.
-fn assert_clean_tree(ctx: &Ctx, step: &str, paths: &[&str]) -> Result<Outcome> {
-    let mut args = vec!["diff", "--exit-code", "--"];
-    args.extend_from_slice(paths);
-    let diffed = process(ctx, step, "git", &args)?;
-    if !matches!(diffed, Outcome::Ok(_)) {
-        return Ok(diffed);
-    }
-    let untracked = untracked_files(&ctx.root, paths)?;
-    if untracked.is_empty() {
-        return Ok(diffed);
-    }
-    Ok(Outcome::Failed(untracked_message(&untracked, paths)))
-}
-
-/// Every file under `paths` that git neither tracks nor ignores.
+/// A correct generated artifact must also be included in the commit.
 fn untracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>> {
     let output = Command::new("git")
         .args(["ls-files", "--others", "--exclude-standard", "--"])
         .args(paths)
         .current_dir(root)
         .output()
-        .context("spawn `git ls-files --others`")?;
+        .context("spawn git ls-files --others")?;
     anyhow::ensure!(
         output.status.success(),
-        "`git ls-files --others --exclude-standard -- {}` failed: {}",
-        paths.join(" "),
-        String::from_utf8_lossy(&output.stderr).trim()
+        "git ls-files failed: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
@@ -359,7 +290,7 @@ fn untracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>> {
         .collect())
 }
 
-/// The failure line for [`assert_clean_tree`]: the files, by name, because "the
+/// The failure line for the artifact cleanliness test: the files, by name, because "the
 /// tree is dirty" without them sends a reader to run `git status` themselves.
 fn untracked_message(files: &[String], paths: &[&str]) -> String {
     const SHOWN: usize = 8;
@@ -1220,7 +1151,7 @@ fn run_release_build(ctx: &Ctx) -> Result<Outcome> {
     )
 }
 
-/// The TypeScript workspaces (`packages/design`, `packages/test-kit`) and the
+/// The TypeScript test kit and the
 /// release scripts: format, lint, typecheck and tests, through `bun run check`.
 fn run_ts_static(ctx: &Ctx) -> Result<Outcome> {
     process(ctx, "ts-static", "bun", &["run", "check"])

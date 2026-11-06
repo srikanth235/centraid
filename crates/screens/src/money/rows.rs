@@ -90,14 +90,16 @@ pub fn row(
     .join(", ");
     wire::MoneyRow {
         txn_id: source.txn_id.clone(),
+        color_key: source.color_key.clone(),
+        is_income: !struck
+            && source
+                .amount
+                .as_ref()
+                .is_some_and(|amount| amount.minor > 0),
         title,
         meta,
         amount: fold::text(source.amount.as_ref()),
-        amount_tone: if struck {
-            Tone::Seam
-        } else {
-            fold::sign_tone(source.amount.as_ref())
-        } as i32,
+        amount_tone: if struck { Tone::Seam } else { Tone::Neutral } as i32,
         category_label: category,
         chips: chips(locale, &source.flags, source.category_id.is_some()),
         accessibility_label,
@@ -111,6 +113,7 @@ pub fn row(
 pub fn sections(
     locale: Locale,
     rows: &[wire::MoneyActivityRow],
+    totals: &[wire::money_activity::DayTotal],
     today: &str,
     parent: &str,
 ) -> Vec<wire::MoneyDaySection> {
@@ -120,6 +123,18 @@ pub fn sections(
         match out.last_mut() {
             Some(last) if last.day == source.posted_on => last.rows.push(line),
             _ => out.push(wire::MoneyDaySection {
+                total: totals
+                    .iter()
+                    .find(|total| total.day == source.posted_on)
+                    .map(|total| {
+                        total
+                            .amounts
+                            .iter()
+                            .map(|amount| fold::signed(Some(amount)))
+                            .collect::<Vec<_>>()
+                            .join(" · ")
+                    })
+                    .unwrap_or_default(),
                 day: source.posted_on.clone(),
                 heading: fold::day_heading(locale, &source.posted_on, today),
                 rows: vec![line],

@@ -140,10 +140,16 @@ struct TodoDetailView: View {
                         guard seeded, typed != detail.draft.notes else { return }
                         send(event { $0.notes = .with { $0.notes = typed } })
                     }
-                KitHairline()
-                ForEach(detail.fields, id: \.key) { field in
-                    fieldRow(field, today: detail.today)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(detail.fields, id: \.key) { field in
+                        fieldRow(field, today: detail.today)
+                    }
                 }
+                .padding(.vertical, 8)
+                .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
+                AgendaAttachmentCard(value: detail.attachments, send: { change in send(event { $0.attachment = change }) }, open: open)
                 subtasks(detail)
                 HStack(spacing: 12) {
                     if !detail.deleteLabel.isEmpty {
@@ -204,6 +210,9 @@ struct TodoDetailView: View {
                     }
                 }
                 pickers(field, today: today)
+                if field.editText {
+                    TodoCustomField(field: field) { value in send(event { $0.fieldText = .with { $0.field = field.key; $0.text = value } }) }
+                }
                 if field.addText {
                     HStack(spacing: 8) {
                         TextField(field.addPlaceholder, text: $typedTag)
@@ -330,5 +339,23 @@ private struct TodoEntryVerb: View {
             KitLink(label: label, identifier: identifier, action: action)
                 .disabled(!enabled)
         }
+    }
+}
+
+
+private struct TodoCustomField: View {
+    let field: Centraid_Core_V1_TodoField
+    let save: (String) -> Void
+    @State private var value = ""
+    var body: some View {
+        HStack {
+            TextField(field.addPlaceholder, text: $value)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .centraidType("body")
+                .accessibilityLabel(field.addPlaceholder)
+                .accessibilityIdentifier("tasks-text-\(field.key)")
+                .onSubmit { save(value) }
+            KitLink(label: field.saveLabel, identifier: "tasks-save-\(field.key)") { save(value) }
+        }.onAppear { value = field.textValue }
     }
 }

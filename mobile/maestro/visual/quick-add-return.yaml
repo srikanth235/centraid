@@ -1,0 +1,61 @@
+# Run only after the image profiles: these are real writes to the demo vault.
+appId: ${APP_ID}
+name: Return adds a reminder and keeps typing focus
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: home-tile-reminders
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: home-tile-reminders
+- extendedWaitUntil:
+    visible:
+      id: agenda-add-task
+    timeout: 60000
+- tapOn:
+    id: agenda-add-task
+- extendedWaitUntil:
+    visible:
+      id: agenda-quick-add
+    timeout: 10000
+- tapOn:
+    id: agenda-quick-add
+- inputText: CI Return first reminder
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: agenda-quick-add
+    timeout: 10000
+# No second tap on the field: this write must use the focus retained by Return.
+- inputText: CI Return second reminder
+- assertVisible:
+    id: agenda-quick-add-verb
+- pressKey: Enter
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "agenda-task-row-.*"
+      text: ".*CI Return first reminder.*"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "agenda-task-row-.*"
+    text: ".*CI Return first reminder.*"
+- scrollUntilVisible:
+    element:
+      id: "agenda-task-row-.*"
+      text: ".*CI Return second reminder.*"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "agenda-task-row-.*"
+    text: ".*CI Return second reminder.*"
+- takeScreenshot: return-continuation

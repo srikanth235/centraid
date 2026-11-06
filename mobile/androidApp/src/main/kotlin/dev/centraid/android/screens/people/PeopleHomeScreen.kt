@@ -1,6 +1,9 @@
 package dev.centraid.android.screens.people
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,18 +18,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
@@ -152,11 +161,26 @@ public fun PeopleHomeScreen(
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
             ) { data ->
-                LazyColumn(Modifier.testTag("people-list")) {
+                val listState = rememberLazyListState()
+                val scope = rememberCoroutineScope()
+                Box {
+                LazyColumn(Modifier.testTag("people-list").padding(end = if (data is PeopleRosterData && data.sections.isNotEmpty()) 44.dp else 0.dp), state = listState) {
                     when (data) {
                         is PeopleRosterData -> roster(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
                         is PeopleTouchData -> touch(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
                     }
+                }
+                if (data is PeopleRosterData) {
+                    Column(Modifier.align(Alignment.CenterEnd).width(44.dp).verticalScroll(rememberScrollState())) {
+                        data.sections.forEachIndexed { index, section ->
+                            Text(section.title, style = centraidType("smallStrong"), color = centraidColor("peopleText"),
+                                modifier = Modifier.fillMaxWidth().testTag("people-index-${section.key}").clickable {
+                                    val offset = (if (data.my_card != null) 1 else 0) + data.sections.take(index).sumOf { 1 + it.rows.size }
+                                    scope.launch { listState.scrollToItem(offset) }
+                                }.heightIn(min = 44.dp).padding(horizontal = 8.dp, vertical = 3.dp))
+                        }
+                    }
+                }
                 }
             }
         }
@@ -205,11 +229,26 @@ private fun LazyListScope.roster(
     onOpen: (Route) -> Unit,
     onEvent: (PeopleHomeEvent) -> Unit,
 ) {
+    roster.my_card?.let { card ->
+        item(key = "my-card") {
+            Column(Modifier.testTag("people-my-card")) {
+                Text(roster.my_card_label, style = centraidType("small"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+                PersonRow(card.copy(meta = ""), onOpen, onEvent)
+            }
+        }
+    }
     val empty = roster.empty
     if (roster.rows.isEmpty() && empty != null) {
         item(key = "empty") { DayOne(empty, importLabel, onEvent) }
     }
-    items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+    if (roster.sections.isEmpty()) {
+        items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+    } else {
+        roster.sections.forEach { section ->
+            item(key = "section-${section.key}") { SectionHeader(SectionHead(title = section.title)) }
+            items(section.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+        }
+    }
 }
 
 private fun LazyListScope.touch(
@@ -340,6 +379,9 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
             CentraidRow(
                 title = row.name,
                 meta = listOf(row.role, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
+                titleMaxLines = Int.MAX_VALUE,
+                metaMaxLines = Int.MAX_VALUE,
+                chipsBelow = true,
                 chips = row.chips.map { chip ->
                     StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
                 },
@@ -348,11 +390,12 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
                 onTap = { row.route?.let(onOpen) },
             )
         }
-        IconKey(
+        if (row.star_label.isNotEmpty()) IconKey(
             iconKey = "Star",
             label = row.star_label,
             testTag = "people-star-${row.party_id}",
             bordered = row.starred,
+            tint = if (row.starred) "peopleText" else "textFaint",
             modifier = Modifier.padding(end = 8.dp),
         ) { onEvent(PeopleHomeEvent(star = PeopleHomeEvent.StarToggled(row.party_id))) }
     }
@@ -361,14 +404,18 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
 internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
+    val initials = avatar?.initials.orEmpty()
+    val style = centraidType("smallStrong")
+    val textSize = rememberTextMeasurer().measure(AnnotatedString(initials), style, softWrap = false, maxLines = 1).size
+    val measuredSide = with(LocalDensity.current) { maxOf(textSize.width, textSize.height).toDp() + 12.dp }
     Box(
         Modifier
-            .size(size.dp)
+            .size(maxOf(size.dp, measuredSide))
             .clip(CircleShape)
             .background(hueColor(avatar?.hue_key.orEmpty()))
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
+        Text(initials, style = style, color = centraidColor("onAccent"), maxLines = 1, softWrap = false)
     }
 }

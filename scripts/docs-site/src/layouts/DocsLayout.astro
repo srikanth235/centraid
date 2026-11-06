@@ -146,7 +146,7 @@ const jsonLdHtml = JSON.stringify(jsonLd);
       )
     }
     <meta name="application-name" content="Centraid docs" />
-    {/* The product's own two page grounds (packages/design's `--bg`). */}
+    {/* The product's own two page grounds (design/tokens.toml's `--bg`). */}
     <meta name="theme-color" content="#FDFDFC" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0E0E0E" media="(prefers-color-scheme: dark)" />
     <meta data-pagefind-meta="label[content]" content={pageLabel} />
@@ -171,22 +171,22 @@ const jsonLdHtml = JSON.stringify(jsonLd);
     <meta name="twitter:image:alt" content="Centraid documentation" />
     <link rel="icon" href={asset('assets/centraid-mark.svg')} />
     {/* The one bundled face, served from this origin. Nothing here reaches a
-        font CDN: the product ships Instrument Sans with no network fetch, and
+        font CDN: the product ships Geist with no network fetch, and
         a local-first product's docs should not open with a third-party
         request. The tokens must load BEFORE docs.css, which resolves every
         colour, rung and duration through them. */}
     <link
       rel="preload"
       as="font"
-      type="font/woff2"
-      href={`${base}assets/fonts/instrument-sans-latin-400-normal.woff2`}
+      type="font/ttf"
+      href={`${base}assets/fonts/Geist-Regular.ttf`}
       crossorigin
     />
     <link
       rel="preload"
       as="font"
-      type="font/woff2"
-      href={`${base}assets/fonts/instrument-sans-latin-600-normal.woff2`}
+      type="font/ttf"
+      href={`${base}assets/fonts/Geist-SemiBold.ttf`}
       crossorigin
     />
     <link rel="stylesheet" href={asset('assets/centraid-tokens.css')} />

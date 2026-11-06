@@ -96,6 +96,22 @@ pub(crate) fn items(
         phone::load_items(door, asked.archived, limit),
         |data| {
             Answer::LockerItems(wire::LockerItems {
+                starred_items: data
+                    .starred_items
+                    .into_iter()
+                    .map(|listed| row(listed, &zone))
+                    .collect(),
+                recent_items: data
+                    .recent_items
+                    .into_iter()
+                    .map(|listed| row(listed, &zone))
+                    .collect(),
+                code_items: data
+                    .code_items
+                    .into_iter()
+                    .map(|listed| row(listed, &zone))
+                    .collect(),
+                code_count: data.code_count.map(count),
                 items: data
                     .items
                     .into_iter()

@@ -1,19 +1,42 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.screens.agenda.AgendaCalendarForm
+import dev.centraid.android.screens.agenda.AgendaImportOptionsView
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import centraid.core.v1.AgendaCalendarGrid
+import centraid.core.v1.AgendaHourDay
+import centraid.core.v1.AgendaRowItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,12 +57,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaBandTab
 import centraid.core.v1.AgendaChrome
@@ -113,6 +140,7 @@ public fun AgendaHomeScreen(
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome ?: AgendaChrome()
+    val quickAddKeyboard = state.quick_add?.shown == true && WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val denied = state.denied
     if (denied != null) {
         // THE DENIED GATE KEEPS THE HEADER AND HAS NO BAND, iOS's shape: there
@@ -172,17 +200,19 @@ public fun AgendaHomeScreen(
                 onOpen = { onEvent(AgendaHomeEvent(search_opened = AgendaHomeEvent.SearchOpened())) },
             ),
             band = {
-                AppBand(
-                    app = "agenda",
-                    tabs = state.band.map { it.toTab() },
-                    onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
-                    onHome = onHome,
-                )
+                if (!quickAddKeyboard) {
+                    AppBand(
+                        app = "agenda",
+                        tabs = state.band.map { it.toTab() },
+                        onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
+                        onHome = onHome,
+                    )
+                }
             },
         ) {
             Column(Modifier.fillMaxSize()) {
                 val toolbar = state.toolbar
-                if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, onEvent)
+                if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, state.calendar_grid, onEvent)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val loading = state.loading
                     val failure = state.failure
@@ -202,8 +232,11 @@ public fun AgendaHomeScreen(
                         }
                         data != null -> {
                             val todo = data.todo
+                            val calendarGrid = state.calendar_grid
                             if (todo != null) {
                                 AgendaTodoPlace(todo, words, actions, onEvent)
+                            } else if (calendarGrid != null && calendarGrid.view_key != "list") {
+                                AgendaGrid(calendarGrid, data, chrome, actions, onEvent, onOpen)
                             } else {
                                 AgendaList(state, data, actions, onEvent, onOpen)
                             }
@@ -223,6 +256,7 @@ public fun AgendaHomeScreen(
                     verb = words.quick_add_verb,
                     onChange = { onEvent(AgendaHomeEvent(quick_add_changed = AgendaHomeEvent.QuickAddChanged(title = it))) },
                     onSubmit = { onEvent(AgendaHomeEvent(quick_add_submitted = AgendaHomeEvent.QuickAddSubmitted())) },
+                    onTool = { onEvent(AgendaHomeEvent(quick_add_tool = centraid.core.v1.TodoQuickAddTool(key = it))) },
                     // THE KEYBOARD LEFT: the machine puts an empty bar away.
                     onBlur = { onEvent(AgendaHomeEvent(quick_add_closed = AgendaHomeEvent.QuickAddClosed())) },
                     testTag = "agenda-quick-add",
@@ -234,6 +268,8 @@ public fun AgendaHomeScreen(
     when (state.sheet) {
         AgendaHomeState.Sheet.SHEET_MORE -> AgendaMoreSheet(state, chrome, onEvent, onOpen)
         AgendaHomeState.Sheet.SHEET_READS -> AgendaReadsSheet(chrome, onEvent)
+        AgendaHomeState.Sheet.SHEET_CALENDAR_EDITOR -> state.container_form?.let { AgendaCalendarForm(it, state.status?.sentence.orEmpty(), onEvent) }
+        AgendaHomeState.Sheet.SHEET_IMPORTS -> state.import_options?.let { AgendaImportOptionsView(it, onEvent) }
         AgendaHomeState.Sheet.SHEET_FILE, AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> AgendaTaskSheet(state, words, onEvent)
         else -> Unit
     }
@@ -243,38 +279,68 @@ private fun AgendaBandTab.toTab(): AppBandTab =
     AppBandTab(key = key, label = label, iconKey = icon_key, selected = current)
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun AgendaToolbarRow(
     toolbar: AgendaToolbar,
     chrome: AgendaChrome,
+    grid: AgendaCalendarGrid?,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
-    Row(
+    val largeText = LocalDensity.current.fontScale > 1.3f
+    Column(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("agenda-toolbar"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            toolbar.range_label,
-            style = centraidType("title"),
-            color = centraidColor("text"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).semantics { heading() },
-        )
+        if (largeText) {
+            Text(toolbar.range_label, style = centraidType("title"), color = centraidColor("text"), modifier = Modifier.semantics { heading() })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AgendaToolbarControls(toolbar, chrome, grid, onEvent)
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    toolbar.range_label,
+                    style = centraidType("title"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                AgendaToolbarControls(toolbar, chrome, grid, onEvent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgendaToolbarControls(toolbar: AgendaToolbar, chrome: AgendaChrome, grid: AgendaCalendarGrid?, onEvent: (AgendaHomeEvent) -> Unit) {
+        var menuOpen by remember { mutableStateOf(false) }
         if (!toolbar.at_today) {
             OutlineButton(label = chrome.today, testTag = "agenda-today") {
                 onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested()))
             }
         }
+        if (grid != null) {
+            Box {
+                OutlineButton(label = grid.view_label, testTag = "agenda-calendar-view") { menuOpen = true }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    grid.view_choices.forEach { choice ->
+                        DropdownMenuItem(text = { Text(choice.label, style = centraidType("body"), color = centraidColor("text")) }, onClick = {
+                            menuOpen = false
+                            onEvent(AgendaHomeEvent(calendar_view = AgendaHomeEvent.CalendarViewChanged(key = choice.key)))
+                        })
+                    }
+                }
+            }
+        }
         KitStepper(
             previousLabel = chrome.previous_day,
             nextLabel = chrome.next_day,
-            onPrevious = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -1))) },
-            onNext = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = 1))) },
+            onPrevious = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = grid?.previous_days ?: -1))) },
+            onNext = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = grid?.next_days ?: 1))) },
             previousTag = "agenda-previous-day",
             nextTag = "agenda-next-day",
         )
-    }
 }
 
 /** Skeleton rows, never a spinner: the list's own geometry, drawn in `skel`. */
@@ -503,6 +569,7 @@ private fun LazyListScope.daySection(
                     onFile = actions.onFile,
                     fileVerb = actions.fileVerb,
                     idPrefix = AGENDA_TASK_ROW,
+                    onAction = actions.onAction,
                     indent = DAY_TASK_INDENT,
                 )
             }
@@ -701,7 +768,12 @@ private fun AgendaMoreSheet(
                     Unit
                 }
                 if (row.toggle) {
-                    AgendaToggleRow(row, pick)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { AgendaToggleRow(row, pick) }
+                        if (row.edit_key.isNotEmpty()) IconKey(iconKey = "Pencil", label = row.edit_label, testTag = "agenda-more-${row.edit_key}") {
+                            onEvent(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = row.edit_key)))
+                        }
+                    }
                 } else {
                     SheetRow(
                         label = row.label,
@@ -732,12 +804,7 @@ private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val hue = hueColor(row.hue_key)
-        Box(
-            Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .then(if (row.on) Modifier.background(hue) else Modifier.border(1.5.dp, hue, CircleShape)),
-        )
+        CentraidIcon(iconKey = row.icon_key.ifEmpty { "Calendar" }, tint = if (row.on) hue else centraidColor("textDisabled"), size = 20.dp)
         Text(
             row.label,
             style = centraidType("body"),
@@ -768,4 +835,95 @@ private fun AgendaReadsSheet(chrome: AgendaChrome, onEvent: (AgendaHomeEvent) ->
             }
         }
     }
+}
+
+
+/** Core-built dates and hourly buckets; both shells send the same calendar intents. */
+@Composable
+private fun AgendaGrid(
+    grid: AgendaCalendarGrid,
+    data: AgendaHomeData,
+    chrome: AgendaChrome,
+    actions: AgendaTaskActions,
+    onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            grid.panels.forEachIndexed { index, panel ->
+                item(key = "calendar-panel-$index") {
+                    var drag = 0f
+                    Column(Modifier.padding(horizontal = KitGeometry.GUTTER).pointerInput(grid.previous_days, grid.next_days) {
+                        detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { change, amount -> drag += amount; change.consume() }, onDragEnd = {
+                            if (kotlin.math.abs(drag) > 80f) onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = if (drag < 0f) grid.next_days else grid.previous_days)))
+                        })
+                    }) {
+                        if (panel.title.isNotEmpty()) Text(panel.title, style = centraidType("title"), color = centraidColor("text"), modifier = Modifier.semantics { heading() })
+                        panel.days.chunked(7).forEach { week ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                week.forEach { day ->
+                                    Column(
+                                        Modifier.weight(1f).heightIn(min = 48.dp)
+                                            .clip(RoundedCornerShape(KitGeometry.RADIUS))
+                                            .background(centraidColor(if (day.selected) "agendaFill" else if (day.today) "agendaTint" else "bg"))
+                                            .clickable { onEvent(AgendaHomeEvent(calendar_day = AgendaHomeEvent.CalendarDayPicked(day = day.day))) }
+                                            .testTag("agenda-calendar-day-${day.day}")
+                                            .clearAndSetSemantics { contentDescription = day.accessibility_label; role = Role.Button },
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        val ink = centraidColor(if (day.selected) "onAccent" else if (day.in_month) "text" else "textFaint")
+                                        Text(day.weekday, style = centraidType("annotLabel"), color = ink)
+                                        Text(day.label, style = centraidType("bodyStrong"), color = ink)
+                                        Box(Modifier.size(4.dp).clip(CircleShape).background(if (day.has_items) centraidColor(if (day.selected) "onAccent" else "agendaText") else androidx.compose.ui.graphics.Color.Transparent))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            data.overdue?.let { overdue -> todoGroups(listOf(overdue), onCheck = actions.onCheck, onOpen = onOpen, onVerb = actions.onVerb) }
+            if (grid.hour_days.size > 1) {
+                item(key = "calendar-week-hours") {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        grid.hour_days.forEach { day -> Column(Modifier.width(280.dp)) { AgendaHourColumn(day, chrome, actions, onEvent, onOpen) } }
+                    }
+                }
+            } else {
+                grid.hour_days.forEach { day -> item(key = day.day) { AgendaHourColumn(day, chrome, actions, onEvent, onOpen) } }
+            }
+            if (grid.hour_days.isEmpty() && grid.view_key != "year") data.days.forEach { day ->
+                item(key = "selected-${day.day}") { Column { Text(day.heading, style = centraidType("title"), color = centraidColor("text")); day.items.forEach { AgendaGridItem(it, actions, onOpen) } } }
+            }
+            if (data.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CALENDAR) {
+                item(key = "calendar-import") { OutlineButton(label = data.import_label, testTag = "kit-empty-import") { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) } }
+            }
+            item(key = "calendar-bottom") { Spacer(Modifier.height(72.dp)) }
+        }
+        OutlineButton(label = grid.today_label, testTag = "agenda-floating-today", modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) { onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested())) }
+    }
+}
+
+@Composable
+private fun AgendaHourColumn(day: AgendaHourDay, chrome: AgendaChrome, actions: AgendaTaskActions, onEvent: (AgendaHomeEvent) -> Unit, onOpen: (Route) -> Unit) {
+    val hourStyle = centraidType("annotLabel").copy(fontFeatureSettings = "tnum")
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val gutter = with(density) {
+        maxOf(48.dp, (day.hours.maxOfOrNull { textMeasurer.measure(AnnotatedString(it.label), style = hourStyle, maxLines = 1).size.width } ?: 0).toDp())
+    }
+    Column {
+        Text(day.heading, style = centraidType("title"), color = centraidColor("text"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+        day.all_day.forEach { AgendaGridItem(it, actions, onOpen) }
+        dev.centraid.android.screens.agenda.AgendaTimeline(day, chrome, gutter, actions, onEvent, onOpen)
+    }
+}
+
+@Composable
+private fun AgendaGridItem(item: AgendaRowItem, actions: AgendaTaskActions, onOpen: (Route) -> Unit) {
+    item.event?.let { row ->
+        EventRow(row, onOpen)
+    }
+    item.task?.let { TodoRowView(it, onCheck = actions.onCheck, onOpen = onOpen, onFile = actions.onFile, fileVerb = actions.fileVerb, idPrefix = AGENDA_TASK_ROW, onAction = actions.onAction) }
+    item.now_line?.let { NowLine(it) }
 }

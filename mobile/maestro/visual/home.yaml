@@ -1,0 +1,34 @@
+appId: ${APP_ID}
+name: Seeded Home widgets
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 60000
+- assertNotVisible:
+    id: home-failure
+- assertVisible:
+    id: home-tile-agenda
+- waitForAnimationToEnd
+- takeScreenshot: home-top
+# Reveal the following row so the complete Photos preview is above the fold,
+# rather than stopping as soon as a clipped edge enters the viewport.
+- scrollUntilVisible:
+    element:
+      id: home-tile-money
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: home-tile-photos
+- takeScreenshot: home-photos
+- scrollUntilVisible:
+    element:
+      text: "Touch and hold a widget to resize or rearrange it[.]"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: home-tile-docs
+- takeScreenshot: home-lower

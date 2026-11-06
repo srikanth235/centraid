@@ -1,5 +1,7 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -148,6 +150,7 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).background(centraidColor("bgElev"), RoundedCornerShape(KitGeometry.RADIUS)).padding(vertical = 8.dp)) {
         data.fields.forEach { field ->
             if (field.enabled) {
                 ChoiceFieldRow(
@@ -161,6 +164,8 @@ private fun TodoDetailBody(
                 FieldRow(key = field.label, value = field.value_, note = field.note)
             }
         }
+        }
+        data.attachments?.let { AgendaAttachmentCard(it, onEvent = { change -> onEvent(TodoDetailEvent(attachment = change)) }, onOpen = onOpen) }
         if (data.subtasks_label.isNotEmpty() || data.subtasks.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.subtasks_label))
         }
@@ -252,6 +257,11 @@ private fun TodoFieldSheet(field: TodoField, addVerb: String, onEvent: (TodoDeta
         }
         if (field.pick_time) {
             SheetRow(label = pickLabel, detail = pickDetail, iconKey = "Clock", testTag = "tasks-pick-time", onTap = { picking = "time" })
+        }
+        if (field.edit_text) {
+            var edited by remember(field.key) { mutableStateOf(field.text_value) }
+            EditableFieldRow(key = field.label, value = edited, reload = null, placeholder = field.add_placeholder, onEdit = { edited = it }, testTag = "tasks-text-${field.key}")
+            OutlineButton(label = field.save_label, testTag = "tasks-save-${field.key}") { onEvent(TodoDetailEvent(field_text = TodoDetailEvent.FieldTextChanged(field_ = field.key, text = edited))) }
         }
         if (field.add_text) {
             AddLine(field.add_placeholder, addVerb, "tasks-add-tag") { onEvent(TodoDetailEvent(tag_added = TodoDetailEvent.TagAdded(label = it))) }

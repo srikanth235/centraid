@@ -66,6 +66,7 @@ enum HealthRange {
   HEALTH_RANGE_WEEK = 1;
   HEALTH_RANGE_MONTH = 2;
   HEALTH_RANGE_YEAR = 3;
+  HEALTH_RANGE_SIX_MONTHS = 4;
 }
 
 // The trends: the last 30 days, the last 90 days, or the last 12 calendar
@@ -161,6 +162,8 @@ message HealthTodayMetric {
   optional double high = 6;
   // How many days fed `typical`.
   uint32 typical_days = 7;
+  // Seven actual daily buckets, oldest first. Missing observations stay absent.
+  repeated HealthBucket week = 8;
 }
 
 message HealthToday {

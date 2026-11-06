@@ -551,6 +551,43 @@ impl Person {
             P::Confirmed(_) => self.confirmed(ctx),
             P::Dismissed(_) => self.asking = Asking::Nothing,
             P::Channel(tapped) => return self.channel_tapped(&tapped.channel_id),
+            P::Hero(tapped) => {
+                if tapped.key == "touch" {
+                    self.sheet_opened(
+                        ctx,
+                        wire::people_person_event::sheet_opened::Which::LogTouch,
+                    );
+                } else {
+                    let kind = match tapped.key.as_str() {
+                        "message" | "call" => "phone",
+                        "mail" => "email",
+                        _ => return Vec::new(),
+                    };
+                    let Some(channel) = self
+                        .loaded()
+                        .and_then(|(sheet, _)| data::preferred_channel(sheet, kind))
+                        .cloned()
+                    else {
+                        return Vec::new();
+                    };
+                    if tapped.key == "message" {
+                        let dialable: String = channel
+                            .value
+                            .chars()
+                            .filter(|c| c.is_ascii_digit() || *c == '+')
+                            .collect();
+                        if !dialable.is_empty() {
+                            return vec![wire::Effect {
+                                kind: Some(wire::effect::Kind::OpenUrl(wire::OpenUrl {
+                                    url: format!("sms:{}", percent_encode(&dialable)),
+                                })),
+                            }];
+                        }
+                    } else {
+                        return self.channel_tapped(&channel.channel_id);
+                    }
+                }
+            }
         }
         Vec::new()
     }

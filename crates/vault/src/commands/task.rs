@@ -54,6 +54,7 @@ pub struct NewTask<'a> {
     /// A day, a wall clock, or an instant.
     pub due: Option<&'a str>,
     pub description: Option<&'a str>,
+    pub url: Option<&'a str>,
     pub priority: Option<i64>,
     pub effort_min: Option<i64>,
     pub remind_before_min: Option<i64>,
@@ -78,10 +79,10 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
     };
     ctx.connection().execute(
         "INSERT INTO task (id, due, description, priority, effort_min, remind_before_min, rule,
-                           anchor, zone, parent_id, project_id, section_id, position)
+                           anchor, zone, parent_id, project_id, section_id, position, url)
          VALUES (?1, ?2, ?3, COALESCE(?4, 0), ?5, ?6, ?7, COALESCE(?8, 'scheduled'), ?9, ?10, ?11,
                  ?12, COALESCE(?13, (SELECT COALESCE(MAX(position), 0) + 1 FROM task
-                                      WHERE project_id IS ?11)))",
+                                      WHERE project_id IS ?11)), ?14)",
         rusqlite::params![
             id,
             task.due,
@@ -96,6 +97,7 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
             task.project_id,
             task.section_id,
             task.position,
+            task.url,
         ],
     )?;
     Ok(id)
@@ -205,7 +207,12 @@ fn refusal(connection: &Connection, task: &Image) -> Result<Option<String>> {
         )));
     }
     if let Some(rule) = &task.rule
-        && let Err(why) = rrule::inspect(rule)
+        && let Err(why) = rrule::inspect_for_date(
+            rule,
+            task.due
+                .as_deref()
+                .is_some_and(|due| temporal::classify(due) == Some(temporal::Kind::LocalDate)),
+        )
     {
         return Ok(Some(format!("{rule}: {}", why.message())));
     }
@@ -312,6 +319,12 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = refusal(ctx.connection(), &image(ctx)?)? {
         return Ok(Some(sentence));
     }
+    if let Some(place) = ctx.optional_str("place_id") {
+        match lookup_live(ctx.connection(), place)? {
+            Ok(found) if found.kind == Kind::Place => {}
+            _ => return Ok(Some("Choose a place in your vault.".to_owned())),
+        }
+    }
     // One level of nesting: a subtask's parent is open and top-level.
     if let Some(parent) = ctx.optional_str("parent_id") {
         let fine: bool = ctx.connection().query_row(
@@ -355,6 +368,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             title: ctx.required_str("title")?,
             due: ctx.optional_str("due"),
             description: ctx.optional_str("description"),
+            url: ctx.optional_str("url"),
             priority: int("priority"),
             effort_min: int("effort_min"),
             remind_before_min: int("remind_before_min"),
@@ -367,6 +381,25 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             position: ctx.input.get("position").and_then(Json::as_f64),
         },
     )?;
+    if ctx.input.get("flagged").and_then(Json::as_bool) == Some(true) {
+        super::tag::set_tagged(ctx, &id, "flag:starred", true)?;
+    }
+    if let Some(tags) = ctx.input.get("tags").and_then(Json::as_array) {
+        for label in tags.iter().filter_map(Json::as_str) {
+            let tag = super::tag::ensure_concept(ctx, Kind::Tag, label.trim())?;
+            super::tag::set_tagged(ctx, &id, &tag, true)?;
+        }
+    }
+    if let Some(place) = ctx.optional_str("place_id") {
+        super::edge::put(
+            ctx,
+            &id,
+            crate::model::Rel::About,
+            place,
+            None,
+            &super::edge::Extras::default(),
+        )?;
+    }
     Ok(json!({ "id": id }))
 }
 
@@ -394,11 +427,18 @@ fn set_stated(ctx: &CommandCtx<'_, '_>, id: &str, columns: &[(&str, &str)]) -> R
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
+    // Choosing a single alert replaces an imported list; changing another
+    // field preserves every imported alert.
+    if ctx.input.get("remind_before_min").is_some() {
+        ctx.connection()
+            .execute("UPDATE task SET reminders = NULL WHERE id = ?1", [id])?;
+    }
     set_stated(
         ctx,
         id,
         &[
             ("description", "description"),
+            ("url", "url"),
             ("due", "due"),
             ("priority", "priority"),
             ("effort_min", "effort_min"),
@@ -435,6 +475,96 @@ fn organize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     )?;
     ctx.touch(id)?;
     Ok(json!({ "id": id }))
+}
+
+/// Stable sibling ordering, without fractional positions that lose precision after many drags.
+fn reorder_ids(ctx: &CommandCtx<'_, '_>) -> Result<Vec<String>> {
+    let id = ctx.required_str("id")?;
+    let (project, section, parent): (Option<String>, Option<String>, Option<String>) =
+        ctx.connection().query_row(
+            "SELECT project_id,section_id,parent_id FROM task WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    let mut query = ctx.connection().prepare(
+        "SELECT t.id,t.position,t.due,t.priority,e.title FROM task t JOIN entity e ON e.id=t.id
+         WHERE t.project_id IS ?1 AND t.section_id IS ?2 AND t.parent_id IS ?3 AND e.deleted_at IS NULL
+         ORDER BY t.position,t.id",
+    )?;
+    let mut rows = query
+        .query_map(rusqlite::params![project, section, parent], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    // Until a drag, preserve the visible fallback: due/title for roots and
+    // due/priority/title for children. Legacy positive positions were assigned
+    // on creation, not by a person's ordering gesture.
+    rows.sort_by(|left, right| {
+        match (left.1 < 0.0, right.1 < 0.0) {
+            (true, true) => left.1.total_cmp(&right.1),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => std::cmp::Ordering::Equal,
+        }
+        .then_with(|| match (&left.2, &right.2) {
+            (Some(left), Some(right)) => left.cmp(right),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        })
+        .then_with(|| {
+            if parent.is_some() {
+                right.3.cmp(&left.3)
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .then_with(|| left.4.cmp(&right.4))
+        .then_with(|| left.0.cmp(&right.0))
+    });
+    Ok(rows.into_iter().map(|row| row.0).collect())
+}
+
+fn pre_reorder(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Some(reason) = pre_live(ctx)? {
+        return Ok(Some(reason));
+    }
+    if let Some(before) = ctx.optional_str("before_id")
+        && !reorder_ids(ctx)?.iter().any(|id| id == before)
+    {
+        return Ok(Some(
+            "The task to move before must be in the same list, section and parent.".to_owned(),
+        ));
+    }
+    Ok(None)
+}
+
+fn reorder(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let id = ctx.required_str("id")?;
+    if ctx.optional_str("before_id") == Some(id) {
+        return Ok(json!({"id": id}));
+    }
+    let mut ids = reorder_ids(ctx)?;
+    ids.retain(|other| other != id);
+    let at = ctx
+        .optional_str("before_id")
+        .and_then(|before| ids.iter().position(|other| other == before))
+        .unwrap_or(ids.len());
+    ids.insert(at, id.to_owned());
+    for (index, task_id) in ids.iter().enumerate() {
+        ctx.connection().execute(
+            "UPDATE task SET position=?2 WHERE id=?1",
+            rusqlite::params![task_id, index as i64 - ids.len() as i64],
+        )?;
+        ctx.touch(task_id)?;
+    }
+    Ok(json!({"id": id}))
 }
 
 /// What closing a task as done did.
@@ -537,9 +667,9 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
     connection.execute(
         "INSERT INTO task (id, status, priority, due, rule, anchor, zone, series_id,
                            remind_before_min, effort_min, parent_id, project_id, section_id,
-                           description, position)
+                           description, position, url, reminders)
          SELECT ?2, 'open', priority, ?3, rule, anchor, zone, series_id, remind_before_min,
-                effort_min, parent_id, project_id, section_id, description, position
+                effort_min, parent_id, project_id, section_id, description, position, url, reminders
            FROM task WHERE id = ?1",
         rusqlite::params![id, next, next_due],
     )?;
@@ -597,6 +727,10 @@ const ADD_SCHEMA: &str = r#"{
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "maxLength": 1000 },
     "description": { "type": ["string", "null"] },
+    "url": { "type": ["string", "null"] },
+    "place_id": { "type": ["string", "null"] },
+    "flagged": { "type": "boolean" },
+    "tags": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
     "due": { "type": ["string", "null"], "description": "A day, a wall clock or an instant." },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
     "effort_min": { "type": ["integer", "null"], "minimum": 1 },
@@ -617,6 +751,7 @@ const EDIT_SCHEMA: &str = r#"{
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "maxLength": 1000 },
     "description": { "type": ["string", "null"] },
+    "url": { "type": ["string", "null"] },
     "due": { "type": ["string", "null"] },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
     "effort_min": { "type": ["integer", "null"], "minimum": 1 },
@@ -654,7 +789,27 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "task_is_live",
         check: pre_live,
     }];
+    const REORDER: &[CommandCondition] = &[CommandCondition {
+        predicate: "task_and_destination_are_live_siblings",
+        check: pre_reorder,
+    }];
     vec![
+        CommandDefinition::plain(
+            "task.clear_completed",
+            "task",
+            super::task_clear::SCHEMA,
+            Idempotency::Idempotent,
+            &[],
+            super::task_clear::run,
+        ),
+        CommandDefinition::plain(
+            "task.reorder",
+            "task",
+            r#"{"type":"object","required":["id"],"additionalProperties":false,"properties":{"id":{"type":"string","minLength":1},"before_id":{"type":["string","null"]}}}"#,
+            Idempotency::Idempotent,
+            REORDER,
+            reorder,
+        ),
         CommandDefinition::plain("task.add", "task", ADD_SCHEMA, Idempotency::Once, ADD, add),
         CommandDefinition::plain(
             "task.edit",

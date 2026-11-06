@@ -10,10 +10,12 @@ use wire::screen_event::Kind as E;
 use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
+use super::appearance::Appearance;
 use super::list::{self, Phase};
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
 use crate::catalog::{act, load};
+use crate::field::Field;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_todo, task as words};
@@ -32,10 +34,13 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         ops: Ops::default(),
         quick_title: String::new(),
+        quick_due: None,
+        quick_flagged: false,
         target_section_id: String::new(),
         sheet: Sheet::None,
         new_section_name: String::new(),
         rename_name: String::new(),
+        show_completed: false,
     }))
 }
 
@@ -46,11 +51,14 @@ struct Project {
     phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
     quick_title: String,
+    quick_due: Option<String>,
+    quick_flagged: bool,
     /// The section a quick add lands in; empty is the project's unsectioned work.
     target_section_id: String,
     sheet: Sheet,
     new_section_name: String,
     rename_name: String,
+    show_completed: bool,
 }
 
 impl Project {
@@ -61,6 +69,32 @@ impl Project {
             Some(self.project_id.clone()),
             rows::MAX_WINDOW,
         ));
+        if self.show_completed {
+            let completed = list::board(
+                ctx,
+                load::agenda::BoardView::Logbook,
+                None,
+                rows::MAX_WINDOW,
+            );
+            match (&mut self.phase, completed) {
+                (Phase::Ready(current), read::Reading::Data(mut done)) => {
+                    for group in &mut done.groups {
+                        group.tasks.retain(|task| {
+                            task.status == "done"
+                                && task.project_id.as_deref() == Some(self.project_id.as_str())
+                        });
+                    }
+                    current.groups.extend(
+                        done.groups
+                            .into_iter()
+                            .filter(|group| !group.tasks.is_empty()),
+                    );
+                }
+                (_, read::Reading::Failed) => self.phase = Phase::Failed,
+                (_, read::Reading::Denied(denied)) => self.phase = Phase::Denied(denied),
+                _ => {}
+            }
+        }
         if let Phase::Ready(board) = &self.phase {
             if let Some(project) = board
                 .projects
@@ -126,6 +160,7 @@ impl Project {
         }
         let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
         row_ctx.show_project = false;
+        row_ctx.hide_completed = !self.show_completed;
         let groups = rows::groups(locale, &board.groups, &row_ctx);
         rename(wire::TodoProjectData {
             today: board.today.clone(),
@@ -143,9 +178,22 @@ impl Project {
 
     fn quick_add(&self, locale: Locale) -> wire::TodoQuickAdd {
         let found = self.found();
+        let today = self
+            .phase
+            .data()
+            .map(|board| board.today.as_str())
+            .unwrap_or_default();
+        let parsed = super::todo::quick::with_due(
+            &self.quick_title,
+            today,
+            self.quick_due.as_deref(),
+            locale,
+        );
         wire::TodoQuickAdd {
             title: self.quick_title.clone(),
-            can_submit: !self.quick_title.trim().is_empty(),
+            can_submit: parsed.valid,
+            preview: parsed.preview,
+            tools: super::todo::quick::tools(locale, today, &parsed.due, self.quick_flagged),
             lands_label: format!("{} {}", words::lands_in(locale), self.lands_in()),
             shown: found,
             focused: false,
@@ -162,15 +210,25 @@ impl Project {
         }
         let section = (!self.target_section_id.is_empty()).then(|| self.target_section_id.clone());
         let lands_in = self.lands_in();
-        if self.ops.add(
+        let today = self
+            .phase
+            .data()
+            .map(|board| board.today.as_str())
+            .unwrap_or_default();
+        if self.ops.add_quick(
             ctx,
             &title,
-            "",
+            today,
             &lands_in,
-            Some(&self.project_id),
-            section.as_deref(),
+            super::todo::quick::Options {
+                project: Some(&self.project_id),
+                section: section.as_deref(),
+                due: self.quick_due.as_deref(),
+                flagged: self.quick_flagged,
+            },
         ) {
             self.quick_title.clear();
+            self.quick_flagged = false;
         }
         self.reload(ctx);
     }
@@ -218,6 +276,41 @@ impl Project {
     fn event(&mut self, event: wire::TodoProjectEvent, ctx: &Ctx) {
         match event.kind {
             Some(P::Refreshed(_)) => self.reload(ctx),
+            Some(P::CompletedChanged(changed)) => {
+                self.show_completed = changed.on;
+                self.reload(ctx);
+            }
+            Some(P::RowAction(action)) => {
+                if let Some(task) = self
+                    .phase
+                    .data()
+                    .and_then(|board| list::find(board, &action.task_id))
+                {
+                    self.ops.row_action(ctx, &task, &action);
+                    self.reload(ctx);
+                }
+            }
+            Some(P::ClearCompleted(_)) => {
+                if !self.show_completed {
+                    return;
+                }
+                if let Some(board) = self.phase.data() {
+                    let request = act::agenda::ClearCompleted {
+                        view: act::agenda::ClearCompletedView::Project,
+                        day: board.today.clone(),
+                        zone: ctx.zone().to_owned(),
+                        project_id: crate::field::Field::Is(self.project_id.clone()),
+                        ..Default::default()
+                    };
+                    self.ops.created(
+                        ctx,
+                        request,
+                        "completed",
+                        words::completed_cleared(ctx.locale()),
+                    );
+                    self.reload(ctx);
+                }
+            }
             Some(P::RowChecked(checked)) => {
                 let Some(task) = self
                     .phase
@@ -234,6 +327,19 @@ impl Project {
                 self.reload(ctx);
             }
             Some(P::QuickAddChanged(changed)) => self.quick_title = changed.title,
+            Some(P::QuickAddTool(tool)) => {
+                let today = self
+                    .phase
+                    .data()
+                    .map(|board| board.today.as_str())
+                    .unwrap_or_default();
+                super::todo::quick::pick(
+                    &tool.key,
+                    today,
+                    &mut self.quick_due,
+                    &mut self.quick_flagged,
+                );
+            }
             Some(P::QuickAddSubmitted(_)) => self.submit_quick_add(ctx),
             // `add:<section_id>` points the quick add at a section; `add:` at
             // the project's unsectioned work.
@@ -256,6 +362,35 @@ impl Project {
             }
             Some(P::RenameName(named)) => self.rename_name = named.name,
             Some(P::RenameSubmitted(_)) => self.submit_rename(ctx),
+            Some(P::Appearance(changed)) => {
+                let project = self.phase.data().and_then(|board| {
+                    board
+                        .projects
+                        .iter()
+                        .find(|project| project.project_id == self.project_id)
+                });
+                let Some(project) = project else {
+                    return;
+                };
+                let mut style = Appearance::of(
+                    &self.project_id,
+                    project.color.as_deref(),
+                    &project.icon_key,
+                );
+                if style.change(&changed.field, &changed.value) {
+                    self.ops.created(
+                        ctx,
+                        act::agenda::StyleList {
+                            list_id: self.project_id.clone(),
+                            color: Field::Is(style.color),
+                            icon_key: Field::Is(style.icon),
+                        },
+                        &self.project_id,
+                        crate::strings::agenda::appearance_saved(ctx.locale()),
+                    );
+                    self.reload(ctx);
+                }
+            }
             _ => {}
         }
     }
@@ -283,7 +418,47 @@ impl Screen for Project {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoProject(
                 wire::TodoProjectState {
+                    appearance: self
+                        .phase
+                        .data()
+                        .and_then(|board| {
+                            board
+                                .projects
+                                .iter()
+                                .find(|project| project.project_id == self.project_id)
+                        })
+                        .map(|project| {
+                            Appearance::of(
+                                &self.project_id,
+                                project.color.as_deref(),
+                                &project.icon_key,
+                            )
+                            .view(locale)
+                        }),
                     title: self.name.clone(),
+                    show_completed: self.show_completed,
+                    show_completed_label: words::show_completed(locale),
+                    clear_completed_label: if self.show_completed
+                        && self.phase.data().is_some_and(|board| {
+                            board
+                                .groups
+                                .iter()
+                                .flat_map(rows::flatten)
+                                .any(|task| task.status == "done")
+                        }) {
+                        words::clear_completed(locale)
+                    } else {
+                        String::new()
+                    },
+                    title_color_role: rows::hue_of(
+                        &self.project_id,
+                        self.phase.data().and_then(|board| {
+                            board
+                                .projects
+                                .iter()
+                                .find(|project| project.project_id == self.project_id)
+                        }),
+                    ),
                     content: Some(content),
                     chrome: Some(rows::chrome(locale)),
                     status: self.ops.status.clone(),

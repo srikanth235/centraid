@@ -701,6 +701,8 @@ fn a_staged_file_files_and_its_document_answers_the_held_path() {
 
     let answer = scratch.document(&document_id);
     let row = answer.document.as_ref().expect("the document is there");
+    assert_eq!(row.preview_path, answer.bytes_path);
+    assert_eq!(answer.file_path, answer.bytes_path);
     assert_eq!(row.kind, wire::DocsKind::Pdf as i32);
     assert_eq!(row.surface, wire::DocsSurface::Stage as i32);
     assert!(answer.bytes_held);

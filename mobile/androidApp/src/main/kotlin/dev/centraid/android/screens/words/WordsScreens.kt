@@ -582,7 +582,7 @@ private fun RestoredLine(line: RestoredVaultLine, index: Int) {
 /**
  * One vault that stayed with the other phone (`WordsEnterState.stayed`,
  * R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and not
- * wrong" (DESIGN.md), since the vault is safe where it is. The retry under the
+ * wrong" (product-intuition screen contracts), since the vault is safe where it is. The retry under the
  * list is [StayedRetry].
  */
 @Composable
@@ -670,6 +670,7 @@ internal fun WordsControls(
     prefix: String,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
+    secondaryInk: String = "link",
 ) {
     // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty column would still
     // spend its top padding and a gap in whatever holds it.
@@ -693,7 +694,7 @@ internal fun WordsControls(
                     .semantics { role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(secondary, style = centraidType("smallStrong"), color = centraidColor("link"))
+                Text(secondary, style = centraidType("smallStrong"), color = centraidColor(secondaryInk))
             }
         }
     }

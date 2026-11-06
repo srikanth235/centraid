@@ -292,6 +292,10 @@ impl Listed {
 /// `locker.items`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItemsData {
+    pub starred_items: Vec<Listed>,
+    pub recent_items: Vec<Listed>,
+    pub code_items: Vec<Listed>,
+    pub code_count: Option<usize>,
     pub items: Vec<Listed>,
     pub truncated: bool,
     pub window: usize,
@@ -382,7 +386,34 @@ pub fn load_items(door: &dyn PageDoor, archived: bool, limit: Option<i64>) -> Ki
         .filter(|(item_id, _)| live_ids.contains(item_id.as_str()))
         .flat_map(|(_, labels)| labels.iter().cloned())
         .collect();
+    let pick = |rows: Vec<&ItemRow>| {
+        rows.into_iter()
+            .take(window)
+            .map(|row| decorations.listed(row.clone()))
+            .collect()
+    };
+    let mut recently_used: Vec<&ItemRow> = live
+        .iter()
+        .copied()
+        .filter(|row| row.last_used_at.is_some())
+        .collect();
+    recently_used.sort_by(|a, b| {
+        b.last_used_at
+            .cmp(&a.last_used_at)
+            .then_with(|| a.item_id.cmp(&b.item_id))
+    });
+    recently_used.truncate(10);
+    let codes: Vec<&ItemRow> = live
+        .iter()
+        .copied()
+        .filter(|row| row.item_type == "login" && row.has_code)
+        .collect();
+    let code_count = counted.then_some(codes.len());
     Ok(ItemsData {
+        starred_items: pick(live.iter().copied().filter(|row| row.starred).collect()),
+        recent_items: pick(recently_used),
+        code_items: pick(codes),
+        code_count,
         truncated: shelf.len() > window || walked.filled,
         window,
         total: counted.then_some(shelf.len()),

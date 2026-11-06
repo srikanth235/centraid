@@ -23,6 +23,7 @@ import centraid.core.v1.HealthMetricEvent
 import centraid.core.v1.HealthMetricState
 import centraid.core.v1.HealthWorkoutEvent
 import centraid.core.v1.HealthWorkoutState
+import dev.centraid.android.kit.ChartScrubber
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
@@ -37,7 +38,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 // ---------------------------------------------------------------------------
-// health.metric: one metric over a week, a month or a year (#1129, #1135)
+// health.metric: one metric over a week, a month, six months or a year (#1129, #1135)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -71,7 +72,13 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
                             }
                         }
                         item(key = "chart") {
-                            HealthChart(data.bars, data.has_typical, data.typical_bp, data.typical_label, data.ticks, data.chart_label)
+                            HealthChart(data.bars, data.has_typical, data.typical_bp, data.typical_label, data.ticks, data.chart_label, data.selected_index)
+                            data.selected_bucket?.let { selected ->
+                                FieldRow(key = selected.label, value = selected.detail)
+                                ChartScrubber(data.scrubber_label, listOf(selected.label, selected.detail).joinToString(", "), data.selected_index, data.bars.size) { index ->
+                                    onEvent(HealthMetricEvent(bucket = HealthMetricEvent.BucketPicked(index = index)))
+                                }
+                            }
                         }
                         items(data.facts.size, key = { "fact-$it" }) { index -> FieldRow(key = data.facts[index].label, value = data.facts[index].detail) }
                         item(key = "foot") { HealthNote(data.foot) }

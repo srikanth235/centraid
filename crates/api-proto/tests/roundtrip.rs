@@ -218,6 +218,7 @@ fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
     let unowned = core::AgendaParties {
         parties: Vec::new(),
         me: None,
+        places: Vec::new(),
     };
     let decoded = core::AgendaParties::decode(unowned.encode_to_vec().as_slice()).expect("decodes");
     assert_eq!(

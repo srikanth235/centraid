@@ -325,7 +325,7 @@ struct ChatView: View {
 
 // MARK: - Motion
 
-/// DESIGN.md invariant 5, lowered for this screen: entry at 280 ms on the entry
+/// product-intuition screen contracts invariant 5, lowered for this screen: entry at 280 ms on the entry
 /// curve, a state change at 140 ms. Reduced motion drops both at the call site.
 enum ChatMotion {
     static let entry = Animation.timingCurve(0.2, 0.7, 0.2, 1, duration: 0.28)
@@ -383,8 +383,8 @@ private struct ChatHeader: View {
                 Text(verbatim: state.subtitle)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chat-subtitle")
             }
             .frame(maxWidth: .infinity)
@@ -704,6 +704,7 @@ private struct ChatMessageRow: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
+                CentraidBrandMark(size: 28)
                 if !message.text.isEmpty {
                     // THE ANSWER'S MARKDOWN as styling, never as its markers.
                     ChatMarkdownText(
@@ -815,6 +816,10 @@ private struct ChatCardRow: View {
     @Environment(\.colorScheme) private var scheme
 
     private var appName: String { state.scopes.first { $0.app == card.app }?.name ?? "" }
+    private var accent: Color { scheme.centraidMarks[card.app]?.hue ?? Theme.color("shellText", scheme) }
+    private var tint: Color {
+        Theme.color(scheme.centraidMarks[card.app] == nil ? "bgElev" : "\(card.app)Tint", scheme)
+    }
 
     private var spoken: String {
         [card.title, card.subtitle, card.meta, appName].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -827,7 +832,7 @@ private struct ChatCardRow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(verbatim: card.title)
                         .chatType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .foregroundStyle(accent)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !card.subtitle.isEmpty {
@@ -850,7 +855,7 @@ private struct ChatCardRow: View {
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .fill(Theme.color("bgElev", scheme))
+                    .fill(tint)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
@@ -896,6 +901,10 @@ private struct ChatPendingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text(pending.title)
+                .chatType("smallStrong")
+                .foregroundStyle(Theme.color("shellText", scheme))
+                .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
                     Text(verbatim: step.summary)
@@ -916,6 +925,7 @@ private struct ChatPendingCard: View {
             .accessibilityLabel(pending.accessibilityLabel)
             .accessibilityIdentifier("chat-pending")
             if asking {
+                ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
                     KitOutlineButton(label: pending.cancelLabel, action: onCancel)
                         .accessibilityIdentifier("chat-pending-cancel")
@@ -925,6 +935,13 @@ private struct ChatPendingCard: View {
                         action: onConfirm
                     )
                     .accessibilityIdentifier("chat-pending-confirm")
+                }
+                VStack(spacing: 8) {
+                    KitOutlineButton(label: pending.cancelLabel, action: onCancel)
+                        .accessibilityIdentifier("chat-pending-cancel")
+                    KitOutlineButton(label: pending.confirmLabel, tone: pending.destructive ? "net" : "shellText", action: onConfirm)
+                        .accessibilityIdentifier("chat-pending-confirm")
+                }
                 }
                 .disabled(pending.state == .working)
             } else if !pending.settledLine.isEmpty {
@@ -1033,14 +1050,7 @@ private struct ChatComposerCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .fill(Theme.color("bgElev", scheme))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-        )
+        .bandGround(RoundedRectangle(cornerRadius: Self.radius, style: .continuous), solid: "bgElev")
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.pending.count)
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
         .sheet(isPresented: Binding(

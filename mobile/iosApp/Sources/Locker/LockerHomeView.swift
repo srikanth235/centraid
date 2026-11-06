@@ -26,6 +26,7 @@ struct LockerHomeView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var content: ScreenContent<Centraid_Core_V1_LockerHomeData> {
         switch state.content {
@@ -148,7 +149,33 @@ struct LockerHomeView: View {
 
     @ViewBuilder
     private func items(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
-        LockerNote(text: home.statusLine)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 140), spacing: 10)], spacing: 10) {
+            ForEach(home.categories, id: \.key) { category in
+                Button {
+                    if category.hasRoute { open(category.route) }
+                    else { send(LockerHomeEvents.make { $0.category = .with { $0.key = category.key } }) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            CentraidIconView(iconKey: category.iconKey, tint: Theme.color("lockerText", scheme), size: 26)
+                            Spacer()
+                            Text(category.countLabel).centraidType("title").foregroundStyle(Theme.color("text", scheme))
+                        }
+                        Text(category.label).centraidType("body").foregroundStyle(Theme.color("text", scheme))
+                    }.frame(maxWidth: .infinity, minHeight: 80, alignment: .leading).padding(12)
+                        .background(Theme.color(category.selected ? "lockerTint" : "bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                }.buttonStyle(.plain).accessibilityIdentifier("locker-category-\(category.key)")
+            }
+        }.padding(CentraidGeometry.pageMargin)
+        if !home.starredRows.isEmpty {
+            SectionHeader(title: home.starredTitle)
+            ForEach(home.starredRows, id: \.itemID) { row in LockerRowView(row: row) { open(row.route) } }
+        }
+        if !home.recentRows.isEmpty {
+            SectionHeader(title: home.recentTitle)
+            ForEach(home.recentRows, id: \.itemID) { row in LockerRowView(row: row) { open(row.route) } }
+        }
+        if !home.rows.isEmpty { SectionHeader(title: home.itemsTitle) }
         if home.hasItemsEmpty {
             EmptyStateView(
                 home.itemsEmpty,

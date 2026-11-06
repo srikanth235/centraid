@@ -10,7 +10,7 @@ import SwiftUI
 /// beneath, Utilities as a grouped list, and the albums in the trash with their
 /// Restore. A member who knows that screen knows this one. What is NOT borrowed is
 /// the system's own look: the type, colour and icons are the emitted tables'
-/// (DESIGN.md), because a second icon set is a second product.
+/// (product-intuition screen contracts), because a second icon set is a second product.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which section a card lands in, every title, every
 /// count, which sections are folded and the route a tap opens are Rust's

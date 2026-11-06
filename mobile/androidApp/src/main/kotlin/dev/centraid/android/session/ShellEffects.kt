@@ -29,6 +29,8 @@ import centraid.core.v1.LibraryPermissionRead
 import centraid.core.v1.LinkReading
 import centraid.core.v1.PassNoted
 import centraid.core.v1.PhoneChanged
+import dev.centraid.android.notifications.AgendaNotifications
+import dev.centraid.android.notifications.NotificationPermissionPrompt
 import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
@@ -37,11 +39,13 @@ import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.SecretStores
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import dev.centraid.android.screens.agenda.writeCalendar
 import dev.centraid.android.screens.docs.FolderReader
 import dev.centraid.android.screens.people.readContactsSnapshot
 import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -91,6 +95,9 @@ internal class ShellEffects(
     private val scope: CoroutineScope,
 ) {
     private val context: Context = context.applicationContext
+    private val notificationPermission = NotificationPermissionPrompt(
+        File(this.context.noBackupFilesDir, "agenda-notification-permission-requested"),
+    )
 
     /** The activity's half, while one is up. */
     @Volatile var ui: UiHost? = null
@@ -150,6 +157,20 @@ internal class ShellEffects(
             effect.synced_probe != null -> EffectResult(synced_status = SecretStores.probe(context))
             effect.keychain != null -> withContext(Dispatchers.IO) { keychain(effect.keychain!!) }
             // ---- the pass service (`crates/screens/src/passes`) --------------------------------
+            effect.agenda_notifications != null -> {
+                val sync = effect.agenda_notifications!!
+                if (Build.VERSION.SDK_INT >= 33) {
+                    val prompt: (suspend () -> Boolean)? = ui?.let { host ->
+                        { host.ask(Manifest.permission.POST_NOTIFICATIONS) }
+                    }
+                    notificationPermission.requestIfNeeded(
+                        needed = sync.ask_permission,
+                        granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+                        prompt = prompt,
+                    )
+                }
+                EffectResult(agenda_notifications = AgendaNotifications.sync(context, sync))
+            }
             effect.schedule_windows != null ->
                 EffectResult(windows_scheduled = PassWork.schedule(context, effect.schedule_windows!!.windows))
             effect.pass_window_done != null -> {
@@ -193,12 +214,19 @@ internal class ShellEffects(
             // ---- the phone's stores ------------------------------------------------------------
             effect.calendar_read != null -> {
                 val read = effect.calendar_read!!
-                if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
+                if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission) || !allowed(Manifest.permission.WRITE_CALENDAR, read.ask_permission)) {
                     EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
                     }.fold({ EffectResult(calendar = it) }, { failed("the calendar could not be read") })
+                }
+            }
+            effect.calendar_write != null -> {
+                if (!allowed(Manifest.permission.WRITE_CALENDAR, false)) {
+                    EffectResult(failed = EffectFailed(reason = "calendar write access is off", denied = true))
+                } else withContext(Dispatchers.IO) {
+                    EffectResult(calendar_written = writeCalendar(context, effect.calendar_write!!))
                 }
             }
             effect.contacts_read != null -> {
@@ -268,8 +296,23 @@ internal class ShellEffects(
             effect.share != null -> {
                 val share = effect.share!!
                 val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, listOf(share.text, share.url).filter { it.isNotEmpty() }.joinToString("\n"))
+                    type = if (share.file_path.isEmpty()) "text/plain" else share.media_type.ifEmpty { "application/octet-stream" }
+                    if (share.file_path.isNotEmpty()) {
+                        val uri = withContext(Dispatchers.IO) {
+                            val directory = java.io.File(context.cacheDir, "shared-copies/docs").apply { mkdirs() }
+                            directory.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 24 * 60 * 60 * 1000L }?.forEach { it.deleteRecursively() }
+                            val batch = java.io.File(directory, java.util.UUID.randomUUID().toString()).apply { mkdirs() }
+                            val name = share.subject.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").take(180).ifBlank { "document" }
+                            val copy = java.io.File(batch, name)
+                            java.io.File(share.file_path).copyTo(copy)
+                            androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".photocopies", copy)
+                        }
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri(share.subject, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } else {
+                        putExtra(Intent.EXTRA_TEXT, listOf(share.text, share.url).filter { it.isNotEmpty() }.joinToString("\n"))
+                    }
                     if (share.subject.isNotEmpty()) putExtra(Intent.EXTRA_SUBJECT, share.subject)
                 }
                 start(Intent.createChooser(send, share.subject.ifEmpty { null }))

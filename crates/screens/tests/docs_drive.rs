@@ -19,12 +19,12 @@ fn state(d: &Driver, i: u64) -> &wire::DocsDriveState {
 }
 
 #[test]
-fn the_drive_opens_on_all_with_the_band_and_the_count() {
+fn the_drive_opens_on_recents_with_the_band_and_the_count() {
     let d = driver();
     let i = root(&d);
     let drive = state(&d, i);
     assert_eq!(drive.destination, wire::DocsDestination::All as i32);
-    assert_eq!(drive.chrome.as_ref().unwrap().title, "Docs");
+    assert_eq!(drive.chrome.as_ref().unwrap().title, "Recents");
     assert_eq!(drive.chrome.as_ref().unwrap().back, "Docs");
     let band: Vec<(&str, bool)> = drive
         .band
@@ -90,7 +90,7 @@ fn a_row_says_kind_size_and_when_in_words() {
         panic!("not a document route");
     };
     assert_eq!(args.document_id, row.document_id);
-    assert_eq!(args.parent, "Docs");
+    assert_eq!(args.parent, "Recents");
 }
 
 /// The menu the drive draws.
@@ -142,10 +142,10 @@ fn the_filter_menu_holds_three_nested_filters_the_sort_and_the_view() {
     assert_eq!(menu::checked(sort), ["changed_desc"]);
     assert_eq!(sort.options[0].label, "Date changed · Newest first");
     assert_eq!(sort.options[2].label, "Name · A to Z");
-    // The layout is a choice of the menu: a list until a grid is picked.
+    // The thumbnail grid is the default; the list remains a menu choice.
     let view = section(&d, i, "view");
     assert_eq!(view.title, "View");
-    assert_eq!(menu::checked(view), ["list"]);
+    assert_eq!(menu::checked(view), ["grid"]);
 }
 
 #[test]
@@ -246,19 +246,19 @@ fn the_layout_is_the_views_section_and_changes_no_filter() {
     let i = root(&d);
     assert_eq!(
         state(&d, i).layout,
-        wire::docs_drive_state::Layout::List as i32
-    );
-    menu_pick(&mut d, i, "view", "grid");
-    assert_eq!(
-        state(&d, i).layout,
         wire::docs_drive_state::Layout::Grid as i32
     );
-    assert_eq!(menu::checked(section(&d, i, "view")), ["grid"]);
-    assert!(!filter_menu(&d, i).filtering);
     menu_pick(&mut d, i, "view", "list");
     assert_eq!(
         state(&d, i).layout,
         wire::docs_drive_state::Layout::List as i32
+    );
+    assert_eq!(menu::checked(section(&d, i, "view")), ["list"]);
+    assert!(!filter_menu(&d, i).filtering);
+    menu_pick(&mut d, i, "view", "grid");
+    assert_eq!(
+        state(&d, i).layout,
+        wire::docs_drive_state::Layout::Grid as i32
     );
     // Clear filters keeps the layout.
     menu_pick(&mut d, i, "view", "grid");
@@ -641,7 +641,7 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Taxes");
     // A folder page carries the same filter menu (it holds no chip row of its own).
     assert!(drive.filter_menu.is_some());
-    assert_eq!(drive.chrome.as_ref().unwrap().back, "Docs");
+    assert_eq!(drive.chrome.as_ref().unwrap().back, "Browse");
     let data = drive_data(d.view(page));
     assert_eq!(data.folders.len(), 1);
     assert_eq!(data.folders[0].name, "2026");

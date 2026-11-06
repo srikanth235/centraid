@@ -57,25 +57,30 @@ fn a_monthly_positional_byday_stays() {
 }
 
 #[test]
-fn what_the_vault_still_refuses_is_left_in_the_rule_for_the_vault_to_refuse() {
+fn expanded_monthly_selectors_survive_import_unchanged() {
     for rule in [
         "FREQ=MONTHLY;BYDAY=MO;BYSETPOS=2",
         "FREQ=MONTHLY;BYMONTHDAY=1,15",
         "FREQ=MONTHLY;BYDAY=2MO,3TU",
     ] {
         assert_eq!(calendar::rule(rule, FIFTEENTH), rule);
+        assert!(centraid_vault::time::rrule::inspect(rule).is_ok());
     }
 }
 
 #[test]
-fn a_part_that_only_restates_the_anchor_goes_where_the_vault_takes_no_such_part() {
+fn selectors_and_week_start_are_preserved_even_when_they_match_the_anchor() {
+    assert_eq!(
+        calendar::rule("FREQ=YEARLY;BYMONTH=3;BYDAY=2MO", FIFTEENTH),
+        "FREQ=YEARLY;BYMONTH=3;BYDAY=2MO"
+    );
     assert_eq!(
         calendar::rule("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", FIFTEENTH),
-        "FREQ=YEARLY"
+        "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15"
     );
     assert_eq!(
         calendar::rule("FREQ=WEEKLY;BYDAY=MO;WKST=MO", FIFTEENTH),
-        "FREQ=WEEKLY;BYDAY=MO"
+        "FREQ=WEEKLY;BYDAY=MO;WKST=MO"
     );
     assert_eq!(
         calendar::rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO", FIFTEENTH),
@@ -139,6 +144,7 @@ fn standup(start: &str, moved: bool, original: &str) -> wire::PhoneCalendarEvent
             rrule: "FREQ=WEEKLY;BYDAY=MO".to_owned(),
             start: "2026-10-05T09:00:00".to_owned(),
             end: "2026-10-05T09:30:00".to_owned(),
+            tz: "America/Los_Angeles".to_owned(),
         }),
         original_start: original.to_owned(),
         moved,
@@ -318,6 +324,7 @@ fn a_moved_day_states_its_own_timing_link_and_place_and_a_series_states_its_link
             rrule: "FREQ=WEEKLY".to_owned(),
             start: "2026-10-05".to_owned(),
             end: "2026-10-05".to_owned(),
+            tz: "UTC".to_owned(),
         }),
         original_start: if moved {
             "2026-10-19".to_owned()
@@ -659,6 +666,16 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     assert_eq!(watches(&world), [true]);
 
     assert!(reads(&world).is_empty(), "the second tap was nothing");
+    assert!(
+        world.driver.effects.iter().all(|request| !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::CalendarWrite(_))
+        )),
+        "importing unchanged source events never writes them back to the phone"
+    );
 
     // Importing again adds nothing twice.
     tap_import(&mut world, host);
@@ -731,6 +748,10 @@ fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_a
 fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete_read_goes_but_not_from_a_partial_one()
  {
     let mut world = world();
+    let in_range = |events| wire::CalendarSnapshot {
+        now_ms: 4_076_006_400_000, // 2099-03-01, within the phone's window of the event.
+        ..snapshot(events)
+    };
     let host = world.driver.push("agenda", host_route());
     answer(
         &mut world,
@@ -741,7 +762,7 @@ fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete
     answer(
         &mut world,
         is_read,
-        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+        wire::effect_result::Outcome::Calendar(in_range(vec![future(
             "Offsite",
             "2099-03-10",
             "uid:offsite@google",
@@ -756,17 +777,26 @@ fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete
         is_read,
         wire::effect_result::Outcome::Calendar(wire::CalendarSnapshot {
             complete: false,
-            ..snapshot(vec![])
+            ..in_range(vec![])
         }),
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
 
-    // A complete read that lacks it (the calendar is still there, empty) moves it to the trash.
+    // Even a complete read cannot infer deletion outside the phone's observed window.
     tap_import(&mut world, host);
     answer(
         &mut world,
         is_read,
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
+    );
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+
+    // A complete read covering it (the calendar is still there, empty) moves it to the trash.
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(in_range(vec![])),
     );
     assert!(in_window(&world, "Offsite").is_empty());
 }
@@ -791,6 +821,7 @@ fn a_repeating_series_imports_as_one_event_that_skips_what_the_phone_does_not_sh
             rrule: "RRULE:FREQ=WEEKLY".to_owned(),
             start: "2099-03-02T09:00:00".to_owned(),
             end: "2099-03-02T09:30:00".to_owned(),
+            tz: ZONE_PARIS.to_owned(),
         }),
         phone_id: format!("local:ek-{day}"),
         calendar_key: "work".to_owned(),

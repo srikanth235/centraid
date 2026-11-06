@@ -68,11 +68,15 @@ message PhotosLightboxState {
   repeated PhotosLightboxVerb menu = 21;
   repeated PhotosLightboxShareChoice share_choices = 22;
   PhotosLightboxWords words = 23;
+  // Info expands below the photograph on this page. It stays visible while a
+  // place, album or sharing choice is presented; it is never an editor field.
+  bool details_visible = 24;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
-    // Everything the vault knows: the facts panel.
+    // Legacy request to open the inline details panel. New state emits NONE
+    // and details_visible=true, keeping modal choices independent.
     SHEET_INFO = 2;
     // What leaves the vault, and in what form. A share is a decision about
     // bytes, so it is a sheet with a choice and never a direct hand-off.
@@ -422,6 +426,9 @@ message PhotosEditorState {
   bool dismissed = 17;
   repeated PhotosEditorRatio ratios = 18;
   PhotosEditorWords words = 19;
+  // The legal range for the native, degree-stepped straighten slider.
+  int32 straighten_min = 20;
+  int32 straighten_max = 21;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -493,8 +500,11 @@ message PhotosEditorEvent {
   // A quarter turn resets the crop and the ratio.
   message Rotated {}
 
-  // One press levels a degree anticlockwise; past the limit returns to level.
-  message Straightened {}
+  // A slider supplies an absolute angle. An older button that omits it still
+  // levels one degree anticlockwise, returning to level past the limit.
+  message Straightened {
+    optional int32 degrees = 1;
+  }
 
   message Flipped {}
 

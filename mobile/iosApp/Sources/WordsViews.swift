@@ -433,7 +433,7 @@ private struct RestoredLine: View {
 
 /// One vault that stayed with the other phone (`WordsEntryState.stayed`,
 /// R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and
-/// not wrong" (DESIGN.md), since the vault is safe where it is. The retry
+/// not wrong" (product-intuition screen contracts), since the vault is safe where it is. The retry
 /// under the list is `StayedRetry`.
 private struct StayedLine: View {
     let line: String
@@ -599,6 +599,7 @@ struct WordsControls: View {
     let prefix: String
     let onPrimary: () -> Void
     let onSecondary: () -> Void
+    var secondaryInk: String = "link"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -612,7 +613,7 @@ struct WordsControls: View {
                         .accessibilityIdentifier("\(prefix)-primary")
                 }
                 if !secondary.isEmpty {
-                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    KitLink(label: secondary, identifier: "\(prefix)-secondary", ink: secondaryInk, action: onSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }

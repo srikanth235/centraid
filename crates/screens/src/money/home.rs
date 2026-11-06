@@ -51,7 +51,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let destination = match wire::MoneyDestination::try_from(args.destination) {
         Ok(wire::MoneyDestination::Activity) => Destination::Activity,
         Ok(wire::MoneyDestination::Cashflow) => Destination::Cashflow,
-        _ => Destination::Spending,
+        Ok(wire::MoneyDestination::Spending) => Destination::Spending,
+        _ => Destination::Activity,
     };
     Some(Box::new(Home {
         destination,
@@ -71,6 +72,7 @@ enum Loaded {
         activity: wire::MoneyActivity,
         accounts: wire::MoneyAccounts,
         categories: wire::MoneyCategories,
+        overview: Box<wire::MoneySpending>,
     },
     Cashflow(wire::MoneyCashflow),
 }
@@ -154,15 +156,27 @@ impl Home {
                     Answer::MoneyCategories(x) => Some(x),
                     _ => None,
                 });
-                match (activity, accounts, categories) {
+                let overview = read::read(
+                    ctx,
+                    load::money::Spending {
+                        month: self.month.clone(),
+                    },
+                    |a| match a {
+                        Answer::MoneySpending(x) => Some(x),
+                        _ => None,
+                    },
+                );
+                match (activity, accounts, categories, overview) {
                     (
                         read::Reading::Data(activity),
                         read::Reading::Data(accounts),
                         read::Reading::Data(categories),
+                        read::Reading::Data(overview),
                     ) => Phase::Ready(Loaded::Activity {
                         activity,
                         accounts,
                         categories,
+                        overview: Box::new(overview),
                     }),
                     (read::Reading::Denied(_), ..) => Phase::Denied,
                     _ => Phase::Failed,
@@ -224,7 +238,11 @@ impl Home {
             return;
         }
         let next = fold::shift_month(&self.month, i64::from(months));
+        let in_sheet = self.sheet == Sheet::Month;
         self.set_month(&next, ctx);
+        if in_sheet {
+            self.sheet = Sheet::Month;
+        }
     }
 
     /// A filter changed: what Activity held no longer answers it.
@@ -310,8 +328,10 @@ impl Home {
                 spending: Some(spending(locale, answer)),
                 ..base
             },
-            Loaded::Activity { activity, .. } => wire::MoneyHomeData {
-                activity: Some(self.activity(locale, activity)),
+            Loaded::Activity {
+                activity, overview, ..
+            } => wire::MoneyHomeData {
+                activity: Some(self.activity(locale, activity, overview)),
                 ..base
             },
             Loaded::Cashflow(answer) => wire::MoneyHomeData {
@@ -321,7 +341,12 @@ impl Home {
         }
     }
 
-    fn activity(&self, locale: Locale, answer: &wire::MoneyActivity) -> wire::MoneyActivityData {
+    fn activity(
+        &self,
+        locale: Locale,
+        answer: &wire::MoneyActivity,
+        overview: &wire::MoneySpending,
+    ) -> wire::MoneyActivityData {
         let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
         let needs_count: u32 = answer.needs_category.iter().map(|c| c.count).sum();
         let shown = u32::try_from(answer.rows.len()).unwrap_or(u32::MAX);
@@ -341,6 +366,8 @@ impl Home {
             }
         });
         wire::MoneyActivityData {
+            overview: spending(locale, overview).heroes,
+            overview_title: words::overview_title(locale),
             needs_label: if needs_count > 0 {
                 fill(
                     &words::needs_category(locale),
@@ -370,6 +397,7 @@ impl Home {
             sections: rows::sections(
                 locale,
                 &answer.rows,
+                &answer.day_totals,
                 &answer.today,
                 &words::app_title(locale),
             ),
@@ -427,7 +455,7 @@ impl Home {
     /// THE MONTH IN VIEW, under the app's name: a tap opens the month sheet. Where
     /// the month chip stood (Activity, once read); the band's stepper still steps.
     fn subtitle(&self, locale: Locale) -> Option<wire::HeaderSubtitle> {
-        let Phase::Ready(Loaded::Activity { .. }) = &self.phase else {
+        let Phase::Ready(Loaded::Activity { .. } | Loaded::Spending(_)) = &self.phase else {
             return None;
         };
         let label = if self.month.is_empty() {
@@ -453,16 +481,16 @@ impl Home {
         };
         vec![
             tab(
-                "spending",
-                words::band_spending(locale),
-                "Coin",
-                self.destination == Destination::Spending,
-            ),
-            tab(
                 "activity",
                 words::band_activity(locale),
                 "List",
                 self.destination == Destination::Activity,
+            ),
+            tab(
+                "spending",
+                words::band_spending(locale),
+                "Coin",
+                self.destination == Destination::Spending,
             ),
             tab(
                 "cashflow",
@@ -645,6 +673,15 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
                 .iter()
                 .filter(|line| line.currency == *currency)
                 .map(|line| wire::MoneyCategoryLine {
+                    color_key: line.color_key.clone(),
+                    progress_bp: match (line.spent.as_ref(), line.planned.as_ref()) {
+                        (Some(spent), Some(planned)) if planned.minor > 0 => u32::try_from(
+                            (i128::from(spent.minor) * i128::from(BP) / i128::from(planned.minor))
+                                .clamp(0, i128::from(BP)),
+                        )
+                        .unwrap_or(0),
+                        _ => 0,
+                    },
                     label: line.label.clone(),
                     has_plan: line.planned.is_some(),
                     planned: fold::text(line.planned.as_ref()),
@@ -653,6 +690,22 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
                     over: line.over,
                     accessibility_label: [
                         line.label.clone(),
+                        format!(
+                            "{} {}",
+                            words::spent(locale),
+                            fold::text(line.spent.as_ref())
+                        ),
+                        if line.planned.is_some() {
+                            format!(
+                                "{} {}, {} {}",
+                                words::planned(locale),
+                                fold::text(line.planned.as_ref()),
+                                words::left(locale),
+                                fold::text(line.left.as_ref())
+                            )
+                        } else {
+                            String::new()
+                        },
                         if line.over {
                             words::over_plan(locale)
                         } else {
@@ -727,6 +780,7 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
     }
     wire::MoneySpendingData {
         heroes,
+        weekly_series: weekly_series(locale, &answer.weeks),
         days_left_label: if current_month && answer.days_left > 0 {
             fold::with_n(
                 if answer.days_left == 1 {
@@ -753,6 +807,111 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
         },
         ..Default::default()
     }
+}
+
+/// One chart per currency, with heights scaled only within that currency.
+fn weekly_series(
+    locale: Locale,
+    weeks: &[wire::money_spending::SpendingWeek],
+) -> Vec<wire::MoneyWeeklySeries> {
+    let mut currencies: Vec<&str> = weeks.iter().map(|week| week.currency.as_str()).collect();
+    currencies.sort_unstable();
+    currencies.dedup();
+    currencies
+        .iter()
+        .map(|currency| {
+            let weeks: Vec<_> = weeks
+                .iter()
+                .filter(|week| week.currency == *currency)
+                .collect();
+            let maximum = weeks
+                .iter()
+                .map(|week| week.total.as_ref().map_or(0, |amount| amount.minor))
+                .max()
+                .unwrap_or(1)
+                .max(1);
+            wire::MoneyWeeklySeries {
+                heading: if currencies.len() > 1 {
+                    format!("{} · {currency}", words::weekly_spending(locale))
+                } else {
+                    words::weekly_spending(locale)
+                },
+                weeks: weeks
+                    .into_iter()
+                    .map(|week| {
+                        let full_label = fill(
+                            &words::week_range(locale),
+                            &[
+                                ("start", &fold::day_short(locale, &week.start)),
+                                ("end", &fold::day_short(locale, &week.end)),
+                            ],
+                        );
+                        let label = fill(
+                            &words::week_range(locale),
+                            &[
+                                (
+                                    "start",
+                                    week.start.get(8..10).unwrap_or("").trim_start_matches('0'),
+                                ),
+                                (
+                                    "end",
+                                    week.end.get(8..10).unwrap_or("").trim_start_matches('0'),
+                                ),
+                            ],
+                        );
+                        let total = fold::text(week.total.as_ref());
+                        let mut spoken = vec![full_label, total.clone()];
+                        let segments = week
+                            .categories
+                            .iter()
+                            .filter(|line| {
+                                line.spent.as_ref().is_some_and(|amount| amount.minor > 0)
+                            })
+                            .map(|line| {
+                                let category = if line.category_id.is_empty() {
+                                    words::needs_category_option(locale)
+                                } else {
+                                    line.label.clone()
+                                };
+                                let label =
+                                    format!("{} {}", category, fold::text(line.spent.as_ref()));
+                                spoken.push(label.clone());
+                                wire::MoneyWeekSegment {
+                                    color_key: line.color_key.clone(),
+                                    height_bp: u32::try_from(
+                                        (i128::from(
+                                            line.spent.as_ref().map_or(0, |amount| amount.minor),
+                                        ) * i128::from(BP)
+                                            / i128::from(maximum))
+                                        .clamp(0, i128::from(BP)),
+                                    )
+                                    .unwrap_or(0),
+                                    label,
+                                }
+                            })
+                            .collect();
+                        if week
+                            .refund_credit
+                            .as_ref()
+                            .is_some_and(|amount| amount.minor > 0)
+                        {
+                            spoken.push(format!(
+                                "{} {}",
+                                words::refunds(locale),
+                                fold::text(week.refund_credit.as_ref())
+                            ));
+                        }
+                        wire::MoneyWeekBar {
+                            label,
+                            total,
+                            accessibility_label: spoken.join(", "),
+                            segments,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 /// The Account section's options, and the name of the one checked (None for all).

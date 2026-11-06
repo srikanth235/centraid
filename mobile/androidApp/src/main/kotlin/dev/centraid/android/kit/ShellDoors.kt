@@ -24,7 +24,7 @@ import dev.centraid.android.theme.centraidColor
 public val LocalShellLine: ProvidableCompositionLocal<(@Composable () -> Unit)?> = compositionLocalOf { null }
 
 /**
- * THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback
+ * THE IMPORT'S STATUS LINE (product-intuition screen contracts: "`StatusLine` is the one feedback
  * channel … docked to the bottom of the frame … no floating overlay, no
  * auto-dismiss"): an import's progress and outcome, above the band, on Home
  * and on every app. One fragment, at most one action ([actionLabel], "Open
@@ -41,7 +41,7 @@ public fun ShellBanner(
     onAct: () -> Unit,
     onClose: () -> Unit,
 ) {
-    // ENTRY AND SETTLE AT 280MS (DESIGN.md's one motion grammar).
+    // ENTRY AND SETTLE AT 280MS (product-intuition screen contracts's one motion grammar).
     AnimatedVisibility(
         visible = sentence.isNotEmpty(),
         enter = slideInVertically(tween(ENTER_MS)) { it } + fadeIn(tween(ENTER_MS)),

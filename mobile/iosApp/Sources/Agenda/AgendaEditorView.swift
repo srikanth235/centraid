@@ -154,6 +154,27 @@ struct AgendaEditorView: View {
                 ) { day, time in
                     send(event { $0.start = .with { $0.day = day; $0.time = time } })
                 }
+                if !editor.showEventFields {
+                    EditableFieldRow(key: chrome.fieldNotes, text: $typedNotes, placeholder: chrome.notesPlaceholder, identifier: "agenda-editor-notes") { typed in
+                        guard seeded, typed != draft.notes else { return }
+                        send(event { $0.notes = .with { $0.text = typed } })
+                    }
+                    if editor.moreDetailsOpen {
+                        ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") { send(event { $0.sheetOpened = .with { $0.sheet = .repeat } }) }
+                        ChoiceFieldRow(key: chrome.fieldReminder, value: editor.reminderLabel, identifier: "agenda-editor-reminder") { send(event { $0.sheetOpened = .with { $0.sheet = .reminder } }) }
+                        EditableFieldRow(key: chrome.fieldLink, text: $typedLink, placeholder: chrome.linkPlaceholder, identifier: "agenda-editor-link") { typed in
+                            guard seeded, typed != draft.link else { return }
+                            send(event { $0.link = .with { $0.text = typed } })
+                        }
+                    }
+                }
+                ForEach(editor.extraFields, id: \.key) { field in
+                    AgendaExtraField(field: field) { value in send(event { $0.extraChanged = .with { $0.key = field.key; $0.value = value } }) }
+                }
+                if !editor.moreDetailsLabel.isEmpty {
+                    KitLink(label: editor.moreDetailsLabel, identifier: "agenda-editor-more-details") { send(event { $0.moreDetails = .init() }) }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                }
                 if editor.showEventFields {
                     whenRow(
                         key: chrome.fieldEnds,
@@ -221,12 +242,11 @@ struct AgendaEditorView: View {
                     .overlay(alignment: .bottom) { KitHairline() }
                 }
                 if state.hasStatus, !state.status.sentence.isEmpty {
-                    Text(state.status.sentence)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("net", scheme))
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 12)
-                        .accessibilityIdentifier("agenda-editor-status")
+                    StatusLineView(status: state.status, identifier: "agenda-editor-status-action") {
+                        send(event { $0.statusActed = .init() })
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 12)
                 }
                 if editor.showSkip {
                     KitOutlineButton(label: editor.skipLabel, tone: "net") { send(event { $0.skip = .init() }) }
@@ -390,5 +410,36 @@ private struct AgendaOptionalLabel: ViewModifier {
     let label: String
     func body(content: Content) -> some View {
         if label.isEmpty { content } else { content.accessibilityLabel(label) }
+    }
+}
+
+
+private struct AgendaExtraField: View {
+    let field: Centraid_Core_V1_TodoField
+    let changed: (String) -> Void
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(field.label).centraidType("annotLabel").foregroundStyle(Theme.color("textSoft", scheme))
+            if field.editText {
+                MachineTextField(placeholder: field.addPlaceholder, value: field.textValue, onEdit: changed)
+                    .centraidType("body")
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityLabel(field.label)
+                    .accessibilityIdentifier("agenda-editor-extra-\(field.key)")
+            } else {
+                Menu {
+                    ForEach(field.choices, id: \.key) { choice in
+                        Button(choice.label) { changed(choice.key) }.disabled(!choice.enabled)
+                    }
+                } label: {
+                    Text(field.choices.first(where: { $0.selected })?.label ?? field.label)
+                        .centraidType("body").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .accessibilityLabel(field.label)
+                .accessibilityIdentifier("agenda-editor-extra-\(field.key)")
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin).padding(.vertical, 8)
     }
 }

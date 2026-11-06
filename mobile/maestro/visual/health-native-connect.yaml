@@ -1,0 +1,15 @@
+# iOS only. These established flows exercise the OS's real HealthKit grant;
+# failed grants remain failures and save the actual sheet as a diagnostic.
+appId: ${APP_ID}
+name: Seed Apple Health and connect through the real permission sheet
+---
+- runFlow: ../flows/health-seed.yaml
+- runFlow: ../flows/health-connect.yaml
+- scrollUntilVisible:
+    element:
+      id: "health-workout-.*"
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "health-workout-.*"
+- takeScreenshot: health-connected-workouts

@@ -43,7 +43,7 @@ fn versions_newest_first_the_current_one_unrestorable_and_restore_is_a_write() {
     assert_eq!(state.close, "Close");
     let versions = rows(d.view(i)).clone();
     assert_eq!(versions.len(), 3);
-    assert_eq!(versions[0].label, "Current version");
+    assert_eq!(versions[0].label, "Current");
     assert!(versions[0].current);
     assert_eq!(versions[0].preview, "third words");
     assert_eq!(versions[0].restore_label, "");

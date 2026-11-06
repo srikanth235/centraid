@@ -645,7 +645,9 @@ fn a_swipe_keeps_the_shelfs_order_re_shows_the_chrome_and_closes_the_sheet() {
         ev::Kind::Chrome(ev::ChromeToggled { visible: false }),
     );
     tap(&mut d, at, V::Info);
-    assert_eq!(view(&d, at).sheet, Sheet::Info as i32);
+    assert!(view(&d, at).details_visible);
+    assert!(verb(&view(&d, at), V::Info).on);
+    assert_eq!(view(&d, at).sheet, Sheet::None as i32);
     send(
         &mut d,
         at,
@@ -674,6 +676,50 @@ fn a_swipe_keeps_the_shelfs_order_re_shows_the_chrome_and_closes_the_sheet() {
         ev::Kind::Moved(ev::Moved { photo_id: stranger }),
     );
     assert_eq!(view(&d, at).position, "");
+}
+
+#[test]
+fn info_is_an_inline_toggle_and_modal_choices_do_not_hide_it() {
+    let mut d = driver();
+    let shelf = shelf_of(&d, 1, "inline-details");
+    let at = open(&mut d, &shelf[0], &shelf, "");
+    assert!(!view(&d, at).details_visible);
+    tap(&mut d, at, V::Info);
+    let shown = view(&d, at);
+    assert!(shown.details_visible);
+    assert!(verb(&shown, V::Info).on);
+    assert_eq!(shown.sheet, Sheet::None as i32);
+    assert_eq!(shown.photo_id, shelf[0]);
+    send(
+        &mut d,
+        at,
+        ev::Kind::Sheet(ev::SheetChanged {
+            sheet: Sheet::Place as i32,
+        }),
+    );
+    assert!(view(&d, at).details_visible);
+    assert_eq!(view(&d, at).sheet, Sheet::Place as i32);
+    send(
+        &mut d,
+        at,
+        ev::Kind::Sheet(ev::SheetChanged {
+            sheet: Sheet::None as i32,
+        }),
+    );
+    assert!(view(&d, at).details_visible);
+    tap(&mut d, at, V::Info);
+    assert!(!view(&d, at).details_visible);
+    assert!(!verb(&view(&d, at), V::Info).on);
+    // An older shell's Info sheet request opens the same inline panel.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Sheet(ev::SheetChanged {
+            sheet: Sheet::Info as i32,
+        }),
+    );
+    assert!(view(&d, at).details_visible);
+    assert_eq!(view(&d, at).sheet, Sheet::None as i32);
 }
 
 #[test]

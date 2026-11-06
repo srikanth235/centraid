@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -100,37 +102,45 @@ internal fun MoneyFigureRow(figure: MoneyFigure, modifier: Modifier = Modifier) 
 @Composable
 internal fun MoneyHeroView(hero: MoneyHero) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("money-hero")
-            .semantics(mergeDescendants = true) { },
+        Modifier.fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(moneyRadius("lg"))
+            .background(centraidColor("bgSunken"))
+            .padding(vertical = 8.dp),
     ) {
-        // THE FIGURE AND ITS SENTENCE SHARE A BASELINE: the sentence beside the figure, not under it.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FitText(
-                money(hero.spent),
-                role = "display",
-                ink = centraidColor(if (hero.over) "net" else "text"),
-                minScale = HERO_MIN_SCALE,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .alignByBaseline()
-                    .clearAndSetSemantics { contentDescription = spoken(hero.spent_label, hero.spent) },
-            )
-            Text(
-                hero.spent_label,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.alignByBaseline().clearAndSetSemantics { },
-            )
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+                .testTag("money-hero")
+                .semantics(mergeDescendants = true) { },
+        ) {
+            // THE FIGURE AND ITS SENTENCE SHARE A BASELINE: the sentence beside the figure, not under it.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitText(
+                    money(hero.spent),
+                    role = "display",
+                    ink = centraidColor(if (hero.over) "net" else "text"),
+                    minScale = HERO_MIN_SCALE,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .alignByBaseline()
+                        .clearAndSetSemantics { contentDescription = spoken(hero.spent_label, hero.spent) },
+                )
+                Text(
+                    hero.spent_label,
+                    style = centraidType("body"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.alignByBaseline().clearAndSetSemantics { },
+                )
+            }
+            if (hero.has_bar) {
+                MoneyBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label)
+            }
         }
-        if (hero.has_bar) {
-            MoneyBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label)
-        }
+        // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
+        MoneyFigureColumns(hero.figures)
     }
-    // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
-    MoneyFigureColumns(hero.figures)
 }
 
 /** A plan bar from the state's basis points: the fill, and a tick for the day. */
@@ -150,7 +160,7 @@ internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: Stri
             Modifier
                 .fillMaxWidth(fillBp.coerceIn(0, BP) / BP.toFloat())
                 .height(6.dp)
-                .background(centraidColor(if (over) "net" else "textSoft")),
+                .background(centraidColor(if (over) "dangerFill" else "moneyFill")),
         )
         if (tickBp > 0) {
             Row(Modifier.fillMaxWidth().height(6.dp)) {
@@ -164,17 +174,21 @@ internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: Stri
 /** THE TRANSACTION ROW: the one row, the signed amount as its figure. */
 @Composable
 internal fun MoneyRowView(row: MoneyRow, onTap: (() -> Unit)?) {
-    CentraidRow(
-        title = row.title,
-        meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-        trailing = money(row.amount),
-        trailingTone = row.amount_tone,
-        chips = row.chips.map { it },
-        dimmed = row.dimmed,
-        a11y = spoken(row.accessibility_label, row.amount),
-        testTag = "money-row-${row.txn_id}",
-        onTap = onTap,
-    )
+    Box {
+        CentraidRow(
+            title = row.title,
+            meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
+            trailing = money(row.amount),
+            trailingTone = row.amount_tone,
+            trailingInk = if (row.is_income) "successText" else "text",
+            chips = row.chips.map { it },
+            dimmed = row.dimmed,
+            a11y = spoken(row.accessibility_label, row.amount),
+            testTag = "money-row-${row.txn_id}",
+            onTap = onTap,
+        )
+        Box(Modifier.align(Alignment.CenterStart).padding(start = 8.dp).size(8.dp).background(centraidColor(row.color_key), CircleShape))
+    }
 }
 
 /** A switch row: the state's label and whether it is on. The toggle is an event the screen forwards. */

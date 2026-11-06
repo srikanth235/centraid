@@ -357,14 +357,20 @@ private struct NotesLibraryList: View {
                             if !section.head.title.isEmpty {
                                 SectionHeader(title: section.head.title, count: section.head.count)
                             }
-                            ForEach(section.rows, id: \.noteID) { row in
-                                NotesRowView(
-                                    row: row,
-                                    menuLabel: state.chrome.rowMenuLabel,
-                                    onTap: { open(row.route) },
-                                    onMenu: { send(NotesEvents.home { $0.rowMenu = .with { $0.noteID = row.noteID } }) }
-                                )
+                            LazyVStack(spacing: 0) {
+                                ForEach(section.rows, id: \.noteID) { row in
+                                    NotesRowView(
+                                        row: row,
+                                        menuLabel: state.chrome.rowMenuLabel,
+                                        onTap: { open(row.route) },
+                                        onMenu: { send(NotesEvents.home { $0.rowMenu = .with { $0.noteID = row.noteID } }) }
+                                    )
+                                }
                             }
+                            .background(Theme.color("bgElev", scheme))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                            .padding(.horizontal, Theme.spacing("4", scheme))
+                            .padding(.bottom, Theme.spacing("3", scheme))
                         }
                         if library.truncated {
                             if !library.windowEndLabel.isEmpty {
@@ -397,6 +403,7 @@ struct NotesRowView: View {
     var onMenu: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         HStack(spacing: 0) {
@@ -405,22 +412,22 @@ struct NotesRowView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             if row.pinned {
-                                CentraidIconView(iconKey: "Pin", tint: Theme.color("textSoft", scheme), size: 12)
+                                CentraidIconView(iconKey: "Pin", tint: Theme.color("notesText", scheme), size: 12)
                             }
                             Text(row.title)
-                                .centraidType("smallStrong")
+                                .centraidType("bodyStrong")
                                 .foregroundStyle(Theme.color("text", scheme))
-                                .lineLimit(1)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                         snippet
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(2)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         if !row.meta.isEmpty {
                             Text(row.meta)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                     }
                     Spacer(minLength: 8)
@@ -428,7 +435,7 @@ struct NotesRowView: View {
                         Text(row.checkLabel)
                             .centraidType("annotLabel")
                             .monospacedDigit()
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .foregroundStyle(Theme.color("notesText", scheme))
                     }
                 }
                 .padding(.leading, CentraidGeometry.pageMargin)

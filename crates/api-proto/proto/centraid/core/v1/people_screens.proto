@@ -177,6 +177,15 @@ message PeopleRosterData {
   // "12 people · 3 to reconnect · 2 starred" ("shown" when truncated).
   string status_line = 3;
   bool truncated = 4;
+  repeated PeopleRosterSection sections = 5;
+  optional PeopleRow my_card = 6;
+  string my_card_label = 7;
+}
+
+message PeopleRosterSection {
+  string key = 1;
+  string title = 2;
+  repeated PeopleRow rows = 3;
 }
 
 // A count tile on Touch. `tappable` false draws a figure, not a control.
@@ -462,6 +471,26 @@ message PeoplePersonData {
   // The relationships, both directions; the section draws only when there are some (#1146 D8).
   PeopleSectionHead relations_head = 22;
   repeated PeopleRelationRow relations = 23;
+  repeated PeopleHeroAction hero_actions = 24;
+  string vault_links_title = 25;
+  repeated PeopleVaultLinkRow vault_links = 26;
+  string vault_links_note = 27;
+}
+
+message PeopleVaultLinkRow {
+  string id = 1;
+  string title = 2;
+  string app_label = 3;
+  string color_key = 4;
+  string icon_key = 5;
+  Route route = 6;
+}
+
+message PeopleHeroAction {
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool enabled = 4;
 }
 
 message PeopleRelationRow {
@@ -585,6 +614,11 @@ message PeoplePersonEvent {
     Dismissed dismissed = 15;
     // A channel row's tap: Rust asks the OS to call, mail, map or copy it.
     ChannelTapped channel = 16;
+    HeroTapped hero = 17;
+  }
+
+  message HeroTapped {
+    string key = 1;
   }
 
   message Refreshed {}

@@ -46,6 +46,8 @@ pub struct Context<'a> {
     pub day_in_head: bool,
     /// Name the project in the meta line (not inside the project itself).
     pub show_project: bool,
+    /// The list hides completed subtasks until Show Completed is on.
+    pub hide_completed: bool,
 }
 
 impl<'a> Context<'a> {
@@ -68,6 +70,7 @@ impl<'a> Context<'a> {
                 .collect(),
             day_in_head: false,
             show_project: true,
+            hide_completed: false,
         }
     }
 }
@@ -108,7 +111,13 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
         task.title.clone()
     };
     let due = due_label(locale, task, ctx);
-    let meta = meta(locale, task, ctx);
+    let mut meta = meta(locale, task, ctx);
+    if task.flagged {
+        if !meta.is_empty() {
+            meta.push_str(" · ");
+        }
+        meta.push_str(&words::flagged(locale));
+    }
     let priority = priority_label(locale, task.priority);
     let check = check_of(&task.status);
     let open = matches!(check, wire::TodoCheck::Open | wire::TodoCheck::InProcess);
@@ -119,12 +128,40 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
         .collect::<Vec<_>>()
         .join(", ");
     wire::TodoRow {
+        actions: vec![
+            wire::TodoChoice {
+                key: "details".into(),
+                label: words::details(locale),
+                icon_key: "Info".into(),
+                enabled: true,
+                ..Default::default()
+            },
+            wire::TodoChoice {
+                key: "flag".into(),
+                label: if task.flagged {
+                    words::unflag(locale)
+                } else {
+                    words::flag(locale)
+                },
+                icon_key: "Flag".into(),
+                enabled: true,
+                ..Default::default()
+            },
+            wire::TodoChoice {
+                key: "delete".into(),
+                label: words::delete_reminder(locale),
+                icon_key: "Trash".into(),
+                enabled: true,
+                ..Default::default()
+            },
+        ],
         task_id: task.task_id.clone(),
         children: if subtask {
             Vec::new()
         } else {
             task.children
                 .iter()
+                .filter(|child| !ctx.hide_completed || is_open(child))
                 .map(|child| row(locale, child, ctx, true))
                 .collect()
         },
@@ -305,18 +342,20 @@ pub fn priority_label(locale: Locale, priority: i64) -> String {
 /// is a wheel hue, else the id's own.
 #[must_use]
 pub fn hue_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
-    let key = centraid_design::party_hue_key(project_id, project.and_then(|p| p.color.as_deref()))
-        .unwrap_or_else(|| centraid_design::identity_hue_key(project_id));
-    hue_role(key)
+    crate::agenda::appearance::color(
+        project_id,
+        project.and_then(|project| project.color.as_deref()),
+    )
 }
 
 /// A wheel key as the theme's colour role: `rose` → `cRose`; empty stays empty.
 #[must_use]
 pub fn hue_role(wheel_key: &str) -> String {
-    let mut chars = wheel_key.chars();
-    chars.next().map_or_else(String::new, |first| {
-        format!("c{}{}", first.to_uppercase(), chars.as_str())
-    })
+    if wheel_key.is_empty() {
+        String::new()
+    } else {
+        centraid_design::hue_role_key(wheel_key).to_owned()
+    }
 }
 
 /// `April 2026`.
@@ -407,7 +446,13 @@ pub fn title_of(
 ) -> String {
     match kind {
         Kind::Overdue => words::group_overdue(locale),
-        Kind::Today => words::group_today(locale),
+        Kind::Today => match group.key.as_str() {
+            "all-day" => crate::strings::shared::all_day(locale),
+            "morning" => words::morning(locale),
+            "afternoon" => words::afternoon(locale),
+            "tonight" => words::tonight(locale),
+            _ => words::group_today(locale),
+        },
         Kind::Day => civil::relative_day(locale, &group.day, ctx.today),
         Kind::Inbox => words::inbox(locale),
         Kind::Project => group

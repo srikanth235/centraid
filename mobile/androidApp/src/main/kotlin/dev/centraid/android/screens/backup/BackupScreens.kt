@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -57,6 +58,7 @@ import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 
@@ -136,7 +138,12 @@ private fun BackupPage(
         // WHERE THE BACKUP STANDS, and the one act that moves it: with nothing paired
         // that act is adding a backup device, drawn as the page's primary; once one is
         // paired it is "Back up now" (iOS `BackupHomeView`).
-        Head(model.title, line?.sentence.orEmpty())
+        Text(model.title, style = centraidType("display"), color = centraidColor("text"), modifier = Modifier.semantics { heading() })
+        Column(
+            Modifier.fillMaxWidth().background(centraidColor("bgElev"), RoundedCornerShape(LocalCentraidTokens.current.radii.getValue("lg").dp)).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+        Text(line?.sentence.orEmpty(), style = centraidType("bodyStrong"), color = centraidColor("text"))
         if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
         line?.waiting.orEmpty().map { it.sentence }.filter { it.isNotEmpty() }.forEach { Sentence(it) }
         // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not.
@@ -187,13 +194,14 @@ private fun BackupPage(
         }
         // WHAT THE LAST ACT DID, in place: one clause, never a toast.
         if (model.notice.isNotEmpty()) Sentence(model.notice, "backup-notice")
+        }
         // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost phone takes
         // every vault with it, whatever is backed up.
         if (model.key_warning) RecoveryKey(model, onEvent, onShowWords)
         // WHAT EACH APP'S BACKUP HOLDS (#1144), biggest first as the screen orders it.
         if (model.apps.isNotEmpty()) Section(model.apps_heading) { Apps(model.apps) }
         if (paired) Section(model.devices_heading) { Destinations(model, onEvent, onAddDestination) }
-        if (model.rule_choices.isNotEmpty()) {
+        if (model.rule_choices.isNotEmpty() || model.include_videos_label.isNotEmpty()) {
             Section(model.rule_label) {
                 model.rule_choices.forEach { choice ->
                     Row(
@@ -220,10 +228,7 @@ private fun BackupPage(
                         )
                     }
                 }
-            }
-        }
         if (model.include_videos_label.isNotEmpty()) {
-            Rule()
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -246,6 +251,8 @@ private fun BackupPage(
                     colors = SwitchDefaults.colors(checkedTrackColor = centraidColor("accent")),
                     modifier = Modifier.semantics { contentDescription = model.include_videos_label },
                 )
+            }
+        }
             }
         }
         // THE RECOVERY KEY BELONGS HERE: it is the other half of getting a vault back,
@@ -281,28 +288,6 @@ private fun openBatterySettings(context: Context) {
 }
 
 /** The page's head: its title and the line. */
-@Composable
-private fun Head(title: String, lead: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (title.isNotEmpty()) {
-            Text(
-                title,
-                style = centraidType("title"),
-                color = centraidColor("text"),
-                modifier = Modifier.testTag("backup-title").semantics { heading() },
-            )
-        }
-        if (lead.isNotEmpty()) Text(lead, style = centraidType("body"), color = centraidColor("textSoft"))
-    }
-}
-
-/**
- * WHERE THE RECOVERY KEY IS, and what can be done about it (iOS
- * `BackupHomeView.recoveryKey`). A warning carries the attention mark Home's line
- * uses, and the screen makes "Show recovery key" the page's Ink button (`ink`);
- * otherwise it is one quiet sentence and an outline button. Moving the key into or
- * out of the keychain is a plain link: a choice made once, not a thing to do.
- */
 @Composable
 private fun RecoveryKey(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Unit, onShowKey: () -> Unit) {
     if (model.key_heading.isEmpty()) return
@@ -355,17 +340,21 @@ private fun Rule() {
 /** ONE GROUP: a rule above, its name in sentence case, then its rows. */
 @Composable
 private fun Section(heading: String, content: @Composable () -> Unit) {
-    Rule()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (heading.isNotEmpty()) {
             Text(
                 heading,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                modifier = Modifier.semantics { heading() },
+                style = centraidType("eyebrow"),
+                color = centraidColor("textFaint"),
+                modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() },
             )
         }
-        content()
+        Column(
+            Modifier.fillMaxWidth()
+                .background(centraidColor("bgElev"), RoundedCornerShape((LocalCentraidTokens.current.radii["lg"] ?: 0).dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) { content() }
     }
 }
 

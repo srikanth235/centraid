@@ -274,6 +274,21 @@ message LockerHomeData {
   // The header's filter button: All · Starred · each type · Archived, with counts,
   // one single-choice section. Set on Items' data only.
   optional FilterMenu filter_menu = 14;
+  repeated LockerCategory categories = 15;
+  repeated LockerRow starred_rows = 16;
+  repeated LockerRow recent_rows = 17;
+  string starred_title = 18;
+  string recent_title = 19;
+  string items_title = 20;
+}
+
+message LockerCategory {
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  string count_label = 4;
+  bool selected = 5;
+  optional Route route = 6;
 }
 
 message LockerReviewSection {
@@ -314,6 +329,7 @@ message LockerGenerator {
 }
 
 message LockerHomeEvent {
+  message CategoryPicked { string key = 1; }
   oneof kind {
     BandPicked band = 1;
     // 2 was `filter`: a filter is now a pick in the header's menu.
@@ -338,6 +354,7 @@ message LockerHomeEvent {
     // The header's filter menu: a pick, or its Clear row (All).
     FilterMenuPicked filter_menu_picked = 16;
     FilterMenuCleared filter_menu_cleared = 17;
+    CategoryPicked category = 18;
   }
   reserved 2;
   reserved "filter";
@@ -445,6 +462,8 @@ message LockerItemData {
   optional EmptyState gone = 15;
   // "This item is in the trash · it is erased on Mon 12 October".
   string trashed_note = 16;
+  optional LockerFieldRow code_card = 17;
+  string change_password_label = 18;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a

@@ -1,0 +1,42 @@
+appId: ${APP_ID}
+name: Reminder details and photo attachment action
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: home-tile-reminders
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: home-tile-reminders
+# Select the body of a saved demo reminder, never its completion checkbox.
+- scrollUntilVisible:
+    element:
+      id: "agenda-task-row-(?!check-|file-).*"
+      text: ".*Rotate the tires before the drive.*"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "agenda-task-row-(?!check-|file-).*"
+    text: ".*Rotate the tires before the drive.*"
+- extendedWaitUntil:
+    visible:
+      id: tasks-title-field
+    timeout: 60000
+- takeScreenshot: reminder-details-top
+- scrollUntilVisible:
+    element:
+      id: agenda-attachment-add-photo
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: agenda-attachment-add
+- assertVisible:
+    id: agenda-attachment-add-photo
+- takeScreenshot: reminder-photo-action

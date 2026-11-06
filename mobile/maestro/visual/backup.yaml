@@ -1,0 +1,33 @@
+appId: ${APP_ID}
+name: Backup settings and destination action
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-backup-status
+    timeout: 60000
+- tapOn:
+    id: home-backup-status
+- extendedWaitUntil:
+    visible:
+      id: backup-screen
+    timeout: 60000
+- takeScreenshot: backup-top
+- scrollUntilVisible:
+    element:
+      id: backup-add-destination
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: backup-add-destination
+- takeScreenshot: backup-destination
+- scrollUntilVisible:
+    element:
+      id: backup-include-videos
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: backup-include-videos
+- takeScreenshot: backup-policy-bottom

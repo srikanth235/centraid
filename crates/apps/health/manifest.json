@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "health",
   "name": "Health",
-  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store. Chat reads it like any app: the daily figures and workouts are kinds the assistant finds, counts and sums.",
+  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Summary shows your pinned metrics and seven-day shapes against your own typical, with highlights from recorded days; metric detail supports Week, Month, 6M and Year; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store. Chat reads it like any app: the daily figures and workouts are kinds the assistant finds, counts and sums.",
   "version": "0.2.0",
   "iconKey": "Activity",
   "colorKey": "olive",
@@ -318,7 +318,14 @@
         "properties": {
           "system": {
             "type": "string",
-            "enum": ["contacts", "calendar", "files", "health", "statement"]
+            "enum": [
+              "contacts",
+              "calendar",
+              "files",
+              "health",
+              "statement",
+              "reminders"
+            ]
           },
           "ref": {
             "type": "string",
@@ -776,7 +783,7 @@
         "total",
         "days_above_typical"
       ],
-      "description": "One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.",
+      "description": "One metric over a week, a month, six months or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.",
       "input": {
         "type": "object",
         "properties": {
@@ -791,7 +798,7 @@
             ]
           },
           "range": {
-            "enum": ["week", "month", "year"]
+            "enum": ["week", "month", "six_months", "year"]
           }
         },
         "additionalProperties": false,

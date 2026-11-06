@@ -165,6 +165,7 @@ pub(crate) fn today(
                             low: metric.typical.map(|typical| typical.low),
                             high: metric.typical.map(|typical| typical.high),
                             typical_days: metric.typical.map_or(0, |typical| count(typical.days)),
+                            week: metric.week.into_iter().map(bucket).collect(),
                         }
                     })
                     .collect(),
@@ -195,6 +196,7 @@ pub(crate) fn series(
     let range = match R::try_from(asked.range).unwrap_or(R::Unspecified) {
         R::Week => Range::Week,
         R::Month => Range::Month,
+        R::SixMonths => Range::SixMonths,
         R::Year => Range::Year,
         R::Unspecified => {
             return Err(invalid("a health series read names no range".to_owned()));

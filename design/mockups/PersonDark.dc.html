@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="utf-8">
 <title>Person page (dark)</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -14,60 +12,61 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: linear-gradient(180deg, #2E1D44 0px, #0E0D0C 330px); font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: linear-gradient(180deg, var(--ds-peopleTint) 0px, var(--ds-bg) 330px); font-family: Geist, system-ui, sans-serif; color: var(--ds-text);">
   <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 4px;">
-    <a href="PeopleDark.dc.html" aria-label="Back to People" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(44,42,39,0.8); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    <a href="PeopleDark.dc.html" aria-label="Back to People" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--ds-glass); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
     </a>
     <div style="display: flex; gap: 8px;">
-      <button aria-label="Star, merge, move to trash" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(44,42,39,0.8); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      <button aria-label="Star, merge, move to trash" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--ds-glass); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--ds-text)" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
       </button>
-      <button style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid rgba(44,42,39,0.8); background: rgba(44,42,39,0.72); font-size: 16px; font-weight: 600;">Edit</button>
+      <button style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--ds-glass); background: var(--ds-glass); font-size: 16px; font-weight: 600;">Edit</button>
     </div>
   </div>
 
   <div style="display: flex; flex-direction: column; align-items: center;">
-    <span style="width: 96px; height: 96px; border-radius: 48px; background: rgba(44,42,39,0.72); border: 1px solid rgba(44,42,39,0.9); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; color: #BA82F5;">AL</span>
+    <span style="width: 96px; height: 96px; border-radius: 48px; background: var(--ds-glass); border: 1px solid var(--ds-glass); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; color: var(--ds-peopleText);">AL</span>
     <div style="font-size: 26px; font-weight: 700; margin-top: 10px;">Ada Lovelace</div>
-    <div style="font-size: 14px; color: #C9C4BA;">Friend · London</div>
-    <div style="font-size: 13px; color: #A39E95; margin-top: 4px;">Every 14 days · last touch 12 days ago</div>
+    <div style="font-size: 14px; color: var(--ds-textSoft);">Friend · London</div>
+    <div style="font-size: 13px; color: var(--ds-textFaint); margin-top: 4px;">Every 14 days · last touch 12 days ago</div>
   </div>
 
   <div style="display: flex; justify-content: center; gap: 14px; margin-top: 14px;">
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #C9C4BA;"><button aria-label="Message" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="#BA82F5" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg></button>message</div>
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #C9C4BA;"><button aria-label="Call" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="#BA82F5" aria-hidden="true"><path d="M6 3l4 1 1 5-2 1a12 12 0 006 6l1-2 5 1 1 4c-1 2-3 2-4 2A17 17 0 013 7c0-1 0-3 3-4z"/></svg></button>call</div>
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #C9C4BA;"><button aria-label="Email" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#BA82F5" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></button>mail</div>
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #C9C4BA; font-weight: 600;"><button aria-label="Log a touch" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: #935BCB; display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg></button>log touch</div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--ds-textSoft);"><button aria-label="Message" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid var(--ds-glass); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="var(--ds-peopleText)" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg></button>message</div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--ds-textSoft);"><button aria-label="Call" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid var(--ds-glass); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="var(--ds-peopleText)" aria-hidden="true"><path d="M6 3l4 1 1 5-2 1a12 12 0 006 6l1-2 5 1 1 4c-1 2-3 2-4 2A17 17 0 013 7c0-1 0-3 3-4z"></path></svg></button>call</div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--ds-textSoft);"><button aria-label="Email" style="width: 52px; height: 52px; border-radius: 26px; border: 1px solid var(--ds-glass); background: var(--ds-glass); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ds-peopleText)" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></button>mail</div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--ds-textSoft); font-weight: 600;"><button aria-label="Log a touch" style="width: 52px; height: 52px; border-radius: 26px; border: none; background: var(--ds-peopleFill); display: flex; align-items: center; justify-content: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg></button>log touch</div>
   </div>
 
-  <div style="margin: 16px 16px 0; background: #1F1E1C; border-radius: 16px;">
-    <div style="padding: 10px 14px; border-bottom: 1px solid #2C2A27; display: flex; align-items: center;"><div style="flex-grow: 1;"><div style="font-size: 12px; color: #A39E95;">mobile · preferred</div><div style="font-size: 16px;">+44 20 7946 0000</div></div></div>
-    <div style="padding: 10px 14px; border-bottom: 1px solid #2C2A27;"><div style="font-size: 12px; color: #A39E95;">email · work</div><div style="font-size: 16px;">ada@analytical.example</div></div>
-    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: #A39E95;">home</div><div style="font-size: 16px;">12 Crescent Rd, London</div></div>
+  <div style="margin: 16px 16px 0; background: var(--ds-bgElev); border-radius: 16px;">
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--ds-line); display: flex; align-items: center;"><div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--ds-textFaint);">mobile · preferred</div><div style="font-size: 16px;">+44 20 7946 0000</div></div></div>
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--ds-line);"><div style="font-size: 12px; color: var(--ds-textFaint);">email · work</div><div style="font-size: 16px;">ada@analytical.example</div></div>
+    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: var(--ds-textFaint);">home</div><div style="font-size: 16px;">12 Crescent Rd, London</div></div>
   </div>
 
-  <div style="margin: 10px 16px 0; background: #1F1E1C; border-radius: 16px;">
-    <div style="padding: 10px 14px; border-bottom: 1px solid #2C2A27; display: flex; align-items: center;">
-      <div style="flex-grow: 1;"><div style="font-size: 12px; color: #A39E95;">birthday · in 5 days</div><div style="font-size: 16px;">9 November</div></div>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="#BA82F5" aria-label="Reminder on" role="img"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8zM10 20a2 2 0 004 0"/></svg>
+  <div style="margin: 10px 16px 0; background: var(--ds-bgElev); border-radius: 16px;">
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--ds-line); display: flex; align-items: center;">
+      <div style="flex-grow: 1;"><div style="font-size: 12px; color: var(--ds-textFaint);">birthday · in 5 days</div><div style="font-size: 16px;">9 November</div></div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#7638AD" aria-label="Reminder on" role="img"><path d="M6 8a6 6 0 0112 0c0 7 3 8 3 8H3s3-1 3-8zM10 20a2 2 0 004 0"></path></svg>
     </div>
-    <div style="padding: 10px 14px; border-bottom: 1px solid #2C2A27;"><div style="font-size: 12px; color: #A39E95;">how you met</div><div style="font-size: 16px;">Maths club, 2019</div></div>
-    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: #A39E95;">related</div><div style="font-size: 16px;">Charles Babbage · mentor</div></div>
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--ds-line);"><div style="font-size: 12px; color: var(--ds-textFaint);">how you met</div><div style="font-size: 16px;">Maths club, 2019</div></div>
+    <div style="padding: 10px 14px;"><div style="font-size: 12px; color: var(--ds-textFaint);">related</div><div style="font-size: 16px;">Charles Babbage · mentor</div></div>
   </div>
 
-  <div style="margin: 10px 16px 0; background: #1F1E1C; border-radius: 16px;">
-    <div style="padding: 10px 14px 4px; font-size: 13px; font-weight: 600; color: #A39E95;">In your vault</div>
-    <div style="padding: 6px 14px; display: flex; gap: 10px; font-size: 15px;"><span style="color: #BF9738;">Note</span><span>Loves chess, hates tea · 3 days ago</span></div>
-    <div style="padding: 6px 14px; display: flex; gap: 10px; font-size: 15px;"><span style="color: #569EF7;">Event</span><span>Lunch with Ada · Sat 7 Nov, 12:30</span></div>
-    <div style="padding: 6px 14px 12px; display: flex; gap: 10px; font-size: 15px;"><span style="color: #BA82F5;">Touch</span><span>Call · talked about the engine · 12 days ago</span></div>
+  <div style="margin: 10px 16px 0; background: var(--ds-bgElev); border-radius: 16px;">
+    <div style="padding: 10px 14px 4px; font-size: 13px; font-weight: 600; color: var(--ds-textFaint);" data-selector="people-vault-links">In your vault</div>
+    <div style="padding: 6px 14px; display: flex; gap: 10px; font-size: 15px;"><span style="color: var(--ds-notesText);">Note</span><span>Loves chess, hates tea · 3 days ago</span></div>
+    <div style="padding: 6px 14px; display: flex; gap: 10px; font-size: 15px;"><span style="color: var(--ds-agendaText);">Event</span><span>Lunch with Ada · Sat 7 Nov, 12:30</span></div>
+    <div style="padding: 6px 14px 12px; display: flex; gap: 10px; font-size: 15px;"><span style="color: var(--ds-docsText);">Document</span><span>Engine diagrams · 12 days ago</span></div>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

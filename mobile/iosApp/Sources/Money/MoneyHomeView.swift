@@ -128,7 +128,6 @@ struct MoneyHomeView: View {
 
     @ViewBuilder
     private func page(_ home: Centraid_Core_V1_MoneyHomeData, state: Centraid_Core_V1_MoneyHomeState) -> some View {
-        if home.showsMonth { monthStepper(home, chrome: state.chrome) }
         switch state.destination {
         case .activity: activity(home.activity)
         case .cashflow: cashflow(home.cashflow)
@@ -162,6 +161,9 @@ struct MoneyHomeView: View {
         } else {
             ForEach(Array(spending.heroes.enumerated()), id: \.offset) { _, hero in
                 MoneyHeroView(hero: hero)
+            }
+            ForEach(Array(spending.weeklySeries.enumerated()), id: \.offset) { _, series in
+                MoneyWeeklyChart(series: series)
             }
             MoneyNote(text: spending.daysLeftLabel)
             ForEach(Array(spending.inOutNet.enumerated()), id: \.offset) { _, group in
@@ -210,6 +212,10 @@ struct MoneyHomeView: View {
         if activity.hasEmpty {
             EmptyStateView(activity.empty, onAction: addStatement)
         } else {
+            MoneySection(title: activity.overviewTitle)
+            ForEach(Array(activity.overview.enumerated()), id: \.offset) { _, hero in
+                MoneyHeroView(hero: hero)
+            }
             if !activity.needsLabel.isEmpty {
                 // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
                 let needsKey = activity.needsKey
@@ -218,10 +224,16 @@ struct MoneyHomeView: View {
                 }
             }
             ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
-                MoneySection(title: section.heading)
-                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                    MoneyRowView(row: row) { open(row.route) }
+                MoneyDayHeader(title: section.heading, total: section.total)
+                VStack(spacing: 0) {
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { KitHairline().padding(.leading, CentraidGeometry.pageMargin) }
+                        MoneyRowView(row: row) { open(row.route) }
+                    }
                 }
+                .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
             MoneyNote(text: activity.window)
             ShowMoreFooter(visible: activity.more) { send(event { $0.showMore = .init() }) }
@@ -285,11 +297,19 @@ struct MoneyHomeView: View {
                 }
             }
         case .month:
-            MoneyChoiceSheet(
-                title: chrome.monthSheetTitle,
-                choices: home?.monthOptions ?? [],
-                identifierPrefix: "money-month-option"
-            ) { key in send(event { $0.monthPicked = .with { $0.month = key } }) }
+            SheetRoom(title: chrome.monthSheetTitle) {
+                if let home, home.showsMonth { monthStepper(home, chrome: chrome) }
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array((home?.monthOptions ?? []).enumerated()), id: \.offset) { _, choice in
+                            MoneySheetRow(label: choice.label, detail: choice.detail, selected: choice.selected,
+                                          identifier: "money-month-option-\(choice.key)") {
+                                send(event { $0.monthPicked = .with { $0.month = choice.key } })
+                            }
+                        }
+                    }
+                }
+            }
         default:
             EmptyView()
         }

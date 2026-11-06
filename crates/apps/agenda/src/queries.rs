@@ -56,7 +56,8 @@ use centraid_vault::time::zone::FireZone;
 pub use centraid_apps_kit::attached::Attachment;
 
 use crate::expansion::{
-    DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events, recurrence_summary,
+    DEFAULT_EXPAND_MS, MAX_SERIES_INSTANCES, MAX_TOTAL_INSTANCES, SPAN_BUFFER_MS,
+    event_duration_ms, expand_recurring_events, expand_series_window, recurrence_summary,
 };
 use crate::{Denial, denial_of};
 
@@ -86,7 +87,7 @@ pub const WIDE: FanOutBound = FanOutBound::new(500, 64);
 
 const STARRED: &str = "flag:starred";
 const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supported, status, \
-     calendar_id, place_id, url, reminders, description";
+     calendar_id, place_id, url, reminders, description, busy, travel_minutes";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 
 /// These answers carry no continuation or partial flag, so their stated bounds
@@ -132,6 +133,7 @@ pub struct CalendarRow {
     pub calendar_id: String,
     pub name: Option<String>,
     pub color: Option<String>,
+    pub icon_key: Option<String>,
 }
 
 /// One event row, or one OCCURRENCE of one, which is the same row with a
@@ -163,6 +165,8 @@ pub struct EventRow {
     pub conferencing_uri: Option<String>,
     /// Minutes before it starts, in the order they were set.
     pub reminders: Vec<i64>,
+    pub busy: bool,
+    pub travel_minutes: i64,
     pub attachments: Vec<Attachment>,
     pub attendees: Vec<Attendee>,
     /// The ONE member-facing recurrence sentence; **never the rule** (#834).
@@ -235,6 +239,7 @@ pub struct PartyEntry {
 /// What `parties` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PartiesData {
+    pub places: Vec<PartyEntry>,
     pub parties: Vec<PartyEntry>,
     pub me: Option<String>,
 }
@@ -345,10 +350,18 @@ fn event_of(row: &Row, entity: &Row) -> EventRow {
         recurrence_semantics: text_of(row, "timing"),
         rrule: text_of(row, "rule"),
         rrule_support: Some(
-            if row.get("rule_supported").and_then(Cell::integer) == Some(0) {
-                "unsupported"
-            } else {
+            // A restored import may have been marked unsupported by an
+            // earlier engine. Capability is derived from today's parser.
+            if text_of(row, "rule").is_none_or(|rule| {
+                centraid_vault::time::rrule::inspect_for_date(
+                    &rule,
+                    text_of(row, "timing").as_deref() == Some("all-day"),
+                )
+                .is_ok()
+            }) {
                 "supported"
+            } else {
+                "unsupported"
             }
             .to_owned(),
         ),
@@ -359,6 +372,11 @@ fn event_of(row: &Row, entity: &Row) -> EventRow {
         calendar_id: text_of(row, "calendar_id"),
         conferencing_uri: text_of(row, "url"),
         reminders,
+        busy: row.get("busy").and_then(Cell::integer).unwrap_or(1) != 0,
+        travel_minutes: row
+            .get("travel_minutes")
+            .and_then(Cell::integer)
+            .unwrap_or(0),
         ..EventRow::default()
     }
 }
@@ -553,14 +571,14 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
             "entity",
             PageOrder::asc("title", "id"),
         )
-        .filter("kind = ?", vec![text("calendar")]),
+        .filter("kind = ? AND deleted_at IS NULL", vec![text("calendar")]),
         EVENT_JOIN_BOUND,
     )?;
     let ids = ids_of(&named, "id");
-    let painted: BTreeMap<String, (Option<String>, f64)> = by_ids(
+    let painted: BTreeMap<String, (Option<String>, Option<String>, f64)> = by_ids(
         "agenda.upcoming.colors",
         "container",
-        "id, color, position",
+        "id, color, icon_key, position",
         "id",
     )
     .of(door, &ids, None)?
@@ -570,6 +588,7 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
             text_of(row, "id")?,
             (
                 text_of(row, "color"),
+                text_of(row, "icon_key"),
                 match row.get("position") {
                     Some(Cell::Real(at)) => *at,
                     _ => 0.0,
@@ -583,14 +602,15 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
         .filter_map(|row| {
             let id = text_of(row, "id")?;
             Some(CalendarRow {
-                color: painted.get(&id).and_then(|(color, _)| color.clone()),
+                color: painted.get(&id).and_then(|(color, _, _)| color.clone()),
+                icon_key: painted.get(&id).and_then(|(_, icon, _)| icon.clone()),
                 name: text_of(row, "title"),
                 calendar_id: id,
             })
         })
         .collect();
     calendars.sort_by(|left, right| {
-        let place = |row: &CalendarRow| painted.get(&row.calendar_id).map_or(0.0, |(_, at)| *at);
+        let place = |row: &CalendarRow| painted.get(&row.calendar_id).map_or(0.0, |(_, _, at)| *at);
         place(left).total_cmp(&place(right))
     });
     Ok(calendars)
@@ -681,7 +701,84 @@ pub fn load_upcoming(
         Some(upper) => upper.to_owned(),
         None => from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis + DEFAULT_EXPAND_MS)),
     };
-    let mut expanded = expand_recurring_events(events, &from_lower, &expand_to, &exceptions)?;
+    let upper_ms = parse_instant_ms(&expand_to);
+    let explicit_upper_ms = to
+        .filter(|value| !value.is_empty())
+        .and_then(parse_instant_ms);
+    let mut expanded = Vec::new();
+    for event in events {
+        let recurring = event.rrule.is_some();
+        let visible_upper_ms = if recurring {
+            upper_ms
+        } else {
+            explicit_upper_ms
+        };
+        // The implicit ceiling bounds recurrence work, not one-off visibility:
+        // a default today-forward read must still include a distant appointment.
+        let mut rows = if !recurring {
+            expand_recurring_events(vec![event], &from_lower, &expand_to, &exceptions)?
+        } else if let (Some(from_ms), Some(to_ms)) = (from_ms, upper_ms) {
+            // The storage lookback finds long-running one-offs; recurrence
+            // uses actual overlap and separate original-time exception windows.
+            let semantics = event.semantics();
+            let own = event
+                .start_tz
+                .as_deref()
+                .and_then(|name| FireZone::named(name).ok());
+            let own = own.as_ref().unwrap_or(zone);
+            let comparison = |at| {
+                if semantics == Semantics::Zoned {
+                    at
+                } else {
+                    centraid_vault::time::zone::wall_epoch(zone.zoned_parts(at))
+                }
+            };
+            let reach = event_duration_ms(&event).max(0)
+                + if semantics == Semantics::AllDay {
+                    86_400_000
+                } else {
+                    0
+                };
+            if event.rrule.as_deref().is_some_and(|rule| {
+                centraid_vault::time::rrule::inspect_for_date(rule, semantics == Semantics::AllDay)
+                    .is_err()
+            }) {
+                vec![event.clone()]
+            } else {
+                expand_series_window(
+                    &event,
+                    &exceptions,
+                    comparison(from_ms).saturating_sub(reach),
+                    comparison(to_ms),
+                    own,
+                    MAX_SERIES_INSTANCES + 2,
+                )?
+            }
+        } else {
+            expand_recurring_events(vec![event], &from_lower, &expand_to, &exceptions)?
+        };
+        // Explicit override anchors may lie outside the displayed window.
+        // Filter their final interpreted interval before claiming a whole answer.
+        rows.retain(|event| {
+            from_ms.is_none_or(|from| still_running_at(event, from, zone))
+                && visible_upper_ms.is_none_or(|to| {
+                    crate::local::interval_ms(event, zone).is_none_or(|(start, _)| start < to)
+                })
+        });
+        if rows.len() > MAX_SERIES_INSTANCES {
+            return Err(KitError::FanOutExceeded {
+                query: "agenda.upcoming.expansion".to_owned(),
+                cap: MAX_SERIES_INSTANCES,
+            });
+        }
+        if expanded.len() + rows.len() > MAX_TOTAL_INSTANCES {
+            return Err(KitError::FanOutExceeded {
+                query: "agenda.upcoming.expansion".to_owned(),
+                cap: MAX_TOTAL_INSTANCES,
+            });
+        }
+        expanded.extend(rows);
+    }
     name_places(door, &mut expanded)?;
     // THE TRUE LOWER BOUND, on EVERY row: the expansion ran from the reach-back,
     // so an occurrence of a series is no more in range by construction than a
@@ -700,6 +797,26 @@ pub(crate) fn events_among(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec
     let mut events = live_events(door, &rows)?;
     decorate(door, &mut events)?;
     Ok(events)
+}
+
+/// Live notification sources are independent of the visible calendar window.
+/// A reached bound is a failed read, never a partial cancellation plan.
+pub(crate) fn load_alert_events(door: &dyn PageDoor) -> KitResult<Vec<EventRow>> {
+    let rows = read_pages(
+        door,
+        &PageQuery::new(
+            "agenda.notifications.events",
+            EVENT_COLUMNS,
+            "event",
+            PageOrder::asc("id", "id"),
+        )
+        .filter(
+            "status <> ? AND reminders IS NOT NULL",
+            vec![text("cancelled")],
+        ),
+        WIDE,
+    )?;
+    live_events(door, &rows)
 }
 
 /// `search`: the same rows, in the order the index ranked them. **A cancelled
@@ -1032,5 +1149,31 @@ pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denia
             .cmp(&left.is_you)
             .then_with(|| left.name.cmp(&right.name))
     });
-    Ok((PartiesData { parties, me: owner }, None))
+    let places = complete_window(
+        door,
+        &PageQuery::new(
+            "agenda.parties.places",
+            "id, title",
+            "entity",
+            PageOrder::asc("title", "id"),
+        )
+        .filter("kind = ? AND deleted_at IS NULL", vec![text("place")]),
+        PARTY_CAP,
+    )?
+    .rows
+    .iter()
+    .map(|row| PartyEntry {
+        party_id: text_of(row, "id").unwrap_or_default(),
+        name: text_of(row, "title").unwrap_or_default(),
+        is_you: false,
+    })
+    .collect();
+    Ok((
+        PartiesData {
+            parties,
+            me: owner,
+            places,
+        },
+        None,
+    ))
 }

@@ -3,6 +3,17 @@
 //! autosave line's are the kit's (`strings::shared`).
 
 catalog! {
+    plain action_share = ("Share", "Share");
+    plain preview = ("Quick Look", "Quick Look");
+    plain label_color = ("Label color", "Label color");
+    plain color_blue = ("Blue", "Blue");
+    plain color_yellow = ("Yellow", "Yellow");
+    plain color_violet = ("Violet", "Violet");
+    plain color_petrol = ("Petrol", "Petrol");
+    plain color_navy = ("Navy", "Navy");
+    plain color_graphite = ("Graphite", "Graphite");
+    plain color_raspberry = ("Raspberry", "Raspberry");
+    plain color_orchid = ("Orchid", "Orchid");
     plain player_pause = ("Pause", "Pause");
     plain player_play = ("Play", "Play");
     plain player_position = ("Position", "Position");
@@ -23,8 +34,8 @@ catalog! {
     plain add_title = ("Add to Docs", "Add to Docs");
     plain add_upload = ("Upload a file", "Upload a file");
     plain app_title = ("Docs", "Docs");
-    plain band_all = ("All", "All");
-    plain band_folders = ("Folders", "Folders");
+    plain band_all = ("Recents", "Recents");
+    plain band_folders = ("Browse", "Browse");
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
     plain band_starred = ("Starred", "Starred");

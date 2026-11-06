@@ -1,4 +1,4 @@
-//! Health's two read pages: one metric over a week, a month or a year
+//! Health's two read pages: one metric over a week, a month, six months or a year
 //! (`health.metric`), and one workout (`health.workout`).
 
 mod health_support;
@@ -77,7 +77,7 @@ fn a_metric_is_the_weeks_bars_the_typical_line_and_its_facts() {
         data.versus
     );
     let keys: Vec<&str> = state.segments.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, ["week", "month", "year"]);
+    assert_eq!(keys, ["week", "month", "six_months", "year"]);
     // A range is a segment of the same page, and reads again.
     d.send(
         i,
@@ -92,6 +92,31 @@ fn a_metric_is_the_weeks_bars_the_typical_line_and_its_facts() {
         wire::HealthMetricRange::Month as i32
     );
     assert_eq!(metric_data(d.view(i)).caption, "Last 30 days");
+    d.send(
+        i,
+        wire::screen_event::Kind::HealthMetric(wire::HealthMetricEvent {
+            kind: Some(me::Kind::Bucket(me::BucketPicked { index: 0 })),
+        }),
+    );
+    assert_eq!(metric_data(d.view(i)).selected_index, 0);
+    assert!(metric_data(d.view(i)).selected_bucket.is_some());
+    d.send(
+        i,
+        wire::screen_event::Kind::HealthMetric(wire::HealthMetricEvent {
+            kind: Some(me::Kind::Range(me::RangePicked {
+                key: "six_months".into(),
+            })),
+        }),
+    );
+    assert_eq!(metric_data(d.view(i)).bars.len(), 6);
+    assert_eq!(metric_data(d.view(i)).selected_index, 5);
+    d.send(
+        i,
+        wire::screen_event::Kind::HealthMetric(wire::HealthMetricEvent {
+            kind: Some(me::Kind::Bucket(me::BucketPicked { index: 999 })),
+        }),
+    );
+    assert_eq!(metric_data(d.view(i)).selected_index, 5);
 }
 
 #[test]

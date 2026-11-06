@@ -61,6 +61,7 @@ public fun CentraidRow(
     trailing: String = "",
     trailingNote: String = "",
     trailingTone: StatusChip.Tone = StatusChip.Tone.TONE_UNSPECIFIED,
+    trailingInk: String? = null,
     chips: List<StatusChip> = emptyList(),
     hueKey: String = "",
     dimmed: Boolean = false,
@@ -70,6 +71,9 @@ public fun CentraidRow(
     testTag: String = "kit-row",
     onTap: (() -> Unit)? = null,
     metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
+    titleMaxLines: Int = 2,
+    metaMaxLines: Int = 1,
+    chipsBelow: Boolean = false,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) centraidColor("textFaint") else centraidColor("text")
@@ -110,7 +114,7 @@ public fun CentraidRow(
                 title,
                 style = centraidType("body"),
                 color = titleInk,
-                maxLines = 2,
+                maxLines = titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
             // [metaRuns] is the same line with spans a machine marked (a
@@ -120,7 +124,7 @@ public fun CentraidRow(
                     metaRuns,
                     style = centraidType("annotLabel"),
                     color = softInk,
-                    maxLines = 1,
+                    maxLines = metaMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             } else if (meta.isNotEmpty()) {
@@ -128,17 +132,22 @@ public fun CentraidRow(
                     meta,
                     style = centraidType("annotLabel"),
                     color = softInk,
-                    maxLines = 1,
+                    maxLines = metaMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (chipsBelow) {
+                chips.forEach { chip ->
+                    StatusChipView(chip, Modifier.padding(top = 4.dp), maxLines = Int.MAX_VALUE)
+                }
+            }
         }
-        chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+        if (!chipsBelow) chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
         if (trailing.isNotEmpty() || pending) {
             // THE FIGURE: right-aligned, with its sub-label under it.
             Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
                 if (trailing.isNotEmpty()) {
-                    val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
+                    val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = trailingInk ?: "text")
                     Text(trailing, style = centraidType("bodyStrong"), color = figureInk, textAlign = TextAlign.End, maxLines = 1)
                 }
                 val note = if (pending) pendingLabel else trailingNote
@@ -176,14 +185,14 @@ public fun CentraidRow(row: ListRow, modifier: Modifier = Modifier, onTap: (() -
  * soft ink. No fill — a chip is read, not pressed.
  */
 @Composable
-public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
+public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier, maxLines: Int = 1) {
     if (chip.label.isEmpty()) return
     val ink = toneInk(chip.tone, neutral = "textSoft")
     Text(
         chip.label,
         style = centraidType("annotLabel"),
         color = ink,
-        maxLines = 1,
+        maxLines = maxLines,
         modifier = modifier
             .border(KitGeometry.HAIRLINE, ink, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 1.dp)
@@ -434,19 +443,23 @@ public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
 @Composable
 public fun hueColor(key: String): Color {
     val role = when {
-        key in PARTY_ROLES -> key
+        key in PARTY_ROLES || key in IDENTITY_FILL_ROLES -> key
         key in PARTY_HUES -> "c" + key.replaceFirstChar { it.uppercase() }
         else -> "cSlate"
     }
     return centraidColor(role)
 }
 
-/** `packages/design`'s eight party hues. */
+/** `design/tokens.toml`'s eight party hues. */
 private val PARTY_HUES: Set<String> =
     setOf("rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet")
 
 /** The same eight, as the theme's colour roles. */
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
+
+private val IDENTITY_FILL_ROLES: Set<String> = setOf(
+    "agendaFill", "notesFill", "peopleFill", "docsFill", "moneyFill", "lockerFill", "healthFill", "photosFill",
+)
 
 
 /**

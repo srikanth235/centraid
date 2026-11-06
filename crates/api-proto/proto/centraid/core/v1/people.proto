@@ -169,6 +169,8 @@ message PeopleRoster {
   uint32 count_all = 6;
   uint32 count_starred = 7;
   uint32 count_due = 8;
+  // The vault's own person, kept separate from contacts and contact counts.
+  optional PeopleRosterRow my_card = 9;
 }
 
 // One person as a dashboard rail draws them.
@@ -262,6 +264,15 @@ message PeopleSheet {
   repeated PeopleTouchEntry touches = 8;
   // Who this person is related to, both directions, by name (#1146 D8).
   repeated PeopleRelation relations = 10;
+  repeated PeopleVaultLink vault_links = 11;
+  bool vault_links_truncated = 12;
+}
+
+// Only the public entity envelope crosses; Locker is never included.
+message PeopleVaultLink {
+  string id = 1;
+  string kind = 2;
+  string title = 3;
 }
 
 // One `related` edge, read from the sheet's person. The edge is labelled by what its target is

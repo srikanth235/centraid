@@ -1,7 +1,7 @@
 #if os(iOS)
 import UIKit
 
-/// THE TWO LAUNCH-TIME DUTIES A SwiftUI `App` CANNOT PERFORM ITSELF (#1080).
+/// Launch-time notification and background-upload duties run before any SwiftUI scene.
 ///
 /// `handleEventsForBackgroundURLSession` exists only on the application
 /// delegate. When the background uploads finish while Centraid is suspended or
@@ -20,6 +20,7 @@ final class CentraidAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        AgendaNotifications.shared.install()
         BackgroundUploader.shared.reconnect()
         return true
     }

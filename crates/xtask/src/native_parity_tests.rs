@@ -625,6 +625,10 @@ fn the_register_is_well_formed() {
         }
     }
     let keys: Vec<&str> = REGISTER.iter().map(|(key, _)| *key).collect();
+    // PhoneReminder is now a platform input rather than a screen view state;
+    // its retired due-field exception is not part of the screen register.
+    assert_eq!(keys.len(), 100, "the screen exception census changed");
+    assert!(!keys.contains(&"PhoneReminder.due"));
     assert!(
         REGISTER
             .iter()
@@ -634,8 +638,7 @@ fn the_register_is_well_formed() {
                 .any(|(_, status)| matches!(status, Status::RustOnly { .. }))
             && REGISTER
                 .iter()
-                .any(|(_, status)| matches!(status, Status::Runtime { .. }))
-            && keys.len() > 100,
+                .any(|(_, status)| matches!(status, Status::Runtime { .. })),
         "the register stopped being read"
     );
 }

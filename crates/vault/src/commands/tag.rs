@@ -111,6 +111,35 @@ fn pre_label(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .then(|| "a tag needs a word".to_owned()))
 }
 
+fn pre_color(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
+        Ok(found) => found,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    Ok((found.kind != Kind::Tag).then(|| "only a label has a label color".to_owned()))
+}
+
+fn color(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let id = ctx.required_str("id")?;
+    let color = ctx.required_str("color")?;
+    let changed = ctx.connection().execute(
+        "UPDATE concept SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+        [id, color],
+    )? > 0;
+    if changed {
+        ctx.touch(id)?;
+    }
+    Ok(serde_json::json!({"id": id, "color": color, "changed": changed}))
+}
+
+const COLOR_SCHEMA: &str = r#"{
+  "type": "object", "required": ["id", "color"], "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "color": { "type": "string", "enum": ["listBlue", "listYellow", "listViolet", "listPetrol", "listNavy", "listGraphite", "listRaspberry", "listOrchid"] }
+  }
+}"#;
+
 const SCHEMA: &str = r#"{
   "type": "object",
   "required": ["id", "label"],
@@ -124,6 +153,17 @@ const SCHEMA: &str = r#"{
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
+        CommandDefinition::plain(
+            "tag.color",
+            "tag",
+            COLOR_SCHEMA,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "is_a_live_label",
+                check: pre_color,
+            }],
+            color,
+        ),
         CommandDefinition::plain(
             "tag.add",
             "tag",

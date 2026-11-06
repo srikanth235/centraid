@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 49] = [
+const PROTOS: [&str; 53] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -44,6 +44,8 @@ const PROTOS: [&str; 49] = [
     // the next app's queries arrive as its own file and one more arm, and
     // `app_query.proto` is the one both envelopes import.
     "proto/centraid/core/v1/agenda.proto",
+    "proto/centraid/core/v1/notifications.proto",
+    "proto/centraid/core/v1/notifications_screens.proto",
     // People's five answers (#1046), the same shape as Agenda's.
     "proto/centraid/core/v1/people.proto",
     // Notes' eight answers (#1046), the same shape as Agenda's.
@@ -97,6 +99,8 @@ const PROTOS: [&str; 49] = [
     "proto/centraid/core/v1/chat_screens.proto",
     // The phone imports (#1135, lane I): the shell's 1700-1899 arms.
     "proto/centraid/core/v1/imports_screens.proto",
+    "proto/centraid/core/v1/phone_calendar.proto",
+    "proto/centraid/core/v1/phone_reminders.proto",
     // Vault plumbing (#1135, lane H2): the generic secret/core-call effects and
     // the custody, pairing, backup and pass screens that speak them.
     "proto/centraid/core/v1/plumbing_screens.proto",

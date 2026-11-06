@@ -99,7 +99,7 @@ fn the_root_is_the_roster_under_a_band_with_one_filter_menu() {
     let sort = menu::find(&built, menu::SORT).unwrap();
     assert_eq!(sort.kind, wire::menu_section::Kind::Single as i32);
     assert_eq!(shown(sort), [("Recently added", 0), ("Name", 0)]);
-    assert_eq!(menu::checked(sort), ["recent"]);
+    assert_eq!(menu::checked(sort), ["name"]);
     assert!(!built.filtering);
     assert_eq!(built.spoken, "Filter and sort");
     assert_eq!(built.clear_label, "Clear filters");
@@ -109,7 +109,7 @@ fn the_root_is_the_roster_under_a_band_with_one_filter_menu() {
     let dana = data.rows.iter().find(|r| r.name == "Dana Reyes").unwrap();
     assert_eq!(dana.meta, "No touch logged yet");
     assert_eq!(dana.avatar.as_ref().unwrap().initials, "DR");
-    assert!(dana.avatar.as_ref().unwrap().hue_key.starts_with('c'));
+    assert!(dana.avatar.as_ref().unwrap().hue_key.ends_with("Fill"));
     assert_eq!(dana.star_label, "Star Dana Reyes");
     assert_eq!(
         dana.route,
@@ -559,4 +559,33 @@ fn a_leap_day_birthday_is_shown_on_the_day_it_falls_on() {
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     let day = if leap { "29" } else { "28" };
     assert_eq!(shown, format!("{day} February"), "falls on {falls}");
+}
+
+#[test]
+fn the_name_roster_has_an_index_and_my_card_stays_out_of_the_contact_count() {
+    let mut d = clean();
+    person(&d, "Zoe");
+    person(&d, "Ada");
+    let i = begin(&mut d);
+    let data = roster_data(d.view(i));
+    assert_eq!(
+        data.sections
+            .iter()
+            .map(|section| section.title.as_str())
+            .collect::<Vec<_>>(),
+        ["A", "Z"]
+    );
+    assert_eq!(
+        data.sections
+            .iter()
+            .map(|section| section.rows.len())
+            .sum::<usize>(),
+        2
+    );
+    let me = data.my_card.as_ref().expect("the owner has a card");
+    assert_eq!(me.meta, "My card");
+    assert!(me.star_label.is_empty());
+    assert!(data.rows.iter().all(|row| row.party_id != me.party_id));
+    send_home(&mut d, i, pick("sort", "recent"));
+    assert!(roster_data(d.view(i)).sections.is_empty());
 }

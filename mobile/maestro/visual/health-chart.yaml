@@ -1,0 +1,39 @@
+appId: ${APP_ID}
+name: Apple Health steps detail and chart controls
+---
+- launchApp:
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: home-grid
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: home-tile-health
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: home-tile-health
+- scrollUntilVisible:
+    element:
+      id: health-metric-steps
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: health-metric-steps
+- extendedWaitUntil:
+    visible:
+      id: health-metric-page
+    timeout: 60000
+- assertVisible:
+    id: health-metric-range
+- takeScreenshot: health-chart-top
+- scrollUntilVisible:
+    element:
+      id: health-metric-scrubber
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: health-metric-scrubber
+- takeScreenshot: health-chart-scrubber

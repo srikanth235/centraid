@@ -4,8 +4,8 @@ import SwiftUI
 //
 // Every word, number and unit here is the state's, and every length is the state's basis points
 // of its own span (10,000 is full): nothing here computes a typical, a range or a delta, and
-// nothing picks a unit. The identity hue (olive, R-1129-10) is drawn in exactly one place — the
-// bar of the period a chart's `current` names — and the app's icon chip, which is the catalogue's.
+// nothing picks a unit. Health's raspberry identifies every metric; its stronger fills
+// distinguish current and selected buckets without judging a reading.
 
 /// A basis point length as a fraction, clamped: 10,000 is the whole span.
 func healthFraction<Number: BinaryInteger>(_ basisPoints: Number) -> CGFloat {
@@ -283,9 +283,9 @@ struct HealthSparkline: View {
                 drawing = true
                 last = at
             }
-            context.stroke(line, with: .color(Theme.color("textSoft", scheme)), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            context.stroke(line, with: .color(Theme.color("healthText", scheme)), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             if let last {
-                context.fill(Path(ellipseIn: CGRect(x: last.x - 3, y: last.y - 3, width: 6, height: 6)), with: .color(Theme.color("text", scheme)))
+                context.fill(Path(ellipseIn: CGRect(x: last.x - 3, y: last.y - 3, width: 6, height: 6)), with: .color(Theme.color("healthText", scheme)))
             }
         }
         .frame(width: 120, height: 48)
@@ -297,25 +297,30 @@ struct HealthSparkline: View {
 
 /// ONE METRIC OVER A WEEK, A MONTH OR A YEAR: a bar a bucket, its height the state's basis points
 /// of the chart, no bar for a bucket with no value; the typical as a dashed rule with its label.
-/// THE CURRENT BUCKET IS THE ONE HUE MARK (R-1129-10); a bucket above the typical is drawn in
-/// soft ink, the rest in the quiet line.
+/// Health's hue identifies every bucket. Stronger fill and an outline distinguish the current
+/// and selected buckets; none of the readings is assigned a success or error color.
 struct HealthBarChart: View {
     let data: Centraid_Core_V1_HealthMetricData
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let hue = scheme.centraidMarks["health"]?.hue ?? Theme.color("text", scheme)
+        let hue = Theme.color("healthFill", scheme)
         let spacing: CGFloat = data.bars.count > 14 ? 3 : 8
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { proxy in
                 let height = proxy.size.height
                 ZStack(alignment: .topLeading) {
                     HStack(alignment: .bottom, spacing: spacing) {
-                        ForEach(Array(data.bars.enumerated()), id: \.offset) { _, bar in
-                            let fill = bar.current ? hue : Theme.color(bar.aboveTypical ? "textSoft" : "lineStrong", scheme)
+                        ForEach(Array(data.bars.enumerated()), id: \.offset) { index, bar in
+                            let fill = bar.current ? hue : Theme.color(bar.aboveTypical ? "healthText" : "healthTint", scheme)
                             RoundedRectangle(cornerRadius: spacing > 5 ? 4 : 2)
                                 .fill(bar.hasValue_p ? fill : Color.clear)
+                                .overlay {
+                                    if index == Int(data.selectedIndex), bar.hasValue_p {
+                                        RoundedRectangle(cornerRadius: spacing > 5 ? 4 : 2).stroke(Theme.color("healthText", scheme), lineWidth: 2)
+                                    }
+                                }
                                 .frame(height: bar.hasValue_p ? max(height * healthFraction(bar.heightBp), 2) : 0)
                                 .frame(maxWidth: .infinity)
                         }

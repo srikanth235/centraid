@@ -273,8 +273,15 @@ fn a_sheet_has_the_contact_points_dates_notes_and_touches_of_one_person() {
             .collect::<Vec<_>>(),
         [("call", "Call", "long call")]
     );
-    // No live person: an unknown id, the owner and a pet are not sheets.
-    for id in ["nobody", owner.as_str(), pet.as_str()] {
+    // My card is an explicit sheet, but remains outside the contacts circle.
+    assert!(
+        w.read(|door| load_person(door, &owner).expect("reads"))
+            .0
+            .person
+            .is_some()
+    );
+    // An unknown id and a pet are not contact sheets.
+    for id in ["nobody", pet.as_str()] {
         assert!(
             w.read(|door| load_person(door, id).expect("reads"))
                 .0
@@ -347,5 +354,38 @@ fn an_empty_vault_answers_every_read_empty() {
             .0
             .people
             .is_empty()
+    );
+}
+
+#[test]
+fn my_card_is_separate_from_the_circle_and_vault_links_only_name_live_supported_items() {
+    let w = World::new();
+    let person = w.person("Dana", json!({}));
+    let note = w.ok(
+        "person.add_note",
+        json!({"id":person,"text":"Bring the book"}),
+    );
+    let dead = w.ok("person.add_note", json!({"id":person,"text":"Cancelled"}));
+    w.ok("entity.trash", json!({"id": dead["note_id"]}));
+    let owner = w.vault.self_id().unwrap().unwrap();
+    let (roster, denied) = w.read(|door| load_people(door, PeopleInput::default()).unwrap());
+    assert!(denied.is_none());
+    assert_eq!(roster.my_card.as_ref().unwrap().party_id, owner);
+    assert!(roster.people.iter().all(|row| row.party_id != owner));
+    let (sheet, denied) = w.read(|door| load_person(door, &person).unwrap());
+    assert!(denied.is_none());
+    let sheet = sheet.person.unwrap();
+    assert!(!sheet.vault_links_truncated);
+    assert!(
+        sheet
+            .vault_links
+            .iter()
+            .any(|link| link.id == note["note_id"].as_str().unwrap() && link.kind == "note")
+    );
+    assert!(
+        !sheet
+            .vault_links
+            .iter()
+            .any(|link| link.id == dead["note_id"].as_str().unwrap())
     );
 }

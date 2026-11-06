@@ -3,7 +3,14 @@
 catalog! {
     plain app_title = ("Health", "Health");
     plain band_more = ("More", "More");
-    plain band_today = ("Today", "Today");
+    plain band_today = ("Summary", "Summary");
+    plain summary_title = ("Summary", "Summary");
+    plain pinned_empty = ("Choose metrics from the filter above to pin them here.", "Choose metrics from the filter above to pin them here.");
+    plain pinned_title = ("Pinned", "Pinned");
+    plain highlights_title = ("Highlights", "Highlights");
+    plain highlight_average = ("{value} over {n} recorded days", "{value} over {n} recorded days");
+    plain scrubber_label = ("Explore readings", "Explore readings");
+    plain no_reading = ("No reading", "No reading");
     plain band_trends = ("Trends", "Trends");
     plain band_workouts = ("Workouts", "Workouts");
     plain caption_month = ("Last 30 days", "Last 30 days");
@@ -101,6 +108,7 @@ catalog! {
     plain range_days_30 = ("30 days", "30 days");
     plain range_days_90 = ("90 days", "90 days");
     plain range_month = ("Month", "Month");
+    plain range_six_months = ("6M", "6M");
     plain range_week = ("Week", "Week");
     plain range_year = ("Year", "Year");
     plain read_incomplete = ("Couldn’t read this page. Try again.", "Couldn’t read this page. Try again.");

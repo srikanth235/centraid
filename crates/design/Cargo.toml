@@ -10,8 +10,3 @@ repository.workspace = true
 [lib]
 name = "centraid_design"
 path = "src/lib.rs"
-
-[dependencies]
-serde_json.workspace = true
-
-[dev-dependencies]

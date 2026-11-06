@@ -3,6 +3,8 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -91,7 +94,7 @@ public fun KitChip(
     ) {
         Row(
             Modifier
-                .height(32.dp)
+                .heightIn(min = 32.dp)
                 .clip(shape)
                 .background(centraidColor(if (selected) "bgSunken" else "bg"), shape)
                 .border(KitGeometry.HAIRLINE, centraidColor(if (selected) "lineStrong" else "line"), shape)
@@ -134,6 +137,7 @@ public fun KitSegmented(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val largeText = LocalDensity.current.fontScale > 1.3f
     val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
     Row(
         modifier
@@ -141,14 +145,14 @@ public fun KitSegmented(
             .clip(shape)
             .background(centraidColor("bgElev"))
             .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), shape)
+            .then(if (largeText) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
             .padding(BandPolicy.BAND_PLATE_PAD.dp)
             .semantics { role = Role.Tab },
     ) {
         options.forEach { (key, label) ->
             val lit = key == selected
             Column(
-                Modifier
-                    .weight(1f)
+                (if (largeText) Modifier.widthIn(min = 72.dp) else Modifier.weight(1f))
                     .heightIn(min = 36.dp)
                     .bandPress({ onSelect(key) })
                     .padding(horizontal = 4.dp, vertical = 6.dp)
@@ -163,7 +167,7 @@ public fun KitSegmented(
                 Text(
                     label,
                     // THE HELD PAIR: one rung, two weights, no reflow.
-                    style = centraidType(if (lit) "control" else "band", scales = false),
+                    style = centraidType(if (lit) "control" else "band"),
                     color = centraidColor(if (lit) "text" else "textSoft"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -404,8 +408,11 @@ public fun StageKey(
     /** The label is drawn under the mark (a trashed photograph's Restore and Delete forever). */
     showLabel: Boolean = false,
     destructive: Boolean = false,
+    selectedInk: String = "onStage",
+    ink: String = "onStage",
+    disabledInk: String = "onStageSoft",
 ) {
-    val ink = centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    val resolvedInk = centraidColor(if (!enabled) disabledInk else if (destructive) "net" else if (on) selectedInk else ink)
     Column(
         modifier
             .defaultMinSize(minWidth = KitGeometry.ROW_MIN, minHeight = KitGeometry.ROW_MIN)
@@ -420,8 +427,8 @@ public fun StageKey(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = on)
-        if (showLabel) Text(text = label, color = ink, style = centraidType("small"), maxLines = 1)
+        CentraidIcon(iconKey = iconKey, tint = resolvedInk, size = 24.dp, solid = on)
+        if (showLabel) Text(text = label, color = resolvedInk, style = centraidType("small"))
     }
 }
 

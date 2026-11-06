@@ -248,7 +248,7 @@ impl SystemMap {
     }
 
     /// Whether two values of the field say the same thing.
-    fn agree(&self, name: &str, left: Option<&Json>, right: Option<&Json>) -> bool {
+    pub(super) fn agree(&self, name: &str, left: Option<&Json>, right: Option<&Json>) -> bool {
         match self.child(name) {
             Some(child) => same(
                 left.map(child.canon).as_ref(),
@@ -361,8 +361,56 @@ const LINE: Child = Child {
     merge: stated_merge,
 };
 
-/// The five systems the vault follows.
+/// The systems the vault follows.
 pub const SYSTEMS: &[SystemMap] = &[
+    SystemMap {
+        system: "reminders",
+        command: "follow.reminders",
+        kind: Kind::Task,
+        fills: Some(Kind::Project),
+        origin: OriginOf::Phone,
+        claims: None,
+        fields: &[
+            "description",
+            "url",
+            "due",
+            "zone",
+            "priority",
+            "rule",
+            "status",
+            "done_at",
+        ],
+        fixed: &[],
+        children: &[
+            Child {
+                name: "reminders",
+                read: super::reminder_import::alarms,
+                canon: super::calendar_sync::sorted,
+                merge: super::reminder_import::merge_alarms,
+            },
+            Child {
+                name: "flagged",
+                read: super::reminder_import::flagged,
+                canon: super::reminder_import::canon,
+                merge: super::reminder_import::merge_flag,
+            },
+            Child {
+                name: "parent_key",
+                read: super::reminder_import::parent,
+                canon: super::reminder_import::canon,
+                merge: super::reminder_import::merge_parent,
+            },
+        ],
+        match_on: &[Match::Title, Match::Column("due")],
+        gone: Gone::Keep,
+        window: None,
+        defaults: super::reminder_import::defaults,
+        founds: Some(super::reminder_import::list),
+        shape: super::reminder_import::shape,
+        settle: nothing_to_settle,
+        replaced: nothing_replaced,
+        named: nothing_to_settle,
+    },
     SystemMap {
         system: "contacts",
         command: "follow.contacts",
@@ -406,12 +454,32 @@ pub const SYSTEMS: &[SystemMap] = &[
             "busy",
         ],
         fixed: &[],
-        children: &[Child {
-            name: "overrides",
-            read: event::overrides_read,
-            canon: event::overrides_canon,
-            merge: event::overrides_merge,
-        }],
+        children: &[
+            Child {
+                name: "overrides",
+                read: event::overrides_read,
+                canon: event::overrides_canon,
+                merge: event::overrides_merge,
+            },
+            Child {
+                name: "reminders",
+                read: super::calendar_sync::reminders,
+                canon: super::calendar_sync::sorted,
+                merge: super::calendar_sync::merge_reminders,
+            },
+            Child {
+                name: "attendees",
+                read: super::calendar_sync::attendees,
+                canon: super::calendar_sync::guest_keys,
+                merge: super::calendar_sync::merge_attendees,
+            },
+            Child {
+                name: "location",
+                read: super::calendar_sync::location,
+                canon: super::calendar_sync::place_name,
+                merge: super::calendar_sync::merge_location,
+            },
+        ],
         match_on: &[Match::Title, Match::Column("starts")],
         gone: Gone::Trash,
         window: None,
@@ -521,7 +589,11 @@ fn same(left: Option<&Json>, right: Option<&Json>) -> bool {
 }
 
 /// The columns a row holds now, for the fields named, as JSON.
-fn current(connection: &Connection, map: &SystemMap, id: &str) -> Result<Map<String, Json>> {
+pub(super) fn current(
+    connection: &Connection,
+    map: &SystemMap,
+    id: &str,
+) -> Result<Map<String, Json>> {
     let mut out = Map::new();
     let title: String =
         connection.query_row("SELECT title FROM entity WHERE id = ?1", [id], |row| {
@@ -720,12 +792,15 @@ struct Tally {
     refused: usize,
 }
 
-struct Record {
-    external_id: String,
-    device_id: Option<String>,
+pub(super) struct Record {
+    pub(super) external_id: String,
+    pub(super) device_id: Option<String>,
+    // A calendar provider may assign a portable UID after a local creation.
+    // This alias is accepted only for this origin's current phone.
+    previous_external_id: Option<String>,
     /// The size of the bytes the record names (`claims`), counted by the phone.
     size: Option<i64>,
-    fields: Map<String, Json>,
+    pub(super) fields: Map<String, Json>,
 }
 
 /// A record's identity: its id at the source and the phone it is on.
@@ -747,6 +822,10 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
             .cloned()
             .unwrap_or_default();
         let record = Record {
+            previous_external_id: raw
+                .get("previous_external_id")
+                .and_then(Json::as_str)
+                .map(str::to_owned),
             external_id: raw
                 .get("external_id")
                 .and_then(Json::as_str)
@@ -1102,6 +1181,18 @@ fn merge_record(
     tally: &mut Tally,
 ) -> Result<()> {
     let connection = ctx.connection();
+    if map.system == "calendar"
+        && record.external_id.starts_with("uid:")
+        && record.device_id.is_none()
+        && source_of(connection, &origin.id, record)?.is_none()
+        && let Some(previous) = record
+            .previous_external_id
+            .as_deref()
+            .filter(|id| id.starts_with("local:"))
+        && let Some(device) = origin.device.as_deref()
+    {
+        connection.execute("UPDATE source SET external_id = ?3, device_id = NULL WHERE origin_id = ?1 AND device_id = ?2 AND external_id = ?4 AND system = 'calendar'", rusqlite::params![origin.id, device, record.external_id, previous])?;
+    }
     let Some((source_id, entity_id, stated, gone_at)) = source_of(connection, &origin.id, record)?
     else {
         // A record the vault has not seen: match it to a row of the member's
@@ -1295,6 +1386,8 @@ fn settle_absent(
             };
             if other_phone(row)
                 || before_window(connection, map, entity_id, since)?
+                || (map.system == "calendar"
+                    && super::calendar_sync::outside_window(ctx, entity_id)?)
                 || entity::require(connection, entity_id)?.deleted_at.is_some()
             {
                 continue;
@@ -1310,6 +1403,10 @@ fn settle_absent(
 
     for row in rows.iter().filter(|row| absent(row)) {
         let Some(entity_id) = &row.entity_id else {
+            if map.system == "calendar" && super::calendar_sync::outside_statement(ctx, &row.stated)
+            {
+                continue;
+            }
             // A tombstone whose record is gone is forgotten; the table does not
             // grow with every contact the member ever purged. A record dated
             // before the read began is not one the read could have held.
@@ -1323,6 +1420,9 @@ fn settle_absent(
             continue;
         };
         if before_window(connection, map, entity_id, since)? {
+            continue;
+        }
+        if map.system == "calendar" && super::calendar_sync::outside_window(ctx, entity_id)? {
             continue;
         }
         // Another phone's record is forgotten and the row kept, for the new
@@ -1381,6 +1481,11 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
             &mut tally,
         )?;
     }
+    let writes = if map.system == "calendar" && complete {
+        super::calendar_sync::writes(ctx, map, &origin, &records)?
+    } else {
+        serde_json::json!([])
+    };
     Ok(serde_json::json!({
         "origin": origin.id,
         "added": tally.added,
@@ -1392,6 +1497,7 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         "restored": tally.restored,
         "doubted": tally.doubted,
         "refused": tally.refused,
+        "writes": writes,
     }))
 }
 
@@ -1493,12 +1599,24 @@ const SCHEMA: &str = r#"{
   }
 }"#;
 
+fn calendar_schema() -> &'static str {
+    static CALENDAR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    CALENDAR.get_or_init(|| {
+        let mut schema: Json = serde_json::from_str(SCHEMA).expect("the static follow schema parses");
+        schema["properties"]["records"]["items"]["properties"]["previous_external_id"] = serde_json::json!({
+            "type": ["string", "null"],
+            "description": "A calendar row's former local id on this phone, when the provider assigned its portable UID."
+        });
+        schema.to_string()
+    })
+}
+
 const STOP_SCHEMA: &str = r#"{
   "type": "object",
   "required": ["system", "ref"],
   "additionalProperties": false,
   "properties": {
-    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement"] },
+    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement", "reminders"] },
     "ref": { "type": "string", "minLength": 1 }
   }
 }"#;
@@ -1539,7 +1657,11 @@ pub fn definitions() -> Vec<CommandDefinition> {
             CommandDefinition::plain(
                 map.command,
                 "follow",
-                SCHEMA,
+                if map.system == "calendar" {
+                    calendar_schema()
+                } else {
+                    SCHEMA
+                },
                 Idempotency::Idempotent,
                 &[CommandCondition {
                     predicate: "records_say_where_they_came_from",

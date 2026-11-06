@@ -85,14 +85,14 @@ fn upload_picks_then_files_the_staged_bytes_and_opens_the_document() {
     // The document is in the drive, a PDF by its name.
     let row = row(d.view(i), "Lease.pdf");
     assert_eq!(row.kind_label, "PDF");
-    // The shell is asked to open its page, back word "Docs".
+    // The shell is asked to open its page, returning to Recents.
     let route = opened(&d).expect("the document opens");
     assert_eq!(route.screen, docs::DOCUMENT);
     let Some(wire::route::Args::DocsDocument(args)) = route.args else {
         panic!("a document route");
     };
     assert_eq!(args.document_id, row.document_id);
-    assert_eq!(args.parent, "Docs");
+    assert_eq!(args.parent, "Recents");
     // The line never clears itself: the member puts it away.
     drive_send(&mut d, i, D::IngestDismissed(de::IngestDismissed {}));
     assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);

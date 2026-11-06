@@ -1,31 +1,11 @@
-//! AGENDA'S HOME (#1046, #1128): Day, Schedule, Waiting and To-do, with Search
-//! as a mode and More as a sheet.
-//!
-//! The band holds places only (R-CHROME-5): Day, Schedule, Waiting, To-do, then
-//! More; there is no month or hour grid. To-do is the Inbox and the projects
-//! ([`place`]); it reads tasks and no event, and has no day bar. Search is the
-//! bar under the title (R-CHROME-2), opened by `SearchOpened`, and the More
-//! sheet's rows are computed here ([`chrome::more_rows`]) so both platforms draw
-//! one list. Opening lands on Day, anchored on the `today` the core answers,
-//! never on a device-clock guess.
-//!
-//! ## What reads and what re-folds
-//!
-//! A read is a WINDOW: the anchor and the place's span (a day, or
-//! [`held::LIST_DAYS`]). Everything else is local and re-folds the held answers:
-//! hiding a calendar, Schedule to Waiting (one window), closing search. A
-//! search term reads the search alone while the window is held. A change event
-//! or a pull clears every held answer and reads again. Loads and writes are
-//! synchronous, so a gesture that writes reads again before the view is drawn.
-//!
-//! ## Rows open pages by their own route
-//!
-//! An event row, a task row, a project row or container, the Plus on the add
-//! sheet, the Overdue verb and the absence notice carry the [`wire::Route`] to
-//! push; this screen never sees the tap.
+//! Calendar and Reminders share one Agenda, with Invites and More in its band.
+//! Calendar owns day/week hour grids, month/year cells and the schedule list.
+//! Rust builds the civil dates, routes, selection, filters and mutation intents;
+//! native shells lay out the supplied state and report gestures.
 
 mod chrome;
 mod fold;
+mod grid;
 mod held;
 mod place;
 mod search;
@@ -37,11 +17,13 @@ use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
 use self::held::Held;
+use super::appearance::{Appearance, CalendarEditor};
 use super::calendar::CalendarFollow;
 use super::routes;
 use super::todo::ops::Ops;
 use super::todo::rows;
 use crate::catalog::act;
+use crate::field::Field;
 use crate::kit::civil;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{agenda as words, agenda_home as sentences, fill, task};
@@ -59,6 +41,8 @@ pub(super) enum Phase {
 #[derive(Default)]
 struct QuickAdd {
     title: String,
+    due: Option<String>,
+    flagged: bool,
     /// The bar is drawn: the Plus (or Notes' "Send to Agenda") opened it.
     drawn: bool,
     focused: bool,
@@ -67,6 +51,7 @@ struct QuickAdd {
 pub(super) struct Home {
     phase: Phase,
     destination: Dest,
+    calendar_view: String,
     /// The day the surface is anchored on; EMPTY until an answer names today.
     anchor: String,
     /// The day the core last named as today.
@@ -78,6 +63,9 @@ pub(super) struct Home {
     sheet: Sheet,
     filing_task_id: String,
     new_project_name: String,
+    new_project_style: Appearance,
+    calendar_editor: Option<CalendarEditor>,
+    include_completed_import: bool,
     quick: QuickAdd,
     /// To-do's window, widened by "Show more".
     limit: u32,
@@ -85,6 +73,9 @@ pub(super) struct Home {
     held: Held,
     /// The phone's calendar, imported and followed for as long as Agenda is up.
     calendar: CalendarFollow,
+    notification_status: super::notification_status::Status,
+    reminder_import_pending: Option<bool>,
+    import_status: Option<wire::StatusLine>,
 }
 
 /// The registry factory.
@@ -111,6 +102,12 @@ impl Home {
         Self {
             phase: Phase::Loading,
             destination,
+            calendar_view: if destination == Dest::Schedule {
+                "list"
+            } else {
+                "day"
+            }
+            .to_owned(),
             anchor: String::new(),
             today: String::new(),
             search_open: false,
@@ -119,15 +116,22 @@ impl Home {
             sheet: Sheet::None,
             filing_task_id: String::new(),
             new_project_name: String::new(),
+            new_project_style: Appearance::default(),
+            calendar_editor: None,
+            include_completed_import: false,
             quick: QuickAdd {
                 drawn: !seed.is_empty(),
                 focused: !seed.is_empty(),
                 title: seed,
+                ..Default::default()
             },
             limit: rows::PAGE,
             ops: Ops::default(),
             held: Held::default(),
             calendar: CalendarFollow::new(),
+            notification_status: super::notification_status::Status::default(),
+            reminder_import_pending: None,
+            import_status: None,
         }
     }
 
@@ -158,6 +162,12 @@ impl Home {
         self.shut_quick_add();
         self.close_search();
         self.destination = destination;
+        if destination == Dest::Schedule {
+            self.calendar_view = "list".into();
+        }
+        if destination == Dest::Day && self.calendar_view == "list" {
+            self.calendar_view = "day".into();
+        }
         self.sheet = Sheet::None;
         self.read(ctx);
     }
@@ -185,6 +195,27 @@ impl Home {
     fn on_event(&mut self, event: H, ctx: &Ctx) {
         match event {
             H::Refreshed(_) => self.refresh(ctx),
+            H::EventAdjusted(adjustment) => self.adjust_event(ctx, &adjustment),
+            H::CalendarView(picked) => {
+                if grid::VIEWS.contains(&picked.key.as_str()) && !self.denied() {
+                    self.calendar_view = picked.key;
+                    let destination = if self.calendar_view == "list" {
+                        Dest::Schedule
+                    } else {
+                        Dest::Day
+                    };
+                    self.move_to(destination, ctx);
+                }
+            }
+            H::CalendarDay(picked) => {
+                if civil::epoch_day_of(&picked.day).is_some() && !self.denied() {
+                    self.anchor = picked.day;
+                    if self.calendar_view == "year" {
+                        self.calendar_view = "month".to_owned();
+                    }
+                    self.read(ctx);
+                }
+            }
             // Taken before this match: it returns the shell's effects.
             H::ImportRequested(_) => {}
             H::Destination(moved) => {
@@ -192,7 +223,14 @@ impl Home {
                 self.move_to(destination, ctx);
             }
             H::Band(picked) => match picked.key.as_str() {
-                chrome::BAND_DAY => self.move_to(Dest::Day, ctx),
+                chrome::BAND_DAY => self.move_to(
+                    if self.calendar_view == "list" {
+                        Dest::Schedule
+                    } else {
+                        Dest::Day
+                    },
+                    ctx,
+                ),
                 chrome::BAND_SCHEDULE => self.move_to(Dest::Schedule, ctx),
                 chrome::BAND_WAITING => self.move_to(Dest::Waiting, ctx),
                 chrome::BAND_TODO => self.move_to(Dest::Todo, ctx),
@@ -257,6 +295,12 @@ impl Home {
                     self.refresh(ctx);
                 }
             }
+            H::TaskAction(action) => {
+                if let Some(task) = self.held.find(&action.task_id) {
+                    self.ops.row_action(ctx, &task, &action);
+                    self.refresh(ctx);
+                }
+            }
             H::StatusActed(_) => {
                 self.ops.undo(ctx);
                 self.refresh(ctx);
@@ -269,6 +313,14 @@ impl Home {
             }
             H::FileChosen(chosen) => self.file(&chosen.key, ctx),
             H::QuickAddChanged(typed) => self.quick.title = typed.title,
+            H::QuickAddTool(tool) => {
+                crate::agenda::todo::quick::pick(
+                    &tool.key,
+                    &self.held.today(),
+                    &mut self.quick.due,
+                    &mut self.quick.flagged,
+                );
+            }
             H::QuickAddSubmitted(_) => self.add(ctx),
             // THE PLUS OPENS THE BAR on the keyboard (R-CHROME-1), on To-do only.
             H::QuickAddOpened(_) => {
@@ -284,6 +336,9 @@ impl Home {
                     self.shut_quick_add();
                 }
             }
+            H::ContainerForm(changed) => self.change_container(ctx, &changed.field, &changed.value),
+            H::ContainerSaved(_) => self.save_calendar(ctx),
+            H::ImportOptions(changed) => self.include_completed_import = changed.include_completed,
             H::NewProjectName(typed) => self.new_project_name = typed.name,
             H::NewProjectSubmitted(_) => self.create_project(ctx),
             // THE EMPTY TO-DO'S ONE ACTION is the new-project sheet.
@@ -308,14 +363,115 @@ impl Home {
         }
     }
 
+    fn adjust_event(&mut self, ctx: &Ctx, adjustment: &wire::agenda_home_event::EventAdjusted) {
+        use crate::catalog::act::agenda as action;
+        use crate::field::Field;
+        let Some(event) = self
+            .held
+            .upcoming
+            .as_ref()
+            .and_then(|upcoming| {
+                upcoming
+                    .events
+                    .iter()
+                    .find(|event| event.instance_key == adjustment.instance_key)
+            })
+            .cloned()
+        else {
+            return;
+        };
+        if event.all_day
+            || adjustment.delta_minutes == 0
+            || adjustment.delta_minutes.unsigned_abs() > 10080
+        {
+            return;
+        }
+        let Some((starts, ends)) = grid::adjusted_times(
+            &event,
+            ctx.zone(),
+            adjustment.delta_minutes,
+            adjustment.resize,
+        ) else {
+            return;
+        };
+        let event_zone = event.start_tz.as_deref().unwrap_or(ctx.zone());
+        let (Some(starts), Some(ends)) = (
+            grid::in_event_zone(&starts, ctx.zone(), event_zone),
+            grid::in_event_zone(&ends, ctx.zone(), event_zone),
+        ) else {
+            return;
+        };
+        let request: wire::ActRequest = if let Some(original) = &event.original_start_local {
+            action::EditOccurrence {
+                event_id: event.event_id.clone(),
+                original_start: original.clone(),
+                scope: action::EditOccurrenceScope::Occurrence,
+                action: action::EditOccurrenceAction::Override,
+                starts: Some(starts),
+                ends: Field::Is(ends),
+                zone: Field::Is(event_zone.to_owned()),
+                ..Default::default()
+            }
+            .into()
+        } else {
+            action::EditEvent {
+                event_id: event.event_id.clone(),
+                starts: Some(starts),
+                ends: Field::Is(ends),
+                zone: Field::Is(event_zone.to_owned()),
+                ..Default::default()
+            }
+            .into()
+        };
+        self.ops.created(
+            ctx,
+            request,
+            &event.instance_key,
+            if adjustment.resize {
+                words::resized(ctx.locale())
+            } else {
+                words::moved(ctx.locale())
+            },
+        );
+        self.refresh(ctx);
+    }
+
     /// A More row, by its key. A key the sheet does not hold now (a calendar
     /// gone since it was drawn) does nothing.
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
         let rows = self.more_rows(ctx);
-        let Some(row) = rows.iter().find(|row| row.key == key) else {
+        let Some(row) = rows
+            .iter()
+            .find(|row| row.key == key || row.edit_key == key)
+        else {
             return;
         };
-        if row.key == chrome::MORE_READS {
+        if key == chrome::MORE_NEW_CALENDAR {
+            self.calendar_editor = Some(CalendarEditor {
+                appearance: Appearance {
+                    icon: "Calendar".to_owned(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            self.sheet = Sheet::CalendarEditor;
+        } else if let Some(id) = key.strip_prefix(chrome::MORE_EDIT_CALENDAR) {
+            if let Some(calendar) = self.held.upcoming.as_ref().and_then(|upcoming| {
+                upcoming
+                    .calendars
+                    .iter()
+                    .find(|calendar| calendar.calendar_id == id)
+            }) {
+                self.calendar_editor = Some(CalendarEditor {
+                    id: id.to_owned(),
+                    name: calendar.name.clone().unwrap_or_default(),
+                    appearance: Appearance::of(id, calendar.color.as_deref(), &calendar.icon_key),
+                });
+                self.sheet = Sheet::CalendarEditor;
+            }
+        } else if key == chrome::MORE_IMPORT {
+            self.sheet = Sheet::Imports;
+        } else if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
         } else if let Some(id) = row.key.strip_prefix(chrome::MORE_CALENDAR) {
             let id = id.to_owned();
@@ -349,8 +505,19 @@ impl Home {
             return;
         }
         let inbox = task::inbox(ctx.locale());
-        if self.ops.add(ctx, &title, "", &inbox, None, None) {
+        if self.ops.add_quick(
+            ctx,
+            &title,
+            &self.held.today(),
+            &inbox,
+            crate::agenda::todo::quick::Options {
+                due: self.quick.due.as_deref(),
+                flagged: self.quick.flagged,
+                ..Default::default()
+            },
+        ) {
             self.quick.title.clear();
+            self.quick.flagged = false;
         }
         self.refresh(ctx);
     }
@@ -363,13 +530,117 @@ impl Home {
         let request = act::agenda::CreateProject {
             kind: act::agenda::CreateProjectKind::Project,
             title: name.clone(),
+            color: Field::Is(self.new_project_style.color.clone()),
+            icon_key: Field::Is(self.new_project_style.icon.clone()),
             ..Default::default()
         };
-        self.ops
-            .created(ctx, request, &name, task::project_created(ctx.locale()));
+        if !self
+            .ops
+            .created(ctx, request, &name, task::project_created(ctx.locale()))
+        {
+            return;
+        }
         self.sheet = Sheet::None;
         self.new_project_name.clear();
         self.refresh(ctx);
+    }
+
+    fn change_container(&mut self, ctx: &Ctx, field: &str, value: &str) {
+        if self.sheet == Sheet::NewProject {
+            self.new_project_style.change(field, value);
+            return;
+        }
+        let Some(editor) = &mut self.calendar_editor else {
+            return;
+        };
+        if field == "name" {
+            editor.name = value.to_owned();
+            return;
+        }
+        let before = editor.appearance.clone();
+        if !editor.appearance.change(field, value) {
+            return;
+        }
+        if editor.id.is_empty() {
+            return;
+        }
+        let request = act::agenda::StyleList {
+            list_id: editor.id.clone(),
+            color: Field::Is(editor.appearance.color.clone()),
+            icon_key: Field::Is(editor.appearance.icon.clone()),
+        };
+        if !self.ops.created(
+            ctx,
+            request,
+            &editor.id,
+            words::appearance_saved(ctx.locale()),
+        ) {
+            editor.appearance = before;
+        }
+        self.refresh(ctx);
+    }
+
+    fn save_calendar(&mut self, ctx: &Ctx) {
+        let Some(editor) = self.calendar_editor.as_ref() else {
+            return;
+        };
+        let name = editor.name.trim().to_owned();
+        if name.is_empty() {
+            return;
+        }
+        let request: wire::ActRequest = if editor.id.is_empty() {
+            act::agenda::CreateCalendar {
+                title: name.clone(),
+                color: Field::Is(editor.appearance.color.clone()),
+                icon_key: Field::Is(editor.appearance.icon.clone()),
+                ..Default::default()
+            }
+            .into()
+        } else {
+            act::agenda::RenameList {
+                list_id: editor.id.clone(),
+                title: name.clone(),
+            }
+            .into()
+        };
+        if self
+            .ops
+            .created(ctx, request, &name, words::calendar_saved(ctx.locale()))
+        {
+            self.sheet = Sheet::None;
+            self.calendar_editor = None;
+            self.refresh(ctx);
+        }
+    }
+
+    fn import_options(&self, ctx: &Ctx) -> wire::AgendaImportOptions {
+        let locale = ctx.locale();
+        let mut options = vec![wire::AgendaImportOption {
+            key: "calendar".to_owned(),
+            label: words::import_calendar(locale),
+            source: wire::ImportSource::Calendar as i32,
+            from_file: false,
+        }];
+        if ctx.platform() == "ios" {
+            options.push(wire::AgendaImportOption {
+                key: "reminders".to_owned(),
+                label: words::import_reminders(locale),
+                source: wire::ImportSource::Reminders as i32,
+                from_file: false,
+            });
+        }
+        options.push(wire::AgendaImportOption {
+            key: "reminders-file".to_owned(),
+            label: words::import_reminders_file(locale),
+            source: wire::ImportSource::Reminders as i32,
+            from_file: true,
+        });
+        wire::AgendaImportOptions {
+            title: words::import_title(locale),
+            include_completed_label: words::import_completed(locale),
+            include_completed: self.include_completed_import,
+            options,
+        }
     }
 
     /// The data the held answers draw, or `None` when they are not for this state.
@@ -408,13 +679,100 @@ impl Screen for Home {
                 self.refresh(ctx);
                 return self.calendar.attach();
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::EnvironmentChanged(_)) => {
+                self.refresh(ctx);
+                self.calendar.request(ctx);
+            }
+            Some(E::DataChanged(changed)) => {
+                self.refresh(ctx);
+                if changed.tables.iter().any(|table| {
+                    ["event", "entity", "occurrence", "edge", "contact_point"]
+                        .contains(&table.as_str())
+                }) {
+                    self.calendar.request(ctx);
+                }
+            }
+            Some(E::Announced(announced)) => self.notification_status.hear(&announced.topic),
             Some(E::AgendaHome(home)) => match home.kind {
-                Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                Some(H::StatusActed(_))
+                    if self.import_status.is_none()
+                        && self.calendar.status().is_none()
+                        && self.ops.status.is_none()
+                        && self.notification_status.active() =>
+                {
+                    return self.notification_status.act(ctx);
+                }
+                Some(H::ImportRequested(request)) => {
+                    self.sheet = Sheet::None;
+                    self.import_status = None;
+                    if request.source == wire::ImportSource::Reminders as i32 || request.from_file {
+                        if self.reminder_import_pending.is_some() {
+                            return Vec::new();
+                        }
+                        self.reminder_import_pending = Some(request.include_completed);
+                        let kind = if request.from_file {
+                            wire::effect::Kind::PickBytes(wire::PickBytes {
+                                accept: vec![
+                                    "text/calendar".to_owned(),
+                                    ".ics".to_owned(),
+                                    ".ical".to_owned(),
+                                ],
+                            })
+                        } else {
+                            wire::effect::Kind::RemindersRead(wire::RemindersRead {
+                                ask_permission: true,
+                                include_completed: request.include_completed,
+                            })
+                        };
+                        return vec![wire::Effect { kind: Some(kind) }];
+                    }
+                    return self.calendar.import(ctx);
+                }
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
             Some(other) => {
+                if let (Some(include_completed), E::EffectResult(result)) =
+                    (self.reminder_import_pending, &other)
+                {
+                    use wire::effect_result::Outcome as O;
+                    let snapshot = match &result.outcome {
+                        Some(O::RemindersSnapshot(snapshot)) => Some(Ok(snapshot.clone())),
+                        Some(O::BytesPicked(file)) if file.cancelled => {
+                            self.reminder_import_pending = None;
+                            return Vec::new();
+                        }
+                        Some(O::BytesPicked(file)) => Some(crate::imports::reminder_file::parse(
+                            &file.content,
+                            &file.name,
+                            include_completed,
+                            ctx.zone(),
+                        )),
+                        Some(O::Failed(_)) => Some(Err("the reminder source could not be read")),
+                        _ => None,
+                    };
+                    if let Some(snapshot) = snapshot {
+                        self.reminder_import_pending = None;
+                        let (sentence, refused) = match snapshot {
+                            Ok(snapshot) => {
+                                let outcome =
+                                    crate::imports::reminders::run_snapshot(ctx, &snapshot);
+                                (
+                                    crate::imports::reminders::sentence(ctx.locale(), outcome),
+                                    outcome.refused > 0,
+                                )
+                            }
+                            Err(_) => (task::import_reminders_failed(ctx.locale()), true),
+                        };
+                        self.import_status = Some(wire::StatusLine {
+                            sentence,
+                            refused,
+                            action_label: String::new(),
+                        });
+                        self.refresh(ctx);
+                        return Vec::new();
+                    }
+                }
                 if let Some(effects) = self.calendar.on_event(&other, ctx) {
                     return effects;
                 }
@@ -507,7 +865,18 @@ impl Screen for Home {
                         &today,
                         !denied && term.is_none(),
                     )),
-                    chrome: Some(chrome::words_of(locale)),
+                    chrome: Some(wire::AgendaChrome {
+                        title: match self.destination {
+                            Dest::Todo => words::band_todo(locale),
+                            Dest::Waiting => words::band_waiting(locale),
+                            _ => words::band_day(locale),
+                        },
+                        ..chrome::words_of(locale)
+                    }),
+                    calendar_grid: (!denied
+                        && !self.search_open
+                        && matches!(self.destination, Dest::Day | Dest::Schedule))
+                    .then(|| grid::build(self, locale, ctx.zone())),
                     more_rows: if denied {
                         Vec::new()
                     } else {
@@ -527,13 +896,43 @@ impl Screen for Home {
                         )
                     }),
                     status: self
-                        .calendar
-                        .status()
-                        .cloned()
-                        .or_else(|| self.ops.status.clone()),
+                        .import_status
+                        .clone()
+                        .or_else(|| {
+                            self.calendar
+                                .status()
+                                .cloned()
+                                .or_else(|| self.ops.status.clone())
+                        })
+                        .or_else(|| self.notification_status.view(locale)),
                     quick_add: Some(wire::TodoQuickAdd {
                         title: self.quick.title.clone(),
-                        can_submit: !self.quick.title.trim().is_empty(),
+                        can_submit: crate::agenda::todo::quick::with_due(
+                            &self.quick.title,
+                            &today,
+                            self.quick.due.as_deref(),
+                            locale,
+                        )
+                        .valid,
+                        preview: crate::agenda::todo::quick::with_due(
+                            &self.quick.title,
+                            &today,
+                            self.quick.due.as_deref(),
+                            locale,
+                        )
+                        .preview,
+                        tools: crate::agenda::todo::quick::tools(
+                            locale,
+                            &today,
+                            &crate::agenda::todo::quick::with_due(
+                                &self.quick.title,
+                                &today,
+                                self.quick.due.as_deref(),
+                                locale,
+                            )
+                            .due,
+                            self.quick.flagged,
+                        ),
                         lands_label: fill(
                             &sentences::lands_in(locale),
                             &[("place", &task::inbox(locale))],
@@ -550,6 +949,12 @@ impl Screen for Home {
                     } else {
                         Vec::new()
                     },
+                    container_form: self
+                        .calendar_editor
+                        .as_ref()
+                        .map(|editor| editor.view(locale)),
+                    new_project_appearance: Some(self.new_project_style.view(locale)),
+                    import_options: Some(self.import_options(ctx)),
                     new_project_name: self.new_project_name.clone(),
                     new_project_can_submit: !self.new_project_name.trim().is_empty(),
                     // "Add", not "New event": on Day, Schedule and Waiting the Plus

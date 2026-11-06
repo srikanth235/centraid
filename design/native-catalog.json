@@ -1,77 +1,76 @@
 {
-  "$generatedBy": "contracts/tools/export-native-catalog.ts",
-  "$note": "The app catalogue, the identity marks resolved over --bg per scheme, and the shared icon path data. Lowered from packages/design for the Kotlin and Swift shells.",
+  "$generatedBy": "cargo xtask design",
   "apps": [
     {
-      "colorKey": "slate",
-      "desc": "Notes, notebooks and a journal.",
+      "colorKey": "notes",
+      "desc": "Your notebooks as a projection of the vault: a note is an entity with its words on the note row, a notebook is a container, a pin or a tag is an edge, a past version is a revision. Creating, editing, filing, pinning and deleting all run through typed commands — the note's own (note.*) and the shared ones every app uses (entity.*, flag.*, tag.*, edge.*, container.*) — contract-checked, with each command declared in the app manifest.",
       "iconKey": "Book",
       "id": "notes",
       "name": "Notes"
     },
     {
-      "colorKey": "violet",
-      "desc": "Contacts and relationships.",
-      "iconKey": "AddressBook",
+      "colorKey": "people",
+      "desc": "Your circle, remembered — a personal CRM projected from the vault's own rows. A person is an entity with its columns (role, nickname, how you met, birthday, cadence); a touch is an activity with the person; a note, a journal entry and a gift idea or follow-up are a note or a task with an about edge; an important date other than the birthday is a yearly event about them; a relationship is a related edge; a list holds people with contains edges; the star is the shared flag. Last-contacted is computed from the touches. Every write runs through a typed command — the person's own (person.*) and the shared ones (entity.*, flag.*, container.*) — contract-checked.",
+      "iconKey": "Users",
       "id": "people",
       "name": "People"
     },
     {
-      "colorKey": "amber",
-      "desc": "Browse and back up your photos.",
+      "colorKey": "photos",
+      "desc": "Your photo library as a projection of the vault: a photograph is an entity over one blob — its title is the caption, its capture time, size and place are columns of its row — an album is a container with an ordered list of photographs, a heart or the archive is an edge to a flag, and a thumbnail, a caption or a perceptual hash is a derivative of the bytes. Uploading, captioning, deleting and organizing into albums all run through typed vault commands — the photograph's own (photo.*, album.set_cover) and the shared ones every app uses — contract-checked, and identical bytes are one photograph. The library stays in the personal vault.",
       "iconKey": "Camera",
       "id": "photos",
       "name": "Photos"
     },
     {
-      "colorKey": "rose",
-      "desc": "Private items behind a lock.",
+      "colorKey": "locker",
+      "desc": "Everything, locked up — a personal password manager over the vault on this phone. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords (and nine template types), each an owner-only locker.item. Secrets are sealed under a key K derived from the member's 24 words and held only in the phone core's memory behind the phone's own lock (biometric, passcode fallback); the list is metadata and every secret is revealed per field, per gesture, the item stamped as used before its value exists, and concealed after 30 seconds. One-time codes are RFC 6238 codes the core makes from a seed that is never shown. Custom fields may be sealed; a passkey is stored, never revealed, and cannot be made on the phone. Review is metadata only — the compromised flag, http:// addresses and card expiry — and names weak/reused passwords and breach checking as not checked here. Import reads a password-manager CSV or a Locker export and seals it in; export writes every secret to a plaintext file through the system's save sheet after a fresh owner check. Favorites are the vault's canonical star and tags are the vault's own tags, the same words every other app reads. Every write runs through a typed vault command.",
       "iconKey": "Lock",
       "id": "locker",
       "name": "Locker"
     },
     {
-      "colorKey": "teal",
-      "desc": "Read and organize your documents.",
+      "colorKey": "docs",
+      "desc": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is an entity over one blob: its title is the entity's, what the bytes are and the folder it is filed in are columns of its row, and two documents may legitimately share identical bytes (the blob plane stores them once). Text documents edit in place and any document's bytes can be replaced, each change a walkable version in its history. Folders are containers, and filing is one column of the document. Starring is a `tagged` edge to the starred flag on the document itself, so Starred here is the set of starred DOCUMENTS and nothing else. A document attached to something (a receipt on a transaction, a file on an event) and filed in no folder shows only where it is attached. Trash sets a purge date about 30 days out and keeps the folder and the star, so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — the document's own (document.*) and the shared ones every app uses — contract-checked, with each command declared in the app manifest. The app stores no separate copy of the data.",
       "iconKey": "Folder",
       "id": "docs",
       "name": "Docs"
     },
     {
-      "colorKey": "forest",
-      "desc": "Your calendar, events and plans.",
+      "colorKey": "agenda",
+      "desc": "Your calendar and your tasks as a projection of the personal vault: upcoming events from the vault's events, proposals, answers and cancellation asks, and the task board from the vault's own tasks, all through contract-checked typed commands. The app stores no separate copy of the data.",
       "iconKey": "Calendar",
       "id": "agenda",
       "name": "Agenda"
     },
     {
-      "colorKey": "indigo",
-      "desc": "Spending, targets and cash flow.",
+      "colorKey": "money",
+      "desc": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is never edited, only named, filed under a category or voided; importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
       "iconKey": "Coin",
       "id": "money",
       "name": "Money"
     },
     {
-      "colorKey": "olive",
-      "desc": "Daily totals and workouts from your phone.",
+      "colorKey": "health",
+      "desc": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Summary shows your pinned metrics and seven-day shapes against your own typical, with highlights from recorded days; metric detail supports Week, Month, 6M and Year; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store. Chat reads it like any app: the daily figures and workouts are kinds the assistant finds, counts and sums.",
       "iconKey": "Activity",
       "id": "health",
       "name": "Health"
     }
   ],
   "geometry": {
-    "appMarkSmallStroke": 1.75,
-    "appMarkStroke": 1.6,
-    "appMarkViewBox": 24,
-    "durationOne": 140,
-    "durationTwo": 280,
-    "hairline": 1,
+    "appMarkSmallStroke": 2.0,
+    "appMarkStroke": 2.0,
+    "appMarkViewBox": 24.0,
+    "durationOne": 140.0,
+    "durationTwo": 280.0,
+    "hairline": 1.0,
     "iconChipRadiusRatio": 0.26,
     "iconChipTintDark": 0.2,
     "iconChipTintLight": 0.13,
-    "pageMargin": 18,
-    "targetMinCoarse": 44,
-    "targetMinFine": 34
+    "pageMargin": 18.0,
+    "targetMinCoarse": 44.0,
+    "targetMinFine": 44.0
   },
   "icons": {
     "Activity": [
@@ -356,6 +355,14 @@
         "d": "M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"
       }
     ],
+    "CreditCard": [
+      {
+        "d": "M3 5h18v14H3z"
+      },
+      {
+        "d": "M3 9h18M7 15h3"
+      }
+    ],
     "Database": [
       {
         "d": "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z"
@@ -426,6 +433,11 @@
     "Filter": [
       {
         "d": "M22 3H2l8 9.46V19l4 2v-8.54z"
+      }
+    ],
+    "Flag": [
+      {
+        "d": "M4 22V3M4 4c4-4 8 4 16 0v12c-8 4-12-4-16 0"
       }
     ],
     "Folder": [
@@ -1104,88 +1116,88 @@
     ]
   },
   "marks": {
-    "light": {
-      "notes": {
-        "chipBackground": "#e4e9ef",
-        "hue": "#3e6596",
-        "markColor": "#3a5e8b"
-      },
-      "people": {
-        "chipBackground": "#ece7ec",
-        "hue": "#7a5283",
-        "markColor": "#744e7d"
-      },
-      "photos": {
-        "chipBackground": "#efe6e4",
-        "hue": "#904e46",
-        "markColor": "#894a43"
-      },
-      "locker": {
-        "chipBackground": "#eee6e8",
-        "hue": "#8c4c61",
-        "markColor": "#894a5f"
+    "dark": {
+      "agenda": {
+        "chipBackground": "#1B2A3D",
+        "hue": "#569EF7",
+        "markColor": "#569EF7"
       },
       "docs": {
-        "chipBackground": "#dcebec",
-        "hue": "#00707e",
-        "markColor": "#006774"
-      },
-      "agenda": {
-        "chipBackground": "#e4ebe4",
-        "hue": "#397247",
-        "markColor": "#346841"
-      },
-      "money": {
-        "chipBackground": "#e9e8ee",
-        "hue": "#635a93",
-        "markColor": "#5f568d"
+        "chipBackground": "#193139",
+        "hue": "#30A9C6",
+        "markColor": "#30A9C6"
       },
       "health": {
-        "chipBackground": "#e9eae0",
-        "hue": "#666723",
-        "markColor": "#5e5f20"
+        "chipBackground": "#3A222B",
+        "hue": "#F76E8E",
+        "markColor": "#F76E8E"
+      },
+      "locker": {
+        "chipBackground": "#292D33",
+        "hue": "#939DA8",
+        "markColor": "#939DA8"
+      },
+      "money": {
+        "chipBackground": "#242A3E",
+        "hue": "#7C97F4",
+        "markColor": "#7C97F4"
+      },
+      "notes": {
+        "chipBackground": "#F5C431",
+        "hue": "#BF9738",
+        "markColor": "#1C1B19"
+      },
+      "people": {
+        "chipBackground": "#302238",
+        "hue": "#BA82F5",
+        "markColor": "#BA82F5"
+      },
+      "photos": {
+        "chipBackground": "#382331",
+        "hue": "#E573C3",
+        "markColor": "#E573C3"
       }
     },
-    "dark": {
-      "notes": {
-        "chipBackground": "#242d37",
-        "hue": "#7ea7dc",
-        "markColor": "#7ea7dc"
-      },
-      "people": {
-        "chipBackground": "#312833",
-        "hue": "#be92c8",
-        "markColor": "#be92c8"
-      },
-      "photos": {
-        "chipBackground": "#362826",
-        "hue": "#d78f85",
-        "markColor": "#d78f85"
-      },
-      "locker": {
-        "chipBackground": "#36272c",
-        "hue": "#d48da2",
-        "markColor": "#d48da2"
+    "light": {
+      "agenda": {
+        "chipBackground": "#E9F0FA",
+        "hue": "#266FC4",
+        "markColor": "#266FC4"
       },
       "docs": {
-        "chipBackground": "#1d2f32",
-        "hue": "#58b4c4",
-        "markColor": "#58b4c4"
-      },
-      "agenda": {
-        "chipBackground": "#242f26",
-        "hue": "#7bb587",
-        "markColor": "#7bb587"
-      },
-      "money": {
-        "chipBackground": "#2c2a37",
-        "hue": "#a39bda",
-        "markColor": "#a39bda"
+        "chipBackground": "#E2F1F4",
+        "hue": "#087990",
+        "markColor": "#087990"
       },
       "health": {
-        "chipBackground": "#2d2d20",
-        "hue": "#a8aa66",
-        "markColor": "#a8aa66"
+        "chipBackground": "#FAE9EF",
+        "hue": "#BB365C",
+        "markColor": "#BB365C"
+      },
+      "locker": {
+        "chipBackground": "#EBEDF0",
+        "hue": "#454E58",
+        "markColor": "#454E58"
+      },
+      "money": {
+        "chipBackground": "#EAEDF8",
+        "hue": "#27388B",
+        "markColor": "#27388B"
+      },
+      "notes": {
+        "chipBackground": "#F5C431",
+        "hue": "#8C6802",
+        "markColor": "#1C1B19"
+      },
+      "people": {
+        "chipBackground": "#F1E9F8",
+        "hue": "#7638AD",
+        "markColor": "#7638AD"
+      },
+      "photos": {
+        "chipBackground": "#F7E8F3",
+        "hue": "#A8398A",
+        "markColor": "#A8398A"
       }
     }
   }

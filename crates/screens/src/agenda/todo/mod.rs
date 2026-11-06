@@ -2,4 +2,5 @@
 //! To-do, the list pages, a project and Catch up.
 
 pub mod ops;
+pub mod quick;
 pub mod rows;

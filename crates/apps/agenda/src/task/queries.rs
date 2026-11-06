@@ -48,8 +48,8 @@ use centraid_vault::time::zone::FireZone;
 pub use centraid_apps_kit::attached::Attachment;
 
 use crate::task::board::{
-    BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, FamilyRow, LOGBOOK_ROWS, by_urgency, is_open_status,
-    nest_task_families,
+    BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, FamilyRow, LOGBOOK_ROWS, by_manual_position, by_urgency,
+    is_open_status, nest_task_families,
 };
 use crate::{Denial, denial_of};
 
@@ -71,7 +71,7 @@ pub const OPEN_STATUSES: [&str; 1] = ["open"];
 pub const CLOSED_STATUSES: [&str; 2] = ["done", "cancelled"];
 
 const TASK_COLUMNS: &str = "id, parent_id, project_id, section_id, status, description, priority, \
-     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position";
+     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position, url, reminders";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 const ARCHIVED: &str = "flag:archived";
 
@@ -114,6 +114,7 @@ pub struct RecurrenceFacts {
 /// `completed_at`): `due`, `rule` and `done_at` are the model's.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TaskRow {
+    pub flagged: bool,
     pub task_id: String,
     pub parent_task_id: Option<String>,
     pub project_id: Option<String>,
@@ -122,12 +123,15 @@ pub struct TaskRow {
     pub status: String,
     pub title: String,
     pub description: Option<String>,
+    pub url: Option<String>,
     pub priority: Option<i64>,
     pub due_at: Option<String>,
     pub completed_at: Option<String>,
     pub effort_min: Option<i64>,
     /// The reminder's lead time, in minutes before the due moment.
     pub remind_before_min: Option<i64>,
+    /// Every imported time alarm, in minutes before due.
+    pub reminders: Vec<i64>,
     pub rrule: Option<String>,
     pub tz: Option<String>,
     pub recurrence_anchor: Option<String>,
@@ -167,6 +171,7 @@ pub struct ProjectRow {
     /// The area it sits in, by name.
     pub area: Option<String>,
     pub color: Option<String>,
+    pub icon_key: Option<String>,
     pub sort_order: Option<i64>,
 }
 
@@ -280,11 +285,15 @@ fn task_of(entity: &Row, row: &Row) -> TaskRow {
         status: text_of(row, "status").unwrap_or_default(),
         title: text_of(entity, "title").unwrap_or_default(),
         description: text_of(row, "description"),
+        url: text_of(row, "url"),
         priority: int(row, "priority"),
         due_at: text_of(row, "due"),
         completed_at: text_of(row, "done_at"),
         effort_min: int(row, "effort_min"),
         remind_before_min: int(row, "remind_before_min"),
+        reminders: text_of(row, "reminders")
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_default(),
         rrule: text_of(row, "rule"),
         tz: text_of(row, "zone"),
         recurrence_anchor: text_of(row, "anchor"),
@@ -440,7 +449,7 @@ fn logbook(door: &dyn PageDoor) -> KitResult<Vec<TaskRow>> {
 /// source under R-1020-35 by lane Schedule; the WRITER half — `anchorWrite`
 /// sending a key `schedule.organize_task` refuses outright, so an anchor change
 /// silently did nothing — went with the close pass.
-fn recurrence_of(task: &TaskRow, now: &str, member: &FireZone) -> RecurrenceFacts {
+pub(crate) fn recurrence_of(task: &TaskRow, now: &str, member: &FireZone) -> RecurrenceFacts {
     let (Some(rule), Some(start)) = (task.rrule.as_deref(), task.due_at.as_deref()) else {
         return RecurrenceFacts::default();
     };
@@ -470,6 +479,7 @@ fn recurrence_of(task: &TaskRow, now: &str, member: &FireZone) -> RecurrenceFact
 
 /// Everything a row carries that does not depend on its family.
 struct Decorations {
+    flagged: std::collections::BTreeSet<String>,
     attachments: BTreeMap<String, Vec<Attachment>>,
     references: BTreeMap<String, Vec<Reference>>,
     tags: BTreeMap<String, Vec<TaskTag>>,
@@ -478,6 +488,7 @@ struct Decorations {
 
 fn decorate(task: &TaskRow, decorations: &Decorations, now: &str, zone: &FireZone) -> TaskRow {
     TaskRow {
+        flagged: decorations.flagged.contains(&task.task_id),
         attachments: decorations
             .attachments
             .get(&task.task_id)
@@ -516,6 +527,7 @@ fn read_decorations(
 ) -> KitResult<Decorations> {
     let attachments = centraid_apps_kit::attached::of(door, task_ids)?;
     let mut decorations = Decorations {
+        flagged: std::collections::BTreeSet::new(),
         attachments,
         references: BTreeMap::new(),
         tags: BTreeMap::new(),
@@ -558,6 +570,9 @@ fn read_decorations(
         let Some(end) = far.get(&to) else { continue };
         let kind = text_of(end, "kind").unwrap_or_default();
         if rel == "tagged" {
+            if to == "flag:starred" {
+                decorations.flagged.insert(task.clone());
+            }
             // A flag (starred, pinned, archived) is not a tag a member typed.
             if kind == "tag" {
                 let label = text_of(end, "title").unwrap_or_else(|| "?".to_owned());
@@ -614,7 +629,7 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
     let placed: BTreeMap<String, Row> = by_ids(
         "agenda.task.board.containers",
         "container",
-        "id, parent_id, color, position",
+        "id, parent_id, color, icon_key, position",
         "id",
     )
     .within(WIDE, door, &ids, None)?
@@ -675,6 +690,7 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
                         .and_then(|held| text_of(held, "parent_id"))
                         .and_then(|area| areas.get(&area).cloned()),
                     color: held.and_then(|held| text_of(held, "color")),
+                    icon_key: held.and_then(|held| text_of(held, "icon_key")),
                     sort_order: Some(position(&id).round() as i64),
                     project_id: id,
                 },
@@ -726,7 +742,10 @@ fn family(
         .iter()
         .map(|child| decorate(child, decorations, now, zone))
         .collect();
-    nested.sort_by(|left, right| by_urgency(sort_key(left), sort_key(right)));
+    nested.sort_by(|left, right| {
+        by_manual_position(left.sort_order, right.sort_order)
+            .then_with(|| by_urgency(sort_key(left), sort_key(right)))
+    });
     let done = nested
         .iter()
         .filter(|child| !is_open_status(&child.status))
@@ -1097,4 +1116,35 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
         },
         None,
     ))
+}
+
+/// Reminder candidates, independently of the board's newest-created window.
+/// Closed or trashed rows never reach the scheduler. The recurrence engine
+/// supplies the same next open period as the task board.
+pub fn load_alert_tasks(
+    door: &dyn PageDoor,
+    now: &str,
+    zone: &FireZone,
+) -> KitResult<Vec<TaskRow>> {
+    let rows = read_pages(
+        door,
+        &PageQuery::new(
+            "agenda.notifications.tasks",
+            TASK_COLUMNS,
+            "task",
+            PageOrder::asc("due", "id"),
+        )
+        .filter("status = ? AND due IS NOT NULL", vec![text("open")]),
+        WIDE,
+    )?;
+    let entities = live_entities(door, "agenda.notifications.entities", &ids_of(&rows, "id"))?;
+    let entities = by_text(&entities, "id");
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let mut task = task_of(entities.get(&text_of(row, "id")?)?, row);
+            task.recurrence = recurrence_of(&task, now, zone);
+            Some(task)
+        })
+        .collect())
 }

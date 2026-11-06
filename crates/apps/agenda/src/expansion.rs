@@ -16,8 +16,8 @@
 //!    it is what made a stored skip match nothing on three surfaces at once
 //!    (#996 R21).
 //! 3. **An unsupported rule keeps the anchor.** A free-text RRULE mistake must
-//!    not erase the event from the agenda, so a series that expands to nothing
-//!    is drawn at its own `dtstart` — visible, once, and not repeating.
+//!    not erase the event from the agenda, so an invalid rule is drawn at its
+//!    own `dtstart` — visible, once, and not repeating. A valid empty rule stays empty.
 //! 4. **[`MAX_TOTAL_INSTANCES`] is enforced DURING the expansion**, across all
 //!    series, and it **errors at the size it reaches** rather than returning
 //!    what it had (D-1020-D3-12). v0 returns the partial list, which is the
@@ -33,6 +33,9 @@ use centraid_vault::time::zone::FireZone;
 use serde_json::Value;
 
 use crate::queries::EventRow;
+
+mod window;
+pub(crate) use window::expand_series_window;
 
 /// Reach back past `from` so still-running multi-day events are not cut off
 /// (`upcoming.ts:172`).
@@ -127,14 +130,24 @@ pub fn expand_recurring_events(
         let zone = FireZone::named(event.start_tz.as_deref().unwrap_or(NEUTRAL_ZONE)).ok();
         let mut input = ExpandInput::new(&rule, &event.dtstart, range_from, range_to)
             .with_semantics(event.semantics())
-            .at_most(MAX_SERIES_INSTANCES);
+            .at_most(MAX_SERIES_INSTANCES + 1);
         input.zone = zone.as_ref();
         let expanded = recurrence::expand(&input);
+        if expanded.len() > MAX_SERIES_INSTANCES {
+            return Err(KitError::FanOutExceeded {
+                query: "agenda.upcoming.expansion".to_owned(),
+                cap: MAX_SERIES_INSTANCES,
+            });
+        }
         // AN UNSUPPORTED RULE KEEPS THE ANCHOR: a free-text RRULE mistake must
         // not erase the event from the agenda.
-        let base = if expanded.is_empty() {
+        let base = if expanded.is_empty()
+            && rrule::inspect_for_date(&rule, event.semantics() == Semantics::AllDay).is_err()
+        {
             vec![anchor_of(&event)]
         } else {
+            // A valid rule with no occurrence in this window stays empty:
+            // an ended COUNT series or February 31 must not invent an event.
             expanded
         };
         let instances = recurrence::apply_exceptions(&base, &matcher);
@@ -159,8 +172,72 @@ pub fn expand_recurring_events(
     Ok(out)
 }
 
+/// Resolve one named occurrence directly. A minute series must not enumerate
+/// a multi-day search window before the selected detail can be opened.
+pub(crate) fn named_occurrence(
+    event: &EventRow,
+    key: &str,
+    exceptions: &[StoredExceptionRow],
+) -> KitResult<Option<EventRow>> {
+    let Some(rule) = event.rrule.as_deref() else {
+        return Ok(None);
+    };
+    let zone = FireZone::named(event.start_tz.as_deref().unwrap_or(NEUTRAL_ZONE)).ok();
+    let event_exceptions =
+        occurrence::exceptions_of(exceptions, SeriesType::Event, &event.event_id);
+    let matcher = occurrence::recurrence_exceptions_of(&event_exceptions);
+    if matcher.len() > MAX_TOTAL_INSTANCES {
+        return Err(KitError::FanOutExceeded {
+            query: "agenda.event.exceptions".to_owned(),
+            cap: MAX_TOTAL_INSTANCES,
+        });
+    }
+    let mut keys = vec![key];
+    keys.extend(
+        matcher
+            .iter()
+            .filter(|item| {
+                item.scope == recurrence::ExceptionScope::Future
+                    && item.original_start.as_str() <= key
+            })
+            .map(|item| item.original_start.as_str()),
+    );
+    keys.sort_unstable();
+    keys.dedup();
+    let mut base = Vec::new();
+    for key in keys {
+        let Some(wall) = centraid_vault::time::zone::parse_wall_iso(key) else {
+            continue;
+        };
+        let at = if event.semantics() == Semantics::Zoned {
+            let Some(resolved) = zone.as_ref().and_then(|zone| zone.resolve_wall_time(wall)) else {
+                continue;
+            };
+            let Some(at) = parse_instant_ms(&resolved.instant) else {
+                continue;
+            };
+            at
+        } else {
+            centraid_vault::time::zone::wall_epoch(wall)
+        };
+        let from = centraid_vault::clock::format_iso_ms(at);
+        let to = centraid_vault::clock::format_iso_ms(at.saturating_add(1));
+        let mut input = ExpandInput::new(rule, &event.dtstart, &from, &to)
+            .with_semantics(event.semantics())
+            .at_most(1);
+        input.zone = zone.as_ref();
+        base.extend(recurrence::expand(&input));
+    }
+    Ok(recurrence::apply_exceptions(&base, &matcher)
+        .iter()
+        .find(|instance| instance.wall_start == key)
+        .map(|instance| {
+            occurrence_row(event, instance, event_duration_ms(event), &event_exceptions)
+        }))
+}
+
 /// One occurrence, as a row.
-fn occurrence_row(
+pub(crate) fn occurrence_row(
     event: &EventRow,
     instance: &Occurrence,
     duration_ms: i64,

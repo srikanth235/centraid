@@ -1,0 +1,40 @@
+// Native phone-store facts and write effects. Platform adapters produce these inputs;
+// Rust owns their conversion and merge. They are not rendered screen state.
+syntax = "proto3";
+package centraid.core.v1;
+
+message RemindersRead {
+  bool ask_permission = 1;
+  bool include_completed = 2;
+}
+
+message RemindersSnapshot {
+  repeated PhoneReminder reminders = 1;
+  string device_id = 2;
+  // Public EventKit does not expose flags or subtask hierarchy. The importer
+  // shows this fidelity note; an iCalendar task file can supply those fields.
+  bool native_hierarchy_unavailable = 3;
+}
+
+message PhoneReminder {
+  string title = 1;
+  string notes = 2;
+  // `YYYY-MM-DD` or empty.
+  string due = 3;
+  string phone_id = 4;
+  string list_key = 5;
+  string list_title = 6;
+  string time = 7;
+  string zone = 8;
+  // iCalendar priority: 1 is highest, 9 lowest, 0 unspecified.
+  uint32 priority = 9;
+  string rule = 10;
+  repeated int32 alarms_before_min = 11;
+  string url = 12;
+  bool completed = 13;
+  string completed_at = 14;
+  // VTODO RELATED-TO and X-APPLE-REMINDER-FLAGGED; unavailable in EventKit.
+  string parent_phone_id = 15;
+  optional bool flagged = 16;
+  uint32 unsupported_alarms = 17;
+}

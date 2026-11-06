@@ -103,10 +103,10 @@ fn a_31st_skips_the_short_months_and_the_summary_says_so_in_words() {
 }
 
 #[test]
-fn a_still_refused_form_keeps_the_anchor_rather_than_erasing_the_event() {
+fn an_invalid_form_keeps_the_anchor_rather_than_erasing_the_event() {
     let rows = expand_recurring_events(
         vec![series(
-            "FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1",
+            "FREQ=MONTHLY;BYDAY=0MO;BYSETPOS=1",
             "2026-01-12T17:00:00.000Z",
         )],
         "2026-01-01T00:00:00.000Z",
@@ -116,7 +116,51 @@ fn a_still_refused_form_keeps_the_anchor_rather_than_erasing_the_event() {
     .expect("expands");
     assert_eq!(starts(&rows), ["2026-01-12T17:00:00.000Z"]);
     assert_eq!(
-        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1")),
+        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=0MO;BYSETPOS=1")),
         None
     );
+}
+
+#[test]
+fn monthly_lists_and_set_positions_use_the_shared_engine() {
+    let rows = expand_recurring_events(
+        vec![series(
+            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+            "2026-01-01T17:00:00.000Z",
+        )],
+        "2026-01-01T00:00:00.000Z",
+        "2026-04-01T00:00:00.000Z",
+        &[],
+    )
+    .expect("expands");
+    assert_eq!(
+        starts(&rows),
+        [
+            "2026-01-30T17:00:00.000Z",
+            "2026-02-27T17:00:00.000Z",
+            "2026-03-31T16:00:00.000Z"
+        ]
+    );
+    assert!(
+        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"))
+            .expect("summary")
+            .contains("last matching occurrence")
+    );
+}
+
+#[test]
+fn a_valid_custom_rule_with_no_dates_does_not_invent_the_anchor() {
+    for rule in ["FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=31", "FREQ=DAILY;COUNT=1"] {
+        let rows = expand_recurring_events(
+            vec![series(rule, "2026-01-01T17:00:00.000Z")],
+            "2026-02-01T00:00:00.000Z",
+            "2026-04-01T00:00:00.000Z",
+            &[],
+        )
+        .expect("valid series");
+        assert!(
+            rows.is_empty(),
+            "{rule}: no occurrence belongs to this window"
+        );
+    }
 }

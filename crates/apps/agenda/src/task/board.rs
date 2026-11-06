@@ -133,6 +133,19 @@ pub fn by_urgency(
         .then_with(|| left_id.cmp(right_id))
 }
 
+/// Existing tasks have auto-assigned nonnegative positions. Only the negative
+/// sequence written by an explicit drag replaces their due/priority ordering.
+/// This keeps an upgrade from silently changing old lists to creation order.
+pub fn by_manual_position(left: Option<i64>, right: Option<i64>) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (left.filter(|n| *n < 0), right.filter(|n| *n < 0)) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

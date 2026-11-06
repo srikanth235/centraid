@@ -127,8 +127,10 @@ fn reminders(items: &[(&str, &str, &str)]) -> O {
                 title: (*title).to_owned(),
                 notes: (*notes).to_owned(),
                 due: (*due).to_owned(),
+                ..Default::default()
             })
             .collect(),
+        ..Default::default()
     })
 }
 

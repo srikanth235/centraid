@@ -40,9 +40,15 @@ export default defineConfig({
     // Xcode owns asset catalog metadata.
     "**/*.xcassets/**/Contents.json",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
-    // The public site's token sheet is lowered from @centraid/design by
+    // The public site's token sheet reads the Rust-owned design values through
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
+    // Rust owns these bytes; `cargo xtask design --check` validates them.
+    "design/native-theme.json",
+    "design/native-catalog.json",
+    "design/native-fonts.json",
+    "design/site-tokens.css",
+    "design/mockups/tokens.css",
     // The native tool task's export (#1088): `nativetools export` writes these
     // files, and `crates/nativetools/tests/export_fixture.rs` asserts them
     // byte for byte against the live export.

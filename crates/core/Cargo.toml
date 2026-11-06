@@ -22,6 +22,7 @@ debug-fault = []
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
+centraid-design = { path = "../design" }
 # LOCKER'S PHONE LOADERS (#1047 L1): `app_query::locker` asks
 # `centraid_apps_locker::phone` for the list, the item and the counts.
 centraid-apps-locker = { path = "../apps/locker" }

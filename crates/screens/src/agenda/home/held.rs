@@ -151,6 +151,64 @@ fn midnight(day: &str) -> Option<String> {
     civil::epoch_day_of(day).map(|_| format!("{day}T00:00:00Z"))
 }
 
+fn read_upcoming(ctx: &Ctx, from: String, to: String) -> Result<wire::AgendaUpcoming, Stop> {
+    get(read(
+        ctx,
+        query::Upcoming {
+            from: Some(from),
+            to: Some(to),
+        },
+        |answer| match answer {
+            Answer::AgendaUpcoming(upcoming) => Some(upcoming),
+            _ => None,
+        },
+    ))
+}
+
+/// A year is four bounded reads. One ordinary daily series has more than the
+/// per-series 200-instance ceiling over a year, but fits every quarter. The
+/// whole year still has the app's aggregate bound; it never returns a partial
+/// calendar. UTC padding covers every display-zone offset, and identity
+/// deduplication keeps an event spanning a quarter boundary once.
+fn read_year(ctx: &Ctx, start: &str, span: i64) -> Result<wire::AgendaUpcoming, Stop> {
+    use centraid_apps_agenda::expansion::MAX_TOTAL_INSTANCES;
+    use std::collections::BTreeSet;
+    let first = civil::plus_days(start, -1).ok_or(Stop::Failed)?;
+    let total = span + 2;
+    let mut offset = 0;
+    let mut merged = wire::AgendaUpcoming::default();
+    let mut seen = BTreeSet::new();
+    while offset < total {
+        let next = (offset + 92).min(total);
+        let from = civil::plus_days(&first, offset)
+            .and_then(|day| midnight(&day))
+            .ok_or(Stop::Failed)?;
+        let to = civil::plus_days(&first, next)
+            .and_then(|day| midnight(&day))
+            .ok_or(Stop::Failed)?;
+        let mut part = read_upcoming(ctx, from, to)?;
+        let events = std::mem::take(&mut part.events);
+        if offset == 0 {
+            merged = part;
+        }
+        for event in events {
+            if seen.insert(event.instance_key.clone()) {
+                if merged.events.len() == MAX_TOTAL_INSTANCES {
+                    return Err(Stop::Failed);
+                }
+                merged.events.push(event);
+            }
+        }
+        offset = next;
+    }
+    merged.events.sort_by(|left, right| {
+        left.local_start
+            .cmp(&right.local_start)
+            .then_with(|| left.instance_key.cmp(&right.instance_key))
+    });
+    Ok(merged)
+}
+
 impl Home {
     /// Read whatever the current place needs and does not hold, and settle the
     /// phase: data, a failure, or the gate. Everything is synchronous, so a
@@ -240,31 +298,29 @@ impl Home {
             }
             self.anchor.clone_from(&context.today);
         }
-        let span = span_of(self.destination);
-        let key = format!("{span}|{}", self.anchor);
+        let (start, span) = if self.destination == wire::AgendaDestination::Day {
+            super::grid::window(&self.calendar_view, &self.anchor)
+        } else {
+            (self.anchor.clone(), span_of(self.destination))
+        };
+        let key = format!("{span}|{start}");
         if self.held.window.as_deref() != Some(key.as_str()) {
             let (Some(before), Some(after), Some(last)) = (
-                civil::plus_days(&self.anchor, -1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span + 1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span - 1),
+                civil::plus_days(&start, -1).and_then(|day| midnight(&day)),
+                civil::plus_days(&start, span + 1).and_then(|day| midnight(&day)),
+                civil::plus_days(&start, span - 1),
             ) else {
                 return Err(Stop::Failed);
             };
-            let upcoming = get(read(
-                ctx,
-                query::Upcoming {
-                    from: Some(before),
-                    to: Some(after),
-                },
-                |answer| match answer {
-                    Answer::AgendaUpcoming(upcoming) => Some(upcoming),
-                    _ => None,
-                },
-            ))?;
+            let upcoming = if self.calendar_view == "year" {
+                read_year(ctx, &start, span)?
+            } else {
+                read_upcoming(ctx, before, after)?
+            };
             let context = get(read(
                 ctx,
                 query::DayContext {
-                    from: Some(self.anchor.clone()),
+                    from: Some(start),
                     to: Some(last),
                 },
                 pick_context,

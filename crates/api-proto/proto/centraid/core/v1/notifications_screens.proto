@@ -1,0 +1,65 @@
+// One Rust plan, executed by the phone. Device journals contain only the active
+// vault's alert metadata and unacknowledged actions; no action crosses a vault.
+syntax = "proto3";
+package centraid.core.v1;
+
+message AgendaAlert {
+  string id = 1;
+  string entity_id = 2;
+  int64 fire_at_ms = 3;
+  string title = 4;
+  string body = 5;
+  bool task = 6;
+  // Changes when the source changes. A snooze never survives an edit or completion.
+  string source_stamp = 7;
+}
+message AgendaNotificationAction {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_DONE = 1;
+    KIND_HOUR = 2;
+    KIND_TOMORROW = 3;
+  }
+  string action_id = 1;
+  string vault_id = 2;
+  string alert_id = 3;
+  Kind kind = 4;
+  int64 at_ms = 5;
+  string entity_id = 6;
+  string source_stamp = 7;
+}
+message AgendaNotificationSync {
+  // Read the persisted device journal at launch, before replacing any plan.
+  bool load_only = 1;
+  string vault_id = 2;
+  repeated AgendaAlert alerts = 3;
+  repeated AgendaAlert snoozed = 4;
+  repeated string acknowledge = 5;
+  bool ask_permission = 6;
+  string channel_label = 7;
+  string done_label = 8;
+  string hour_label = 9;
+  string tomorrow_label = 10;
+  reserved 11;
+  reserved "active_ids";
+  // Delivered cards stay actionable while their underlying source revision lives.
+  repeated AgendaNotificationSource sources = 12;
+}
+message AgendaNotificationState {
+  string vault_id = 1;
+  repeated AgendaAlert snoozed = 2;
+  repeated AgendaNotificationAction pending = 3;
+  bool allowed = 4;
+}
+
+// An atomic device file, outside the synced vault. Written before reporting an
+// action, so termination between a tap and its acknowledgement is replay-safe.
+message AgendaNotificationJournal {
+  AgendaNotificationSync plan = 1;
+  repeated AgendaNotificationAction pending = 2;
+}
+
+message AgendaNotificationSource {
+  string entity_id = 1;
+  string source_stamp = 2;
+}

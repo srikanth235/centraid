@@ -32,6 +32,63 @@ fn month_of_steps(d: &centraid_screens::testing::Driver, today: &str) {
 }
 
 #[test]
+fn summary_pins_are_device_preferences_and_survive_a_new_screen() {
+    let mut d = driver();
+    connect_store(&d);
+    let i = root(&d);
+    home_event(&mut d, i, he::Kind::Refreshed(he::Refreshed {}));
+    let mut shell = centraid_screens::testing::FakeShell::default();
+    home_event(
+        &mut d,
+        i,
+        he::Kind::FilterMenuPicked(wire::FilterMenuPicked {
+            section_key: "pinned".into(),
+            option_key: "steps".into(),
+        }),
+    );
+    d.serve(&mut shell);
+    assert_eq!(
+        shell
+            .device
+            .get(centraid_screens::health::pins::KEY)
+            .map(String::as_str),
+        Some("steps")
+    );
+    let pinned = home_data(d.view(i)).today_data.as_ref().unwrap();
+    assert_ne!(pinned.hero.as_ref().unwrap().metric, "steps");
+    let next = push(
+        &mut d,
+        centraid_screens::health::routes::home(wire::HealthDestination::Today),
+    );
+    d.serve(&mut shell);
+    let pinned = home_data(d.view(next)).today_data.as_ref().unwrap();
+    assert!(
+        pinned
+            .metrics
+            .iter()
+            .chain(pinned.hero.iter())
+            .all(|metric| metric.metric != "steps")
+    );
+    home_event(
+        &mut d,
+        next,
+        he::Kind::FilterMenuCleared(wire::FilterMenuCleared {}),
+    );
+    d.serve(&mut shell);
+    assert_eq!(
+        home_data(d.view(next))
+            .today_data
+            .as_ref()
+            .unwrap()
+            .hero
+            .as_ref()
+            .unwrap()
+            .metric,
+        "steps"
+    );
+}
+
+#[test]
 fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_store() {
     let d = driver();
     let i = root(&d);
@@ -45,7 +102,7 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     assert_eq!(empty.action_label, "Connect Apple Health");
     assert!(data.today_data.is_none());
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
-    assert_eq!(band, ["Today", "Trends", "Workouts", "More"]);
+    assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(more, ["reads", "choose"]);
     // The row that opens Connect carries the route, and the empty state's
@@ -529,7 +586,7 @@ fn a_pick_in_another_section_changes_nothing() {
 }
 
 #[test]
-fn the_menu_is_on_workouts_only_and_never_before_a_store_or_without_a_kind() {
+fn summary_selects_pins_and_workouts_selects_kinds_only_after_connecting() {
     // Not connected: no tab has a menu.
     let mut d = driver();
     let i = root(&d);
@@ -543,12 +600,15 @@ fn the_menu_is_on_workouts_only_and_never_before_a_store_or_without_a_kind() {
     band(&mut d, i, "workouts");
     assert!(home_state(d.view(i)).filter_menu.is_none());
 
-    // Connected with workouts: Today and Trends have none, Workouts has one.
+    // Connected: Summary selects pinned metrics, Workouts selects kinds, Trends has segments.
     let mut d = driver();
     let i = run_and_ride(&mut d);
     assert!(home_state(d.view(i)).filter_menu.is_some());
     band(&mut d, i, "today");
-    assert!(home_state(d.view(i)).filter_menu.is_none());
+    assert_eq!(
+        home_state(d.view(i)).filter_menu.as_ref().unwrap().sections[0].key,
+        "pinned"
+    );
     band(&mut d, i, "trends");
     assert!(home_state(d.view(i)).filter_menu.is_none());
     // Trends keeps its range segments, which are not the menu.

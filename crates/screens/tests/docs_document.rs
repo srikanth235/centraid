@@ -94,10 +94,10 @@ fn the_reader_draws_the_text_with_the_facts_and_the_path() {
     assert!(facts.iter().any(|(label, _)| *label == "Added"));
     assert_eq!(
         keys(d.view(i)),
-        ["edit", "star", "rename", "move", "labels", "trash"]
+        ["share", "edit", "star", "rename", "move", "labels", "trash"]
     );
     // Edit is a route the shell pushes.
-    let edit = &data.actions[0];
+    let edit = &data.actions[1];
     assert_eq!(edit.route.as_ref().unwrap().screen, docs::EDITOR);
 }
 
@@ -143,7 +143,7 @@ fn the_heads_writes_star_rename_move_and_labels() {
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "star");
     assert!(document_data(d.view(i)).row.as_ref().unwrap().starred);
-    assert_eq!(keys(d.view(i))[1], "unstar");
+    assert_eq!(keys(d.view(i))[2], "unstar");
     // The verbs sheet lists every verb the head offers; a pick closes it.
     document_send(&mut d, i, DD::MoreOpened(dd::MoreOpened {}));
     let sheet = document_state(d.view(i)).sheet.as_ref().unwrap();
@@ -204,8 +204,8 @@ fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever(
     document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
     let data = document_data(d.view(i));
     assert!(data.row.as_ref().unwrap().trashed);
-    assert_eq!(keys(d.view(i)), ["restore", "purge"]);
-    assert!(data.actions[1].destructive);
+    assert_eq!(keys(d.view(i)), ["share", "restore", "purge"]);
+    assert!(data.actions[2].destructive);
     // It never says it will be deleted: the window's end is a restore's end.
     assert!(
         data.trashed_note.starts_with("In trash · restorable until"),
@@ -589,4 +589,54 @@ fn restore_asks_nothing_and_brings_the_document_back_where_it_was() {
     assert!(trash_view(d.view(i)).confirm.is_none());
     assert!(!trash_ids(d.view(i)).contains(&id));
     assert_eq!(document(&d, &id).document.unwrap().folder_id, taxes);
+}
+
+#[test]
+fn choosing_a_label_color_updates_every_document_wearing_it_and_rejects_unknown_keys() {
+    let mut d = driver();
+    let a = text(&d, "Tickets", "Flight details");
+    let b = text(&d, "Itinerary", "Hotel details");
+    for document_id in [&a, &b] {
+        arrange(
+            &d,
+            act::docs::Tag {
+                document_id: document_id.clone(),
+                label: "Travel".to_owned(),
+            },
+        );
+    }
+    let i = open(&mut d, &a, "Tickets", "Docs");
+    pick_doc(&mut d, i, "labels");
+    let tag_id = document_data(d.view(i)).row.as_ref().unwrap().labels[0]
+        .tag_id
+        .clone();
+    document_send(
+        &mut d,
+        i,
+        DD::LabelColor(wire::DocsLabelColorPicked {
+            tag_id: tag_id.clone(),
+            color_key: "listViolet".to_owned(),
+        }),
+    );
+    assert_eq!(
+        document_data(d.view(i)).row.as_ref().unwrap().labels[0].color_key,
+        "listViolet"
+    );
+    document_send(
+        &mut d,
+        i,
+        DD::LabelColor(wire::DocsLabelColorPicked {
+            tag_id,
+            color_key: "danger".to_owned(),
+        }),
+    );
+    assert_eq!(
+        document_data(d.view(i)).row.as_ref().unwrap().labels[0].color_key,
+        "listViolet"
+    );
+    let other = open(&mut d, &b, "Itinerary", "Docs");
+    assert_eq!(
+        document_data(d.view(other)).row.as_ref().unwrap().labels[0].color_key,
+        "listViolet"
+    );
 }

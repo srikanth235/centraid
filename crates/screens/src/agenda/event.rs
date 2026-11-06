@@ -65,11 +65,13 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }
     Some(Box::new(EventPage {
         route: args,
+        attachments: super::attachments::Attachments::default(),
         content: Content::Loading,
         sheet: Sheet::None,
         confirm: false,
         scope: None,
         status: None,
+        notification_status: super::notification_status::Status::default(),
         dismissed: false,
     }))
 }
@@ -82,6 +84,7 @@ enum Content {
 }
 
 struct EventPage {
+    attachments: super::attachments::Attachments,
     route: wire::AgendaEventRoute,
     content: Content,
     /// The scope sheet, while a series' cancel is asked.
@@ -91,6 +94,7 @@ struct EventPage {
     /// The scope the sheet has picked.
     scope: Option<wire::AgendaScope>,
     status: Option<wire::StatusLine>,
+    notification_status: super::notification_status::Status,
     dismissed: bool,
 }
 
@@ -264,7 +268,37 @@ impl Screen for EventPage {
         }
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Announced(announced)) => self.notification_status.hear(&announced.topic),
+            Some(E::EffectResult(result)) => {
+                if result.outcome.as_ref().is_some_and(|outcome| {
+                    self.attachments.result(ctx, &self.route.event_id, outcome)
+                }) {
+                    self.reload(ctx);
+                }
+            }
             Some(E::AgendaEvent(event)) => match event.kind {
+                Some(K::Attachment(event)) => {
+                    let known: Vec<_> = self
+                        .event()
+                        .map(|event| {
+                            event
+                                .attachments
+                                .iter()
+                                .map(|item| item.attachment_id.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let effects = self
+                        .attachments
+                        .event(ctx, &self.route.event_id, &known, &event);
+                    self.reload(ctx);
+                    return effects;
+                }
+                Some(K::StatusActed(_)) => {
+                    if self.status.is_none() {
+                        return self.notification_status.act(ctx);
+                    }
+                }
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
                 Some(K::Action(picked)) if picked.key == ACTION_CANCEL => self.ask_cancel(),
@@ -326,7 +360,10 @@ impl Screen for EventPage {
             chrome: Some(Self::chrome(locale)),
             dismissed: self.dismissed,
             cancel_armed: series_sheet && self.scope.is_some(),
-            status: self.status.clone(),
+            status: self
+                .status
+                .clone()
+                .or_else(|| self.notification_status.view(locale)),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),
@@ -476,6 +513,23 @@ impl EventPage {
             spoken_parts.push(words::meta_repeats(locale));
         }
         wire::AgendaEventData {
+            attachments: Some(
+                self.attachments.view(
+                    locale,
+                    event
+                        .attachments
+                        .iter()
+                        .map(|item| {
+                            super::attachments::row(
+                                locale,
+                                &item.attachment_id,
+                                &item.title,
+                                &item.kind,
+                            )
+                        })
+                        .collect(),
+                ),
+            ),
             title,
             date_label: date,
             when_label: when,
@@ -723,10 +777,7 @@ pub fn calendar_hue(calendar_id: Option<&str>, calendar: Option<&wire::AgendaCal
     let Some(id) = calendar_id else {
         return NO_CALENDAR_HUE.to_owned();
     };
-    let key =
-        centraid_design::party_hue_key(id, calendar.and_then(|calendar| calendar.color.as_deref()))
-            .unwrap_or_else(|| centraid_design::identity_hue_key(id));
-    hue_role(key)
+    super::appearance::color(id, calendar.and_then(|calendar| calendar.color.as_deref()))
 }
 
 #[cfg(test)]

@@ -170,6 +170,10 @@ enum TodoView {
   TODO_VIEW_ALL = 2;
   TODO_VIEW_LOGBOOK = 3;
   TODO_VIEW_REMINDERS = 4;
+  TODO_VIEW_TODAY = 5;
+  TODO_VIEW_SCHEDULED = 6;
+  TODO_VIEW_FLAGGED = 7;
+  TODO_VIEW_TAGS = 8;
 }
 
 // `agenda.home`: lands on `destination` at today, or on Day when unspecified.
@@ -198,11 +202,14 @@ message AgendaEditorRoute {
   string day = 4;
   // A create's kind; UNSPECIFIED is the kind this device last added.
   AgendaEditorKind kind = 5;
+  // A calendar grid slot pre-fills a new event, in the core's local time.
+  string start_time = 6;
 }
 
 // `agenda.todo_list`: the Anytime, All, Logbook or Reminders page.
 message TodoListRoute {
   TodoView view = 1;
+  string tag_id = 2;
 }
 
 // `agenda.project`: one project's page. The name rides along so the head has
@@ -363,6 +370,7 @@ enum HealthMetricRange {
   HEALTH_METRIC_RANGE_WEEK = 1;
   HEALTH_METRIC_RANGE_MONTH = 2;
   HEALTH_METRIC_RANGE_YEAR = 3;
+  HEALTH_METRIC_RANGE_SIX_MONTHS = 4;
 }
 
 // `health.home`: UNSPECIFIED is Today.

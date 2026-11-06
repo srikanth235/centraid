@@ -179,7 +179,7 @@ public fun FailureView(
 
 /**
  * NOTHING HERE: one sentence, at most one more, and at most one action
- * (DESIGN.md copy table). The strings are finished; the action is the
+ * (product-intuition screen contracts copy table). The strings are finished; the action is the
  * screen's own event.
  *
  * A ported app's day one that offers the phone's own data (People's contacts,
@@ -191,6 +191,7 @@ public fun EmptyStateView(
     empty: EmptyState,
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    actionTag: String = "kit-empty-action",
 ) {
     Column(
         modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
@@ -208,7 +209,7 @@ public fun EmptyStateView(
         if (empty.action_label.isNotEmpty() && onAction != null) {
             OutlineButton(
                 label = empty.action_label,
-                testTag = "kit-empty-action",
+                testTag = actionTag,
                 modifier = Modifier.padding(top = 16.dp),
                 onPress = onAction,
             )
@@ -325,7 +326,7 @@ public fun ChoiceStack(
 /** The kit's geometry, in one place. */
 public object KitGeometry {
     /**
-     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (DESIGN.md fixes it at 18), the one
+     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (product-intuition screen contracts fixes it at 18), the one
      * definition every kit and screen inset reads. The name stays; the value is no longer typed here.
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp

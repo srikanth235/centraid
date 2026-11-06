@@ -23,8 +23,8 @@ import dev.centraid.design.CentraidGeometry
 /**
  * ONE ICON SET, DRAWN FROM THE EMITTED SILHOUETTES (#1020, wave A).
  *
- * The path data is `packages/design`'s, lowered by
- * `contracts/tools/export-native-catalog.ts` — the same 24x24 silhouettes the
+ * The path data is `design/tokens.toml`'s, lowered by
+ * `cargo xtask design` — the same 24x24 silhouettes the
  * web renderer draws. Material's icon set is deliberately NOT used here: a
  * second set is a second product, and the one thing Home's invariant header
  * promises is that eight unlike bodies read as one grid.
@@ -67,14 +67,15 @@ public fun CentraidIcon(
                     drawPath(
                         path = path,
                         color = tint,
-                        // The stroke is specified in the CALLER's units, so it
-                        // is divided back out of the scale — a 1.6pt rule drawn
-                        // inside a 0.66x scale would otherwise land at 1.06.
+                        // The stroke is in logical dp, while Canvas and this
+                        // scale use physical pixels. Convert to pixels before
+                        // cancelling the view-box scale so its weight stays
+                        // the same on every display density.
                         // Round caps and joins are the hand-off's, not a
                         // default: a mitred corner at 1.6 on a 16pt mark reads
                         // as a spike.
                         style = Stroke(
-                            width = strokeWidth / factor,
+                            width = strokeWidth.dp.toPx() / factor,
                             cap = StrokeCap.Round,
                             join = StrokeJoin.Round,
                         ),

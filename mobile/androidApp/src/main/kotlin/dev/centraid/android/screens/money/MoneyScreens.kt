@@ -1,6 +1,8 @@
 package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,10 +10,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -128,7 +133,6 @@ internal fun MoneyHomeScreen(
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) { home ->
             LazyColumn {
-                if (home.shows_month) item(key = "month") { MonthStepper(state, onEvent) }
                 when (state.destination) {
                     MoneyHomeState.Destination.DESTINATION_ACTIVITY -> activity(state, onEvent, onOpen, addStatement)
                     MoneyHomeState.Destination.DESTINATION_CASHFLOW -> cashflow(state, addStatement)
@@ -150,12 +154,16 @@ internal fun MoneyHomeScreen(
             },
             onDismiss = close,
         )
-        MoneyHomeState.Sheet.SHEET_MONTH -> OptionSheet(
-            title = chrome?.month_sheet_title.orEmpty(),
-            options = data?.month_options.orEmpty().map { SheetOption(key = it.key, label = it.label, selected = it.selected) },
-            onPick = { key -> onEvent(MoneyHomeEvent(month_picked = MoneyHomeEvent.MonthPicked(month = key))) },
-            onDismiss = close,
-        )
+        MoneyHomeState.Sheet.SHEET_MONTH -> dev.centraid.android.kit.SheetRoom(
+            title = chrome?.month_sheet_title.orEmpty(), onDismiss = close,
+        ) {
+            if (data?.shows_month == true) MonthStepper(state, onEvent)
+            data?.month_options.orEmpty().forEach { choice ->
+                dev.centraid.android.kit.SheetRow(label = choice.label, detail = choice.detail,
+                    selected = choice.selected, testTag = "money-month-option-${choice.key}",
+                    onTap = { onEvent(MoneyHomeEvent(month_picked = MoneyHomeEvent.MonthPicked(month = choice.key))) })
+            }
+        }
         else -> Unit
     }
 }
@@ -191,6 +199,7 @@ private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Uni
         return
     }
     items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
+    items(spending.weekly_series.size, key = { "weekly-$it" }) { index -> MoneyWeeklyChart(spending.weekly_series[index]) }
     item(key = "days") { MoneyNote(spending.days_left_label) }
     items(spending.in_out_net.size, key = { "net-$it" }) { index ->
         MoneyFigureCard(spending.in_out_net[index].figures)
@@ -243,6 +252,8 @@ private fun LazyListScope.activity(
         item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
+    item(key = "overview-title") { MoneySection(activity.overview_title) }
+    items(activity.overview.size, key = { "overview-$it" }) { index -> MoneyHeroView(activity.overview[index]) }
     if (activity.needs_label.isNotEmpty()) {
         item(key = "needs") {
             // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
@@ -252,9 +263,22 @@ private fun LazyListScope.activity(
         }
     }
     activity.sections.forEach { section ->
-        item(key = "day-${section.day}") { MoneySection(section.heading) }
-        items(section.rows, key = { "t-${it.txn_id}" }) { row ->
-            MoneyRowView(row) { row.route?.let(onOpen) }
+        item(key = "day-${section.day}") { MoneyDayHeader(section.heading, section.total) }
+        itemsIndexed(section.rows, key = { _, row -> "t-${row.txn_id}" }) { index, row ->
+            val rounded = moneyRadius("lg")
+            val square = CornerSize(0.dp)
+            val shape = rounded.copy(
+                topStart = if (index == 0) rounded.topStart else square,
+                topEnd = if (index == 0) rounded.topEnd else square,
+                bottomStart = if (index == section.rows.lastIndex) rounded.bottomStart else square,
+                bottomEnd = if (index == section.rows.lastIndex) rounded.bottomEnd else square,
+            )
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER).clip(shape).background(centraidColor("bgSunken"))) {
+                Column {
+                    if (index > 0) MoneyHairline()
+                    MoneyRowView(row) { row.route?.let(onOpen) }
+                }
+            }
         }
     }
     item(key = "window") {

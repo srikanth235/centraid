@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 
 use centraid_vault::time::zone::FireZone;
 
-use crate::task::board::is_open_status;
+use crate::task::board::{by_manual_position, is_open_status};
 use crate::task::local::{self, Civil, DuePlacement};
 use crate::task::queries::{ProjectRow, SectionRow, TaskRow};
 
@@ -182,7 +182,10 @@ pub struct Group {
 
 impl Group {
     fn new(kind: GroupKind, key: impl Into<String>, mut tasks: Vec<Placed>) -> Self {
-        tasks.sort_by(by_due);
+        tasks.sort_by(|left, right| {
+            by_manual_position(left.task.sort_order, right.task.sort_order)
+                .then_with(|| by_due(left, right))
+        });
         Self {
             kind,
             key: key.into(),
@@ -212,14 +215,21 @@ pub fn groups(
     let mut out = match view {
         View::Today => {
             let overdue = open_of(open).filter(|t| t.due.overdue).cloned().collect();
-            let today = open_of(open)
-                .filter(|t| t.due.lands_today && !t.due.overdue)
-                .cloned()
-                .collect();
-            vec![
-                Group::new(GroupKind::Overdue, "overdue", overdue),
-                Group::new(GroupKind::Today, "today", today),
-            ]
+            let mut groups = vec![Group::new(GroupKind::Overdue, "overdue", overdue)];
+            // A date without a time stays all-day. Timed reminders are grouped
+            // by the core's already-resolved local clock, never a UTC prefix.
+            for period in ["all-day", "morning", "afternoon", "tonight"] {
+                let tasks = open_of(open)
+                    .filter(|t| {
+                        t.due.lands_today
+                            && !t.due.overdue
+                            && today_period(&t.due.due_time) == period
+                    })
+                    .cloned()
+                    .collect();
+                groups.push(Group::new(GroupKind::Today, period, tasks));
+            }
+            groups
         }
         View::Upcoming => {
             let mut by_day: BTreeMap<String, Vec<Placed>> = BTreeMap::new();
@@ -376,6 +386,15 @@ pub fn groups(
     out
 }
 
+fn today_period(time: &str) -> &'static str {
+    match time.get(..2).and_then(|hour| hour.parse::<u8>().ok()) {
+        None => "all-day",
+        Some(0..=11) => "morning",
+        Some(12..=16) => "afternoon",
+        Some(_) => "tonight",
+    }
+}
+
 /// The numbers a band, a tile or a notice says, over the open ROOTS fetched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Counts {
@@ -514,7 +533,7 @@ mod tests {
             keys(&today),
             [
                 ("overdue".to_owned(), vec!["late".to_owned()]),
-                ("today".to_owned(), vec!["tonight".to_owned()]),
+                ("tonight".to_owned(), vec!["tonight".to_owned()]),
             ]
         );
         let upcoming = groups(&View::Upcoming, &open, &[], &[], &[]);

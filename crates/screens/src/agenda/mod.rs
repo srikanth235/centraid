@@ -26,13 +26,17 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
 
+pub mod appearance;
+mod attachments;
 pub mod calendar;
+mod calendar_write;
 pub mod catch_up;
 pub mod detail;
 pub mod editor;
 pub mod event;
 pub mod home;
 pub mod list;
+pub(crate) mod notification_status;
 pub mod project;
 pub mod todo;
 pub mod trash;
@@ -136,6 +140,7 @@ pub mod routes {
                 original_start_local: original_start_local.map(str::to_owned),
                 day: day.to_owned(),
                 kind: kind as i32,
+                start_time: String::new(),
             }),
         )
     }
@@ -145,7 +150,10 @@ pub mod routes {
     pub fn todo_list(view: wire::TodoView) -> wire::Route {
         route(
             TODO_LIST,
-            wire::route::Args::TodoList(wire::TodoListRoute { view: view as i32 }),
+            wire::route::Args::TodoList(wire::TodoListRoute {
+                view: view as i32,
+                ..Default::default()
+            }),
         )
     }
 

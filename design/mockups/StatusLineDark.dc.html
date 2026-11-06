@@ -1,10 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="utf-8">
 <title>Docs status line (dark)</title>
 <script src="./support.js"></script>
-</head>
+<link rel="stylesheet" href="./tokens.css"></head>
 <body>
 <x-dc>
 <helmet>
@@ -15,86 +13,87 @@ body{margin:0}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--ds-bgList); font-family: Geist, system-ui, sans-serif; color: var(--ds-text);">
   <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 4px;">
     <span aria-hidden="true"></span>
     <div style="display: flex; gap: 8px;">
-      <button aria-label="Filter, sort and view" style="width: 44px; height: 44px; border-radius: 22px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"/></svg>
+      <button aria-label="Filter, sort and view" style="width: 44px; height: 44px; border-radius: 22px; background: var(--ds-glass); border: 1px solid var(--ds-lineStrong); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
       </button>
-      <button aria-label="Add to Docs" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #01819B; display: flex; align-items: center; justify-content: center;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <button aria-label="Add to Docs" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: var(--ds-docsFill); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
       </button>
     </div>
   </div>
   <h1 style="margin: 4px 20px 2px; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Recents</h1>
-  <p style="margin: 0 20px 12px; font-size: 13px; color: #A39E95;">Changed lately · 41 documents in Docs</p>
+  <p style="margin: 0 20px 12px; font-size: 13px; color: var(--ds-textFaint);">Changed lately · 41 documents in Docs</p>
 
   <div style="display: flex; gap: 8px; padding: 0 20px 12px;">
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #468DE5;"></span>Taxes</span>
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #E55D7E;"></span>Medical</span>
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #1399B5;"></span>Receipts</span>
+    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: var(--ds-bgSunken); display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: var(--ds-listBlue);"></span>Taxes</span>
+    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: var(--ds-bgSunken); display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: var(--ds-listRaspberry);"></span>Medical</span>
+    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: var(--ds-bgSunken); display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: var(--ds-listPetrol);"></span>Receipts</span>
   </div>
 
   <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; padding: 0 20px;">
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4E0D8; box-sizing: border-box; position: relative; overflow: hidden; padding: 10px; background: #F3EDE2;"><div style="height: 8px; width: 50%; background: #1C1B19; border-radius: 2px;"></div><div style="height: 4px; width: 90%; background: #CFCAC1; border-radius: 2px; margin-top: 10px;"></div><div style="height: 4px; width: 70%; background: #CFCAC1; border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 80%; background: #CFCAC1; border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 40%; background: #CFCAC1; border-radius: 2px; margin-top: 14px;"></div><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: #3A3733; color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">JPG</span></div>
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); box-sizing: border-box; position: relative; overflow: hidden; padding: 10px; background: #F3EDE2;"><div style="height: 8px; width: 50%; background: var(--ds-text); border-radius: 2px;"></div><div style="height: 4px; width: 90%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 10px;"></div><div style="height: 4px; width: 70%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 80%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 40%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 14px;"></div><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: var(--ds-text); color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">JPG</span></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Rent receipt Oct</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1399B5;"></span>1 Nov · 1.4 MB</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 3px; background: var(--ds-listPetrol);"></span>1 Nov · 1.4 MB</span>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4E0D8; box-sizing: border-box; position: relative; overflow: hidden; padding: 10px; font-size: 6px; line-height: 1.5; color: #6F6B64;"><div style="font-size: 9px; font-weight: 700; color: #1C1B19;"># Trip plan</div>Lisbon, 12–18 Dec. Flights booked. Hotel near Alfama…<br/>- pack adapter<br/>- tram 28<span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: #3A3733; color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">MD</span></div>
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); box-sizing: border-box; position: relative; overflow: hidden; padding: 10px; font-size: 6px; line-height: 1.5; color: var(--ds-textFaint);"><div style="font-size: 9px; font-weight: 700; color: var(--ds-text);"># Trip plan</div>Lisbon, 12–18 Dec. Flights booked. Hotel near Alfama…<br>- pack adapter<br>- tram 28<span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: var(--ds-text); color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">MD</span></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Trip plan</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;">Yesterday · 6 KB</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;">Yesterday · 6 KB</span>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4E0D8; box-sizing: border-box; position: relative; overflow: hidden; padding: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; align-content: start;"><span style="height: 8px; background: #DDF0F2;"></span><span style="height: 8px; background: #DDF0F2;"></span><span style="height: 8px; background: #DDF0F2;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="height: 8px; background: #F2EFEA;"></span><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: #3A3733; color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">XLSX</span></div>
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); box-sizing: border-box; position: relative; overflow: hidden; padding: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; align-content: start;"><span style="height: 8px; background: var(--ds-docsTint);"></span><span style="height: 8px; background: var(--ds-docsTint);"></span><span style="height: 8px; background: var(--ds-docsTint);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="height: 8px; background: var(--ds-bgSunken);"></span><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: var(--ds-text); color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">XLSX</span></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Budget 2026</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;">30 Oct · 88 KB</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;">30 Oct · 88 KB</span>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; border-radius: 8px; background: #2A2826; display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#939DA8" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: var(--ds-bgSunken); display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--ds-lockerText)" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Voice memo</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;">24 Oct · 4:05</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;">24 Oct · 4:05</span>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; display: flex; align-items: center; justify-content: center;"><svg width="84" height="70" viewBox="0 0 84 70" aria-hidden="true"><path d="M2 10a6 6 0 016-6h22l8 8h38a6 6 0 016 6v44a6 6 0 01-6 6H8a6 6 0 01-6-6z" fill="#30A9C6"/><path d="M2 22h80v40a6 6 0 01-6 6H8a6 6 0 01-6-6z" fill="#1D4144"/></svg></div>
+      <div style="width: 96px; height: 120px; display: flex; align-items: center; justify-content: center;"><svg width="84" height="70" viewBox="0 0 84 70" aria-hidden="true"><path d="M2 10a6 6 0 016-6h22l8 8h38a6 6 0 016 6v44a6 6 0 01-6 6H8a6 6 0 01-6-6z" fill="var(--ds-docsText)"></path><path d="M2 22h80v40a6 6 0 01-6 6H8a6 6 0 01-6-6z" fill="var(--ds-docsTint)"></path></svg></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Taxes 2025</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;">12 documents</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;">12 documents</span>
     </div>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-      <div style="width: 96px; height: 120px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4E0D8; box-sizing: border-box; position: relative; overflow: hidden; padding: 10px;"><div style="height: 8px; width: 70%; background: #1C1B19; border-radius: 2px;"></div><div style="height: 4px; width: 90%; background: #CFCAC1; border-radius: 2px; margin-top: 8px;"></div><div style="height: 4px; width: 85%; background: #CFCAC1; border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 90%; background: #CFCAC1; border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 60%; background: #CFCAC1; border-radius: 2px; margin-top: 4px;"></div><div style="height: 22px; width: 100%; background: #E9F5F6; border-radius: 3px; margin-top: 8px;"></div><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: #3A3733; color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">PDF</span></div>
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); box-sizing: border-box; position: relative; overflow: hidden; padding: 10px;"><div style="height: 8px; width: 70%; background: var(--ds-text); border-radius: 2px;"></div><div style="height: 4px; width: 90%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 8px;"></div><div style="height: 4px; width: 85%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 90%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 4px;"></div><div style="height: 4px; width: 60%; background: var(--ds-lineStrong); border-radius: 2px; margin-top: 4px;"></div><div style="height: 22px; width: 100%; background: #E9F5F6; border-radius: 3px; margin-top: 8px;"></div><span style="position: absolute; left: 6px; bottom: 6px; font-size: 9px; font-weight: 700; background: var(--ds-text); color: #FFFFFF; padding: 1px 4px; border-radius: 3px;">PDF</span></div>
       <span style="font-size: 13px; text-align: center; line-height: 1.2;">Lease 2026</span>
-      <span style="font-size: 11px; color: #A39E95; display: flex; align-items: center; gap: 4px;">20 Oct · 640 KB</span>
+      <span style="font-size: 11px; color: var(--ds-textFaint); display: flex; align-items: center; gap: 4px;">20 Oct · 640 KB</span>
     </div>
   </div>
 
-  <div role="status" aria-live="polite" style="position: absolute; left: 16px; right: 16px; bottom: 88px; height: 44px; border-radius: 22px; background: #1F1E1C; border: 1px solid #3A3733; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 16px; box-sizing: border-box;">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A39E95" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>
+  <div role="status" aria-live="polite" style="position: absolute; left: 16px; right: 16px; bottom: 88px; height: 44px; border-radius: 22px; background: var(--ds-bgElev); border: 1px solid var(--ds-lineStrong); display: flex; align-items: center; gap: 10px; padding: 0 6px 0 16px; box-sizing: border-box;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ds-textFaint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"></path></svg>
     <span style="flex-grow: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Passport scan moved to trash</span>
-    <button style="height: 44px; padding: 0 12px; border: none; background: none; color: #30A9C6; font-size: 15px; font-weight: 600;">Undo</button>
+    <button style="height: 44px; padding: 0 12px; border: none; background: none; color: var(--ds-docsText); font-size: 15px; font-weight: 600;">Undo</button>
   </div>
 
   <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
-    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>
+    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--ds-glass); border: 1px solid var(--ds-lineStrong); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"></path></svg>
     </button>
-    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
-      <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #F2EFEA; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Recents</span>
-      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Browse</span>
-      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"/></svg>Starred</span>
-      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</span>
+    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: var(--ds-glass); border: 1px solid var(--ds-lineStrong); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+      <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ds-text); font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Recents</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ds-textFaint);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>Browse</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ds-textFaint);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg>Starred</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ds-textFaint);"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>More</span>
     </div>
-    <button aria-label="Search titles and contents" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <button aria-label="Search titles and contents" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: var(--ds-glass); border: 1px solid var(--ds-lineStrong); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ds-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
     </button>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844}}">
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
 </script>
-</body>
-</html>
+
+
+</body></html>

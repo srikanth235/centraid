@@ -2,6 +2,35 @@
 //! Catch up. `task` is here only as the word a person reads.
 
 catalog! {
+    plain completed_cleared = ("Completed reminders moved to Trash", "Completed reminders moved to Trash");
+    plain tags_comma = ("Tags, separated by commas", "Tags, separated by commas");
+    plain field_url = ("URL", "URL");
+    plain custom_repeat = ("Custom repeat", "Custom repeat");
+    plain repeat_needs_time = ("Add a time to repeat more often than daily.", "Add a time to repeat more often than daily.");
+    plain repeat_invalid = ("Check the custom repeat rule.", "Check the custom repeat rule.");
+    plain custom_rule = ("Custom repeat rule", "Custom repeat rule");
+    plain apply = ("Apply", "Apply");
+    plain quick_due_preview = ("Due {date}", "Due {date}");
+    plain quick_date_unclear = ("Use today, tomorrow, next Friday or a date like 2026-11-05.", "Use today, tomorrow, next Friday or a date like 2026-11-05.");
+    plain quick_time_unclear = ("Use a time like 9am or 21:00.", "Use a time like 9am or 21:00.");
+    plain row_deleted = ("Reminder deleted", "Reminder deleted");
+    plain row_reordered = ("Reminder moved", "Reminder moved");
+    plain clear_completed = ("Clear Completed", "Clear Completed");
+    plain details = ("Details", "Details");
+    plain delete_reminder = ("Delete", "Delete");
+    plain smart_scheduled = ("Scheduled", "Scheduled");
+    plain smart_completed = ("Completed", "Completed");
+    plain my_lists = ("My Lists", "My Lists");
+    plain flag = ("Flag", "Flag");
+    plain flagged = ("Flagged", "Flagged");
+    plain unflag = ("Remove flag", "Remove flag");
+    plain not_flagged = ("Not flagged", "Not flagged");
+    plain flagged_empty = ("No flagged reminders.", "No flagged reminders.");
+    plain morning = ("Morning", "Morning");
+    plain afternoon = ("Afternoon", "Afternoon");
+    plain tonight = ("Tonight", "Tonight");
+    plain show_completed = ("Show Completed", "Show Completed");
+    plain scheduled_empty = ("No scheduled reminders.", "No scheduled reminders.");
     plain add = ("Add", "Add");
     plain added_to = ("Added to", "Added to");
     plain add_section = ("Add section", "Add section");
@@ -20,7 +49,7 @@ catalog! {
     plain came_due_many = ("tasks came due", "tasks came due");
     plain came_due_one = ("task came due", "task came due");
     plain cancel = ("Cancel", "Cancel");
-    plain catch_up = ("Reschedule", "Reschedule");
+    plain catch_up = ("Catch up", "Catch up");
     plain catch_up_empty = ("Nothing is overdue.", "Nothing is overdue.");
     plain close = ("Close", "Close");
     plain complete_all = ("Complete all", "Complete all");
@@ -60,6 +89,8 @@ catalog! {
     plain group_undated = ("Undated", "Undated");
     plain group_unsectioned = ("No section", "No section");
     plain import_reminders_done = ("{count} tasks imported", "{count} tasks imported");
+    plain import_reminders_native_limit = ("Reminders does not expose flags or subtasks. Import a task file to keep them", "Reminders does not expose flags or subtasks. Import a task file to keep them");
+    plain import_reminders_alarm_limit = ("Location alerts need re-adding", "Location alerts need re-adding");
     plain import_reminders_failed = ("Reminders did not import.", "Reminders did not import.");
     plain import_reminders_none = ("No open reminders to import", "No open reminders to import");
     plain import_reminders_no_vault = ("Make a vault first, then import.", "Make a vault first, then import.");
@@ -92,10 +123,10 @@ catalog! {
     plain pile_dated = ("Came due", "Came due");
     plain pile_repeating = ("Repeating, behind", "Repeating, behind");
     plain pile_sitting = ("Sitting 90 days or more", "Sitting 90 days or more");
-    plain priority_next = ("Next", "Next");
+    plain priority_next = ("!!", "!!");
     plain priority_none = ("None", "None");
-    plain priority_now = ("Now", "Now");
-    plain priority_soon = ("Soon", "Soon");
+    plain priority_now = ("!!!", "!!!");
+    plain priority_soon = ("!", "!");
     plain projects_no_area = ("Projects", "Projects");
     plain project_created = ("Project created", "Project created");
     plain project_empty = ("Nothing is filed here yet.", "Nothing is filed here yet.");
@@ -157,7 +188,7 @@ catalog! {
     plain untitled = ("Untitled task", "Untitled task");
     plain view_all = ("All", "All");
     plain view_anytime = ("Anytime", "Anytime");
-    plain view_logbook = ("Logbook", "Logbook");
+    plain view_logbook = ("Completed", "Completed");
     plain view_reminders = ("Reminders", "Reminders");
     plain when_next_week = ("Next week", "Next week");
     plain when_none = ("No date", "No date");
@@ -166,5 +197,11 @@ catalog! {
     plain when_weekend = ("This weekend", "This weekend");
     plain window = ("more not shown", "more not shown");
     plain wont_do = ("Won't do", "Won't do");
+    plain notification_done = ("Mark as done", "Mark as done");
+    plain notification_denied = ("Allow notifications in Settings to receive reminders.", "Allow notifications in Settings to receive reminders.");
+    plain notification_failed = ("Reminders could not be scheduled.", "Reminders could not be scheduled.");
+    plain notification_settings = ("Settings", "Settings");
+    plain notification_hour = ("In 1 hour", "In 1 hour");
+    plain notification_tomorrow = ("Tomorrow at 9", "Tomorrow at 9");
     plain write_refused = ("Couldn't save that change.", "Couldn't save that change.");
 }

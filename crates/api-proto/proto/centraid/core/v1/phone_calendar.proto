@@ -1,0 +1,111 @@
+// Native phone-store facts and write effects. Platform adapters produce these inputs;
+// Rust owns their conversion and merge. They are not rendered screen state.
+syntax = "proto3";
+package centraid.core.v1;
+
+message CalendarRead {
+  // The member's Import tap lets the OS ask for permission; a following pass
+  // never does.
+  bool ask_permission = 1;
+  uint32 days_back = 2;
+  uint32 days_on = 3;
+}
+
+message CalendarSnapshot {
+  // The shell's clock when it read, epoch milliseconds, and its zone.
+  int64 now_ms = 1;
+  string device_zone = 2;
+  // False when the read may have missed events: nothing is then trashed.
+  bool complete = 3;
+  // Every visible calendar the member writes to, an empty one included.
+  repeated PhoneCalendar calendars = 4;
+  repeated PhoneCalendarEvent events = 5;
+  // This install's id, minted once and kept off the vault: an id that means
+  // something on this phone only is followed under it (R-1127-10).
+  string device_id = 6;
+}
+
+message PhoneCalendar {
+  // The platform's own id for the calendar, not yet prefixed.
+  string key = 1;
+  string source_title = 2;
+  string title = 3;
+  // The colour the phone paints it with, `#RRGGBB`; empty when it has none.
+  string color = 4;
+}
+
+message PhoneCalendarEvent {
+  string title = 1;
+  string notes = 2;
+  bool all_day = 3;
+  string start = 4;
+  string end = 5;
+  // The event's IANA zone; empty is the device's.
+  string tz = 6;
+  // The calendar holds it as not blocking its time.
+  bool free = 7;
+  optional PhoneCalendarSeries series = 8;
+  // Where the series' rule puts this occurrence, when the member moved it.
+  string original_start = 9;
+  bool moved = 10;
+  // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
+  string phone_id = 11;
+  string calendar_key = 12;
+  // The event's link and where it is, as the phone holds them; empty when it has none.
+  string url = 13;
+  string location = 14;
+  repeated int32 alarms_before_min = 15;
+  repeated PhoneCalendarAttendee attendees = 16;
+  // Opaque local item id used only by the native writer, never as portable identity.
+  string native_id = 17;
+  // The series master is distinct from the concrete occurrence's native id.
+  string native_series_id = 18;
+}
+
+message PhoneCalendarAttendee {
+  string email = 1;
+  string name = 2;
+  string state = 3;
+}
+
+message CalendarWrite {
+  repeated CalendarMutation changes = 1;
+}
+
+message CalendarMutation {
+  string entity_id = 1;
+  string calendar_key = 2;
+  string native_id = 3;
+  bool deleted = 4;
+  PhoneCalendarEvent expected = 5;
+  PhoneCalendarEvent desired = 6;
+  repeated string fields = 7;
+  // Empty for a single event, otherwise the RFC 5545 master rule.
+  string rule = 8;
+  string expected_rule = 9;
+  // Nonempty confines this mutation to one series-local occurrence.
+  string original_start = 10;
+}
+
+message CalendarWritten {
+  uint32 applied = 1;
+  uint32 conflicted = 2;
+  uint32 refused = 3;
+  repeated CalendarReceipt receipts = 4;
+  repeated string unsupported_fields = 5;
+}
+
+message CalendarReceipt {
+  string entity_id = 1;
+  string phone_id = 2;
+  repeated string fields = 3;
+  string original_start = 4;
+}
+
+message PhoneCalendarSeries {
+  string id = 1;
+  string rrule = 2;
+  string start = 3;
+  string end = 4;
+  string tz = 5;
+}
