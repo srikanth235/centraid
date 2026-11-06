@@ -8,20 +8,21 @@ struct StatusLineView: View {
     var identifier: String = "status-action"
     let onAct: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         if !status.sentence.isEmpty {
             HStack(spacing: 8) {
                 Text(status.sentence)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color(status.refused ? "net" : "textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(status.refused ? StateColor.red.text : Surface.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !status.actionLabel.isEmpty {
                     Button(action: onAct) {
                         Text(status.actionLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("link", scheme))
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
@@ -30,8 +31,25 @@ struct StatusLineView: View {
                 }
             }
             // NO IDENTIFIER ON THE CONTAINER: one set here replaces the verb's.
+            .modifier(KitStatusPill())
             .padding(.horizontal, CentraidGeometry.pageMargin)
         }
+    }
+}
+
+/// THE ONE STATUS LINE'S SHAPE (#1173): a single pill on the card colour with a hairline edge,
+/// docked above the band. It casts no shadow: only floating glass does. State is a sentence in
+/// the pill, never a toast that overlays and goes.
+struct KitStatusPill: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+        content
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .background(Surface.card, in: shape)
+            .overlay(shape.strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+            .padding(.vertical, 4)
     }
 }
 
@@ -50,22 +68,23 @@ struct ProgressStatusLine: View {
     var onClose: () -> Void = {}
     var identifier: String = "status"
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         if !sentence.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(sentence)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color(refused ? "net" : "textSoft", scheme))
+                        .kitType(.row)
+                        .foregroundStyle(refused ? StateColor.red.text : Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("\(identifier)-sentence")
                     if !actionLabel.isEmpty {
                         Button(action: onAct) {
                             Text(actionLabel)
-                                .centraidType("smallStrong")
-                                .foregroundStyle(Theme.color("link", scheme))
+                                .kitType(.row)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(accent.text)
                                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                                 .contentShape(Rectangle())
                         }
@@ -74,7 +93,7 @@ struct ProgressStatusLine: View {
                     }
                     if !closeLabel.isEmpty {
                         Button(action: onClose) {
-                            CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
+                            CentraidIconView(iconKey: "X", tint: Surface.meta, size: 16)
                                 .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
                                 .contentShape(Rectangle())
                         }
@@ -86,9 +105,9 @@ struct ProgressStatusLine: View {
                 if let permille {
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Theme.color("skel", scheme))
+                            Capsule().fill(Surface.fill)
                             Capsule()
-                                .fill(Theme.color("text", scheme))
+                                .fill(accent.fill)
                                 .frame(width: proxy.size.width * CGFloat(min(permille, 1000)) / 1000)
                         }
                     }
@@ -96,8 +115,8 @@ struct ProgressStatusLine: View {
                     .accessibilityHidden(true)
                 }
             }
+            .modifier(KitStatusPill())
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 4)
         }
     }
 }

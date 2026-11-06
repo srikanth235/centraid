@@ -24,26 +24,31 @@ struct LockerWallView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// THE LOCK SCREEN (#1173): the lock on a wash of Locker's graphite, the one sentence, what
+    /// unlocking does, when it locks itself, and the one ink button in Locker's fill.
     var body: some View {
+        let accent = AppAccent("locker")
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                CentraidIconView(iconKey: "Lock", tint: Theme.color("text", scheme), size: 28)
+                CentraidIconView(iconKey: "Lock", tint: accent.text, size: 28)
+                    .frame(width: 64, height: 64)
+                    .background(accent.wash(dark: scheme == .dark), in: Circle())
                     .accessibilityHidden(true)
                     .padding(.top, 24)
                 Text(wall.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("locker-wall-title")
                 if !wall.body.isEmpty {
                     Text(wall.body)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.body)
                 }
                 if !wall.notice.isEmpty {
                     Text(wall.notice)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color(wall.phase == .failed ? "net" : "textSoft", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(wall.phase == .failed ? StateColor.red.text : Surface.meta)
                         .accessibilityIdentifier("locker-wall-notice")
                 }
                 // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
@@ -73,6 +78,7 @@ struct LockerWallView: View {
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .environment(\.appAccent, accent)
         .accessibilityIdentifier("locker-wall")
     }
 }

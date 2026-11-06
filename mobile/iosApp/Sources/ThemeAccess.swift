@@ -43,6 +43,8 @@ enum Theme {
     /// own natural height is applied as `lineSpacing` plus half of it as padding
     /// above and below — see `CentraidTypeModifier` for why both are needed.
     static func style(_ role: String, _ scheme: ColorScheme) -> CentraidTypeStyle {
+        // THE REDESIGN'S SCALE (#1173) is `CentraidScale`, not the legacy table.
+        if let rung = KitType.named(role) { return rung.style }
         guard let value = tokens(scheme).type[role] else {
             preconditionFailure("no such type role '\(role)' in the emitted native theme.")
         }

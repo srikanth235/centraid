@@ -145,8 +145,19 @@ struct RoomTrailing: View {
 
     var body: some View {
         if let action {
-            ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
-                .disabled(!action.enabled)
+            if action.iconKey == "Plus" {
+                // THE CREATE VERB is the filled key in the app's accent.
+                KitAccentKey(
+                    iconKey: action.iconKey,
+                    label: action.label,
+                    identifier: action.identifier,
+                    enabled: action.enabled,
+                    action: action.action
+                )
+            } else {
+                ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
+                    .disabled(!action.enabled)
+            }
         }
     }
 }
@@ -235,11 +246,16 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // THE HEADER IS THE PAGE'S: the title at 34 bold, the scope under it. The system bar
+            // above carries only the keys (the glass filter and the filled accent `+`) and a
+            // back chevron where the place was pushed.
+            KitHeader(title: title, subtitle: subtitle)
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .background(Surface.page.ignoresSafeArea())
+        .environment(\.appAccent, AppAccent(app))
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -248,8 +264,10 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
                 if let filter { FilterMenuButton(app: app, slot: filter) }
                 trailing()
             }
-            if let subtitle {
-                ToolbarItem(placement: .principal) { RoomTitle(title: title, slot: subtitle) }
+            // The title is drawn in the page, so the bar's own is put away; the item keeps the
+            // back label the system takes from `navigationTitle`.
+            ToolbarItem(placement: .principal) {
+                Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -329,6 +347,10 @@ struct PushedPage<Trailing: View, Content: View>: View {
     let title: String
     let parentTitle: String
     let onBack: () -> Void
+    /// The kit's own pages (Trash, Settings) draw the title large in the page, with `meta`
+    /// under it; a page that heads itself (a document, an editor) leaves this off.
+    var showsTitle: Bool = false
+    var meta: String = ""
     let trailing: () -> Trailing
     let content: () -> Content
 
@@ -338,36 +360,40 @@ struct PushedPage<Trailing: View, Content: View>: View {
         title: String,
         parentTitle: String,
         onBack: @escaping () -> Void,
+        showsTitle: Bool = false,
+        meta: String = "",
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.parentTitle = parentTitle
         self.onBack = onBack
+        self.showsTitle = showsTitle
+        self.meta = meta
         self.trailing = trailing
         self.content = content
     }
 
     var body: some View {
-        content()
+        VStack(spacing: 0) {
+            if showsTitle { KitHeader(title: title, meta: meta) }
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
-            .navigationTitle(title)
+            .background(Surface.page.ignoresSafeArea())
+            .navigationTitle(showsTitle ? "" : title)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // THE BACK KEY IS A CHEVRON IN THE BAR'S OWN GLASS (#1173): a drill-in page
+                    // is the only place a back chevron appears. The parent's name is what a
+                    // screen reader says.
                     Button(action: onBack) {
-                        HStack(spacing: 2) {
-                            CentraidIconView(iconKey: "ChevronLeft", tint: Theme.color("text", scheme), size: 18)
-                            Text(parentTitle)
-                                .centraidType("body")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
+                        CentraidIconView(iconKey: "ChevronLeft", tint: Surface.ink, size: 18)
+                            .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(KitWords.backTo(parent: parentTitle))
@@ -504,16 +530,16 @@ struct SheetRoom<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
                 .padding(.top, 20)
             content()
             if !status.isEmpty {
                 Text(status)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
                     .accessibilityIdentifier("kit-sheet-status")
             }
             if primary != nil || !outlines.isEmpty {
@@ -555,7 +581,7 @@ struct SheetPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .presentationBackground(Theme.color("bgElev", scheme))
+            .presentationBackground(Surface.sheet)
             .presentationDragIndicator(.visible)
             .presentationDetents(detents)
             // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
@@ -575,32 +601,35 @@ struct KitInkButton: View {
     var identifier: String = ""
     let action: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
-    /// Disabled is still drawn: a `bgSunken` slab with a `textDisabled` label
-    /// (a destructive one, a `textDisabled` outline) — never hidden, never faded.
-    private var ink: String { enabled ? (destructive ? "net" : "onAccent") : "textDisabled" }
+    /// THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label;
+    /// a destructive one is the outlined state-red pill at the same width. Disabled is still
+    /// drawn: the fill colour with meta ink, never hidden, never faded.
+    private var ink: Color {
+        guard enabled else { return Surface.meta }
+        return destructive ? StateColor.red.text : .white
+    }
 
     var body: some View {
         Button(action: action) {
             Text(label)
-                .centraidType("labelOn")
-                .foregroundStyle(Theme.color(ink, scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(ink)
                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                 .background {
                     if !destructive {
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .fill(Theme.color(enabled ? "accent" : "bgSunken", scheme))
+                        Capsule().fill(enabled ? accent.fill : Surface.fill)
                     }
                 }
                 .overlay {
                     if destructive {
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .strokeBorder(Theme.color(enabled ? "net" : "textDisabled", scheme), lineWidth: 1.5)
+                        Capsule().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
                     }
                 }
-                .contentShape(Rectangle())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)

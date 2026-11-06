@@ -90,13 +90,13 @@ struct CentraidRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(dimmed ? "textFaint" : "text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(dimmed ? Surface.meta : Surface.ink)
                     .lineLimit(2)
                 if !meta.isEmpty || pending {
                     Text(pending ? (meta.isEmpty ? pendingLabel : "\(meta) · \(pendingLabel)") : meta)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color(dimmed ? "textFaint" : "textSoft", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
                         .lineLimit(1)
                 }
             }
@@ -124,7 +124,7 @@ struct CentraidRow: View {
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
                 .padding(.leading, CentraidGeometry.pageMargin)
         }
@@ -138,7 +138,7 @@ struct KitRowPress: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(configuration.isPressed ? Theme.color("bgPress", scheme) : Color.clear)
+            .background(configuration.isPressed ? Surface.fill : Color.clear)
     }
 }
 
@@ -166,8 +166,6 @@ struct StatusChipView: View {
 
     init(_ chip: Centraid_Core_V1_StatusChip) { self.chip = chip }
 
-    private var tone: String { Self.ink(chip.tone, neutral: "textSoft") }
-
     /// A tone's ink role. `neutral` is what NEUTRAL and UNSPECIFIED draw — soft
     /// ink on a chip, plain ink on a row's trailing figure.
     static func ink(_ tone: Centraid_Core_V1_StatusChip.Tone, neutral: String) -> String {
@@ -179,16 +177,22 @@ struct StatusChipView: View {
         }
     }
 
+    /// THE ONE BADGE SHAPE (#1173): 11pt capitals on a pale tint. A tone that says a state wears
+    /// that state's colour (not yet and caution are amber, owe and leaves are red); a plain chip
+    /// is quiet ink on the fill.
     var body: some View {
-        Text(chip.label)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color(tone, scheme))
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .overlay(
-                Capsule().strokeBorder(Theme.color(tone == "textSoft" ? "line" : tone, scheme), lineWidth: CentraidGeometry.hairline)
-            )
+        switch chip.tone {
+        case .seam, .warning: KitBadge(label: chip.label, state: .amber)
+        case .net: KitBadge(label: chip.label, state: .red)
+        case .neutral, .unspecified, .UNRECOGNIZED:
+            Text(chip.label)
+                .kitType(.badge)
+                .foregroundStyle(Surface.meta)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Surface.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
     }
 }
 
@@ -207,6 +211,7 @@ struct SectionHeader: View {
     var onVerb: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     init(_ head: KitSectionHead, onVerb: (() -> Void)? = nil) {
         self.head = head
@@ -220,20 +225,21 @@ struct SectionHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(head.title)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.group)
+                .foregroundStyle(Surface.meta)
                 .accessibilityAddTraits(.isHeader)
             if let count = head.count {
                 Text("\(count)")
-                    .centraidType("eyebrow")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .kitType(.group)
+                    .foregroundStyle(Surface.meta)
             }
             Spacer(minLength: 0)
             if !head.verbLabel.isEmpty, let onVerb {
                 Button(action: onVerb) {
                     Text(head.verbLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
+                        .kitType(.meta)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(accent.text)
                         .frame(minHeight: CentraidGeometry.targetMinFine)
                         .contentShape(Rectangle())
                 }
@@ -405,32 +411,38 @@ struct SearchContainerRow: View {
     let container: Centraid_Core_V1_SearchContainer
     let onOpen: (Centraid_Core_V1_Route) -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
+    /// A matched container is one pill above the rows (#1173): its glyph in the app's colour,
+    /// the kind in meta, then its name.
     var body: some View {
         Button {
             guard container.hasRoute else { return }
             onOpen(container.route)
         } label: {
-            HStack(spacing: 12) {
-                CentraidIconView(iconKey: container.iconKey, tint: Theme.color("textSoft", scheme), size: 18)
+            HStack(spacing: 6) {
+                CentraidIconView(iconKey: container.iconKey, tint: accent.text, size: 16)
+                Text(container.kindLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .lineLimit(1)
                 Text(container.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 8)
-                Text(container.kindLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .frame(minHeight: CentraidGeometry.targetMinFine)
+            .background(Surface.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+            .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .overlay(alignment: .bottom) { KitHairline() }
             .contentShape(Rectangle())
         }
-        .buttonStyle(KitRowPress())
+        .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(container.accessibilityLabel)
         .accessibilityAddTraits(.isButton)

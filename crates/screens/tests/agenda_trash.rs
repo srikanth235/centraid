@@ -66,6 +66,7 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     assert_eq!(view.back_label, "Agenda");
     let data = trash_data(d.view(i));
     assert_eq!(data.rows.len(), 2);
+    assert_eq!(data.count_label, "Trash · 2");
     let order: Vec<&str> = data.rows.iter().map(|r| r.id.as_str()).collect();
     assert!(order.contains(&first.as_str()) && order.contains(&second.as_str()));
     let today = today(&d);

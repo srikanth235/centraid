@@ -37,8 +37,8 @@ struct ConfirmSheet: View {
         ) {
             if !confirm.body.isEmpty {
                 Text(confirm.body)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
             }
         }
         .presentationDetents(Self.detents)
@@ -70,8 +70,8 @@ struct NoticeSheet: View {
             titleIdentifier: "kit-notice"
         ) {
             Text(sentence)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.row)
+                .foregroundStyle(Surface.body)
         }
         .presentationDetents(Self.detents)
     }
@@ -82,6 +82,8 @@ struct NoticeSheet: View {
 struct SheetRow: View {
     var iconKey: String = ""
     let label: String
+    /// A line of meta under the label ("From a password manager"); the machine's words.
+    var detail: String = ""
     var destructive: Bool = false
     var selected: Bool = false
     /// A row that opens another sheet or page says so with a trailing chevron.
@@ -89,33 +91,47 @@ struct SheetRow: View {
     var identifier: String = ""
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
-        let ink = enabled ? (destructive ? "net" : "text") : "textDisabled"
+        let ink = enabled ? (destructive ? StateColor.red.text : Surface.ink) : Surface.meta
         Button(action: onTap) {
             HStack(spacing: 12) {
                 if !iconKey.isEmpty {
-                    CentraidIconView(
-                        iconKey: iconKey,
-                        tint: Theme.color(ink, scheme),
-                        size: 18
-                    )
-                    .frame(width: 24, height: 24)
+                    // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a
+                    // destructive row's is the state's red.
+                    CentraidIconView(iconKey: iconKey, tint: .white, size: 16)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            destructive ? StateColor.red.fill : accent.fill,
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
                 }
-                Text(label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(ink, scheme))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label)
+                        .kitType(.row)
+                        .foregroundStyle(ink)
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                    }
+                }
                 Spacer(minLength: 0)
                 if selected {
-                    CentraidIconView(iconKey: "Check", tint: Theme.color(enabled ? "text" : "textDisabled", scheme), size: 16)
+                    CentraidIconView(iconKey: "Check", tint: accent.text, size: 16)
                 }
                 if chevron {
-                    CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 16)
+                    CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse + 8)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
@@ -139,7 +155,12 @@ struct OptionSheet<Rows: View>: View {
 
     var body: some View {
         SheetRoom(title: title, status: status) {
+            // THE ROWS ARE ONE CARD ON THE SHEET (#1173); the last row's hairline falls outside
+            // the clip, so a card never ends on a rule.
             VStack(spacing: 0) { rows() }
+                .padding(.bottom, -1)
+                .background(Surface.sheetCard)
+                .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         }
     }
 }

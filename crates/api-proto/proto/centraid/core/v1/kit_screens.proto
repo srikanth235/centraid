@@ -307,6 +307,8 @@ message TrashData {
   EmptyState empty = 2;
   // "Empty trash"; empty when the app cannot empty its trash, or has nothing in it.
   string empty_label = 3;
+  // The scope line under the title ("Trash · 3"); empty when there is nothing in it.
+  string count_label = 4;
 }
 
 // What a trash screen shows. The screen name (`<app>.trash`) says which app.
