@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Native-controls ratchet gate (DESIGN.md "### The controls (mobile)").
+// Native-controls ratchet gate (product-intuition/references/design-behaviour.md § Controls).
 //
 // The mobile shells draw every control from the kit — `mobile/iosApp/Sources/Kit`
 // and `mobile/androidApp/.../kit` — and a screen reaches for a platform
@@ -45,7 +45,7 @@
 // with no entry that now counts, fails. A file UNDER its budget also fails —
 // the budget must be lowered in the same change, so the debt can never creep
 // back into the headroom a fix opened up. Never raise a number: fix the
-// screen (reach for the kit control) or open a DESIGN.md argument.
+// screen (reach for the kit control) or open an argument with the owner (product-intuition/references/design-behaviour.md § Controls).
 //
 // Run with `--print` to emit the measured budget as JSON, the sanctioned way
 // to record a decrease. `//` and `/* */` comments are stripped before matching.
@@ -245,7 +245,7 @@ function main() {
       console.error(`  ${o.rule}  ${o.file}: ${o.count} (budget ${o.budget})`);
     }
     console.error(
-      '\nDESIGN.md "The controls (mobile)": draw the control from the kit\n' +
+      "\nproduct-intuition/references/design-behaviour.md § Controls: draw the control from the kit\n" +
         "(InkButton/OutlineButton/KitLink/IconKey/ConfirmSheet/ReadStateView, a\n" +
         "token radius, a leaf disabled ink). Do not raise the budget; see the\n" +
         "header of scripts/lint-native-controls.mjs.\n"

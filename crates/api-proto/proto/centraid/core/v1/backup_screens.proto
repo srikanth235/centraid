@@ -153,7 +153,7 @@ message BackupRuleChoice {
   bool picked = 3;
 }
 
-// THE PAGE'S ONE INK BUTTON (DESIGN.md: at most one per view), named once for
+// THE PAGE'S ONE INK BUTTON (product-intuition/references/design-behaviour.md § Controls: at most one per view), named once for
 // both shells.
 enum BackupInk {
   BACKUP_INK_UNSPECIFIED = 0;

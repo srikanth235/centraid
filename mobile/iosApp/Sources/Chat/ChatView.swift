@@ -325,7 +325,7 @@ struct ChatView: View {
 
 // MARK: - Motion
 
-/// DESIGN.md invariant 5, lowered for this screen: entry at 280 ms on the entry
+/// design/tokens.toml (motion), lowered for this screen: entry at 280 ms on the entry
 /// curve, a state change at 140 ms. Reduced motion drops both at the call site.
 enum ChatMotion {
     static let entry = Animation.timingCurve(0.2, 0.7, 0.2, 1, duration: 0.28)

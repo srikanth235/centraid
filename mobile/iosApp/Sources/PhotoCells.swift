@@ -171,7 +171,7 @@ struct PhotoTile: View {
 /// still on its way gets none — tapping it would ask for something already
 /// queued — and `original` and `absent` draw nothing.
 ///
-/// A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
+/// A FETCH IS A LINE AND NOT A SPINNER (product-intuition/references/design-behaviour.md § Status line: loading is determinate or
 /// static, never a spinner). The byte plane reports completion and not
 /// progress (the tile carries no percentage), so the honest mark is words on the
 /// tile's own chip — v0's state slot, one quiet mono line on the page colour.
@@ -218,7 +218,7 @@ struct PhotoHeldMark: View {
 
 /// SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6
 /// in. Selecting and not picked is an outline in the stage's ink; picked is a
-/// filled ink circle with the inverse tick. INK, never a hue: DESIGN.md keeps
+/// filled ink circle with the inverse tick. INK, never a hue: product-intuition/references/design-behaviour.md § Colour keeps
 /// colour off controls, and a picked photograph is a control's state.
 struct PhotoSelectionDot: View {
     @Environment(\.colorScheme) private var scheme
@@ -243,7 +243,7 @@ struct PhotoSelectionDot: View {
 
 /// SLOT 3 — KIND (v0's `kindOverlay`): a video's length or `live`, in mono,
 /// bottom-trailing, from rung S up — below it the type would have to shrink
-/// past legibility, and DESIGN.md puts the floor there rather than shrinking
+/// past legibility, and product-intuition/references/design-behaviour.md § Accessibility puts the floor there rather than shrinking
 /// it. A video whose length the vault does not know still says it is a video,
 /// with the catalog's play mark, because that is what changes what a tap does.
 struct PhotoKindLine: View {
@@ -299,7 +299,7 @@ enum PhotoTileMetrics {
 /// Skeleton tiles at the rung's own geometry, packed by Rust at the width the
 /// shell reported, so the photographs land where their placeholders stood. The
 /// aspect sequence is FIXED — random aspects would flicker — and nothing moves:
-/// DESIGN.md's `Loading` is static skeletons, and a shimmer is
+/// product-intuition/references/design-behaviour.md § Status line: `Loading` is static skeletons, and a shimmer is
 /// attention-seeking about work the product can simply describe.
 struct PhotoGridSkeleton: View {
     @Environment(\.colorScheme) private var scheme

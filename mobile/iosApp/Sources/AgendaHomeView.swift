@@ -25,7 +25,7 @@ struct AgendaHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
     /// The quick add holds the keyboard: the band is put away while it does
-    /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
+    /// (as an editor's is, product-intuition/references/design-behaviour.md § Rooms), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
     @State private var quickAddTyping = false
 

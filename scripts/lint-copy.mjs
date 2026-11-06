@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copy ratchet gate (DESIGN.md "## Copy").
+// Copy ratchet gate (product-intuition/references/design-behaviour.md § Wording).
 //
 // Every member-facing string lives in the Rust catalogue,
 // `crates/screens/src/strings/*.rs` (one `catalog!` row per sentence, #1135),
@@ -25,7 +25,7 @@
 //   copy-over-budget
 //       The hard caps, by key suffix: actions and labels 4 words, notes,
 //       details, ledes, statuses and hints 12, bodies, leads, notices and
-//       errors 25, titles 6. The caps are ceilings, not targets: DESIGN.md
+//       errors 25, titles 6. The caps are ceilings, not targets: product-intuition/references/design-behaviour.md
 //       "Copy" budgets are tighter, and the lane that writes a string
 //       writes to those.
 //
@@ -41,7 +41,7 @@
 // no entry that now counts, fails. A file UNDER its budget also fails — the
 // budget must be lowered in the same change, so the debt can never creep
 // back into the headroom a rewrite opened up. Never raise a number: cut the
-// words, or open a DESIGN.md argument.
+// words, or open an argument with the owner (product-intuition/references/design-behaviour.md § Wording).
 //
 // Run with `--print` to emit the measured budget as JSON, the sanctioned way
 // to record a decrease. Run with `--list` to name every offending key.
@@ -255,7 +255,7 @@ const BUDGET = {
   },
   "copy-over-budget": {
     // EXPORT_LEDE: the plaintext-export warning, a security disclosure, which
-    // keeps a full sentence (DESIGN.md "Copy").
+    // keeps a full sentence (product-intuition/references/design-behaviour.md § Wording).
     "crates/screens/src/strings/locker.rs": 1,
     // PHOTOS_KEEP_ORIGINALS_LABEL, OWN_LABEL: toggle and checkbox labels, and
     // ENDPOINT_LABEL, RESTORE_HELD_OWN_LABEL: field and list prompts — the
@@ -341,7 +341,7 @@ function main() {
       console.error(`  ${o.rule}  ${o.file}: ${o.count} (budget ${o.budget})`);
     }
     console.error(
-      '\nDESIGN.md "Copy": cut the words, use the vocabulary table, keep reassurance\n' +
+      "\nproduct-intuition/references/design-behaviour.md § Wording: cut the words, use the vocabulary table, keep reassurance\n" +
         "to consent, destructive confirms and security disclosures. Do not raise the\n" +
         "budget. Run `node scripts/lint-copy.mjs --list` to name the offending keys.\n"
     );

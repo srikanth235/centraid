@@ -252,7 +252,7 @@ internal fun Modifier.bandStrip(): Modifier =
 
 /**
  * THE BAND'S PRESS: `bgPress` under the finger on the pill rung, and no
- * ripple — a ground and not a splash, a scale or an opacity, which DESIGN.md
+ * ripple — a ground and not a splash, a scale or an opacity, which product-intuition/references/design-behaviour.md § Controls
  * refuses. The tab stays where it was and only its floor answers.
  */
 @Composable

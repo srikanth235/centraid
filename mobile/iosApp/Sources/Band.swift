@@ -115,7 +115,7 @@ private struct BandTab: View {
     }
 }
 
-/// AN APP'S BAND — the `AppPlace` room's band (DESIGN.md, "The seven rooms"),
+/// AN APP'S BAND — the `AppPlace` room's band (product-intuition/references/design-behaviour.md § Rooms),
 /// copied from v0's (`apps/mobile/src/apps/photos/PhotosBand.tsx`,
 /// `kit/band/BandCapsule.tsx`, `kit/band-surface.ts`).
 ///
@@ -131,7 +131,7 @@ private struct BandTab: View {
 /// the held pair (`band` 400 → `control` 600, same rung, so nothing reflows),
 /// the ink step (`textFaint` mark and `textSoft` label → full `text`), and the
 /// rule. v0 said it with ink and the rule alone and set every label at 600,
-/// which left four grey bold words and a hairline to hunt for; DESIGN.md's held
+/// which left four grey bold words and a hairline to hunt for; the held (design/mockups/DesignRules.dc.html)
 /// pair is what makes the lit tab legible at a glance.
 ///
 /// **THE RULE SLIDES, AND IT SITS INSIDE THE PLATE.** Drawn on the plate's
@@ -418,7 +418,7 @@ private struct AppBandTab: View {
 
 /// THE BAND'S PRESS: `bgPress` under the finger, on the pill rung like the
 /// plate it sits in, eased on the state-change curve. A ground and not a
-/// scale, a dim or an opacity — DESIGN.md refuses all three — so the tab stays
+/// scale, a dim or an opacity — product-intuition/references/design-behaviour.md § Controls refuses all three — so the tab stays
 /// exactly where it was and only its floor answers.
 private struct BandPress: ButtonStyle {
     /// How far the pressed ground stands in from the tab's top and bottom, so
@@ -448,7 +448,7 @@ private struct BandPress: ButtonStyle {
     }
 }
 
-/// THE BAND'S GROUND, ONCE FOR EVERY BAND (DESIGN.md, "Elevation & Depth"): the platform's own
+/// THE BAND'S GROUND, ONCE FOR EVERY BAND (design/mockups/DesignRules.dc.html): the platform's own
 /// glass over whatever the page scrolls under it, or the paper it falls back to. This is the ONE
 /// place the shell asks which OS it is on; no band, key or bar decides that for itself.
 ///

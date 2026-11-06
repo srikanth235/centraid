@@ -235,7 +235,7 @@ Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's 
 | the Wire types | `crates/api-proto/proto`, by Gradle's `generateCommonMainProtos` | `buf lint` / `buf breaking`; the task is a build input, so a stale tree is not possible |
 | `iosApp/Sources/Generated/**` (the SwiftProtobuf types) | `mobile/scripts/generate-swift-protos.sh`: Xcode's pre-build phase, and `xcodegen generate`'s `preGenCommand` | none needed: the phase re-runs when a `.proto` changes, and `Sources/Generated` is gitignored |
 
-One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the emitter carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to [DESIGN.md](../DESIGN.md)'s rulebook.
+One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the emitter carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to the [wording rules](../.claude/skills/product-intuition/references/design-behaviour.md#wording).
 
 ## The shells, and what they hold
 

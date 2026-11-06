@@ -47,7 +47,7 @@ public fun CentraidTheme(
     content: @Composable () -> Unit,
 ) {
     val tokens = if (dark) CentraidTokens.dark else CentraidTokens.light
-    // THE SYSTEM FONT SCALE, CAPPED ONCE (DESIGN.md, Dynamic Type). Every `sp` in
+    // THE SYSTEM FONT SCALE, CAPPED ONCE (product-intuition/references/design-behaviour.md § Accessibility). Every `sp` in
     // the tree — ours through [centraidType], Material's own — resolves against
     // THIS density, so the cap is not something a screen can forget. A scale at
     // or under the cap passes through untouched, nonlinear scaling and all; a
@@ -87,7 +87,7 @@ public fun CentraidTheme(
 /**
  * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS caps Dynamic Type at
  * `DynamicTypeSize.xxxLarge`, Android caps the system font scale here
- * (DESIGN.md, Dynamic Type). A member who sets text larger than this reads this.
+ * (product-intuition/references/design-behaviour.md § Accessibility). A member who sets text larger than this reads this.
  */
 private const val MAX_FONT_SCALE: Float = 1.3f
 

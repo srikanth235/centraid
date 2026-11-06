@@ -61,7 +61,7 @@ enum Theme {
 private struct CentraidTypeModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     /// READ SO THE VIEW RE-RENDERS WHEN THE MEMBER CHANGES THE SYSTEM TEXT SIZE.
-    /// The app root caps it (DESIGN.md, Dynamic Type); a place the root's cap
+    /// The app root caps it (product-intuition/references/design-behaviour.md § Accessibility); a place the root's cap
     /// does not reach is capped again by `Theme.resolve`.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let role: String
@@ -113,7 +113,7 @@ struct CentraidResolvedType {
 }
 
 extension Theme {
-    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (DESIGN.md, Dynamic Type).
+    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (product-intuition/references/design-behaviour.md § Accessibility).
     ///
     /// The app root caps the environment at this once, but a SHEET DOES NOT
     /// INHERIT THAT CAP: a presentation is a hosting controller of its own and
@@ -124,7 +124,7 @@ extension Theme {
     /// anywhere a cap did not reach.
     static let textSizeCap: DynamicTypeSize = .xxxLarge
 
-    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (DESIGN.md, Dynamic Type).
+    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (product-intuition/references/design-behaviour.md § Accessibility).
     ///
     /// `band` is the only one, and the hold is arithmetic and not preference:
     /// invariant 1 caps a band at five destinations plus More, and those six

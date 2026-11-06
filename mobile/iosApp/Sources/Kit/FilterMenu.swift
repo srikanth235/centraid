@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE ONE FILTER AND SORT MENU (DESIGN.md, `AppPlace`).
+// THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots).
 //
 // The header's filter button opens a platform `Menu` that Rust finished
 // (`FilterMenu`): its sections, options, counts, checks and words. This file is

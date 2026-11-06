@@ -49,6 +49,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 - [Vault and Locker](references/vault-locker.md)
 - [Backup, following, and the assistant](references/backup-following-assistant.md)
 - [Apps and mobile shell](references/apps-shell.md)
+- [Design behaviour](references/design-behaviour.md): rooms, one way home, the status line, search and Ask about, controls, colour, accessibility, wording. Design values live in `design/mockups/` and `design/tokens.toml`.
 - [Identity, search, and performance](references/identity-search-performance.md)
 
 ## Decision process

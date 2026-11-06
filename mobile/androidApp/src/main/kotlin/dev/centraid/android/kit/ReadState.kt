@@ -179,7 +179,7 @@ public fun FailureView(
 
 /**
  * NOTHING HERE: one sentence, at most one more, and at most one action
- * (DESIGN.md copy table). The strings are finished; the action is the
+ * (product-intuition/references/design-behaviour.md § Wording). The strings are finished; the action is the
  * screen's own event.
  *
  * A ported app's day one that offers the phone's own data (People's contacts,
@@ -325,7 +325,7 @@ public fun ChoiceStack(
 /** The kit's geometry, in one place. */
 public object KitGeometry {
     /**
-     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (DESIGN.md fixes it at 18), the one
+     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (design/tokens.toml fixes it), the one
      * definition every kit and screen inset reads. The name stays; the value is no longer typed here.
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp

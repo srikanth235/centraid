@@ -181,7 +181,7 @@ public fun HomeScreen(
                 else -> SpringboardGrid(data, state.loading_label, onOpen)
             }
         }
-        // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+        // THE IMPORT'S LINE, on the band (product-intuition/references/design-behaviour.md § Status line).
         LocalShellLine.current?.invoke()
         Band(band, onSelectTab)
     }
@@ -1021,7 +1021,7 @@ private fun ColumnScope.FilledBody(body: HomeTileBody) {
                         androidx.compose.foundation.text.BasicText(
                             face.initials,
                             // `textInv` is the SOLVED foreground for a filled
-                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
+                            // identity disc (`design/mockups/DesignRules.dc.html`'s rule — `onAccent`
                             // in the hand-off's role map). Ink on a saturated
                             // fill is the contrast failure this tile had.
                             style = initialsStyle.copy(
