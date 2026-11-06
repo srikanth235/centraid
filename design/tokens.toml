@@ -1,0 +1,154 @@
+# Design tokens. `[mockups.dark]` is read by `cargo xtask design-dark`
+# (crates/xtask/src/design_dark.rs), which writes every `XDark.dc.html` in
+# design/mockups from the light `X.dc.html` (#1173). Never edit a dark screen.
+
+[mockups.dark]
+# Appended to the <title> of a dark screen.
+title_suffix = " (dark)"
+
+# One entry per light colour that changes. The dark value depends on the role
+# the colour plays: `text` is CSS `color`; `ink` is SVG `fill`/`stroke` (the
+# text value when absent); `fill` is `background*`, gradient stops and SVG
+# `stop-color`; `line` is `border*` and `outline*`; `shadow` is `box-shadow`
+# and `text-shadow`. A role left out keeps the light value.
+colors = [
+  { light = "#00AA98", ink = "#00F6DC" },
+  { light = "#087990", text = "#30A9C6", fill = "#01819B" },
+  { light = "#1C1B19", text = "#F2EFEA", fill = "#3A3733", line = "#F2EFEA" },
+  { light = "#1E4C80", text = "#2D71BE" },
+  { light = "#1F4A36", text = "#A2D8BF" },
+  { light = "#1F4A45", text = "#7FC4B8", fill = "#2E7268", line = "#7FC4B8" },
+  { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
+  { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
+  { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
+  { light = "#2F6FB5", text = "#5C96D5" },
+  { light = "#3D638F", text = "#5E89BA" },
+  { light = "#3E6B55", text = "#5A9B7B" },
+  { light = "#454E58", text = "#939DA8", fill = "#6A7888" },
+  { light = "#4A4741", text = "#C9C4BA", fill = "#3A3733" },
+  { light = "#4E3C86", text = "#705AB5" },
+  { light = "#5698F8", ink = "#85B4FA" },
+  { light = "#5A3200", text = "#E4C195" },
+  { light = "#6A5A99", text = "#9487B8" },
+  { light = "#6E6B66", fill = "#5F5B55" },
+  { light = "#6F6B64", text = "#A39E95" },
+  { light = "#7638AD", text = "#BA82F5", fill = "#935BCB", line = "#BA82F5" },
+  { light = "#85807A", text = "#75716A", line = "#75716A" },
+  { light = "#874300", text = "#F2A64F", fill = "#964C04" },
+  { light = "#8A6A1F", text = "#C89A2D" },
+  { light = "#8C6802", text = "#BF9738", fill = "#967002", line = "#BF9738" },
+  { light = "#8E897F", text = "#5C5852", fill = "#5C5852", line = "#5C5852" },
+  { light = "#8E8A84", fill = "#5F5B55" },
+  { light = "#8FA6C4", ink = "#ABBDD3" },
+  { light = "#A8398A", text = "#E573C3", fill = "#BB4C9C", line = "#E573C3" },
+  { light = "#AFC1D9", ink = "#A9BCD6" },
+  { light = "#BB365C", text = "#F76E8E", fill = "#CB4669", line = "#F76E8E" },
+  { light = "#C8392F", text = "#F27A6D", fill = "#CD483D", line = "#F27A6D" },
+  { light = "#CFCAC1", fill = "#4A4741", line = "#4A4741" },
+  { light = "#D7D4CE", fill = "#3A3733" },
+  { light = "#D8D3CA", line = "#C9C2B6" },
+  { light = "#D9E6DF", fill = "#263A30" },
+  { light = "#DCE8F4", fill = "#1D3044" },
+  { light = "#DDEDE3", fill = "#223F2D" },
+  { light = "#E1E3F0", fill = "#202541" },
+  { light = "#E1F0F3", fill = "#1D3D44" },
+  { light = "#D7D3CC", fill = "#3A3733" },
+  { light = "#DDF0F2", fill = "#1D4044" },
+  { light = "#E1F1F2", ink = "#1D4144", fill = "#1D4144" },
+  { light = "#E2DED7", fill = "#3A3733" },
+  { light = "#E2EEF8", fill = "#1D3244" },
+  { light = "#E3EEEB", fill = "#253C36" },
+  { light = "#E3F0F2", fill = "#1F3D42" },
+  { light = "#E3F1E8", fill = "#20412C" },
+  { light = "#E4E0D8", fill = "#3A3733", line = "#3A3733" },
+  { light = "#E6ECF3", fill = "#1F2F41" },
+  { light = "#E6EEF8", fill = "#1D2E44" },
+  { light = "#E8E4DC", text = "#3A3426" },
+  { light = "#E8E4DD", fill = "#3A3327" },
+  { light = "#E8F0EA", fill = "#263B2B" },
+  { light = "#E8F2EC", fill = "#233E2E", line = "#233E2E" },
+  { light = "#E9E1F3", fill = "#2E1D44" },
+  { light = "#E9E5F4", fill = "#271D44" },
+  { light = "#EBD3E5", fill = "#431E3A" },
+  { light = "#EBEDF0", fill = "#2A2F37" },
+  { light = "#ECE8F3", fill = "#2C2140" },
+  { light = "#ECE9E4", fill = "#2A2826" },
+  { light = "#ECEAE5", fill = "#2A2826" },
+  { light = "#ECEAF6", fill = "#241D44" },
+  { light = "#EDEAE5", fill = "#0E0D0C" },
+  { light = "#EEEAF6", fill = "#2A1D44" },
+  { light = "#EEEBE5", fill = "#2C2A27", line = "#2C2A27" },
+  { light = "#EFE7D8", fill = "#2A2826" },
+  { light = "#EFEDE8", fill = "#393428" },
+  { light = "#F0C3CF", fill = "#5C2A38" },
+  { light = "#F0ECF7", fill = "#2B1D44" },
+  { light = "#F2EFEA", fill = "#2A2826" },
+  { light = "#F3EFF8", fill = "#2E1D43" },
+  { light = "#F48E04", ink = "#FCB048" },
+  { light = "#F4F2EE", fill = "#0E0D0C" },
+  { light = "#F6E3D6", fill = "#442D1D" },
+  { light = "#F6EFD8", fill = "#443B1D" },
+  { light = "#F83F6E", ink = "#FB84A2" },
+  { light = "#F8E4EA", fill = "#441D29" },
+  { light = "#FBE7E4", fill = "#44221D" },
+  { light = "#FBE7ED", fill = "#441D29" },
+  { light = "#FBFAF8", fill = "#0E0D0C" },
+  { light = "#FFF6E8", fill = "#44351D" },
+  { light = "#FFFFFF", fill = "#1F1E1C" },
+]
+
+# Content colours: list colours, photos and tints, document pages, the app
+# icon, switch knobs. They keep their value in every role not listed above. A
+# light colour that is in neither `colors` nor here is an error, so a new
+# colour in a light screen forces a decision about its dark value.
+keep = [
+  "#1399B5", "#2E4F2A", "#2E6A60", "#2F5577", "#2F5A2B", "#2F6B4F",
+  "#2F7D4F", "#35507A", "#3A3936", "#3A6FD8", "#3D5A80", "#3D5AA8",
+  "#3D5E7A", "#3E6B36", "#468DE5", "#4A3F66", "#4A3F7A", "#4C7A3E",
+  "#4E7A3E", "#4E9A8C", "#5A3A2A", "#5A8CB0", "#5E4A8E", "#5F8F4A",
+  "#6B5A40", "#6E8DB5", "#7A6AB0", "#7FA3C0", "#7FA866", "#808C9A",
+  "#8D8170", "#8E3B52", "#8F7A57", "#9A6A22", "#9DBF8A", "#9EC3D9",
+  "#A08560", "#A39E95", "#A84A3A", "#A85A12", "#A8D0C8", "#AA71E3",
+  "#B0602A", "#B08505", "#B9B2D8", "#B9D3A0", "#C2366B", "#C46A4A",
+  "#C8473B", "#C9D6E8", "#CFC6B8", "#D462B2", "#D8CBA6",
+  "#D9784E", "#D9A23A", "#D9C7A7", "#E0A060", "#E55D7E",
+  "#E8A3C0", "#E9F5F6", "#F0B23E", "#F0B86A", "#F2A93B", "#F2C9A0",
+  "#F2D57A", "#F3E8B8", "#F3EDE2",
+]
+
+# A document page is content, so it and everything inside it stay light: a
+# white `background`, at least `min_height` px tall, with a radius no larger
+# than `max_radius` px.
+[mockups.dark.paper]
+background = "#FFFFFF"
+min_height = 100
+max_radius = 8
+
+# An iOS switch thumb stays white: an absolutely positioned `size` px circle.
+[mockups.dark.knob]
+background = "#FFFFFF"
+size = 26
+
+# An app tile keeps its ink fill: a square, centred flex box holding a white
+# glyph.
+[mockups.dark.tile]
+background = "#1C1B19"
+
+# Translucent white (glass) becomes translucent `to`, never less opaque than
+# `min_alpha`.
+[mockups.dark.glass]
+from = [255, 255, 255]
+to = [44, 42, 39]
+min_alpha = "0.72"
+
+# Black shadows and scrims are never lighter than `min_alpha`.
+[mockups.dark.shade]
+min_alpha = "0.5"
+
+# The Centraid brand icon swaps its white for the dark ground. The 120-wide
+# app-icon tile (`tile_view_box`) also keeps its quarter colours and drops its
+# hairline.
+[mockups.dark.icon]
+white = "#FFFFFF"
+ground = "#1C1B19"
+tile_view_box = "0 0 120 120"

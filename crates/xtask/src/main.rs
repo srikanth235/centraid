@@ -18,6 +18,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+mod design_dark;
 mod doc_links;
 mod gate;
 mod ledger;
@@ -75,6 +76,14 @@ enum Command {
     /// manifests (`crates/screens/src/catalog.rs`), or with `--check` fail
     /// when the committed file is stale (#1135).
     ScreensCatalog {
+        /// Compare instead of write.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Write every dark mockup (`design/mockups/XDark.dc.html`) from its light
+    /// screen and `design/tokens.toml`, or with `--check` fail when one differs
+    /// (#1173). Edit the light screen, never a dark one.
+    DesignDark {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
@@ -237,6 +246,13 @@ fn main() -> ExitCode {
         },
         Command::Rules => rules::print_report(&root),
         Command::ScreensCatalog { check } => match screens_catalog::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
+        Command::DesignDark { check } => match design_dark::run(&root, check) {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

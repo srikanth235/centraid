@@ -3977,9 +3977,11 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
