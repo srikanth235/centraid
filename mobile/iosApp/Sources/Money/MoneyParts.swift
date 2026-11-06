@@ -665,7 +665,7 @@ struct MoneyFormSheet<Content: View>: View {
 
 // MARK: - The page's foot
 
-/// THE STATUS LINE a pushed page hosts at its foot (DESIGN.md: no toast).
+/// THE STATUS LINE a pushed page hosts at its foot (product-intuition/references/design-behaviour.md § Status line).
 struct MoneyStatusFoot: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"

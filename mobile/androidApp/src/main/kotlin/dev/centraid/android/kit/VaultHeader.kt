@@ -51,7 +51,7 @@ import dev.centraid.design.CentraidGeometry
  *
  * One trailing verb, and only when there is something to say: Settings, the
  * door to the transfer rules, drawn beside the originals-waiting line. A key
- * with no destination is not drawn (DESIGN.md, HomeRoom).
+ * with no destination is not drawn (product-intuition/references/design-behaviour.md § Rooms).
  */
 @Composable
 public fun VaultHeader(

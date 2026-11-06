@@ -40,7 +40,7 @@ message Denied {
 }
 
 // A list with nothing in it, said once: one sentence and at most one action
-// (DESIGN.md's copy table). `action_label` empty means no action; the action
+// (product-intuition/references/design-behaviour.md § Wording). `action_label` empty means no action; the action
 // itself is the screen's own event.
 message EmptyState {
   string headline = 1;
@@ -155,7 +155,7 @@ message Autosave {
 }
 
 // A decision the member confirms. Full sentences, because only a destructive
-// confirm earns them (DESIGN.md); `destructive` draws the outlined `net` action.
+// confirm earns them (product-intuition/references/design-behaviour.md § Controls); `destructive` draws the outlined `net` action.
 message Confirm {
   string title = 1;
   string body = 2;
@@ -164,7 +164,7 @@ message Confirm {
 }
 
 // A row's status as a finished label and a tone. `seam` is "not yet", `net`
-// is owe/leaves (DESIGN.md).
+// is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
 message StatusChip {
   string label = 1;
   Tone tone = 2;
@@ -193,12 +193,12 @@ message ListRow {
   string accessibility_label = 7;
   bool dimmed = 8;
   bool pending = 9;
-  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (DESIGN.md).
+  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
   // UNSPECIFIED is ink too, so a row with a plain count sets nothing.
   StatusChip.Tone trailing_tone = 10;
 }
 
-// THE ONE FILTER AND SORT MENU (DESIGN.md, "AppPlace"): the header's filter
+// THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots): the header's filter
 // button opens this, in every app that filters or sorts, in place of the chip
 // row that stood under the header. Rust makes the whole menu: every section,
 // option, count and checkmark, the words, and whether anything is narrowing the
@@ -274,7 +274,7 @@ message HeaderSubtitle {
   bool tappable = 5;
 }
 
-// THE ONE STATUS LINE (DESIGN.md: no toast). One clause, at most one verb.
+// THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line). One clause, at most one verb.
 // A screen carries it where it says what a write did — "Task done" with
 // Undo — and `action_label` empty is a line with no verb. What the verb does
 // is the screen's own event (`StatusActed`).

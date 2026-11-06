@@ -49,7 +49,7 @@ struct ConfirmSheet: View {
     }
 }
 
-/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (DESIGN.md "The controls (mobile)"):
+/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (product-intuition/references/design-behaviour.md § Controls):
 /// the act that was refused as the title, the sentence saying what happened
 /// and what to do, and one way out, the outline [doneLabel]. A swipe away is
 /// the same as Done.

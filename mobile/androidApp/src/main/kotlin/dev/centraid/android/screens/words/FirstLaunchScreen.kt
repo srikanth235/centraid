@@ -69,7 +69,7 @@ import kotlinx.coroutines.launch
  * words to be understood. So the gate is a small deck of three slips, each a
  * title and a sentence under a picture drawn from the system's own parts (the
  * real app marks, a question and its answer, the `net` rule for the one thing
- * that leaves the device). A slip is DESIGN.md's raised paper (`bgElev`, a
+ * that leaves the device). A slip is the mockups' raised paper (design/mockups/DesignRules.dc.html) (`bgElev`, a
  * hairline, the `lg` radius). No feature tour: the apps are shown as one house.
  *
  * Next flings the top slip away (so does a swipe left anywhere on the deck; a
@@ -203,7 +203,7 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
     }
 }
 
-/** DESIGN.md invariant 5, lowered once for this screen: entry and settle at 280ms on the entry curve. */
+/** design/tokens.toml (motion), lowered once for this screen: entry and settle at 280ms on the entry curve. */
 private fun entry(): AnimationSpec<Float> = tween(ENTRY_MS, easing = CubicBezierEasing(0.2f, 0.7f, 0.2f, 1f))
 
 /**

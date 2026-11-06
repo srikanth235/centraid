@@ -396,7 +396,7 @@ message DocsIngestView {
   // Bytes streamed into the core so far and the file's size, as thousandths
   // for a bar. 0 is unknown.
   uint32 progress_permille = 3;
-  // THE STATUS LINE'S CONTROLS (DESIGN.md: at most one inline text action).
+  // THE STATUS LINE'S CONTROLS (product-intuition/references/design-behaviour.md § Status line: at most one inline text action).
   // `retry_label` is that one text action — FAILED only, EMPTY otherwise.
   // `dismiss_label` is the line's CLOSE KEY (an icon control; this is its
   // accessibility label), set at FILED and at FAILED, EMPTY otherwise.

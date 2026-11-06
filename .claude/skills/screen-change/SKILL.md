@@ -20,6 +20,8 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 
 ## 2. The steps
 
+**Start from the mockups.** A visual or UX change begins in `design/mockups/`: find the screen's board (`canvas.json` lists them) and update the light board in the same change. Dark boards are generated with `cargo xtask design-dark`, never hand-edited; a value that changes goes in `design/tokens.toml`. The behavioural rules (rooms, one way home, status line, search, controls, colour, accessibility, wording) are in the `product-intuition` skill's [design behaviour](../product-intuition/references/design-behaviour.md).
+
 1. **Decide where the change lives.** A label, count, empty-state choice, enabled flag, ordering, destination or accessibility label is Rust's. If a view needs a value the `ViewState` does not carry, add the field in Rust; never compute it in Swift or Kotlin. A copy edit is a `strings/` edit and nothing else.
 2. **Edit the proto first.** Put new messages in the app's file and new oneof arms in the app's reserved range (the `screens.proto` header lists them: 100s agenda, 200s docs, 300s health, 400s locker, 500s money, 600s notes, 700s people, 800s photos, 900s the kit, 1000+ the shell). Compatibility is enforced by `buf breaking` under `WIRE_JSON`: adding fields and arms is fine; never renumber, retype or rename; to remove one, `reserved` BOTH its number and its name. A view has three states (loading, a `Failure`, data); a failed read is never an empty list.
 3. **Write the screen.** Implement `Screen`: `update(event, &Ctx) -> Vec<Effect>` and `view(&Ctx) -> ViewState`. Read only with `kit::read::read` (`Data | Denied | Failed`); write only with `kit::act::act`, which answers with the verdict synchronously. Handle `Appeared` (the one load), `DataChanged` (load again), `EffectResult`, `TimerFired`, `Left`. Name apps, actions and queries through the generated `catalog::act::...` / `catalog::load::...` values, never as strings; if an app's `manifest.json` changed run `cargo xtask screens-catalog` (`--check` fails a stale file).
@@ -46,8 +48,8 @@ The product decision lives in Rust. The shells only draw. Most "UI" work is ther
 ## 4. Pitfalls
 
 - **A stale core.** iOS links `libcentraid_core_ffi.a` by path and Android loads a copied `.so` from `jniLibs`; nothing rebuilds either when Rust changes. The app can show old behavior without an error. Rebuild the core for the target platform before running the shell; see [mobile-verify](../mobile-verify/SKILL.md) for the canonical commands and platform requirements. The Android core script currently uses a macOS NDK toolchain.
-- **Hand-edited generated files** are overwritten by the next emit, and the gate fails on a diff over `design` and `mobile`. Fix the source (emitter, `packages/design`, `strings/shared.rs`), not the output. A guard belongs on the source too.
-- **Tokens.** Never write a hex colour or a parallel colour table in a view; a value that is not a token belongs in `packages/design`, then re-emit.
+- **Hand-edited generated files** are overwritten by the next emit, and the gate fails on a diff over `design` and `mobile`. Fix the source (the mockups and `design/tokens.toml`, the emitter, `strings/shared.rs`), not the output. A guard belongs on the source too.
+- **Tokens.** Never write a hex colour or a parallel colour table in a view; a value that is not a token belongs in the mockups and `design/tokens.toml`, then re-emit.
 - **A view that works on one platform.** Add the field to the other shell the same day; the parity rule counts spellings, not rendering.
 - **`UIImage(contentsOfFile:)`** returns nil for the content store's extensionless files; use `UIImage(data:)`.
 - **Swift written without a compiler** is unproven until a Mac compiles it; say so.

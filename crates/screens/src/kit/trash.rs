@@ -4,7 +4,7 @@
 //!
 //! A list of deleted rows the spec's `load` reads, restore as a write with no
 //! confirm, and purge / empty behind a destructive confirm with full sentences
-//! (DESIGN.md). A spec with no `purge` has NO destroy path (Docs today): the
+//! (product-intuition/references/design-behaviour.md § Controls). A spec with no `purge` has NO destroy path (Docs today): the
 //! screen offers restore only — no "Delete forever" and no "Empty trash" — and
 //! says nothing it cannot do. A refused write keeps the list and says the
 //! core's sentence; the vault's own change event reloads the list after a

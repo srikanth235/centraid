@@ -38,7 +38,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /*
- * THE ONE FILTER AND SORT MENU (DESIGN.md, `AppPlace`), the Compose twin of iOS's `FilterMenu.swift`.
+ * THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots), the Compose twin of iOS's `FilterMenu.swift`.
  *
  * The header's filter button opens a Material 3 `DropdownMenu` that Rust finished (`FilterMenu`):
  * its sections, options, counts, checks and words. This file is the only drawing of it, so every

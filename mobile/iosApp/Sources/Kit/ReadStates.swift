@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
+// THE FOUR READ SHAPES, DRAWN ONCE (K5; product-intuition/references/design-behaviour.md § Rooms).
 //
 // The room owns the empty, loading and error states; the app supplies the
 // words. A screen that draws its own spinner, its own failure lines or its own
@@ -160,7 +160,7 @@ struct ScreenFailureView: View {
     }
 }
 
-/// NOTHING HERE, AND WHY — one sentence and at most one action (DESIGN.md
+/// NOTHING HERE, AND WHY — one sentence and at most one action (product-intuition/references/design-behaviour.md § Wording
 /// copy table). The strings are finished in the machine; the action is the
 /// screen's own event, so the view takes a closure.
 struct EmptyStateView: View {

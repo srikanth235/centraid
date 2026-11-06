@@ -599,7 +599,7 @@ private struct ContentBody: View {
                                 Text(face.initials)
                                     .centraidType("smallStrong")
                                     // `textInv` is the SOLVED foreground for a
-                                    // filled identity disc (`DESIGN.md`'s rule
+                                    // filled identity disc (`design/mockups/DesignRules.dc.html`'s rule
                                     // 7 — `onAccent` in the hand-off's role
                                     // map). Ink on a saturated fill is the
                                     // contrast failure this tile had.

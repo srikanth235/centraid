@@ -17,7 +17,7 @@ import SwiftUI
 /// backups — each a sentence over a picture drawn from the system's own parts
 /// (the real app marks, a question and its answer, `--net` for the one thing
 /// that leaves the device). The
-/// slip is the paper metaphor of DESIGN.md's surfaces: raised paper, darker
+/// slip is the paper metaphor of design/mockups/DesignRules.dc.html's surfaces: raised paper, darker
 /// than the page in light. No feature tour — the apps are shown as one
 /// house, never explained one by one.
 ///
@@ -151,7 +151,7 @@ struct FirstLaunchView: View {
     }
 }
 
-/// DESIGN.md invariant 5, lowered once for this screen: entry and settle at
+/// design/tokens.toml (motion), lowered once for this screen: entry and settle at
 /// 280ms on the entry curve. Nothing here bounces, loops or parallaxes;
 /// reduced motion drops every movement (the slips change place at once).
 private enum FirstLaunchMotion {

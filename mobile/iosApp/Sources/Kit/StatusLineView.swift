@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// THE ONE STATUS LINE (DESIGN.md: no toast): one clause, at most one verb
+/// THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line): one clause, at most one verb
 /// ("Undo"). The sentence and the verb are the machine's; what the verb does
 /// is the screen's own event, which `onAct` sends.
 struct StatusLineView: View {

@@ -57,7 +57,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
- * THE ROOMS (DESIGN.md "The seven rooms"; K5, #1029).
+ * THE ROOMS (product-intuition/references/design-behaviour.md § Rooms; K5, #1029).
  *
  * A screen is one of these and supplies content and copy; the room owns the
  * header, the back or close control, search, the status host and the band

@@ -433,7 +433,7 @@ private struct RestoredLine: View {
 
 /// One vault that stayed with the other phone (`WordsEntryState.stayed`,
 /// R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and
-/// not wrong" (DESIGN.md), since the vault is safe where it is. The retry
+/// not wrong" (product-intuition/references/design-behaviour.md § Colour), since the vault is safe where it is. The retry
 /// under the list is `StayedRetry`.
 private struct StayedLine: View {
     let line: String

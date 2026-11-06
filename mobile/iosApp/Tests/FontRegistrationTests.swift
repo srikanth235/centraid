@@ -141,7 +141,7 @@ final class FontRegistrationTests: XCTestCase {
 
     /// NOTHING IN THE RAMP NAMES A 470.
     ///
-    /// The companion to the test above, and the reason it is safe. DESIGN.md
+    /// The companion to the test above, and the reason it is safe. design/mockups/DesignRules.dc.html
     /// specifies two weights; the 470 exists only as a file and a PostScript
     /// name, never as a rung. A role emitted at weight 470 would mean the
     /// lowering had leaked upward into the token table, where it would reach the
