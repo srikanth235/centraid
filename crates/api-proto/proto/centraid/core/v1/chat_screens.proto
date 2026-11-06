@@ -204,6 +204,11 @@ message ChatPending {
   bool destructive = 7;
   string settled_line = 8;
   string accessibility_label = 9;
+  // "Proposed change": the card's label, drawn as a badge (#1173).
+  string title = 10;
+  // The app every step belongs to, whose colour draws the card; empty (the shell's
+  // own colour) when the steps span apps or the kind is no app's.
+  string app = 11;
 
   enum State {
     STATE_UNSPECIFIED = 0;

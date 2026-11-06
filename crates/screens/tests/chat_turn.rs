@@ -308,8 +308,12 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
             pending.confirm_label.as_str(),
             pending.cancel_label.as_str()
         ),
-        ("Confirm", "Cancel")
+        ("Confirm", "Not now")
     );
+    // THE CARD IS LABELLED AND COLOURED BY THE CORE (#1173): "Proposed change", in the colour of
+    // the app whose row it changes (a task is Agenda's), and nothing is written yet.
+    assert_eq!(pending.title, "Proposed change");
+    assert_eq!(pending.app, "agenda");
     assert!(!pending.destructive && pending.more_line.is_empty());
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }

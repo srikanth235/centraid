@@ -46,6 +46,25 @@ pub(super) enum Stage {
 pub(super) struct Step {
     pub summary: String,
     pub destructive: bool,
+    /// The app the row belongs to, by the kind the core named it by (`task`, `person`…); empty
+    /// when the kind is not one an app owns.
+    pub app: &'static str,
+}
+
+/// The app a row of `kind` lives in (#1173): the card is drawn in that app's colour. A kind this
+/// does not know is no app's, and the card keeps the shell's colour rather than guess one.
+pub(super) fn app_of_kind(kind: &str) -> &'static str {
+    match kind {
+        "task" | "reminder" | "event" | "project" | "list" | "section" => "agenda",
+        "person" | "contact" | "people" | "touch" => "people",
+        "note" | "notebook" => "notes",
+        "doc" | "document" | "file" | "folder" => "docs",
+        "photo" | "asset" | "album" => "photos",
+        "transaction" | "account" | "category" | "rule" | "budget" => "money",
+        "metric" | "workout" => "health",
+        "item" | "secret" => "locker",
+        _ => "",
+    }
 }
 
 /// A write the model proposed and the core parked, waiting on the member's tap.
@@ -59,6 +78,18 @@ pub(super) struct Proposal {
     pub stage: Stage,
     /// How it ended, once it has.
     pub line: String,
+}
+
+impl Proposal {
+    /// The one app every step belongs to, or empty when they span apps (or none is known): the
+    /// card is drawn in that app's colour (#1173).
+    pub fn app(&self) -> &'static str {
+        let mut apps = self.steps.iter().map(|step| step.app);
+        match apps.next() {
+            Some(first) if !first.is_empty() && apps.all(|app| app == first) => first,
+            _ => "",
+        }
+    }
 }
 
 /// Where an attachment comes from: what the core is handed, by name or by bytes.
@@ -720,5 +751,42 @@ impl Chat {
             Fail::LoadFailed => words::load_failed(locale),
             Fail::VisionLoadFailed => words::vision_load_failed(locale),
         }
+    }
+}
+
+#[cfg(test)]
+mod proposal_app_tests {
+    use super::{Proposal, Stage, Step, app_of_kind};
+
+    fn proposal(kinds: &[&str]) -> Proposal {
+        Proposal {
+            id: "p1".into(),
+            steps: kinds
+                .iter()
+                .map(|kind| Step {
+                    summary: String::new(),
+                    destructive: false,
+                    app: app_of_kind(kind),
+                })
+                .collect(),
+            more: 0,
+            destructive: false,
+            stage: Stage::Waiting,
+            line: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_proposal_wears_the_colour_of_the_one_app_its_rows_belong_to() {
+        assert_eq!(proposal(&["task"]).app(), "agenda");
+        assert_eq!(proposal(&["task", "event"]).app(), "agenda");
+        assert_eq!(proposal(&["person"]).app(), "people");
+    }
+
+    #[test]
+    fn a_proposal_across_apps_or_of_an_unknown_kind_keeps_the_shells_colour() {
+        assert_eq!(proposal(&["task", "person"]).app(), "");
+        assert_eq!(proposal(&["gadget"]).app(), "");
+        assert_eq!(proposal(&[]).app(), "");
     }
 }
