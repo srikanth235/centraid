@@ -74,7 +74,7 @@ struct FirstLaunchView: View {
 
     /// The plain list page in light, the page in dark (the board draws no card).
     private var page: String {
-        scheme == .dark ? CentraidAsset.surfacePage : CentraidAsset.surfacePlainPageLight
+        CentraidAsset.surfacePlainPage
     }
 
     /// The app icon: the mark on a white tile with a hairline edge. The tile is

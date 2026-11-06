@@ -74,9 +74,8 @@ import centraid.core.v1.Confirm
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidMark
 import dev.centraid.android.kit.SearchField
-import dev.centraid.android.kit.appAccentFill
-import dev.centraid.android.kit.appAccentText
-import dev.centraid.android.kit.tokenColor
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidSearchField
@@ -454,10 +453,10 @@ private fun MessageRow(
                 Text(
                     message.text,
                     style = centraidType("body"),
-                    color = tokenColor(R.color.centraid_surface_page),
+                    color = centraidResource(R.color.centraid_surface_page),
                     modifier = Modifier
                         .clip(RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card) * 1.25f))
-                        .background(tokenColor(R.color.centraid_text_ink))
+                        .background(centraidResource(R.color.centraid_text_ink))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 )
             }
@@ -533,8 +532,8 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(tokenColor(R.color.centraid_surface_card))
-            .border(KitGeometry.HAIRLINE, tokenColor(R.color.centraid_surface_border), shape)
+            .background(centraidResource(R.color.centraid_surface_card))
+            .border(KitGeometry.HAIRLINE, centraidResource(R.color.centraid_surface_border), shape)
             .clickable(onClick = onOpen)
             .heightIn(min = KitGeometry.ROW_MIN)
             .height(IntrinsicSize.Min)
@@ -552,28 +551,28 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
                 .width(4.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(appAccentFill(card.app)),
+                .background(appAccent(card.app).fill),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 card.title,
-                color = tokenColor(R.color.centraid_text_ink),
+                color = centraidResource(R.color.centraid_text_ink),
                 fontSize = tokenSp(R.dimen.centraid_text_row),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (card.subtitle.isNotEmpty()) {
-                Text(card.subtitle, color = tokenColor(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(card.subtitle, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (card.meta.isNotEmpty()) {
-                Text(card.meta, color = tokenColor(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(card.meta, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (appName.isNotEmpty()) {
             Text(
                 appName,
-                color = appAccentText(card.app),
+                color = appAccent(card.app).text,
                 fontSize = tokenSp(R.dimen.centraid_text_meta),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -598,8 +597,8 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(tokenColor(R.color.centraid_surface_card))
-            .border(KitGeometry.HAIRLINE, tokenColor(R.color.centraid_surface_border), shape)
+            .background(centraidResource(R.color.centraid_surface_card))
+            .border(KitGeometry.HAIRLINE, centraidResource(R.color.centraid_surface_border), shape)
             .height(IntrinsicSize.Min)
             .padding(horizontal = 14.dp, vertical = 14.dp)
             .semantics { contentDescription = pending.accessibility_label }
@@ -611,12 +610,12 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                 .width(4.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(appAccentFill(pending.app)),
+                .background(appAccent(pending.app).fill),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 pending.title.uppercase(),
-                color = appAccentText(pending.app),
+                color = appAccent(pending.app).text,
                 fontSize = tokenSp(R.dimen.centraid_text_badge),
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.6.sp,
@@ -624,13 +623,13 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             pending.steps.forEach { step ->
                 Text(
                     step.summary,
-                    color = tokenColor(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
+                    color = centraidResource(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
                     fontSize = tokenSp(R.dimen.centraid_text_row),
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             if (pending.more_line.isNotEmpty()) {
-                Text(pending.more_line, color = tokenColor(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
+                Text(pending.more_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
             }
             if (asking) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
@@ -639,7 +638,7 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .weight(1f)
                             .heightIn(min = KitGeometry.ROW_MIN)
                             .clip(CircleShape)
-                            .background(tokenColor(if (pending.destructive) R.color.centraid_state_red else R.color.centraid_shell))
+                            .background(centraidResource(if (pending.destructive) R.color.centraid_state_red else R.color.centraid_shell))
                             .clickable(enabled = !working, onClick = onConfirm)
                             .semantics { role = Role.Button }
                             .testTag("chat-confirm"),
@@ -652,17 +651,17 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
                             .weight(1f)
                             .heightIn(min = KitGeometry.ROW_MIN)
                             .clip(CircleShape)
-                            .border(1.dp, tokenColor(R.color.centraid_surface_border), CircleShape)
+                            .border(1.dp, centraidResource(R.color.centraid_surface_border), CircleShape)
                             .clickable(enabled = !working, onClick = onCancel)
                             .semantics { role = Role.Button }
                             .testTag("chat-cancel"),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(pending.cancel_label, color = tokenColor(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
+                        Text(pending.cancel_label, color = centraidResource(R.color.centraid_text_ink), fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
                     }
                 }
             } else if (pending.settled_line.isNotEmpty()) {
-                Text(pending.settled_line, color = tokenColor(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-settled"))
+                Text(pending.settled_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta), modifier = Modifier.testTag("chat-settled"))
             }
         }
     }
@@ -703,7 +702,7 @@ private fun ChatComposer(
                 // THE COMPOSER FLOATS (#1173): Material's tonal elevation, the one shadow on the screen.
                 .shadow(3.dp, shape)
                 .clip(shape)
-                .background(tokenColor(R.color.centraid_surface_card))
+                .background(centraidResource(R.color.centraid_surface_card))
                 .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
@@ -807,7 +806,7 @@ private fun SendKey(iconKey: String, label: String, filled: Boolean, tag: String
         Modifier
             .size(KitGeometry.ROW_MIN)
             .clip(CircleShape)
-            .background(if (filled) tokenColor(R.color.centraid_shell) else androidx.compose.ui.graphics.Color.Transparent)
+            .background(if (filled) centraidResource(R.color.centraid_shell) else androidx.compose.ui.graphics.Color.Transparent)
             .border(KitGeometry.HAIRLINE, if (filled) androidx.compose.ui.graphics.Color.Transparent else centraidColor("lineStrong"), CircleShape)
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag)

@@ -1,6 +1,16 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +61,7 @@ internal class AgendaTaskActions(
     val onFile: (String) -> Unit,
     val onVerb: (String) -> Unit,
     val fileVerb: String,
+    val menu: TodoRowMenu? = null,
 )
 
 internal fun agendaTaskActions(
@@ -65,6 +76,10 @@ internal fun agendaTaskActions(
         onFile = { onEvent(AgendaHomeEvent(file_requested = AgendaHomeEvent.FileRequested(task_id = it))) },
         onVerb = { key -> if (key == CATCH_UP) catchUp?.let(onOpen) },
         fileVerb = words.file_verb,
+        menu = TodoRowMenu(
+            words,
+            onFlag = { id, on -> onEvent(AgendaHomeEvent(task_flagged = AgendaHomeEvent.TaskFlagged(task_id = id, flagged = on))) },
+        ),
     )
 
 /** The verb key (`TodoRowGroup.verb_key`, `TodoNotice.verb_key`) that opens Catch up. */
@@ -118,6 +133,20 @@ internal fun AgendaTodoPlace(
         return
     }
     LazyColumn(Modifier.fillMaxSize().testTag("agenda-todo-list")) {
+        // THE REMINDERS HOME (#1173): the smart-list cards, then My Lists.
+        if (todo.smart_lists.isNotEmpty()) {
+            item(key = "smart") { AgendaSmartLists(todo.smart_lists, actions.onOpen) }
+        }
+        if (todo.my_lists_title.isNotEmpty() && todo.projects.isNotEmpty()) {
+            item(key = "my-lists") {
+                Text(
+                    todo.my_lists_title,
+                    style = centraidType("section"),
+                    color = centraidColor("text"),
+                    modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 12.dp),
+                )
+            }
+        }
         todoGroups(
             todo.groups,
             onCheck = actions.onCheck,
@@ -126,13 +155,29 @@ internal fun AgendaTodoPlace(
             onFile = actions.onFile,
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
+            menu = actions.menu,
         )
         todo.projects.forEach { group ->
             item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
             items(group.rows, key = { "project-${it.row?.id}" }) { project ->
                 project.row?.let { row ->
-                    Box(Modifier.testTag("agenda-project-${row.id}")) {
-                        CentraidRow(row) { project.route?.let(actions.onOpen) }
+                    // A LIST IS ITS COLOUR AND ITS OPEN COUNT (#1173).
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .clickable { project.route?.let(actions.onOpen) }
+                            .padding(horizontal = KitGeometry.GUTTER)
+                            .testTag("agenda-project-${row.id}")
+                            .clearAndSetSemantics { contentDescription = row.accessibility_label },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(12.dp).clip(CircleShape)
+                                .background(agendaListColor(project.list_color_key) ?: centraidColor("textFaint")),
+                        )
+                        Text(row.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        Text(project.count, style = centraidType("body"), color = centraidColor("textSoft"))
                     }
                 }
             }
@@ -155,7 +200,7 @@ internal fun AgendaTodoPlace(
                 )
                 if (todo.new_project_label.isNotEmpty()) {
                     KitLink(
-                        label = todo.new_project_label,
+                        label = todo.add_list_label.ifEmpty { todo.new_project_label },
                         onClick = openNewProject,
                         modifier = Modifier.testTag("agenda-new-project").padding(horizontal = 8.dp),
                     )

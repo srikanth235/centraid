@@ -54,7 +54,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import centraid.core.v1.ShellBandTab
@@ -93,10 +92,10 @@ public fun HomeBand(
             )
             .bandFloor()
             .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
-            .background(centraidColor("bgElev"))
+            .background(Surface.card)
             .border(
                 CentraidGeometry.HAIRLINE.dp,
-                centraidColor("lineStrong"),
+                Surface.border,
                 RoundedCornerShape(BandPolicy.BAND_RADIUS.dp),
             )
             .padding(BandPolicy.BAND_PLATE_PAD.dp)
@@ -159,7 +158,7 @@ private fun BandTab(
                         .clip(RoundedCornerShape(7.dp))
                         .border(
                             CentraidGeometry.HAIRLINE.dp,
-                            centraidColor("lineStrong"),
+                            Surface.border,
                             RoundedCornerShape(7.dp),
                         )
                 } else {
@@ -171,7 +170,7 @@ private fun BandTab(
                     iconKey = iconKey,
                     // Inactive is `textFaint` — never the label's token, never
                     // an app's hue. The band carries no identity at all.
-                    tint = if (selected) centraidColor("text") else centraidColor("textFaint"),
+                    tint = if (selected) Surface.ink else Surface.meta,
                     size = BandPolicy.BAND_ICON_SIZE.dp,
                 )
             }
@@ -182,7 +181,7 @@ private fun BandTab(
             // and it HOLDS at every font scale: `control` scales elsewhere, so the
             // active half says `scales = false`.
             style = centraidType(if (selected) "control" else "band", scales = false),
-            color = if (selected) centraidColor("text") else centraidColor("textSoft"),
+            color = if (selected) Surface.ink else Surface.meta,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -234,9 +233,9 @@ internal fun Modifier.bandFloor(): Modifier {
 internal fun Modifier.bandGround(shape: Shape): Modifier {
     val plate = this
         .shadow(BandPolicy.BAND_ELEVATION.dp, shape, clip = false)
-        .background(centraidColor("bgElev"), shape)
+        .background(Surface.card, shape)
     return if (rememberHighTextContrast()) {
-        plate.border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), shape)
+        plate.border(CentraidGeometry.HAIRLINE.dp, Surface.border, shape)
     } else {
         plate
     }
@@ -248,7 +247,7 @@ internal fun Modifier.bandGround(shape: Shape): Modifier {
  */
 @Composable
 internal fun Modifier.bandStrip(): Modifier =
-    if (rememberHighTextContrast()) this.background(centraidColor("bg")) else this
+    if (rememberHighTextContrast()) this.background(Surface.page) else this
 
 /**
  * THE BAND'S PRESS: `bgPress` under the finger on the pill rung, and no
@@ -259,7 +258,7 @@ internal fun Modifier.bandStrip(): Modifier =
 internal fun Modifier.bandPress(onPress: () -> Unit): Modifier {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val ground = if (pressed) centraidColor("bgPress") else androidx.compose.ui.graphics.Color.Transparent
+    val ground = if (pressed) Surface.fill else androidx.compose.ui.graphics.Color.Transparent
     return this
         .clip(RoundedCornerShape(BandPolicy.BAND_RADIUS.dp))
         .background(ground)
@@ -416,7 +415,7 @@ public fun AppBand(
                         .offset(x = x, y = pad + CentraidGeometry.HAIRLINE.dp)
                         .size(width = mark, height = 2.dp)
                         .clip(CircleShape)
-                        .background(centraidColor("text")),
+                        .background(Surface.ink),
                 )
             }
         }
@@ -459,7 +458,7 @@ internal fun BandSegmented(
                     .weight(1f)
                     .fillMaxHeight()
                     .clip(plate)
-                    .background(if (segment.selected) centraidColor("bgSunken") else androidx.compose.ui.graphics.Color.Transparent)
+                    .background(if (segment.selected) Surface.fill else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { onPick(segment.id) }
                     .testTag(segment.id)
                     .semantics {
@@ -472,7 +471,7 @@ internal fun BandSegmented(
                 Text(
                     segment.label,
                     style = centraidType(if (segment.selected) "control" else "band", scales = false),
-                    color = centraidColor(if (segment.selected) "text" else "textSoft"),
+                    color = if (segment.selected) Surface.ink else Surface.meta,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -502,7 +501,7 @@ internal fun BandKey(iconKey: String, spoken: String, testTag: String, onPress: 
     ) {
         CentraidIcon(
             iconKey = iconKey,
-            tint = centraidColor("textSoft"),
+            tint = Surface.meta,
             size = BandPolicy.BAND_ICON_SIZE.dp,
         )
     }
@@ -534,7 +533,7 @@ private fun AppBandTabView(
             iconKey = iconKey,
             // Inactive is `textFaint`, as on the Home band: the lit mark is the
             // one ink shape in the strip.
-            tint = if (selected) centraidColor("text") else centraidColor("textFaint"),
+            tint = if (selected) Surface.ink else Surface.meta,
             size = BandPolicy.BAND_ICON_SIZE.dp,
         )
         Text(
@@ -542,7 +541,7 @@ private fun AppBandTabView(
             // THE HELD PAIR: one rung, two weights, no reflow — and it holds at
             // every font scale (`control` scales elsewhere).
             style = centraidType(if (selected) "control" else "band", scales = false),
-            color = if (selected) centraidColor("text") else centraidColor("textSoft"),
+            color = if (selected) Surface.ink else Surface.meta,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

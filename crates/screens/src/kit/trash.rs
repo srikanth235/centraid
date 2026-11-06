@@ -347,6 +347,11 @@ impl Screen for Trash {
                 } else {
                     String::new()
                 },
+                count_label: if items.is_empty() {
+                    String::new()
+                } else {
+                    shared::trash_count(locale, items.len() as u64)
+                },
             }),
         };
         wire::ViewState {

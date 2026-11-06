@@ -41,7 +41,7 @@ import centraid.core.v1.HomeFirstLaunchSlide
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidMark
-import dev.centraid.android.kit.tokenColor
+import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.theme.centraidDark
 
@@ -63,7 +63,7 @@ import dev.centraid.android.theme.centraidDark
 @Composable
 internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit) {
     val dark = centraidDark()
-    val page = tokenColor(if (dark) R.color.centraid_surface_page else R.color.centraid_surface_plain_page_light)
+    val page = centraidResource(R.color.centraid_surface_plain_page)
     Column(
         Modifier
             .fillMaxSize()
@@ -86,7 +86,7 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
                     .padding(top = 28.dp)
                     .semantics { heading() }
                     .testTag("first-launch-title"),
-                color = tokenColor(R.color.centraid_text_ink),
+                color = centraidResource(R.color.centraid_text_ink),
                 fontSize = TITLE_SP.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -94,7 +94,7 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
             Text(
                 gate.body,
                 modifier = Modifier.padding(top = 8.dp),
-                color = tokenColor(R.color.centraid_text_meta),
+                color = centraidResource(R.color.centraid_text_meta),
                 fontSize = tokenSp(R.dimen.centraid_text_row),
                 textAlign = TextAlign.Center,
             )
@@ -119,7 +119,7 @@ private fun MarkTile() {
             .size(TILE.dp)
             .clip(shape)
             .background(Color.White)
-            .border(BorderStroke(1.dp, tokenColor(R.color.centraid_surface_border)), shape)
+            .border(BorderStroke(1.dp, centraidResource(R.color.centraid_surface_border)), shape)
             .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
@@ -132,7 +132,7 @@ private val CLAIM_ICONS: List<String> = listOf("Grid", "Sparkle", "Lock")
 
 @Composable
 private fun Claim(index: Int, claim: HomeFirstLaunchSlide) {
-    val shell = tokenColor(R.color.centraid_shell_text)
+    val shell = centraidResource(R.color.centraid_shell_text)
     Row(
         Modifier.fillMaxWidth().testTag("first-launch-claim-$index"),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -155,13 +155,13 @@ private fun Claim(index: Int, claim: HomeFirstLaunchSlide) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 claim.title,
-                color = tokenColor(R.color.centraid_text_ink),
+                color = centraidResource(R.color.centraid_text_ink),
                 fontSize = tokenSp(R.dimen.centraid_text_row),
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 claim.body,
-                color = tokenColor(R.color.centraid_text_meta),
+                color = centraidResource(R.color.centraid_text_meta),
                 fontSize = DETAIL_SP.sp,
             )
         }
@@ -180,7 +180,7 @@ private fun Doors(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Un
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
                 .clip(CircleShape)
-                .background(tokenColor(R.color.centraid_shell))
+                .background(centraidResource(R.color.centraid_shell))
                 .clickable(onClick = onMake)
                 .semantics { role = Role.Button }
                 .testTag("first-launch-primary"),
@@ -204,7 +204,7 @@ private fun Doors(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Un
         ) {
             Text(
                 gate.restore_label,
-                color = tokenColor(R.color.centraid_shell_text),
+                color = centraidResource(R.color.centraid_shell_text),
                 fontSize = tokenSp(R.dimen.centraid_text_row),
                 fontWeight = FontWeight.SemiBold,
             )

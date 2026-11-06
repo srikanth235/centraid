@@ -7,7 +7,11 @@
 -->
 <resources>
     <color name="centraid_surface_page">#0E0D0C</color>
+    <color name="centraid_surface_plain_page">#0E0D0C</color>
     <color name="centraid_surface_card">#1F1E1C</color>
+    <color name="centraid_surface_sheet">#1A1918</color>
+    <color name="centraid_surface_sheet_card">#2B2927</color>
+    <color name="centraid_surface_fill">#2A2826</color>
     <color name="centraid_surface_line">#2C2A27</color>
     <color name="centraid_surface_border">#3A3733</color>
     <color name="centraid_text_ink">#F2EFEA</color>
@@ -40,8 +44,11 @@
     <color name="centraid_app_photos_tile">#BB4C9C</color>
     <color name="centraid_state_amber">#964C04</color>
     <color name="centraid_state_amber_text">#F2A64F</color>
+    <color name="centraid_state_amber_tint">#44351D</color>
     <color name="centraid_state_green">#2F8556</color>
     <color name="centraid_state_green_text">#62D092</color>
+    <color name="centraid_state_green_tint">#1B3A29</color>
     <color name="centraid_state_red">#CD483D</color>
     <color name="centraid_state_red_text">#F27A6D</color>
+    <color name="centraid_state_red_tint">#44221D</color>
 </resources>

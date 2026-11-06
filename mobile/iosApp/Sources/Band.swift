@@ -86,7 +86,7 @@ private struct BandTab: View {
                         iconKey: iconKey,
                         // Inactive is `textFaint` — never the label's token,
                         // never an app's hue. The band carries no identity.
-                        tint: Theme.color(selected ? "text" : "textFaint", scheme),
+                        tint: selected ? Surface.ink : Surface.meta,
                         size: BandMetrics.iconSize,
                         strokeWidth: CentraidGeometry.appMarkStroke
                     )
@@ -97,7 +97,7 @@ private struct BandTab: View {
                     // the strip, and it HOLDS at every text size: `control`
                     // scales elsewhere, so the active half says `scales: false`.
                     .centraidType(selected ? "control" : "band", scales: false)
-                    .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
+                    .foregroundStyle(selected ? Surface.ink : Surface.meta)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
             }
@@ -301,12 +301,12 @@ struct BandSegmented: View {
                 Button { onPick(segment.id) } label: {
                     Text(segment.label)
                         .centraidType(segment.selected ? "control" : "band", scales: false)
-                        .foregroundStyle(Theme.color(segment.selected ? "text" : "textSoft", scheme))
+                        .foregroundStyle(segment.selected ? Surface.ink : Surface.meta)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
                         .background(
-                            Capsule().fill(segment.selected ? Theme.color("bgSunken", scheme) : .clear)
+                            Capsule().fill(segment.selected ? Surface.fill : .clear)
                         )
                         .contentShape(Capsule())
                 }
@@ -341,7 +341,7 @@ struct BandKey: View {
         Button(action: action) {
             CentraidIconView(
                 iconKey: iconKey,
-                tint: Theme.color("textSoft", scheme),
+                tint: Surface.ink,
                 size: BandMetrics.iconSize,
                 strokeWidth: CentraidGeometry.appMarkStroke
             )
@@ -376,7 +376,7 @@ private struct AppBandTab: View {
                     // Inactive is `textFaint`, as on the Home band: the mark
                     // recedes further than the word, so the lit tab's mark is
                     // the one ink shape in the strip.
-                    tint: Theme.color(selected ? "text" : "textFaint", scheme),
+                    tint: selected ? Surface.ink : Surface.meta,
                     size: BandMetrics.iconSize,
                     strokeWidth: CentraidGeometry.appMarkStroke
                 )
@@ -385,7 +385,7 @@ private struct AppBandTab: View {
                     // THE HELD PAIR: one rung, two weights, no reflow — and it
                     // holds at every text size (`control` scales elsewhere).
                     .centraidType(selected ? "control" : "band", scales: false)
-                    .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
+                    .foregroundStyle(selected ? Surface.ink : Surface.meta)
                     .lineLimit(1)
             }
             .padding(.top, BandMetrics.tabTop)
@@ -398,7 +398,7 @@ private struct AppBandTab: View {
                     // a darker stretch of the border. Mark-wide, it is plainly
                     // a marker for the one ink shape under it.
                     Capsule()
-                        .fill(Theme.color("text", scheme))
+                        .fill(Surface.ink)
                         .frame(width: BandMetrics.markSize, height: BandMetrics.activeRule)
                         // At the tab's top, which is `platePad` inside the
                         // plate's edge — clear of its hairline, and still
@@ -432,7 +432,7 @@ private struct BandPress: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         // THE RESTING GROUND IS THE PLATE'S (`BandGround`), so the style paints only the press.
-        let fill: Color = configuration.isPressed && paints ? Theme.color("bgPress", scheme) : .clear
+        let fill: Color = configuration.isPressed && paints ? Surface.fill : .clear
         return configuration.label
             .background(
                 Capsule()
@@ -485,11 +485,11 @@ struct BandGround<S: InsettableShape>: ViewModifier {
                     if BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
                         shape.fill(.thinMaterial)
                     } else {
-                        shape.fill(Theme.color(solid, scheme))
+                        shape.fill(Surface.card)
                     }
                 }
                 .overlay(
-                    shape.strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                    shape.strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
                 )
         }
     }
@@ -523,7 +523,7 @@ struct BandStrip: ViewModifier {
     func body(content: Content) -> some View {
         content.background {
             if !BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
-                Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom)
+                Surface.page.ignoresSafeArea(edges: .bottom)
             }
         }
     }

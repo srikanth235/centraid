@@ -1,6 +1,11 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,9 +66,19 @@ internal fun TodoListScreen(
                             onCheck = { onEvent(TodoListEvent(row_checked = TodoListEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
                             onVerb = { },
+                            menu = chrome?.let {
+                                TodoRowMenu(
+                                    it,
+                                    onFlag = { id, on -> onEvent(TodoListEvent(row_flagged = TodoListEvent.RowFlagged(task_id = id, flagged = on))) },
+                                    onDelete = { id -> onEvent(TodoListEvent(row_deleted = TodoListEvent.RowDeleted(task_id = id))) },
+                                )
+                            },
                         )
                         item(key = "foot") {
                             Column {
+                                if (list.subtitle.isNotEmpty()) {
+                                    Text(list.subtitle, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.padding(KitGeometry.GUTTER))
+                                }
                                 if (list.window_label.isNotEmpty()) {
                                     Text(list.window_label, style = centraidType("annotLabel"), color = centraidColor("textFaint"), modifier = Modifier.padding(KitGeometry.GUTTER))
                                 }
@@ -116,7 +131,14 @@ internal fun TodoProjectScreen(
                 if (project.groups.isEmpty() && empty != null) {
                     EmptyStateView(empty, onAction = null)
                 } else {
+                    val listColor = agendaListColor(project.list_color_key)
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-project")) {
+                        // THE TITLE IN THE LIST'S COLOUR (#1173).
+                        listColor?.let { color ->
+                            item(key = "title") {
+                                Text(state.title, style = centraidType("title"), color = color, modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+                            }
+                        }
                         if (project.count_label.isNotEmpty()) {
                             item(key = "count") {
                                 Text(project.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
@@ -137,14 +159,50 @@ internal fun TodoProjectScreen(
                             onCheck = { onEvent(TodoProjectEvent(row_checked = TodoProjectEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
                             onVerb = { onEvent(TodoProjectEvent(group_verb = TodoProjectEvent.GroupVerb(key = it))) },
+                            menu = chrome?.let {
+                                TodoRowMenu(
+                                    it,
+                                    onFlag = { id, on -> onEvent(TodoProjectEvent(row_flagged = TodoProjectEvent.RowFlagged(task_id = id, flagged = on))) },
+                                    onDelete = { id -> onEvent(TodoProjectEvent(row_deleted = TodoProjectEvent.RowDeleted(task_id = id))) },
+                                    onMove = { id, before -> onEvent(TodoProjectEvent(row_moved = TodoProjectEvent.RowMoved(task_id = id, before_id = before))) },
+                                )
+                            },
                         )
+                        // "2 completed · Show · Clear", and the rows while shown.
+                        val completed = project.completed
+                        if (completed != null && completed.count > 0 && chrome != null) {
+                            item(key = "completed") {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(completed.count_label, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+                                    KitLink(
+                                        label = if (completed.shown) chrome.hide_completed_verb else chrome.show_completed_verb,
+                                        onClick = { onEvent(TodoProjectEvent(completed_toggled = TodoProjectEvent.CompletedToggled())) },
+                                        modifier = Modifier.testTag("tasks-completed-toggle"),
+                                    )
+                                    KitLink(
+                                        label = chrome.clear_completed_verb,
+                                        onClick = { onEvent(TodoProjectEvent(completed_cleared = TodoProjectEvent.CompletedCleared())) },
+                                        modifier = Modifier.testTag("tasks-completed-clear"),
+                                    )
+                                }
+                            }
+                            completed.rows.forEach { row ->
+                                item(key = "done-${row.task_id}") {
+                                    TodoRowView(row, onCheck = { onEvent(TodoProjectEvent(row_checked = TodoProjectEvent.RowChecked(task_id = it))) }, onOpen = onOpen)
+                                }
+                            }
+                        }
                     }
                 }
             }
             StatusLine(state.status) { onEvent(TodoProjectEvent(status_acted = TodoProjectEvent.StatusActed())) }
             TodoQuickAddBar(
                 quickAdd = state.quick_add,
-                placeholder = chrome?.quick_add_placeholder.orEmpty(),
+                placeholder = chrome?.new_reminder.orEmpty(),
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TodoProjectEvent(quick_add_changed = TodoProjectEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TodoProjectEvent(quick_add_submitted = TodoProjectEvent.QuickAddSubmitted())) },

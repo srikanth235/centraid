@@ -1,0 +1,173 @@
+package dev.centraid.android.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import centraid.core.v1.Route
+import centraid.core.v1.SettingsChoice
+import centraid.core.v1.SettingsData
+import centraid.core.v1.SettingsEvent
+import centraid.core.v1.SettingsRow
+import centraid.core.v1.SettingsState
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitSegment
+import dev.centraid.android.kit.KitSegmented
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.PushedPage
+import dev.centraid.android.kit.ReadStateView
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.screenContentOf
+
+/**
+ * `home.settings` (#1173, the Settings board): a pushed page of cards. The appearance is one
+ * segmented choice (stacked at the largest text), then a card per section, then About. Every word,
+ * the order and where a row goes are Rust's; a tap on a row with a route is [onOpen].
+ */
+@Composable
+internal fun SettingsScreen(
+    state: SettingsState,
+    onEvent: (SettingsEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onBack: () -> Unit,
+) {
+    PushedPage(title = state.title, parentTitle = state.back_label, onBack = onBack) {
+        ReadStateView(
+            content = screenContentOf(state.loading, null, state.data_),
+            onRetry = null,
+        ) { data -> SettingsBody(data, onEvent, onOpen) }
+    }
+}
+
+@Composable
+private fun SettingsBody(data: SettingsData, onEvent: (SettingsEvent) -> Unit, onOpen: (Route) -> Unit) {
+    LazyColumn(
+        Modifier.fillMaxWidth().testTag("settings-list"),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = KitGeometry.GUTTER,
+            end = KitGeometry.GUTTER,
+            bottom = 24.dp,
+        ),
+    ) {
+        val appearance = data.appearance
+        if (appearance != null) {
+            item(key = "appearance") {
+                Column {
+                    GroupHead(appearance.title)
+                    KitSegmented(
+                        appearance.choices.map { KitSegment(it.id, it.label, it.selected) },
+                        testTag = "settings-appearance",
+                    ) { id ->
+                        onEvent(SettingsEvent(appearance_picked = SettingsEvent.AppearancePicked(id = id)))
+                    }
+                    KitText(
+                        appearance.note,
+                        KitType.Meta,
+                        Surface.meta,
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp).testTag("settings-appearance-note"),
+                    )
+                }
+            }
+        }
+        data.sections.forEach { section ->
+            item(key = "section-${section.key}") {
+                Column {
+                    GroupHead(section.title)
+                    Column(Modifier.kitCard().testTag("settings-section-${section.key}")) {
+                        section.rows.forEach { row -> SettingsRowView(row, onOpen) }
+                    }
+                }
+            }
+        }
+        item(key = "about") {
+            Column {
+                GroupHead(data.about_title)
+                Row(
+                    Modifier
+                        .kitCard()
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .semantics(mergeDescendants = true) { }
+                        .testTag("settings-version"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    KitText(data.version_title, KitType.Row, Surface.ink, Modifier.weight(1f))
+                    KitText(data.version, KitType.Row, Surface.meta)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupHead(title: String) {
+    KitText(
+        title,
+        KitType.Group,
+        Surface.meta,
+        Modifier.padding(start = 4.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
+    )
+}
+
+@Composable
+private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
+    val route = row.route
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .then(if (route != null) Modifier.clickable { onOpen(route) } else Modifier)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .testTag("settings-row-${row.id}")
+                .clearAndSetSemantics {
+                    contentDescription = row.accessibility_label
+                    if (route != null) role = Role.Button
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp)
+            Column(Modifier.weight(1f)) {
+                KitText(row.title, KitType.Row, Surface.ink)
+                if (row.meta.isNotEmpty()) Text(row.meta, style = kitTextStyle(KitType.Meta), color = Surface.meta)
+            }
+            if (route != null) {
+                CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+        Spacer(Modifier.padding(start = 56.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+    }
+}

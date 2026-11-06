@@ -36,6 +36,7 @@ use wire::agenda_home_event::Kind as H;
 use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
+pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
@@ -44,7 +45,9 @@ use super::todo::rows;
 use crate::catalog::act;
 use crate::kit::civil;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{agenda as words, agenda_home as sentences, fill, task};
+use crate::strings::{
+    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
+};
 
 /// Where a read stands.
 pub(super) enum Phase {
@@ -192,10 +195,17 @@ impl Home {
                 self.move_to(destination, ctx);
             }
             H::Band(picked) => match picked.key.as_str() {
-                chrome::BAND_DAY => self.move_to(Dest::Day, ctx),
-                chrome::BAND_SCHEDULE => self.move_to(Dest::Schedule, ctx),
-                chrome::BAND_WAITING => self.move_to(Dest::Waiting, ctx),
-                chrome::BAND_TODO => self.move_to(Dest::Todo, ctx),
+                // The Calendar tab lands on the view the member last used.
+                chrome::BAND_CALENDAR => {
+                    let view = if self.destination == Dest::Schedule {
+                        Dest::Schedule
+                    } else {
+                        Dest::Day
+                    };
+                    self.move_to(view, ctx);
+                }
+                chrome::BAND_REMINDERS => self.move_to(Dest::Todo, ctx),
+                chrome::BAND_INVITES => self.move_to(Dest::Waiting, ctx),
                 chrome::BAND_MORE => self.sheet = Sheet::More,
                 _ => {}
             },
@@ -254,6 +264,12 @@ impl Home {
             H::TaskChecked(checked) => {
                 if let Some(found) = self.held.find(&checked.task_id) {
                     self.ops.check(ctx, &found);
+                    self.refresh(ctx);
+                }
+            }
+            H::TaskFlagged(flagged) => {
+                if self.held.find(&flagged.task_id).is_some() {
+                    self.ops.flag(ctx, &flagged.task_id, flagged.flagged);
                     self.refresh(ctx);
                 }
             }
@@ -500,6 +516,12 @@ impl Screen for Home {
                     } else {
                         chrome::band(locale, self.destination, sheet_up)
                     },
+                    calendar_views: if denied {
+                        Vec::new()
+                    } else {
+                        chrome::calendar_views(locale, self.destination)
+                    },
+                    calendar_view_label: reminders::view_menu(locale),
                     toolbar: Some(chrome::toolbar(
                         locale,
                         self.destination,

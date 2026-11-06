@@ -826,7 +826,7 @@ private struct ChatCardRow: View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
                 Capsule()
-                    .fill(AppAccent.fill(card.app))
+                    .fill(AppAccent(card.app).fill)
                     .frame(width: 4)
                     .padding(.vertical, 2)
                 VStack(alignment: .leading, spacing: 2) {
@@ -852,7 +852,7 @@ private struct ChatCardRow: View {
                 if !appName.isEmpty {
                     Text(verbatim: appName)
                         .font(.system(size: CentraidScale.metaSize, weight: .semibold))
-                        .foregroundStyle(AppAccent.text(card.app))
+                        .foregroundStyle(AppAccent(card.app).text)
                         .lineLimit(1)
                 }
             }
@@ -910,7 +910,7 @@ private struct ChatPendingCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Capsule()
-                .fill(AppAccent.fill(pending.app))
+                .fill(AppAccent(pending.app).fill)
                 .frame(width: 4)
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -918,7 +918,7 @@ private struct ChatPendingCard: View {
                         .font(.system(size: CentraidScale.badgeSize, weight: .bold))
                         .textCase(.uppercase)
                         .tracking(0.6)
-                        .foregroundStyle(AppAccent.text(pending.app))
+                        .foregroundStyle(AppAccent(pending.app).text)
                     ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
                         Text(verbatim: step.summary)
                             .font(.system(size: CentraidScale.rowSize, weight: .semibold))

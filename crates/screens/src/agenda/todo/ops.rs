@@ -17,7 +17,7 @@ use crate::catalog::act;
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
 use crate::screen::Ctx;
-use crate::strings::{Locale, task as words};
+use crate::strings::{Locale, agenda_reminders as reminders, task as words};
 
 /// A repeating task completed here: where its next one landed is named when the
 /// next load carries it.
@@ -233,6 +233,123 @@ impl Ops {
         } else {
             self.refused(&settled);
         }
+    }
+
+    /// THE FLAG (#1173): set or clear the starred flag on a task. The status
+    /// line says it, and the inverse is the other verb, so Undo flips it back.
+    pub fn flag(&mut self, ctx: &Ctx, task_id: &str, on: bool) -> bool {
+        let locale = ctx.locale();
+        let key = kit_act::key(
+            &[if on { "star-task" } else { "unstar-task" }, task_id],
+            self.next_seq(),
+        );
+        let settled = if on {
+            kit_act::act(
+                ctx,
+                act::agenda::StarTask {
+                    task_id: task_id.to_owned(),
+                },
+                &key,
+            )
+        } else {
+            kit_act::act(
+                ctx,
+                act::agenda::UnstarTask {
+                    task_id: task_id.to_owned(),
+                },
+                &key,
+            )
+        };
+        if !settled.committed {
+            self.refused(&settled);
+            return false;
+        }
+        self.status = Some(wire::StatusLine {
+            sentence: if on {
+                reminders::row_flagged(locale)
+            } else {
+                reminders::row_unflagged(locale)
+            },
+            action_label: words::undo(locale),
+            refused: false,
+        });
+        self.undo = settled.inverse;
+        true
+    }
+
+    /// THE SWIPE'S DELETE: the task goes to the trash with its subtasks and
+    /// Undo restores it.
+    pub fn delete(&mut self, ctx: &Ctx, task_id: &str) -> bool {
+        let locale = ctx.locale();
+        let key = kit_act::key(&["delete-task", task_id], self.next_seq());
+        let settled = kit_act::act(
+            ctx,
+            act::agenda::DeleteTask {
+                task_id: task_id.to_owned(),
+            },
+            &key,
+        );
+        if !settled.committed {
+            self.refused(&settled);
+            return false;
+        }
+        self.status = Some(wire::StatusLine {
+            sentence: words::task_deleted(locale),
+            action_label: words::undo(locale),
+            refused: false,
+        });
+        self.undo = settled.inverse;
+        true
+    }
+
+    /// DRAG TO REORDER (#1173): put `task_id` at `position`. Only the position
+    /// changes: the project and the section stay as stored.
+    pub fn reposition(&mut self, ctx: &Ctx, task_id: &str, position: f64) -> bool {
+        let key = kit_act::key(&["organize-task", task_id, "position"], self.next_seq());
+        let settled = kit_act::act(
+            ctx,
+            act::agenda::OrganizeTask {
+                task_id: task_id.to_owned(),
+                position: Some(position),
+                ..Default::default()
+            },
+            &key,
+        );
+        self.undo = None;
+        if settled.committed {
+            self.status = None;
+        } else {
+            self.refused(&settled);
+        }
+        settled.committed
+    }
+
+    /// "Clear": the completed tasks of a list go to the trash (30 days, the
+    /// Trash page restores them). One status line says it; there is no
+    /// single Undo for many writes.
+    pub fn clear_completed(&mut self, ctx: &Ctx, task_ids: &[String]) -> bool {
+        let locale = ctx.locale();
+        for id in task_ids {
+            let key = kit_act::key(&["delete-task", id, "cleared"], self.next_seq());
+            let settled = kit_act::act(
+                ctx,
+                act::agenda::DeleteTask {
+                    task_id: id.clone(),
+                },
+                &key,
+            );
+            if !settled.committed {
+                self.refused(&settled);
+                return false;
+            }
+        }
+        self.undo = None;
+        self.status = Some(wire::StatusLine {
+            sentence: reminders::completed_cleared(locale),
+            action_label: String::new(),
+            refused: false,
+        });
+        true
     }
 
     /// A create with no row to draw (a project, a section): the status line says it.

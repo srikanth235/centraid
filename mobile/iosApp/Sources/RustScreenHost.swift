@@ -130,6 +130,14 @@ struct RustScreenView: View {
                 open: open,
                 onCancel: pop
             )
+        // SETTINGS (#1173): a page pushed from Home.
+        case .settings(let state)?:
+            SettingsView(
+                state: state,
+                send: { store.send(instance, .settings($0)) },
+                open: open,
+                onBack: pop
+            )
         case .agendaHome(let state)?:
             AgendaHomeView(
                 state: state,

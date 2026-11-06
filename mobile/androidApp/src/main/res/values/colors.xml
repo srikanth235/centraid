@@ -8,13 +8,13 @@
 -->
 <resources>
     <color name="centraid_surface_page">#F4F2EE</color>
+    <color name="centraid_surface_plain_page">#FBFAF8</color>
     <color name="centraid_surface_card">#FFFFFF</color>
+    <color name="centraid_surface_sheet">#F4F2EE</color>
+    <color name="centraid_surface_sheet_card">#FFFFFF</color>
+    <color name="centraid_surface_fill">#F2EFEA</color>
     <color name="centraid_surface_line">#EEEBE5</color>
     <color name="centraid_surface_border">#E4E0D8</color>
-    <color name="centraid_surface_plain_page_light">#FBFAF8</color>
-    <color name="centraid_surface_sheet_dark">#1A1918</color>
-    <color name="centraid_surface_sheet_card_dark">#2B2927</color>
-    <color name="centraid_surface_fill_dark">#2A2826</color>
     <color name="centraid_text_ink">#1C1B19</color>
     <color name="centraid_text_body">#4A4741</color>
     <color name="centraid_text_meta">#6F6B64</color>
@@ -46,10 +46,13 @@
     <color name="centraid_app_photos_tile">#A8398A</color>
     <color name="centraid_state_amber">#874300</color>
     <color name="centraid_state_amber_text">#874300</color>
+    <color name="centraid_state_amber_tint">#FFF6E8</color>
     <color name="centraid_state_green">#2B7B51</color>
     <color name="centraid_state_green_text">#2B7B51</color>
+    <color name="centraid_state_green_tint">#E8F2EC</color>
     <color name="centraid_state_red">#C8392F</color>
     <color name="centraid_state_red_text">#C8392F</color>
+    <color name="centraid_state_red_tint">#FDEDEB</color>
     <color name="centraid_list_blue">#468DE5</color>
     <color name="centraid_list_graphite">#808C9A</color>
     <color name="centraid_list_indigo">#6785F5</color>

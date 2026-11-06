@@ -28,8 +28,20 @@ struct CoreTrashView: View {
         }
     }
 
+    /// The scope line under the title: the machine's, once the rows are read.
+    private var countLabel: String {
+        if case let .data(data)? = state.content { return data.countLabel }
+        return ""
+    }
+
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack) {
+        PushedPage(
+            title: state.title,
+            parentTitle: state.backLabel,
+            onBack: onBack,
+            showsTitle: true,
+            meta: countLabel
+        ) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -41,21 +53,35 @@ struct CoreTrashView: View {
                         EmptyStateView(data.empty)
                     } else {
                         ScrollView {
-                            LazyVStack(spacing: 0) {
-                                SectionHeader(
-                                    title: state.title,
-                                    count: UInt32(data.rows.count),
-                                    verb: data.emptyLabel,
-                                    onVerb: { event { $0.kind = .empty(.init()) } }
-                                )
-                                ForEach(data.rows, id: \.id) { row in
-                                    TrashRowView(
-                                        row: row,
-                                        onRestore: { event { $0.kind = .restore(.with { $0.id = row.id }) } },
-                                        onPurge: { event { $0.kind = .purge(.with { $0.id = row.id }) } }
-                                    )
+                            VStack(alignment: .leading, spacing: 12) {
+                                // THE ROWS ARE ONE CARD (#1173); the last hairline falls outside the clip.
+                                LazyVStack(spacing: 0) {
+                                    ForEach(data.rows, id: \.id) { row in
+                                        TrashRowView(
+                                            row: row,
+                                            onRestore: { event { $0.kind = .restore(.with { $0.id = row.id }) } },
+                                            onPurge: { event { $0.kind = .purge(.with { $0.id = row.id }) } }
+                                        )
+                                    }
+                                }
+                                .padding(.bottom, -1)
+                                .kitCard()
+                                .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                                if !data.emptyLabel.isEmpty {
+                                    Button { event { $0.kind = .empty(.init()) } } label: {
+                                        Text(data.emptyLabel)
+                                            .kitType(.row)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(StateColor.red.text)
+                                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("trash-empty")
                                 }
                             }
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.top, 4)
                         }
                         .refreshable { event { $0.kind = .refreshed(.init()) } }
                     }
@@ -74,6 +100,7 @@ struct CoreTrashView: View {
             )
             .modifier(SheetPresentation(detents: ConfirmSheet.detents))
         }
+        .environment(\.appAccent, AppAccent(state.appID))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(state.appID)-trash")
     }
@@ -84,15 +111,33 @@ private struct TrashRowView: View {
     let onRestore: () -> Void
     let onPurge: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
-        HStack(spacing: 8) {
-            CentraidRow(title: row.title, meta: row.meta, identifier: "trash-row-\(row.id)")
+        HStack(spacing: 10) {
+            if !row.iconKey.isEmpty {
+                KitTile(iconKey: row.iconKey, size: 34)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.title)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(2)
+                if !row.meta.isEmpty {
+                    Text(row.meta)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("trash-row-\(row.id)")
             Button(action: onRestore) {
                 Text(row.restoreLabel)
-                    .centraidType("annotLabelOn")
-                    .foregroundStyle(Theme.color("link", scheme))
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(accent.text)
                     .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
                     .contentShape(Rectangle())
             }
@@ -100,7 +145,7 @@ private struct TrashRowView: View {
             .accessibilityIdentifier("trash-restore-\(row.id)")
             if !row.purgeLabel.isEmpty {
                 Button(action: onPurge) {
-                    CentraidIconView(iconKey: "Trash", tint: Theme.color("net", scheme), size: 16)
+                    CentraidIconView(iconKey: "Trash", tint: StateColor.red.text, size: 16)
                         .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
                         .contentShape(Rectangle())
                 }
@@ -109,6 +154,11 @@ private struct TrashRowView: View {
                 .accessibilityIdentifier("trash-purge-\(row.id)")
             }
         }
-        .padding(.trailing, 8)
+        .padding(.leading, 12)
+        .padding(.trailing, 2)
+        .padding(.vertical, 4)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
+        }
     }
 }

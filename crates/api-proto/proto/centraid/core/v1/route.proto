@@ -96,6 +96,7 @@ message Route {
     HomeRoute home = 1000;
     HomeSearchRoute home_search = 1001;
     ShellAskRoute ask = 1002;
+    SettingsRoute settings = 1010;
   }
 }
 
@@ -170,6 +171,11 @@ enum TodoView {
   TODO_VIEW_ALL = 2;
   TODO_VIEW_LOGBOOK = 3;
   TODO_VIEW_REMINDERS = 4;
+  // The Reminders home's smart lists (#1173): open work due today or before,
+  // open work with a date, and open work carrying the Flag.
+  TODO_VIEW_TODAY = 5;
+  TODO_VIEW_SCHEDULED = 6;
+  TODO_VIEW_FLAGGED = 7;
 }
 
 // `agenda.home`: lands on `destination` at today, or on Day when unspecified.
@@ -590,6 +596,9 @@ message HomeRoute {}
 
 // Home's search takes no arguments.
 message HomeSearchRoute {}
+
+// Settings takes no arguments.
+message SettingsRoute {}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the

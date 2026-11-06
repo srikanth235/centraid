@@ -1,7 +1,14 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -50,15 +57,15 @@ public fun ConfirmSheet(
         if (confirm.body.isNotEmpty()) {
             Text(
                 confirm.body,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
+                style = kitTextStyle(KitType.Row),
+                color = Surface.body,
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
             )
         }
         Text(
             cancelLabel,
-            style = centraidType("control"),
-            color = centraidColor("textSoft"),
+            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+            color = Surface.meta,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = KitGeometry.ROW_MIN)
@@ -93,8 +100,8 @@ public fun NoticeSheet(
     ) {
         Text(
             sentence,
-            style = centraidType("body"),
-            color = centraidColor("textSoft"),
+            style = kitTextStyle(KitType.Row),
+            color = Surface.body,
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
         )
     }
@@ -117,43 +124,46 @@ public fun SheetRow(
     testTag: String = "sheet-row",
     enabled: Boolean = true,
 ) {
-    val ink = centraidColor(
-        when {
-            !enabled -> "textDisabled"
-            destructive -> "net"
-            else -> "text"
-        },
-    )
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(enabled = enabled, onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .testTag(testTag)
-            .clearAndSetSemantics {
-                contentDescription = if (detail.isEmpty()) label else "$label, $detail"
-                role = Role.Button
-                if (!enabled) disabled()
-                this.selected = selected
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (iconKey != null) {
-            CentraidIcon(
-                iconKey = iconKey,
-                tint = if (destructive || !enabled) ink else centraidColor("textSoft"),
-                size = 18.dp,
-                modifier = Modifier.padding(end = 12.dp),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(label, style = centraidType("body"), color = ink)
-            if (detail.isNotEmpty()) {
-                Text(detail, style = centraidType("annotLabel"), color = centraidColor(if (enabled) "textSoft" else "textDisabled"))
+    val ink = when {
+        !enabled -> Surface.meta
+        destructive -> StateColor.Red.text
+        else -> Surface.ink
+    }
+    val line = Surface.sheetLine
+    val accent = appAccent()
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clickable(enabled = enabled, onClick = onTap)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .testTag(testTag)
+                .clearAndSetSemantics {
+                    contentDescription = if (detail.isEmpty()) label else "$label, $detail"
+                    role = Role.Button
+                    if (!enabled) disabled()
+                    this.selected = selected
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (iconKey != null) {
+                // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a destructive
+                // row's is the state's red.
+                KitTile(
+                    iconKey,
+                    Modifier.padding(end = 12.dp),
+                    size = 32.dp,
+                    fill = if (destructive) StateColor.Red.fill else null,
+                )
             }
+            Column(Modifier.weight(1f)) {
+                KitText(label, KitType.Row, ink)
+                if (detail.isNotEmpty()) KitText(detail, KitType.Meta, Surface.meta)
+            }
+            if (selected) CentraidIcon(iconKey = "Check", tint = accent.text, size = 16.dp)
         }
-        if (selected) CentraidIcon(iconKey = "Check", tint = centraidColor("text"), size = 16.dp)
+        Spacer(Modifier.padding(start = if (iconKey != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
     }
 }
 
@@ -180,6 +190,13 @@ public fun OptionSheet(
     status: String = "",
 ) {
     SheetRoom(title = title, onDismiss = onDismiss, status = status) {
+        // THE ROWS ARE ONE CARD ON THE SHEET (#1173); the last row's hairline falls outside the clip.
+        Column(
+            Modifier
+                .padding(horizontal = KitGeometry.GUTTER)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                .background(Surface.sheetCard),
+        ) {
         options.forEach { option ->
             SheetRow(
                 label = option.label,
@@ -190,6 +207,7 @@ public fun OptionSheet(
                 testTag = "sheet-option-${option.key}",
                 onTap = { onPick(option.key) },
             )
+        }
         }
     }
 }

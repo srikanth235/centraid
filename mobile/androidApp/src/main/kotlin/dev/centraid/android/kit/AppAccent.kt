@@ -1,49 +1,89 @@
 package dev.centraid.android.kit
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.annotation.ColorRes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import dev.centraid.android.R
+import dev.centraid.android.theme.centraidDark
+import dev.centraid.design.CentraidGeometry
 
 /**
- * An app's colour (#1173), by the app id Rust sends (`ChatCard.app`,
- * `ChatPending.app`): anything shown from another app is drawn in THAT app's
- * colour. The values are the generated resources (`centraid_app_<id>` for the
- * fill, `centraid_app_<id>_text` for text), so light and dark are the design
- * source's; this only says which resource an id is. An empty or unknown id is
- * the shell's own teal, which is what a thing that belongs to no app wears.
+ * A COLOUR RESOURCE IN THE SCHEME THE MEMBER CHOSE (#1173).
+ *
+ * `colorResource` resolves against the phone's night mode, but the member may have forced the
+ * other appearance (`CentraidTheme(dark = ...)`), so the resource is read from a configuration
+ * that says which scheme is drawn. Only the colour is read this way: the context every other
+ * call sees is untouched, because an activity-bound effect needs the real one.
  */
 @Composable
-public fun appAccentFill(appId: String): Color = tokenColor(fillRes(appId))
+internal fun centraidResource(@ColorRes id: Int): Color {
+    val context = LocalContext.current
+    val dark = centraidDark()
+    val scheme = remember(context, dark) { context.inScheme(dark) }
+    return Color(scheme.getColor(id))
+}
 
-/** The app's colour as text or an icon: lighter in dark. */
+private fun Context.inScheme(dark: Boolean): Context {
+    val config = Configuration(resources.configuration)
+    val night = if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+    config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+    return createConfigurationContext(config)
+}
+
+/**
+ * AN APP'S COLOUR, as the three values the design gives it. The one hook for every screen that
+ * wears an app: `appAccent("agenda")`. The shell's places (`home`, `chat`, `backup`) and any id
+ * this table does not know wear the shell's teal.
+ *
+ * - [fill] is the colour under white glyphs: the filled `+`, a button, a selected state. In dark
+ *   it is the deeper value, so white on it stays 4.5:1 or more.
+ * - [text] is the colour as text or an icon on the page or a card: a title, a star, a link. In
+ *   light it equals [fill].
+ * - [tile] is the bright colour on a tile or an icon where the accent is not that (Notes'
+ *   yellow). It does not change in dark.
+ *
+ * Stars use [text], never amber: amber only means a state.
+ */
+@Immutable
+public data class AppAccent(val appId: String, val fill: Color, val text: Color, val tile: Color) {
+    /** The tint behind an app's glyph: the fill at the icon chip's own strength. */
+    public fun wash(dark: Boolean): Color =
+        fill.copy(alpha = (if (dark) CentraidGeometry.ICON_CHIP_TINT_DARK else CentraidGeometry.ICON_CHIP_TINT_LIGHT).toFloat())
+}
+
 @Composable
-public fun appAccentText(appId: String): Color = tokenColor(textRes(appId))
+public fun appAccent(appId: String): AppAccent {
+    val ids = accentResources(appId)
+    return AppAccent(
+        appId = appId,
+        fill = centraidResource(ids[0]),
+        text = centraidResource(ids[1]),
+        tile = centraidResource(ids[2]),
+    )
+}
 
-@ColorRes
-private fun fillRes(appId: String): Int =
-    when (appId) {
-        "agenda" -> R.color.centraid_app_agenda
-        "notes" -> R.color.centraid_app_notes
-        "people" -> R.color.centraid_app_people
-        "docs" -> R.color.centraid_app_docs
-        "money" -> R.color.centraid_app_money
-        "locker" -> R.color.centraid_app_locker
-        "health" -> R.color.centraid_app_health
-        "photos" -> R.color.centraid_app_photos
-        else -> R.color.centraid_shell
-    }
+/** The accent of the app the view is drawn in, stated once by an app's place. */
+public val LocalAppAccentId = compositionLocalOf { "" }
 
-@ColorRes
-private fun textRes(appId: String): Int =
-    when (appId) {
-        "agenda" -> R.color.centraid_app_agenda_text
-        "notes" -> R.color.centraid_app_notes_text
-        "people" -> R.color.centraid_app_people_text
-        "docs" -> R.color.centraid_app_docs_text
-        "money" -> R.color.centraid_app_money_text
-        "locker" -> R.color.centraid_app_locker_text
-        "health" -> R.color.centraid_app_health_text
-        "photos" -> R.color.centraid_app_photos_text
-        else -> R.color.centraid_shell_text
-    }
+/** The accent in force: the enclosing place's app, or the shell's. */
+@Composable
+public fun appAccent(): AppAccent = appAccent(LocalAppAccentId.current)
+
+/** The fill, text and tile resources for an app id (fill, text, tile). */
+private fun accentResources(appId: String): IntArray = when (appId) {
+    "agenda" -> intArrayOf(R.color.centraid_app_agenda, R.color.centraid_app_agenda_text, R.color.centraid_app_agenda_tile)
+    "docs" -> intArrayOf(R.color.centraid_app_docs, R.color.centraid_app_docs_text, R.color.centraid_app_docs_tile)
+    "health" -> intArrayOf(R.color.centraid_app_health, R.color.centraid_app_health_text, R.color.centraid_app_health_tile)
+    "locker" -> intArrayOf(R.color.centraid_app_locker, R.color.centraid_app_locker_text, R.color.centraid_app_locker_tile)
+    "money" -> intArrayOf(R.color.centraid_app_money, R.color.centraid_app_money_text, R.color.centraid_app_money_tile)
+    "notes" -> intArrayOf(R.color.centraid_app_notes, R.color.centraid_app_notes_text, R.color.centraid_app_notes_tile)
+    "people" -> intArrayOf(R.color.centraid_app_people, R.color.centraid_app_people_text, R.color.centraid_app_people_tile)
+    "photos" -> intArrayOf(R.color.centraid_app_photos, R.color.centraid_app_photos_text, R.color.centraid_app_photos_tile)
+    else -> intArrayOf(R.color.centraid_shell, R.color.centraid_shell_text, R.color.centraid_shell)
+}
