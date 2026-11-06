@@ -340,9 +340,12 @@ message HomeBar {
   Route search_route = 8;
   // The label of the gear beside "N originals waiting": "Download settings".
   string transfer_rules_label = 9;
-  // The appearance key: the glyph and the words of the switch it makes.
-  string appearance_icon = 4;
-  string appearance_label = 5;
+  // 4 and 5 were the appearance key's glyph and words: the appearance is Settings' now (#1173).
+  reserved 4, 5;
+  reserved "appearance_icon", "appearance_label";
+  // The settings key beside search: "Settings", and where it goes.
+  string settings_label = 12;
+  Route settings_route = 13;
   // 6 was `switch_spoken`: nothing read it (#1152).
   reserved 6;
   reserved "switch_spoken";
@@ -419,7 +422,6 @@ message HomeEvent {
   oneof kind {
     BackupPressed backup = 3;
     StatusPressed status = 4;
-    AppearancePressed appearance = 5;
     VaultPressed vault = 6;
     VaultPicked vault_picked = 7;
     SheetClosed sheet_closed = 8;
@@ -450,11 +452,17 @@ message HomeEvent {
     // The phone asked for a page from outside Home (a key slot, a system rationale link):
     // Home answers with the route, so the shell names no screen.
     EntryAsked entry_asked = 25;
+    // Settings chose the appearance: Home keeps it and draws the scheme it names.
+    AppearanceChosen appearance_chosen = 26;
   }
+  // 5 was `appearance`, the key that flipped light and dark: Settings chooses it now.
+  reserved 5;
+  reserved "appearance";
 
   message BackupPressed {}
   message StatusPressed {}
-  message AppearancePressed {}
+  // `stored` is what the Keychain holds: "", "light" or "dark".
+  message AppearanceChosen { string stored = 1; }
   message VaultPressed {}
   message VaultPicked { string vault_id = 1; }
   message SheetClosed {}

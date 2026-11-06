@@ -75,28 +75,6 @@ impl Appearance {
             Self::Dark => "dark",
         }
     }
-
-    /// Whether the app is dark right now.
-    fn dark(self, phone_dark: bool) -> bool {
-        match self {
-            Self::System => phone_dark,
-            Self::Light => false,
-            Self::Dark => true,
-        }
-    }
-
-    /// The choice the key makes: the other of the two. A choice that lands where
-    /// the phone already is goes back to following it.
-    fn toggled(self, phone_dark: bool) -> Self {
-        let to_dark = !self.dark(phone_dark);
-        if to_dark == phone_dark {
-            Self::System
-        } else if to_dark {
-            Self::Dark
-        } else {
-            Self::Light
-        }
-    }
 }
 
 /// The step after a vault was picked in the sheet.
@@ -128,7 +106,6 @@ struct Home {
     ask: Ask,
     outcome: String,
     appearance: Appearance,
-    phone_dark: bool,
     /// The cache of what the shell keeps, shared with the pass service: the
     /// transfer rule is read from it and written through it.
     secrets: VaultSecrets,
@@ -161,7 +138,6 @@ impl Home {
             ask: Ask::None,
             outcome: String::new(),
             appearance: Appearance::System,
-            phone_dark: false,
             transfer_sheet_open: false,
             keeping: None,
         }
@@ -257,11 +233,14 @@ impl Home {
             H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
             H::EntryAsked(asked) => return entry_route(asked.entry()),
-            H::Appearance(_) => {
-                self.appearance = self.appearance.toggled(self.phone_dark);
+            // SETTINGS CHOSE IT: kept in the Keychain, the one store, and drawn at once.
+            H::AppearanceChosen(chosen) => {
+                self.appearance = Appearance::of(&chosen.stored);
                 return vec![keychain_set(self.appearance.stored())];
             }
-            H::PhoneSchemeTold(told) => self.phone_dark = told.dark,
+            // Following the phone is the shell's to draw: Home no longer words a switch
+            // that depends on where the phone is.
+            H::PhoneSchemeTold(_) => {}
             H::Vault(_) => self.sheet_open = true,
             H::VaultPicked(picked) => {
                 self.sheet_open = false;
@@ -496,7 +475,6 @@ impl Home {
     }
 
     fn bar(&self, locale: Locale) -> wire::HomeBar {
-        let dark = self.appearance.dark(self.phone_dark);
         let vault = match &self.vault {
             Some(vault) => finish_vault(locale, vault),
             None => wire::HomeVault {
@@ -550,12 +528,8 @@ impl Home {
             search_label: words::home_search_placeholder(locale),
             search_route: Some(routes::search()),
             transfer_rules_label: photos::transfer_settings_label(locale),
-            appearance_icon: if dark { "Sun" } else { "Moon" }.to_owned(),
-            appearance_label: if dark {
-                words::appearance_to_light(locale)
-            } else {
-                words::appearance_to_dark(locale)
-            },
+            settings_label: crate::strings::settings::settings_title(locale),
+            settings_route: Some(routes::settings()),
         }
     }
 
@@ -889,21 +863,6 @@ fn finish_vault(locale: Locale, vault: &wire::ShellVault) -> wire::HomeVault {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_appearance_key_goes_to_the_other_scheme_and_back_to_following() {
-        // On a light phone: following -> dark -> following (light is the phone's).
-        let a = Appearance::System.toggled(false);
-        assert_eq!(a, Appearance::Dark);
-        assert_eq!(a.toggled(false), Appearance::System);
-        // On a dark phone: following -> light -> following.
-        let b = Appearance::System.toggled(true);
-        assert_eq!(b, Appearance::Light);
-        assert_eq!(b.toggled(true), Appearance::System);
-        // A held scheme that disagrees with the phone flips to the other held one.
-        assert_eq!(Appearance::Dark.toggled(true), Appearance::Light);
-        assert_eq!(Appearance::Light.toggled(false), Appearance::Dark);
-    }
 
     #[test]
     fn a_tile_opens_its_app_and_notes_opens_a_new_note_when_it_holds_none() {

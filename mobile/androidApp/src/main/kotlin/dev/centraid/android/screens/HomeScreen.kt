@@ -140,7 +140,7 @@ public fun HomeScreen(
     // THE BACKUP LINE'S DOOR: the backup tab, which Rust selects.
     val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
     val search: () -> Unit = { bar?.search_route?.let(onOpen) }
-    val appearance: () -> Unit = { onEvent(HomeEvent(appearance = HomeEvent.AppearancePressed())) }
+    val settings: (() -> Unit)? = state.bar?.settings_route?.let { route -> { onOpen(route) } }
     Column(
         Modifier
             .fillMaxSize()
@@ -163,7 +163,7 @@ public fun HomeScreen(
                 // a tap pushes the search over every app. Not on the
                 // Backup tab, which is the backup's and not the springboard's.
                 onSearch = search,
-                onAppearance = appearance,
+                onSettings = settings,
             )
         }
         StatusRibbon(state.status, onEvent)

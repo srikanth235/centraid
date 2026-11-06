@@ -960,7 +960,12 @@ mod tests {
     #[test]
     fn the_calendar_widget_names_the_day_and_lists_two_events_with_the_rest_counted() {
         let made = agenda_of(vec![
-            timed("a", "Lunch with Ana", "2026-06-15T11:15", "2026-06-15T12:30"),
+            timed(
+                "a",
+                "Lunch with Ana",
+                "2026-06-15T11:15",
+                "2026-06-15T12:30",
+            ),
             timed("b", "Lease call", "2026-06-15T11:45", ""),
             timed("c", "Dentist", "2026-06-15T14:00", "2026-06-15T15:00"),
             timed("d", "Gym", "2026-06-15T18:00", "2026-06-15T19:00"),
@@ -970,7 +975,10 @@ mod tests {
         assert_eq!((body.weekday.as_str(), body.day.as_str()), ("Monday", "15"));
         assert_eq!(
             lines(body),
-            [("Lunch with Ana", "11:15 \u{2013} 12:30"), ("Lease call", "11:45")]
+            [
+                ("Lunch with Ana", "11:15 \u{2013} 12:30"),
+                ("Lease call", "11:45")
+            ]
         );
         assert_eq!(body.foot, "Agenda \u{b7} 2 more");
         // The count is what the spoken label says: four events in the week.
@@ -1005,7 +1013,10 @@ mod tests {
         ]);
         assert_eq!(
             lines(agenda_body(&made)),
-            [("Call with Ana", "08:30 \u{2013} 09:30"), ("Survey", "10:00")]
+            [
+                ("Call with Ana", "08:30 \u{2013} 09:30"),
+                ("Survey", "10:00")
+            ]
         );
         assert_eq!(count(&made), 2);
     }
@@ -1045,7 +1056,10 @@ mod tests {
         events.sort_by(|a, b| a.local_start.cmp(&b.local_start));
         let made = agenda_of(events);
         // Only today's occurrence is the day's; the other six are the week's.
-        assert_eq!(lines(agenda_body(&made)), [("Stand-up", "10:00 \u{2013} 10:15")]);
+        assert_eq!(
+            lines(agenda_body(&made)),
+            [("Stand-up", "10:00 \u{2013} 10:15")]
+        );
         assert_eq!(count(&made), 8);
     }
 
@@ -1078,7 +1092,10 @@ mod tests {
         let Some(Body::Reminders(body)) = &reminders.body else {
             panic!("not a reminders body");
         };
-        assert_eq!(body.titles, ["File the taxes", "Call Mum", "Water the plants"]);
+        assert_eq!(
+            body.titles,
+            ["File the taxes", "Call Mum", "Water the plants"]
+        );
         assert_eq!(body.caption, "Today");
         // The calendar's own count agrees with both widgets: one event and four due.
         assert_eq!(count(&calendar), 5);
@@ -1118,7 +1135,12 @@ mod tests {
         assert!(made.body.is_none() && reminders.is_none());
         assert_eq!(made.count_label, "on your plate");
         // An event that is over leaves the same: nothing to say.
-        let over = agenda_of(vec![timed("e", "School run", "2026-06-15T07:30", "2026-06-15T08:00")]);
+        let over = agenda_of(vec![timed(
+            "e",
+            "School run",
+            "2026-06-15T07:30",
+            "2026-06-15T08:00",
+        )]);
         assert_eq!(over.status, Status::Empty);
     }
 
@@ -1147,15 +1169,6 @@ mod tests {
             note_id: id.to_owned(),
             title: title.map(str::to_owned),
             preview: preview.to_owned(),
-            ..Default::default()
-        }
-    }
-
-    fn notebook(id: &str, name: Option<&str>, count: u32) -> wire::NotesNotebook {
-        wire::NotesNotebook {
-            notebook_id: id.to_owned(),
-            name: name.map(str::to_owned),
-            note_count: count,
             ..Default::default()
         }
     }
@@ -1209,7 +1222,9 @@ mod tests {
     #[test]
     fn edited_is_today_yesterday_or_the_day_named() {
         let line = |day: &str, today: Option<&str>| {
-            notes_body(&notes_of(vec![edited(day)], false, today)).edited.clone()
+            notes_body(&notes_of(vec![edited(day)], false, today))
+                .edited
+                .clone()
         };
         assert_eq!(line("2026-06-15", Some(TODAY)), "Edited today");
         assert_eq!(line("2026-06-14", Some(TODAY)), "Edited yesterday");
@@ -1591,10 +1606,7 @@ mod tests {
 
     #[test]
     fn the_people_widget_says_how_many_are_due_for_a_catch_up_when_any_are() {
-        let made = people_tile(
-            Locale::En,
-            &roster(&["Ada", "Grace", "Alan", "Edsger"], 3),
-        );
+        let made = people_tile(Locale::En, &roster(&["Ada", "Grace", "Alan", "Edsger"], 3));
         assert_eq!(made.status, Status::Content);
         assert_eq!(people_body(&made), ("3", "reconnect"));
         // The tile's own count stays everyone, for the spoken label.

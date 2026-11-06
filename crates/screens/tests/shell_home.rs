@@ -196,7 +196,11 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
             .iter()
             .position(|t| t.widget == "reminders")
             .unwrap(),
-        data.tiles.iter().position(|t| t.widget == "agenda").unwrap() + 1
+        data.tiles
+            .iter()
+            .position(|t| t.widget == "agenda")
+            .unwrap()
+            + 1
     );
     let calendar = tile_of(&data, "agenda");
     let Some(wire::home_tile_body::Kind::Agenda(day)) =
@@ -528,7 +532,7 @@ fn a_different_vault_in_front_reads_the_tiles_again_and_the_first_lockup_does_no
 }
 
 #[test]
-fn the_appearance_key_follows_the_phone_then_holds_the_other_scheme_in_the_keychain() {
+fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
     let (mut d, i) = started();
     // Opening asks the Keychain for what was chosen.
     let ask = d
@@ -539,33 +543,40 @@ fn the_appearance_key_follows_the_phone_then_holds_the_other_scheme_in_the_keych
     assert!(
         matches!(ask, Some(wire::effect::Kind::Keychain(op)) if op.key == "appearance" && op.op == wire::keychain_op::Op::Get as i32)
     );
-    tell(
-        &mut d,
-        i,
-        H::PhoneSchemeTold(wire::home_event::PhoneSchemeTold { dark: false }),
-    );
+    // The key beside search is Settings' door, with its words and its route; there is
+    // no appearance switch on Home any more.
     let bar = state(&d, i).bar.unwrap();
-    assert_eq!(
-        (bar.appearance_icon.as_str(), bar.appearance_label.as_str()),
-        ("Moon", "Switch to dark")
-    );
+    assert_eq!(bar.settings_label, "Settings");
+    assert_eq!(bar.settings_route.unwrap().screen, "home.settings");
     assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
+    // Settings chose Dark: kept in the Keychain, drawn at once.
     d.effects.clear();
     tell(
         &mut d,
         i,
-        H::Appearance(wire::home_event::AppearancePressed {}),
+        H::AppearanceChosen(wire::home_event::AppearanceChosen {
+            stored: "dark".into(),
+        }),
     );
-    let home = state(&d, i);
-    assert_eq!(home.scheme, wire::HomeScheme::Dark as i32);
-    assert_eq!(home.bar.unwrap().appearance_icon, "Sun");
+    assert_eq!(state(&d, i).scheme, wire::HomeScheme::Dark as i32);
     assert!(matches!(
         d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::Keychain(op)) if op.value == b"dark".to_vec() && op.op == wire::keychain_op::Op::Set as i32
     ));
+    // Following the phone again stores nothing.
+    tell(
+        &mut d,
+        i,
+        H::AppearanceChosen(wire::home_event::AppearanceChosen {
+            stored: String::new(),
+        }),
+    );
+    assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
+    assert!(matches!(
+        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
+        Some(wire::effect::Kind::Keychain(op)) if op.value.is_empty() && op.op == wire::keychain_op::Op::Set as i32
+    ));
     // The stored choice comes back from the Keychain as an effect result.
-    let id = d.effects.last().unwrap().effect_id;
-    let _ = id;
     d.answer_effect(wire::effect_result::Outcome::Keychain(
         wire::KeychainValue {
             found: true,

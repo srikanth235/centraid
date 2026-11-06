@@ -117,7 +117,7 @@ private struct HomeRoot: View {
             }
         }
         // EDGE TO EDGE: the page ground reaches the notch and the home indicator.
-        .background((shell.tab == .home ? Color(CentraidAsset.surfacePage) : Theme.color("bg", scheme)).ignoresSafeArea())
+        .background((shell.tab == .home ? Surface.page : Theme.color("bg", scheme)).ignoresSafeArea())
         // THE CHAT BELONGS TO THE VAULT IN FRONT: when it changes the thread,
         // its session and its cards are the old vault's and are dropped.
         .onChange(of: home.bar.vault.vaultID, initial: true) { _, id in

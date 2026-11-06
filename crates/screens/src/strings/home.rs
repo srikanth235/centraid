@@ -5,8 +5,6 @@
 //! there, not restated.
 
 catalog! {
-    plain appearance_to_dark = ("Switch to dark", "Switch to dark");
-    plain appearance_to_light = ("Switch to light", "Switch to light");
     plain backup_status_open = ("Open backup", "Open backup");
     plain band_backup = ("Backup", "Backup");
     plain band_backup_spoken = ("Backup and recovery key", "Backup and recovery key");

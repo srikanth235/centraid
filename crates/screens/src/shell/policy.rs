@@ -185,7 +185,12 @@ mod tests {
     fn tile(widget: &str, status: Status) -> wire::HomeTile {
         wire::HomeTile {
             widget: widget.to_owned(),
-            app_id: if widget == REMINDERS { "agenda" } else { widget }.to_owned(),
+            app_id: if widget == REMINDERS {
+                "agenda"
+            } else {
+                widget
+            }
+            .to_owned(),
             status: status as i32,
             ..wire::HomeTile::default()
         }
@@ -202,7 +207,11 @@ mod tests {
     }
 
     fn order(folded: &Folded) -> Vec<&str> {
-        folded.tiles.iter().map(|tile| tile.widget.as_str()).collect()
+        folded
+            .tiles
+            .iter()
+            .map(|tile| tile.widget.as_str())
+            .collect()
     }
 
     #[test]
@@ -259,8 +268,18 @@ mod tests {
         for tile in &folded.tiles {
             assert_eq!(tile.size(), Size::Medium, "{}", tile.widget);
         }
-        let height = |widget: &str| folded.tiles.iter().find(|t| t.widget == widget).unwrap().height;
-        assert_eq!((height("agenda"), height("photos"), height("notes")), (2, 2, 1));
+        let height = |widget: &str| {
+            folded
+                .tiles
+                .iter()
+                .find(|t| t.widget == widget)
+                .unwrap()
+                .height
+        };
+        assert_eq!(
+            (height("agenda"), height("photos"), height("notes")),
+            (2, 2, 1)
+        );
     }
 
     #[test]

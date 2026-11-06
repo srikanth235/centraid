@@ -43,9 +43,9 @@ import centraid.core.v1.Route
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
-import dev.centraid.android.kit.appAccentFill
-import dev.centraid.android.kit.appAccentText
-import dev.centraid.android.kit.tokenColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.design.CentraidCatalog
 
@@ -109,15 +109,17 @@ private fun WidgetRow(spans: List<Int>, floor: Dp, content: @Composable () -> Un
 @Composable
 internal fun WidgetGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
     val byWidget = data.tiles.associateBy { it.widget }
+    // AT THE LARGEST TEXT a widget has no room to share a row: each takes the whole width.
+    val largest = rememberLargestText()
     Column(
         Modifier.fillMaxWidth().testTag("home-grid"),
         verticalArrangement = Arrangement.spacedBy(GAP),
     ) {
-        for (row in data.grid_rows) {
-            val tiles = row.widgets.mapNotNull { byWidget[it] }
-            if (tiles.isEmpty()) continue
+        val rows = data.grid_rows.map { row -> row.widgets.mapNotNull { byWidget[it] } }.filter { it.isNotEmpty() }
+        // One widget a row at the largest text; Rust's rows otherwise.
+        for (tiles in if (largest) rows.flatten().map { listOf(it) } else rows) {
             WidgetRow(
-                spans = tiles.map { spanOf(it) },
+                spans = tiles.map { if (largest) COLUMNS else spanOf(it) },
                 floor = floorOf(tiles.minOf { it.height }.coerceAtLeast(1)),
             ) {
                 for (tile in tiles) WidgetCard(tile, loading, onOpen)
@@ -146,7 +148,7 @@ private fun WidgetCard(tile: HomeTile, loading: String, onOpen: (Route) -> Unit)
     Box(
         Modifier
             .clip(shape)
-            .background(tokenColor(R.color.centraid_surface_card))
+            .background(Surface.card)
             // A WIDGET WITH NO ROUTE (still reading, or could not be) is not a control.
             .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
             // Keyed on the widget: Agenda's two are `home-tile-agenda` and
@@ -163,10 +165,10 @@ private fun WidgetCard(tile: HomeTile, loading: String, onOpen: (Route) -> Unit)
 }
 
 @Composable
-private fun meta(): Color = tokenColor(R.color.centraid_text_meta)
+private fun meta(): Color = Surface.meta
 
 @Composable
-private fun ink(): Color = tokenColor(R.color.centraid_text_ink)
+private fun ink(): Color = Surface.ink
 
 /** The app's own text size rungs: meta (13) for lines, strong at the same size. */
 @Composable
@@ -225,7 +227,7 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
 @Composable
 private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agenda, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        WText(day.weekday.uppercase(), appAccentText(tile.app_id), strong = true, size = tokenSp(R.dimen.centraid_text_badge))
+        WText(day.weekday.uppercase(), appAccent(tile.app_id).text, strong = true, size = tokenSp(R.dimen.centraid_text_badge))
         Text(
             day.day,
             color = ink(),
@@ -239,7 +241,7 @@ private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agen
                         .width(3.dp)
                         .heightIn(min = 30.dp)
                         .clip(CircleShape)
-                        .background(appAccentFill(tile.app_id)),
+                        .background(appAccent(tile.app_id).fill),
                 )
                 Column {
                     WText(event.title, ink(), strong = true)
@@ -257,10 +259,10 @@ private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agen
 private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.Reminders, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            WText(tile.name, appAccentText(tile.app_id), strong = true, modifier = Modifier.weight(1f))
+            WText(tile.name, appAccent(tile.app_id).text, strong = true, modifier = Modifier.weight(1f))
             Text(
                 (tile.count?.value_ ?: 0).toString(),
-                color = appAccentText(tile.app_id),
+                color = appAccent(tile.app_id).text,
                 fontSize = tokenSp(R.dimen.centraid_text_section),
                 fontWeight = FontWeight.Bold,
             )
@@ -285,7 +287,7 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CentraidCatalog.byId[tile.app_id]?.let { app ->
-            CentraidIcon(iconKey = app.iconKey, tint = appAccentText(tile.app_id), size = 22.dp)
+            CentraidIcon(iconKey = app.iconKey, tint = appAccent(tile.app_id).text, size = 22.dp)
         }
         if (figure.isNotEmpty()) WText(figure, ink(), strong = true)
         WText(caption, meta(), maxLines = 2, align = TextAlign.Center)
@@ -296,7 +298,7 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
 @Composable
 private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        WText(tile.name, appAccentText(tile.app_id), strong = true)
+        WText(tile.name, appAccent(tile.app_id).text, strong = true)
         WText(title, ink())
         if (line.isNotEmpty()) WText(line, meta())
     }
@@ -308,12 +310,12 @@ private fun Invitation(tile: HomeTile, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             CentraidCatalog.byId[tile.app_id]?.let { app ->
-                CentraidIcon(iconKey = app.iconKey, tint = appAccentText(tile.app_id), size = 16.dp)
+                CentraidIcon(iconKey = app.iconKey, tint = appAccent(tile.app_id).text, size = 16.dp)
             }
-            WText(tile.name, appAccentText(tile.app_id), strong = true)
+            WText(tile.name, appAccent(tile.app_id).text, strong = true)
         }
         Spacer(Modifier.weight(1f))
-        WText(tile.empty_copy, tokenColor(R.color.centraid_text_body), maxLines = 3)
+        WText(tile.empty_copy, Surface.body, maxLines = 3)
     }
 }
 
@@ -330,7 +332,7 @@ private fun Skeleton(loading: String, modifier: Modifier) {
                     .fillMaxWidth(fraction)
                     .height(10.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(tokenColor(R.color.centraid_surface_line)),
+                    .background(Surface.line),
             )
         }
     }
@@ -347,9 +349,9 @@ private fun PhotoWidget(tile: HomeTile) {
     val cells = photos.cells
     @Composable
     fun cell(index: Int, modifier: Modifier) {
-        Box(modifier.background(tokenColor(R.color.centraid_surface_line))) {
+        Box(modifier.background(Surface.line)) {
             val path = cells.getOrNull(index)?.thumbnail_path
-            if (!path.isNullOrEmpty()) ContentImage(path = path, modifier = Modifier.fillMaxSize())
+            if (!path.isNullOrEmpty()) ContentImage(path = path)
         }
     }
     Box(Modifier.fillMaxWidth().heightIn(min = floorOf(2))) {

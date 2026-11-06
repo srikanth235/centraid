@@ -62,6 +62,8 @@ private struct WidgetRowLayout: Layout {
 struct WidgetGrid: View {
     let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
+    /// AT THE LARGEST TEXT a widget has no room to share a row: each takes the whole width.
+    @Environment(\.isLargestText) private var largestText
 
     private var byWidget: [String: Centraid_Core_V1_HomeTile] {
         Dictionary(data.tiles.map { ($0.widget, $0) }, uniquingKeysWith: { first, _ in first })
@@ -75,13 +77,18 @@ struct WidgetGrid: View {
         }
     }
 
+    /// Rust's rows, or one widget a row at the largest text.
+    private func rows(_ tiles: [String: Centraid_Core_V1_HomeTile]) -> [[Centraid_Core_V1_HomeTile]] {
+        let packed = data.gridRows.map { $0.widgets.compactMap { tiles[$0] } }.filter { !$0.isEmpty }
+        return largestText ? packed.flatMap { $0 }.map { [$0] } : packed
+    }
+
     var body: some View {
         let tiles = byWidget
         VStack(spacing: WidgetGeometry.gap) {
-            ForEach(Array(data.gridRows.enumerated()), id: \.offset) { _, row in
-                let drawn = row.widgets.compactMap { tiles[$0] }
+            ForEach(Array(rows(tiles).enumerated()), id: \.offset) { _, drawn in
                 WidgetRowLayout(
-                    spans: drawn.map(span),
+                    spans: drawn.map { largestText ? WidgetGeometry.columns : span($0) },
                     floor: WidgetGeometry.floor(rows: Int(drawn.map(\.height).min() ?? 1))
                 ) {
                     ForEach(drawn, id: \.widget) { tile in
@@ -125,7 +132,7 @@ private struct WidgetCard: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(CentraidAsset.surfaceCard))
+            .background(Surface.card)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -143,9 +150,9 @@ private struct WidgetBody: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.homeLoadingLabel) private var loadingLabel
 
-    private var accent: Color { AppAccent.text(tile.appID) }
-    private var meta: Color { Color(CentraidAsset.textMeta) }
-    private var ink: Color { Color(CentraidAsset.textInk) }
+    private var accent: Color { AppAccent(tile.appID).text }
+    private var meta: Color { Surface.meta }
+    private var ink: Color { Surface.ink }
 
     var body: some View {
         if tile.status == .loading {
@@ -180,7 +187,7 @@ private struct WidgetBody: View {
                 .padding(.top, -4)
             ForEach(Array(day.events.enumerated()), id: \.offset) { _, event in
                 HStack(spacing: 6) {
-                    Capsule().fill(AppAccent.fill(tile.appID)).frame(width: 3)
+                    Capsule().fill(AppAccent(tile.appID).fill).frame(width: 3)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(event.title)
                             .centraidType("annotLabelOn")
@@ -296,7 +303,7 @@ private struct WidgetBody: View {
             Spacer(minLength: 0)
             Text(tile.emptyCopy)
                 .centraidType("annotLabel")
-                .foregroundStyle(Color(CentraidAsset.textBody))
+                .foregroundStyle(Surface.body)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -309,7 +316,7 @@ private struct WidgetBody: View {
             ForEach([0.8, 0.55], id: \.self) { fraction in
                 GeometryReader { proxy in
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(CentraidAsset.surfaceLine))
+                        .fill(Surface.line)
                         .frame(width: proxy.size.width * fraction, height: 10)
                 }
                 .frame(height: 10)
@@ -330,7 +337,7 @@ private struct PhotoWidget: View {
 
     private func cell(_ index: Int) -> some View {
         Rectangle()
-            .fill(Color(CentraidAsset.surfaceLine))
+            .fill(Surface.line)
             .overlay {
                 if index < photos.cells.count, photos.cells[index].hasThumbnailPath,
                    !photos.cells[index].thumbnailPath.isEmpty {
