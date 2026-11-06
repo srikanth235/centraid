@@ -57,8 +57,8 @@ impl std::fmt::Display for Currency {
 
 /// The ISO 4217 minor-unit exponent, for the codes the product can reach.
 ///
-/// v0 has no such table, which is the bug: `packages/design/src/format.ts:38`
-/// divides by 100 for every currency. Two decimals is the default because it is
+/// v0 has no such table, which is the bug: the retired TypeScript `format.ts`
+/// divided by 100 for every currency. Two decimals is the default because it is
 /// the answer for the overwhelming majority of codes; the exceptions listed
 /// here are the ones a member of this product plausibly holds money in. An
 /// unlisted code getting 2 is a *stated* default, not a guess that hides.

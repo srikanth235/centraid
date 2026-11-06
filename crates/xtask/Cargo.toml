@@ -32,7 +32,7 @@ centraid-design = { path = "../design" }
 # sha2 at all — `crates/vault` no longer does — so it is now an extra compile
 # for the gate tool, and that is the correct place to pay it.
 sha2 = { workspace = true }
-# `design/tokens.toml` is read by `design-dark` (#1173); toml is already in the lockfile.
+# `design/tokens.toml` is read by the dark-mockup generator (#1173); toml is already in the lockfile.
 toml = "0.9"
 
 [dev-dependencies]

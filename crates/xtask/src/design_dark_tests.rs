@@ -283,17 +283,99 @@ fn a_committed_pair_round_trips_exactly() {
 }
 
 /// Every dark board in the repository is what the generator writes: the same
-/// comparison as `cargo xtask design-dark --check`, so no gate can go green
-/// over a hand-edited dark screen.
+/// comparison as the gate's `design` step, so no gate can go green over a
+/// hand-edited dark screen.
 #[test]
 fn every_committed_dark_board_is_current() {
-    let report = generate_all(root(), true).expect("the boards convert");
+    let boards = dark_boards(root()).expect("the boards convert");
+    assert!(!boards.is_empty());
+    let mut drifted = Vec::new();
+    for (path, wanted) in &boards {
+        let have = std::fs::read_to_string(root().join(path)).unwrap_or_default();
+        if &have != wanted {
+            drifted.push(format!("{path}: {}", first_difference(&have, wanted)));
+        }
+    }
     assert!(
-        report.changed.is_empty(),
-        "{} of {} dark boards drifted: {:#?}",
-        report.changed.len(),
-        report.total,
-        report.changed
+        drifted.is_empty(),
+        "{} drifted: {drifted:#?}",
+        drifted.len()
     );
-    assert_eq!(report.identical, report.total);
+}
+
+/// THE DARK MOCKUPS AND THE APPS CANNOT DISAGREE (#1173). `[mockups.dark]` lists
+/// a dark value per light colour; the apps' dark values are `dark_fill` and
+/// `dark_text` on every accent and the dark halves of `[surface]` and `[text]`.
+/// This lists every place the two differ.
+fn dark_disagreements() -> Vec<String> {
+    use centraid_design::tokens::Tokens;
+    let tokens = Tokens::load(root()).expect("design/tokens.toml parses");
+    let map = DarkMap::load(root()).expect("design/tokens.toml parses");
+    let entry = |light: &str| {
+        map.colors
+            .get(&hex_key(light))
+            .map(|&i| &map.section.colors[i])
+    };
+    let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
+    let mut out = Vec::new();
+    let compare =
+        |out: &mut Vec<String>, what: &str, role: &str, entry: Option<&String>, want: &str| {
+            if let Some(have) = entry
+                && !same(have, want)
+            {
+                out.push(format!(
+                    "{what}: {role} is {have} in [mockups.dark], {want} in the apps"
+                ));
+            }
+        };
+    for (name, accent) in tokens.accents() {
+        let Some(e) = entry(&accent.light) else {
+            out.push(format!(
+                "{name}: {} has no [mockups.dark] entry",
+                accent.light
+            ));
+            continue;
+        };
+        compare(&mut out, &name, "text", e.text.as_ref(), &accent.dark_text);
+        compare(&mut out, &name, "line", e.line.as_ref(), &accent.dark_text);
+        compare(&mut out, &name, "fill", e.fill.as_ref(), &accent.dark_fill);
+    }
+    let (sl, sd) = (&tokens.surface.light, &tokens.surface.dark);
+    for (name, light, dark) in [
+        ("surface.page", &sl.page, &sd.page),
+        ("surface.card", &sl.card, &sd.card),
+        ("surface.line", &sl.line, &sd.line),
+        ("surface.border", &sl.border, &sd.border),
+    ] {
+        match entry(light) {
+            Some(e) => compare(&mut out, name, "fill", e.fill.as_ref(), dark),
+            None => out.push(format!("{name}: {light} has no [mockups.dark] entry")),
+        }
+    }
+    let (tl, td) = (&tokens.text.light, &tokens.text.dark);
+    for (name, light, dark) in [
+        ("text.ink", &tl.ink, &td.ink),
+        ("text.body", &tl.body, &td.body),
+        ("text.meta", &tl.meta, &td.meta),
+    ] {
+        match entry(light) {
+            Some(e) => compare(&mut out, name, "text", e.text.as_ref(), dark),
+            None => out.push(format!("{name}: {light} has no [mockups.dark] entry")),
+        }
+    }
+    out
+}
+
+/// Today there is none: every app, state and shell colour, and every light
+/// surface and text colour, has a `[mockups.dark]` entry whose roles equal the
+/// semantic tables. A new disagreement is a failure; resolve it by changing the
+/// value that is wrong, in the file, with the owner's say.
+#[test]
+fn the_dark_mockups_and_the_apps_agree() {
+    let found = dark_disagreements();
+    assert!(
+        found.is_empty(),
+        "the boards and the apps disagree:\n{}",
+        found.join("\n")
+    );
 }

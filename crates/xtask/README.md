@@ -10,7 +10,7 @@ cargo xtask gate --profile nightly --lane <name>   # one step, or one device lan
 cargo xtask gate --profile release   # nightly + the restore drill + the VPS smoke
 cargo xtask gate --profile mobile-jvm  # the Kotlin half, on its own
 cargo xtask rules                    # the structural rules alone
-cargo xtask design [--check]         # every design artifact from design/tokens.toml; --check fails on any stale file
+cargo xtask design [--check]         # every design artifact from design/tokens.toml (shells, sites, dark mockups); --check fails on any stale file or site-lint finding
 cargo xtask doc-links                # every relative markdown link and in-repo anchor resolves
 cargo xtask test-plan                # which crates `local`'s `test` step would run, and why (--reads: the table it trusts)
 cargo xtask repo-root                # which tree the path-based rules will scan
@@ -61,9 +61,9 @@ The step says so in three places: a banner before its line naming every crate an
 
 ### The `design` step
 
-`cargo xtask design` generates every design artifact from `design/tokens.toml` ([#1173](https://github.com/srikanth235/centraid/issues/1173)): `mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift`, the `Assets.xcassets/Colors` colour sets (light and dark built in), the font copies, the Android `Tokens.kt`, `Catalog.kt`, `Words.kt`, `res/values/{colors,dimens}.xml`, `res/values-night/colors.xml`, and both sites' `centraid-tokens.css` and `fonts/`. The kit's words are read from the text of `crates/screens/src/strings/{shared,home}.rs` (a row it cannot parse, an unknown escape or a missing key is an error), so this tool does not depend on the screens crate. Output is generated already formatted: nothing runs after it.
+`cargo xtask design` generates every design artifact from `design/tokens.toml` ([#1173](https://github.com/srikanth235/centraid/issues/1173)): `mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift`, the `Assets.xcassets/Colors` colour sets (light and dark built in), the font copies, the Android `Tokens.kt`, `Catalog.kt`, `Words.kt`, `res/values/{colors,dimens}.xml`, `res/values-night/colors.xml`, both sites' `centraid-tokens.css` and `fonts/`, and every dark mockup `design/mockups/XDark.dc.html` (from its light screen and `[mockups.dark]`; edit the light screen, never a dark one). The sites' sheet is `design_site.rs`: the colour roles, spacing, radii and touch type scale are the shells' own `[native.*]`, and the rest (desktop overrides, page-scale values, font subsets) is `[site]`. The kit's words are read from the text of `crates/screens/src/strings/{shared,home}.rs` (a row it cannot parse, an unknown escape or a missing key is an error), so this tool does not depend on the screens crate. Output is generated already formatted: nothing runs after it.
 
-`cargo xtask design --check` regenerates into memory and fails listing every file that differs (changed, missing, or stray in a directory the generator owns). The gate's `design` step (`pr` and up; also the last part of `mobile-jvm`) runs the same comparison in process, and also fails on a generated file that is not tracked by git. It replaced the `emitters` step, which ran two bun scripts and `bun run format`.
+`cargo xtask design --check` regenerates into memory and fails listing every file that differs (changed, missing, or stray in a directory the generator owns), and lints what the two sites author on top of the sheet (`scripts/home-site`, `scripts/docs-site`): a font CDN, a literal `font-family`, a retired `paper`/`night` theme name, or a `var(--x)` that names nothing the sheet or the file declares. It replaced `scripts/site-tokens.mjs`. The gate's `design` step (`pr` and up; also the last part of `mobile-jvm`) runs the same comparison in process, and also fails on a generated file that is not tracked by git. It replaced the `emitters` step, which ran two bun scripts and `bun run format`. `crates/xtask/src/design_checks.rs` carries the guarantees the retired `packages/design` tests held that the generator does not give by construction (see its header).
 
 ### The `fault-door` step
 
@@ -114,7 +114,7 @@ What it does not read is only the append-only record, where a finding could neve
 
 ### The `ts-static` step
 
-`bun run check`: `oxfmt --check` and `oxlint` over the tree, then `tsc` and vitest in each workspace under `packages/`, then the release scripts' tests. The pre-commit hook runs the format and lint halves over the staged files.
+`bun run check`: `oxfmt --check` and `oxlint` over the tree, then `tsc` and vitest in each workspace under `packages/` (today `packages/test-kit`), then the release scripts' tests. The pre-commit hook runs the format and lint halves over the staged files.
 
 ## Required checks
 

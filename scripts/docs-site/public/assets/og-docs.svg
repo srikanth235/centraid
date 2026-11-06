@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Centraid documentation</title>
   <desc id="desc">A social preview card for Centraid docs.</desc>
-  <!-- Drawn in the product's light theme, values taken from packages/design:
+  <!-- Drawn in the product's light theme, values taken from design/tokens.toml:
        #FDFDFC page, #F5F4F2 raised paper, #E5E4E1 the explicit boundary,
        #141414 / #5A5A58 the first two ink rungs, and #EFEEEB the hairline.
        A social renderer has no webfont, so the family names the product face

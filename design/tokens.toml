@@ -1,8 +1,8 @@
 # design/tokens.toml: THE ONE SOURCE OF DESIGN VALUES (#1173).
 #
 # Values only, no logic. `cargo xtask design` reads this file (and
-# `design/icons.toml`, `design/site/tokens.css` and `design/fonts/`) and writes
-# every native design artifact from it:
+# `design/icons.toml`, `design/fonts/` and the light screens in
+# `design/mockups/`) and writes every design artifact from it:
 #
 #   mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift
 #   mobile/iosApp/Resources/Assets.xcassets/Colors/*.colorset
@@ -12,6 +12,7 @@
 #   mobile/androidApp/src/main/res/values-night/colors.xml
 #   mobile/androidApp/src/main/res/font/*.ttf
 #   scripts/{docs-site,home-site}/public/assets/centraid-tokens.css and fonts/
+#   design/mockups/XDark.dc.html (every dark screen, from its light one)
 #
 # `cargo xtask design --check` regenerates into memory and fails on any file
 # that differs; the gate's `design` step runs the same check. The model, the
@@ -19,7 +20,7 @@
 # app with its dark fill and dark text, contrast floors) are
 # `crates/design/src/tokens.rs`; a value that fails a floor is a failing test.
 #
-# Two layers live here, on purpose:
+# Three layers live here, on purpose (the third, `site.*`, is at the end):
 #
 #   1. THE REDESIGN (#1173): the values in `design/mockups/DesignRules.dc.html`.
 #      Sections `surface`, `text`, `shell`, `app`, `state`, `list`, `type`,
@@ -535,9 +536,12 @@ dark_hue = "#a8aa66"
 dark_chip = "#2d2d20"
 dark_mark = "#a8aa66"
 
-# Dark mockups. `[mockups.dark]` is read by `cargo xtask design-dark`
+# Dark mockups. `[mockups.dark]` is read by `cargo xtask design`
 # (crates/xtask/src/design_dark.rs), which writes every `XDark.dc.html` in
 # design/mockups from the light `X.dc.html` (#1173). Never edit a dark screen.
+# The dark value of every app, state and shell colour, surface and text colour
+# here is the same value as its `dark_fill`, `dark_text` or dark half above; a
+# test (`the_dark_mockups_and_the_apps_agree`) fails when one drifts.
 
 [mockups.dark]
 # Appended to the <title> of a dark screen.
@@ -639,18 +643,73 @@ colors = [
 # light colour that is in neither `colors` nor here is an error, so a new
 # colour in a light screen forces a decision about its dark value.
 keep = [
-  "#1399B5", "#2E4F2A", "#2E6A60", "#2F5577", "#2F5A2B", "#2F6B4F",
-  "#2F7D4F", "#35507A", "#3A3936", "#3A6FD8", "#3D5A80", "#3D5AA8",
-  "#3D5E7A", "#3E6B36", "#468DE5", "#4A3F66", "#4A3F7A", "#4C7A3E",
-  "#4E7A3E", "#4E9A8C", "#5A3A2A", "#5A8CB0", "#5E4A8E", "#5F8F4A",
-  "#6B5A40", "#6E8DB5", "#7A6AB0", "#7FA3C0", "#7FA866", "#808C9A",
-  "#8D8170", "#8E3B52", "#8F7A57", "#9A6A22", "#9DBF8A", "#9EC3D9",
-  "#A08560", "#A39E95", "#A84A3A", "#A85A12", "#A8D0C8", "#AA71E3",
-  "#B0602A", "#B08505", "#B9B2D8", "#B9D3A0", "#C2366B", "#C46A4A",
-  "#C8473B", "#C9D6E8", "#CFC6B8", "#D462B2", "#D8CBA6",
-  "#D9784E", "#D9A23A", "#D9C7A7", "#E0A060", "#E55D7E",
-  "#E8A3C0", "#E9F5F6", "#F0B23E", "#F0B86A", "#F2A93B", "#F2C9A0",
-  "#F2D57A", "#F3E8B8", "#F3EDE2",
+  "#1399B5",
+  "#2E4F2A",
+  "#2E6A60",
+  "#2F5577",
+  "#2F5A2B",
+  "#2F6B4F",
+  "#2F7D4F",
+  "#35507A",
+  "#3A3936",
+  "#3A6FD8",
+  "#3D5A80",
+  "#3D5AA8",
+  "#3D5E7A",
+  "#3E6B36",
+  "#468DE5",
+  "#4A3F66",
+  "#4A3F7A",
+  "#4C7A3E",
+  "#4E7A3E",
+  "#4E9A8C",
+  "#5A3A2A",
+  "#5A8CB0",
+  "#5E4A8E",
+  "#5F8F4A",
+  "#6B5A40",
+  "#6E8DB5",
+  "#7A6AB0",
+  "#7FA3C0",
+  "#7FA866",
+  "#808C9A",
+  "#8D8170",
+  "#8E3B52",
+  "#8F7A57",
+  "#9A6A22",
+  "#9DBF8A",
+  "#9EC3D9",
+  "#A08560",
+  "#A39E95",
+  "#A84A3A",
+  "#A85A12",
+  "#A8D0C8",
+  "#AA71E3",
+  "#B0602A",
+  "#B08505",
+  "#B9B2D8",
+  "#B9D3A0",
+  "#C2366B",
+  "#C46A4A",
+  "#C8473B",
+  "#C9D6E8",
+  "#CFC6B8",
+  "#D462B2",
+  "#D8CBA6",
+  "#D9784E",
+  "#D9A23A",
+  "#D9C7A7",
+  "#E0A060",
+  "#E55D7E",
+  "#E8A3C0",
+  "#E9F5F6",
+  "#F0B23E",
+  "#F0B86A",
+  "#F2A93B",
+  "#F2C9A0",
+  "#F2D57A",
+  "#F3E8B8",
+  "#F3EDE2",
 ]
 
 # A document page is content, so it and everything inside it stay light: a
@@ -689,3 +748,357 @@ min_alpha = "0.5"
 white = "#FFFFFF"
 ground = "#1C1B19"
 tile_view_box = "0 0 120 120"
+# ---------------------------------------------------------------------------
+# 3. The public sites (#1173)
+# ---------------------------------------------------------------------------
+#
+# `cargo xtask design` lowers the product's tokens onto `centraid-tokens.css`,
+# the one stylesheet the landing page and the docs site share. Most of that
+# sheet is already above: the colour roles are `[native.colors.*]`, spacing and
+# radii are `[native.spacing]` and `[native.radii]`, the touch type scale is
+# `[native.type.*]`. This section is only what the sites need and the shells do
+# not: the desktop (fine-pointer) overrides, the page-scale values, the font
+# subsets, and a handful of colours the native roles do not carry. The order of
+# the custom properties is the generator's (design_site.rs), not this file's.
+
+[site.fonts]
+family = "Instrument Sans"
+weights = [400, 600]
+# One entry per subset, in the order the faces are written. `unicode_range`
+# is the browser's cue to fetch the subset only when a glyph needs it.
+subsets = [
+  { name = "latin", unicode_range = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" },
+  { name = "latin-ext", unicode_range = "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF" },
+]
+
+# Fixed values, in the order they are written: after the radii and spacing steps
+# (head), after the type scale (tail).
+[site.root]
+head = [
+  [
+    "--sp-gutter",
+    "2px",
+  ],
+  [
+    "--sp-hair",
+    "1px",
+  ],
+  [
+    "--sp-chip",
+    "3px",
+  ],
+  [
+    "--ease",
+    "cubic-bezier(0.3, 0, 0.4, 1)",
+  ],
+  [
+    "--ease-entry",
+    "cubic-bezier(0.2, 0.7, 0.2, 1)",
+  ],
+  [
+    "--target-min",
+    "44px",
+  ],
+  [
+    "--o-disabled",
+    "0.45",
+  ],
+  [
+    "--dur-1",
+    "140ms",
+  ],
+  [
+    "--dur-2",
+    "280ms",
+  ],
+  [
+    "--h-control",
+    "34px",
+  ],
+  [
+    "--h-row",
+    "44px",
+  ],
+  [
+    "--h-segmented",
+    "28px",
+  ],
+  [
+    "--w-stem",
+    "240px",
+  ],
+  [
+    "--w-key-col",
+    "110px",
+  ],
+  [
+    "--page-margin",
+    "18px",
+  ],
+  [
+    "--density-row",
+    "44px",
+  ],
+  [
+    "--density-pad",
+    "16px",
+  ],
+  [
+    "--font-code",
+    "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+  ],
+  [
+    "--font-sans",
+    "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
+  ],
+]
+tail = [
+  [
+    "--t-display-tracking",
+    "-0.02em",
+  ],
+  [
+    "--t-title-tracking",
+    "-0.01em",
+  ],
+  [
+    "--t-eyebrow-tracking",
+    "0.06em",
+  ],
+  [
+    "--t-eyebrow-transform",
+    "uppercase",
+  ],
+  [
+    "--t-mono-numeric",
+    "tabular-nums",
+  ],
+  [
+    "--t-mono-direction",
+    "ltr",
+  ],
+  [
+    "--t-mono-bidi",
+    "isolate",
+  ],
+  [
+    "--tile-row-badge-w",
+    "116px",
+  ],
+  [
+    "--tile-shelf-max",
+    "1560px",
+  ],
+  [
+    "--tile-shelf-pad-x",
+    "56px",
+  ],
+  [
+    "--tile-bg",
+    "color-mix(in srgb, var(--text) 2.5%, transparent)",
+  ],
+  [
+    "--tile-bg-hover",
+    "color-mix(in srgb, var(--text) 5%, transparent)",
+  ],
+  [
+    "--tile-gap",
+    "11px",
+  ],
+  [
+    "--tile-h",
+    "248px",
+  ],
+  [
+    "--tile-icon",
+    "44px",
+  ],
+  [
+    "--tile-icon-radius",
+    "11.44px",
+  ],
+  [
+    "--tile-pad",
+    "15px 16px",
+  ],
+  [
+    "--tile-radius",
+    "12px",
+  ],
+]
+
+# `@media (pointer: fine)`: a pointer can hit a smaller target and read a
+# denser scale. The properties here replace the ones above.
+[site.fine]
+props = [
+  [
+    "--page-margin",
+    "32px",
+  ],
+  [
+    "--target-min",
+    "34px",
+  ],
+  [
+    "--w-key-col",
+    "150px",
+  ],
+]
+
+# The fine-pointer type scale, by the role's name in `[native.type.*]`.
+[site.fine.type.display]
+font_size = 32.0
+line_height = 36.0
+weight = 600
+
+[site.fine.type.title]
+font_size = 20.0
+line_height = 26.0
+weight = 600
+
+[site.fine.type.reading]
+font_size = 17.0
+line_height = 28.0
+weight = 400
+
+[site.fine.type.body]
+font_size = 13.0
+line_height = 19.0
+weight = 400
+
+[site.fine.type.bodyStrong]
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[site.fine.type.labelOn]
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[site.fine.type.small]
+font_size = 13.0
+line_height = 19.0
+weight = 400
+
+[site.fine.type.smallStrong]
+font_size = 13.0
+line_height = 18.0
+weight = 600
+
+[site.fine.type.control]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.eyebrow]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.mono]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[site.fine.type.annotLabel]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[site.fine.type.annotLabelOn]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.band]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+# Colours the native roles do not carry, light scheme.
+[site.light]
+"--bg-app" = "#F0EFED"
+"--bg-hud" = "rgba(253,253,252,.94)"
+"--bg-wall" = "#F0EFED"
+"--device-wall" = "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), linear-gradient(180deg, #EAE9E6 0%, #E1E0DC 100%)"
+"--glass-sheen" = "none"
+"--c-amber-text" = "#894a43"
+"--c-forest-text" = "#346841"
+"--c-indigo-text" = "#5f568d"
+"--c-ochre-text" = "#7c5420"
+"--c-olive-text" = "#5e5f20"
+"--c-rose-text" = "#894a5f"
+"--c-slate-text" = "#3a5e8b"
+"--c-teal-text" = "#006774"
+"--c-violet-text" = "#744e7d"
+
+# Colours the native roles do not carry, dark scheme.
+[site.dark]
+"--bg-app" = "#060606"
+"--bg-hud" = "rgba(14,14,14,.94)"
+"--bg-wall" = "#060606"
+"--device-wall" = "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), var(--bg-wall)"
+"--glass-sheen" = "none"
+"--c-amber-text" = "#d78f85"
+"--c-forest-text" = "#7bb587"
+"--c-indigo-text" = "#a39bda"
+"--c-ochre-text" = "#c99b65"
+"--c-olive-text" = "#a8aa66"
+"--c-rose-text" = "#d48da2"
+"--c-slate-text" = "#7ea7dc"
+"--c-teal-text" = "#58b4c4"
+"--c-violet-text" = "#be92c8"
+
+# The density tiers, comfortable first.
+[[site.density]]
+tier = "comfortable"
+pad = 16
+row = 44
+
+[[site.density]]
+tier = "compact"
+pad = 12
+row = 38
+
+[[site.density]]
+tier = "dense"
+pad = 8
+row = 34
+
+# Page-scale values, in groups. `comment` is the CSS comment above the group
+# (a line break in it is a line break in the sheet).
+[[site.layer]]
+comment = "Long-form measure. The reading role's contract is 66ch at the consumer;\nthese are that contract spelled once for both sites."
+props = [["--measure-reading", "66ch"], ["--measure-lede", "52ch"]]
+
+[[site.layer]]
+comment = "Section rhythm. The spacing scale tops out at 32px because that is the\nlargest rhythm step INSIDE a product screen; a scrolling page stacks the\ntop rung rather than inventing a bigger one."
+props = [
+  [
+    "--sp-band",
+    "calc(var(--sp-6) * 2)",
+  ],
+  [
+    "--sp-band-lg",
+    "calc(var(--sp-6) * 3)",
+  ],
+  [
+    "--sp-band-xl",
+    "calc(var(--sp-6) * 4)",
+  ],
+]
+
+[[site.layer]]
+comment = "The marketing display step: the display ROLE, scaled. Same face, same\nweight, same tracking — only the size moves, and it moves as a multiple\nof the role's own published size token rather than as a second scale."
+props = [
+  [
+    "--t-hero-size",
+    "clamp(\n    calc(var(--t-display-size) * 1.35),\n    6vw,\n    calc(var(--t-display-size) * 2.25)\n  )",
+  ],
+  [
+    "--t-chapter-size",
+    "clamp(\n    calc(var(--t-display-size) * 1.15),\n    4.4vw,\n    calc(var(--t-display-size) * 1.6)\n  )",
+  ],
+]
+

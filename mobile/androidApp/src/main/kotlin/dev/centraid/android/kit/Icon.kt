@@ -23,7 +23,7 @@ import dev.centraid.design.CentraidGeometry
 /**
  * ONE ICON SET, DRAWN FROM THE EMITTED SILHOUETTES (#1020, wave A).
  *
- * The path data is `packages/design`'s, lowered by
+ * The path data is `design/icons.toml`, lowered by
  * `cargo xtask design` — the same 24x24 silhouettes the
  * web renderer draws. Material's icon set is deliberately NOT used here: a
  * second set is a second product, and the one thing Home's invariant header
