@@ -159,6 +159,17 @@ graphite = "#808C9A"
 raspberry = "#E55D7E"
 orchid = "#D462B2"
 
+# The four brand colours of the app mark (`design/mockups/QuartersIcon.dc.html`):
+# a squared circle of four quarters around an open square heart. One family at
+# even brightness, brighter than the in-app colours, which stay dark enough for
+# text. Brand colours, not app keys: they draw the mark (the assistant's avatar
+# in Chat, the app icon) and nothing else. They do not change in dark.
+[brand]
+teal = "#00AA98"
+orange = "#F48E04"
+blue = "#5698F8"
+pink = "#F83F6E"
+
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]
 size = 34

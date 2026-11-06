@@ -963,6 +963,13 @@ fn color_assets(tokens: &Tokens) -> Vec<ColorAsset> {
             dark: value.clone(),
         });
     }
+    for (id, value) in &tokens.brand {
+        out.push(ColorAsset {
+            snake: format!("brand_{id}"),
+            light: value.clone(),
+            dark: value.clone(),
+        });
+    }
     out
 }
 

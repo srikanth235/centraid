@@ -22,8 +22,7 @@ catalog! {
     plain first_launch_assistant_body = ("Ask about your own things. It runs on this phone.", "Ask about your own things. It runs on this phone.");
     plain first_launch_backup_title = ("Encrypted backups", "Encrypted backups");
     plain first_launch_backup_body = ("Pair a backup device. It keeps a copy it can't open.", "Pair a backup device. It keeps a copy it can't open.");
-    plain first_launch_next = ("Next", "Next");
-    plain first_launch_skip = ("Skip", "Skip");
+    plain first_launch_title = ("Welcome to Centraid", "Welcome to Centraid");
     plain first_launch_make = ("Get started", "Get started");
     plain first_launch_restore = ("Restore backup", "Restore backup");
     plain home_loading = ("Loading", "Loading");

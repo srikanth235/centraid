@@ -61,4 +61,8 @@
     <color name="centraid_list_petrol">#1399B5</color>
     <color name="centraid_list_raspberry">#E55D7E</color>
     <color name="centraid_list_violet">#AA71E3</color>
+    <color name="centraid_brand_blue">#5698F8</color>
+    <color name="centraid_brand_orange">#F48E04</color>
+    <color name="centraid_brand_pink">#F83F6E</color>
+    <color name="centraid_brand_teal">#00AA98</color>
 </resources>

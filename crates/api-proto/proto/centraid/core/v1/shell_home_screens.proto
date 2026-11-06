@@ -364,17 +364,19 @@ message HomeTransferSheet {
   repeated BackupRuleChoice choices = 3;
 }
 
-// What a phone that holds no vault opens onto: every app's mark as one house,
-// one sentence and two doors, and the slides a shell may page through first.
+// What a phone that holds no vault opens onto (#1173): ONE welcome screen, not a
+// deck. The mark, a title, one sentence, three things the app is (`slides`, in
+// order: apps, assistant, backups) and two doors. The apps' roster, Next and
+// Skip went with the deck.
 message HomeFirstLaunch {
   string body = 1;
   string make_label = 2;
   string restore_label = 3;
-  // The app ids the house's marks are drawn from: Home's tiles, in Home's order.
-  repeated string apps = 4;
+  reserved 4, 6, 7;
+  reserved "apps", "next_label", "skip_label";
   repeated HomeFirstLaunchSlide slides = 5;
-  string next_label = 6;
-  string skip_label = 7;
+  // "Welcome to Centraid".
+  string title = 8;
 }
 
 message HomeFirstLaunchSlide {

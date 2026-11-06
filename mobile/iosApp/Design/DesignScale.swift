@@ -83,4 +83,8 @@ public enum CentraidAsset {
     public static let listPetrol = "CentraidListPetrol"
     public static let listRaspberry = "CentraidListRaspberry"
     public static let listViolet = "CentraidListViolet"
+    public static let brandBlue = "CentraidBrandBlue"
+    public static let brandOrange = "CentraidBrandOrange"
+    public static let brandPink = "CentraidBrandPink"
+    public static let brandTeal = "CentraidBrandTeal"
 }

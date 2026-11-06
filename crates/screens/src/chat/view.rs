@@ -449,8 +449,10 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
             })
             .collect(),
         more_line: more,
+        title: words::proposal_title(locale),
+        app: held.app().to_owned(),
         confirm_label: words::confirm(locale),
-        cancel_label: words::cancel(locale),
+        cancel_label: words::not_now(locale),
         destructive: held.destructive,
         settled_line: held.line.clone(),
         accessibility_label: parts.join(". "),

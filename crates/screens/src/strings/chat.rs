@@ -74,9 +74,11 @@ catalog! {
     counted more_steps = ("and {n} more", "and {n} more");
     plain new_chat = ("New chat", "New chat");
     plain note_doc_truncated = ("Read the first part of the document.", "Read the first part of the document.");
+    plain not_now = ("Not now", "Not now");
     plain not_done = ("Not done.", "Not done.");
     plain reading_document = ("Reading the document", "Reading the document");
     plain reading_photo = ("Reading the photo", "Reading the photo");
+    plain proposal_title = ("Proposed change", "Proposed change");
     plain remove_attachment = ("Remove", "Remove");
     plain rename = ("Rename", "Rename");
     plain rename_title = ("Rename chat", "Rename chat");

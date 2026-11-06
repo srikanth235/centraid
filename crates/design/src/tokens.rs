@@ -34,6 +34,9 @@ pub const APP_IDS: [&str; 8] = [
 pub const STATE_IDS: [&str; 3] = ["red", "amber", "green"];
 
 /// The eight list colours (`[list]`).
+/// The four colours of the app mark, clockwise from the top.
+pub const BRAND_IDS: [&str; 4] = ["teal", "orange", "blue", "pink"];
+
 pub const LIST_IDS: [&str; 8] = [
     "blue",
     "mustard",
@@ -445,6 +448,8 @@ pub struct Tokens {
     pub app: BTreeMap<String, Accent>,
     pub state: BTreeMap<String, Accent>,
     pub list: BTreeMap<String, String>,
+    /// The four brand colours of the app mark (teal, orange, blue, pink). Not app keys.
+    pub brand: BTreeMap<String, String>,
     #[serde(rename = "type")]
     pub scale: BTreeMap<String, ScaleStep>,
     pub radius: Radii,
@@ -533,6 +538,13 @@ impl Tokens {
             &mut problems,
         );
 
+        same_set(
+            "[brand]",
+            self.brand.keys().map(String::as_str).collect(),
+            &BRAND_IDS,
+            &mut problems,
+        );
+
         // Colour roles: the same 55 in both schemes.
         for (scheme, table) in [
             ("light", &self.native.colors.light),
@@ -604,6 +616,9 @@ impl Tokens {
         }
         for (name, value) in &self.list {
             hexes.push((format!("list.{name}"), value));
+        }
+        for (name, value) in &self.brand {
+            hexes.push((format!("brand.{name}"), value));
         }
         for app in &self.native.app {
             for (field, value) in [
@@ -835,6 +850,8 @@ mod tests {
         assert_eq!(tokens.app.len(), 8);
         assert_eq!(tokens.state.len(), 3);
         assert_eq!(tokens.list.len(), 8);
+        assert_eq!(tokens.brand.len(), 4);
+        assert_eq!(tokens.brand["teal"], "#00AA98");
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
         assert_eq!(tokens.icons.len(), 140);
