@@ -39,12 +39,16 @@
 page = "#F4F2EE"
 plain_page = "#FBFAF8"
 card = "#FFFFFF"
+sheet = "#F4F2EE"
+sheet_card = "#FFFFFF"
+fill = "#F2EFEA"
 line = "#EEEBE5"
 border = "#E4E0D8"
 
 # Dark is designed, not inverted: sheets sit one level up (sheet, sheet_card).
 [surface.dark]
 page = "#0E0D0C"
+plain_page = "#0E0D0C"
 card = "#1F1E1C"
 sheet = "#1A1918"
 sheet_card = "#2B2927"
@@ -124,16 +128,22 @@ dark_text = "#E573C3"
 light = "#C8392F"
 dark_fill = "#CD483D"
 dark_text = "#F27A6D"
+tint = "#FDEDEB"
+dark_tint = "#44221D"
 
 [state.amber]
 light = "#874300"
 dark_fill = "#964C04"
 dark_text = "#F2A64F"
+tint = "#FFF6E8"
+dark_tint = "#44351D"
 
 [state.green]
 light = "#2B7B51"
 dark_fill = "#2F8556"
 dark_text = "#62D092"
+tint = "#E8F2EC"
+dark_tint = "#1B3A29"
 
 # One palette for lists, calendars and categories: the eight app hues, lighter.
 # They reach 3:1 on the light page and on dark cards, so they do not change in

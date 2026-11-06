@@ -196,6 +196,13 @@ pub struct Accent {
     /// The bright colour on tiles and icons, when it is not the accent.
     #[serde(default)]
     pub tile: Option<String>,
+    /// The pale ground of a badge in this colour, on the light page. Only the
+    /// states have one (a badge says a state).
+    #[serde(default)]
+    pub tint: Option<String>,
+    /// The badge ground in dark: a deep wash under the `dark_text` value.
+    #[serde(default)]
+    pub dark_tint: Option<String>,
 }
 
 /// Light surfaces.
@@ -205,6 +212,11 @@ pub struct LightSurfaces {
     pub page: String,
     pub plain_page: String,
     pub card: String,
+    /// A sheet's ground: the page colour, with white cards on it.
+    pub sheet: String,
+    pub sheet_card: String,
+    /// A control's track (the segmented control, a search field).
+    pub fill: String,
     pub line: String,
     pub border: String,
 }
@@ -214,6 +226,8 @@ pub struct LightSurfaces {
 #[serde(deny_unknown_fields)]
 pub struct DarkSurfaces {
     pub page: String,
+    /// The plain list page. Dark has one page colour, so this is the page's.
+    pub plain_page: String,
     pub card: String,
     pub sheet: String,
     pub sheet_card: String,
@@ -469,9 +483,13 @@ impl Tokens {
             ("surface.light.page", &light.page),
             ("surface.light.plain_page", &light.plain_page),
             ("surface.light.card", &light.card),
+            ("surface.light.sheet", &light.sheet),
+            ("surface.light.sheet_card", &light.sheet_card),
+            ("surface.light.fill", &light.fill),
             ("surface.light.line", &light.line),
             ("surface.light.border", &light.border),
             ("surface.dark.page", &dark.page),
+            ("surface.dark.plain_page", &dark.plain_page),
             ("surface.dark.card", &dark.card),
             ("surface.dark.sheet", &dark.sheet),
             ("surface.dark.sheet_card", &dark.sheet_card),
@@ -493,6 +511,12 @@ impl Tokens {
             hexes.push((format!("{name}.dark_text"), &accent.dark_text));
             if let Some(tile) = &accent.tile {
                 hexes.push((format!("{name}.tile"), tile));
+            }
+            if let Some(tint) = &accent.tint {
+                hexes.push((format!("{name}.tint"), tint));
+            }
+            if let Some(tint) = &accent.dark_tint {
+                hexes.push((format!("{name}.dark_tint"), tint));
             }
         }
         for (name, value) in &self.list {
@@ -602,6 +626,24 @@ impl Tokens {
                 TEXT_CONTRAST,
                 "the fill",
             );
+            if let Some(tint) = &accent.tint {
+                check(
+                    format!("{name}.light as a badge on its tint"),
+                    &accent.light,
+                    tint,
+                    TEXT_CONTRAST,
+                    "the badge tint",
+                );
+            }
+            if let Some(tint) = &accent.dark_tint {
+                check(
+                    format!("{name}.dark_text as a badge on its tint"),
+                    &accent.dark_text,
+                    tint,
+                    TEXT_CONTRAST,
+                    "the dark badge tint",
+                );
+            }
         }
         for (name, value) in &self.list {
             check(
@@ -770,6 +812,21 @@ mod tests {
                 contrast_ratio(&accent.dark_text, &tokens.surface.dark.card).expect("hex pair");
             assert!(ratio >= 6.0, "{name}.dark_text is {ratio:.2}:1");
         }
+    }
+
+    #[test]
+    fn every_state_has_a_badge_tint_in_both_schemes() {
+        let tokens = committed();
+        for (id, state) in &tokens.state {
+            assert!(state.tint.is_some(), "state.{id} has no tint");
+            assert!(state.dark_tint.is_some(), "state.{id} has no dark_tint");
+        }
+    }
+
+    #[test]
+    fn dark_has_one_page_colour() {
+        let tokens = committed();
+        assert_eq!(tokens.surface.dark.plain_page, tokens.surface.dark.page);
     }
 
     fn committed_text(file: &str) -> String {

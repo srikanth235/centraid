@@ -891,6 +891,13 @@ fn accent_assets(out: &mut Vec<ColorAsset>, prefix: &str, id: &str, accent: &Acc
         light: accent.light.clone(),
         dark: accent.dark_text.clone(),
     });
+    if let (Some(tint), Some(dark_tint)) = (&accent.tint, &accent.dark_tint) {
+        out.push(ColorAsset {
+            snake: format!("{base}_tint"),
+            light: tint.clone(),
+            dark: dark_tint.clone(),
+        });
+    }
     if tile {
         out.push(ColorAsset {
             snake: format!("{base}_tile"),
@@ -905,16 +912,17 @@ fn accent_assets(out: &mut Vec<ColorAsset>, prefix: &str, id: &str, accent: &Acc
 
 /// Every redesign colour as an asset, in a fixed order.
 ///
-/// A value that exists in one scheme only keeps that scheme in its name
-/// (`surface_plain_page_light`, `surface_sheet_dark`) and carries the same
-/// colour in both appearances: inventing the other scheme's value is a design
-/// decision this file does not make.
+/// Every surface has both schemes, so every surface is a two-appearance asset.
 fn color_assets(tokens: &Tokens) -> Vec<ColorAsset> {
     let mut out = Vec::new();
     let (ls, ds) = (&tokens.surface.light, &tokens.surface.dark);
     for (name, light, dark) in [
         ("page", &ls.page, &ds.page),
+        ("plain_page", &ls.plain_page, &ds.plain_page),
         ("card", &ls.card, &ds.card),
+        ("sheet", &ls.sheet, &ds.sheet),
+        ("sheet_card", &ls.sheet_card, &ds.sheet_card),
+        ("fill", &ls.fill, &ds.fill),
         ("line", &ls.line, &ds.line),
         ("border", &ls.border, &ds.border),
     ] {
@@ -922,22 +930,6 @@ fn color_assets(tokens: &Tokens) -> Vec<ColorAsset> {
             snake: format!("surface_{name}"),
             light: light.clone(),
             dark: dark.clone(),
-        });
-    }
-    out.push(ColorAsset {
-        snake: "surface_plain_page_light".into(),
-        light: ls.plain_page.clone(),
-        dark: ls.plain_page.clone(),
-    });
-    for (name, value) in [
-        ("sheet", &ds.sheet),
-        ("sheet_card", &ds.sheet_card),
-        ("fill", &ds.fill),
-    ] {
-        out.push(ColorAsset {
-            snake: format!("surface_{name}_dark"),
-            light: value.clone(),
-            dark: value.clone(),
         });
     }
     let (lt, dt) = (&tokens.text.light, &tokens.text.dark);
