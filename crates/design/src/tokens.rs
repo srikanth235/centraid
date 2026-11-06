@@ -340,6 +340,88 @@ struct IconsFile {
     icons: BTreeMap<String, Vec<IconPath>>,
 }
 
+/// One font subset the sites ship: a name and the browser's cue for fetching it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteSubset {
+    pub name: String,
+    pub unicode_range: String,
+}
+
+/// The sites' font family and the subsets of each weight.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteFonts {
+    pub family: String,
+    pub weights: Vec<u32>,
+    pub subsets: Vec<SiteSubset>,
+}
+
+/// Fixed custom properties, as ordered `[name, value]` pairs.
+pub type PropList = Vec<[String; 2]>;
+
+/// The fixed custom properties written around the derived ones.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteRoot {
+    /// After the radii and spacing steps.
+    pub head: PropList,
+    /// After the type scale.
+    pub tail: PropList,
+}
+
+/// One role of the fine-pointer type scale.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteType {
+    pub font_size: f64,
+    pub line_height: f64,
+    pub weight: u32,
+}
+
+/// `@media (pointer: fine)`: the desktop overrides.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteFine {
+    pub props: PropList,
+    /// By role name in `[native.type.*]`.
+    #[serde(rename = "type")]
+    pub types: BTreeMap<String, SiteType>,
+}
+
+/// One density tier.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteDensity {
+    pub tier: String,
+    pub pad: u32,
+    pub row: u32,
+}
+
+/// A group of page-scale custom properties with the comment that explains it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteLayerGroup {
+    pub comment: String,
+    pub props: PropList,
+}
+
+/// What the public sites' stylesheet needs that the native roles do not carry
+/// (`[site]`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Site {
+    pub fonts: SiteFonts,
+    pub root: SiteRoot,
+    pub fine: SiteFine,
+    /// Custom properties with no native role, by name, light scheme.
+    pub light: BTreeMap<String, String>,
+    /// The same, dark scheme.
+    pub dark: BTreeMap<String, String>,
+    pub density: Vec<SiteDensity>,
+    pub layer: Vec<SiteLayerGroup>,
+}
+
 /// `design/tokens.toml` and `design/icons.toml`, parsed and validated.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Tokens {
@@ -353,6 +435,7 @@ pub struct Tokens {
     pub scale: BTreeMap<String, ScaleStep>,
     pub radius: Radii,
     pub native: Native,
+    pub site: Site,
     #[serde(skip)]
     pub icons: BTreeMap<String, Vec<IconPath>>,
 }

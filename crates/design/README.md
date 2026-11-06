@@ -14,11 +14,11 @@ Two jobs. Both are pure data and arithmetic, and neither touches TypeScript ([#1
 | app, state and shell colours reach 4.5:1 as text on the light page; dark text values reach 4.5:1 on the dark card; white glyphs reach 4.5:1 on each dark fill | accessibility: text 4.5:1 |
 | list colours reach 3:1 on the light page and on the dark card | lists are drawn as dots, bars and big titles |
 
-A value that fails a floor is a failing test, and the value is reported, not adjusted. `cargo xtask design` reads this model and writes the iOS asset catalogue and Swift tables, the Android resources and Kotlin tables, the kit's words, the fonts and the two sites' token sheet; `cargo xtask design --check` is the gate's `design` step.
+A value that fails a floor is a failing test, and the value is reported, not adjusted. `cargo xtask design` reads this model and writes the iOS asset catalogue and Swift tables, the Android resources and Kotlin tables, the kit's words, the fonts the two sites' token sheet (the colour roles, spacing, radii and touch type scale are the shells' own; the `[site]` section holds only what the sites add) and every dark mockup; `cargo xtask design --check` is the gate's `design` step.
 
 ## 2. Computed identity
 
-A party's hue key from its id, its initials, and a figure's tone. The core computes them once and sends the shells a key; the shells only look it up. They were ported from the retired `packages/design` ([#1020](https://github.com/srikanth235/centraid/issues/1020)), and the unit tests pin that package's answers as literal rows over a deliberately hostile corpus: non-ASCII names, an empty name, a whitespace-only name, a name that is one emoji, single-character ids, long ids, and every shape of stored `avatar_color`, including the two that answer `None` (a stored literal the wheel cannot name, which is **not** silently defaulted).
+A party's hue key from its id, its initials, and a figure's tone. The core computes them once and sends the shells a key; the shells only look it up. They were ported from the retired TypeScript design package ([#1020](https://github.com/srikanth235/centraid/issues/1020)), and the unit tests pin that package's answers as literal rows over a deliberately hostile corpus: non-ASCII names, an empty name, a whitespace-only name, a name that is one emoji, single-character ids, long ids, and every shape of stored `avatar_color`, including the two that answer `None` (a stored literal the wheel cannot name, which is **not** silently defaulted).
 
 ### The one bug reproduced rather than fixed
 
