@@ -223,7 +223,7 @@ public fun VaultHeader(
  * A vault's own hue, and the one wash that is not emitted.
  *
  * Every APP hue is resolved and composited by
- * `contracts/tools/export-native-catalog.ts`, because the eight apps are known
+ * `cargo xtask design`, because the eight apps are known
  * at build time. A vault's colour is the MEMBER's, chosen at runtime, so it
  * cannot be in that table — and this is the one place the blend is computed
  * rather than read. It uses the same tint share the emitter uses, from the same

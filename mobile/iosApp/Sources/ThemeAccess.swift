@@ -20,15 +20,15 @@ enum Theme {
 
     /// A role, or a loud failure.
     ///
-    /// A trap and not a fallback colour: a role renamed in `packages/design` and
+    /// A trap and not a fallback colour: a role renamed in `design/tokens.toml` and
     /// not here would otherwise paint something plausible and wrong, and
     /// `centraidColorRoles` is the list a test checks this against.
     static func color(_ role: String, _ scheme: ColorScheme) -> Color {
         guard let value = tokens(scheme).colors[role] else {
             preconditionFailure(
                 "no such colour role '\(role)' in the emitted native theme. Roles come "
-                    + "from packages/design; regenerate with "
-                    + "`bun contracts/tools/export-native-theme.ts`."
+                    + "from design/tokens.toml; regenerate with "
+                    + "`cargo xtask design`."
             )
         }
         return value
@@ -214,8 +214,8 @@ extension Theme {
         guard let name = centraidTypeFaces[style.family]?[style.weight] else {
             preconditionFailure(
                 "no face for family '\(style.family)' at weight \(style.weight) in the "
-                    + "emitted table. Faces come from packages/design/fonts; regenerate "
-                    + "with `bun contracts/tools/export-native-theme.ts`."
+                    + "emitted table. Faces come from design/fonts; regenerate "
+                    + "with `cargo xtask design`."
             )
         }
         guard let uiFont = UIFont(name: name, size: style.fontSize) else {
@@ -223,7 +223,7 @@ extension Theme {
                 "the font '\(name)' is not registered. Its file must be in "
                     + "Resources/Fonts AND listed under UIAppFonts in "
                     + "mobile/iosApp/project.yml; re-run `xcodegen generate` after "
-                    + "`bun contracts/tools/export-native-theme.ts`."
+                    + "`cargo xtask design`."
             )
         }
         return uiFont

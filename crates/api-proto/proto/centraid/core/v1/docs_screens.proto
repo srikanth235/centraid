@@ -144,7 +144,7 @@ message DocsBandTab {
   // `all`, `folders`, `starred`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
-  // A `design/native-catalog.json` icon key.
+  // A `design/icons.toml` icon key.
   string icon_key = 3;
   bool current = 4;
 }
@@ -230,7 +230,7 @@ message DocsRowView {
   string content_id = 2;
   // The title, or "Untitled".
   string title = 3;
-  // A `design/native-catalog.json` icon key for the kind.
+  // A `design/icons.toml` icon key for the kind.
   string kind_icon_key = 4;
   // "PDF", "Image", …
   string kind_label = 5;

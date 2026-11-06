@@ -1,4 +1,531 @@
-# Design tokens. `[mockups.dark]` is read by `cargo xtask design-dark`
+# design/tokens.toml: THE ONE SOURCE OF DESIGN VALUES (#1173).
+#
+# Values only, no logic. `cargo xtask design` reads this file (and
+# `design/icons.toml`, `design/site/tokens.css` and `design/fonts/`) and writes
+# every native design artifact from it:
+#
+#   mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift
+#   mobile/iosApp/Resources/Assets.xcassets/Colors/*.colorset
+#   mobile/iosApp/Resources/Fonts/*.ttf
+#   mobile/androidApp/src/main/kotlin/dev/centraid/android/design/{Tokens,Catalog,Words}.kt
+#   mobile/androidApp/src/main/res/values/{colors,dimens}.xml
+#   mobile/androidApp/src/main/res/values-night/colors.xml
+#   mobile/androidApp/src/main/res/font/*.ttf
+#   scripts/{docs-site,home-site}/public/assets/centraid-tokens.css and fonts/
+#
+# `cargo xtask design --check` regenerates into memory and fails on any file
+# that differs; the gate's `design` step runs the same check. The model, the
+# parser and the validation (every role in both schemes, hex well-formed, every
+# app with its dark fill and dark text, contrast floors) are
+# `crates/design/src/tokens.rs`; a value that fails a floor is a failing test.
+#
+# Two layers live here, on purpose:
+#
+#   1. THE REDESIGN (#1173): the values in `design/mockups/DesignRules.dc.html`.
+#      Sections `surface`, `text`, `shell`, `app`, `state`, `list`, `type`,
+#      `radius`. Dark fill and dark text pairs are read off that board.
+#   2. THE LEGACY NATIVE LOWERING (`native.*`): the 55-role theme, the app
+#      catalogue and the geometry the shells draw today, transcribed verbatim
+#      so that regeneration changes no pixel. The Phase 4 screen PRs move the
+#      shells onto layer 1 and then delete layer 2.
+
+# ---------------------------------------------------------------------------
+# 1. The redesign
+# ---------------------------------------------------------------------------
+
+# Surfaces. Two page colours (pages of cards, plain lists) and white cards.
+# `line` is the 1px rule between rows inside a card; `border` is a card's edge.
+[surface.light]
+page = "#F4F2EE"
+plain_page = "#FBFAF8"
+card = "#FFFFFF"
+line = "#EEEBE5"
+border = "#E4E0D8"
+
+# Dark is designed, not inverted: sheets sit one level up (sheet, sheet_card).
+[surface.dark]
+page = "#0E0D0C"
+card = "#1F1E1C"
+sheet = "#1A1918"
+sheet_card = "#2B2927"
+fill = "#2A2826"
+line = "#2C2A27"
+border = "#3A3733"
+
+# Text. The light values are the ones the Design rules board draws with.
+[text.light]
+ink = "#1C1B19"
+body = "#4A4741"
+meta = "#6F6B64"
+
+[text.dark]
+ink = "#F2EFEA"
+body = "#C9C4BA"
+meta = "#A39E95"
+
+# Colour has one job each. Every accent has three values: `light` (the
+# accent on the light page, text and fill alike), `dark_fill` (a fill under
+# white glyphs, 4.5:1 or more) and `dark_text` (text and icons on dark, lighter).
+# The dark pairs are read off the Design rules board
+# (`design/mockups/DesignRules.dc.html`, "Each accent gets two dark values").
+
+# The shell's own colour: Welcome, Home, Chat, Backup.
+[shell]
+light = "#1F4A45"
+dark_fill = "#2E7268"
+dark_text = "#7FC4B8"
+
+# The eight apps. `tile` is the bright colour on tiles and icons where it is
+# not the accent (Notes: Apple Notes yellow, content, so it does not change in
+# dark).
+[app.agenda]
+light = "#266FC4"
+dark_fill = "#3077CD"
+dark_text = "#569EF7"
+
+[app.notes]
+light = "#8C6802"
+dark_fill = "#967002"
+dark_text = "#BF9738"
+tile = "#F5C431"
+
+[app.people]
+light = "#7638AD"
+dark_fill = "#935BCB"
+dark_text = "#BA82F5"
+
+[app.docs]
+light = "#087990"
+dark_fill = "#01819B"
+dark_text = "#30A9C6"
+
+[app.money]
+light = "#27388B"
+dark_fill = "#536EDC"
+dark_text = "#7C97F4"
+
+[app.locker]
+light = "#454E58"
+dark_fill = "#6A7888"
+dark_text = "#939DA8"
+
+[app.health]
+light = "#BB365C"
+dark_fill = "#CB4669"
+dark_text = "#F76E8E"
+
+[app.photos]
+light = "#A8398A"
+dark_fill = "#BB4C9C"
+dark_text = "#E573C3"
+
+# States. In words and badges red, amber and green only ever mean a state.
+[state.red]
+light = "#C8392F"
+dark_fill = "#CD483D"
+dark_text = "#F27A6D"
+
+[state.amber]
+light = "#874300"
+dark_fill = "#964C04"
+dark_text = "#F2A64F"
+
+[state.green]
+light = "#2B7B51"
+dark_fill = "#2F8556"
+dark_text = "#62D092"
+
+# One palette for lists, calendars and categories: the eight app hues, lighter.
+# They reach 3:1 on the light page and on dark cards, so they do not change in
+# dark. Dots, bars, tiles and big titles only; never small text.
+[list]
+blue = "#468DE5"
+mustard = "#B08505"
+violet = "#AA71E3"
+petrol = "#1399B5"
+indigo = "#6785F5"
+graphite = "#808C9A"
+raspberry = "#E55D7E"
+orchid = "#D462B2"
+
+# Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
+[type.title]
+size = 34
+weight = 700
+
+[type.section]
+size = 20
+weight = 700
+
+[type.row]
+size = 16
+weight = 400
+
+[type.meta]
+size = 13
+weight = 400
+
+[type.group]
+size = 12
+weight = 600
+caps = true
+
+[type.badge]
+size = 11
+weight = 700
+caps = true
+
+# Radii, in points. Only floating glass casts a shadow.
+[radius]
+card = 16
+
+# ---------------------------------------------------------------------------
+# 2. The legacy native lowering (what the shells draw today)
+# ---------------------------------------------------------------------------
+
+[native.faces]
+# Which .ttf draws each ramp weight. The 400 key resolves to a 470 face on
+# purpose: the phone's touch step makes a true 400 read thin. `design/fonts/`
+# holds the files; the PostScript name is read from each file's `name` table.
+
+sans = [
+  { weight = 400, file = "InstrumentSans_470Book.ttf", android_resource = "instrument_sans_book" },
+  { weight = 600, file = "InstrumentSans-SemiBold.ttf", android_resource = "instrument_sans_semibold" },
+]
+
+[native.spacing]
+1 = 4
+2 = 8
+3 = 12
+4 = 16
+5 = 24
+6 = 32
+
+[native.radii]
+xs = 0
+sm = 4
+md = 7
+lg = 12
+pill = 999
+
+[native.type.display]
+family = "sans"
+font_size = 27.0
+line_height = 31.0
+weight = 600
+
+[native.type.title]
+family = "sans"
+font_size = 20.0
+line_height = 26.0
+weight = 600
+
+[native.type.reading]
+family = "sans"
+font_size = 17.0
+line_height = 28.0
+weight = 400
+
+[native.type.body]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 400
+
+[native.type.bodyStrong]
+family = "sans"
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[native.type.labelOn]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 600
+
+[native.type.small]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 400
+
+[native.type.smallStrong]
+family = "sans"
+font_size = 15.0
+line_height = 21.0
+weight = 600
+
+[native.type.control]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[native.type.eyebrow]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[native.type.mono]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 400
+
+[native.type.annotLabel]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 400
+
+[native.type.annotLabelOn]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 600
+
+[native.type.band]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[native.colors.light]
+accent = "#141414"
+accentDeep = "#141414"
+accentDeepHover = "#000000"
+accentFill = "#141414"
+accentInkHover = "#2E2E2D"
+accentLight = "#3D3D3B"
+accentSoft = "rgba(20,20,20,.08)"
+accentText = "#141414"
+appIdentityText = "#141414"
+attention = "#8A6520"
+bg = "#FDFDFC"
+bgChrome = "#F5F4F2"
+bgElev = "#F5F4F2"
+bgHover = "#f1f1f0"
+bgPress = "#e8e8e7"
+bgSel = "rgba(45,75,168,.12)"
+bgSunken = "#F9F8F6"
+cAmber = "#904e46"
+cForest = "#397247"
+cIndigo = "#635a93"
+cOchre = "#845922"
+cOlive = "#666723"
+cRose = "#8c4c61"
+cSlate = "#3e6596"
+cTeal = "#00707e"
+cViolet = "#7a5283"
+danger = "#9a3b2e"
+focusRingColor = "#4A67C8"
+line = "#EFEEEB"
+lineSel = "rgba(45,75,168,.42)"
+lineStrong = "#E5E4E1"
+link = "#2D4BA8"
+net = "#9A3B2E"
+netHover = "#7F3026"
+netWash = "rgba(154,59,46,.07)"
+onAccent = "#FDFDFC"
+onStage = "#EDEDEC"
+onStageSoft = "#9A9A98"
+scrim = "rgba(26,24,21,0.3)"
+seam = "#B4441F"
+shadowLg = "0 24px 48px -16px rgba(20,20,20,.16)"
+shadowMd = "0 8px 24px -8px rgba(20,20,20,.10)"
+shadowSm = "0 1px 2px rgba(20,20,20,.06)"
+skel = "#E4E3E0"
+stage = "#0B0B0B"
+stageLine = "#2A2A29"
+stageSunken = "#1A1A19"
+success = "#3a6540"
+text = "#141414"
+textDisabled = "#9C9C99"
+textFaint = "#6C6C69"
+textGhost = "#888885"
+textInv = "#FDFDFC"
+textSoft = "#5A5A58"
+warning = "#7c5619"
+
+[native.colors.dark]
+accent = "#EDEDEC"
+accentDeep = "#EDEDEC"
+accentDeepHover = "#FFFFFF"
+accentFill = "#EDEDEC"
+accentInkHover = "#D2D2D1"
+accentLight = "#C8C8C6"
+accentSoft = "rgba(237,237,236,.08)"
+accentText = "#EDEDEC"
+appIdentityText = "#EDEDEC"
+attention = "#D8A64E"
+bg = "#0E0E0E"
+bgChrome = "#121211"
+bgElev = "#171716"
+bgHover = "#191919"
+bgPress = "#222222"
+bgSel = "rgba(157,176,240,.12)"
+bgSunken = "#121211"
+cAmber = "#d78f85"
+cForest = "#7bb587"
+cIndigo = "#a39bda"
+cOchre = "#c99b65"
+cOlive = "#a8aa66"
+cRose = "#d48da2"
+cSlate = "#7ea7dc"
+cTeal = "#58b4c4"
+cViolet = "#be92c8"
+danger = "#e08878"
+focusRingColor = "#8098E8"
+line = "#1B1B1A"
+lineSel = "rgba(157,176,240,.42)"
+lineStrong = "#232322"
+link = "#9DB0F0"
+net = "#E08878"
+netHover = "#EC9C8D"
+netWash = "rgba(224,136,120,.11)"
+onAccent = "#0E0E0E"
+onStage = "#EDEDEC"
+onStageSoft = "#9A9A98"
+scrim = "rgba(0,0,0,0.62)"
+seam = "#E0864F"
+shadowLg = "0 30px 70px -24px rgba(0,0,0,.7)"
+shadowMd = "0 12px 30px -14px rgba(0,0,0,.6)"
+shadowSm = "0 1px 0 rgba(0,0,0,.4)"
+skel = "#1E1E1D"
+stage = "#0B0B0B"
+stageLine = "#2A2A29"
+stageSunken = "#1A1A19"
+success = "#7fb588"
+text = "#EDEDEC"
+textDisabled = "#565654"
+textFaint = "#878785"
+textGhost = "#656563"
+textInv = "#0E0E0E"
+textSoft = "#9A9A98"
+warning = "#d9a75b"
+
+[native.geometry]
+# Geometry both shells need that the token table does not carry.
+appMarkSmallStroke = 1.75
+appMarkStroke = 1.6
+appMarkViewBox = 24
+durationOne = 140
+durationTwo = 280
+hairline = 1
+iconChipRadiusRatio = 0.26
+iconChipTintDark = 0.2
+iconChipTintLight = 0.13
+pageMargin = 18
+targetMinCoarse = 44
+targetMinFine = 34
+
+[[native.app]]
+id = "notes"
+name = "Notes"
+desc = "Notes, notebooks and a journal."
+icon_key = "Book"
+color_key = "slate"
+light_hue = "#3e6596"
+light_chip = "#e4e9ef"
+light_mark = "#3a5e8b"
+dark_hue = "#7ea7dc"
+dark_chip = "#242d37"
+dark_mark = "#7ea7dc"
+
+[[native.app]]
+id = "people"
+name = "People"
+desc = "Contacts and relationships."
+icon_key = "AddressBook"
+color_key = "violet"
+light_hue = "#7a5283"
+light_chip = "#ece7ec"
+light_mark = "#744e7d"
+dark_hue = "#be92c8"
+dark_chip = "#312833"
+dark_mark = "#be92c8"
+
+[[native.app]]
+id = "photos"
+name = "Photos"
+desc = "Browse and back up your photos."
+icon_key = "Camera"
+color_key = "amber"
+light_hue = "#904e46"
+light_chip = "#efe6e4"
+light_mark = "#894a43"
+dark_hue = "#d78f85"
+dark_chip = "#362826"
+dark_mark = "#d78f85"
+
+[[native.app]]
+id = "locker"
+name = "Locker"
+desc = "Private items behind a lock."
+icon_key = "Lock"
+color_key = "rose"
+light_hue = "#8c4c61"
+light_chip = "#eee6e8"
+light_mark = "#894a5f"
+dark_hue = "#d48da2"
+dark_chip = "#36272c"
+dark_mark = "#d48da2"
+
+[[native.app]]
+id = "docs"
+name = "Docs"
+desc = "Read and organize your documents."
+icon_key = "Folder"
+color_key = "teal"
+light_hue = "#00707e"
+light_chip = "#dcebec"
+light_mark = "#006774"
+dark_hue = "#58b4c4"
+dark_chip = "#1d2f32"
+dark_mark = "#58b4c4"
+
+[[native.app]]
+id = "agenda"
+name = "Agenda"
+desc = "Your calendar, events and plans."
+icon_key = "Calendar"
+color_key = "forest"
+light_hue = "#397247"
+light_chip = "#e4ebe4"
+light_mark = "#346841"
+dark_hue = "#7bb587"
+dark_chip = "#242f26"
+dark_mark = "#7bb587"
+
+[[native.app]]
+id = "money"
+name = "Money"
+desc = "Spending, targets and cash flow."
+icon_key = "Coin"
+color_key = "indigo"
+light_hue = "#635a93"
+light_chip = "#e9e8ee"
+light_mark = "#5f568d"
+dark_hue = "#a39bda"
+dark_chip = "#2c2a37"
+dark_mark = "#a39bda"
+
+[[native.app]]
+id = "health"
+name = "Health"
+desc = "Daily totals and workouts from your phone."
+icon_key = "Activity"
+color_key = "olive"
+light_hue = "#666723"
+light_chip = "#e9eae0"
+light_mark = "#5e5f20"
+dark_hue = "#a8aa66"
+dark_chip = "#2d2d20"
+dark_mark = "#a8aa66"
+
+# Dark mockups. `[mockups.dark]` is read by `cargo xtask design-dark`
 # (crates/xtask/src/design_dark.rs), which writes every `XDark.dc.html` in
 # design/mockups from the light `X.dc.html` (#1173). Never edit a dark screen.
 

@@ -20,7 +20,7 @@ The Linux `cargo xtask gate` proves Rust and JVM behavior. The separate `ios` jo
 | the **real ABI round trip**: `open → call → next_event → free → close` from Kotlin over JNA against `libcentraid_core_ffi.so`, on a vault the Rust fixture binary founded (`:core:jvmTest`) | the same round trip through cinterop on iOS, and through JNA on a device |
 | the UI-thread assertion, the buffer accounting, the poison handling, the bounded-queue behaviour | a panic injected by the real library (it has no fault-injection point — see `contracts/handoff/E/proposed-patches.md`) |
 | every screen's behaviour: `centraid_screens::testing::Driver` over the real core (`cargo test -p centraid-screens`) | the Compose screens and the SwiftUI views rendering |
-| the emitted token table, catalogue and kit words match `packages/design` (`packages/design`'s `native-emission.test.ts`, and the drift check of the `mobile-jvm` step) | Roborazzi and swift-snapshot-testing snapshots (`IconSilhouetteTests` now runs in the iOS CI job) |
+| the emitted token table, catalogue and kit words match `design/tokens.toml` (`cargo xtask design --check`: the gate's `design` step, also run by the `mobile-jvm` step) | Roborazzi and swift-snapshot-testing snapshots (`IconSilhouetteTests` now runs in the iOS CI job) |
 | the pass service, the phone imports and the vault shelf's decisions (Rust tests in `crates/screens`) | the windows firing, the background `URLSession` carrying parts with the app suspended, the PhotoKit and MediaStore walkers, the derivatives, the deletions — `maestro/backup-measurement.md` |
 | `cargo xtask rules` over the shells' sources (no copy in a view, controls from the kit) | the device numbers that promote `tests/journeys.json`'s parked ceilings |
 
@@ -32,7 +32,7 @@ Both shells have been seen running over the real core: the iOS shell compiles, l
 cd mobile && ./gradlew mobileJvm
 ```
 
-`:core:jvmTest` and nothing else. It is the `mobile-jvm` step of `cargo xtask gate --profile mobile-jvm`, which `nightly.yml` runs; the step also regenerates the emitted design artifacts and screen fixtures and fails on drift.
+`:core:jvmTest` and nothing else. It is the `mobile-jvm` step of `cargo xtask gate --profile mobile-jvm`, which `nightly.yml` runs; the step also runs the design drift check (`cargo xtask design --check`) and fails on drift.
 
 **`:core:jvmTest` builds two Rust things first** and fails loudly if `cargo` is not there, because a binding test that skipped would read green on a machine where the ABI does not work at all:
 
@@ -229,13 +229,13 @@ Above `:core`, Android's `dev.centraid.core.Screens` holds the screen runtime's 
 
 | File | Generator | The drift check |
 | --- | --- | --- |
-| `androidApp/src/main/kotlin/dev/centraid/android/design/{Tokens,Catalog,Words}.kt` | `contracts/tools/export-native-theme.ts` (the catalogue by `export-native-catalog.ts`, the kit's words by `export-native-words.ts`, from `crates/screens/src/strings/shared.rs`) | `git diff --exit-code design mobile` |
-| `iosApp/Design/{Theme,Catalog,Words}.swift` | the same | the same |
-| `design/native-{theme,catalog}.json` | the same | the same |
+| `androidApp/src/main/kotlin/dev/centraid/android/design/{Tokens,Catalog,Words}.kt` | `cargo xtask design` from `design/tokens.toml` and `design/icons.toml` (the kit's words from `crates/screens/src/strings/shared.rs`) | `cargo xtask design --check`, the gate's `design` step |
+| `iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift` | the same | the same |
+| `iosApp/Resources/Assets.xcassets/Colors/*.colorset` (the redesign's colours, light and dark built in), `iosApp/Resources/Fonts`, `androidApp/src/main/res/{values/colors.xml,values-night/colors.xml,values/dimens.xml,font}` | the same | the same |
 | the Wire types | `crates/api-proto/proto`, by Gradle's `generateCommonMainProtos` | `buf lint` / `buf breaking`; the task is a build input, so a stale tree is not possible |
 | `iosApp/Sources/Generated/**` (the SwiftProtobuf types) | `mobile/scripts/generate-swift-protos.sh`: Xcode's pre-build phase, and `xcodegen generate`'s `preGenCommand` | none needed: the phase re-runs when a `.proto` changes, and `Sources/Generated` is gitignored |
 
-One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the emitter carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to the [wording rules](../.claude/skills/product-intuition/references/design-behaviour.md#wording).
+One generator (Rust, no formatter after it), N committed artifacts, one check that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue, icon set or kit word, which is why the generator carries them rather than eight app names and 139 silhouettes being typed into two languages. A view's other copy is the Rust `ViewState`'s: the words live in `crates/screens/src/strings`, and `lint:copy` holds them to the [wording rules](../.claude/skills/product-intuition/references/design-behaviour.md#wording).
 
 ## The shells, and what they hold
 

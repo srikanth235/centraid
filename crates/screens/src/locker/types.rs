@@ -21,7 +21,7 @@ pub struct TypeInfo {
     /// The plural a filter chip says ("Logins"); `label` where the filter row
     /// offers no chip of its own.
     pub plural: Words,
-    /// A `design/native-catalog.json` icon key.
+    /// A `design/icons.toml` icon key.
     pub icon: &'static str,
     /// The six a phone creates.
     pub creatable: bool,

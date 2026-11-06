@@ -172,7 +172,7 @@ message AgendaBandTab {
   // `day`, `schedule`, `waiting`, `todo`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
-  // A `design/native-catalog.json` icon key.
+  // A `design/icons.toml` icon key.
   string icon_key = 3;
   // The 2px accent bar.
   bool current = 4;
@@ -384,7 +384,7 @@ message AgendaMoreRow {
   string section = 7;
   // What a screen reader says for the row: "Work, Hidden".
   string spoken = 8;
-  // A `design/native-catalog.json` icon key on a Tasks place's row; empty on
+  // A `design/icons.toml` icon key on a Tasks place's row; empty on
   // a calendar row.
   string icon_key = 9;
   // WHERE A TAP GOES on a Tasks place's row: Anytime, Logbook and Reminders

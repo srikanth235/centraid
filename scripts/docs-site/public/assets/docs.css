@@ -2,8 +2,8 @@
 
    Same design as the product, not a design of its own. Every colour, face,
    radius, duration and type rung resolves through assets/centraid-tokens.css,
-   which scripts/site-tokens.mjs lowers from packages/design's `toCss()` — the
-   SAME emitter the desktop shell and the PWA render on. The landing page at
+   which `cargo xtask design` generates from design/site/tokens.css and
+   design/fonts. The landing page at
    scripts/home-site/public/index.html drinks from the same file.
 
    What that binds these pages to (the mockups in design/mockups/ and design/tokens.toml are the rulebook):

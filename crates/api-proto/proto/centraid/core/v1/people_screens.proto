@@ -116,7 +116,7 @@ message PeopleHomeState {
 message PeopleBandTab {
   string key = 1;
   string label = 2;
-  // A `design/native-catalog.json` icon key.
+  // A `design/icons.toml` icon key.
   string icon_key = 3;
   bool current = 4;
 }

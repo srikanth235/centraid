@@ -16,10 +16,6 @@ import {
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
-function json<T>(file: string): T {
-  return JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as T;
-}
-
 // ── WHO CONSUMES THE REGISTRY, AND HOW THAT MOVED ─────────────────────────
 //
 // Until #1029 the two tests below scanned `packages/blueprints` — the app
@@ -109,27 +105,6 @@ describe("single icon registry", () => {
       if (!file.endsWith(".ts")) continue;
       const source = readFileSync(path.join(elements, file), "utf8");
       expect(source, file).not.toContain("<svg");
-    }
-  });
-
-  test("the emitted native catalogue is this registry, not a second one", () => {
-    // `design/native-catalog.json` is COMMITTED, so it can go stale against the
-    // registry it was lowered from. The drift gate that catches that lives in
-    // `cargo xtask gate` (`emitters`, and the `mobile-jvm` profile), which is
-    // neither cheap nor run on a TypeScript-only change — and the emitted table
-    // is what both shells actually draw.
-    const catalogue = json<{
-      apps: { id: string; iconKey: string }[];
-      icons: Record<string, unknown[]>;
-    }>("design/native-catalog.json");
-    expect(Object.keys(catalogue.icons).sort()).toStrictEqual(
-      Object.keys(icons).sort()
-    );
-    expect(catalogue.apps.map((app) => app.id)).toStrictEqual(
-      apps.map((app) => app.id)
-    );
-    for (const app of catalogue.apps) {
-      expect(isIconName(app.iconKey), `${app.id} → ${app.iconKey}`).toBe(true);
     }
   });
 
