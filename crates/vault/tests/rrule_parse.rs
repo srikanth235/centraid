@@ -8,8 +8,7 @@
 
 use centraid_vault::time::recurrence::{ExpandInput, expand};
 use centraid_vault::time::rrule::{
-    self, DayRule, Freq, ParsedRrule, Refusal, Until, assert_supported, describe, inspect,
-    normalize, parse,
+    self, DayRule, Freq, ParsedRrule, Refusal, Until, assert_supported, inspect, normalize, parse,
 };
 use centraid_vault::time::zone::FireZone;
 
@@ -34,7 +33,7 @@ fn assert_refused_everywhere(rule: &str) -> Refusal {
         "{rule}"
     );
     assert_eq!(parse(rule), None, "{rule}");
-    assert_eq!(describe(rule), None, "{rule}");
+    assert_eq!(rrule::shape(rule), None, "{rule}");
     assert_eq!(normalize(rule), None, "{rule}");
     let utc = FireZone::named("Etc/UTC").expect("a zone");
     let found = expand(
@@ -403,7 +402,7 @@ fn every_frequency_takes_the_parts_the_rfc_gives_it() {
         "FREQ=YEARLY;BYMONTHDAY=29;BYMONTH=2",
     ] {
         assert!(inspect(rule).is_ok(), "{rule}: {:?}", inspect(rule));
-        assert!(describe(rule).is_some(), "{rule}: words");
+        assert!(rrule::shape(rule).is_some(), "{rule}: a shape");
     }
 }
 
@@ -517,191 +516,52 @@ fn the_canonical_form_of_every_accepted_shape_parses_back_to_the_same_rule() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_sentences_before_widening_are_untouched() {
-    for (rule, said) in [
-        ("FREQ=DAILY", "Daily"),
-        ("FREQ=WEEKLY", "Weekly"),
-        ("FREQ=MONTHLY", "Every month"),
-        ("FREQ=YEARLY", "Every year"),
-        ("FREQ=DAILY;INTERVAL=2", "Every other day"),
-        ("FREQ=DAILY;INTERVAL=13", "Every 13 days"),
-        ("FREQ=WEEKLY;BYDAY=MO,FR", "Every Monday and Friday"),
-        ("FREQ=WEEKLY;INTERVAL=2;BYDAY=FR", "Every other Friday"),
-        (
-            "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR,MO",
-            "Every other week on Friday and Monday",
-        ),
-        ("FREQ=WEEKLY;INTERVAL=3;BYDAY=MO", "Every 3 weeks on Monday"),
-        ("FREQ=MONTHLY;INTERVAL=3", "Every 3 months"),
-        ("FREQ=MONTHLY;BYDAY=2MO", "Monthly on the second Monday"),
-        ("FREQ=MONTHLY;BYDAY=-1FR", "Monthly on the last Friday"),
-        ("FREQ=MONTHLY;BYMONTHDAY=-1", "Monthly on the last day"),
-        ("FREQ=MONTHLY;BYMONTHDAY=22", "Monthly on the 22nd"),
-        (
-            "FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR",
-            "Every other month on the last Friday",
-        ),
-        (
-            "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1;COUNT=4",
-            "Every 3 months on the last day \u{b7} 4 times",
-        ),
-        ("FREQ=DAILY;COUNT=1", "Daily \u{b7} once"),
-        (
-            "FREQ=DAILY;UNTIL=20260301T000000Z",
-            "Daily \u{b7} until Mar 1, 2026",
-        ),
-        (
-            "FREQ=WEEKLY;UNTIL=2026-12-31",
-            "Weekly \u{b7} until Dec 31, 2026",
-        ),
-        ("FREQ=WEEKLY;WKST=SU", "Weekly"),
-    ] {
-        assert_eq!(describe(rule).as_deref(), Some(said), "{rule}");
-    }
+fn a_rule_has_a_structural_shape_and_no_words() {
+    use centraid_vault::time::rrule::{ShapeEnd, shape};
+    let said = shape("FREQ=MONTHLY;INTERVAL=3;BYDAY=-1FR;BYMONTH=1,7;COUNT=4").expect("shape");
+    assert_eq!(said.freq, Freq::Monthly);
+    assert_eq!(said.interval, 3);
+    assert_eq!(
+        said.weekdays,
+        vec![DayRule {
+            ordinal: Some(-1),
+            day: 5
+        }]
+    );
+    assert_eq!(said.months, vec![1, 7]);
+    assert_eq!(said.end, ShapeEnd::Count(4));
+
+    let said =
+        shape("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1,1;UNTIL=2030-12-31").expect("shape");
+    assert_eq!(said.set_positions, vec![-1, 1]);
+    assert_eq!(
+        said.end,
+        ShapeEnd::Until {
+            year: 2030,
+            month: 12,
+            day: 31
+        }
+    );
+    let said = shape("FREQ=YEARLY;BYYEARDAY=1,-1;BYWEEKNO=20;BYMONTHDAY=3").expect("shape");
+    assert_eq!(said.year_days, vec![1, -1]);
+    assert_eq!(said.week_numbers, vec![20]);
+    assert_eq!(said.month_days, vec![3]);
+    assert_eq!(said.end, ShapeEnd::Never);
+    // The basic UTC spelling names its day too.
+    assert_eq!(
+        shape("FREQ=DAILY;UNTIL=20260301T000000Z").map(|rule| rule.end),
+        Some(ShapeEnd::Until {
+            year: 2026,
+            month: 3,
+            day: 1
+        })
+    );
+    // WKST is not what a member reads.
+    assert_eq!(shape("FREQ=WEEKLY;WKST=SU"), shape("FREQ=WEEKLY"));
 }
 
 #[test]
-fn the_new_shapes_have_words() {
-    for (rule, said) in [
-        // Day lists under DAILY, MONTHLY, YEARLY.
-        (
-            "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR",
-            "Daily on Monday, Tuesday, Wednesday, Thursday and Friday",
-        ),
-        ("FREQ=MONTHLY;BYDAY=MO", "Monthly on each Monday"),
-        (
-            "FREQ=MONTHLY;BYDAY=MO,FR",
-            "Monthly on each Monday and Friday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=1MO,-1FR",
-            "Monthly on the first Monday and the last Friday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=-2MO",
-            "Monthly on the second to last Monday",
-        ),
-        ("FREQ=MONTHLY;BYDAY=5MO", "Monthly on the fifth Monday"),
-        (
-            "FREQ=MONTHLY;BYDAY=2SA;BYMONTHDAY=7",
-            "Monthly on the second Saturday when it falls on the 7th",
-        ),
-        ("FREQ=YEARLY;BYDAY=20MO", "Every year on the 20th Monday"),
-        ("FREQ=YEARLY;BYDAY=-1FR", "Every year on the last Friday"),
-        // Month days.
-        (
-            "FREQ=MONTHLY;BYMONTHDAY=1,15",
-            "Monthly on the 1st and 15th",
-        ),
-        (
-            "FREQ=MONTHLY;BYMONTHDAY=1,15,-1",
-            "Monthly on the 1st, 15th and last day",
-        ),
-        (
-            "FREQ=MONTHLY;BYMONTHDAY=-2",
-            "Monthly on the 2nd to last day",
-        ),
-        (
-            "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=10,11,12",
-            "Every other month on the 10th, 11th and 12th",
-        ),
-        ("FREQ=DAILY;BYMONTHDAY=13", "Daily on the 13th"),
-        // Months, year days, weeks.
-        ("FREQ=YEARLY;BYMONTH=6,7", "Every year in June and July"),
-        (
-            "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15",
-            "Every year on the 15th in March",
-        ),
-        (
-            "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH",
-            "Every year on the fourth Thursday in November",
-        ),
-        (
-            "FREQ=YEARLY;BYYEARDAY=1,100,200",
-            "Every year on the 1st, 100th and 200th day of the year",
-        ),
-        (
-            "FREQ=YEARLY;BYYEARDAY=-1",
-            "Every year on the last day of the year",
-        ),
-        (
-            "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO",
-            "Every year on Monday in week 20",
-        ),
-        ("FREQ=YEARLY;BYWEEKNO=53", "Every year in week 53"),
-        (
-            "FREQ=YEARLY;BYWEEKNO=-1;BYDAY=SU",
-            "Every year on Sunday in the last week",
-        ),
-        (
-            "FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7",
-            "Weekly on Monday in June and July",
-        ),
-        (
-            "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU;WKST=SU",
-            "Every other week on Monday and Sunday",
-        ),
-        ("FREQ=DAILY;BYMONTH=2", "Daily in February"),
-        // BYSETPOS.
-        (
-            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
-            "Monthly on the last weekday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1",
-            "Monthly on the first weekend day",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1",
-            "Monthly on the last Friday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=MO,WE;BYSETPOS=1,-1",
-            "Monthly on the first and last of Monday and Wednesday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=TU,WE,TH;BYSETPOS=3",
-            "Monthly on the third of Tuesday, Wednesday and Thursday",
-        ),
-        (
-            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-2",
-            "Monthly on the second to last weekday",
-        ),
-        (
-            "FREQ=MONTHLY;BYMONTHDAY=1,15,-1;BYSETPOS=2",
-            "Monthly on the second day among the 1st, 15th and last day",
-        ),
-        (
-            "FREQ=YEARLY;BYMONTH=1,2;BYSETPOS=1",
-            "Every year on the first day in January and February",
-        ),
-        // Endings on the new shapes.
-        (
-            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=6",
-            "Monthly on the last weekday \u{b7} 6 times",
-        ),
-        (
-            "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;UNTIL=20301231",
-            "Every year on the fourth Thursday in November \u{b7} until Dec 31, 2030",
-        ),
-    ] {
-        assert_eq!(describe(rule).as_deref(), Some(said), "{rule}");
-    }
-}
-
-#[test]
-fn a_raw_rule_is_never_what_the_summary_says() {
-    for rule in [
-        "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH",
-        "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
-        "FREQ=YEARLY;BYWEEKNO=53;BYDAY=MO;WKST=SU",
-    ] {
-        let said = describe(rule).expect("words");
-        assert!(
-            !said.contains("FREQ") && !said.contains('=') && !said.contains("BY"),
-            "{said}"
-        );
-    }
+fn the_refusal_sentence_quotes_the_rule() {
     assert_eq!(
         rrule::refusal_sentence(&refused("FREQ=HOURLY"), "RRULE: FREQ=HOURLY"),
         format!("{} (rule: FREQ=HOURLY)", refused("FREQ=HOURLY").message())

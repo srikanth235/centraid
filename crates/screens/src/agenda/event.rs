@@ -38,6 +38,8 @@ use centraid_api_proto::core_v1 as wire;
 use wire::agenda_event_event::Kind as K;
 use wire::agenda_event_state::Sheet;
 use wire::app_query_response::Answer;
+
+use super::rule_words;
 use wire::screen_event::Kind as E;
 
 use super::attachments::Attachments;
@@ -403,18 +405,21 @@ impl EventPage {
             .map(str::trim)
             .unwrap_or_default()
             .to_owned();
-        let series = event.recurrence_summary.is_some();
+        let series = rule_words::repeats(event.rrule.as_deref());
         let fact = |label: String, detail: &str| wire::AgendaFact {
             label,
             detail: detail.to_owned(),
         };
         let mut facts = Vec::new();
         if let Some(rule) = event
-            .recurrence_summary
+            .rrule
             .as_deref()
             .filter(|rule| !rule.trim().is_empty())
         {
-            facts.push(fact(words::field_repeat(locale), rule));
+            facts.push(fact(
+                words::field_repeat(locale),
+                &rule_words::stored(locale, rule),
+            ));
         }
         if let Some(place) = place {
             facts.push(fact(words::field_place(locale), place));
@@ -689,7 +694,7 @@ fn gone(locale: Locale) -> wire::AgendaGone {
 /// An occurrence of a repeating event: the one a scope question makes sense for.
 #[must_use]
 pub fn is_series_occurrence(event: &wire::AgendaEvent) -> bool {
-    event.recurrence_summary.is_some()
+    rule_words::repeats(event.rrule.as_deref())
         && event
             .original_start_local
             .as_deref()

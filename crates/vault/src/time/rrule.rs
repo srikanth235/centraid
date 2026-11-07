@@ -35,10 +35,17 @@
 //!   an ordinal `BYDAY` is MONTHLY's and YEARLY's, and `BYSETPOS` needs
 //!   another `BYxxx` part to select from.
 //! - A date that does not exist (`BYMONTHDAY=31` in April, Feb 29 in a common
-//!   year) is SKIPPED, never rolled over. The one exception is the day a rule
-//!   takes from `DTSTART` because it names none (`FREQ=MONTHLY` anchored on
-//!   the 31st): that lands on the month's last day, which is what the engine
-//!   has always done and what "monthly on the 31st" means to a member.
+//!   year) is SKIPPED, never rolled over, and that includes the day a rule
+//!   takes from `DTSTART` because it names none: plain `FREQ=MONTHLY` anchored
+//!   on the 31st skips the months with no 31st, and plain `FREQ=YEARLY`
+//!   anchored on Feb 29 skips the common years, with `COUNT` counting real
+//!   occurrences only (RFC 5545 section 3.3.10; owner decision on #1173,
+//!   reversing the engine's earlier clamp to the month's last day, so a
+//!   two-way sync with EventKit and CalendarContract expands exactly the
+//!   phone's occurrences). A member who wants "the last day" writes
+//!   `BYMONTHDAY=-1` (the Custom repeat sheet's "Last day"), and the sheet's
+//!   "last" weekday position (`BYDAY=-1FR`) is its default for a start on
+//!   the 29th to 31st.
 //!
 //! Refused, each with the reason accepting it would be a lie: `BYHOUR`,
 //! `BYMINUTE`, `BYSECOND` (the engine carries the anchor's wall clock);
@@ -72,15 +79,6 @@ impl Freq {
             Self::Weekly => "WEEKLY",
             Self::Monthly => "MONTHLY",
             Self::Yearly => "YEARLY",
-        }
-    }
-
-    const fn unit(self) -> &'static str {
-        match self {
-            Self::Daily => "day",
-            Self::Weekly => "week",
-            Self::Monthly => "month",
-            Self::Yearly => "year",
         }
     }
 }
@@ -697,299 +695,53 @@ pub fn refusal_sentence(refusal: &Refusal, rrule: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// THE ONE SUMMARISER. A raw RRULE string is never shown to a member.
+// THE RULE'S SHAPE, for the one place that turns it into words.
 //
-// Its words live HERE, in the vault, beside the rule they describe (the
-// pattern since #1020). Member-facing words belong in the core strings
-// (`crates/screens/src/strings/`); moving these there is an owner decision
-// (see the #1173 hand-off), and until it is made this is still the ONE place
-// a recurrence sentence is built.
+// The vault holds no member-facing words (those live in the core strings,
+// `crates/screens/src/strings/`, owner decision on #1173). It answers what a
+// rule IS, structurally, and the screens crate says it in English through the
+// same strings the Custom repeat sheet's live summary uses, so one wording of
+// a recurrence exists. A raw RRULE string is never shown to a member.
 // ---------------------------------------------------------------------------
 
-const DAY_NAMES: [(&str, &str); 7] = [
-    ("SU", "Sunday"),
-    ("MO", "Monday"),
-    ("TU", "Tuesday"),
-    ("WE", "Wednesday"),
-    ("TH", "Thursday"),
-    ("FR", "Friday"),
-    ("SA", "Saturday"),
-];
-
-const MONTH_NAMES: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-const MONTH_FULL_NAMES: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
-fn day_name(token: &str) -> &'static str {
-    DAY_NAMES
-        .iter()
-        .find(|(code, _)| *code == token)
-        .map_or("", |(_, name)| *name)
+/// When a rule ends, as a member would say it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeEnd {
+    /// No `COUNT` and no readable `UNTIL`.
+    Never,
+    /// `COUNT`: how many occurrences, `>= 1`.
+    Count(i64),
+    /// `UNTIL`: the calendar day it names, inclusive.
+    Until { year: i64, month: u32, day: u32 },
 }
 
-/// "a", "a and b", "a, b and c".
-fn join_and(items: &[String]) -> String {
-    match items.len() {
-        0 => String::new(),
-        1 => items[0].clone(),
-        _ => format!(
-            "{} and {}",
-            items[..items.len() - 1].join(", "),
-            items[items.len() - 1]
-        ),
-    }
+/// What a parsed rule is, without any words: the frequency, the step, and
+/// every `BYxxx` list the rule carries. `WKST` is not here: it decides
+/// which days a week holds, not what a member reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleShape {
+    pub freq: Freq,
+    /// Steps between occurrences, `>= 1`.
+    pub interval: i64,
+    /// `BYDAY`, in the order written; the ordinal is the nth weekday (`2MO`,
+    /// `-1FR`), `None` is every such weekday.
+    pub weekdays: Vec<DayRule>,
+    /// `BYMONTHDAY`: `1..=31`, or `-1..=-31` from the end.
+    pub month_days: Vec<i64>,
+    /// `BYYEARDAY`.
+    pub year_days: Vec<i64>,
+    /// `BYWEEKNO`.
+    pub week_numbers: Vec<i64>,
+    /// `BYMONTH`: `1..=12`.
+    pub months: Vec<i64>,
+    /// `BYSETPOS`.
+    pub set_positions: Vec<i64>,
+    pub end: ShapeEnd,
 }
 
-/// "Monday", "Monday and Tuesday", "Monday, Tuesday and Friday".
-fn join_days(days: &[&str]) -> String {
-    let names: Vec<String> = days.iter().map(|day| day_name(day).to_owned()).collect();
-    join_and(&names)
-}
-
-/// 1st, 2nd, 3rd, 4th ... 11th, 12th, 13th ... 21st, 22nd, 31st.
-fn day_of_month_label(day: i64) -> String {
-    let suffix = match (day % 100, day % 10) {
-        (11..=13, _) => "th",
-        (_, 1) => "st",
-        (_, 2) => "nd",
-        (_, 3) => "rd",
-        _ => "th",
-    };
-    format!("{day}{suffix}")
-}
-
-/// "first", "second" ... "fifth", "last", "second to last"; past five, "21st".
-fn ordinal_word(ordinal: i64) -> String {
-    const WORDS: [&str; 5] = ["first", "second", "third", "fourth", "fifth"];
-    let from_end = ordinal < 0;
-    let n = ordinal.unsigned_abs();
-    let word = match usize::try_from(n) {
-        Ok(n) if (1..=5).contains(&n) => WORDS[n - 1].to_owned(),
-        _ => day_of_month_label(ordinal.abs()),
-    };
-    match (from_end, n) {
-        (true, 1) => "last".to_owned(),
-        (true, _) => format!("{word} to last"),
-        (false, _) => word,
-    }
-}
-
-fn day_tokens_of(rule: &ParsedRrule) -> Vec<&'static str> {
-    rule.by_day.iter().map(|day| day.token()).collect()
-}
-
-/// "the 1st, 15th and last day": a `BYMONTHDAY` list.
-fn month_day_items(days: &[i64]) -> String {
-    let items: Vec<String> = days
-        .iter()
-        .map(|day| match *day {
-            -1 => "last day".to_owned(),
-            day if day < 0 => format!("{} to last day", day_of_month_label(-day)),
-            day => day_of_month_label(day),
-        })
-        .collect();
-    format!("the {}", join_and(&items))
-}
-
-/// "the second Monday and each Friday": a `BYDAY` list with ordinals.
-fn by_day_items(rule: &ParsedRrule) -> String {
-    let mut items: Vec<String> = Vec::new();
-    let plain: Vec<&str> = rule
-        .by_day
-        .iter()
-        .filter(|day| day.ordinal.is_none())
-        .map(|day| day.token())
-        .collect();
-    for day in &rule.by_day {
-        if let Some(ordinal) = day.ordinal {
-            items.push(format!(
-                "the {} {}",
-                ordinal_word(ordinal),
-                day_name(day.token())
-            ));
-        }
-    }
-    if !plain.is_empty() {
-        items.push(format!("each {}", join_days(&plain)));
-    }
-    join_and(&items)
-}
-
-/// "the last weekday", "the first and third Friday": a `BYSETPOS` list over
-/// the days `BYDAY` names.
-fn set_position_items(rule: &ParsedRrule) -> String {
-    let mut positions = rule.by_set_pos.clone();
-    positions.sort_by_key(|pos| (*pos < 0, pos.abs()));
-    let words: Vec<String> = positions.iter().map(|pos| ordinal_word(*pos)).collect();
-    let ordinals = join_and(&words);
-    let tokens = day_tokens_of(rule);
-    let mut sorted: Vec<u8> = rule.by_day.iter().map(|day| day.day).collect();
-    sorted.sort_unstable();
-    sorted.dedup();
-    let noun = match (tokens.len(), sorted.as_slice()) {
-        (0, _) => None,
-        (_, [1, 2, 3, 4, 5]) => Some("weekday".to_owned()),
-        (_, [0, 6]) => Some("weekend day".to_owned()),
-        (_, [single]) => Some(day_name(DAY_TOKENS[usize::from(*single)]).to_owned()),
-        _ => None,
-    };
-    match noun {
-        Some(noun) => format!("the {ordinals} {noun}"),
-        None if tokens.is_empty() => format!("the {ordinals} day"),
-        None => format!("the {ordinals} of {}", join_days(&tokens)),
-    }
-}
-
-fn is_plain_days(rule: &ParsedRrule) -> bool {
-    !rule.by_day.is_empty() && rule.by_day.iter().all(|day| day.ordinal.is_none())
-}
-
-/// The frequency's opening words: "Daily", "Every other week", "Every 3 months".
-fn head(rule: &ParsedRrule, short: bool) -> String {
-    let unit = rule.freq.unit();
-    match (rule.interval, rule.freq, short) {
-        (1, Freq::Daily, _) => "Daily".to_owned(),
-        (1, Freq::Weekly, _) => "Weekly".to_owned(),
-        (1, Freq::Monthly, true) => "Monthly".to_owned(),
-        (1, _, _) => format!("Every {unit}"),
-        (2, _, _) => format!("Every other {unit}"),
-        (n, _, _) => format!("Every {n} {unit}s"),
-    }
-}
-
-/// The sentences the engine said before #1173, byte for byte.
-fn legacy_cadence(rule: &ParsedRrule) -> Option<String> {
-    let only = |rule: &ParsedRrule| {
-        rule.by_month.is_empty()
-            && rule.by_year_day.is_empty()
-            && rule.by_week_no.is_empty()
-            && rule.by_set_pos.is_empty()
-    };
-    if !only(rule) {
-        return None;
-    }
-    match rule.freq {
-        Freq::Monthly => {
-            let on = match (rule.by_day.as_slice(), rule.by_month_day.as_slice()) {
-                ([], []) => return Some(head(rule, false)),
-                ([], [-1]) => "the last day".to_owned(),
-                ([], [day @ 1..=31]) => format!("the {}", day_of_month_label(*day)),
-                ([day], []) if matches!(day.ordinal, Some(1..=4 | -1)) => {
-                    let ordinal = day.ordinal.unwrap_or(1);
-                    format!("the {} {}", ordinal_word(ordinal), day_name(day.token()))
-                }
-                _ => return None,
-            };
-            Some(format!("{} on {on}", head(rule, true)))
-        }
-        Freq::Weekly => {
-            if rule.by_day.is_empty() && rule.by_month_day.is_empty() {
-                return Some(head(rule, false));
-            }
-            if !is_plain_days(rule) || !rule.by_month_day.is_empty() {
-                return None;
-            }
-            let days = day_tokens_of(rule);
-            Some(match rule.interval {
-                1 => format!("Every {}", join_days(&days)),
-                2 if days.len() == 1 => format!("Every other {}", join_days(&days)),
-                _ => format!("{} on {}", head(rule, false), join_days(&days)),
-            })
-        }
-        Freq::Daily | Freq::Yearly => {
-            (rule.by_day.is_empty() && rule.by_month_day.is_empty()).then(|| head(rule, false))
-        }
-    }
-}
-
-fn cadence(rule: &ParsedRrule) -> String {
-    if let Some(sentence) = legacy_cadence(rule) {
-        return sentence;
-    }
-    let mut clauses: Vec<String> = Vec::new();
-    if !rule.by_set_pos.is_empty() {
-        clauses.push(format!("on {}", set_position_items(rule)));
-        if !rule.by_month_day.is_empty() {
-            clauses.push(format!("among {}", month_day_items(&rule.by_month_day)));
-        }
-    } else {
-        if !rule.by_day.is_empty() {
-            let in_a_week =
-                matches!(rule.freq, Freq::Daily | Freq::Weekly) || !rule.by_week_no.is_empty();
-            let text = if is_plain_days(rule) && in_a_week {
-                join_days(&day_tokens_of(rule))
-            } else {
-                by_day_items(rule)
-            };
-            clauses.push(format!("on {text}"));
-        }
-        if !rule.by_month_day.is_empty() {
-            let joiner = if rule.by_day.is_empty() {
-                "on"
-            } else {
-                "when it falls on"
-            };
-            clauses.push(format!("{joiner} {}", month_day_items(&rule.by_month_day)));
-        }
-    }
-    if !rule.by_year_day.is_empty() {
-        let items: Vec<String> = rule
-            .by_year_day
-            .iter()
-            .map(|day| match *day {
-                -1 => "last".to_owned(),
-                day if day < 0 => format!("{} to last", day_of_month_label(-day)),
-                day => day_of_month_label(day),
-            })
-            .collect();
-        clauses.push(format!("on the {} day of the year", join_and(&items)));
-    }
-    if !rule.by_week_no.is_empty() {
-        let items: Vec<String> = rule
-            .by_week_no
-            .iter()
-            .map(|week| match *week {
-                -1 => "the last week".to_owned(),
-                week if week < 0 => format!("the {} to last week", day_of_month_label(-week)),
-                week => format!("week {week}"),
-            })
-            .collect();
-        clauses.push(format!("in {}", join_and(&items)));
-    }
-    if !rule.by_month.is_empty() {
-        let months: Vec<String> = rule
-            .by_month
-            .iter()
-            .filter_map(|month| usize::try_from(*month).ok())
-            .filter_map(|month| MONTH_FULL_NAMES.get(month.wrapping_sub(1)))
-            .map(|name| (*name).to_owned())
-            .collect();
-        clauses.push(format!("in {}", join_and(&months)));
-    }
-    let opening = head(rule, true);
-    if clauses.is_empty() {
-        return opening;
-    }
-    format!("{opening} {}", clauses.join(" "))
-}
-
-/// UNTIL carries its own spelling; the label is the calendar day it names.
-fn until_label(until: &str) -> Option<String> {
+/// The calendar day an `UNTIL` spelling names (basic `20261231...` or extended
+/// `2026-12-31`).
+fn until_day(until: &str) -> Option<(i64, u32, u32)> {
     let bytes = until.as_bytes();
     let (year, month, day) = if bytes.len() >= 8 && bytes[..8].iter().all(u8::is_ascii_digit) {
         (&until[0..4], &until[4..6], &until[6..8])
@@ -998,36 +750,38 @@ fn until_label(until: &str) -> Option<String> {
     } else {
         return None;
     };
-    let year: i64 = year.parse().ok()?;
-    let month: usize = month.parse().ok()?;
-    let day: i64 = day.parse().ok()?;
+    let month: u32 = month.parse().ok()?;
     if !(1..=12).contains(&month) {
         return None;
     }
-    Some(format!("{} {day}, {year}", MONTH_NAMES[month - 1]))
+    Some((year.parse().ok()?, month, day.parse().ok()?))
 }
 
-/// A rule never carries both (the parser refuses it), so this is whichever is set.
-fn ending(rule: &ParsedRrule) -> String {
-    if let Some(count) = rule.count {
-        return if count == 1 {
-            " \u{b7} once".to_owned()
-        } else {
-            format!(" \u{b7} {count} times")
-        };
-    }
-    let Some(until) = rule.until.as_deref() else {
-        return String::new();
-    };
-    until_label(until).map_or_else(String::new, |label| format!(" \u{b7} until {label}"))
-}
-
-/// THE member-facing recurrence sentence, or `None` when the rule does not
-/// parse. Every surface (Agenda, Tasks, the assistant) renders a rule with
-/// this function; **a second summariser anywhere is the defect this exists to
-/// prevent**, and a raw RRULE string is never shown to a member.
+/// The structural description of a rule, or `None` when it does not parse.
+/// THE input of the one member-facing summariser (in the core strings): a
+/// raw RRULE string is never shown to a member.
 #[must_use]
-pub fn describe(value: &str) -> Option<String> {
+pub fn shape(value: &str) -> Option<RuleShape> {
     let rule = parse(value)?;
-    Some(format!("{}{}", cadence(&rule), ending(&rule)))
+    // A rule never carries both (the parser refuses it).
+    let end =
+        if let Some(count) = rule.count {
+            ShapeEnd::Count(count)
+        } else {
+            rule.until.as_deref().and_then(until_day).map_or(
+                ShapeEnd::Never,
+                |(year, month, day)| ShapeEnd::Until { year, month, day },
+            )
+        };
+    Some(RuleShape {
+        freq: rule.freq,
+        interval: rule.interval,
+        weekdays: rule.by_day,
+        month_days: rule.by_month_day,
+        year_days: rule.by_year_day,
+        week_numbers: rule.by_week_no,
+        months: rule.by_month,
+        set_positions: rule.by_set_pos,
+        end,
+    })
 }

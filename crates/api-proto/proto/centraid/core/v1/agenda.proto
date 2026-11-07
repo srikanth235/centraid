@@ -129,9 +129,9 @@ message AgendaEvent {
   // surface draws no clock time for it (#1046, a v0 defect not carried).
   optional string recurrence_semantics = 9;
   // THE RULE, FOR AN EDITOR AND NEVER FOR A MEMBER. An editor reads it to show
-  // which repeat preset is set; what a member reads is `recurrence_summary`,
-  // and a raw RRULE on a screen is the defect that field exists to prevent
-  // (#834).
+  // which repeat preset is set; what a member reads is the core's sentence
+  // for it, and a raw RRULE on a screen is the defect that sentence exists to
+  // prevent (#834).
   optional string rrule = 10;
   // `supported` or `unsupported`. An unsupported rule — only an import can
   // store one; a command refuses it — expands to nothing and the anchor stays
@@ -152,12 +152,13 @@ message AgendaEvent {
   repeated AgendaAttachment attachments = 21;
   // THE OWNER FIRST, so RSVP controls lead (#337); then by name.
   repeated AgendaAttendee attendees = 22;
-  // The ONE member-facing recurrence sentence, resolved by the core. Absent
-  // on an event that does not repeat.
-  optional string recurrence_summary = 23;
+  // The sentence for the rule is built in the core strings from `rrule`
+  // (owner decision, #1173); the field that carried it is retired.
+  reserved 23;
+  reserved "recurrence_summary";
   // True on an occurrence the expansion moved off the series' own start, and
   // FALSE on the occurrence AT it — the anchor. So this is not "does this
-  // repeat": `recurrence_summary` present is.
+  // repeat": `rrule` present is.
   bool is_recurrence_instance = 24;
   // THE LIST'S KEY, NEVER THE ROW'S IDENTITY: the event id for a one-off, and
   // `<event_id>:<wall clock>` for every occurrence of a series, the anchor
@@ -545,9 +546,11 @@ message AgendaTask {
   // --- the recurrence, as facts (#834), plus the rule for the picker ------
   // The task repeats.
   bool repeats = 19;
-  // The one summariser's sentence ("Daily", "Every 2 weeks on Monday"), built
-  // in Rust. Absent on a one-off.
-  optional string recurrence_summary = 20;
+  // The sentence for the rule ("Every day", "Every 2 weeks on Monday") is
+  // built in the core strings from `rrule` (owner decision, #1173); the field
+  // that carried it is retired.
+  reserved 20;
+  reserved "recurrence_summary";
   // Unactioned periods, collapsed into a count: a repeating task never stacks.
   uint32 missed = 21;
   // The next open period, as the engine spells it; absent on a one-off.
@@ -590,7 +593,7 @@ message AgendaTask {
   // The stored RFC 5545 rule, verbatim; absent on a one-off. For the editor's
   // repeat picker ONLY — to pre-select a preset and send the rule back
   // through `task.edit`. A shell never expands, summarises or dates
-  // from it: `recurrence_summary`, `next_due` and `missed` are those answers
+  // from it: the core's sentence, `next_due` and `missed` are those answers
   // (#834's rule, which this field does not relax).
   optional string rrule = 38;
   // `created_at`'s civil day (`YYYY-MM-DD`) in the request zone — what

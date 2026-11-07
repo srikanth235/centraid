@@ -192,7 +192,7 @@ fn every_combination_writes_its_rule_and_says_its_sentence() {
     );
     combo(
         vec![end("on"), until("2099-12-31")],
-        "Every week on Wednesday, until Thursday 31 December",
+        "Every week on Wednesday, until Thursday 31 December 2099",
         "FREQ=WEEKLY;BYDAY=WE;UNTIL=20991231",
     );
     combo(
@@ -455,7 +455,7 @@ fn a_task_takes_the_custom_sheet_and_saves_its_rule() {
     let found = world.tasks_titled("Water the plants");
     assert_eq!(found.len(), 1);
     assert!(found[0].repeats, "{:?}", found[0]);
-    assert!(found[0].recurrence_summary.is_some());
+    assert!(found[0].rrule.is_some());
 }
 
 #[test]

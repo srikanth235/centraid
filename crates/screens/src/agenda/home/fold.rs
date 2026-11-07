@@ -41,6 +41,7 @@ use super::grid::{self, WeekStart};
 use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
+use crate::agenda::rule_words;
 use crate::agenda::style;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
@@ -749,12 +750,12 @@ pub(super) fn time_of(locale: Locale, event: &wire::AgendaEvent, day: &str) -> (
 }
 
 /// "repeats · 2 guests · call". "repeats" on EVERY occurrence of a series:
-/// `recurrence_summary` is present on all of them (#1046). A guest is anyone on
+/// the stored `rrule` is present on all of them (#1046). A guest is anyone on
 /// the event but you.
 fn meta_of(locale: Locale, event: &wire::AgendaEvent) -> Vec<String> {
     let guests = event.attendees.iter().filter(|guest| !guest.is_you).count();
     let mut meta = Vec::new();
-    if event.recurrence_summary.is_some() {
+    if rule_words::repeats(event.rrule.as_deref()) {
         meta.push(words::meta_repeats(locale));
     }
     if guests > 0 {

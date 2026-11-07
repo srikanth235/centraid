@@ -36,6 +36,7 @@ pub mod event;
 pub mod home;
 pub mod list;
 pub mod project;
+pub mod rule_words;
 mod style;
 pub mod todo;
 pub mod trash;

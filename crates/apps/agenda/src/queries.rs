@@ -55,9 +55,7 @@ use centraid_vault::time::zone::FireZone;
 
 pub use centraid_apps_kit::attached::Attachment;
 
-use crate::expansion::{
-    DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events, recurrence_summary,
-};
+use crate::expansion::{DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events};
 use crate::{Denial, denial_of};
 
 // ---------------------------------------------------------------------------
@@ -171,8 +169,6 @@ pub struct EventRow {
     pub travel_min: Option<i64>,
     pub attachments: Vec<Attachment>,
     pub attendees: Vec<Attendee>,
-    /// The ONE member-facing recurrence sentence; **never the rule** (#834).
-    pub recurrence_summary: Option<String>,
     pub is_recurrence_instance: bool,
     /// The series id for a one-off, and `<event_id>:<wall clock>` for an
     /// occurrence. **The list's key, never the row's identity.**
@@ -443,9 +439,6 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
             .location_place_id
             .as_ref()
             .and_then(|place| places.get(place).cloned());
-        // THE ONE SUMMARISER, RESOLVED HERE (#834): the row carries the sentence
-        // and never the raw rule.
-        event.recurrence_summary = recurrence_summary(event.rrule.as_deref());
     }
     Ok(())
 }

@@ -437,7 +437,6 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         updated_at: task.updated_at.clone(),
         repeats: task.rrule.is_some(),
         rrule: task.rrule.clone(),
-        recurrence_summary: task.recurrence.recurrence_summary.clone(),
         missed: count(task.recurrence.missed.unwrap_or_default()),
         next_due: task.recurrence.next_due.clone(),
         due_day: due.due_day.clone(),

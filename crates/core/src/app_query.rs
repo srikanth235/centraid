@@ -886,7 +886,6 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
                 is_you: attendee.is_you,
             })
             .collect(),
-        recurrence_summary: event.recurrence_summary,
         is_recurrence_instance: event.is_recurrence_instance,
         instance_key: event.instance_key,
         original_start_local: event.original_start_local,
@@ -1131,7 +1130,7 @@ mod tests {
         for run in &runs {
             assert!(run.instance_key.starts_with(&format!("{series}:")));
             assert!(run.original_start_local.is_some());
-            assert_eq!(run.recurrence_summary.as_deref(), Some("Weekly"));
+            assert_eq!(run.rrule.as_deref(), Some("FREQ=WEEKLY"));
             assert_eq!(
                 run.reminders,
                 vec![wire::AgendaReminder { minutes_before: 10 }]
@@ -1144,7 +1143,7 @@ mod tests {
             .expect("the one-off is on the agenda");
         assert_eq!(dentist.instance_key, one_off);
         assert!(!dentist.is_recurrence_instance);
-        assert_eq!(dentist.recurrence_summary, None);
+        assert_eq!(dentist.rrule, None);
     }
 
     /// WHERE EACH OCCURRENCE FALLS, IN THE DEVICE'S ZONE. A zoned call that

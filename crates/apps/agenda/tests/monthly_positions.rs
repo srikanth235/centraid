@@ -6,8 +6,9 @@
 //! shows are the ones the engine expands: the second Monday of each month, and
 //! the last day of each month — including the months that are short.
 
-use centraid_apps_agenda::expansion::{expand_recurring_events, recurrence_summary};
+use centraid_apps_agenda::expansion::expand_recurring_events;
 use centraid_apps_agenda::queries::EventRow;
+use centraid_vault::time::rrule;
 
 fn series(rrule: &str, dtstart: &str) -> EventRow {
     EventRow {
@@ -73,7 +74,7 @@ fn the_second_monday_and_the_last_day_expand_in_the_series_own_zone() {
 }
 
 #[test]
-fn a_31st_skips_the_short_months_and_the_summary_says_so_in_words() {
+fn a_31st_skips_the_short_months_and_the_positions_have_a_shape() {
     let rows = expand_recurring_events(
         vec![series(
             "FREQ=MONTHLY;BYMONTHDAY=31",
@@ -92,14 +93,9 @@ fn a_31st_skips_the_short_months_and_the_summary_says_so_in_words() {
             "2026-05-31T16:00:00.000Z",
         ]
     );
-    assert_eq!(
-        recurrence_summary(Some("FREQ=MONTHLY;BYMONTHDAY=-1")).as_deref(),
-        Some("Monthly on the last day")
-    );
-    assert_eq!(
-        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=2MO")).as_deref(),
-        Some("Monthly on the second Monday")
-    );
+    // The words are the core strings' (`crates/screens/tests/agenda_repeat_words.rs`).
+    assert!(rrule::shape("FREQ=MONTHLY;BYMONTHDAY=-1").is_some());
+    assert!(rrule::shape("FREQ=MONTHLY;BYDAY=2MO").is_some());
 }
 
 #[test]
@@ -115,10 +111,7 @@ fn a_still_refused_form_keeps_the_anchor_rather_than_erasing_the_event() {
     )
     .expect("expands");
     assert_eq!(starts(&rows), ["2026-01-12T17:00:00.000Z"]);
-    assert_eq!(
-        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=2MO;BYHOUR=9")),
-        None
-    );
+    assert_eq!(rrule::shape("FREQ=MONTHLY;BYDAY=2MO;BYHOUR=9"), None);
 }
 
 #[test]
@@ -143,8 +136,28 @@ fn a_rule_that_once_was_refused_now_expands_through_agenda() {
             "2026-04-30T16:00:00.000Z",
         ]
     );
+    assert!(rrule::shape("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1").is_some());
+}
+
+/// RFC 5545 (owner decision on #1173): a plain monthly series that starts on
+/// the 31st names no day, takes the 31st from its start, and SKIPS the months
+/// that have none; it no longer lands on the month's last day.
+#[test]
+fn a_plain_monthly_series_on_the_31st_skips_the_short_months() {
+    let rows = expand_recurring_events(
+        vec![series("FREQ=MONTHLY", "2026-01-31T17:00:00.000Z")],
+        "2026-01-01T00:00:00.000Z",
+        "2026-06-01T00:00:00.000Z",
+        &[],
+    )
+    .expect("expands");
     assert_eq!(
-        recurrence_summary(Some("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")).as_deref(),
-        Some("Monthly on the last weekday")
+        starts(&rows),
+        [
+            "2026-01-31T17:00:00.000Z",
+            "2026-03-31T16:00:00.000Z",
+            "2026-05-31T16:00:00.000Z",
+        ],
+        "February and April have no 31st"
     );
 }

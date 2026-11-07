@@ -144,6 +144,28 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Android, EDITED_IN_PLACE),
     ),
     // Platform, iOS only: Android has no such thing.
+    // Agenda's "Import reminders" More row and its option sheet: only where the platform has a
+    // Reminders store (`Ctx::reminders_source`), so Android's More draws no such row.
+    (
+        "AgendaHomeEvent.import_reminders_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaHomeEvent.import_reminders_submitted",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaHomeState.import_reminders",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaImportRemindersSheet.completed_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaImportRemindersSheet.completed_on",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("Announce.topic", platform(Shell::Ios, CERT_PIN)),
     ("Announced.topic", platform(Shell::Ios, CERT_PIN)),
     (

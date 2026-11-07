@@ -23,6 +23,7 @@ use super::attachments::Attachments;
 use super::editor::draft::normalize_url;
 use super::list::{self, Phase};
 use super::routes;
+use super::rule_words;
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
 use crate::catalog::{act, load};
@@ -1101,10 +1102,13 @@ fn fields(
         key: REPEATS.to_owned(),
         label: words::field_repeats(locale),
         value: task
-            .recurrence_summary
-            .clone()
-            .filter(|summary| task.repeats && !summary.trim().is_empty())
-            .unwrap_or_else(|| words::repeats_never(locale)),
+            .rrule
+            .as_deref()
+            .filter(|rule| task.repeats && !rule.trim().is_empty())
+            .map_or_else(
+                || words::repeats_never(locale),
+                |rule| rule_words::stored(locale, rule),
+            ),
         note: if !dated {
             words::repeats_needs_due(locale)
         } else if task.missed > 0 {

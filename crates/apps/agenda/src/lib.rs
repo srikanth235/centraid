@@ -40,7 +40,7 @@
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`Denial`] is a value every query answers beside its payload |
-//! | A raw RRULE shown to a member | `recurrence_summary` is [`centraid_vault::time::rrule::describe`]'s sentence, resolved here; a second summariser is the defect that function exists to prevent (#834) |
+//! | A raw RRULE shown to a member | a row carries the stored rule for the editor and never a sentence: the one sentence is built in the core strings from [`centraid_vault::time::rrule::shape`] (`crates/screens`, `agenda::rule_words`); a second summariser is the defect that seam exists to prevent (#834) |
 
 pub mod attachments;
 pub mod commands;

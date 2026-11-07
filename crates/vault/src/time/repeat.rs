@@ -22,7 +22,7 @@
 //! expands exactly as the one it read did.
 //!
 //! No words live here. The sentence for a rule is
-//! [`super::rrule::describe`]'s, and the editor's own labels are the editor's.
+//! built in the core strings from [`super::rrule::shape`] (`crates/screens`), and the editor's own labels are the editor's.
 
 use super::rrule::{self, DayRule, Freq, ParsedRrule};
 
@@ -97,7 +97,9 @@ pub enum MonthlyBasis {
     /// Days of the month: `1..=31`, or `-1..=-31` counted from the end (`-1`
     /// is the last day). **Empty means the day the series starts on.** A month
     /// without the day has no occurrence that month (the 31st skips April),
-    /// except the implied start day, which lands on the month's last day.
+    /// and that includes the implied start day (RFC 5545, owner decision on
+    /// #1173): a series that starts on the 31st and names no day skips the
+    /// months with none. "The last day" is written `-1`.
     ByDate(Vec<i32>),
     /// The nth weekday: `ordinal` is `1..=4`, or `-1` for the last (the
     /// range an editor shows; [`RepeatSpec::to_rrule`] refuses the rest).

@@ -89,11 +89,11 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             lateRow.overdue shouldBe true
             lateRow.due_day shouldBe today.minusDays(3).toString()
             // THE REPEATING TASK IS DUE ITS NEXT PERIOD, not four days late —
-            // and it carries the sentence, built in Rust, never the rule.
+            // and it carries its rule for the editor; the sentence is built in Rust.
             val dailyRow = board.groups.flatMap { it.tasks }.single { it.task_id == daily }
             dailyRow.overdue shouldBe false
             dailyRow.repeats shouldBe true
-            dailyRow.recurrence_summary shouldBe "Daily"
+            dailyRow.rrule shouldBe "FREQ=DAILY"
             dailyRow.next_due shouldNotBe null
 
             // --- Upcoming ---------------------------------------------------

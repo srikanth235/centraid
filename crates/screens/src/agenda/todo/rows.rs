@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
+use crate::agenda::rule_words;
 use crate::kit::civil;
 use crate::strings::{Locale, agenda_reminders as reminders, task as words};
 
@@ -204,12 +205,12 @@ pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
         });
     }
     // THE CORE'S SENTENCE, never a dash.
-    if let Some(summary) = task
-        .recurrence_summary
+    if let Some(rule) = task
+        .rrule
         .as_deref()
-        .filter(|s| task.repeats && !s.trim().is_empty())
+        .filter(|rule| task.repeats && !rule.trim().is_empty())
     {
-        parts.push(summary.to_owned());
+        parts.push(rule_words::stored(locale, rule));
     }
     if task.missed > 0 && !task.due_day.is_empty() {
         parts.push(format!(

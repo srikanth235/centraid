@@ -118,6 +118,11 @@ struct Image {
     id: Option<String>,
     due: Option<String>,
     rule: Option<String>,
+    /// The command itself states this rule. A rule that is only CARRIED over
+    /// from the stored row is not judged again: one an older build stored and
+    /// this one can no longer read must not stop the member from editing
+    /// anything else about the task (#1173).
+    rule_stated: bool,
     remind: Option<i64>,
     parent: Option<String>,
     project: Option<String>,
@@ -147,6 +152,7 @@ fn image(ctx: &CommandCtx<'_, '_>) -> Result<Image> {
                             id: None,
                             due: row.get(0)?,
                             rule: row.get(1)?,
+                            rule_stated: false,
                             remind: row.get(2)?,
                             parent: row.get(3)?,
                             project: row.get(4)?,
@@ -162,6 +168,7 @@ fn image(ctx: &CommandCtx<'_, '_>) -> Result<Image> {
         id: None,
         due: None,
         rule: None,
+        rule_stated: false,
         remind: None,
         parent: None,
         project: None,
@@ -179,6 +186,7 @@ fn image(ctx: &CommandCtx<'_, '_>) -> Result<Image> {
     Ok(Image {
         id,
         due: stated(ctx, "due").unwrap_or(held.due),
+        rule_stated: stated(ctx, "rule").is_some_and(|rule| rule.is_some()),
         rule: stated(ctx, "rule").unwrap_or(held.rule),
         remind: ctx
             .input
@@ -212,7 +220,8 @@ fn refusal(connection: &Connection, task: &Image) -> Result<Option<String>> {
             ],
         )));
     }
-    if let Some(rule) = &task.rule
+    if task.rule_stated
+        && let Some(rule) = &task.rule
         && let Err(why) = rrule::inspect(rule)
     {
         return Ok(Some(format!("{rule}: {}", why.message())));

@@ -28,7 +28,6 @@ use centraid_vault::time::occurrence::{self, SeriesType, StoredExceptionRow};
 use centraid_vault::time::recurrence::{
     self, ExpandInput, Occurrence, Semantics, parse_instant_ms, shift_temporal,
 };
-use centraid_vault::time::rrule;
 use centraid_vault::time::zone::FireZone;
 use serde_json::Value;
 
@@ -218,14 +217,4 @@ fn occurrence_row(
         recurrence_overlap: Some(instance.overlap),
         ..event.clone()
     }
-}
-
-/// THE ONE MEMBER-FACING RECURRENCE SENTENCE, resolved here (#834).
-///
-/// The row carries the sentence and **never the raw rule**. A second
-/// summariser anywhere is the defect `describe` exists to prevent, so this is
-/// a call and not a grammar.
-#[must_use]
-pub fn recurrence_summary(rrule: Option<&str>) -> Option<String> {
-    rrule::describe(rrule?)
 }

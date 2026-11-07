@@ -90,6 +90,8 @@ pub(super) struct Home {
     /// The Calendar view last used: where the band's Calendar tab returns to.
     last_calendar: Dest,
     sheet: Sheet,
+    /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
+    import_completed: bool,
     filing_task_id: String,
     /// The style sheet's draft: the new list, the new calendar or the calendar being edited.
     style: Option<Draft>,
@@ -138,6 +140,7 @@ impl Home {
                 Dest::Day
             },
             sheet: Sheet::None,
+            import_completed: false,
             filing_task_id: String::new(),
             style: None,
             quick: QuickAdd {
@@ -333,6 +336,13 @@ impl Home {
                 }
             }
             H::StyleSubmitted(_) => self.submit_style(ctx),
+            // THE IMPORT REMINDERS SHEET (iOS): the switch, then the verb.
+            H::ImportRemindersCompleted(_) => {
+                if self.sheet == Sheet::ImportReminders {
+                    self.import_completed = !self.import_completed;
+                }
+            }
+            H::ImportRemindersSubmitted(_) => self.import_reminders(ctx),
             H::CalendarEdit(asked) => self.edit_calendar(&asked.calendar_id, ctx),
             // THE EMPTY TO-DO'S ONE ACTION is the new-project sheet.
             H::TodoEmptyActed(_) => {
@@ -415,6 +425,9 @@ impl Home {
         };
         if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
+        } else if row.key == chrome::MORE_IMPORT_REMINDERS {
+            self.import_completed = false;
+            self.sheet = Sheet::ImportReminders;
         } else if row.key == chrome::MORE_NEW_CALENDAR {
             self.open_sheet(Sheet::NewCalendar);
         } else if let Some(id) = row.key.strip_prefix(chrome::MORE_CALENDAR) {
@@ -424,6 +437,31 @@ impl Home {
             // A TASKS PLACE IS A PAGE: the sheet closes, and the shell pushes the row's route.
             self.sheet = Sheet::None;
         }
+    }
+
+    /// The Import reminders sheet's verb: ask the ONE reminders import (`imports.made`'s
+    /// `RemindersRequested`) to read the phone with the sheet's option. It runs without the import
+    /// status banner's offer and says its outcome on the import status line, in the import's own
+    /// words. Only where the platform has a Reminders store; the sheet shuts either way.
+    fn import_reminders(&mut self, ctx: &Ctx) {
+        if self.sheet != Sheet::ImportReminders {
+            return;
+        }
+        let include_completed = std::mem::take(&mut self.import_completed);
+        self.sheet = Sheet::None;
+        if !ctx.reminders_source() {
+            return;
+        }
+        ctx.post(
+            crate::imports::MADE,
+            wire::ScreenEvent {
+                kind: Some(E::ImportsMade(wire::ImportsMadeEvent {
+                    kind: Some(wire::imports_made_event::Kind::RemindersRequested(
+                        wire::imports_made_event::RemindersRequested { include_completed },
+                    )),
+                })),
+            },
+        );
     }
 
     /// A filing choice: the write it makes, with the sheet shut.
@@ -556,7 +594,12 @@ impl Home {
             .data(ctx)
             .map(|data| data.calendars)
             .unwrap_or_default();
-        chrome::more_rows(ctx.locale(), &calendars, self.shows_calendars())
+        chrome::more_rows(
+            ctx.locale(),
+            &calendars,
+            self.shows_calendars(),
+            ctx.reminders_source(),
+        )
     }
 
     /// The calendars are known (the data is the events' fold, not To-do's), so
@@ -658,7 +701,10 @@ impl Screen for Home {
         } else {
             String::new()
         };
-        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads);
+        let sheet_up = matches!(
+            self.sheet,
+            Sheet::More | Sheet::Reads | Sheet::ImportReminders
+        );
         let today = data
             .as_ref()
             .map(|data| data.today.clone())
@@ -710,6 +756,7 @@ impl Screen for Home {
                             data.as_ref()
                                 .map_or(&[][..], |data| data.calendars.as_slice()),
                             data.is_some() && self.shows_calendars(),
+                            ctx.reminders_source(),
                         )
                     },
                     search_corrected: corrected,
@@ -760,6 +807,9 @@ impl Screen for Home {
                             )
                         })
                         .map(|draft| Box::new(draft.sheet(locale))),
+                    import_reminders: (self.sheet == Sheet::ImportReminders
+                        && ctx.reminders_source())
+                    .then(|| chrome::import_reminders_sheet(locale, self.import_completed)),
                     // "Add", not "New event": on Day, Schedule and Waiting the Plus
                     // opens the sheet that adds an event or a task (R-1128-Z1).
                     add_label: if todo {

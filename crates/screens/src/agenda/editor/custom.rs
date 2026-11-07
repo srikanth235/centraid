@@ -20,9 +20,12 @@ use super::repeat::{
     WEEKDAYS,
 };
 use crate::agenda::event::long_day;
+use crate::agenda::rule_words::{self, weekday_full};
 use crate::kit::civil;
 use crate::strings::agenda_repeat as words;
-use crate::strings::{Locale, agenda as day_words, fill};
+use crate::strings::{Locale, agenda as day_words};
+use centraid_vault::time::Freq as VaultFreq;
+use centraid_vault::time::rrule::{DAY_TOKENS, DayRule, RuleShape, ShapeEnd};
 use wire::agenda_editor_state::Sheet;
 
 /// What the open sheet holds.
@@ -31,19 +34,6 @@ pub struct Custom {
     pub spec: Spec,
     /// The stored rule cannot be shown part by part.
     pub read_only: bool,
-}
-
-/// The full name of a weekday token: `Monday`.
-fn weekday_full(locale: Locale, token: &str) -> String {
-    match token {
-        "MO" => day_words::weekday_full_mon(locale),
-        "TU" => day_words::weekday_full_tue(locale),
-        "WE" => day_words::weekday_full_wed(locale),
-        "TH" => day_words::weekday_full_thu(locale),
-        "FR" => day_words::weekday_full_fri(locale),
-        "SA" => day_words::weekday_full_sat(locale),
-        _ => day_words::weekday_full_sun(locale),
-    }
 }
 
 fn weekday_short(locale: Locale, token: &str) -> String {
@@ -68,95 +58,82 @@ fn ordinal_word(locale: Locale, ordinal: i32) -> String {
     }
 }
 
-/// `a`, `a and b`, `a, b and c`.
-fn join(locale: Locale, items: &[String]) -> String {
-    match items {
-        [] => String::new(),
-        [only] => only.clone(),
-        [rest @ .., last] => {
-            let head = rest.iter().skip(1).fold(rest[0].clone(), |text, item| {
-                fill(&words::list_comma(locale), &[("a", &text), ("b", item)])
-            });
-            fill(
-                &words::list_last(locale),
-                &[("rest", &head), ("last", last)],
-            )
+/// The vault's structural view of what the sheet holds: the same shape a
+/// stored rule has, so the sheet and a stored rule say ONE wording
+/// ([`rule_words::sentence`]).
+fn shape_of(spec: &Spec) -> RuleShape {
+    let day_index = |token: &str| {
+        DAY_TOKENS
+            .iter()
+            .position(|candidate| *candidate == token)
+            .and_then(|at| u8::try_from(at).ok())
+            .unwrap_or(0)
+    };
+    let mut weekdays: Vec<DayRule> = Vec::new();
+    let mut month_days: Vec<i64> = Vec::new();
+    match (spec.freq, spec.month_mode) {
+        (Freq::Weekly, _) => {
+            weekdays = spec
+                .sorted_weekdays()
+                .iter()
+                .map(|day| DayRule {
+                    ordinal: None,
+                    day: day_index(day),
+                })
+                .collect();
         }
+        (Freq::Monthly, MonthMode::Date) => {
+            month_days = spec
+                .sorted_month_days()
+                .iter()
+                .map(|day| i64::from(*day))
+                .collect();
+        }
+        (Freq::Monthly, MonthMode::Nth) => {
+            weekdays = vec![DayRule {
+                ordinal: Some(i64::from(spec.ordinal)),
+                day: day_index(spec.nth_day),
+            }];
+        }
+        _ => {}
+    }
+    let end = match spec.end {
+        End::Never => ShapeEnd::Never,
+        End::On => civil::epoch_day_of(&spec.until_day)
+            .and_then(|_| {
+                let mut parts = spec.until_day.split('-');
+                Some(ShapeEnd::Until {
+                    year: parts.next()?.parse().ok()?,
+                    month: parts.next()?.parse().ok()?,
+                    day: parts.next()?.parse().ok()?,
+                })
+            })
+            .unwrap_or(ShapeEnd::Never),
+        End::After => ShapeEnd::Count(i64::from(spec.count.max(1))),
+    };
+    RuleShape {
+        freq: match spec.freq {
+            Freq::Daily => VaultFreq::Daily,
+            Freq::Weekly => VaultFreq::Weekly,
+            Freq::Monthly => VaultFreq::Monthly,
+            Freq::Yearly => VaultFreq::Yearly,
+        },
+        interval: i64::from(spec.interval.max(1)),
+        weekdays,
+        month_days,
+        year_days: Vec::new(),
+        week_numbers: Vec::new(),
+        months: Vec::new(),
+        set_positions: Vec::new(),
+        end,
     }
 }
 
 /// THE SENTENCE THE RULE SAYS: "Every 2 weeks on Monday and Friday, until
-/// Thursday 31 December".
+/// Thursday 31 December". The same words a stored rule is read in.
 #[must_use]
 pub fn summary(locale: Locale, spec: &Spec) -> String {
-    let steps = u64::try_from(spec.interval.max(1)).unwrap_or(1);
-    let cadence = match spec.freq {
-        Freq::Daily => words::every_days(locale, steps),
-        Freq::Weekly => {
-            let days: Vec<String> = spec
-                .sorted_weekdays()
-                .iter()
-                .map(|day| weekday_full(locale, day))
-                .collect();
-            if days.is_empty() {
-                words::every_weeks(locale, steps)
-            } else {
-                fill(
-                    &words::weekly_on(locale, steps),
-                    &[("days", &join(locale, &days))],
-                )
-            }
-        }
-        Freq::Monthly => match spec.month_mode {
-            MonthMode::Date => {
-                let days: Vec<String> = spec
-                    .sorted_month_days()
-                    .iter()
-                    .map(|day| {
-                        if *day == LAST_DAY {
-                            words::last_day(locale).to_lowercase()
-                        } else {
-                            civil::ordinal(u32::try_from(*day).unwrap_or(1))
-                        }
-                    })
-                    .collect();
-                if days.is_empty() {
-                    words::every_months(locale, steps)
-                } else {
-                    fill(
-                        &words::monthly_on_dates(locale, steps),
-                        &[("days", &join(locale, &days))],
-                    )
-                }
-            }
-            MonthMode::Nth => fill(
-                &words::monthly_on_nth(locale, steps),
-                &[
-                    (
-                        "ordinal",
-                        &ordinal_word(locale, spec.ordinal).to_lowercase(),
-                    ),
-                    ("weekday", &weekday_full(locale, spec.nth_day)),
-                ],
-            ),
-        },
-        Freq::Yearly => words::every_years(locale, steps),
-    };
-    match spec.end {
-        End::Never => cadence,
-        End::On if civil::epoch_day_of(&spec.until_day).is_some() => fill(
-            &words::ending_until(locale),
-            &[
-                ("cadence", &cadence),
-                ("day", &long_day(locale, &spec.until_day)),
-            ],
-        ),
-        End::On => cadence,
-        End::After => fill(
-            &words::ending_count(locale, u64::try_from(spec.count.max(1)).unwrap_or(1)),
-            &[("cadence", &cadence)],
-        ),
-    }
+    rule_words::sentence(locale, &shape_of(spec))
 }
 
 /// The sentence a problem says.
@@ -364,7 +341,8 @@ impl Editor {
         if custom.read_only {
             let summary = self
                 .event()
-                .and_then(|event| event.recurrence_summary.clone())
+                .and_then(|event| event.rrule.as_deref())
+                .and_then(|rule| rule_words::of_rule(locale, rule))
                 .filter(|_| draft::same_repeat(draft, self.baseline.as_ref().unwrap_or(draft)))
                 .unwrap_or_else(|| words::unrepresentable(locale));
             return Some(wire::AgendaCustomRepeatSheet {
@@ -488,5 +466,34 @@ impl Editor {
             count: spec.count,
             count_label: words::count_label(locale, u64::try_from(spec.count.max(1)).unwrap_or(1)),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ONE WORDING (owner decision, #1173): the sentence the sheet builds from
+    /// its spec is the sentence a stored rule says, for every rule the sheet
+    /// can show.
+    #[test]
+    fn the_sheet_and_a_stored_rule_say_the_same_words() {
+        for rule in [
+            "FREQ=DAILY",
+            "FREQ=DAILY;INTERVAL=3;COUNT=5",
+            "FREQ=WEEKLY;BYDAY=MO,FR",
+            "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=2030-12-31",
+            "FREQ=MONTHLY;BYMONTHDAY=1,15,-1",
+            "FREQ=MONTHLY;INTERVAL=2;BYDAY=2MO",
+            "FREQ=MONTHLY;BYDAY=-1FR;COUNT=1",
+            "FREQ=YEARLY",
+        ] {
+            let spec = repeat::from_rrule(rule, "2026-06-10").expect("the sheet shows it");
+            assert_eq!(
+                summary(Locale::En, &spec),
+                rule_words::of_rule(Locale::En, rule).expect("words"),
+                "{rule}"
+            );
+        }
     }
 }

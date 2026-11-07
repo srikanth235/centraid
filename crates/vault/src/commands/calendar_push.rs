@@ -19,10 +19,26 @@
 //! ([`crate::commands::follow::SystemMap::unlink_mark`]), which is why such an event is not owed a
 //! create (C5).
 //!
+//! ## C12: a restore after a pushed delete re-creates the event on the phone
+//!
+//! The member trashed a followed event, the shell deleted the phone's copy (C6) and the source was
+//! tombstoned; later the member restores it from the trash. The event is theirs again and belongs in
+//! its phone calendar, so it must be owed a CREATE again. The mechanism is not a new rule or a new
+//! column: **C6 leaves the tombstone in the form a purge leaves**, a source of no row
+//! (`entity_id` NULL, the answer to the phone's old id), so a restored event has no source and the
+//! derived create above is owed to it. When the shell answers, `follow.pushed` links the NEW id the
+//! phone minted by inserting a new source row; the tombstone is never relinked
+//! (`source_tombstone_is_final` forbids it), and the next complete read that no longer holds its old
+//! record forgets it, as for any tombstone. A restore needs no code of its own and cannot be told
+//! from a restore of any other trashed event; what it cannot do is reach the cases that must NOT
+//! re-create, because they keep a LINKED source row and so are never "no source": the C5 marker (the
+//! phone deleted an event the member had edited: `gone_at` set, the event live) and the follower's
+//! own C4 trash, which the record's return undoes.
+//!
 //! [`pushed`] is `follow.pushed`: the shell's answers. For an item that went through it records
 //! what the phone now holds (`stated`), links a created event to the id the phone minted, tombstones
-//! a deleted one (C6), or forgets a delete the phone declined because it had changed (C7). A failed
-//! item changes nothing.
+//! a deleted one (C6; C12 for a restore of it), or forgets a delete the phone declined because it
+//! had changed (C7). A failed item changes nothing.
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json, json};
@@ -505,9 +521,15 @@ fn pushed(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                     connection.execute("DELETE FROM source WHERE id = ?1", [&source])?;
                     unlinked += 1;
                 } else {
-                    // C6: deleted on the phone; the source is tombstoned, never owed again.
+                    // C6: deleted on the phone. The source becomes a TOMBSTONE of the phone's
+                    // old id, the form a purge leaves it in (a source of no row): never owed again,
+                    // the phone's returning record is not re-imported over the member's trash, and
+                    // an explicit restore of the event later finds it with no source, so a create
+                    // is owed again (C12). `UPDATE`, never `REPLACE`.
                     connection.execute(
-                        "UPDATE source SET gone_at = ?2, seen_at = ?2 WHERE id = ?1",
+                        "UPDATE source SET entity_id = NULL, entity_kind = NULL,
+                                           gone_at = ?2, seen_at = ?2
+                          WHERE id = ?1",
                         [&source, &ctx.now],
                     )?;
                     deleted += 1;

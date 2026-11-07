@@ -133,6 +133,15 @@ struct AgendaHomeView: View {
         .sheet(isPresented: sheetBinding(state, .reads)) {
             AgendaReadsSheet(chrome: state.chrome)
         }
+        // THE REMINDERS IMPORT (iOS): the option and the verb, opened from More. The verb asks the
+        // one import (`imports.made`) to read the phone's Reminders; its outcome is the import line's.
+        .sheet(isPresented: sheetBinding(state, .importReminders)) {
+            AgendaImportRemindersSheet(
+                sheet: state.importReminders,
+                onToggle: { send(AgendaEvents.make { $0.importRemindersCompleted = .init() }) },
+                onImport: { send(AgendaEvents.make { $0.importRemindersSubmitted = .init() }) }
+            )
+        }
         .sheet(isPresented: sheetBinding(state, .file)) {
             OptionSheet(title: state.chrome.tasks.fileTitle) {
                 ForEach(state.fileChoices, id: \.key) { choice in
@@ -862,6 +871,39 @@ private struct AgendaMoreSheet: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// THE IMPORT REMINDERS SHEET: one switch ("Include completed reminders", off until turned on) and
+/// the one verb. Both words are Rust's (`ImportsMadeState`'s); the switch's state is the core's and a
+/// flip is an event; the verb is `SheetRoom`'s one ink button.
+private struct AgendaImportRemindersSheet: View {
+    let sheet: Centraid_Core_V1_AgendaImportRemindersSheet
+    let onToggle: () -> Void
+    let onImport: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            primary: SheetPrimary(
+                label: sheet.importLabel,
+                identifier: "agenda-import-reminders-go",
+                action: onImport
+            ),
+            titleIdentifier: "agenda-import-reminders-sheet"
+        ) {
+            Toggle(isOn: Binding(
+                get: { sheet.completedOn },
+                set: { _ in onToggle() }
+            )) {
+                Text(sheet.completedLabel)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+            }
+            .kitToggle()
+            .accessibilityIdentifier("agenda-import-reminders-completed")
         }
     }
 }

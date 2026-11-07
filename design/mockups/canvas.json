@@ -26,6 +26,22 @@
       "x": 0,
       "y": 15080
     },
+    "AgendaEventAttachments.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "13 · Event with attachments",
+      "w": 390,
+      "x": 5640,
+      "y": 3480
+    },
+    "AgendaEventAttachmentsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "13 · Event with attachments · dark",
+      "w": 390,
+      "x": 5640,
+      "y": 3480
+    },
     "AgendaEventCancel.dc.html": {
       "h": 844,
       "page": "light",
@@ -65,6 +81,22 @@
       "w": 390,
       "x": 940,
       "y": 15080
+    },
+    "AgendaTaskDetail.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "14 · Task with a link and attachments",
+      "w": 390,
+      "x": 6110,
+      "y": 3480
+    },
+    "AgendaTaskDetailDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "14 · Task with a link and attachments · dark",
+      "w": 390,
+      "x": 6110,
+      "y": 3480
     },
     "AndroidChat.dc.html": {
       "h": 915,
@@ -346,6 +378,38 @@
       "x": 0,
       "y": 3480
     },
+    "CalendarStyle.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · New calendar",
+      "w": 390,
+      "x": 3760,
+      "y": 3480
+    },
+    "CalendarStyleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · New calendar · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 3480
+    },
+    "CalendarStyleEdit.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Edit calendar",
+      "w": 390,
+      "x": 4230,
+      "y": 3480
+    },
+    "CalendarStyleEditDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Edit calendar · dark",
+      "w": 390,
+      "x": 4230,
+      "y": 3480
+    },
     "Chat.dc.html": {
       "h": 844,
       "page": "light",
@@ -379,7 +443,7 @@
       "y": 15080
     },
     "CodeMap.dc.html": {
-      "h": 1300,
+      "h": 1768,
       "page": "rules",
       "title": "Code map",
       "w": 1200,
@@ -393,6 +457,22 @@
       "w": 1200,
       "x": 2560,
       "y": 0
+    },
+    "CustomRepeat.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Custom repeat",
+      "w": 390,
+      "x": 4700,
+      "y": 3480
+    },
+    "CustomRepeatDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Custom repeat · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 3480
     },
     "Decisions.dc.html": {
       "h": 1780,
@@ -505,6 +585,22 @@
       "w": 390,
       "x": 0,
       "y": 18560
+    },
+    "EventEditorRows.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Event editor, more rows",
+      "w": 390,
+      "x": 5170,
+      "y": 3480
+    },
+    "EventEditorRowsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Event editor, more rows · dark",
+      "w": 390,
+      "x": 5170,
+      "y": 3480
     },
     "FilterMenu.dc.html": {
       "h": 844,
@@ -650,6 +746,22 @@
       "x": 1280,
       "y": 0
     },
+    "ImportReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "15 · Import reminders (iOS)",
+      "w": 390,
+      "x": 6580,
+      "y": 3480
+    },
+    "ImportRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "15 · Import reminders (iOS) · dark",
+      "w": 390,
+      "x": 6580,
+      "y": 3480
+    },
     "LargeText.dc.html": {
       "h": 844,
       "page": "light",
@@ -680,6 +792,38 @@
       "title": "4 · A list, adding inline · dark",
       "w": 390,
       "x": 1410,
+      "y": 3480
+    },
+    "ListStyle.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · New list",
+      "w": 390,
+      "x": 2820,
+      "y": 3480
+    },
+    "ListStyleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · New list · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 3480
+    },
+    "ListStyleEdit.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Edit list",
+      "w": 390,
+      "x": 3290,
+      "y": 3480
+    },
+    "ListStyleEditDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Edit list · dark",
+      "w": 390,
+      "x": 3290,
       "y": 3480
     },
     "LockScreen.dc.html": {
@@ -1861,6 +2005,15 @@
     "List.dc.html",
     "Details.dc.html",
     "Swipe.dc.html",
+    "ListStyle.dc.html",
+    "ListStyleEdit.dc.html",
+    "CalendarStyle.dc.html",
+    "CalendarStyleEdit.dc.html",
+    "CustomRepeat.dc.html",
+    "EventEditorRows.dc.html",
+    "AgendaEventAttachments.dc.html",
+    "AgendaTaskDetail.dc.html",
+    "ImportReminders.dc.html",
     "Locker.dc.html",
     "LockerItem.dc.html",
     "People.dc.html",
@@ -1945,6 +2098,15 @@
     "ListDark.dc.html",
     "DetailsDark.dc.html",
     "SwipeDark.dc.html",
+    "ListStyleDark.dc.html",
+    "ListStyleEditDark.dc.html",
+    "CalendarStyleDark.dc.html",
+    "CalendarStyleEditDark.dc.html",
+    "CustomRepeatDark.dc.html",
+    "EventEditorRowsDark.dc.html",
+    "AgendaEventAttachmentsDark.dc.html",
+    "AgendaTaskDetailDark.dc.html",
+    "ImportRemindersDark.dc.html",
     "LockerDark.dc.html",
     "LockerItemDark.dc.html",
     "PeopleDark.dc.html",

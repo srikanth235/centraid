@@ -2,7 +2,7 @@
 //! snapshots, the core merges them into the vault and, when something is owed to a writable phone
 //! calendar, asks the shell to write it with ONE `CalendarWrite`; the shell answers
 //! `CalendarWritten` and the core records it (`follow.pushed`). Each conflict rule of the design
-//! (C1..C11) has its own test, driven through a real vault and the runtime: snapshots and answers
+//! (C1..C12) has its own test, driven through a real vault and the runtime: snapshots and answers
 //! go in, the effects asked and the vault's rows come out.
 
 mod agenda_event_support;
@@ -316,7 +316,7 @@ fn only(write: &wire::CalendarWrite) -> &wire::CalendarWriteItem {
 }
 
 // ---------------------------------------------------------------------------
-// C1..C11
+// C1..C12
 // ---------------------------------------------------------------------------
 
 /// C1: the phone changed a field and the vault did not: the vault takes it, and nothing is written.
@@ -439,6 +439,79 @@ fn c6_a_trashed_event_the_phone_still_holds_is_deleted_there_once() {
     // Gone from the phone: no later pass writes anything for it.
     phone.pass(writable_work(vec![]));
     assert!(phone.writes().is_empty());
+}
+
+/// C12: the member restores an event whose phone copy was deleted (C6): it is owed a CREATE again
+/// in its writable phone calendar, the shell answers with the new id, and the event is linked to it.
+#[test]
+fn c12_a_restored_event_is_created_again_on_the_phone_and_linked_to_its_new_id() {
+    let mut phone = with_offsite();
+    let id = phone.id("Offsite");
+    // C6: trashed, and deleted on the phone.
+    phone.act(act::agenda::TrashEvent {
+        event_id: id.clone(),
+    });
+    assert_eq!(only(&phone.writes()[0]).op, Op::Delete as i32);
+    phone.written_ok();
+    assert!(phone.writes().is_empty());
+
+    // The member restores it from the trash.
+    phone.act(act::agenda::RestoreEvent {
+        event_id: id.clone(),
+    });
+    let writes = phone.writes();
+    assert_eq!(writes.len(), 1, "one CalendarWrite: {writes:?}");
+    let item = only(&writes[0]);
+    assert_eq!(item.op, Op::Create as i32);
+    assert_eq!(item.event_id, id);
+    assert_eq!(item.calendar_key, WORK);
+    assert!(item.external_id.is_empty(), "the phone mints the id");
+    let fields = item.fields.as_ref().expect("fields");
+    assert_eq!(fields.title, "Offsite");
+    assert_eq!(fields.start, "2099-03-10T12:00:00");
+    assert_eq!(fields.tz, "Europe/Paris");
+
+    // The shell created it and answers with the id the phone gave it: the event is linked.
+    phone.written_ok();
+    assert!(phone.writes().is_empty(), "linked: not created twice");
+    let reborn = format!("local:made-{id}");
+    phone.pass(writable_work(vec![meeting("Offsite", &reborn)]));
+    assert!(phone.writes().is_empty());
+    let shown: Vec<wire::AgendaEvent> = phone
+        .world
+        .window("2099-01-01T00:00:00Z", "2099-12-31T00:00:00Z")
+        .into_iter()
+        .filter(|event| event.summary.as_deref() == Some("Offsite"))
+        .collect();
+    assert_eq!(shown.len(), 1, "one event, linked, not imported twice");
+    assert_eq!(shown[0].event_id, id);
+    // And editing it now writes an UPDATE to the new copy, which is the proof it is linked.
+    phone.edit_title(&id, "Offsite (again)");
+    let writes = phone.writes();
+    let item = only(&writes[0]);
+    assert_eq!(item.op, Op::Update as i32);
+    assert_eq!(item.external_id, reborn);
+}
+
+/// C12 does not reach C5: an event the phone deleted and the member had edited is never created
+/// again, even after the member trashes and restores it.
+#[test]
+fn c12_never_recreates_an_event_the_phone_deleted_after_the_member_edited_it() {
+    let mut phone = with_offsite();
+    let id = phone.id("Offsite");
+    phone.edit_title(&id, "Mine");
+    phone.written(vec![wire::CalendarWrittenItem {
+        event_id: id.clone(),
+        ok: false,
+        ..wire::CalendarWrittenItem::default()
+    }]);
+    phone.pass(writable_work(vec![]));
+    assert!(phone.event("Mine").is_some());
+    phone.act(act::agenda::TrashEvent {
+        event_id: id.clone(),
+    });
+    phone.act(act::agenda::RestoreEvent { event_id: id });
+    assert!(phone.writes().is_empty(), "the phone's delete is final");
 }
 
 /// C7: the vault trashed it but the phone's copy changed since: the phone keeps it, the vault
@@ -837,4 +910,106 @@ fn alerts_and_guests_ride_the_record_alerts_once_each_and_guests_only_when_there
     let bare = &batch.records[1].fields;
     assert!(bare["reminders"].is_null());
     assert!(bare.get("attendees").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// A stored rule this build cannot read (#1173, owner decision)
+// ---------------------------------------------------------------------------
+
+/// An imported series whose rule the engine does not expand (a sub-daily rule, `BYHOUR`) is
+/// stored as the phone said it. It must still load: the event shows once, at its anchor; its
+/// detail renders; the editor opens it read-only as Custom and offers Replace; and Replace with a
+/// rule the engine reads writes it.
+#[test]
+fn a_followed_series_whose_rule_this_build_cannot_read_still_loads_everywhere() {
+    use wire::agenda_editor_event as events;
+    use wire::agenda_editor_event::Kind as K;
+
+    const UNREADABLE: &str = "FREQ=DAILY;BYHOUR=9";
+    let mut phone = phone(false);
+    let day = |day: &str| wire::PhoneCalendarEvent {
+        title: "Standup".to_owned(),
+        start: format!("{day}T09:00:00"),
+        end: format!("{day}T09:30:00"),
+        tz: "Europe/Paris".to_owned(),
+        series: Some(wire::PhoneCalendarSeries {
+            id: "uid:standup".to_owned(),
+            rrule: format!("RRULE:{UNREADABLE}"),
+            start: "2099-03-02T09:00:00".to_owned(),
+            end: "2099-03-02T09:30:00".to_owned(),
+        }),
+        phone_id: format!("local:ek-{day}"),
+        calendar_key: WORK.to_owned(),
+        ..wire::PhoneCalendarEvent::default()
+    };
+    phone.import(writable_work(vec![day("2099-03-02")]));
+
+    // It shows, once, at its anchor, carrying the stored rule for the editor.
+    let shown: Vec<wire::AgendaEvent> = phone
+        .world
+        .window("2099-01-01T00:00:00Z", "2099-12-31T00:00:00Z")
+        .into_iter()
+        .filter(|event| event.summary.as_deref() == Some("Standup"))
+        .collect();
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    let id = shown[0].event_id.clone();
+    assert_eq!(shown[0].rrule.as_deref(), Some(UNREADABLE));
+
+    // Its detail renders, and says "Custom" for a rule nobody can read, never the rule.
+    let page = phone.world.open_event(&id, &id, None, "2099-03-02");
+    let data = phone.world.event_data(page);
+    let repeats = data
+        .facts
+        .iter()
+        .find(|fact| fact.label == "Repeats")
+        .expect("a repeat fact");
+    assert_eq!(repeats.detail, "Custom");
+    assert!(!data.facts.iter().any(|fact| fact.detail.contains("BYHOUR")));
+
+    // The editor opens it read-only as Custom, with Replace.
+    let editor = phone.world.open_edit(&id, "", None, "2099-03-02");
+    assert_eq!(phone.world.draft(editor).repeat_key, "custom");
+    phone.world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    let sheet = phone
+        .world
+        .editor_data(editor)
+        .custom_repeat
+        .clone()
+        .expect("the sheet");
+    assert!(sheet.read_only);
+    assert_eq!(sheet.replace_label, "Replace this rule");
+    assert!(!sheet.summary.is_empty() && !sheet.summary.contains("BYHOUR"));
+    // Done leaves the stored rule alone: nothing to save.
+    phone
+        .world
+        .send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(!phone.world.editor_data(editor).dirty);
+    // Replace starts a fresh rule the engine reads, and saving writes it.
+    phone.world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    phone
+        .world
+        .send_editor(editor, K::CustomReplace(events::CustomReplaceTapped {}));
+    assert!(
+        !phone
+            .world
+            .editor_data(editor)
+            .custom_repeat
+            .clone()
+            .expect("sheet")
+            .read_only
+    );
+    phone
+        .world
+        .send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(phone.world.editor_data(editor).dirty);
 }

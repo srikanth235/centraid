@@ -366,9 +366,8 @@ fn every_spec_round_trips_through_its_rule() {
             Some(rule.as_str()),
             "{rule}"
         );
-        // A summary exists and is a sentence, never the rule.
-        let said = rrule::describe(&rule).unwrap_or_else(|| panic!("{rule}: words"));
-        assert!(!said.contains('='), "{said}");
+        // A shape exists for the one summariser (the core strings).
+        assert!(rrule::shape(&rule).is_some(), "{rule}: a shape");
     }
 }
 

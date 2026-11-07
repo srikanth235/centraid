@@ -5,11 +5,11 @@
 //!
 //! - **A zoned rule keeps its WALL CLOCK through an offset change.** A 09:00
 //!   series is a 09:00 series on both sides of a DST boundary, because every
-//!   step is civil arithmetic ([`super::zone::add_wall_days`],
-//!   [`super::zone::add_wall_months`]) and the instant is resolved once, at
-//!   the end.
-//! - **A gap is skipped and a fold occurs once, at the earlier instant**
-//!   ([`super::zone::FireZone::resolve_wall_time`]).
+//!   step is civil arithmetic ([`super::period`]'s day numbers) and the
+//!   instant is resolved once, at the end.
+//! - **A gap moves forward and a fold occurs once, at the earlier instant**
+//!   ([`super::zone::FireZone::resolve_wall_time_forward`]): RFC 5545 section
+//!   3.3.5, owner decision on #1173.
 //! - **A refused rule expands to NO occurrences** — never to a plausible
 //!   series that means something else ([`super::rrule`]).
 //! - **An exception keys off the unmodified original occurrence**: the
@@ -275,7 +275,10 @@ fn resolve_candidate(
 ) -> Option<Occurrence> {
     let wall_start = wall_iso(wall, semantics != Semantics::AllDay);
     if semantics == Semantics::Zoned {
-        let resolved = zone?.resolve_wall_time(wall)?;
+        // A GAP MOVES FORWARD by the gap and still counts (RFC 5545 section
+        // 3.3.5, owner decision on #1173); `wall_start` stays the series'
+        // own wall clock, which is the exception key.
+        let resolved = zone?.resolve_wall_time_forward(wall);
         return Some(Occurrence {
             original_start: resolved.instant.clone(),
             start: resolved.instant,
@@ -323,8 +326,9 @@ const MAX_PERIODS: usize = 120_000;
 /// unsupported rule, an unreadable anchor or an empty range yields **no
 /// occurrences** rather than a plausible series meaning something else.
 ///
-/// `COUNT` counts the occurrences that exist: a candidate the zone's spring
-/// gap swallows is not one, and nor is one before the anchor. `max_instances`
+/// `COUNT` counts every occurrence of the series, a candidate in the zone's
+/// spring gap included (it moves forward, RFC 5545), and not one before the
+/// anchor. `max_instances`
 /// caps what comes back, never what is counted.
 #[must_use]
 pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
@@ -376,8 +380,7 @@ pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
                 continue;
             }
             let Some(occurrence) = resolve_candidate(wall, input.semantics, input.zone) else {
-                // A GAP IS SKIPPED, not substituted: the wall time exists at
-                // no instant in this zone, so nothing can deliver it.
+                // Only a zoned series with no zone resolves to nothing.
                 continue;
             };
             let value = instant_for_comparison(&occurrence.start, input.semantics);
@@ -914,7 +917,11 @@ mod tests {
     }
 
     #[test]
-    fn an_occurrence_in_the_spring_gap_is_skipped_not_substituted() {
+    fn an_occurrence_in_the_spring_gap_moves_forward_by_the_gap_and_counts() {
+        // FLIPPED to RFC 5545 section 3.3.5 by the owner's decision on #1173
+        // (a two-way sync with EventKit and CalendarContract has to expand the
+        // phone's occurrences, and both move a gap time forward). It used to
+        // be skipped and not counted.
         let new_york = zone("America/New_York");
         let occurrences = expand(
             &ExpandInput::new(
@@ -930,10 +937,31 @@ mod tests {
             .map(|occurrence| occurrence.wall_start.as_str())
             .collect();
         assert!(
-            !walls.contains(&"2026-03-08T02:30:00"),
-            "02:30 does not exist on the 8th: {walls:?}"
+            walls.contains(&"2026-03-08T02:30:00"),
+            "the gap day is an occurrence, keyed by its own wall clock: {walls:?}"
         );
-        assert_eq!(walls.len(), 4, "four of the five days have an 02:30");
+        assert_eq!(walls.len(), 5, "all five days are occurrences");
+        let gap = occurrences
+            .iter()
+            .find(|occurrence| occurrence.wall_start == "2026-03-08T02:30:00")
+            .expect("the gap day");
+        assert_eq!(
+            gap.start, "2026-03-08T07:30:00.000Z",
+            "02:30 on the gap day is 03:30 EDT, which is 07:30Z"
+        );
+        assert!(!gap.overlap);
+        // And it COUNTS: five occurrences from the 6th end on the 10th.
+        let counted = expand(
+            &ExpandInput::new(
+                "FREQ=DAILY;COUNT=5",
+                "2026-03-06T07:30:00.000Z",
+                "2026-03-06T00:00:00.000Z",
+                "2026-04-01T00:00:00.000Z",
+            )
+            .in_zone(&new_york),
+        );
+        assert_eq!(counted.len(), 5);
+        assert_eq!(counted[4].wall_start, "2026-03-10T02:30:00");
     }
 
     #[test]
@@ -1590,7 +1618,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pinned_day_in_the_spring_gap_is_skipped_and_one_in_the_fold_occurs_once() {
+    fn a_pinned_day_in_the_spring_gap_moves_forward_and_one_in_the_fold_occurs_once() {
         let la = zone("America/Los_Angeles");
         // 02:30 on the 8th of March 2026 does not exist in Los Angeles.
         let gap = expand(
@@ -1602,8 +1630,17 @@ mod tests {
             )
             .in_zone(&la),
         );
+        // RFC 5545 (owner decision on #1173): March's 02:30 is 03:30 PDT.
         let walls: Vec<&str> = gap.iter().map(|o| o.wall_start.as_str()).collect();
-        assert_eq!(walls, ["2026-02-08T02:30:00", "2026-04-08T02:30:00"]);
+        assert_eq!(
+            walls,
+            [
+                "2026-02-08T02:30:00",
+                "2026-03-08T02:30:00",
+                "2026-04-08T02:30:00"
+            ]
+        );
+        assert_eq!(gap[1].start, "2026-03-08T10:30:00.000Z");
         // 01:30 on the 1st of November happens twice; the earlier instant wins.
         let fold = expand(
             &ExpandInput::new(

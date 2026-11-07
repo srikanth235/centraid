@@ -25,6 +25,7 @@ catalog! {
     plain ordinal_second = ("Second", "Second");
     plain ordinal_third = ("Third", "Third");
     plain ordinal_fourth = ("Fourth", "Fourth");
+    plain ordinal_fifth = ("Fifth", "Fifth");
     plain ordinal_last = ("Last", "Last");
     plain ends_label = ("Ends", "Ends");
     plain end_never = ("Never", "Never");
@@ -37,23 +38,35 @@ catalog! {
         "This rule came from somewhere else and the editor cannot show its parts."
     );
 
-    // The live sentence: the cadence, then the end. A count of one is the
-    // singular form, so "Every day" is the one-step rule.
+    // THE ONE RECURRENCE SENTENCE (owner decision, #1173): the sheet's live
+    // summary and every stored rule's sentence are built from these, in
+    // `agenda::rule_words`. The cadence, then clauses for each part the rule
+    // carries, then the end. A count of one is the singular form, so "Every
+    // day" is the one-step rule.
     counted every_days = ("Every day", "Every {n} days");
     counted every_weeks = ("Every week", "Every {n} weeks");
     counted every_months = ("Every month", "Every {n} months");
     counted every_years = ("Every year", "Every {n} years");
-    counted weekly_on = ("Every week on {days}", "Every {n} weeks on {days}");
-    counted monthly_on_dates = (
-        "Every month on the {days}",
-        "Every {n} months on the {days}"
-    );
-    counted monthly_on_nth = (
-        "Every month on the {ordinal} {weekday}",
-        "Every {n} months on the {ordinal} {weekday}"
-    );
+    plain clause_on = ("on {items}", "on {items}");
+    plain clause_when = ("when it falls on {items}", "when it falls on {items}");
+    plain clause_in = ("in {items}", "in {items}");
+    plain clause_among = ("among {items}", "among {items}");
+    plain clause_year_days = ("on the {items} day of the year", "on the {items} day of the year");
+    plain the_items = ("the {items}", "the {items}");
+    plain nth_weekday = ("the {ordinal} {weekday}", "the {ordinal} {weekday}");
+    plain each_weekdays = ("each {days}", "each {days}");
+    plain ordinal_to_last = ("{ordinal} to last", "{ordinal} to last");
+    plain day_to_last = ("{ordinal} to last day", "{ordinal} to last day");
+    plain week_number = ("week {n}", "week {n}");
+    plain week_last = ("the last week", "the last week");
+    plain week_to_last = ("the {ordinal} to last week", "the {ordinal} to last week");
+    plain set_weekday = ("the {ordinals} weekday", "the {ordinals} weekday");
+    plain set_weekend_day = ("the {ordinals} weekend day", "the {ordinals} weekend day");
+    plain set_of_days = ("the {ordinals} of {days}", "the {ordinals} of {days}");
+    plain set_any_day = ("the {ordinals} day", "the {ordinals} day");
     plain list_last = ("{rest} and {last}", "{rest} and {last}");
     plain list_comma = ("{a}, {b}", "{a}, {b}");
+    plain until_date = ("{weekday} {day} {month} {year}", "{weekday} {day} {month} {year}");
     plain ending_until = ("{cadence}, until {day}", "{cadence}, until {day}");
     counted ending_count = ("{cadence}, once", "{cadence}, {n} times");
 

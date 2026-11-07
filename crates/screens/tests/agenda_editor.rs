@@ -11,6 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use centraid_screens::kit::civil;
+use centraid_screens::strings::Locale;
 use wire::agenda_editor_event::Kind as K;
 use wire::agenda_editor_state::Sheet;
 use wire::{AgendaEditorKind as Kind, AgendaScope as Scope};
@@ -630,15 +631,17 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
         "A repeat rule belongs to the whole series."
     );
     assert_eq!(data.draft.as_ref().expect("draft").repeat_key, "custom");
-    let summary = world
+    let rule = world
         .event_row(&series)
         .expect("event")
-        .recurrence_summary
-        .expect("a summary");
+        .rrule
+        .expect("a rule");
+    let summary =
+        centraid_screens::agenda::rule_words::of_rule(Locale::En, &rule).expect("a summary");
     assert_eq!(
         data.repeats.last().expect("custom last").label,
         summary,
-        "a rule as stored says what the vault says"
+        "a rule as stored says what the one summariser says"
     );
 
     world.title(page, "Daily sync");

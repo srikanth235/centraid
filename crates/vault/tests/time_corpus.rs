@@ -10,8 +10,8 @@
 //!
 //! | File | The claim it would falsify |
 //! |---|---|
-//! | `rrule-cases.json` | a part this engine cannot honour is REFUSED with v0's own sentence, and the summariser says v0's words |
-//! | `dst-cases.json` | a gap is skipped, a fold occurs once at the earlier instant, and a wall clock survives an offset change — in six zones, one with a 30-minute shift, one with negative DST and one at a :45 offset |
+//! | `rrule-cases.json` | a part this engine cannot honour is REFUSED with v0's own sentence, and the rule's shape exists exactly where v0 had a sentence (the words are the core strings', `crates/screens/tests/agenda_repeat_words.rs`) |
+//! | `dst-cases.json` | a gap moves forward and counts (RFC 5545, flipped by the owner on #1173), an implied 31st or Feb 29 is skipped (likewise), a fold occurs once at the earlier instant, and a wall clock survives an offset change — in six zones, one with a 30-minute shift, one with negative DST and one at a :45 offset |
 //! | `occurrence-cases.json` | the occurrence key is `original_start_local`, the SERIES-LOCAL WALL CLOCK, and keying on the resolved instant matches nothing (ONT-25) |
 
 use std::collections::BTreeMap;
@@ -142,10 +142,15 @@ fn every_rrule_case_agrees_with_v0() {
         match rrule::inspect(&value) {
             Ok(rule) if v0_accepted => {
                 accepted += 1;
+                // v0's English summary is no longer asserted here: the words
+                // moved to the core strings (owner decision, #1173), and the
+                // vault answers the rule's structure. The words are tested
+                // in `crates/screens/tests/agenda_repeat_words.rs` against
+                // this same corpus.
                 assert_eq!(
-                    rrule::describe(&value),
-                    case["summary"].as_str().map(str::to_owned),
-                    "{label}: the one summariser"
+                    rrule::shape(&value).is_some(),
+                    case["summary"].is_string(),
+                    "{label}: the rule has a shape exactly when v0 had a summary"
                 );
                 let expected = &case["rule"];
                 assert_eq!(
@@ -187,8 +192,8 @@ fn every_rrule_case_agrees_with_v0() {
                     "{label}: v0 refused {part} and this build accepted: not a widened part"
                 );
                 assert!(
-                    rrule::describe(&value).is_some(),
-                    "{label}: the one summariser has words for a rule it accepts"
+                    rrule::shape(&value).is_some(),
+                    "{label}: a rule the engine accepts has a shape for the one summariser"
                 );
                 widened_seen += 1;
             }
@@ -342,6 +347,22 @@ fn every_zoned_expansion_agrees_with_v0() {
         occurrences += case["occurrences"].as_array().map_or(0, Vec::len);
     }
     assert!(occurrences > 400, "{occurrences} occurrences compared");
+    // The cases the owner's RFC 5545 decision on #1173 FLIPPED from v0's answer
+    // (a gap moves forward and counts, section 3.3.5; an implied day a month
+    // lacks is skipped, section 3.3.10) say so, and each carries the answer
+    // an independent implementation (python-dateutil with zoneinfo) gives.
+    let flipped = cases
+        .iter()
+        .filter(|case| {
+            case["flipped"]
+                .as_str()
+                .is_some_and(|why| why.contains("RFC 5545"))
+        })
+        .count();
+    assert_eq!(
+        flipped, 13,
+        "one DST case and the implied-day cases of six zones"
+    );
 }
 
 #[test]
@@ -371,6 +392,17 @@ fn every_wall_clock_resolution_agrees_with_v0() {
         match case["instant"].as_str() {
             None => {
                 assert!(resolved.is_none(), "{label}: v0 found no instant (a GAP)");
+                // RFC 5545 section 3.3.5 (owner decision on #1173): a series
+                // moves a gap time FORWARD. `forward` is Python's `fold=0`
+                // reading of the same wall clock (PEP 495: the offset before
+                // the change), an independent implementation of the RFC's.
+                let forward = zone.resolve_wall_time_forward(wall);
+                assert_eq!(
+                    Some(forward.instant.as_str()),
+                    case["forward"].as_str(),
+                    "{label}: the RFC's reading of a gap"
+                );
+                assert!(!forward.overlap, "{label}");
                 gaps += 1;
             }
             Some(instant) => {

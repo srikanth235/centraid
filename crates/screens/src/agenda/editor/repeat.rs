@@ -357,9 +357,9 @@ pub fn from_rrule(rule: &str, start_day: &str) -> Option<Spec> {
             spec.month_days = days;
         }
         MonthlyBasis::ByDate(_) if spec.freq == Freq::Monthly => {
-            // A monthly rule with no day lands on the start's day of the month;
-            // past the 28th that is the month's last day in the short months,
-            // which "on the 31st" is not, so the sheet does not claim it.
+            // A monthly rule with no day lands on the start's day of the month, and past the
+            // 28th it skips the months without it (RFC 5545), which is "on the 31st" and not a
+            // pin this rule carries, so the sheet does not claim it.
             let dom = civil::day_of_month_of(start_day).filter(|dom| *dom <= 28)?;
             spec.month_mode = MonthMode::Date;
             spec.month_days = vec![i32::try_from(dom).ok()?];
@@ -423,7 +423,9 @@ mod tests {
         ] {
             assert_eq!(from_rrule(rule, START), None, "{rule}");
         }
-        // No pin on the 31st would mean a different rule in a short month.
+        // A plain monthly rule on the 31st stays read-only Custom: the sheet would have to add a
+        // pin (`BYMONTHDAY=31`) that the stored rule does not carry, and it never rewrites a rule
+        // it was not asked to. (Under RFC 5545 the two expand alike, owner decision on #1173.)
         assert_eq!(from_rrule("FREQ=MONTHLY", "2099-01-31"), None);
         assert!(from_rrule("FREQ=MONTHLY", START).is_some());
     }
@@ -455,5 +457,35 @@ mod tests {
         spec.end = End::After;
         spec.count = 0;
         assert_eq!(to_rrule(&spec, START), Err(Problem::Count));
+    }
+}
+
+#[cfg(test)]
+mod last_day_tests {
+    use super::*;
+
+    /// A start on the 29th to 31st gets "last" as the Custom sheet's weekday position
+    /// default, an EXPLICIT rule (`BYDAY=-1<weekday>`), and "Last day" is an explicit
+    /// `BYMONTHDAY=-1`: neither is the implied day, which RFC 5545 skips in short months
+    /// (owner decision on #1173).
+    #[test]
+    fn a_start_past_the_28th_defaults_to_the_last_weekday_and_writes_an_explicit_rule() {
+        // 2099-01-31 is a Saturday.
+        let mut spec = Spec::starting("2099-01-31");
+        assert_eq!(spec.ordinal, LAST_DAY);
+        spec.freq = Freq::Monthly;
+        spec.month_mode = MonthMode::Nth;
+        assert_eq!(
+            to_rrule(&spec, "2099-01-31").as_deref(),
+            Ok("FREQ=MONTHLY;BYDAY=-1SA")
+        );
+        spec.month_mode = MonthMode::Date;
+        spec.month_days = vec![LAST_DAY];
+        assert_eq!(
+            to_rrule(&spec, "2099-01-31").as_deref(),
+            Ok("FREQ=MONTHLY;BYMONTHDAY=-1")
+        );
+        // The 22nd's own place is the fourth, never a fifth.
+        assert_eq!(Spec::starting("2099-01-22").ordinal, 4);
     }
 }

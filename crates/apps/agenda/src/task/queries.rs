@@ -43,7 +43,6 @@ use centraid_vault::model::Flag;
 use centraid_vault::time::recurrence::{
     CollapseInput, RecurrenceAnchor, collapse_missed, is_all_day_anchor,
 };
-use centraid_vault::time::rrule;
 use centraid_vault::time::zone::FireZone;
 
 pub use centraid_apps_kit::attached::Attachment;
@@ -100,11 +99,10 @@ pub struct Reference {
     pub to_id: String,
 }
 
-/// The recurrence facts a repeating task carries. **Never the rule itself**
-/// (#834).
+/// The recurrence facts a repeating task carries. The sentence a member reads
+/// is the core strings' (`crates/screens`), built from the stored rule's shape.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RecurrenceFacts {
-    pub recurrence_summary: Option<String>,
     /// Unactioned periods, collapsed into a count. A repeating task never
     /// stacks.
     pub missed: Option<usize>,
@@ -468,9 +466,6 @@ fn recurrence_of(task: &TaskRow, now: &str, member: &FireZone) -> RecurrenceFact
         last_completed_at: task.completed_at.as_deref(),
     });
     RecurrenceFacts {
-        // THE ONE SUMMARISER (#834): the row carries the sentence, never the
-        // rule.
-        recurrence_summary: rrule::describe(rule),
         missed: Some(collapsed.missed),
         next_due: collapsed.next_due,
     }

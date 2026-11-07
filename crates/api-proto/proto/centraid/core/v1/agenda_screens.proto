@@ -111,6 +111,11 @@ message AgendaHomeState {
   // SHEET_NEW_CALENDAR or SHEET_EDIT_CALENDAR: name, colour and icon of the
   // list or calendar being made or edited.
   AgendaStyleSheet style = 33;
+  // THE IMPORT REMINDERS SHEET (iOS only: Android has no Reminders store), set
+  // while `sheet` is SHEET_IMPORT_REMINDERS: the option "Include completed
+  // reminders" and the one verb. The More row that opens it (`import-reminders`)
+  // is drawn only where the platform has a reminders source.
+  AgendaImportRemindersSheet import_reminders = 34;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -128,7 +133,22 @@ message AgendaHomeState {
     SHEET_NEW_CALENDAR = 6;
     // Rename or restyle one calendar (`style`), opened from its More row.
     SHEET_EDIT_CALENDAR = 7;
+    // The reminders import's option sheet (`import_reminders`), opened from
+    // More's "Import reminders".
+    SHEET_IMPORT_REMINDERS = 8;
   }
+}
+
+// The Import reminders option sheet: one switch and one verb. Its words are
+// `ImportsMadeState`'s ("Include completed reminders", "Import reminders"); the
+// verb is the ONE import path (`imports.made`'s `RemindersRequested`), so the
+// outcome is said on the import status line like every import.
+message AgendaImportRemindersSheet {
+  string title = 1;
+  string completed_label = 2;
+  // "Include completed reminders" is on; off until the member turns it on.
+  bool completed_on = 3;
+  string import_label = 4;
 }
 
 // One entry of the Calendar's view menu: Day, Week, Month, List or Year.
@@ -659,7 +679,9 @@ message AgendaCalendarChoice {
 // Reminders, Trash) under a "Tasks" heading, then "What Agenda may read".
 message AgendaMoreRow {
   // `calendar-<calendar_id>`, `new-calendar` (opens SHEET_NEW_CALENDAR), a Tasks
-  // place (`anytime`, `logbook`, `reminders`, `trash`) or `reads`.
+  // place (`anytime`, `logbook`, `reminders`, `trash`), `import-reminders`
+  // (opens SHEET_IMPORT_REMINDERS; only where the platform has a reminders
+  // source) or `reads`.
   string key = 1;
   string label = 2;
   // "Shown" / "Hidden" on a calendar row; empty on an action row.
@@ -763,7 +785,17 @@ message AgendaHomeEvent {
     StyleIconPicked style_icon = 51;
     StyleSubmitted style_submitted = 52;
     CalendarEditRequested calendar_edit = 53;
+    // THE IMPORT REMINDERS SHEET (iOS): the switch and the verb. The verb asks
+    // `imports.made` to read the phone's Reminders with the switch's option.
+    ImportRemindersCompletedToggled import_reminders_completed = 54;
+    ImportRemindersSubmitted import_reminders_submitted = 55;
   }
+
+  // The sheet's "Include completed reminders" switch was flipped.
+  message ImportRemindersCompletedToggled {}
+
+  // The sheet's "Import reminders".
+  message ImportRemindersSubmitted {}
 
   message StyleNameChanged {
     string name = 1;

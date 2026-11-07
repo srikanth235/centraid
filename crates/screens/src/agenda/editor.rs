@@ -83,6 +83,7 @@ use self::draft::{
 use super::event::{
     calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
 };
+use super::rule_words;
 use super::todo::ops::{NewTask, Ops};
 use super::todo::rows;
 use crate::catalog::{act, load};
@@ -1540,7 +1541,8 @@ impl Editor {
                     .is_some_and(|base| draft::same_repeat(draft, base))
                     .then(|| {
                         self.event()
-                            .and_then(|event| event.recurrence_summary.clone())
+                            .and_then(|event| event.rrule.as_deref())
+                            .and_then(|rule| rule_words::of_rule(locale, rule))
                     })
                     .flatten();
                 stored

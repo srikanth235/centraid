@@ -3,9 +3,12 @@
 //! Every expectation here is a fixed answer, not a recomputation: the RFC 5545
 //! section 3.8.5.3 examples are the RFC's own lists; the part-by-part tables
 //! were cross-checked against an independent implementation (`python-dateutil`)
-//! when written and then frozen, with the two places the engine departs from
-//! it written down next to the test that pins them (the implied day, and a
-//! `BYWEEKNO` that names no day). **No test reads the wall clock**: every
+//! when written and then frozen, with the one place the engine departs from
+//! it written down next to the test that pins it (a `BYWEEKNO` that names no
+//! day). The two departures it used to keep, clamping an implied 31st and
+//! skipping a spring-forward gap, were FLIPPED to RFC 5545 by the owner's
+//! decision on #1173 (a two-way sync with EventKit and CalendarContract has to
+//! expand exactly the phone's occurrences). **No test reads the wall clock**: every
 //! series has an explicit anchor and an explicit range, and the DST tests name
 //! the instants.
 //!
@@ -888,16 +891,19 @@ fn a_window_far_past_the_anchor_equals_a_walk_from_the_anchor() {
 }
 
 // ---------------------------------------------------------------------------
-// The two places the engine departs from a plain reading
+// The implied day, and the one place the engine departs from a plain reading
 // ---------------------------------------------------------------------------
 
-/// The day a rule takes from DTSTART because it names none CLAMPS to the
-/// month's last day: a monthly rent anchored on the 31st is the 28th in
-/// February and the 30th in April. A day named with BYMONTHDAY never clamps.
-/// (RFC 5545 would skip the short months; the engine has always clamped here,
-/// and a member who wrote "monthly" on the 31st means "month end".)
+/// The day a rule takes from DTSTART because it names none SKIPS the months
+/// that lack it, exactly as a day named with BYMONTHDAY does (RFC 5545 section
+/// 3.3.10; owner decision on #1173). It used to CLAMP to the month's last day
+/// (a rent anchored on the 31st fell on the 28th in February), which no phone
+/// calendar does, so a two-way sync would have disagreed with EventKit and
+/// CalendarContract. "The last day" is `BYMONTHDAY=-1`, which the editor's
+/// "last" default writes for a start on the 29th to 31st. COUNT counts the
+/// occurrences that exist.
 #[test]
-fn an_implied_day_clamps_and_a_named_day_skips() {
+fn an_implied_day_and_a_named_day_both_skip_and_count_counts_real_occurrences() {
     let monthly = expand_zoned(
         "FREQ=MONTHLY",
         "2026-01-31T09:00",
@@ -907,13 +913,8 @@ fn an_implied_day_clamps_and_a_named_day_skips() {
     );
     assert_eq!(
         dates(&monthly),
-        [
-            "2026-01-31",
-            "2026-02-28",
-            "2026-03-31",
-            "2026-04-30",
-            "2026-05-31"
-        ]
+        ["2026-01-31", "2026-03-31", "2026-05-31"],
+        "RFC 5545: February and April have no 31st"
     );
     let named = expand_zoned(
         "FREQ=MONTHLY;BYMONTHDAY=31",
@@ -923,7 +924,7 @@ fn an_implied_day_clamps_and_a_named_day_skips() {
         50,
     );
     assert_eq!(dates(&named), ["2026-01-31", "2026-03-31", "2026-05-31"]);
-    // Feb 29 yearly: the 28th in a common year, the 29th in a leap one.
+    // Feb 29 yearly: only the leap years.
     let leap = expand_zoned(
         "FREQ=YEARLY",
         "2024-02-29T09:00",
@@ -931,17 +932,41 @@ fn an_implied_day_clamps_and_a_named_day_skips() {
         "2029-01-01T00:00:00.000Z",
         50,
     );
-    assert_eq!(
-        dates(&leap),
-        [
-            "2024-02-29",
-            "2025-02-28",
-            "2026-02-28",
-            "2027-02-28",
-            "2028-02-29"
-        ]
+    assert_eq!(dates(&leap), ["2024-02-29", "2028-02-29"]);
+    // COUNT counts real occurrences only: three is three, not three months.
+    let counted = expand_zoned(
+        "FREQ=MONTHLY;COUNT=3",
+        "2026-01-31T09:00",
+        "Etc/UTC",
+        "2027-01-01T00:00:00.000Z",
+        50,
     );
-    // And a month limit keeps the implied day: Jan 31 to Feb and Apr.
+    assert_eq!(dates(&counted), ["2026-01-31", "2026-03-31", "2026-05-31"]);
+    let counted_leaps = expand_zoned(
+        "FREQ=YEARLY;COUNT=3",
+        "2024-02-29T09:00",
+        "Etc/UTC",
+        "2040-01-01T00:00:00.000Z",
+        50,
+    );
+    assert_eq!(
+        dates(&counted_leaps),
+        ["2024-02-29", "2028-02-29", "2032-02-29"]
+    );
+    // The 30th skips only February; the 29th only a common year's.
+    let thirtieth = expand_zoned(
+        "FREQ=MONTHLY",
+        "2026-01-30T09:00",
+        "Etc/UTC",
+        "2026-05-01T00:00:00.000Z",
+        50,
+    );
+    assert_eq!(
+        dates(&thirtieth),
+        ["2026-01-30", "2026-03-30", "2026-04-30"]
+    );
+    // And a month limit keeps the implied day: Jan 31 names neither Feb nor
+    // Apr, so there is nothing.
     let limited = expand_zoned(
         "FREQ=MONTHLY;BYMONTH=2,4",
         "2026-01-31T09:00",
@@ -949,7 +974,16 @@ fn an_implied_day_clamps_and_a_named_day_skips() {
         "2027-01-01T00:00:00.000Z",
         50,
     );
-    assert_eq!(dates(&limited), ["2026-02-28", "2026-04-30"]);
+    assert!(dates(&limited).is_empty(), "{:?}", dates(&limited));
+    // Anchored on the 30th, the same limit lands only in April.
+    let limited = expand_zoned(
+        "FREQ=MONTHLY;BYMONTH=2,4",
+        "2026-01-30T09:00",
+        "Etc/UTC",
+        "2027-01-01T00:00:00.000Z",
+        50,
+    );
+    assert_eq!(dates(&limited), ["2026-04-30"]);
 }
 
 /// `BYWEEKNO` with no day beside it takes the anchor's weekday (RFC 5545:
@@ -1210,22 +1244,16 @@ fn a_09_00_weekly_event_stays_09_00_local_across_new_yorks_spring_forward() {
     );
 }
 
-/// THE POLICY, stated once. A wall time that does not exist (02:30 on the
-/// spring-forward day) has no occurrence that day, and COUNT does not count
-/// it: the series is whole days later, not shorter. A wall time that happens
-/// twice (01:30 on the fall-back day) is ONE occurrence, at the EARLIER
-/// instant, flagged `overlap`.
-///
-/// Against RFC 5545 section 3.3.5: the FOLD is the RFC's reading exactly ("the
-/// first occurrence"). The GAP is the one departure: the RFC reads 02:30 with
-/// the offset from before the gap, which lands it on 03:30; this engine has
-/// always skipped it instead (`zone::FireZone::resolve_wall_time`, the DST
-/// policy in `time/mod.rs`), because a 02:30 reminder that fires at 03:30 is
-/// not the reminder the member wrote. (`civil::parse_civil_ms`, which reads ONE
-/// typed time, does take the RFC's reading: a single time has to land
-/// somewhere, a series can skip a day.)
+/// THE POLICY, stated once, and it is RFC 5545 section 3.3.5's (owner decision
+/// on #1173, FLIPPED from "skip the gap": EventKit and CalendarContract both
+/// move a gap time forward, and a two-way sync must expand the phone's own
+/// occurrences). A wall time that does not exist (02:30 on the spring-forward
+/// day) is read with the offset from before the gap and lands on 03:30 EDT,
+/// and it COUNTS. A wall time that happens twice (01:30 on the fall-back day)
+/// is ONE occurrence, at the EARLIER instant, flagged `overlap`. The key an
+/// exception names is still the series' own wall clock (02:30).
 #[test]
-fn new_yorks_gap_is_skipped_without_counting_and_its_fold_occurs_once_at_the_earlier_instant() {
+fn new_yorks_gap_moves_forward_and_counts_and_its_fold_occurs_once_at_the_earlier_instant() {
     let spring = expand_zoned(
         "FREQ=DAILY;COUNT=5",
         "2026-03-06T02:30",
@@ -1238,12 +1266,12 @@ fn new_yorks_gap_is_skipped_without_counting_and_its_fold_occurs_once_at_the_ear
         triples(&[
             ("2026-03-06T02:30:00", "2026-03-06T07:30:00.000Z", false),
             ("2026-03-07T02:30:00", "2026-03-07T07:30:00.000Z", false),
-            // 2026-03-08T02:30 does not exist.
+            // 2026-03-08T02:30 does not exist: it is 03:30 EDT, 07:30Z, and counts.
+            ("2026-03-08T02:30:00", "2026-03-08T07:30:00.000Z", false),
             ("2026-03-09T02:30:00", "2026-03-09T06:30:00.000Z", false),
             ("2026-03-10T02:30:00", "2026-03-10T06:30:00.000Z", false),
-            ("2026-03-11T02:30:00", "2026-03-11T06:30:00.000Z", false),
         ]),
-        "five occurrences: the gap day is not one of them"
+        "five occurrences: the gap day is the third"
     );
     let autumn = expand_zoned(
         "FREQ=DAILY",
@@ -1264,7 +1292,7 @@ fn new_yorks_gap_is_skipped_without_counting_and_its_fold_occurs_once_at_the_ear
 }
 
 #[test]
-fn a_yearly_event_on_a_gap_day_skips_that_year_only() {
+fn a_yearly_event_on_a_gap_day_moves_forward_that_year_and_counts() {
     let found = expand_zoned(
         "FREQ=YEARLY;COUNT=4",
         "2025-03-08T02:30",
@@ -1274,13 +1302,13 @@ fn a_yearly_event_on_a_gap_day_skips_that_year_only() {
     );
     assert_eq!(
         dates(&found),
-        ["2025-03-08", "2027-03-08", "2028-03-08", "2029-03-08"],
-        "2026-03-08 02:30 is the gap; the count goes on"
+        ["2025-03-08", "2026-03-08", "2027-03-08", "2028-03-08"],
+        "2026-03-08 02:30 is the gap: 03:30 EDT, and it counts"
     );
 }
 
 #[test]
-fn a_month_position_in_the_gap_is_skipped_too() {
+fn a_month_position_in_the_gap_moves_forward_too() {
     let found = expand_zoned(
         "FREQ=MONTHLY;BYDAY=2SU",
         "2026-02-08T02:30",
@@ -1292,7 +1320,8 @@ fn a_month_position_in_the_gap_is_skipped_too() {
         resolved(&found),
         triples(&[
             ("2026-02-08T02:30:00", "2026-02-08T07:30:00.000Z", false),
-            // The second Sunday of March is the 8th: the gap.
+            // The second Sunday of March is the 8th: the gap, 03:30 EDT.
+            ("2026-03-08T02:30:00", "2026-03-08T07:30:00.000Z", false),
             ("2026-04-12T02:30:00", "2026-04-12T06:30:00.000Z", false),
         ])
     );
@@ -1311,7 +1340,9 @@ fn londons_gap_and_fold_fall_on_the_last_sundays_of_march_and_october() {
         resolved(&spring),
         triples(&[
             ("2026-03-22T01:30:00", "2026-03-22T01:30:00.000Z", false),
-            // 01:00 GMT jumps to 02:00 BST on 2026-03-29: 01:30 does not exist.
+            // 01:00 GMT jumps to 02:00 BST on 2026-03-29: 01:30 does not exist,
+            // so it is 02:30 BST, which is the instant 01:30Z.
+            ("2026-03-29T01:30:00", "2026-03-29T01:30:00.000Z", false),
             ("2026-04-05T01:30:00", "2026-04-05T00:30:00.000Z", false),
             ("2026-04-12T01:30:00", "2026-04-12T00:30:00.000Z", false),
         ])
@@ -1381,7 +1412,9 @@ fn sydneys_fold_is_in_april_and_its_gap_in_october() {
         resolved(&spring),
         triples(&[
             ("2026-09-27T02:30:00", "2026-09-26T16:30:00.000Z", false),
-            // 02:00 AEST jumps to 03:00 AEDT on 2026-10-04: 02:30 does not exist.
+            // 02:00 AEST jumps to 03:00 AEDT on 2026-10-04: 02:30 does not exist,
+            // so it is 03:30 AEDT, 16:30Z the day before.
+            ("2026-10-04T02:30:00", "2026-10-03T16:30:00.000Z", false),
             ("2026-10-11T02:30:00", "2026-10-10T15:30:00.000Z", false),
         ])
     );
@@ -1700,6 +1733,127 @@ fn a_repeating_task_collapses_the_periods_of_the_new_shapes() {
         }
     });
     assert_eq!(done.missed, 2, "Monday the 16th and Thursday the 19th");
+}
+
+/// RFC 5545 for a task too (owner decision on #1173): a plain monthly task on
+/// the 31st skips the months with no 31st, a yearly one on Feb 29 skips the
+/// common years, and a task's 02:30 on the spring-forward day is 03:30 EDT.
+/// `next_occurrence` and `collapse_missed` are built on the same expander, so
+/// they cannot disagree with it.
+#[test]
+fn a_tasks_next_occurrence_and_collapse_follow_the_skip_and_the_forward_gap() {
+    let utc = zone("Etc/UTC");
+    let new_york = zone("America/New_York");
+    let next = |rule: &str, start: &str, after: &str, zone: &FireZone, anchor| {
+        next_occurrence(&NextOccurrenceInput {
+            rrule: rule,
+            scheduled_start: start,
+            after,
+            zone: Some(zone),
+            anchor,
+        })
+    };
+    // A bare-date monthly task on the 31st: Jan 31, then March 31.
+    assert_eq!(
+        next(
+            "FREQ=MONTHLY",
+            "2026-01-31",
+            "2026-02-01",
+            &utc,
+            RecurrenceAnchor::Scheduled
+        )
+        .as_deref(),
+        Some("2026-03-31"),
+        "February has no 31st: it is skipped, not the 28th"
+    );
+    assert_eq!(
+        next(
+            "FREQ=MONTHLY",
+            "2026-01-31",
+            "2026-03-31",
+            &utc,
+            RecurrenceAnchor::Scheduled
+        )
+        .as_deref(),
+        Some("2026-05-31"),
+        "April has no 31st either"
+    );
+    // Feb 29 yearly: the next leap day, four years on.
+    assert_eq!(
+        next(
+            "FREQ=YEARLY",
+            "2024-02-29",
+            "2024-03-01",
+            &utc,
+            RecurrenceAnchor::Scheduled
+        )
+        .as_deref(),
+        Some("2028-02-29")
+    );
+    // A timed task: the same, in its own zone (09:00 EST, then 09:00 EDT).
+    assert_eq!(
+        next(
+            "FREQ=MONTHLY",
+            "2026-01-31T14:00:00.000Z",
+            "2026-02-01T00:00:00.000Z",
+            &new_york,
+            RecurrenceAnchor::Scheduled
+        )
+        .as_deref(),
+        Some("2026-03-31T13:00:00.000Z")
+    );
+    // A completion anchor takes its implied day from the completion: done on
+    // Jan 31, the next 31st is March 31.
+    assert_eq!(
+        next(
+            "FREQ=MONTHLY",
+            "2026-01-10",
+            "2026-01-31",
+            &utc,
+            RecurrenceAnchor::Completion
+        )
+        .as_deref(),
+        Some("2026-03-31")
+    );
+    // The gap: 02:30 on the 8th is 03:30 EDT, the next occurrence after the 7th.
+    assert_eq!(
+        next(
+            "FREQ=DAILY",
+            "2026-03-06T07:30:00.000Z",
+            "2026-03-07T07:30:00.000Z",
+            &new_york,
+            RecurrenceAnchor::Scheduled
+        )
+        .as_deref(),
+        Some("2026-03-08T07:30:00.000Z"),
+        "02:30 does not exist on the 8th: 03:30 EDT, which is 07:30Z"
+    );
+    // Collapse: Jan 31 and Mar 31 went by (February has no 31st), and the
+    // next period is May 31 (April has none).
+    let collapsed = collapse_missed(&CollapseInput {
+        rrule: "FREQ=MONTHLY",
+        scheduled_start: "2026-01-31",
+        zone: Some(&utc),
+        anchor: RecurrenceAnchor::Scheduled,
+        now: "2026-04-15T12:00:00.000Z",
+        last_completed_at: None,
+    });
+    assert_eq!(collapsed.missed, 2);
+    assert_eq!(collapsed.next_due.as_deref(), Some("2026-05-31"));
+    // And a daily 02:30 task counts the gap day: the 6th, 7th and 8th went by.
+    let collapsed = collapse_missed(&CollapseInput {
+        rrule: "FREQ=DAILY",
+        scheduled_start: "2026-03-06T07:30:00.000Z",
+        zone: Some(&new_york),
+        anchor: RecurrenceAnchor::Scheduled,
+        now: "2026-03-09T00:00:00.000Z",
+        last_completed_at: None,
+    });
+    assert_eq!(collapsed.missed, 3);
+    assert_eq!(
+        collapsed.next_due.as_deref(),
+        Some("2026-03-09T06:30:00.000Z")
+    );
 }
 
 #[test]
