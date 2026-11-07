@@ -1,6 +1,9 @@
 package dev.centraid.android.screens.notes
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
@@ -304,7 +307,15 @@ private fun NoteTile(
     Box(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(bottom = 2.dp).clip(shape)) {
         KitSwipeRow(
             actions = actions,
-            modifier = Modifier.testTag("notes-row-${row.note_id}"),
+            modifier = Modifier.testTag("notes-row-${row.note_id}").semantics {
+                // THE ROW'S MENU FOR A SCREEN READER: the sheet with Pin, File and Trash.
+                customActions = listOf(
+                    CustomAccessibilityAction(chrome?.row_menu_label.orEmpty()) {
+                        onEvent(NotesHomeEvent(row_menu = NotesHomeEvent.RowMenuOpened(row.note_id)))
+                        true
+                    },
+                )
+            },
             onTap = { row.route?.let(onOpen) },
         ) { NoteBody(row) }
     }

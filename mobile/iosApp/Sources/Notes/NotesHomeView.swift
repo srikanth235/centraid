@@ -501,6 +501,10 @@ struct NotesRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
         .accessibilityIdentifier("notes-row-\(row.noteID)")
+        // THE ROW'S MENU FOR A SCREEN READER: the sheet with Pin, File and Trash.
+        .accessibilityAction(named: Text(chrome?.rowMenuLabel ?? "")) {
+            send(NotesEvents.home { $0.rowMenu = .with { $0.noteID = row.noteID } })
+        }
         .contextMenu {
             if let chrome {
                 Button(row.pinned ? chrome.unpinLabel : chrome.pinLabel) {

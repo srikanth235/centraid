@@ -114,6 +114,7 @@ public fun NotesEditorScreen(
         wasOpen[0] = linkOpen
     }
     val bodyReload: Any? = reload ?: linkCloses.intValue.takeIf { it > 0 }?.let { Pair(state.note_id, it) }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
     CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
@@ -185,6 +186,7 @@ public fun NotesEditorScreen(
                         IconKey("Link", chrome.link_label, "notes-tool-link") {
                             onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
                         }
+                        IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
                     }
                 }
             }
