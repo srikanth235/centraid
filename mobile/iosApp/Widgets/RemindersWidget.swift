@@ -90,9 +90,14 @@ private struct NewReminderPill: View {
     var body: some View {
         Link(destination: url) {
             HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .bold))
-                    .accessibilityHidden(true)
+                // A drawn plus (stated geometry, not an SF Symbol: the shell
+                // draws no system icon set).
+                ZStack {
+                    Capsule().frame(width: 10, height: 2)
+                    Capsule().frame(width: 2, height: 10)
+                }
+                .frame(width: 11, height: 11)
+                .accessibilityHidden(true)
                 Text(label)
                     .font(WidgetType.sans(12, semibold: true, relativeTo: .caption))
                     .lineLimit(1)
