@@ -62,7 +62,7 @@ catalog! {
     plain icon_music = ("Music", "Music");
     plain icon_pin = ("Pin", "Pin");
     plain icon_plant = ("Plant", "Plant");
-    plain icon_receipt = ("Receipt", "Receipt");
+    plain icon_receipt = ("Bill", "Bill");
     plain icon_star = ("Star", "Star");
     plain icon_sun = ("Sun", "Sun");
     plain icon_users = ("People", "People");
