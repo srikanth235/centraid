@@ -44,7 +44,7 @@ catalog! {
     plain field_empty = ("—", "—");
     plain field_priority = ("Priority", "Priority");
     plain field_project = ("Project", "Project");
-    plain field_reminder = ("Reminder", "Reminder");
+    plain field_reminder = ("Early reminder", "Early reminder");
     plain field_repeats = ("Repeats", "Repeats");
     plain field_subtasks = ("Subtasks", "Subtasks");
     plain field_tags = ("Tags", "Tags");
@@ -92,10 +92,7 @@ catalog! {
     plain pile_dated = ("Came due", "Came due");
     plain pile_repeating = ("Repeating, behind", "Repeating, behind");
     plain pile_sitting = ("Sitting 90 days or more", "Sitting 90 days or more");
-    plain priority_next = ("Next", "Next");
     plain priority_none = ("None", "None");
-    plain priority_now = ("Now", "Now");
-    plain priority_soon = ("Soon", "Soon");
     plain projects_no_area = ("Projects", "Projects");
     plain project_created = ("Project created", "Project created");
     plain project_empty = ("Nothing is filed here yet.", "Nothing is filed here yet.");

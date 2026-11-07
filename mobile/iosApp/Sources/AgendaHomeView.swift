@@ -398,30 +398,35 @@ private struct AgendaList: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), in a plain
-                    // stack above the lazy one, as Notes and Docs draw theirs.
+            // A LIST, so a task row can be swiped (#1173): each task is a row of its own, the
+            // events and the day heads plain rows beside them.
+            List {
+                Group {
+                    // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), as Notes
+                    // and Docs draw theirs.
                     AgendaSearchContainers(containers: home.containers, open: open)
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
-                        // birthdays): the phone's calendar is offered quietly above
-                        // them, at the point of use.
-                        if home.importSource == .calendar {
-                            CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                                .padding(.vertical, 8)
-                        }
-                        AgendaLeadBlocks(home: home, chrome: chrome, send: send, open: open)
-                        ForEach(home.days, id: \.day) { section in
-                            AgendaSectionView(section: section, chrome: chrome, send: send, open: open)
-                                .id(section.day)
-                        }
+                    // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
+                    // phone's calendar is offered quietly above them, at the point of use.
+                    if home.importSource == .calendar {
+                        CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.vertical, 8)
                     }
-                    if let ask { SearchAskRow(ask: ask) }
                 }
-                .padding(.bottom, 16)
+                .todoPlainRow()
+                AgendaLeadBlocks(home: home, chrome: chrome, send: send, open: open)
+                ForEach(home.days, id: \.day) { section in
+                    AgendaSectionView(section: section, chrome: chrome, send: send, open: open, inList: true)
+                }
+                Group {
+                    if let ask { SearchAskRow(ask: ask) }
+                    Color.clear.frame(height: 16)
+                }
+                .todoPlainRow()
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
             .refreshable { send(AgendaEvents.make { $0.refreshed = .init() }) }
             .onAppear { land(proxy) }
             .onChange(of: home.landing.day) { _, _ in land(proxy) }
@@ -470,12 +475,13 @@ private struct AgendaLeadBlocks: View {
         // THE NOTICE'S VERB AND THE OVERDUE GROUP'S push Catch up, whose route the data carries.
         if home.hasNotice {
             AgendaNoticeView(notice: home.notice) { if home.hasCatchUp { open(home.catchUp) } }
+                .todoPlainRow()
         }
         if home.hasOverdue {
-            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send, open: open, catchUp: home.hasCatchUp ? home.catchUp : nil)
+            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send, open: open, catchUp: home.hasCatchUp ? home.catchUp : nil, inList: true)
         }
         ForEach(home.taskHits, id: \.key) { group in
-            AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
+            AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil, inList: true)
         }
     }
 }
@@ -628,9 +634,111 @@ struct AgendaSectionView: View {
     let chrome: Centraid_Core_V1_AgendaChrome
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
+    /// Drawn as rows of a `List` (Agenda's Day and Schedule), so a swipe lands on one task; the
+    /// Month's list below its grid keeps the stack.
+    var inList = false
     @Environment(\.colorScheme) private var scheme
 
+    /// The date column's width and the gap to the rows beside it.
+    private static let dateWidth: CGFloat = 44
+    private static let dateGap: CGFloat = 8
+
     var body: some View {
+        if inList {
+            listRows
+        } else {
+            stack
+        }
+    }
+
+    /// THE SECTION AS LIST ROWS: the head (month heading and rule, the section's id), the ribbon,
+    /// then each item its own row. The date column is drawn by the section's first row, in the gutter
+    /// every row keeps, so it still stands beside the items and a swipe moves one row only.
+    @ViewBuilder
+    private var listRows: some View {
+        let margin = CentraidGeometry.pageMargin
+        let gutter = Self.dateWidth + Self.dateGap
+        VStack(alignment: .leading, spacing: 0) {
+            if section.hasMonthHeading {
+                Text(section.monthHeading)
+                    .centraidType("eyebrow")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .padding(.horizontal, margin)
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            Rectangle()
+                .fill(Theme.color("line", scheme))
+                .frame(height: CentraidGeometry.hairline)
+        }
+        .id(section.day)
+        .todoPlainRow()
+        if section.hasRibbon {
+            ribbon
+                .padding(.leading, gutter)
+                .overlay(alignment: .topLeading) { dateColumn.padding(.top, 8) }
+                .padding(.horizontal, margin)
+                .padding(.top, 8)
+                .todoPlainRow()
+        }
+        if section.items.isEmpty && !section.hasRibbon {
+            // A day with nothing on it still shows its date.
+            Color.clear
+                .frame(height: Self.dateWidth)
+                .padding(.leading, gutter)
+                .overlay(alignment: .topLeading) { dateColumn }
+                .padding(.horizontal, margin)
+                .padding(.vertical, 8)
+                .todoPlainRow()
+        }
+        ForEach(Array(section.items.enumerated()), id: \.offset) { index, item in
+            let lead: AnyView? = index == 0 && !section.hasRibbon ? AnyView(dateColumn) : nil
+            switch item.kind {
+            case let .event(row):
+                AgendaEventRowView(row: row, open: open)
+                    .padding(.leading, gutter)
+                    .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
+                    .padding(.horizontal, margin)
+                    .todoPlainRow()
+            case let .task(row):
+                // A DATED TASK IS A ROW OF ITS DAY (R-1128-2): the round box checks it off in
+                // place, a tap opens it, a swipe flags or deletes it.
+                taskRow(row, gutter: gutter, lead: lead)
+                    .listRowInsets(EdgeInsets(top: 0, leading: margin, bottom: 0, trailing: margin))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            case let .nowLine(now):
+                AgendaNowLineView(now: now)
+                    .id("now-\(section.day)")
+                    .padding(.leading, gutter)
+                    .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
+                    .padding(.horizontal, margin)
+                    .todoPlainRow()
+            case .none:
+                EmptyView()
+            }
+        }
+    }
+
+    private func taskRow(_ row: Centraid_Core_V1_TodoRow, gutter: CGFloat, lead: AnyView?) -> some View {
+        TodoRowView(
+            row: row,
+            onCheck: { id in send(AgendaEvents.make { $0.taskChecked = .with { $0.taskID = id } }) },
+            onPick: open,
+            fileVerb: chrome.tasks.fileVerb,
+            onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
+            embedded: true,
+            identifierPrefix: "agenda-task-row",
+            chrome: chrome.tasks,
+            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+            onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) },
+            gutter: gutter,
+            gutterContent: lead
+        )
+    }
+
+    private var stack: some View {
         VStack(alignment: .leading, spacing: 0) {
             if section.hasMonthHeading {
                 Text(section.monthHeading)
@@ -644,7 +752,7 @@ struct AgendaSectionView: View {
             Rectangle()
                 .fill(Theme.color("line", scheme))
                 .frame(height: CentraidGeometry.hairline)
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: Self.dateGap) {
                 dateColumn
                 VStack(alignment: .leading, spacing: 0) {
                     if section.hasRibbon {
@@ -703,7 +811,7 @@ struct AgendaSectionView: View {
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color(section.isPast ? "textFaint" : "textSoft", scheme))
         }
-        .frame(width: 44)
+        .frame(width: Self.dateWidth)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(section.heading)
         .accessibilityAddTraits(.isHeader)

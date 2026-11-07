@@ -101,10 +101,10 @@ internal fun TodoRowView(
     menu: TodoRowMenu? = null,
 ) {
     // THE SWIPE (#1173): Details, Flag and Delete sit behind the row, and the kit's long press opens
-    // the same three; a row with no `menu` (a subtask, a completed row) is the plain row.
-    val actions = menu?.actions(row, onOpen).orEmpty()
-    val swipes = actions.isNotEmpty()
+    // them plus the menu-only Move up, Move down and Move to project; a row with no `menu` (a subtask, a completed row) is the plain row.
     val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
+    val actions = menu?.actions(row, onOpen, file, fileVerb).orEmpty()
+    val swipes = actions.isNotEmpty()
     val body: @Composable () -> Unit = {
         Row(
             Modifier
@@ -223,19 +223,27 @@ internal class TodoRowMenu(
     /** The ids of the row's group in order, for Move up and down. */
     val siblings: List<String> = emptyList(),
 ) {
-    fun actions(row: TodoRow, onOpen: (Route) -> Unit): List<KitRowAction> = buildList {
+    fun actions(row: TodoRow, onOpen: (Route) -> Unit, file: (() -> Unit)? = null, fileVerb: String = ""): List<KitRowAction> = buildList {
         add(KitRowAction("details", chrome.details_verb.ifEmpty { KitWords.DETAILS }) { row.route?.let(onOpen) })
         onFlag?.let { flag ->
             val verb = if (row.flagged) chrome.unflag_verb.ifEmpty { KitWords.UNFLAG } else chrome.flag_verb.ifEmpty { KitWords.FLAG }
             add(KitRowAction("flag", verb, KitRowAction.Tone.Amber) { flag(row.task_id, !row.flagged) })
         }
+        val at = siblings.indexOf(row.task_id)
+        if (onMove != null && at > 0) {
+            add(KitRowAction("move-up", chrome.move_up_verb, menuOnly = true) { onMove.invoke(row.task_id, siblings[at - 1]) })
+        }
+        if (onMove != null && at >= 0 && at < siblings.size - 1) {
+            add(KitRowAction("move-down", chrome.move_down_verb, menuOnly = true) { onMove.invoke(row.task_id, siblings.getOrElse(at + 2) { "" }) })
+        }
+        if (file != null) add(KitRowAction("file", fileVerb, menuOnly = true) { file() })
         onDelete?.let { delete ->
             add(KitRowAction("delete", chrome.delete_verb.ifEmpty { KitWords.DELETE }, KitRowAction.Tone.Red) { delete(row.task_id) })
         }
     }
 
     fun accessibilityActions(row: TodoRow, onOpen: (Route) -> Unit): List<CustomAccessibilityAction> = buildList {
-        actions(row, onOpen).forEach { action -> add(CustomAccessibilityAction(action.label) { action.onPress(); true }) }
+        actions(row, onOpen).filterNot { it.menuOnly }.forEach { action -> add(CustomAccessibilityAction(action.label) { action.onPress(); true }) }
         val at = siblings.indexOf(row.task_id)
         if (onMove != null && at > 0) {
             add(CustomAccessibilityAction(chrome.move_up_verb) { onMove.invoke(row.task_id, siblings[at - 1]); true })

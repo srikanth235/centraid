@@ -283,8 +283,6 @@ private struct AgendaStripDayView: View {
                     .background {
                         if day.isSelected {
                             Circle().fill(accent.fill)
-                        } else if day.isToday {
-                            Circle().strokeBorder(accent.text, lineWidth: 1.5)
                         }
                     }
                 HStack(spacing: 3) {

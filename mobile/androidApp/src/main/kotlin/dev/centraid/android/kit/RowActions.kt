@@ -36,8 +36,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * ONE ACTION ON A ROW (#1173, the Swipe board): Details, Flag, Delete. The same actions are the
- * swipe and the long-press menu, so a row that can be swiped can be reached without a swipe too.
+ * ONE ACTION ON A ROW (#1173, the Swipe board): Details, Flag, Delete. The swipe shows the
+ * actions that are not [menuOnly] and the long-press menu lists them all, so a row that can be swiped can be reached without a swipe too.
  * The labels are the machine's (`KitWords.DETAILS`, `FLAG`, `DELETE`); what each does is the
  * screen's own event, so [onPress] sends it.
  */
@@ -45,6 +45,8 @@ public data class KitRowAction(
     val id: String,
     val label: String,
     val tone: Tone = Tone.Neutral,
+    /** In the long-press menu only, not behind the swipe (Move up, Move down, Move to project). */
+    val menuOnly: Boolean = false,
     val onPress: () -> Unit,
 ) {
     public enum class Tone {
@@ -79,8 +81,9 @@ public fun KitSwipeRow(
         Box(modifier) { content() }
         return
     }
+    val swipeActions = actions.filterNot { it.menuOnly }
     val density = LocalDensity.current
-    val reveal = with(density) { (ACTION_WIDTH * actions.size).toPx() }
+    val reveal = with(density) { (ACTION_WIDTH * swipeActions.size).toPx() }
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -88,7 +91,7 @@ public fun KitSwipeRow(
     Box(modifier) {
         // THE ACTIONS sit behind the row, at the end edge; Delete is the one nearest it.
         Row(Modifier.align(Alignment.CenterEnd).fillMaxHeight()) {
-            actions.forEach { action ->
+            swipeActions.forEach { action ->
                 val fill = when (action.tone) {
                     KitRowAction.Tone.Neutral -> graphite
                     KitRowAction.Tone.Amber -> StateColor.Amber.fill
@@ -117,6 +120,7 @@ public fun KitSwipeRow(
                 .background(Surface.card)
                 .draggable(
                     orientation = Orientation.Horizontal,
+                    enabled = swipeActions.isNotEmpty(),
                     state = rememberDraggableState { delta ->
                         scope.launch { offset.snapTo((offset.value + delta).coerceIn(-reveal, 0f)) }
                     },
