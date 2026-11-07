@@ -326,7 +326,7 @@ private fun Stage(
         Canvas(modifier = Modifier.size(frameW.dp, frameH.dp)) {
             val w = size.width
             val h = size.height
-            val left = (crop.x * w).toFloat()
+            val remaining = (crop.x * w).toFloat()
             val top = (crop.y * h).toFloat()
             val boxW = (crop.w * w).toFloat()
             val boxH = (crop.h * h).toFloat()
@@ -334,16 +334,16 @@ private fun Stage(
             // one that reads the same under every renderer.
             drawRect(mask, Offset(0f, 0f), Size(w, top))
             drawRect(mask, Offset(0f, top + boxH), Size(w, h - top - boxH))
-            drawRect(mask, Offset(0f, top), Size(left, boxH))
-            drawRect(mask, Offset(left + boxW, top), Size(w - left - boxW, boxH))
+            drawRect(mask, Offset(0f, top), Size(remaining, boxH))
+            drawRect(mask, Offset(remaining + boxW, top), Size(w - remaining - boxW, boxH))
             // THE THIRDS, in the stage's own hairline, and the box in its ink.
             for (step in 1..2) {
-                val x = left + boxW * step / 3f
+                val x = remaining + boxW * step / 3f
                 val y = top + boxH * step / 3f
                 drawLine(thirds, Offset(x, top), Offset(x, top + boxH), strokeWidth = 1.dp.toPx())
-                drawLine(thirds, Offset(left, y), Offset(left + boxW, y), strokeWidth = 1.dp.toPx())
+                drawLine(thirds, Offset(remaining, y), Offset(remaining + boxW, y), strokeWidth = 1.dp.toPx())
             }
-            drawRect(ink, Offset(left, top), Size(boxW, boxH), style = Stroke(width = 1.dp.toPx()))
+            drawRect(ink, Offset(remaining, top), Size(boxW, boxH), style = Stroke(width = 1.dp.toPx()))
         }
     }
 }

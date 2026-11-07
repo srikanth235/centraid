@@ -377,6 +377,7 @@ pub const REGISTER: &[Entry] = &[
     ("ScreenEvent.data_changed", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.environment_changed", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.off_thread_done", runtime(RUNTIME_EVENT)),
+    ("ScreenEvent.left", runtime(RUNTIME_EVENT)),
     (
         "ScreenEvent.roll_reported",
         runtime(

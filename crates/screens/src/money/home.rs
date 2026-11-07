@@ -1102,7 +1102,10 @@ fn bars(locale: Locale, answer: &wire::MoneySpending, view: &Home) -> Vec<wire::
                     // "15–21 Oct · ₹21,040 · Eating out was the biggest share"
                     Some(category) => format!(
                         "{caption} · {}",
-                        fill(&words::bar_biggest(locale), &[("category", &category.label)])
+                        fill(
+                            &words::bar_biggest(locale),
+                            &[("category", &category.label)]
+                        )
                     ),
                     None => caption,
                 }

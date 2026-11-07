@@ -47,9 +47,9 @@ internal object ClipboardDeadline {
         val digest = saved.getString(DIGEST, null)
         if (deadline == 0L || digest == null) return
         if (System.currentTimeMillis() < deadline) {
-            val left = deadline - System.currentTimeMillis()
+            val remaining = deadline - System.currentTimeMillis()
             main.removeCallbacksAndMessages(TOKEN)
-            main.postAtTime({ sweep(context) }, TOKEN, android.os.SystemClock.uptimeMillis() + left)
+            main.postAtTime({ sweep(context) }, TOKEN, android.os.SystemClock.uptimeMillis() + remaining)
             return
         }
         val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

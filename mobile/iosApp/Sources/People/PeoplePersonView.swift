@@ -35,8 +35,9 @@ struct PeoplePersonView: View {
         }()
         // THE NAME IS THE HERO'S, so the bar carries no title of its own: only the back chevron and
         // the keys.
+        // Until the read lands the bar carries the name the route brought (`nameHint`).
         PushedPage(
-            title: "",
+            title: person == nil ? state.nameHint : "",
             parentTitle: chrome.back,
             onBack: onBack
         ) {

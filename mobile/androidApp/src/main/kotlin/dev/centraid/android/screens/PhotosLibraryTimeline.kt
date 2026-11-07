@@ -347,11 +347,11 @@ private fun tileAt(
     val item = state.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
         ?: return null
     val row = rows.firstOrNull { it.id == item.key && it.kind == PhotosRowKind.PHOTOS_ROW_KIND_TILES } ?: return null
-    var left = 0f
+    var remaining = 0f
     row.packed.forEach { packed ->
-        val right = left + packed.width.toFloat() * density
+        val right = remaining + packed.width.toFloat() * density
         if (x < right) return tiles.getOrNull(packed.tile)?.photo_id
-        left = right + GAP * density
+        remaining = right + GAP * density
     }
     return row.packed.lastOrNull()?.let { tiles.getOrNull(it.tile)?.photo_id }
 }
