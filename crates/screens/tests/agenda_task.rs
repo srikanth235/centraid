@@ -107,8 +107,8 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     assert_eq!(
         keys,
         [
-            "when", "time", "reminder", "repeats", "anchor", "priority", "effort", "project",
-            "tags"
+            "when", "time", "reminder", "repeats", "anchor", "project", "flag", "priority",
+            "effort", "tags"
         ]
     );
     let when = field(v, "when");
