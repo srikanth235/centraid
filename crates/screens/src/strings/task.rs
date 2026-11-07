@@ -79,9 +79,7 @@ catalog! {
     plain more_reminders_meta = ("open work with a reminder", "open work with a reminder");
     plain more_title = ("More in Agenda", "More in Agenda");
     plain more_trash_meta = ("deleted tasks", "deleted tasks");
-    plain new_project_placeholder = ("Name", "Name");
     plain new_project_title = ("New project", "New project");
-    plain new_project_verb = ("Create project", "Create project");
     plain next_is = ("next is", "next is");
     plain next_one_is = ("the next one is", "the next one is");
     plain notes_placeholder = ("Notes", "Notes");

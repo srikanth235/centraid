@@ -95,6 +95,44 @@ fn instant(index: usize, of: usize) -> String {
     )
 }
 
+/// Which table a stored rule sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleOwner {
+    Event,
+    Task,
+}
+
+/// Store `rule` on an existing event or task EXACTLY as an older build, a
+/// phone import or a hand-edited file could have left it: past every write
+/// boundary, which refuses a rule the engine cannot read (#1173, owner
+/// decision: a stored rule that now fails to parse must still load).
+///
+/// **Why here.** `sql-confinement` keeps SQL out of every crate but the
+/// vault's, the ontology's, the search's and this one, and a test of a read
+/// that must survive such a row has to be able to put one there. An app crate's
+/// test calls this through a vault's own commit guard.
+///
+/// # Errors
+///
+/// A database error, or an id that is not that kind of row.
+pub fn store_unreadable_rule(
+    connection: &Connection,
+    owner: RuleOwner,
+    id: &str,
+    rule: &str,
+) -> KitResult<()> {
+    let sql = match owner {
+        RuleOwner::Event => "UPDATE event SET rule = ?2 WHERE id = ?1",
+        RuleOwner::Task => "UPDATE task SET rule = ?2 WHERE id = ?1",
+    };
+    match connection.execute(sql, params![id, rule]).map_err(door)? {
+        1 => Ok(()),
+        _ => Err(KitError::Door(format!(
+            "`{id}` is not a row to store a rule on"
+        ))),
+    }
+}
+
 /// The volume a Notes library is stated at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Year3NotesShape {

@@ -11,6 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use centraid_screens::kit::civil;
+use centraid_screens::strings::Locale;
 use wire::agenda_editor_event::Kind as K;
 use wire::agenda_editor_state::Sheet;
 use wire::{AgendaEditorKind as Kind, AgendaScope as Scope};
@@ -279,7 +280,8 @@ fn save_proposes_in_the_phones_zone_and_a_commit_ends_the_editor() {
             "Every week on Monday",
             "Every other week on Monday",
             "Every month on the 15th",
-            "Every year on 15 June"
+            "Every year on 15 June",
+            "Custom"
         ]
     );
     assert_eq!(data.reminder_label, "30 minutes before");
@@ -629,12 +631,18 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
         "A repeat rule belongs to the whole series."
     );
     assert_eq!(data.draft.as_ref().expect("draft").repeat_key, "custom");
-    let summary = world
+    let rule = world
         .event_row(&series)
         .expect("event")
-        .recurrence_summary
-        .expect("a summary");
-    assert_eq!(data.repeats.last().expect("custom last").label, summary);
+        .rrule
+        .expect("a rule");
+    let summary =
+        centraid_screens::agenda::rule_words::of_rule(Locale::En, &rule).expect("a summary");
+    assert_eq!(
+        data.repeats.last().expect("custom last").label,
+        summary,
+        "a rule as stored says what the one summariser says"
+    );
 
     world.title(page, "Daily sync");
     world.save(page);
@@ -1118,4 +1126,825 @@ fn a_calendar_pick_closes_its_sheet_and_unknown_picks_are_ignored() {
         .map(|c| c.hue_key.as_str())
         .collect();
     assert!(hues.iter().all(|hue| hue.starts_with('c')), "{hues:?}");
+}
+
+// ---- AGENDA WAVE 2 (#1173): the event editor's place, second alert,
+// availability, zone and travel, and a task's address. ----
+
+fn second_reminder(key: &str) -> K {
+    ev(
+        K::SecondReminder,
+        wire::agenda_editor_event::SecondReminderPicked {
+            key: key.to_owned(),
+        },
+    )
+}
+
+fn availability(key: &str) -> K {
+    ev(
+        K::Availability,
+        wire::agenda_editor_event::AvailabilityPicked {
+            key: key.to_owned(),
+        },
+    )
+}
+
+fn zone(key: &str) -> K {
+    ev(
+        K::Zone,
+        wire::agenda_editor_event::ZonePicked {
+            key: key.to_owned(),
+        },
+    )
+}
+
+fn zone_search(text: &str) -> K {
+    ev(
+        K::ZoneSearch,
+        wire::agenda_editor_event::ZoneSearched {
+            text: text.to_owned(),
+        },
+    )
+}
+
+fn travel(key: &str) -> K {
+    ev(
+        K::Travel,
+        wire::agenda_editor_event::TravelPicked {
+            key: key.to_owned(),
+        },
+    )
+}
+
+fn place(key: &str) -> K {
+    ev(
+        K::Place,
+        wire::agenda_editor_event::PlacePicked {
+            key: key.to_owned(),
+        },
+    )
+}
+
+fn place_search(text: &str) -> K {
+    ev(
+        K::PlaceSearch,
+        wire::agenda_editor_event::PlaceSearched {
+            text: text.to_owned(),
+        },
+    )
+}
+
+fn url(text: &str) -> K {
+    ev(
+        K::Url,
+        wire::agenda_editor_event::UrlChanged {
+            text: text.to_owned(),
+        },
+    )
+}
+
+fn minutes_before(event: &wire::AgendaEvent) -> Vec<i64> {
+    event.reminders.iter().map(|r| r.minutes_before).collect()
+}
+
+fn made(world: &World, title: &str, day: &str) -> wire::AgendaEvent {
+    let next = civil::plus_days(day, 1).expect("a day");
+    world
+        .window(&format!("{day}T00:00:00Z"), &format!("{next}T00:00:00Z"))
+        .into_iter()
+        .find(|e| e.summary.as_deref() == Some(title))
+        .unwrap_or_else(|| panic!("{title} was not filed on {day}"))
+}
+
+#[test]
+fn the_second_alert_waits_for_the_first_never_repeats_it_and_saves_both() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-15", Kind::Event);
+    world.title(page, "Flight");
+    let data = world.editor_data(page);
+    assert!(!data.show_second_reminder);
+    assert!(data.second_reminders.is_empty());
+    // Nothing happens to a second alert before the first is set.
+    world.send_editor(page, second_reminder("60"));
+    world.send_editor(page, sheet(Sheet::SecondReminder));
+    assert_eq!(world.draft(page).second_reminder_key, "none");
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+
+    world.send_editor(page, reminder("1440"));
+    let data = world.editor_data(page);
+    assert!(data.show_second_reminder);
+    assert_eq!(data.second_reminder_label, "No reminder");
+    // The first one's lead is not offered again.
+    assert_eq!(
+        labels(&data.second_reminders),
+        [
+            "No reminder",
+            "At the start",
+            "10 minutes before",
+            "30 minutes before",
+            "1 hour before"
+        ]
+    );
+    world.send_editor(page, sheet(Sheet::SecondReminder));
+    assert_eq!(world.editor_state(page).sheet, Sheet::SecondReminder as i32);
+    world.send_editor(page, second_reminder("1440"));
+    assert_eq!(world.draft(page).second_reminder_key, "none");
+    world.send_editor(page, second_reminder("60"));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    assert_eq!(
+        world.editor_data(page).second_reminder_label,
+        "1 hour before"
+    );
+
+    // A first set to the second's lead takes its place and the second clears.
+    world.send_editor(page, reminder("60"));
+    assert_eq!(world.draft(page).second_reminder_key, "none");
+    world.send_editor(page, second_reminder("10"));
+    // Clearing the first clears the second.
+    world.send_editor(page, reminder("none"));
+    assert_eq!(world.draft(page).second_reminder_key, "none");
+    assert!(!world.editor_data(page).show_second_reminder);
+    world.send_editor(page, reminder("1440"));
+    world.send_editor(page, second_reminder("60"));
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+    assert_eq!(
+        minutes_before(&made(&world, "Flight", "2099-06-15")),
+        [1440, 60]
+    );
+    // TODO(#1173 notify): `cloud/agenda-notify` consumes the second lead; this
+    // editor only writes it.
+}
+
+#[test]
+fn an_edit_opens_both_alerts_and_changing_only_the_second_writes_both() {
+    let mut world = World::new();
+    let id = world.propose("Train", "2099-06-17T09:00:00", "2099-06-17T10:00:00", |p| {
+        p.reminders = Field::Is("[30,10]".to_owned());
+    });
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    let draft = world.draft(page).clone();
+    assert_eq!(
+        (
+            draft.reminder_key.as_str(),
+            draft.second_reminder_key.as_str()
+        ),
+        ("30", "10")
+    );
+    assert!(!world.editor_data(page).dirty);
+    world.send_editor(page, second_reminder("1440"));
+    assert!(world.editor_data(page).dirty);
+    world.save(page);
+    assert_eq!(
+        minutes_before(&world.event_row(&id).expect("event")),
+        [30, 1440]
+    );
+}
+
+#[test]
+fn availability_is_busy_until_set_free_and_a_free_event_blocks_nothing() {
+    let mut world = World::new();
+    world.propose(
+        "Busy block",
+        "2099-06-17T09:00:00",
+        "2099-06-17T10:00:00",
+        |_| {},
+    );
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Second thing");
+    world.send_editor(page, start("2099-06-17", "09:00"));
+    let data = world.editor_data(page);
+    assert_eq!(data.availability_label, "Busy");
+    assert_eq!(labels(&data.availabilities), ["Busy", "Free"]);
+    assert!(!world.draft(page).free);
+    // Busy lands on a busy event: the vault says no, in its own sentence.
+    world.save(page);
+    assert!(!world.editor_state(page).dismissed);
+    assert!(world.editor_state(page).status.is_some());
+
+    world.send_editor(page, sheet(Sheet::Availability));
+    assert_eq!(world.editor_state(page).sheet, Sheet::Availability as i32);
+    world.send_editor(page, availability("free"));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    assert_eq!(world.editor_data(page).availability_label, "Free");
+    assert!(world.draft(page).free);
+    world.send_editor(page, availability("tentative"));
+    assert!(world.draft(page).free);
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    made(&world, "Second thing", "2099-06-17");
+}
+
+#[test]
+fn an_edit_flips_availability_with_busy_on_the_command() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Block",
+        "2099-06-17T09:00:00",
+        "2099-06-17T10:00:00",
+        |_| {},
+    );
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    world.send_editor(page, availability("free"));
+    assert!(world.editor_data(page).dirty);
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+    // Now free: a busy event at the same time is accepted.
+    world.propose(
+        "Overlap",
+        "2099-06-17T09:00:00",
+        "2099-06-17T10:00:00",
+        |_| {},
+    );
+}
+
+#[test]
+fn a_timed_event_has_a_zone_the_phones_by_default_and_all_day_has_none() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Call");
+    let data = world.editor_data(page);
+    assert!(data.show_zone);
+    assert_eq!(world.draft(page).zone, "Europe/London");
+    assert_eq!(data.zone_label, "London, Europe");
+    // The list is drawn with its sheet and narrows by search, in any case.
+    assert!(data.zones.is_empty());
+    world.send_editor(page, sheet(Sheet::Zone));
+    let data = world.editor_data(page);
+    assert!(data.zones.len() > 60);
+    assert!(
+        data.zones
+            .iter()
+            .any(|z| z.key == "Europe/London" && z.selected)
+    );
+    world.send_editor(page, zone_search("  TOKYO "));
+    let data = world.editor_data(page);
+    assert_eq!(data.zone_query, "  TOKYO ");
+    assert_eq!(
+        data.zones
+            .iter()
+            .map(|z| z.key.as_str())
+            .collect::<Vec<_>>(),
+        ["Asia/Tokyo"]
+    );
+    world.send_editor(page, zone_search("america/new"));
+    assert_eq!(world.editor_data(page).zones[0].key, "America/New_York");
+    world.send_editor(page, zone_search("zzzz"));
+    assert!(world.editor_data(page).zones.is_empty());
+    // An id not in the list is ignored.
+    world.send_editor(page, zone("Mars/Olympus"));
+    assert_eq!(world.draft(page).zone, "Europe/London");
+    world.send_editor(page, zone("Asia/Tokyo"));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    assert_eq!(world.editor_data(page).zone_query, "");
+    assert_eq!(world.draft(page).zone, "Asia/Tokyo");
+    assert_eq!(world.editor_data(page).zone_label, "Tokyo, Asia");
+
+    // 10:00 in Tokyo in June is 01:00Z: the zone keeps the wall clock.
+    world.send_editor(page, start("2099-06-17", "10:00"));
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let event = world
+        .window("2099-06-17T00:00:00Z", "2099-06-18T00:00:00Z")
+        .into_iter()
+        .find(|e| e.summary.as_deref() == Some("Call"))
+        .expect("filed");
+    assert_eq!(event.dtstart, "2099-06-17T01:00:00.000Z");
+    assert_eq!(event.start_tz.as_deref(), Some("Asia/Tokyo"));
+
+    // ALL DAY HAS NO ZONE ROW and no zone sheet.
+    let day = world.open_new("2099-06-18", Kind::Event);
+    world.send_editor(day, all_day(true));
+    assert!(!world.editor_data(day).show_zone);
+    world.send_editor(day, sheet(Sheet::Zone));
+    assert_eq!(world.editor_state(day).sheet, Sheet::None as i32);
+    world.send_editor(day, all_day(false));
+    assert!(world.editor_data(day).show_zone);
+    assert_eq!(world.draft(day).zone, "Europe/London");
+}
+
+#[test]
+fn an_event_in_another_zone_opens_in_its_own_wall_clock_and_a_zone_change_edits_it() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Standup",
+        "2099-06-17T10:00:00",
+        "2099-06-17T11:00:00",
+        |p| {
+            p.zone = Field::Is("Asia/Tokyo".to_owned());
+        },
+    );
+    // London reads it at 02:00; the editor reads it at 10:00, in Tokyo.
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    let draft = world.draft(page).clone();
+    assert_eq!(
+        (
+            draft.zone.as_str(),
+            draft.start_time.as_str(),
+            draft.end_time.as_str()
+        ),
+        ("Asia/Tokyo", "10:00", "11:00")
+    );
+    assert!(!world.editor_data(page).dirty);
+    world.send_editor(page, zone("America/New_York"));
+    assert!(world.editor_data(page).dirty);
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let row = world.event_row(&id).expect("event");
+    assert_eq!(row.start_tz.as_deref(), Some("America/New_York"));
+    // 10:00 in New York in June is 14:00Z.
+    assert_eq!(row.dtstart, "2099-06-17T14:00:00.000Z");
+}
+
+#[test]
+fn a_floating_event_has_no_zone_and_keeps_none_unless_one_is_picked() {
+    let mut world = World::new();
+    let id = world.propose("Lunch", "2099-06-17T12:00:00", "2099-06-17T13:00:00", |p| {
+        p.timing = Some(act::agenda::ProposeTiming::Floating);
+        p.zone = Field::Keep;
+    });
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    assert_eq!(world.draft(page).zone, "");
+    assert_eq!(world.editor_data(page).zone_label, "No time zone");
+    world.send_editor(page, sheet(Sheet::Zone));
+    let zones = world.editor_data(page).zones.clone();
+    assert_eq!(zones[0].key, "floating");
+    assert!(zones[0].selected);
+    // A move keeps it floating.
+    world.send_editor(page, start("2099-06-17", "12:30"));
+    world.save(page);
+    let row = world.event_row(&id).expect("event");
+    assert_eq!(row.recurrence_semantics.as_deref(), Some("floating"));
+    assert_eq!(row.local_start, "2099-06-17T12:30");
+}
+
+#[test]
+fn travel_time_is_none_until_chosen_from_the_offered_lengths() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Dentist");
+    let data = world.editor_data(page);
+    assert_eq!(data.travel_label, "None");
+    assert_eq!(
+        labels(&data.travels),
+        [
+            "None",
+            "5 minutes",
+            "15 minutes",
+            "30 minutes",
+            "1 hour",
+            "1 hour 30 minutes",
+            "2 hours"
+        ]
+    );
+    world.send_editor(page, sheet(Sheet::Travel));
+    assert_eq!(world.editor_state(page).sheet, Sheet::Travel as i32);
+    world.send_editor(page, travel("45"));
+    assert_eq!(world.draft(page).travel_min, 0);
+    world.send_editor(page, travel("30"));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    assert_eq!(world.draft(page).travel_min, 30);
+    assert_eq!(world.editor_data(page).travel_label, "30 minutes");
+    assert!(world.editor_data(page).dirty);
+}
+
+fn the_places(world: &World) -> Vec<(String, String)> {
+    let wire::app_query_response::Answer::PhotosPlaces(places) =
+        world.load(centraid_screens::catalog::load::photos::Places::default())
+    else {
+        panic!("places answered something else");
+    };
+    places
+        .places
+        .into_iter()
+        .filter_map(|card| {
+            Some((
+                card.place?.place_id,
+                card.name.filter(|n| !n.is_empty()).unwrap_or(card.phrase),
+            ))
+        })
+        .collect()
+}
+
+#[test]
+fn a_location_is_picked_from_the_vaults_places_searched_and_cleared() {
+    let mut world = World::new();
+    let known = the_places(&world);
+    assert!(known.len() >= 2, "the example vault has places: {known:?}");
+    let (first_id, first_name) = known[0].clone();
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Dinner");
+    let data = world.editor_data(page);
+    assert_eq!(data.location_label, "No location");
+    assert!(!data.show_clear_location);
+    assert!(data.places.is_empty(), "the list is drawn with its sheet");
+
+    world.send_editor(page, sheet(Sheet::Location));
+    let listed = world.editor_data(page).places.clone();
+    assert_eq!(listed.len(), known.len());
+    assert!(listed.iter().all(|c| !c.selected));
+    // The search narrows by the place's words, in any case.
+    let word = first_name
+        .split_whitespace()
+        .next()
+        .expect("a word")
+        .to_uppercase();
+    world.send_editor(page, place_search(&word));
+    let narrowed = world.editor_data(page).places.clone();
+    assert!(
+        narrowed.iter().any(|c| c.key == first_id),
+        "{word}: {narrowed:?}"
+    );
+    assert!(narrowed.len() <= listed.len());
+    world.send_editor(page, place_search("zzzzzz"));
+    assert!(world.editor_data(page).places.is_empty());
+    world.send_editor(page, place_search(""));
+
+    // A place that is not the vault's is ignored; a real one is chosen.
+    world.send_editor(page, place("not-a-place"));
+    assert_eq!(world.draft(page).place_id, "");
+    world.send_editor(page, place(&first_id));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    assert_eq!(world.draft(page).place_id, first_id);
+    let data = world.editor_data(page);
+    assert_eq!(data.location_label, first_name);
+    assert!(data.show_clear_location);
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let event = made(&world, "Dinner", "2099-06-17");
+    assert_eq!(event.location_place_id.as_deref(), Some(first_id.as_str()));
+
+    // Opening it again shows the place; clearing it writes a clear.
+    let edit = world.open_edit(&event.event_id, &event.instance_key, None, "2099-06-17");
+    assert_eq!(world.editor_data(edit).location_label, first_name);
+    assert!(!world.editor_data(edit).dirty);
+    world.send_editor(
+        edit,
+        ev(K::PlaceCleared, wire::agenda_editor_event::PlaceCleared {}),
+    );
+    assert_eq!(world.draft(edit).place_id, "");
+    assert!(world.editor_data(edit).dirty);
+    world.save(edit);
+    assert!(world.editor_state(edit).dismissed);
+    assert_eq!(
+        world
+            .event_row(&event.event_id)
+            .expect("event")
+            .location_place_id,
+        None
+    );
+}
+
+#[test]
+fn only_an_event_has_these_fields_a_task_has_an_address_instead() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Task);
+    world.title(page, "Book flights");
+    let data = world.editor_data(page);
+    assert!(data.show_url && !data.show_zone && !data.show_second_reminder);
+    assert!(data.location_label.is_empty() && data.travel_label.is_empty());
+    // An event's controls are ignored on a task.
+    world.send_editor(page, travel("30"));
+    world.send_editor(page, availability("free"));
+    world.send_editor(page, sheet(Sheet::Zone));
+    world.send_editor(page, sheet(Sheet::Location));
+    let draft = world.draft(page);
+    assert_eq!((draft.travel_min, draft.free), (0, false));
+    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
+    // And an event ignores the task's address.
+    let event = world.open_new("2099-06-17", Kind::Event);
+    world.send_editor(event, url("example.com"));
+    assert_eq!(world.draft(event).url, "");
+    assert!(!world.editor_data(event).show_url);
+}
+
+#[test]
+fn a_task_address_is_made_a_web_address_or_refused_and_may_be_cleared() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Task);
+    world.title(page, "Read the article");
+    // A bare domain gets https, and the row says what will be saved.
+    world.send_editor(page, url("  example.com/read?q=1 "));
+    let data = world.editor_data(page);
+    assert_eq!(data.url_saved_as, "https://example.com/read?q=1");
+    assert!(data.can_save && data.blocked_reason.is_empty());
+    // A full address stays as it is.
+    world.send_editor(page, url("http://Example.org/A"));
+    assert_eq!(world.editor_data(page).url_saved_as, "http://Example.org/A");
+    // Anything else is refused with a sentence, and Save is not armed.
+    for refused in [
+        "not a url",
+        "mailto:me@example.com",
+        "javascript:alert(1)",
+        "ftp://example.com",
+        "nodots",
+        "https://",
+    ] {
+        world.send_editor(page, url(refused));
+        let data = world.editor_data(page);
+        assert!(!data.can_save, "{refused}");
+        assert_eq!(
+            data.blocked_reason, "That is not a web address.",
+            "{refused}"
+        );
+        assert!(data.url_saved_as.is_empty());
+    }
+    // Cleared, it is no address and the task saves.
+    world.send_editor(page, url("   "));
+    assert!(world.editor_data(page).can_save);
+    assert!(world.editor_data(page).blocked_reason.is_empty());
+}
+
+// ---- THE WRITES CARRY THE FIELDS: the act payloads the editor builds. ----
+
+use centraid_screens::agenda::editor::write;
+use centraid_screens::agenda::todo::ops::{NewTask, add_request};
+
+fn timed_draft() -> wire::AgendaDraft {
+    wire::AgendaDraft {
+        title: "Review".into(),
+        all_day: false,
+        start_day: "2099-06-17".into(),
+        start_time: "10:00".into(),
+        end_day: "2099-06-17".into(),
+        end_time: "11:00".into(),
+        calendar_id: "cal".into(),
+        repeat_key: "none".into(),
+        reminder_key: "none".into(),
+        second_reminder_key: "none".into(),
+        zone: "Europe/London".into(),
+        ..Default::default()
+    }
+}
+
+fn text_of(request: &wire::ActRequest, name: &str) -> Option<String> {
+    match request.input.get(name)?.kind.as_ref()? {
+        wire::value::Kind::Text(text) => Some(text.clone()),
+        wire::value::Kind::Integer(n) => Some(n.to_string()),
+        wire::value::Kind::Null(_) => Some("null".to_owned()),
+        other => panic!("{name}: {other:?}"),
+    }
+}
+
+#[test]
+fn a_new_event_write_carries_place_both_alerts_availability_zone_travel_and_rule() {
+    let plain = write::propose(&timed_draft()).request();
+    assert_eq!(plain.action, "propose");
+    // Nothing the member left alone is sent.
+    for absent in ["place_id", "reminders", "busy", "travel_min", "rule", "url"] {
+        assert!(!plain.input.contains_key(absent), "{absent}");
+    }
+    assert_eq!(text_of(&plain, "zone").as_deref(), Some("Europe/London"));
+    assert!(!plain.input.contains_key("timing"));
+
+    let full = write::propose(&wire::AgendaDraft {
+        place_id: "place-1".into(),
+        reminder_key: "30".into(),
+        second_reminder_key: "1440".into(),
+        free: true,
+        zone: "Asia/Tokyo".into(),
+        travel_min: 90,
+        repeat_key: "custom".into(),
+        repeat_rule: "FREQ=WEEKLY;BYDAY=MO,WE".into(),
+        ..timed_draft()
+    })
+    .request();
+    assert_eq!(text_of(&full, "place_id").as_deref(), Some("place-1"));
+    assert_eq!(text_of(&full, "reminders").as_deref(), Some("[30,1440]"));
+    assert_eq!(text_of(&full, "busy").as_deref(), Some("0"));
+    assert_eq!(text_of(&full, "zone").as_deref(), Some("Asia/Tokyo"));
+    assert_eq!(text_of(&full, "travel_min").as_deref(), Some("90"));
+    assert_eq!(
+        text_of(&full, "rule").as_deref(),
+        Some("FREQ=WEEKLY;BYDAY=MO,WE")
+    );
+
+    // A second alert alone, or the same lead twice, is only the first.
+    let twice = write::propose(&wire::AgendaDraft {
+        reminder_key: "30".into(),
+        second_reminder_key: "30".into(),
+        ..timed_draft()
+    })
+    .request();
+    assert_eq!(text_of(&twice, "reminders").as_deref(), Some("[30]"));
+    let orphan = write::propose(&wire::AgendaDraft {
+        second_reminder_key: "30".into(),
+        ..timed_draft()
+    })
+    .request();
+    assert!(!orphan.input.contains_key("reminders"));
+
+    // A floating event is a wall clock with no zone; all-day has no zone at all.
+    let floating = write::propose(&wire::AgendaDraft {
+        zone: String::new(),
+        ..timed_draft()
+    })
+    .request();
+    assert_eq!(text_of(&floating, "timing").as_deref(), Some("floating"));
+    assert!(!floating.input.contains_key("zone"));
+    let all_day = write::propose(&wire::AgendaDraft {
+        all_day: true,
+        ..timed_draft()
+    })
+    .request();
+    assert_eq!(text_of(&all_day, "timing").as_deref(), Some("all-day"));
+    assert!(!all_day.input.contains_key("zone"));
+}
+
+#[test]
+fn an_edit_write_carries_only_the_changed_fields_and_spells_a_clear_as_null() {
+    let base = wire::AgendaDraft {
+        place_id: "place-1".into(),
+        reminder_key: "30".into(),
+        second_reminder_key: "10".into(),
+        travel_min: 30,
+        repeat_key: "weekly".into(),
+        ..timed_draft()
+    };
+    let unchanged = write::edit_event("ev", &base, &base, &[]).request();
+    assert_eq!(unchanged.input.len(), 1, "{:?}", unchanged.input.keys());
+
+    let cleared = write::edit_event(
+        "ev",
+        &wire::AgendaDraft {
+            place_id: String::new(),
+            second_reminder_key: "none".into(),
+            travel_min: 0,
+            free: true,
+            repeat_key: "none".into(),
+            ..base.clone()
+        },
+        &base,
+        &[],
+    )
+    .request();
+    assert_eq!(text_of(&cleared, "place_id").as_deref(), Some("null"));
+    assert_eq!(text_of(&cleared, "travel_min").as_deref(), Some("null"));
+    assert_eq!(text_of(&cleared, "reminders").as_deref(), Some("[30]"));
+    assert_eq!(text_of(&cleared, "busy").as_deref(), Some("0"));
+    assert_eq!(text_of(&cleared, "rule").as_deref(), Some("null"));
+    assert!(!cleared.input.contains_key("zone"));
+
+    // A new zone moves the wall clock into it.
+    let moved = write::edit_event(
+        "ev",
+        &wire::AgendaDraft {
+            zone: "America/New_York".into(),
+            ..base.clone()
+        },
+        &base,
+        &[],
+    )
+    .request();
+    assert_eq!(text_of(&moved, "zone").as_deref(), Some("America/New_York"));
+    assert_eq!(
+        text_of(&moved, "starts").as_deref(),
+        Some("2099-06-17T10:00:00")
+    );
+    // A custom rule is written as the draft holds it; the same rule is no change.
+    let custom = wire::AgendaDraft {
+        repeat_key: "custom".into(),
+        repeat_rule: "FREQ=MONTHLY;BYDAY=2MO".into(),
+        ..base.clone()
+    };
+    let changed = write::edit_event("ev", &custom, &base, &[]).request();
+    assert_eq!(
+        text_of(&changed, "rule").as_deref(),
+        Some("FREQ=MONTHLY;BYDAY=2MO")
+    );
+    let same = write::edit_event("ev", &custom, &custom, &[]).request();
+    assert!(!same.input.contains_key("rule"));
+}
+
+#[test]
+fn a_new_task_write_carries_its_address_and_rule() {
+    let rule = "FREQ=DAILY;INTERVAL=2".to_owned();
+    let request = add_request(&NewTask {
+        title: "Read",
+        due: "2099-06-17",
+        rule: Some(&rule),
+        url: Some("https://example.com/a"),
+        ..NewTask::default()
+    })
+    .request();
+    assert_eq!(request.action, "add-task");
+    assert_eq!(
+        text_of(&request, "url").as_deref(),
+        Some("https://example.com/a")
+    );
+    assert_eq!(text_of(&request, "rule").as_deref(), Some(rule.as_str()));
+    let none = add_request(&NewTask {
+        title: "Read",
+        ..NewTask::default()
+    })
+    .request();
+    assert!(!none.input.contains_key("url"));
+}
+
+#[test]
+fn travel_time_and_a_task_address_commit_through_the_vault() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Dentist");
+    world.send_editor(page, travel("30"));
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    made(&world, "Dentist", "2099-06-17");
+
+    let task = world.open_new("2099-06-17", Kind::Task);
+    world.title(task, "Read the article");
+    world.send_editor(task, url("example.com/read"));
+    world.save(task);
+    assert!(
+        world.editor_state(task).dismissed,
+        "{:?}",
+        world.editor_state(task).status
+    );
+    assert_eq!(world.tasks_titled("Read the article").len(), 1);
+}
+
+/// AN EXISTING EVENT OPENS AS IT WAS SAVED (#1173): free, and its travel time, from the read, so a
+/// Save that touches neither writes neither; and choosing "None" for travel writes the column null.
+#[test]
+fn an_event_opens_with_its_stored_availability_and_travel_and_none_clears_travel() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Dinner out",
+        "2099-06-17T19:00:00",
+        "2099-06-17T20:00:00",
+        |p| {
+            p.busy = Some(false);
+            p.travel_min = Field::Is(45);
+        },
+    );
+    let stored = world.event_row(&id).expect("event");
+    assert!(!stored.busy);
+    assert_eq!(stored.travel_min, Some(45));
+
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    assert!(world.draft(page).free, "it opens free, as it was saved");
+    assert_eq!(world.draft(page).travel_min, 45);
+    let data = world.editor_data(page);
+    assert_eq!(data.availability_label, "Free");
+    assert_eq!(data.travel_label, "45 minutes");
+    assert!(
+        data.travels.iter().any(|t| t.key == "45" && t.selected),
+        "a stored length is offered and picked"
+    );
+    assert!(!data.dirty, "opening an event is no change");
+
+    world.send_editor(page, travel("0"));
+    assert!(world.editor_data(page).dirty);
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let saved = world.event_row(&id).expect("event");
+    assert_eq!(saved.travel_min, None, "None writes null, not zero");
+    assert!(!saved.busy, "the availability it did not touch stands");
+}
+
+/// An event that is busy opens busy and with no travel, and a Save that changes only its title
+/// leaves both alone.
+#[test]
+fn a_busy_event_with_no_travel_opens_as_the_defaults_and_a_title_edit_keeps_them() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Standup",
+        "2099-06-18T09:00:00",
+        "2099-06-18T09:15:00",
+        |_| {},
+    );
+    let page = world.open_edit(&id, "", None, "2099-06-18");
+    assert!(!world.draft(page).free);
+    assert_eq!(world.draft(page).travel_min, 0);
+    world.title(page, "Daily standup");
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+    let saved = world.event_row(&id).expect("event");
+    assert_eq!(saved.summary.as_deref(), Some("Daily standup"));
+    assert!(saved.busy);
+    assert_eq!(saved.travel_min, None);
 }

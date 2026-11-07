@@ -64,6 +64,8 @@ import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.screens.agenda.agendaListColor
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
@@ -278,7 +280,11 @@ public fun AgendaHomeScreen(
     when (state.sheet) {
         AgendaHomeState.Sheet.SHEET_MORE -> AgendaMoreSheet(state, chrome, onEvent, onOpen)
         AgendaHomeState.Sheet.SHEET_READS -> AgendaReadsSheet(chrome, onEvent)
-        AgendaHomeState.Sheet.SHEET_FILE, AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> AgendaTaskSheet(state, words, onEvent)
+        AgendaHomeState.Sheet.SHEET_FILE,
+        AgendaHomeState.Sheet.SHEET_NEW_PROJECT,
+        AgendaHomeState.Sheet.SHEET_NEW_CALENDAR,
+        AgendaHomeState.Sheet.SHEET_EDIT_CALENDAR,
+        -> AgendaTaskSheet(state, words, onEvent)
         else -> Unit
     }
 }
@@ -748,7 +754,9 @@ private fun AgendaMoreSheet(
                     Unit
                 }
                 if (row.toggle) {
-                    AgendaToggleRow(row, pick)
+                    AgendaToggleRow(row, pick) {
+                        onEvent(AgendaHomeEvent(calendar_edit = AgendaHomeEvent.CalendarEditRequested(calendar_id = row.key.removePrefix("calendar-"))))
+                    }
                 } else {
                     SheetRow(
                         label = row.label,
@@ -764,34 +772,61 @@ private fun AgendaMoreSheet(
 
 /** A calendar's show/hide row: the hue dot, filled while shown, and its state word. */
 @Composable
-private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit) {
+private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit, onEdit: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onPick)
-            .padding(horizontal = KitGeometry.GUTTER)
-            .testTag("agenda-more-${row.key}")
-            .clearAndSetSemantics {
-                contentDescription = row.spoken.ifEmpty { row.label }
-                role = Role.Switch
-            },
+            .padding(start = KitGeometry.GUTTER),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val hue = hueColor(row.hue_key)
-        Box(
+        Row(
             Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .then(if (row.on) Modifier.background(hue) else Modifier.border(1.5.dp, hue, CircleShape)),
-        )
-        Text(
-            row.label,
-            style = centraidType("body"),
-            color = if (row.on) centraidColor("text") else centraidColor("textFaint"),
-            modifier = Modifier.weight(1f).padding(start = 12.dp),
-        )
-        Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+                .weight(1f)
+                .heightIn(min = 48.dp)
+                .clickable(onClick = onPick)
+                .testTag("agenda-more-${row.key}")
+                .clearAndSetSemantics {
+                    contentDescription = row.spoken.ifEmpty { row.label }
+                    role = Role.Switch
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // THE CALENDAR'S COLOUR is a list-palette key; its own icon, when it has one, stands in for the dot.
+            val hue = agendaListColor(row.color_key) ?: hueColor(row.hue_key)
+            if (row.icon_key.isNotEmpty()) {
+                CentraidIcon(row.icon_key, tint = if (row.on) hue else centraidColor("textFaint"), size = 18.dp)
+            } else {
+                Box(
+                    Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .then(if (row.on) Modifier.background(hue) else Modifier.border(1.5.dp, hue, CircleShape)),
+                )
+            }
+            Text(
+                row.label,
+                style = centraidType("body"),
+                color = if (row.on) centraidColor("text") else centraidColor("textFaint"),
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+            )
+            Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+        }
+        if (row.edit_label.isNotEmpty()) {
+            Box(
+                Modifier
+                    .size(KitGeometry.ROW_MIN)
+                    .clickable(onClick = onEdit)
+                    .testTag("agenda-calendar-edit-${row.key.removePrefix("calendar-")}")
+                    .clearAndSetSemantics {
+                        contentDescription = row.edit_label
+                        role = Role.Button
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                CentraidIcon("Pencil", tint = centraidColor("textSoft"), size = 18.dp)
+            }
+        }
     }
 }
 

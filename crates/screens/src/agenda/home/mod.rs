@@ -44,11 +44,11 @@ pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
+use super::style::{Draft, Subject};
 use super::todo::natural::{Chipper, Fields};
 use super::todo::ops::{NewTask, Ops};
 use super::todo::quick::Quick;
 use super::todo::rows;
-use crate::catalog::act;
 use crate::kit::civil;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -93,8 +93,11 @@ pub(super) struct Home {
     /// The Calendar view last used: where the band's Calendar tab returns to.
     last_calendar: Dest,
     sheet: Sheet,
+    /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
+    import_completed: bool,
     filing_task_id: String,
-    new_project_name: String,
+    /// The style sheet's draft: the new list, the new calendar or the calendar being edited.
+    style: Option<Draft>,
     quick: QuickAdd,
     /// To-do's window, widened by "Show more".
     limit: u32,
@@ -141,8 +144,9 @@ impl Home {
                 Dest::Day
             },
             sheet: Sheet::None,
+            import_completed: false,
             filing_task_id: String::new(),
-            new_project_name: String::new(),
+            style: None,
             quick: QuickAdd {
                 drawn: bar,
                 focused: bar,
@@ -273,13 +277,18 @@ impl Home {
             H::SheetOpened(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
                 if sheet != Sheet::Unspecified {
-                    self.sheet = sheet;
+                    self.open_sheet(sheet);
                 }
             }
             H::SheetClosed(_) => {
-                self.sheet = Sheet::None;
+                // A calendar's style sheet was opened from More: closing it returns there.
+                self.sheet = if matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar) {
+                    Sheet::More
+                } else {
+                    Sheet::None
+                };
                 self.filing_task_id.clear();
-                self.new_project_name.clear();
+                self.style = None;
             }
             H::TaskChecked(checked) => {
                 if let Some(found) = self.held.find(&checked.task_id) {
@@ -325,8 +334,26 @@ impl Home {
                     self.shut_quick_add();
                 }
             }
-            H::NewProjectName(typed) => self.new_project_name = typed.name,
-            H::NewProjectSubmitted(_) => self.create_project(ctx),
+            H::StyleName(typed) => self.style_name(typed.name),
+            H::StyleColor(picked) => {
+                if let Some(draft) = &mut self.style {
+                    draft.pick_color(&picked.key);
+                }
+            }
+            H::StyleIcon(picked) => {
+                if let Some(draft) = &mut self.style {
+                    draft.pick_icon(&picked.key);
+                }
+            }
+            H::StyleSubmitted(_) => self.submit_style(ctx),
+            // THE IMPORT REMINDERS SHEET (iOS): the switch, then the verb.
+            H::ImportRemindersCompleted(_) => {
+                if self.sheet == Sheet::ImportReminders {
+                    self.import_completed = !self.import_completed;
+                }
+            }
+            H::ImportRemindersSubmitted(_) => self.import_reminders(ctx),
+            H::CalendarEdit(asked) => self.edit_calendar(&asked.calendar_id, ctx),
             // THE EMPTY TO-DO'S ONE ACTION is the new-project sheet.
             H::TodoEmptyActed(_) => {
                 let acts = self.destination == Dest::Todo
@@ -336,7 +363,7 @@ impl Home {
                         .and_then(|todo| todo.empty)
                         .is_some_and(|empty| !empty.action_label.is_empty());
                 if acts {
-                    self.sheet = Sheet::NewProject;
+                    self.open_sheet(Sheet::NewProject);
                 }
             }
             // A STRIP DAY, A MONTH CELL OR A YEAR'S MONTH: the anchor moves to the
@@ -408,6 +435,11 @@ impl Home {
         };
         if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
+        } else if row.key == chrome::MORE_IMPORT_REMINDERS {
+            self.import_completed = false;
+            self.sheet = Sheet::ImportReminders;
+        } else if row.key == chrome::MORE_NEW_CALENDAR {
+            self.open_sheet(Sheet::NewCalendar);
         } else if let Some(id) = row.key.strip_prefix(chrome::MORE_CALENDAR) {
             let id = id.to_owned();
             self.toggle_calendar(&id);
@@ -415,6 +447,31 @@ impl Home {
             // A TASKS PLACE IS A PAGE: the sheet closes, and the shell pushes the row's route.
             self.sheet = Sheet::None;
         }
+    }
+
+    /// The Import reminders sheet's verb: ask the ONE reminders import (`imports.made`'s
+    /// `RemindersRequested`) to read the phone with the sheet's option. It runs without the import
+    /// status banner's offer and says its outcome on the import status line, in the import's own
+    /// words. Only where the platform has a Reminders store; the sheet shuts either way.
+    fn import_reminders(&mut self, ctx: &Ctx) {
+        if self.sheet != Sheet::ImportReminders {
+            return;
+        }
+        let include_completed = std::mem::take(&mut self.import_completed);
+        self.sheet = Sheet::None;
+        if !ctx.reminders_source() {
+            return;
+        }
+        ctx.post(
+            crate::imports::MADE,
+            wire::ScreenEvent {
+                kind: Some(E::ImportsMade(wire::ImportsMadeEvent {
+                    kind: Some(wire::imports_made_event::Kind::RemindersRequested(
+                        wire::imports_made_event::RemindersRequested { include_completed },
+                    )),
+                })),
+            },
+        );
     }
 
     /// A filing choice: the write it makes, with the sheet shut.
@@ -475,20 +532,60 @@ impl Home {
         self.refresh(ctx);
     }
 
-    fn create_project(&mut self, ctx: &Ctx) {
-        let name = self.new_project_name.trim().to_owned();
-        if name.is_empty() {
+    /// A sheet up, with the draft it names: a new list and a new calendar start
+    /// blank. A calendar edit has its own entry ([`Self::edit_calendar`]).
+    fn open_sheet(&mut self, sheet: Sheet) {
+        match sheet {
+            Sheet::NewProject => self.style = Some(Draft::making(Subject::List)),
+            Sheet::NewCalendar => self.style = Some(Draft::making(Subject::Calendar)),
+            Sheet::EditCalendar => return,
+            _ => {}
+        }
+        self.sheet = sheet;
+    }
+
+    fn style_name(&mut self, name: String) {
+        self.style
+            .get_or_insert_with(|| Draft::making(Subject::List))
+            .set_name(name);
+    }
+
+    /// A calendar's edit control: its name, colour and icon, from the row on screen.
+    fn edit_calendar(&mut self, id: &str, ctx: &Ctx) {
+        let Some(calendar) = self.data(ctx).and_then(|data| {
+            data.calendars
+                .into_iter()
+                .find(|calendar| calendar.calendar_id == id)
+        }) else {
+            return;
+        };
+        self.style = Some(Draft::editing(
+            Subject::Calendar,
+            id,
+            &calendar.name,
+            Some(&calendar.color_key),
+            Some(&calendar.icon_key)
+                .filter(|key| !key.is_empty())
+                .map(String::as_str),
+        ));
+        self.sheet = Sheet::EditCalendar;
+    }
+
+    /// Create or Save on the style sheet. A refusal keeps the sheet and the
+    /// member's words, and the status line says why.
+    fn submit_style(&mut self, ctx: &Ctx) {
+        let Some(draft) = self.style.take() else {
+            return;
+        };
+        if !draft.can_submit() {
+            self.style = Some(draft);
             return;
         }
-        let request = act::agenda::CreateProject {
-            kind: act::agenda::CreateProjectKind::Project,
-            title: name.clone(),
-            ..Default::default()
-        };
-        self.ops
-            .created(ctx, request, &name, task::project_created(ctx.locale()));
-        self.sheet = Sheet::None;
-        self.new_project_name.clear();
+        if draft.submit(ctx, &mut self.ops) {
+            self.sheet = Sheet::None;
+        } else {
+            self.style = Some(draft);
+        }
         self.refresh(ctx);
     }
 
@@ -520,7 +617,18 @@ impl Home {
             .data(ctx)
             .map(|data| data.calendars)
             .unwrap_or_default();
-        chrome::more_rows(ctx.locale(), &calendars)
+        chrome::more_rows(
+            ctx.locale(),
+            &calendars,
+            self.shows_calendars(),
+            ctx.reminders_source(),
+        )
+    }
+
+    /// The calendars are known (the data is the events' fold, not To-do's), so
+    /// the sheet may offer "New Calendar".
+    fn shows_calendars(&self) -> bool {
+        self.destination != Dest::Todo || self.active_term().is_some()
     }
 }
 
@@ -535,7 +643,16 @@ impl Screen for Home {
                 self.refresh(ctx);
                 return self.calendar.attach();
             }
-            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
+            Some(E::EnvironmentChanged(_)) => self.refresh(ctx),
+            // The vault moved: the view reloads, and an event of a writable phone calendar may
+            // now be owed to the phone (two-way sync).
+            Some(E::DataChanged(changed)) => {
+                self.refresh(ctx);
+                return self
+                    .calendar
+                    .on_event(&E::DataChanged(changed), ctx)
+                    .unwrap_or_default();
+            }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
                 // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add
@@ -611,7 +728,10 @@ impl Screen for Home {
         } else {
             String::new()
         };
-        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads);
+        let sheet_up = matches!(
+            self.sheet,
+            Sheet::More | Sheet::Reads | Sheet::ImportReminders
+        );
         let today = data
             .as_ref()
             .map(|data| data.today.clone())
@@ -662,6 +782,8 @@ impl Screen for Home {
                             locale,
                             data.as_ref()
                                 .map_or(&[][..], |data| data.calendars.as_slice()),
+                            data.is_some() && self.shows_calendars(),
+                            ctx.reminders_source(),
                         )
                     },
                     search_corrected: corrected,
@@ -711,8 +833,19 @@ impl Screen for Home {
                     } else {
                         Vec::new()
                     },
-                    new_project_name: self.new_project_name.clone(),
-                    new_project_can_submit: !self.new_project_name.trim().is_empty(),
+                    style: self
+                        .style
+                        .as_ref()
+                        .filter(|_| {
+                            matches!(
+                                self.sheet,
+                                Sheet::NewProject | Sheet::NewCalendar | Sheet::EditCalendar
+                            )
+                        })
+                        .map(|draft| Box::new(draft.sheet(locale))),
+                    import_reminders: (self.sheet == Sheet::ImportReminders
+                        && ctx.reminders_source())
+                    .then(|| chrome::import_reminders_sheet(locale, self.import_completed)),
                     // "Add", not "New event": on Day, Schedule and Waiting the Plus
                     // opens the sheet that adds an event or a task (R-1128-Z1).
                     add_label: if todo {

@@ -683,7 +683,6 @@ mod tests {
         let mut behind = task("behind-daily", Some("2099-05-01"), None);
         behind.rrule = Some("FREQ=DAILY".to_owned());
         behind.recurrence = RecurrenceFacts {
-            recurrence_summary: Some("Daily".to_owned()),
             missed: Some(3),
             next_due: Some("2099-06-01".to_owned()),
         };

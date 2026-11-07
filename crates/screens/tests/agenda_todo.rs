@@ -83,7 +83,7 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
         days_from_today: Some(4),
         project_id: Some("p1".into()),
         repeats: true,
-        recurrence_summary: Some("Monthly".into()),
+        rrule: Some("FREQ=MONTHLY".into()),
         missed: 2,
         effort_min: Some(25),
         tags: vec![wire::AgendaTaskTag {
@@ -116,7 +116,7 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
     let ctx = rows::Context::of("2026-06-15", &projects, &[]);
     assert_eq!(
         rows::meta(EN, &behind, &ctx),
-        "Home admin · Monthly · missed 2 · next is Fri 19 June · ~25 min · #home · 1 of 2"
+        "Home admin · Every month · missed 2 · next is Fri 19 June · ~25 min · #home · 1 of 2"
     );
     let row = rows::row(EN, &behind, &ctx, false);
     assert_eq!(row.priority_label, "!!!");

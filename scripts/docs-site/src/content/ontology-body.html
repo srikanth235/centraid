@@ -206,6 +206,7 @@
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">parent_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ container.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">color</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">icon</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">cover</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 </div></div>
@@ -262,6 +263,7 @@
 <div class="colrow"><span class="cn">place_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ place.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">reminders</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">travel_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">description</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="occurrence"><header><h4>occurrence</h4><p class="tp">One day of a series changed on its own, or from then on: an override, a skip or a cancel, keyed by the series-local wall clock.</p></header>
@@ -292,6 +294,7 @@
 <div class="colrow"><span class="cn">zone</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">series_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ task.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">remind_before_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">effort_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">parent_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ task.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">project_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
@@ -559,7 +562,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="42" data-columns="315">42 tables and 315 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="42" data-columns="318">42 tables and 318 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

@@ -34,7 +34,7 @@ internal object AgendaIntents {
             GlanceWidgets.ACTION_ADD_REMINDER ->
                 pending.trySend(AgendaIntent(add = AgendaIntentAdd(title = intent.getStringExtra(GlanceWidgets.EXTRA_TITLE).orEmpty())))
             GlanceWidgets.ACTION_AGENDA_OPEN ->
-                pending.trySend(AgendaIntent(open = AgendaIntentOpen(key = intent.getStringExtra(GlanceWidgets.EXTRA_OPEN_KEY).orEmpty())))
+                pending.trySend(AgendaIntent(open_ = AgendaIntentOpen(key = intent.getStringExtra(GlanceWidgets.EXTRA_OPEN_KEY).orEmpty())))
         }
     }
 

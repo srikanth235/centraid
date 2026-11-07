@@ -53,7 +53,7 @@ An instant with no zone, an unknown zone and a wall clock the zone skips are ref
 | --- | --- |
 | SQL, in any form | `cargo xtask rules`' `sql-confinement` |
 | A second recurrence engine | there is none here: `expansion` calls `centraid_vault::time::recurrence` |
-| A raw RRULE shown to a member | `recurrence_summary` is `rrule::describe`'s sentence |
+| A raw RRULE shown to a member | a row carries the stored rule for the editor and never a sentence; the one sentence is built in the core strings from `rrule::shape` |
 | A write from a query | a query holds statements and a `PageDoor`, whose one method reads |
 | A denial turned into an error | `Denial` is a value every query answers beside its payload |
 

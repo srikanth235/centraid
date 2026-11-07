@@ -12,57 +12,64 @@
 //! with the core's sentence. An all-day event is its civil days, the end
 //! INCLUSIVE (`agenda.proto`).
 
-use super::draft::{Draft, REMINDER_NONE, guests_changed, rule_of, times_changed};
+use super::draft::{Draft, alerts_of, guests_changed, rule_for, same_repeat, times_changed};
 use crate::catalog::act::agenda as act;
 use crate::field::Field;
+
+/// How a draft's wall clock is placed in time.
+enum Placing {
+    /// A day, and no clock.
+    AllDay,
+    /// A wall clock in a named IANA zone.
+    Zoned(String),
+    /// A wall clock the same everywhere.
+    Floating,
+}
 
 /// A draft's times as a command states them.
 struct Times {
     starts: String,
     ends: String,
-    all_day: bool,
-    zone: String,
+    placing: Placing,
 }
 
 impl Times {
-    fn of(draft: &Draft, zone: &str) -> Self {
+    /// A timed draft with no zone is floating by choice: the editor puts the
+    /// device's zone in every new timed event.
+    fn of(draft: &Draft) -> Self {
         if draft.all_day {
             Self {
                 starts: draft.start_day.clone(),
                 ends: draft.end_day.clone(),
-                all_day: true,
-                zone: String::new(),
+                placing: Placing::AllDay,
             }
         } else {
             Self {
                 starts: format!("{}T{}:00", draft.start_day, draft.start_time),
                 ends: format!("{}T{}:00", draft.end_day, draft.end_time),
-                all_day: false,
-                zone: zone.to_owned(),
+                placing: if draft.zone.is_empty() {
+                    Placing::Floating
+                } else {
+                    Placing::Zoned(draft.zone.clone())
+                },
             }
         }
     }
 
-    fn zone(&self) -> Field<String> {
-        if self.all_day {
-            Field::Keep
-        } else {
-            Field::Is(self.zone.clone())
+    /// The zone a command carries: a zoned clock names it, a floating one
+    /// clears whatever zone the event had, an all-day event has none to send.
+    fn zone(&self, clearing: bool) -> Field<String> {
+        match &self.placing {
+            Placing::Zoned(zone) => Field::Is(zone.clone()),
+            Placing::Floating if clearing => Field::Clear,
+            Placing::Floating | Placing::AllDay => Field::Keep,
         }
     }
 }
 
-/// The minutes before it starts, or `None` for "no reminder".
-fn reminder_of(draft: &Draft) -> Option<i64> {
-    draft
-        .reminder_key
-        .parse()
-        .ok()
-        .filter(|_| draft.reminder_key != REMINDER_NONE)
-}
-
+/// The reminders the draft sets: up to two leads, first then second.
 fn reminders(draft: &Draft) -> String {
-    reminder_of(draft).map_or_else(|| "[]".to_owned(), |minutes| format!("[{minutes}]"))
+    serde_json::to_string(&alerts_of(draft)).unwrap_or_else(|_| "[]".to_owned())
 }
 
 fn json_list(ids: &[String]) -> String {
@@ -77,20 +84,35 @@ fn non_blank(text: &str) -> Option<String> {
 
 /// `propose`: a new event.
 #[must_use]
-pub fn propose(draft: &Draft, zone: &str) -> act::Propose {
-    let times = Times::of(draft, zone);
+pub fn propose(draft: &Draft) -> act::Propose {
+    let times = Times::of(draft);
     act::Propose {
         title: draft.title.trim().to_owned(),
         description: non_blank(&draft.notes).map_or(Field::Keep, Field::Is),
-        zone: times.zone(),
-        timing: times.all_day.then_some(act::ProposeTiming::AllDay),
+        zone: times.zone(false),
+        timing: match times.placing {
+            Placing::AllDay => Some(act::ProposeTiming::AllDay),
+            Placing::Floating => Some(act::ProposeTiming::Floating),
+            Placing::Zoned(_) => None,
+        },
         ends: Field::Is(times.ends),
         starts: times.starts,
         calendar_id: Some(draft.calendar_id.clone()),
         attendees: (!draft.guest_ids.is_empty()).then(|| json_list(&draft.guest_ids)),
-        rule: rule_of(&draft.repeat_key).map_or(Field::Keep, |rule| Field::Is(rule.to_owned())),
+        rule: rule_for(draft).map_or(Field::Keep, Field::Is),
         url: non_blank(&draft.link).map_or(Field::Keep, Field::Is),
-        reminders: reminder_of(draft).map_or(Field::Keep, |_| Field::Is(reminders(draft))),
+        place_id: non_blank(&draft.place_id).map_or(Field::Keep, Field::Is),
+        busy: draft.free.then_some(false),
+        travel_min: if draft.travel_min > 0 {
+            Field::Is(i64::from(draft.travel_min))
+        } else {
+            Field::Keep
+        },
+        reminders: if alerts_of(draft).is_empty() {
+            Field::Keep
+        } else {
+            Field::Is(reminders(draft))
+        },
         ..act::Propose::default()
     }
 }
@@ -102,7 +124,6 @@ pub fn edit_event(
     event_id: &str,
     draft: &Draft,
     base: &Draft,
-    zone: &str,
     owner_ids: &[String],
 ) -> act::EditEvent {
     let mut edit = act::EditEvent {
@@ -116,15 +137,31 @@ pub fn edit_event(
         edit.description = non_blank(&draft.notes).map_or(Field::Clear, Field::Is);
     }
     if times_changed(draft, base) {
-        let times = Times::of(draft, zone);
-        edit.zone = times.zone();
-        edit.timing = times.all_day.then_some(act::EditEventTiming::AllDay);
+        let times = Times::of(draft);
+        edit.zone = times.zone(true);
+        edit.timing = match times.placing {
+            Placing::AllDay => Some(act::EditEventTiming::AllDay),
+            Placing::Floating => Some(act::EditEventTiming::Floating),
+            Placing::Zoned(_) => None,
+        };
         edit.ends = Field::Is(times.ends);
         edit.starts = Some(times.starts);
     }
-    if draft.repeat_key != base.repeat_key {
-        edit.rule =
-            rule_of(&draft.repeat_key).map_or(Field::Clear, |rule| Field::Is(rule.to_owned()));
+    if !same_repeat(draft, base) {
+        edit.rule = rule_for(draft).map_or(Field::Clear, Field::Is);
+    }
+    if draft.place_id != base.place_id {
+        edit.place_id = non_blank(&draft.place_id).map_or(Field::Clear, Field::Is);
+    }
+    if draft.free != base.free {
+        edit.busy = Some(!draft.free);
+    }
+    if draft.travel_min != base.travel_min {
+        edit.travel_min = if draft.travel_min > 0 {
+            Field::Is(i64::from(draft.travel_min))
+        } else {
+            Field::Clear
+        };
     }
     if draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty() {
         edit.calendar_id = Some(draft.calendar_id.clone());
@@ -132,7 +169,9 @@ pub fn edit_event(
     if draft.link.trim() != base.link.trim() {
         edit.url = non_blank(&draft.link).map_or(Field::Clear, Field::Is);
     }
-    if draft.reminder_key != base.reminder_key {
+    if draft.reminder_key != base.reminder_key
+        || draft.second_reminder_key != base.second_reminder_key
+    {
         edit.reminders = Field::Is(reminders(draft));
     }
     if guests_changed(draft, base) {
@@ -152,7 +191,6 @@ pub fn override_occurrence(
     scope: act::EditOccurrenceScope,
     draft: &Draft,
     base: &Draft,
-    zone: &str,
 ) -> act::EditOccurrence {
     let mut edit = act::EditOccurrence {
         action: act::EditOccurrenceAction::Override,
@@ -162,9 +200,13 @@ pub fn override_occurrence(
         ..act::EditOccurrence::default()
     };
     if times_changed(draft, base) {
-        let times = Times::of(draft, zone);
-        edit.zone = times.zone();
-        edit.timing = times.all_day.then_some(act::EditOccurrenceTiming::AllDay);
+        let times = Times::of(draft);
+        edit.zone = times.zone(true);
+        edit.timing = match times.placing {
+            Placing::AllDay => Some(act::EditOccurrenceTiming::AllDay),
+            Placing::Floating => Some(act::EditOccurrenceTiming::Floating),
+            Placing::Zoned(_) => None,
+        };
         edit.ends = Field::Is(times.ends);
         edit.starts = Some(times.starts);
     }

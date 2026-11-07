@@ -14,26 +14,68 @@ enum PhoneReminders {
         } else if EKEventStore.authorizationStatus(for: .reminder) != .fullAccess {
             return .failed(denied())
         }
-        let predicate = store.predicateForIncompleteReminders(
-            withDueDateStarting: nil, ending: nil, calendars: nil
-        )
+        // COMPLETED ONES ONLY WHEN THE MEMBER ASKED FOR THEM (`include_completed`).
+        let predicate = read.includeCompleted
+            ? store.predicateForReminders(in: nil)
+            : store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: nil, calendars: nil)
         let reminders: [Centraid_Core_V1_PhoneReminder] = await withCheckedContinuation { continuation in
             store.fetchReminders(matching: predicate) { found in
                 // EventKit retains its model objects. Read them on the callback's
                 // executor and transfer only immutable protobuf values.
-                let reminders = (found ?? []).filter { !$0.isCompleted }.map { reminder in
-                    var phone = Centraid_Core_V1_PhoneReminder()
-                    phone.title = reminder.title ?? ""
-                    phone.notes = reminder.notes ?? ""
-                    phone.due = day(of: reminder.dueDateComponents)
-                    return phone
-                }
+                let reminders = (found ?? [])
+                    .filter { read.includeCompleted || !$0.isCompleted }
+                    .map { phone($0) }
                 continuation.resume(returning: reminders)
             }
         }
         var snapshot = Centraid_Core_V1_RemindersSnapshot()
         snapshot.reminders = reminders
         return .remindersSnapshot(snapshot)
+    }
+
+    /// EVERY FIELD A REMINDER CARRIES, read as the OS holds it. Rust maps priority, folds a
+    /// duplicate and words nothing; `priority` is EventKit's raw 0..9. EventKit has no public
+    /// flag, so `flagged` stays false. A subtask's parent is not exposed either: `parent_id`
+    /// stays empty.
+    private static func phone(_ reminder: EKReminder) -> Centraid_Core_V1_PhoneReminder {
+        var phone = Centraid_Core_V1_PhoneReminder()
+        phone.title = reminder.title ?? ""
+        phone.notes = reminder.notes ?? ""
+        let due = reminder.dueDateComponents
+        phone.due = day(of: due)
+        if let due, let hour = due.hour {
+            phone.dueTime = String(format: "%02d:%02d:%02d", hour, due.minute ?? 0, due.second ?? 0)
+            phone.tz = due.timeZone?.identifier ?? ""
+        }
+        phone.priority = Int32(reminder.priority)
+        if let rule = reminder.recurrenceRules?.first { phone.rrule = PhoneCalendar.rrule(rule) }
+        if let minutes = minutesBefore(reminder, due: due) { phone.alarmMinutesBefore = minutes }
+        phone.listTitle = reminder.calendar?.title ?? ""
+        phone.listColor = PhoneCalendar.hex(reminder.calendar?.cgColor)
+        phone.url = reminder.url?.absoluteString ?? ""
+        phone.completed = reminder.isCompleted
+        if reminder.isCompleted, let when = reminder.completionDate {
+            phone.completedAt = PhoneCalendar.civil(when, TimeZone(identifier: "UTC") ?? .current, "yyyy-MM-dd'T'HH:mm:ss'Z'")
+        }
+        return phone
+    }
+
+    /// The first alarm as whole minutes before the due time: a relative one is its offset
+    /// negated, an absolute one is the due time minus the alarm's date. One after the due time
+    /// is none.
+    private static func minutesBefore(_ reminder: EKReminder, due: DateComponents?) -> UInt32? {
+        guard let alarm = reminder.alarms?.first else { return nil }
+        let seconds: TimeInterval
+        if let absolute = alarm.absoluteDate {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = due?.timeZone ?? .current
+            guard let due, let dueDate = calendar.date(from: due) else { return nil }
+            seconds = dueDate.timeIntervalSince(absolute)
+        } else {
+            seconds = -alarm.relativeOffset
+        }
+        guard seconds >= 0 else { return nil }
+        return UInt32((seconds / 60).rounded())
     }
 
     /// `YYYY-MM-DD` of a due date's own calendar day, or empty when it names none.

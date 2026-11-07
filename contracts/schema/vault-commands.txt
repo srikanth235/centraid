@@ -12,6 +12,7 @@ category.merge
 checkpoint.record
 container.create
 container.move
+container.style
 derivative.drop
 derivative.write
 document.add
@@ -39,6 +40,7 @@ follow.calendar
 follow.contacts
 follow.files
 follow.health
+follow.pushed
 follow.statement
 follow.stop
 locker.add_item

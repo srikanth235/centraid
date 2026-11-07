@@ -51,6 +51,7 @@ fn run(
             calendar_id: "c1".to_owned(),
             name: Some("Work".to_owned()),
             color: None,
+            icon: None,
         }],
     })
 }

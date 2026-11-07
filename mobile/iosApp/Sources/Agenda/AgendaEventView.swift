@@ -139,6 +139,24 @@ struct AgendaEventView: View {
                         guestRow(guest)
                     }
                 }
+                // GUESTS THE PHONE'S CALENDAR HOLDS, read only: a name (else the address), the address
+                // under a name, and the guest's answer.
+                if !detail.followedGuests.isEmpty {
+                    SectionHeader(title: detail.followedHeading)
+                        .accessibilityIdentifier("agenda-event-followed")
+                    ForEach(Array(detail.followedGuests.enumerated()), id: \.offset) { index, guest in
+                        followedRow(guest, index: index)
+                    }
+                }
+                if detail.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: detail.attachments,
+                        idPrefix: "agenda-event-attachment",
+                        headIdentifier: "agenda-event-attachments",
+                        open: open,
+                        send: { attachment in send(event { $0.attachment = attachment }) }
+                    )
+                }
                 let sentence = writeSentence(state)
                 if !sentence.isEmpty, state.sheet != .cancelScope {
                     Text(sentence)
@@ -234,6 +252,38 @@ struct AgendaEventView: View {
             }
         }
         .padding(CentraidGeometry.pageMargin)
+    }
+
+    private func followedRow(_ guest: Centraid_Core_V1_AgendaFollowedGuestRow, index: Int) -> some View {
+        HStack(spacing: 10) {
+            Text(guest.initial)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("onAccent", scheme))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(guest.name)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(1)
+                if !guest.detail.isEmpty {
+                    Text(guest.detail)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(guest.replyLabel)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+        .overlay(alignment: .bottom) { KitHairline() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(guest.accessibilityLabel)
+        .accessibilityIdentifier("agenda-event-followed-guest-\(index)")
     }
 
     private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow) -> some View {

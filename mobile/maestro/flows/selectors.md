@@ -63,8 +63,15 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-new-event` / `agenda-add-task` | Agenda | the header Plus: "Add" on Day, Schedule and Waiting, "Add task" on To-do (it opens the quick-add bar) |
 | `agenda-quick-add` | Agenda (To-do) | the quick-add bar's field, drawn only after `agenda-add-task`; Add is `agenda-quick-add-verb`, and appears once there are words |
 | `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
-| `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-project sheet, whose field is `tasks-new-project-field` |
-| `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `anytime`, `logbook`, `reminders`, `trash`, `reads` |
+| `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-list style sheet, whose field is `agenda-style-name` |
+| `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `new-calendar` (opens the new-calendar sheet, #1173), `anytime`, `logbook`, `reminders`, `trash`, `import-reminders` (iOS only, below), `reads` |
+| `agenda-more-import-reminders` | Agenda's More sheet | **iOS only** (Android has no Reminders store, so its More draws no such row): opens the Import reminders option sheet (#1173) |
+| `agenda-import-reminders-completed` | the Import reminders sheet | **iOS only**: the "Include completed reminders" switch, off by default; `selected`/on once flipped |
+| `agenda-import-reminders-go` | the same | **iOS only**: the sheet's one ink button, "Import reminders": it asks the one reminders import to read the phone with the switch's option, and the outcome is said on the import status line (`import-banner`), never on the sheet |
+| `agenda-calendar-edit-<calendarId>` | Agenda's More sheet | a calendar row's edit control: opens the style sheet on that calendar to rename it and change its colour and icon (#1173) |
+| `agenda-style-name` / `agenda-style-submit` / `agenda-style-cancel` | Agenda's style sheet (a new list from "Add List", a list's "Edit List", a new or edited calendar) | the name field, Create or Save, and Cancel; the new list sheet's field is `agenda-style-name` too (it was `tasks-new-project-field`) |
+| `agenda-style-color-<key>` / `agenda-style-icon-<key>` / `agenda-style-icon-none` | the same | one of the eight `[list]` swatches (`blue`, `mustard`, `violet`, `petrol`, `indigo`, `graphite`, `raspberry`, `orchid`), one icon of the grid (a `design/icons.toml` key such as `Gym`), and the row that clears the icon; the selected one carries `selected=true` |
+| `tasks-project-edit` | a project page | the header verb "Edit List": opens the style sheet on the list |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
 | `agenda-view-menu` | Agenda (Calendar) | the Calendar's view menu key (#1173); its rows are `agenda-view-<key>`: `day`, `week`, `month`, `list`, `year`, and on Month `agenda-month-style-grid` / `agenda-month-style-list` |
@@ -80,6 +87,28 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-editor-notes` | the add sheet (task) | the task's notes field |
 | `agenda-editor-list` | the add sheet (task) | the List row; a list in its sheet is `agenda-editor-list-<key>` (`inbox` or a project id) |
 | `agenda-editor-more-details` | the add sheet (task) | the More details row; under it `agenda-editor-priority-<0..3>`, `agenda-editor-tag-field` and a tag chip `agenda-editor-tag-<text>` |
+| `agenda-editor-location` / `agenda-editor-second-reminder` / `agenda-editor-availability` / `agenda-editor-zone` / `agenda-editor-travel` | the event editor | the Location, Second alert, Availability, Time zone and Travel time rows (#1173 wave 2); each opens its sheet. The second alert row is drawn only once the first alert is set, the zone row only on a timed event |
+| `agenda-editor-url` | the add sheet and a task's editor | the task's address field, with what Save will write under it |
+| `agenda-editor-place-search` / `agenda-editor-place-<id>` / `agenda-editor-place-clear` | the Location sheet | the place search field, one place of the vault (a `place` entity id), and "No location" (drawn while a place is chosen) |
+| `agenda-editor-second-reminder-<key>` | the Second alert sheet | one alert choice (`none`, then the first alert's list) |
+| `agenda-editor-availability-<busy\|free>` | the Availability sheet | Busy or Free |
+| `agenda-editor-zone-search` / `agenda-editor-zone-<iana>` | the Time zone sheet | the zone search field, and one zone (an IANA id such as `Europe/Paris`, or `floating`) |
+| `agenda-editor-travel-<minutes>` | the Travel time sheet | one choice, minutes as text (`0` is none) |
+| `agenda-editor-custom-freq-<key>` | the Custom repeat sheet (the Repeat sheet's `custom` choice) | the frequency segments: `daily`, `weekly`, `monthly`, `yearly` |
+| `agenda-editor-custom-interval` / `agenda-editor-custom-count` | the same | the "Every N" number field and the "After N times" number field |
+| `agenda-editor-custom-weekday-<MO..SU>` | the same (weekly) | one weekday chip, any number picked |
+| `agenda-editor-custom-month-mode-<date\|nth>` | the same (monthly) | "On day(s) of the month" or "On the" |
+| `agenda-editor-custom-month-day-<1..31\|-1>` | the same (monthly by date) | one day of the month chip; `-1` is the last day |
+| `agenda-editor-custom-ordinal-<n>` / `agenda-editor-custom-nth-weekday-<MO..SU>` | the same (monthly "On the") | first to fifth or last (`-1`), then the weekday |
+| `agenda-editor-custom-end-<never\|on\|after>` | the same | how the rule ends; `agenda-editor-custom-until` is the date row that opens the day picker, drawn for "On a date" |
+| `agenda-editor-custom-summary` / `agenda-editor-custom-error` | the same | the rule in words, re-derived on every change, and the sentence while the rule is not whole |
+| `agenda-editor-custom-done` / `agenda-editor-custom-replace` | the same | Done, armed once the rule is whole; and, over a rule the sheet cannot represent (read only), the verb that starts a fresh one |
+| `agenda-detail-link` / `agenda-detail-link-open` | a task's page | the task's address as stored, and its "Open link" verb (hands the address to the phone) |
+| `agenda-detail-attachments` | a task's page | the attachments section; a tile is `agenda-detail-attachment-<id>` (a tap opens it) with its remove control `agenda-detail-attachment-remove-<id>` |
+| `agenda-detail-attachment-add-photo` / `agenda-detail-attachment-add-file` / `agenda-detail-attachment-more` / `agenda-detail-attachment-status` | a task's page | Add photo, Add file, Show more, and the section's own status line |
+| `agenda-event-attachments` | an event's page | the attachments section; a tile is `agenda-event-attachment-<id>` with its remove control `agenda-event-attachment-remove-<id>` |
+| `agenda-event-attachment-add-photo` / `agenda-event-attachment-add-file` / `agenda-event-attachment-more` / `agenda-event-attachment-status` | an event's page | Add photo, Add file, Show more, and the section's own status line |
+| `agenda-event-followed` / `agenda-event-followed-guest-<index>` | an event's page (a followed phone calendar) | the guests the phone's calendar holds, with their replies, and one guest by its position |
 | `tasks-detail-group-<key>` | a task's page | the head of one grouped card, keyed on its first field (`when`, `project`, …); the Flag switch is `tasks-field-flag` |
 | `row-action-<id>` / `row-menu-<id>` | any swipeable task row | the swipe's and the long press's Details, Flag and Delete (`details`, `flag`, `delete`) |
 | `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
@@ -117,6 +146,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
 | `import-banner` | every route, at the foot above the band | an import's status line: progress and outcome (`import-sentence`), its one action (`import-action`, "Open People" after a made vault's imports) and its close key (`import-close`) |
+| `import-reminders` | made vault, under the import banner once its imports are over | the verb that reads the phone's Reminders and imports them as tasks — **iOS only**; Android has no Reminders store |
+| `import-completed-toggle` | made vault, beside `import-reminders` | the chip that also brings completed reminders in (selected while on) — **iOS only**; Android has no Reminders store |
 | `home-vault-sheet` | Home | the vault switcher sheet |
 | `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`, its **Delete**) |
 | `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |

@@ -134,6 +134,15 @@ struct AgendaHomeView: View {
         .sheet(isPresented: sheetBinding(state, .reads)) {
             AgendaReadsSheet(chrome: state.chrome)
         }
+        // THE REMINDERS IMPORT (iOS): the option and the verb, opened from More. The verb asks the
+        // one import (`imports.made`) to read the phone's Reminders; its outcome is the import line's.
+        .sheet(isPresented: sheetBinding(state, .importReminders)) {
+            AgendaImportRemindersSheet(
+                sheet: state.importReminders,
+                onToggle: { send(AgendaEvents.make { $0.importRemindersCompleted = .init() }) },
+                onImport: { send(AgendaEvents.make { $0.importRemindersSubmitted = .init() }) }
+            )
+        }
         .sheet(isPresented: sheetBinding(state, .file)) {
             OptionSheet(title: state.chrome.tasks.fileTitle) {
                 ForEach(state.fileChoices, id: \.key) { choice in
@@ -148,25 +157,23 @@ struct AgendaHomeView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, .newProject)) {
-            SheetRoom(
-                title: state.chrome.tasks.newProjectTitle,
-                primary: state.newProjectCanSubmit
-                    ? SheetPrimary(label: state.chrome.tasks.newProjectVerb) {
-                        send(AgendaEvents.make { $0.newProjectSubmitted = .init() })
-                    }
-                    : nil
-            ) {
-                MachineTextField(
-                    placeholder: state.chrome.tasks.newProjectPlaceholder,
-                    value: state.newProjectName,
-                    focusOnAppear: true,
-                    onEdit: { name in send(AgendaEvents.make { $0.newProjectName = .with { $0.name = name } }) }
-                )
-                .centraidType("body")
-                .accessibilityLabel(state.chrome.tasks.newProjectPlaceholder)
-                .accessibilityIdentifier("tasks-new-project-field")
+        // THE STYLE SHEET, one for the new list, the new calendar and an edited calendar.
+        .sheet(isPresented: Binding(
+            get: { [.newProject, .newCalendar, .editCalendar].contains(state.sheet) },
+            set: { open in
+                if !open, [.newProject, .newCalendar, .editCalendar].contains(state.sheet) {
+                    send(AgendaEvents.make { $0.sheetClosed = .init() })
+                }
             }
+        )) {
+            AgendaStyleSheetView(
+                style: state.style,
+                onName: { name in send(AgendaEvents.make { $0.styleName = .with { $0.name = name } }) },
+                onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
+                onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
+                onSubmit: { send(AgendaEvents.make { $0.styleSubmitted = .init() }) },
+                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
+            )
         }
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
@@ -582,9 +589,11 @@ private struct AgendaTodoList: View {
                         let row = project.row
                         Button { open(project.route) } label: {
                             HStack(spacing: 12) {
-                                Circle()
-                                    .fill(AgendaPalette.list(project.listColorKey) ?? Theme.color("textFaint", scheme))
-                                    .frame(width: 12, height: 12)
+                                AgendaListMark(
+                                    colorKey: project.listColorKey,
+                                    iconKey: project.iconKey,
+                                    fallback: Theme.color("textFaint", scheme)
+                                )
                                 Text(row.title)
                                     .centraidType("body")
                                     .foregroundStyle(Theme.color("text", scheme))
@@ -913,6 +922,12 @@ private struct AgendaMoreSheet: View {
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
+    /// A calendar row that wears a list colour draws its icon in the leading mark, so the
+    /// row itself names no icon; every other row keeps the icon the core sent.
+    private func sheetIcon(of row: Centraid_Core_V1_AgendaMoreRow) -> String {
+        row.colorKey.isEmpty ? row.iconKey : String()
+    }
+
     /// A `SheetRoom` of `SheetRow`s — what `OptionSheet` draws — with the
     /// title carrying the sheet's id, so the rows keep their own. THE ROWS ARE
     /// RUST'S (`more_rows`), the same list Android draws: a calendar row is a
@@ -927,13 +942,18 @@ private struct AgendaMoreSheet: View {
                             SectionHeader(title: row.section)
                         }
                         HStack(spacing: 8) {
-                            if !row.hueKey.isEmpty {
+                            // A CALENDAR WEARS THE ONE LIST PALETTE and its own icon; an events
+                            // calendar with no list colour keeps its hue dot.
+                            if !row.colorKey.isEmpty {
+                                AgendaListMark(colorKey: row.colorKey, iconKey: row.iconKey)
+                                    .padding(.leading, 12)
+                            } else if !row.hueKey.isEmpty {
                                 Circle()
                                     .fill(Theme.color(KitHue.role(row.hueKey) ?? "cSlate", scheme))
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(
-                                iconKey: row.iconKey,
+                                iconKey: sheetIcon(of: row),
                                 label: row.label,
                                 selected: row.toggle && row.on,
                                 identifier: "agenda-more-\(row.key)"
@@ -942,10 +962,57 @@ private struct AgendaMoreSheet: View {
                                 if row.hasRoute { open(row.route) }
                             }
                             .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                            // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.
+                            if !row.editLabel.isEmpty {
+                                let calendarID = String(row.key.dropFirst("calendar-".count))
+                                Button {
+                                    send(AgendaEvents.make { $0.calendarEdit = .with { $0.calendarID = calendarID } })
+                                } label: {
+                                    CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme), size: 18)
+                                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(row.editLabel)
+                                .accessibilityIdentifier("agenda-calendar-edit-\(calendarID)")
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/// THE IMPORT REMINDERS SHEET: one switch ("Include completed reminders", off until turned on) and
+/// the one verb. Both words are Rust's (`ImportsMadeState`'s); the switch's state is the core's and a
+/// flip is an event; the verb is `SheetRoom`'s one ink button.
+private struct AgendaImportRemindersSheet: View {
+    let sheet: Centraid_Core_V1_AgendaImportRemindersSheet
+    let onToggle: () -> Void
+    let onImport: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            primary: SheetPrimary(
+                label: sheet.importLabel,
+                identifier: "agenda-import-reminders-go",
+                action: onImport
+            ),
+            titleIdentifier: "agenda-import-reminders-sheet"
+        ) {
+            Toggle(isOn: Binding(
+                get: { sheet.completedOn },
+                set: { _ in onToggle() }
+            )) {
+                Text(sheet.completedLabel)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+            }
+            .kitToggle()
+            .accessibilityIdentifier("agenda-import-reminders-completed")
         }
     }
 }

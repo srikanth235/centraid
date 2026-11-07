@@ -453,11 +453,12 @@ fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
     assert_eq!(reminders.counts.expect("counts").reminders, 3);
 }
 
-/// A REPEATING TASK CARRIES ITS SENTENCE, built in Rust — v0's phone drew
-/// "—" for every cadence — and its raw rule, which only the editor's repeat
-/// picker reads (to pre-select and send back); a shell never expands it.
+/// A REPEATING TASK CARRIES ITS RULE, which the screens say in words (the core
+/// strings, `crates/screens`; v0's phone drew "—" for every cadence) and
+/// the editor's repeat picker reads (to pre-select and send back); a shell
+/// never expands it.
 #[test]
-fn a_repeating_task_carries_its_summary_and_next_period() {
+fn a_repeating_task_carries_its_rule_and_next_period() {
     let scratch = Scratch::founded();
     let daily = scratch.add(serde_json::json!({
         "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
@@ -465,7 +466,6 @@ fn a_repeating_task_carries_its_summary_and_next_period() {
     let detail = scratch.detail(&daily);
     let task = detail.task.expect("the task");
     assert!(task.repeats);
-    assert_eq!(task.recurrence_summary.as_deref(), Some("Daily"));
     assert_eq!(task.rrule.as_deref(), Some("FREQ=DAILY"));
     assert!(task.missed > 0, "the unactioned days collapse into a count");
     assert!(task.next_due.is_some());
@@ -564,7 +564,7 @@ fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
                 )
             });
         assert!(!row.overdue && row.repeats, "{now}");
-        assert_eq!(row.recurrence_summary.as_deref(), Some("Daily"));
+        assert_eq!(row.rrule.as_deref(), Some("FREQ=DAILY"));
         assert!(row.next_due.is_some());
     }
 }

@@ -12,7 +12,7 @@ use crate::agenda::todo::rows;
 use crate::kit::civil;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
-    agenda_reminders as reminders, fill, task,
+    agenda_lists as lists, agenda_reminders as reminders, fill, imports, task,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
@@ -24,10 +24,15 @@ pub const BAND_MORE: &str = "more";
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
 pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
+/// The row that opens the new-calendar sheet (#1173).
+pub const MORE_NEW_CALENDAR: &str = "new-calendar";
 pub const MORE_ANYTIME: &str = "anytime";
 pub const MORE_LOGBOOK: &str = "logbook";
 pub const MORE_REMINDERS: &str = "reminders";
 pub const MORE_TRASH: &str = "trash";
+/// The row that opens the Import reminders option sheet: offered only where the platform has a
+/// reminders source ([`crate::Ctx::reminders_source`]).
+pub const MORE_IMPORT_REMINDERS: &str = "import-reminders";
 
 /// The Tasks places a More row opens as a page.
 pub const TASK_PLACES: [&str; 4] = [MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH];
@@ -176,6 +181,8 @@ fn day_label(locale: Locale, destination: Dest, anchor: &str, today: &str) -> St
 pub fn more_rows(
     locale: Locale,
     calendars: &[wire::AgendaCalendarChoice],
+    can_add_calendar: bool,
+    can_import_reminders: bool,
 ) -> Vec<wire::AgendaMoreRow> {
     let mut out: Vec<wire::AgendaMoreRow> = calendars
         .iter()
@@ -193,9 +200,29 @@ pub fn more_rows(
                 String::new()
             },
             spoken: format!("{}, {}", calendar.name, calendar.state_label),
+            icon_key: calendar.icon_key.clone(),
+            color_key: calendar.color_key.clone(),
+            edit_label: fill(
+                &lists::edit_calendar(locale),
+                &[("name", calendar.name.as_str())],
+            ),
             ..wire::AgendaMoreRow::default()
         })
         .collect();
+    if can_add_calendar {
+        out.push(wire::AgendaMoreRow {
+            key: MORE_NEW_CALENDAR.to_owned(),
+            label: lists::new_calendar_title(locale),
+            spoken: lists::new_calendar_title(locale),
+            icon_key: "CalendarPlus".to_owned(),
+            section: if calendars.is_empty() {
+                words::rail_calendars(locale)
+            } else {
+                String::new()
+            },
+            ..wire::AgendaMoreRow::default()
+        });
+    }
     let place = |key: &str, label: String, meta: String, icon: &str, route: wire::Route| {
         wire::AgendaMoreRow {
             key: key.to_owned(),
@@ -239,6 +266,17 @@ pub fn more_rows(
     ];
     places[0].section = words::rail_tasks(locale);
     out.extend(places);
+    // THE REMINDERS IMPORT, beside the Tasks places: an action row that opens its option sheet.
+    // Only where the platform has a Reminders store (iOS).
+    if can_import_reminders {
+        out.push(wire::AgendaMoreRow {
+            key: MORE_IMPORT_REMINDERS.to_owned(),
+            label: imports::reminders_import(locale),
+            spoken: imports::reminders_import(locale),
+            icon_key: "Download".to_owned(),
+            ..wire::AgendaMoreRow::default()
+        });
+    }
     out.push(wire::AgendaMoreRow {
         key: MORE_READS.to_owned(),
         label: words::reads_title(locale),
@@ -246,6 +284,21 @@ pub fn more_rows(
         ..wire::AgendaMoreRow::default()
     });
     out
+}
+
+/// The Import reminders option sheet: its words are the import line's
+/// (`strings::imports`, as `ImportsMadeState` carries them).
+#[must_use]
+pub fn import_reminders_sheet(
+    locale: Locale,
+    completed_on: bool,
+) -> wire::AgendaImportRemindersSheet {
+    wire::AgendaImportRemindersSheet {
+        title: imports::reminders_import(locale),
+        completed_label: imports::completed_toggle(locale),
+        completed_on,
+        import_label: imports::reminders_import(locale),
+    }
 }
 
 /// The screen's fixed words, so a view carries no copy of its own.

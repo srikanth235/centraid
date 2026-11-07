@@ -55,9 +55,7 @@ use centraid_vault::time::zone::FireZone;
 
 pub use centraid_apps_kit::attached::Attachment;
 
-use crate::expansion::{
-    DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events, recurrence_summary,
-};
+use crate::expansion::{DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events};
 use crate::{Denial, denial_of};
 
 // ---------------------------------------------------------------------------
@@ -86,7 +84,7 @@ pub const WIDE: FanOutBound = FanOutBound::new(500, 64);
 
 const STARRED: &str = "flag:starred";
 const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supported, status, \
-     calendar_id, place_id, url, reminders, description";
+     calendar_id, place_id, url, reminders, description, busy, travel_min";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 
 /// These answers carry no continuation or partial flag, so their stated bounds
@@ -132,6 +130,8 @@ pub struct CalendarRow {
     pub calendar_id: String,
     pub name: Option<String>,
     pub color: Option<String>,
+    /// A key of `design/icons.toml`, when the member chose one.
+    pub icon: Option<String>,
 }
 
 /// One event row, or one OCCURRENCE of one, which is the same row with a
@@ -161,12 +161,14 @@ pub struct EventRow {
     pub calendar_id: Option<String>,
     /// The joining link.
     pub conferencing_uri: Option<String>,
-    /// Minutes before it starts, in the order they were set.
+    /// Minutes before it starts, in the order they were set (the first alert, then the second).
     pub reminders: Vec<i64>,
+    /// Whether it blocks its time; `false` is the member's "free".
+    pub busy: bool,
+    /// Minutes of travel the member allows before it starts.
+    pub travel_min: Option<i64>,
     pub attachments: Vec<Attachment>,
     pub attendees: Vec<Attendee>,
-    /// The ONE member-facing recurrence sentence; **never the rule** (#834).
-    pub recurrence_summary: Option<String>,
     pub is_recurrence_instance: bool,
     /// The series id for a one-off, and `<event_id>:<wall clock>` for an
     /// occurrence. **The list's key, never the row's identity.**
@@ -359,6 +361,9 @@ fn event_of(row: &Row, entity: &Row) -> EventRow {
         calendar_id: text_of(row, "calendar_id"),
         conferencing_uri: text_of(row, "url"),
         reminders,
+        // A row that does not say is busy, as the column's default is.
+        busy: row.get("busy").and_then(Cell::integer) != Some(0),
+        travel_min: row.get("travel_min").and_then(Cell::integer),
         ..EventRow::default()
     }
 }
@@ -434,9 +439,6 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
             .location_place_id
             .as_ref()
             .and_then(|place| places.get(place).cloned());
-        // THE ONE SUMMARISER, RESOLVED HERE (#834): the row carries the sentence
-        // and never the raw rule.
-        event.recurrence_summary = recurrence_summary(event.rrule.as_deref());
     }
     Ok(())
 }
@@ -557,10 +559,10 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
         EVENT_JOIN_BOUND,
     )?;
     let ids = ids_of(&named, "id");
-    let painted: BTreeMap<String, (Option<String>, f64)> = by_ids(
+    let painted: BTreeMap<String, (Option<String>, Option<String>, f64)> = by_ids(
         "agenda.upcoming.colors",
         "container",
-        "id, color, position",
+        "id, color, icon, position",
         "id",
     )
     .of(door, &ids, None)?
@@ -570,6 +572,7 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
             text_of(row, "id")?,
             (
                 text_of(row, "color"),
+                text_of(row, "icon"),
                 match row.get("position") {
                     Some(Cell::Real(at)) => *at,
                     _ => 0.0,
@@ -583,14 +586,15 @@ pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>>
         .filter_map(|row| {
             let id = text_of(row, "id")?;
             Some(CalendarRow {
-                color: painted.get(&id).and_then(|(color, _)| color.clone()),
+                color: painted.get(&id).and_then(|(color, ..)| color.clone()),
+                icon: painted.get(&id).and_then(|(_, icon, _)| icon.clone()),
                 name: text_of(row, "title"),
                 calendar_id: id,
             })
         })
         .collect();
     calendars.sort_by(|left, right| {
-        let place = |row: &CalendarRow| painted.get(&row.calendar_id).map_or(0.0, |(_, at)| *at);
+        let place = |row: &CalendarRow| painted.get(&row.calendar_id).map_or(0.0, |(.., at)| *at);
         place(left).total_cmp(&place(right))
     });
     Ok(calendars)

@@ -10,8 +10,8 @@
 //!
 //! | File | The claim it would falsify |
 //! |---|---|
-//! | `rrule-cases.json` | a part this engine cannot honour is REFUSED with v0's own sentence, and the summariser says v0's words |
-//! | `dst-cases.json` | a gap is skipped, a fold occurs once at the earlier instant, and a wall clock survives an offset change — in six zones, one with a 30-minute shift, one with negative DST and one at a :45 offset |
+//! | `rrule-cases.json` | a part this engine cannot honour is REFUSED with v0's own sentence, and the rule's shape exists exactly where v0 had a sentence (the words are the core strings', `crates/screens/tests/agenda_repeat_words.rs`) |
+//! | `dst-cases.json` | a gap moves forward and counts (RFC 5545, flipped by the owner on #1173), an implied 31st or Feb 29 is skipped (likewise), a fold occurs once at the earlier instant, and a wall clock survives an offset change — in six zones, one with a 30-minute shift, one with negative DST and one at a :45 offset |
 //! | `occurrence-cases.json` | the occurrence key is `original_start_local`, the SERIES-LOCAL WALL CLOCK, and keying on the resolved instant matches nothing (ONT-25) |
 
 use std::collections::BTreeMap;
@@ -59,71 +59,57 @@ fn zone_of(name: &str) -> Option<FireZone> {
 // rrule-cases.json
 // ---------------------------------------------------------------------------
 
-/// The two refusal sentences #1119 rewrote (contracts/time/README.md, "Deliberate departures"). v0's
-/// `BYDAY` sentence said a positional day could never be honoured and its `BYMONTHDAY` sentence that
-/// the expander only steps from the anchor day; since R-1119-1 a MONTHLY rule takes one of either, so
-/// a member reading v0's words would be told something false. The golden is NOT rewritten: a refused
-/// case naming one of these parts must still carry v0's sentence there, and this build's sentence
-/// must differ from it and name what the subset does take.
-const REWORDED_1119: [(&str, &str); 2] = [
-    (
-        "BYDAY",
-        "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, \
-         and a positional day (\"-1FR\") or a non-day token is not a rule it can expand",
-    ),
-    (
-        "BYMONTHDAY",
-        "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to \
-         days of the month; the expander steps from the anchor day",
-    ),
+/// The golden parts a rule can be refused for in v0 that this build now ACCEPTS, with RFC 5545's
+/// meaning (#1119 took one month position, #1173 took the rest of the day-or-coarser rule). The
+/// golden is a frozen capture and is NOT rewritten: a refused golden case this build accepts must
+/// name one of these parts, must still be recorded as refused in the golden, and must have a
+/// sentence from the one summariser. `crates/vault/tests/rrule_*.rs` pin what each now means.
+const WIDENED_PARTS: [&str; 7] = [
+    "BYDAY",
+    "BYMONTHDAY",
+    "BYMONTH",
+    "BYYEARDAY",
+    "BYWEEKNO",
+    "BYSETPOS",
+    "WKST",
 ];
 
-/// **THE FIVE GOLDEN CASES THE VAULT WIDENED ON PURPOSE** (#1119, R-1119-1).
-///
-/// v0 refused `FREQ=MONTHLY` with a positional `BYDAY` or a `BYMONTHDAY`; the
-/// vault now accepts exactly one of each, with RFC 5545 semantics. The golden
-/// is a frozen capture of v0 and is NOT rewritten (a fixture the port could
-/// rewrite proves nothing), so the departure is written down here, once, per
-/// case: the rule, the pin it must parse to, and the sentence the one
-/// summariser says. A rule not in this table still has to agree with v0, and
-/// every one that is must STILL be recorded as refused in the golden, so this
-/// table cannot quietly grow to cover a case v0 accepted.
-const WIDENED_1119: [(&str, rrule::MonthlyPin, &str); 5] = [
-    (
-        "FREQ=MONTHLY;BYDAY=+3WE",
-        rrule::MonthlyPin::NthWeekday {
-            ordinal: 3,
-            day: "WE",
-        },
-        "Monthly on the third Wednesday",
-    ),
-    (
-        "FREQ=MONTHLY;BYDAY=-1FR",
-        rrule::MonthlyPin::NthWeekday {
-            ordinal: -1,
-            day: "FR",
-        },
-        "Monthly on the last Friday",
-    ),
-    (
-        "FREQ=MONTHLY;BYDAY=2MO",
-        rrule::MonthlyPin::NthWeekday {
-            ordinal: 2,
-            day: "MO",
-        },
-        "Monthly on the second Monday",
-    ),
-    (
-        "FREQ=MONTHLY;BYMONTHDAY=-1",
-        rrule::MonthlyPin::MonthDay(-1),
-        "Monthly on the last day",
-    ),
-    (
-        "FREQ=MONTHLY;BYMONTHDAY=1",
-        rrule::MonthlyPin::MonthDay(1),
-        "Monthly on the 1st",
-    ),
+/// Golden rules v0 REFUSED (with or without `INTERVAL=2;`) and this build still refuses, with a different sentence or reason,
+/// because v0's words became false (it said "the expander emits every candidate", "steps from the
+/// anchor day", "WKST other than SU") or because the refusal is now more exact (`BYWEEKNO` is not a
+/// MONTHLY part, `BYSETPOS` alone selects from nothing). Each must still name the part v0 named.
+const REFUSED_DIFFERENTLY: [&str; 15] = [
+    "FREQ=DAILY;BYSETPOS=-1",
+    "FREQ=DAILY;BYSETPOS=1",
+    "FREQ=DAILY;BYWEEKNO=12",
+    "FREQ=DAILY;BYYEARDAY=200",
+    "FREQ=MONTHLY;BYDAY=MO,",
+    "FREQ=MONTHLY;BYDAY=MO,XX",
+    "FREQ=MONTHLY;BYSETPOS=-1",
+    "FREQ=MONTHLY;BYSETPOS=1",
+    "FREQ=MONTHLY;BYWEEKNO=12",
+    "FREQ=MONTHLY;BYYEARDAY=200",
+    "FREQ=WEEKLY;BYDAY=+3WE",
+    "FREQ=WEEKLY;BYDAY=-1FR",
+    "FREQ=WEEKLY;BYDAY=2MO",
+    "FREQ=WEEKLY;BYDAY=MO,",
+    "FREQ=WEEKLY;BYDAY=MO,XX",
 ];
+
+/// Golden rules v0 ACCEPTED by reading past a value it could not read (`COUNT=banana` was an
+/// endless series, `UNTIL=SOON` too): the same defect the engine's header describes, so they are
+/// refused now, naming the part.
+fn read_past_in_v0(rule: &str) -> Option<&'static str> {
+    if rule.contains("COUNT=banana") {
+        Some("COUNT")
+    } else if rule.contains("INTERVAL=banana") {
+        Some("INTERVAL")
+    } else if rule.contains("UNTIL=SOON") {
+        Some("UNTIL")
+    } else {
+        None
+    }
+}
 
 #[test]
 fn every_rrule_case_agrees_with_v0() {
@@ -137,7 +123,8 @@ fn every_rrule_case_agrees_with_v0() {
     let mut accepted = 0_usize;
     let mut refused = 0_usize;
     let mut widened_seen = 0_usize;
-    let mut reworded_seen = 0_usize;
+    let mut differently_seen = 0_usize;
+    let mut read_past_seen = 0_usize;
     for case in cases {
         let value = text(case, "rrule");
         let label = format!("rrule {value:?}");
@@ -151,34 +138,19 @@ fn every_rrule_case_agrees_with_v0() {
             text(case, "line"),
             "{label}: RRULE: line"
         );
-        if let Some((_, pin, summary)) = WIDENED_1119.iter().find(|(rule, ..)| *rule == value) {
-            assert!(
-                !case["accepted"].as_bool().unwrap_or_default(),
-                "{label}: the table departs from a v0 REFUSAL only"
-            );
-            let rule = rrule::inspect(&value).expect("the vault widened this rule");
-            assert_eq!(rule.monthly_pin, Some(*pin), "{label}: the pin");
-            assert_eq!(rule.freq.as_str(), "MONTHLY", "{label}: freq");
-            assert_eq!(rule.by_day, None, "{label}: a pin is not a weekly day list");
-            assert_eq!(
-                rrule::describe(&value).as_deref(),
-                Some(*summary),
-                "{label}: the one summariser"
-            );
-            widened_seen += 1;
-            continue;
-        }
-        assert_eq!(
-            rrule::describe(&value),
-            case["summary"].as_str().map(str::to_owned),
-            "{label}: the one summariser"
-        );
+        let v0_accepted = case["accepted"].as_bool().unwrap_or_default();
         match rrule::inspect(&value) {
-            Ok(rule) => {
+            Ok(rule) if v0_accepted => {
                 accepted += 1;
-                assert!(
-                    case["accepted"].as_bool().unwrap_or_default(),
-                    "{label}: v0 refused and this build accepted"
+                // v0's English summary is no longer asserted here: the words
+                // moved to the core strings (owner decision, #1173), and the
+                // vault answers the rule's structure. The words are tested
+                // in `crates/screens/tests/agenda_repeat_words.rs` against
+                // this same corpus.
+                assert_eq!(
+                    rrule::shape(&value).is_some(),
+                    case["summary"].is_string(),
+                    "{label}: the rule has a shape exactly when v0 had a summary"
                 );
                 let expected = &case["rule"];
                 assert_eq!(
@@ -202,45 +174,54 @@ fn every_rrule_case_agrees_with_v0() {
                         .map(|day| day.as_str().unwrap_or_default().to_owned())
                         .collect()
                 });
-                let found_days: Option<Vec<String>> = rule
-                    .by_day
-                    .as_ref()
-                    .map(|days| days.iter().map(|day| (*day).to_owned()).collect());
+                let found_days: Option<Vec<String>> = (!rule.by_day.is_empty()).then(|| {
+                    rule.by_day
+                        .iter()
+                        .map(|day| {
+                            assert_eq!(day.ordinal, None, "{label}: a v0 day list is plain");
+                            day.token().to_owned()
+                        })
+                        .collect()
+                });
                 assert_eq!(found_days, expected_days, "{label}: byDay");
             }
-            Err(refusal) => {
+            Ok(_) => {
+                let part = text(case, "part");
+                assert!(
+                    WIDENED_PARTS.contains(&part.as_str()),
+                    "{label}: v0 refused {part} and this build accepted: not a widened part"
+                );
+                assert!(
+                    rrule::shape(&value).is_some(),
+                    "{label}: a rule the engine accepts has a shape for the one summariser"
+                );
+                widened_seen += 1;
+            }
+            Err(refusal) if !v0_accepted => {
                 refused += 1;
                 assert!(
-                    !case["accepted"].as_bool().unwrap_or_default(),
-                    "{label}: v0 accepted and this build refused with {refusal}"
+                    !text(case, "message").is_empty(),
+                    "{label}: the golden holds v0's sentence"
                 );
-                assert_eq!(refusal.reason(), text(case, "reason"), "{label}: reason");
-                let golden = text(case, "message");
-                let reworded = match &refusal {
-                    rrule::Refusal::UnsupportedPart { part } => REWORDED_1119
-                        .iter()
-                        .find(|(name, _)| name == part)
-                        .map(|(_, v0)| *v0),
-                    _ => None,
-                };
-                if let Some(v0) = reworded {
-                    assert_eq!(golden, v0, "{label}: the golden still holds v0's words");
-                    let ours = refusal.message();
-                    assert_ne!(ours, golden, "{label}: #1119 rewrote this sentence");
+                let same_words = refusal.message() == text(case, "message")
+                    && refusal.reason() == text(case, "reason");
+                if !same_words {
+                    differently_seen += 1;
                     assert!(
-                        ours.contains("MONTHLY"),
-                        "{label}: the sentence names what the subset takes: {ours}"
+                        REFUSED_DIFFERENTLY.contains(&value.replace("INTERVAL=2;", "").as_str()),
+                        "{label}: refused with different words and not listed: {refusal}"
                     );
-                    reworded_seen += 1;
-                } else {
-                    assert_eq!(
-                        refusal.message(),
-                        golden,
-                        "{label}: THE SENTENCE — a member reads this one"
-                    );
+                    let part = text(case, "part");
+                    if !part.is_empty() {
+                        assert!(
+                            refusal.message().contains(&part)
+                                || matches!(&refusal, rrule::Refusal::Invalid { part: p, .. } if *p == part),
+                            "{label}: the sentence names v0's part {part}: {refusal}"
+                        );
+                    }
                 }
                 match &refusal {
-                    rrule::Refusal::UnsupportedPart { part } => {
+                    rrule::Refusal::UnsupportedPart { part } if same_words => {
                         assert_eq!(*part, text(case, "part"), "{label}: part");
                     }
                     rrule::Refusal::UnsupportedFreq { freq } => {
@@ -249,18 +230,24 @@ fn every_rrule_case_agrees_with_v0() {
                     rrule::Refusal::Malformed => {
                         assert!(case["part"].is_null(), "{label}: malformed names no part");
                     }
+                    _ => {}
                 }
+            }
+            Err(refusal) => {
+                let part = read_past_in_v0(&value).unwrap_or_else(|| {
+                    panic!("{label}: v0 accepted and this build refused: {refusal}")
+                });
+                assert!(
+                    matches!(&refusal, rrule::Refusal::Invalid { part: p, .. } if p == part),
+                    "{label}: refused for {part}: {refusal}"
+                );
+                read_past_seen += 1;
             }
         }
     }
-    assert_eq!(
-        widened_seen,
-        WIDENED_1119.len(),
-        "every widened rule is a golden case"
-    );
     assert!(
-        reworded_seen >= REWORDED_1119.len(),
-        "each rewritten sentence is met by at least one refused golden case ({reworded_seen})"
+        widened_seen > 15 && differently_seen >= 8 && read_past_seen >= 20,
+        "widened {widened_seen}, differently {differently_seen}, read past {read_past_seen}"
     );
     assert!(
         accepted > 80 && refused > 30,
@@ -268,14 +255,27 @@ fn every_rrule_case_agrees_with_v0() {
     );
 }
 
+/// The cautionary case still refuses (a lone `BYSETPOS` has nothing to select from), but its
+/// sentence is no longer v0's: "the expander emits every candidate" is false now that `BYSETPOS`
+/// selects within a period (`rrule_bysetpos.rs` pins the last-Friday rule that replaces it).
 #[test]
-fn the_cautionary_case_is_refused_with_its_own_sentence() {
+fn the_cautionary_case_is_still_refused_and_says_what_changed() {
     let corpus = fixture("rrule-cases.json");
     let cautionary = &corpus["cautionary"];
     assert_eq!(text(cautionary, "rrule"), "FREQ=MONTHLY;BYSETPOS=-1");
+    assert!(text(cautionary, "message").contains("emits every candidate"));
     let refusal = rrule::inspect("FREQ=MONTHLY;BYSETPOS=-1").expect_err("refused");
-    assert_eq!(refusal.message(), text(cautionary, "message"));
+    assert!(
+        matches!(&refusal, rrule::Refusal::Invalid { part, .. } if part == "BYSETPOS"),
+        "{refusal}"
+    );
+    assert!(
+        refusal.message().contains("nothing to pick from"),
+        "{refusal}"
+    );
     assert_eq!(rrule::parse("FREQ=MONTHLY;BYSETPOS=-1"), None);
+    // The rule the cautionary case MEANT is a rule now.
+    assert!(rrule::parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1").is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +347,22 @@ fn every_zoned_expansion_agrees_with_v0() {
         occurrences += case["occurrences"].as_array().map_or(0, Vec::len);
     }
     assert!(occurrences > 400, "{occurrences} occurrences compared");
+    // The cases the owner's RFC 5545 decision on #1173 FLIPPED from v0's answer
+    // (a gap moves forward and counts, section 3.3.5; an implied day a month
+    // lacks is skipped, section 3.3.10) say so, and each carries the answer
+    // an independent implementation (python-dateutil with zoneinfo) gives.
+    let flipped = cases
+        .iter()
+        .filter(|case| {
+            case["flipped"]
+                .as_str()
+                .is_some_and(|why| why.contains("RFC 5545"))
+        })
+        .count();
+    assert_eq!(
+        flipped, 13,
+        "one DST case and the implied-day cases of six zones"
+    );
 }
 
 #[test]
@@ -376,6 +392,17 @@ fn every_wall_clock_resolution_agrees_with_v0() {
         match case["instant"].as_str() {
             None => {
                 assert!(resolved.is_none(), "{label}: v0 found no instant (a GAP)");
+                // RFC 5545 section 3.3.5 (owner decision on #1173): a series
+                // moves a gap time FORWARD. `forward` is Python's `fold=0`
+                // reading of the same wall clock (PEP 495: the offset before
+                // the change), an independent implementation of the RFC's.
+                let forward = zone.resolve_wall_time_forward(wall);
+                assert_eq!(
+                    Some(forward.instant.as_str()),
+                    case["forward"].as_str(),
+                    "{label}: the RFC's reading of a gap"
+                );
+                assert!(!forward.overlap, "{label}");
                 gaps += 1;
             }
             Some(instant) => {

@@ -90,13 +90,13 @@ class AgendaQueryRoundTripSpec : StringSpec({
                 run.event_id shouldBe seriesId
                 run.instance_key shouldStartWith "$seriesId:"
                 run.original_start_local shouldNotBe null
-                // The sentence, never the rule — and the reminders decoded in
+                // The rule, for the editor (the sentence is built in Rust) — and the reminders decoded in
                 // Rust, because `commonMain` has no JSON to decode them with.
-                run.recurrence_summary shouldNotBe null
+                run.rrule shouldNotBe null
                 run.reminders.map { it.minutes_before } shouldBe listOf(10L)
             }
             val dentist = upcoming.events.single { it.summary == "Dentist" }
-            dentist.recurrence_summary shouldBe null
+            dentist.rrule shouldBe null
             dentist.dtend shouldBe "2099-06-03T10:00:00.000Z"
             // IN START ORDER, which is what a Day list draws in.
             upcoming.events.map { it.dtstart } shouldBe upcoming.events.map { it.dtstart }.sorted()

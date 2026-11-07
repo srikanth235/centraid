@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_thirteen_queries_and_twenty_six_actions() {
+    fn it_declares_fourteen_queries_and_twenty_nine_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 13);
-        assert_eq!(manifest.actions.len(), 26);
+        assert_eq!(manifest.queries.len(), 14);
+        assert_eq!(manifest.actions.len(), 29);
         for name in [
             "upcoming",
             "search",
@@ -62,6 +62,7 @@ mod tests {
             "trash",
             "smart-counts",
             "due-rows",
+            "attachments",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -150,7 +151,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 11);
+        assert_eq!(reads.len(), 12);
         assert!(
             vault
                 .scopes

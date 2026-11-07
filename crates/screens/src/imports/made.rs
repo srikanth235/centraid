@@ -33,6 +33,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Made {
         step: Step::Idle,
         reminders: false,
+        include_completed: false,
+        standalone: false,
         contacts: ContactsFollow::new(),
         calendar: CalendarFollow::new(),
         came: Vec::new(),
@@ -58,6 +60,11 @@ struct Came {
 struct Made {
     step: Step,
     reminders: bool,
+    /// The member's option "Include completed reminders" for the reminders import.
+    include_completed: bool,
+    /// The reminders import is the member's own tap, not a made vault's step: its line says
+    /// everything, even that nothing came in, and the service is not finished by it.
+    standalone: bool,
     contacts: ContactsFollow,
     calendar: CalendarFollow,
     came: Vec<Came>,
@@ -148,6 +155,7 @@ impl Made {
                     vec![effect(wire::effect::Kind::RemindersRead(
                         wire::RemindersRead {
                             ask_permission: true,
+                            include_completed: self.include_completed,
                         },
                     ))]
                 } else {
@@ -160,6 +168,27 @@ impl Made {
                 Vec::new()
             }
         }
+    }
+
+    /// The member's Import reminders tap: ask the OS and import, with their option.
+    fn reminders_requested(
+        &mut self,
+        made: &wire::ImportsMadeEvent,
+        _ctx: &Ctx,
+    ) -> Vec<wire::Effect> {
+        let Some(M::RemindersRequested(requested)) = &made.kind else {
+            return Vec::new();
+        };
+        self.include_completed = requested.include_completed;
+        self.standalone = true;
+        self.came.clear();
+        self.step = Step::Reminders;
+        vec![effect(wire::effect::Kind::RemindersRead(
+            wire::RemindersRead {
+                ask_permission: true,
+                include_completed: requested.include_completed,
+            },
+        ))]
     }
 
     /// An importer's read ended, however it ended.
@@ -203,10 +232,13 @@ impl Screen for Made {
             (E::ImportsMade(made), Step::Idle) => {
                 if let Some(M::Made(made)) = &made.kind {
                     self.reminders = made.reminders;
+                    self.include_completed = made.include_completed;
                     return Self::effects(self.next(ctx));
                 }
-                Vec::new()
+                self.reminders_requested(made, ctx)
             }
+            // The member's own Import reminders tap, once nothing else is running.
+            (E::ImportsMade(made), Step::Done) => self.reminders_requested(made, ctx),
             // The OS photo prompt was answered (or the shell could not raise it): a grant starts
             // the camera roll's walk, by name, and the importers go.
             (E::EffectResult(result), Step::Photos) => match &result.outcome {
@@ -237,9 +269,30 @@ impl Screen for Made {
                     None => Vec::new(),
                 }
             }
+            (E::EffectResult(result), Step::Reminders) if self.standalone => {
+                let sentence = match &result.outcome {
+                    Some(O::RemindersSnapshot(snapshot)) => reminders::status_line(
+                        ctx.locale(),
+                        reminders::run(ctx, &snapshot.reminders, self.include_completed),
+                    ),
+                    Some(O::Failed(failed)) if failed.denied => {
+                        words::reminders_denied(ctx.locale())
+                    }
+                    Some(O::Failed(_)) => {
+                        crate::strings::task::import_reminders_failed(ctx.locale())
+                    }
+                    _ => return Vec::new(),
+                };
+                self.came = vec![Came {
+                    app: "agenda",
+                    sentence,
+                }];
+                self.step = Step::Done;
+                Vec::new()
+            }
             (E::EffectResult(result), Step::Reminders) => match &result.outcome {
                 Some(O::RemindersSnapshot(snapshot)) => {
-                    let outcome = reminders::run(ctx, &snapshot.reminders);
+                    let outcome = reminders::run(ctx, &snapshot.reminders, self.include_completed);
                     if outcome.added > 0 {
                         self.came.push(Came {
                             app: "agenda",
@@ -266,7 +319,7 @@ impl Screen for Made {
         let locale = ctx.locale();
         let fragments: Vec<String> = self.came.iter().map(|came| came.sentence.clone()).collect();
         let open = self.came.first().map(|came| came.app).unwrap_or("");
-        let finished = self.step == Step::Done;
+        let finished = self.step == Step::Done && !self.standalone;
         wire::ViewState {
             kind: Some(wire::view_state::Kind::ImportsMade(
                 wire::ImportsMadeState {
@@ -275,6 +328,8 @@ impl Screen for Made {
                     open_route: rows::app_home(open),
                     running: !matches!(self.step, Step::Idle | Step::Done),
                     finished,
+                    completed_label: words::completed_toggle(locale),
+                    reminders_label: words::reminders_import(locale),
                 },
             )),
             ..wire::ViewState::default()

@@ -1558,6 +1558,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
+    ("task", "url", Reach::Not("a link, not prose")),
     ("task", "rule", Reach::Not("an RFC 5545 rule")),
     ("task", "zone", Reach::Not("a time zone name, not prose")),
     ("note", "body", Reach::Own),
@@ -1616,6 +1617,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("the folded form of the title, which is indexed in what it labels"),
     ),
     ("container", "color", Reach::Not("a colour token")),
+    ("container", "icon", Reach::Not("an icon key")),
     (
         "vault",
         "name",

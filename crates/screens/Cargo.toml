@@ -39,4 +39,7 @@ centraid-ontology = { path = "../ontology" }
 # Civil time is the vault's one engine (`time::FireZone`): a reminder's instant is read in
 # the member's zone by the same rule the core placed it with, never a second reader.
 # Photos' tests also stage a photograph's bytes and need the digest the vault names them by.
+# THE ONE RRULE READER AND WRITER: the Custom repeat sheet's rule is the vault's
+# `RepeatSpec` (`time::repeat`), so a rule the editor writes is one the engine
+# expands and one it reads is the rule that was stored.
 centraid-vault = { path = "../vault" }

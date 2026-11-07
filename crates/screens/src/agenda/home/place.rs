@@ -11,6 +11,7 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::held::Held;
 use crate::agenda::routes;
+use crate::agenda::style;
 use crate::agenda::todo::rows;
 use crate::kit::civil::HourCycle;
 use crate::strings::{
@@ -231,6 +232,7 @@ fn project_groups(
                         route: Some(routes::project(&project.project_id, &project.name)),
                         list_color_key: rows::list_color_of(&project.project_id, Some(project)),
                         count: project.open_count.to_string(),
+                        icon_key: style::icon_of(project.icon.as_deref()),
                     }
                 })
                 .collect(),

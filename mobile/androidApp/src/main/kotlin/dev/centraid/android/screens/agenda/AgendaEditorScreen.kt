@@ -140,6 +140,9 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
     // the vault's (or the defaults'), so a re-read may replace it.
     val clean = !data.dirty
     var picking by remember { mutableStateOf("") }
+    val openSheet = { sheet: AgendaEditorState.Sheet ->
+        onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = sheet)))
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-editor")) {
         // THE ADD SHEET'S SWITCH (#1128): only a create has one, and the
         // machine says which side is lit and what each is called.
@@ -192,6 +195,18 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
                 onEdit = { onEvent(AgendaEditorEvent(notes = AgendaEditorEvent.NotesChanged(text = it))) },
                 testTag = "agenda-editor-notes",
             )
+            // A TASK'S ADDRESS (#1173 wave 2): typed here, with what Save will write under it.
+            if (data.show_url) {
+                EditableFieldRow(
+                    key = chrome.field_url,
+                    value = draft.url,
+                    reload = if (clean) draft.url else null,
+                    placeholder = chrome.url_placeholder,
+                    onEdit = { onEvent(AgendaEditorEvent(url = AgendaEditorEvent.UrlChanged(text = it))) },
+                    testTag = "agenda-editor-url",
+                )
+                if (data.url_saved_as.isNotEmpty()) Note(data.url_saved_as)
+            }
             TaskListRow(chrome.field_list, data.list_label, data.list_hue_key) {
                 onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_LIST)))
             }
@@ -212,12 +227,16 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
                 onDay = { picking = "end-day" },
                 onTime = { picking = "end-time" },
             )
+            if (data.show_zone) {
+                ChoiceFieldRow(chrome.field_zone, data.zone_label, testTag = "agenda-editor-zone", onTap = { openSheet(AgendaEditorState.Sheet.SHEET_ZONE) })
+            }
             ChoiceFieldRow(chrome.field_calendar, data.calendar_label, testTag = "agenda-editor-calendar", onTap = {
                 onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_CALENDAR)))
             })
             ChoiceFieldRow(chrome.field_guests, data.guests_label, testTag = "agenda-editor-guests", onTap = {
                 onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_GUESTS)))
             })
+            ChoiceFieldRow(chrome.field_location, data.location_label, testTag = "agenda-editor-location", onTap = { openSheet(AgendaEditorState.Sheet.SHEET_LOCATION) })
             if (data.repeats.isNotEmpty()) {
                 ChoiceFieldRow(chrome.field_repeat, data.repeat_label, testTag = "agenda-editor-repeat", onTap = {
                     onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REPEAT)))
@@ -226,9 +245,20 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
             } else {
                 FieldRow(key = chrome.field_repeat, value = data.repeat_label, note = data.repeat_note)
             }
-            ChoiceFieldRow(chrome.field_reminder, data.reminder_label, testTag = "agenda-editor-reminder", onTap = {
+            ChoiceFieldRow(chrome.field_first_alert.ifEmpty { chrome.field_reminder }, data.reminder_label, testTag = "agenda-editor-reminder", onTap = {
                 onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REMINDER)))
             })
+            // THE SECOND ALERT is drawn only once the first is set.
+            if (data.show_second_reminder) {
+                ChoiceFieldRow(
+                    chrome.field_second_alert,
+                    data.second_reminder_label,
+                    testTag = "agenda-editor-second-reminder",
+                    onTap = { openSheet(AgendaEditorState.Sheet.SHEET_SECOND_REMINDER) },
+                )
+            }
+            ChoiceFieldRow(chrome.field_travel, data.travel_label, testTag = "agenda-editor-travel", onTap = { openSheet(AgendaEditorState.Sheet.SHEET_TRAVEL) })
+            ChoiceFieldRow(chrome.field_availability, data.availability_label, testTag = "agenda-editor-availability", onTap = { openSheet(AgendaEditorState.Sheet.SHEET_AVAILABILITY) })
             EditableFieldRow(
                 key = chrome.field_link,
                 value = draft.link,
@@ -535,6 +565,6 @@ private fun EditorSheets(state: AgendaEditorState, onEvent: (AgendaEditorEvent) 
             onCommit = { onEvent(AgendaEditorEvent(save = AgendaEditorEvent.SaveTapped())) },
             onDismiss = close,
         )
-        else -> Unit
+        else -> AgendaEventDetailSheets(state, chrome, data, onEvent)
     }
 }

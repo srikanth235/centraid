@@ -26,6 +26,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.PushedPage
@@ -137,12 +138,28 @@ internal fun TodoProjectScreen(
                         // THE TITLE IN THE LIST'S COLOUR (#1173).
                         listColor?.let { color ->
                             item(key = "title") {
-                                Text(state.title, style = centraidType("title"), color = color, modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+                                Row(Modifier.padding(horizontal = KitGeometry.GUTTER), verticalAlignment = Alignment.CenterVertically) {
+                                    // THE LIST'S OWN ICON beside its name (#1173 wave 2).
+                                    if (project.icon_key.isNotEmpty()) {
+                                        CentraidIcon(project.icon_key, tint = color, size = 24.dp, modifier = Modifier.padding(end = 8.dp))
+                                    }
+                                    Text(state.title, style = centraidType("title"), color = color)
+                                }
                             }
                         }
                         if (project.count_label.isNotEmpty()) {
                             item(key = "count") {
                                 Text(project.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
+                            }
+                        }
+                        // "EDIT LIST" (#1173 wave 2) opens the style sheet: name, colour and icon.
+                        if (project.style_label.isNotEmpty()) {
+                            item(key = "style") {
+                                KitLink(
+                                    label = project.style_label,
+                                    onClick = { onEvent(TodoProjectEvent(style_requested = TodoProjectEvent.StyleRequested())) },
+                                    modifier = Modifier.testTag("tasks-project-edit").padding(horizontal = KitGeometry.GUTTER / 2),
+                                )
                             }
                         }
                         // THE RENAME VERB: the header holds one action (Add section), so this one is a quiet link under it.
@@ -230,6 +247,16 @@ internal fun TodoProjectScreen(
                 placeholder = chrome.add_section_placeholder,
                 onEdit = { onEvent(TodoProjectEvent(section_name = TodoProjectEvent.SectionNameChanged(name = it))) },
                 testTag = "tasks-new-section-field",
+            )
+        }
+        state.sheet == TodoProjectState.Sheet.SHEET_STYLE -> state.style?.let { style ->
+            AgendaStyleSheetView(
+                style = style,
+                onName = { onEvent(TodoProjectEvent(style_name = TodoProjectEvent.StyleNameChanged(name = it))) },
+                onColor = { onEvent(TodoProjectEvent(style_color = TodoProjectEvent.StyleColorPicked(key = it))) },
+                onIcon = { onEvent(TodoProjectEvent(style_icon = TodoProjectEvent.StyleIconPicked(key = it))) },
+                onSubmit = { onEvent(TodoProjectEvent(style_submitted = TodoProjectEvent.StyleSubmitted())) },
+                onCancel = closeSheet,
             )
         }
         state.sheet == TodoProjectState.Sheet.SHEET_RENAME && data != null -> SheetRoom(

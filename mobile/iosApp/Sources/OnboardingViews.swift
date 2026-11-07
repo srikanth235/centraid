@@ -15,6 +15,9 @@ struct ShellBanner: View {
     @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// "Include completed reminders": the member's option for the reminders import, kept here
+    /// until they tap the import (it travels with that tap, Rust holds none of it before).
+    @State private var includeCompleted = false
 
     /// The line, unless the member put it away.
     private var line: Centraid_Core_V1_ImportsMadeState? {
@@ -39,6 +42,28 @@ struct ShellBanner: View {
                         onClose: { shell.putImportLineAway(line.summary) },
                         identifier: "import"
                     )
+                    // THE REMINDERS IMPORT (iOS), offered once the made vault's imports are over:
+                    // the option and the verb are Rust's words, the tap asks the OS and imports.
+                    if !line.running, !line.remindersLabel.isEmpty {
+                        HStack(spacing: 12) {
+                            if !line.completedLabel.isEmpty {
+                                KitChip(
+                                    label: line.completedLabel,
+                                    selected: includeCompleted,
+                                    identifier: "import-completed-toggle"
+                                ) {
+                                    includeCompleted.toggle()
+                                }
+                            }
+                            Spacer(minLength: 0)
+                            KitLink(label: line.remindersLabel, identifier: "import-reminders") {
+                                var request = Centraid_Core_V1_ImportsMadeEvent()
+                                request.remindersRequested = .with { $0.includeCompleted = includeCompleted }
+                                store.sendRoot(RustScreens.madeTab, .importsMade(request))
+                            }
+                        }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                    }
                 }
                 .background(Theme.color("bg", scheme))
                 .accessibilityElement(children: .contain)

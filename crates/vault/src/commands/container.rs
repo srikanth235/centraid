@@ -1,10 +1,15 @@
-//! `container.create` and `container.move`: notebooks, folders, albums, lists,
+//! `container.create`, `container.style` and `container.move`: notebooks, folders, albums, lists,
 //! projects, sections, areas and calendars.
 //!
 //! One table hosts all eight and the item's own noun is its kind. Nesting is a
 //! rule of the baseline (`container_parent_shape`): a folder in a folder, a
 //! notebook in a notebook, a section in a project, a project in an area; the
 //! precondition says it in a sentence first.
+//!
+//! A list (a project, or a list) and a calendar wear a colour of the eight-colour list palette and
+//! an icon of a short curated set, both by key; `container.style` sets or clears them and
+//! `container.create` takes them at birth. A followed calendar's colour is the phone's own spelling
+//! and is read, never refused, wherever it was stored.
 
 use rusqlite::OptionalExtension;
 
@@ -12,6 +17,83 @@ use crate::commands::entity::{lookup_live, require};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
+
+/// The eight list colours: the `[list]` palette of `design/tokens.toml`, which a list or a calendar
+/// wears by key. A test holds this equal to the file.
+pub const LIST_COLORS: [&str; 8] = [
+    "blue",
+    "mustard",
+    "violet",
+    "petrol",
+    "indigo",
+    "graphite",
+    "raspberry",
+    "orchid",
+];
+
+/// The icons a list or a calendar may wear: keys of `design/icons.toml`, curated to the ones that
+/// read as a place to put things. A test holds every key in the file.
+pub const LIST_ICONS: [&str; 32] = [
+    "Beaker",
+    "Bell",
+    "Bolt",
+    "Book",
+    "Bookmark",
+    "Calendar",
+    "CalendarBlank",
+    "Camera",
+    "Cloud",
+    "Coin",
+    "Compass",
+    "Flag",
+    "Folder",
+    "Gift",
+    "Globe",
+    "Gym",
+    "Habit",
+    "Heart",
+    "Home",
+    "Inbox",
+    "Journal",
+    "List",
+    "MapPin",
+    "Moon",
+    "Mood",
+    "Music",
+    "Pin",
+    "Plant",
+    "Receipt",
+    "Star",
+    "Sun",
+    "Users",
+];
+
+/// Whether a container of `kind` wears a colour and an icon of the palette.
+const fn is_styled(kind: Kind) -> bool {
+    matches!(kind, Kind::List | Kind::Project | Kind::Calendar)
+}
+
+/// The sentence refusing a colour or an icon a list or a calendar cannot wear.
+fn style_refusal(input: &serde_json::Value, kind: Kind) -> Option<String> {
+    if let Some(color) = input.get("color").and_then(serde_json::Value::as_str)
+        && is_styled(kind)
+        && !LIST_COLORS.contains(&color)
+    {
+        return Some(format!(
+            "“{color}” is not one of the list colours: {}",
+            LIST_COLORS.join(", ")
+        ));
+    }
+    if let Some(icon) = input.get("icon").and_then(serde_json::Value::as_str) {
+        if !is_styled(kind) {
+            return Some(format!("a {} does not wear an icon", kind.noun()));
+        }
+        if !LIST_ICONS.contains(&icon) {
+            return Some(format!("“{icon}” is not an icon a list can wear"));
+        }
+    }
+    None
+}
 
 fn kind_of(word: &str) -> Result<Kind> {
     Kind::parse(word)
@@ -76,6 +158,9 @@ fn pre_create(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some(format!("a {} needs a name", kind.noun())));
     }
+    if let Some(sentence) = style_refusal(&ctx.input, kind) {
+        return Ok(Some(sentence));
+    }
     parent_refusal(ctx, kind, None)
 }
 
@@ -95,8 +180,8 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .get("position")
         .and_then(serde_json::Value::as_f64);
     ctx.connection().execute(
-        "INSERT INTO container (id, kind, parent_id, color, position)
-         VALUES (?1, ?2, ?3, ?4, COALESCE(?5,
+        "INSERT INTO container (id, kind, parent_id, color, icon, position)
+         VALUES (?1, ?2, ?3, ?4, ?6, COALESCE(?5,
            (SELECT COALESCE(MAX(position), 0) + 1 FROM container
              WHERE kind = ?2 AND parent_id IS ?3)))",
         rusqlite::params![
@@ -104,9 +189,45 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             kind.as_str(),
             parent,
             ctx.input.get("color").and_then(serde_json::Value::as_str),
-            position
+            position,
+            ctx.input.get("icon").and_then(serde_json::Value::as_str)
         ],
     )?;
+    Ok(serde_json::json!({ "id": id }))
+}
+
+fn pre_style(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
+        Ok(found) => found,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    if !is_styled(found.kind) {
+        return Ok(Some(format!(
+            "a {} wears no colour or icon of its own",
+            found.kind.noun()
+        )));
+    }
+    if ctx.input.get("color").is_none() && ctx.input.get("icon").is_none() {
+        return Ok(Some(
+            "say a colour or an icon to set, or null to clear".to_owned(),
+        ));
+    }
+    Ok(style_refusal(&ctx.input, found.kind))
+}
+
+/// `container.style`: a list's or a calendar's colour and icon. A key that is present is set
+/// (`null` clears it) and one that is absent is left alone.
+fn style(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let id = ctx.required_str("id")?;
+    for column in ["color", "icon"] {
+        if let Some(value) = ctx.input.get(column) {
+            ctx.connection().execute(
+                &format!("UPDATE container SET {column} = ?2 WHERE id = ?1"),
+                rusqlite::params![id, value.as_str()],
+            )?;
+        }
+    }
+    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -242,6 +363,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "title": { "type": "string", "maxLength": 1000 },
                 "parent": { "type": ["string", "null"] },
                 "color": { "type": ["string", "null"] },
+                "icon": { "type": ["string", "null"] },
                 "position": { "type": ["number", "null"] }
               }
             }"#,
@@ -251,6 +373,26 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_create,
             }],
             create,
+        ),
+        CommandDefinition::plain(
+            "container.style",
+            "container",
+            r#"{
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "color": { "type": ["string", "null"] },
+                "icon": { "type": ["string", "null"] }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "container_wears_a_colour_and_the_style_is_the_palettes",
+                check: pre_style,
+            }],
+            style,
         ),
         CommandDefinition::plain(
             "container.move",

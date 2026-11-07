@@ -89,7 +89,7 @@ fn the_board_holds_the_open_work_its_families_and_what_hangs_off_a_row() {
     );
     let project = world.id(
         "container.create",
-        json!({ "kind": "project", "title": "Garden", "parent": area, "color": "green", "position": 2 }),
+        json!({ "kind": "project", "title": "Garden", "parent": area, "color": "petrol", "position": 2 }),
     );
     let section = world.id(
         "container.create",
@@ -155,7 +155,7 @@ fn the_board_holds_the_open_work_its_families_and_what_hangs_off_a_row() {
     assert_eq!(board.projects.len(), 1);
     assert_eq!(board.projects[0].name.as_deref(), Some("Garden"));
     assert_eq!(board.projects[0].area.as_deref(), Some("Home life"));
-    assert_eq!(board.projects[0].color.as_deref(), Some("green"));
+    assert_eq!(board.projects[0].color.as_deref(), Some("petrol"));
     assert_eq!(board.projects[0].sort_order, Some(2));
     assert_eq!(board.sections.len(), 1);
     assert_eq!(

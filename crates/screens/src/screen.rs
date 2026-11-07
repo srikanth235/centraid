@@ -272,6 +272,15 @@ impl<'a> Ctx<'a> {
         &self.env.platform
     }
 
+    /// Whether the platform has a Reminders store to import from: iOS (EventKit) does,
+    /// Android has none. The same fact the shell tells `imports.made` at a made vault
+    /// (`Made.reminders`), from the one signal the core always has (`Environment.platform`),
+    /// so Agenda's "Import reminders" row is offered only where the import can read.
+    #[must_use]
+    pub fn reminders_source(&self) -> bool {
+        self.env.platform == "ios"
+    }
+
     /// Whether the platform deletes from its photo library behind its own
     /// confirmation (`Environment.library_deletes`): "Free up space" is offered
     /// only where it does.

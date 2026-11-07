@@ -193,6 +193,8 @@ message AppQueryResponse {
     AgendaTaskBoard agenda_task_reminders = 19;
     AgendaTaskSmartCounts agenda_task_smart_counts = 26;
     AgendaTaskDueRows agenda_task_due_rows = 25;
+    // What an event or a task has attached (`agenda.attachments`, #1173).
+    AgendaAttachments agenda_attachments = 27;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;
@@ -250,6 +252,8 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
+    // What the phone's calendars are owed (`shell.calendar-owed`, two-way sync).
+    ImportsCalendarOwed imports_calendar_owed = 1701;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

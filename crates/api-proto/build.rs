@@ -153,6 +153,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.TodoDetailState.content.data")
         .boxed(".centraid.core.v1.BackupHomeState.body.data")
         .boxed(".centraid.core.v1.TodoProjectState.content.data")
+        .boxed(".centraid.core.v1.TodoProjectState.style")
+        .boxed(".centraid.core.v1.AgendaHomeState.style")
         .boxed(".centraid.core.v1.LockerHomeState.content.data")
         .boxed(".centraid.core.v1.LockerItemState.content.data")
         .boxed(".centraid.core.v1.LockerEditorState.content.data")

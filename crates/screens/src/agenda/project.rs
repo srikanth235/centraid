@@ -1,6 +1,6 @@
 //! ONE PROJECT (`agenda.project`): its work in no section, then every section
 //! in its order — an empty section drawn too, with its own "Add task" — "Add
-//! section" and "Rename".
+//! section", "Rename" and "Edit List" (name, colour and icon: [`super::style`]).
 //!
 //! A quick add here is one write: `add-task` filed in the project and, when
 //! the member pointed a section's "Add task" at it, in that section.
@@ -11,6 +11,7 @@ use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
+use super::style::{self, Draft, Subject};
 use super::todo::natural::{Chipper, Fields};
 use super::todo::ops::{NewTask, Ops};
 use super::todo::order;
@@ -20,7 +21,9 @@ use crate::catalog::{act, load};
 use crate::kit::civil::HourCycle;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, task as words};
+use crate::strings::{
+    Locale, agenda_lists as words_lists, agenda_reminders as reminders, agenda_todo, task as words,
+};
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -43,6 +46,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         new_section_name: String::new(),
         rename_name: String::new(),
+        style: None,
         show_completed: false,
         completed: Vec::new(),
     }))
@@ -66,6 +70,8 @@ struct Project {
     sheet: Sheet,
     new_section_name: String,
     rename_name: String,
+    /// The style sheet's draft, while it is up.
+    style: Option<Draft>,
     /// The completed rows are drawn ("Show"); they are counted either way.
     show_completed: bool,
     /// This list's completed tasks (done, not won't-do), newest first.
@@ -189,6 +195,48 @@ impl Project {
             .unwrap_or_default()
     }
 
+    fn stored<'b>(&self, board: &'b wire::AgendaTaskBoard) -> Option<&'b wire::AgendaTaskProject> {
+        board
+            .projects
+            .iter()
+            .find(|project| project.project_id == self.project_id)
+    }
+
+    /// "Edit List": the draft starts from what the list stores.
+    fn open_style(&mut self) {
+        let Some(board) = self.phase.data() else {
+            return;
+        };
+        let Some(project) = self.stored(board) else {
+            return;
+        };
+        self.style = Some(Draft::editing(
+            Subject::List,
+            &self.project_id,
+            &self.name,
+            project.color.as_deref(),
+            project.icon.as_deref(),
+        ));
+        self.sheet = Sheet::Style;
+    }
+
+    /// Save: a refusal keeps the sheet and the member's words.
+    fn submit_style(&mut self, ctx: &Ctx) {
+        let Some(draft) = self.style.take() else {
+            return;
+        };
+        if !draft.can_submit() {
+            self.style = Some(draft);
+            return;
+        }
+        if draft.submit(ctx, &mut self.ops) {
+            self.sheet = Sheet::None;
+        } else {
+            self.style = Some(draft);
+        }
+        self.reload(ctx);
+    }
+
     /// This list's colour on the one palette of eight.
     fn color_key(&self, board: &wire::AgendaTaskBoard) -> String {
         let project = board
@@ -259,6 +307,8 @@ impl Project {
             add_section_label: words::add_section(locale),
             found: true,
             list_color_key: self.color_key(board),
+            icon_key: style::icon_of(self.stored(board).and_then(|p| p.icon.as_deref())),
+            style_label: words_lists::edit_list_title(locale),
             completed: Some(self.completed_state(locale, cycle, board)),
             ..wire::TodoProjectData::default()
         })
@@ -418,7 +468,25 @@ impl Project {
             Some(P::AddSection(_)) => self.sheet = Sheet::AddSection,
             Some(P::SectionName(named)) => self.new_section_name = named.name,
             Some(P::SectionSubmitted(_)) => self.submit_section(ctx),
+            Some(P::StyleRequested(_)) if self.found() => self.open_style(),
+            Some(P::StyleName(named)) => {
+                if let Some(draft) = &mut self.style {
+                    draft.set_name(named.name);
+                }
+            }
+            Some(P::StyleColor(picked)) => {
+                if let Some(draft) = &mut self.style {
+                    draft.pick_color(&picked.key);
+                }
+            }
+            Some(P::StyleIcon(picked)) => {
+                if let Some(draft) = &mut self.style {
+                    draft.pick_icon(&picked.key);
+                }
+            }
+            Some(P::StyleSubmitted(_)) => self.submit_style(ctx),
             Some(P::SheetClosed(_)) => {
+                self.style = None;
                 self.sheet = Sheet::None;
                 self.new_section_name.clear();
                 self.rename_name.clear();
@@ -504,6 +572,11 @@ impl Screen for Project {
                     rename_name: self.rename_name.clone(),
                     rename_can_submit: !self.rename_name.trim().is_empty()
                         && self.rename_name.trim() != self.name,
+                    style: self
+                        .style
+                        .as_ref()
+                        .filter(|_| self.sheet == Sheet::Style)
+                        .map(|draft| Box::new(draft.sheet(locale))),
                 },
             )),
             ..wire::ViewState::default()

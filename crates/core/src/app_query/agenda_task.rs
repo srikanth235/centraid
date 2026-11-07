@@ -484,6 +484,7 @@ fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::AgendaTaskPro
         name: project.name.clone().unwrap_or_default(),
         area: project.area.clone(),
         color: project.color.clone(),
+        icon: project.icon.clone(),
         sort_order: project.sort_order.unwrap_or_default(),
         open_count: count(
             open.iter()
@@ -564,7 +565,6 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         updated_at: task.updated_at.clone(),
         repeats: task.rrule.is_some(),
         rrule: task.rrule.clone(),
-        recurrence_summary: task.recurrence.recurrence_summary.clone(),
         missed: count(task.recurrence.missed.unwrap_or_default()),
         next_due: task.recurrence.next_due.clone(),
         due_day: due.due_day.clone(),
@@ -578,6 +578,7 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         age_days: placed.age_days.map(small),
         created_local_day: placed.created_day.clone(),
         flagged: task.flagged,
+        url: task.url.clone(),
         tags: task
             .tags
             .iter()

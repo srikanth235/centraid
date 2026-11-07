@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
+use crate::agenda::rule_words;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{
     Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,
@@ -211,12 +212,12 @@ pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
         });
     }
     // THE CORE'S SENTENCE, never a dash.
-    if let Some(summary) = task
-        .recurrence_summary
+    if let Some(rule) = task
+        .rrule
         .as_deref()
-        .filter(|s| task.repeats && !s.trim().is_empty())
+        .filter(|rule| task.repeats && !rule.trim().is_empty())
     {
-        parts.push(summary.to_owned());
+        parts.push(rule_words::stored(locale, rule));
     }
     if task.missed > 0 && !task.due_day.is_empty() {
         parts.push(format!(
@@ -527,9 +528,6 @@ pub fn chrome(locale: Locale) -> wire::TodoChrome {
         quick_add_placeholder: words::title_placeholder(locale),
         quick_add_verb: words::add(locale),
         file_title: words::file_title(locale),
-        new_project_title: words::new_project_title(locale),
-        new_project_placeholder: words::new_project_placeholder(locale),
-        new_project_verb: words::new_project_verb(locale),
         add_section_title: words::add_section(locale),
         add_section_placeholder: words::add_section_placeholder(locale),
         add_section_verb: words::add_section(locale),
