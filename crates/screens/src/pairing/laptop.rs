@@ -222,6 +222,10 @@ impl Laptop {
     }
 }
 
+/// The command a member runs on the backup device, drawn as a terminal line. A
+/// literal they type, not a sentence they read, so it is not a catalogue string.
+const COMMAND: &str = "centraid-gateway pair";
+
 fn announce(topic: &str) -> wire::Effect {
     wire::Effect {
         kind: Some(wire::effect::Kind::Announce(wire::Announce {
@@ -381,6 +385,29 @@ impl Laptop {
             },
             accessibility_label,
             finished: self.finished,
+            command: if entering {
+                COMMAND.to_owned()
+            } else {
+                String::new()
+            },
+            safety_groups: match (&phase, &self.answer) {
+                (Phase::Paired, Some(answer)) => answer
+                    .safety_number
+                    .split_whitespace()
+                    .map(str::to_owned)
+                    .collect(),
+                _ => Vec::new(),
+            },
+            safety_label: if phase == Phase::Paired {
+                words::safety_label(locale)
+            } else {
+                String::new()
+            },
+            safety_hint: if phase == Phase::Paired {
+                words::safety_hint(locale)
+            } else {
+                String::new()
+            },
         }
     }
 }

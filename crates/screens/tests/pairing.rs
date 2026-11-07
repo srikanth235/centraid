@@ -158,6 +158,7 @@ fn opening_asks_whether_the_vault_can_pair_a_keyed_one_waits_for_the_code_an_unk
     let (driver, id) = keyed();
     let ready = state(&driver, id);
     assert_eq!(ready.phase, Phase::Waiting as i32);
+    assert_eq!(ready.command, "centraid-gateway pair");
     assert_eq!(ready.title, "Pair with your backup device");
     assert_eq!(ready.scan_label, "Scan QR code");
     assert_eq!(ready.payload_label, "Pairing code");
@@ -339,6 +340,16 @@ fn paired_shows_the_safety_number_to_compare_and_names_the_gateway() {
     assert_eq!(paired.phase, Phase::Paired as i32);
     // THE DIGITS, VERBATIM — every group, as the gateway prints them.
     assert_eq!(paired.safety_number, NUMBER);
+    // THE SAME DIGITS AS GROUPS, one per five, in order and none dropped, for a
+    // shell to lay out; and what matching means, under its label.
+    assert_eq!(paired.safety_groups.join(" "), NUMBER);
+    assert_eq!(paired.safety_groups.len(), NUMBER.split(' ').count());
+    assert_eq!(paired.safety_label, "Safety number");
+    assert_eq!(
+        paired.safety_hint,
+        "Same number on both screens means nobody is in between."
+    );
+    assert_eq!(paired.command, "");
     // v2 CARRIES NO HEX ID TO LEAK: the answer is the gateway's own label and
     // the address it was reached at, and the body names both.
     assert!(

@@ -33,6 +33,26 @@ struct PairLaptopPageView: View {
             VStack(alignment: .leading, spacing: 16) {
                 WordsHead(title: state.title, lead: state.body)
 
+                // THE COMMAND TO RUN, drawn as the terminal line it is (PairDevice).
+                if !state.command.isEmpty {
+                    HStack(spacing: 8) {
+                        Text("$")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
+                            .accessibilityHidden(true)
+                        Text(state.command)
+                            .foregroundStyle(Theme.color("text", scheme))
+                    }
+                    .centraidType("mono")
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .fill(Theme.color("bgSunken", scheme))
+                    )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("pair-command")
+                }
+
                 if !state.scanLabel.isEmpty {
                     KitOutlineButton(label: state.scanLabel) {
                         send(PairLaptopEvents.make { $0.scan = .init() })
@@ -64,20 +84,49 @@ struct PairLaptopPageView: View {
                     }
                 }
 
-                if !state.safetyNumber.isEmpty {
+                if !state.safetyGroups.isEmpty {
                     // EVERY DIGIT, IN THE GATEWAY'S OWN GROUPS: the comparison is
-                    // the member's, so it is drawn to be read, and never shortened.
-                    Text(state.safetyNumber)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                .fill(Theme.color("bgSunken", scheme))
-                        )
-                        .accessibilityIdentifier("pair-safety-number")
+                    // the member's, so it is drawn to be read, and never
+                    // shortened. Four groups to a row (PairCheck); the whole
+                    // number is what a screen reader says.
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !state.safetyLabel.isEmpty {
+                            Text(state.safetyLabel)
+                                .centraidType("eyebrow")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                                .accessibilityHidden(true)
+                        }
+                        let rows = stride(from: 0, to: state.safetyGroups.count, by: 4).map {
+                            Array(state.safetyGroups[$0 ..< min($0 + 4, state.safetyGroups.count)])
+                        }
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: 16) {
+                                ForEach(Array(row.enumerated()), id: \.offset) { _, group in
+                                    Text(group)
+                                        .centraidType("title")
+                                        .monospacedDigit()
+                                        .foregroundStyle(Theme.color("text", scheme))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.6)
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .fill(Theme.color("bgSunken", scheme))
+                    )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(state.safetyNumber)
+                    .accessibilityIdentifier("pair-safety-number")
+                    if !state.safetyHint.isEmpty {
+                        Text(state.safetyHint)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 WordsNotice(notice: state.notice)

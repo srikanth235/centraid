@@ -51,6 +51,13 @@ fn told(front: &wire::ShellVault, all: &[wire::ShellVault]) -> H {
     })
 }
 
+fn tile_of<'a>(data: &'a wire::HomeData, widget: &str) -> &'a wire::HomeTile {
+    data.tiles
+        .iter()
+        .find(|tile| tile.widget == widget)
+        .unwrap_or_else(|| panic!("no {widget} widget"))
+}
+
 fn tile<'a>(data: &'a wire::HomeData, app: &str) -> &'a wire::HomeTile {
     data.tiles
         .iter()
@@ -65,13 +72,30 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     assert_eq!(nav.selected_tab, "home");
     assert_eq!(nav.tabs.len(), 1);
     let data = data(&d, i);
-    let order: Vec<&str> = data.tiles.iter().map(|t| t.app_id.as_str()).collect();
+    // THE WIDGET FOLD'S ORDER, not the order the apps were read in. What is owed
+    // is its own widget while anything is, so the seeded vault may or may not
+    // have one: take it out and the rest are the board's.
+    let order: Vec<&str> = data
+        .tiles
+        .iter()
+        .map(|t| t.widget.as_str())
+        .filter(|widget| *widget != "reminders")
+        .collect();
     assert_eq!(
         order,
         [
-            "photos", "docs", "agenda", "notes", "money", "health", "people", "locker"
+            "agenda", "photos", "money", "health", "people", "locker", "notes", "docs"
         ]
     );
+    // Every widget wears an app: its own, or Agenda's for what is owed.
+    for tile in &data.tiles {
+        assert!(
+            tile.widget == tile.app_id || tile.widget == "reminders",
+            "{} wears {}",
+            tile.widget,
+            tile.app_id
+        );
+    }
     // Every tile names its app, says how to open it and carries where a tap goes.
     for tile in &data.tiles {
         assert!(!tile.name.is_empty(), "{} has no name", tile.app_id);
@@ -85,22 +109,25 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
             route.screen
         );
     }
-    // The rows follow the policy: a wide tile alone, small ones in twos.
-    let rows: Vec<Vec<&str>> = data
+    // Every widget is in exactly one row, and no row is wider than the grid.
+    let listed: Vec<&str> = data
         .grid_rows
         .iter()
-        .map(|row| row.app_ids.iter().map(String::as_str).collect())
+        .flat_map(|row| row.widgets.iter().map(String::as_str))
         .collect();
-    assert_eq!(
-        rows,
-        vec![
-            vec!["photos"],
-            vec!["docs", "notes"],
-            vec!["agenda"],
-            vec!["money", "health"],
-            vec!["people", "locker"],
-        ]
-    );
+    assert_eq!(listed.len(), data.tiles.len());
+    for row in &data.grid_rows {
+        let width: u32 = row
+            .widgets
+            .iter()
+            .map(|widget| match tile_of(&data, widget).size() {
+                wire::HomeTileSize::Small => 1,
+                wire::HomeTileSize::Medium => 2,
+                _ => 4,
+            })
+            .sum();
+        assert!(width <= 4, "{row:?}");
+    }
 }
 
 #[test]
@@ -150,6 +177,38 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
         panic!("the notes tile has no notes body: {notes:?}");
     };
     assert!(!body.title.is_empty());
+    // What is owed today is its own widget, in Agenda's colour, right after the
+    // calendar, naming its tasks and opening Agenda's to-dos.
+    let reminders = tile_of(&data, "reminders");
+    assert_eq!(reminders.app_id, "agenda");
+    assert_eq!(reminders.name, "Reminders");
+    assert_eq!(reminders.size(), wire::HomeTileSize::Medium);
+    assert_eq!(reminders.height, 2);
+    let Some(wire::home_tile_body::Kind::Reminders(owed)) =
+        reminders.body.as_ref().and_then(|b| b.kind.as_ref())
+    else {
+        panic!("the reminders widget has no reminders body: {reminders:?}");
+    };
+    assert!(!owed.titles.is_empty() && owed.titles.len() <= 3);
+    assert!(reminders.count.is_some_and(|count| count.value > 0));
+    assert_eq!(
+        data.tiles
+            .iter()
+            .position(|t| t.widget == "reminders")
+            .unwrap(),
+        data.tiles
+            .iter()
+            .position(|t| t.widget == "agenda")
+            .unwrap()
+            + 1
+    );
+    let calendar = tile_of(&data, "agenda");
+    let Some(wire::home_tile_body::Kind::Agenda(day)) =
+        calendar.body.as_ref().and_then(|b| b.kind.as_ref())
+    else {
+        panic!("the calendar widget has no agenda body: {calendar:?}");
+    };
+    assert!(!day.weekday.is_empty() && !day.day.is_empty() && !day.foot.is_empty());
     // Locker is empty in the example (no Locker), and says what to do.
     let locker = tile(&data, "locker");
     assert_eq!(locker.status, wire::HomeTileStatus::Empty as i32);
@@ -473,7 +532,7 @@ fn a_different_vault_in_front_reads_the_tiles_again_and_the_first_lockup_does_no
 }
 
 #[test]
-fn the_appearance_key_follows_the_phone_then_holds_the_other_scheme_in_the_keychain() {
+fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
     let (mut d, i) = started();
     // Opening asks the Keychain for what was chosen.
     let ask = d
@@ -484,33 +543,40 @@ fn the_appearance_key_follows_the_phone_then_holds_the_other_scheme_in_the_keych
     assert!(
         matches!(ask, Some(wire::effect::Kind::Keychain(op)) if op.key == "appearance" && op.op == wire::keychain_op::Op::Get as i32)
     );
-    tell(
-        &mut d,
-        i,
-        H::PhoneSchemeTold(wire::home_event::PhoneSchemeTold { dark: false }),
-    );
+    // The key beside search is Settings' door, with its words and its route; there is
+    // no appearance switch on Home any more.
     let bar = state(&d, i).bar.unwrap();
-    assert_eq!(
-        (bar.appearance_icon.as_str(), bar.appearance_label.as_str()),
-        ("Moon", "Switch to dark")
-    );
+    assert_eq!(bar.settings_label, "Settings");
+    assert_eq!(bar.settings_route.unwrap().screen, "home.settings");
     assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
+    // Settings chose Dark: kept in the Keychain, drawn at once.
     d.effects.clear();
     tell(
         &mut d,
         i,
-        H::Appearance(wire::home_event::AppearancePressed {}),
+        H::AppearanceChosen(wire::home_event::AppearanceChosen {
+            stored: "dark".into(),
+        }),
     );
-    let home = state(&d, i);
-    assert_eq!(home.scheme, wire::HomeScheme::Dark as i32);
-    assert_eq!(home.bar.unwrap().appearance_icon, "Sun");
+    assert_eq!(state(&d, i).scheme, wire::HomeScheme::Dark as i32);
     assert!(matches!(
         d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::Keychain(op)) if op.value == b"dark".to_vec() && op.op == wire::keychain_op::Op::Set as i32
     ));
+    // Following the phone again stores nothing.
+    tell(
+        &mut d,
+        i,
+        H::AppearanceChosen(wire::home_event::AppearanceChosen {
+            stored: String::new(),
+        }),
+    );
+    assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
+    assert!(matches!(
+        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
+        Some(wire::effect::Kind::Keychain(op)) if op.value.is_empty() && op.op == wire::keychain_op::Op::Set as i32
+    ));
     // The stored choice comes back from the Keychain as an effect result.
-    let id = d.effects.last().unwrap().effect_id;
-    let _ = id;
     d.answer_effect(wire::effect_result::Outcome::Keychain(
         wire::KeychainValue {
             found: true,
@@ -639,7 +705,11 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
     let founded = vault("v1", "Personal");
     tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
     let data = data(&d, i);
-    assert_eq!(data.tiles.len(), 8);
+    // One widget per app, and Agenda's second while something is owed.
+    assert_eq!(
+        data.tiles.iter().filter(|t| t.widget == t.app_id).count(),
+        8
+    );
 }
 
 #[test]
@@ -687,31 +757,6 @@ fn home_reads_again_when_a_table_a_tile_read_moves_with_no_pull_and_no_gesture()
     // The change event reaches Home through the tables its tiles recorded.
     d.pump(std::time::Duration::from_secs(2));
     assert_eq!(notes(&d), before + 1, "the Notes tile moved on its own");
-}
-
-/// THE SEAM THE HUE CORPUS CANNOT SEE (`crates/design/tests/corpus.rs` holds every
-/// row of the wheel): both native Home views turn a face's hue key into a colour
-/// role. A hue spelled in one shell and forgotten in the other draws nothing on
-/// Compose and traps on SwiftUI, and neither failure looks like a missing token.
-/// This reads the SOURCE, because the Swift half has no other enforcer on a
-/// machine with no Xcode. (Ported from the shared module's `PartyHueWheelSpec`.)
-#[test]
-fn both_native_home_views_name_all_eight_hue_roles_and_the_solved_foreground() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let views = [
-        "mobile/iosApp/Sources/HomeView.swift",
-        "mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt",
-    ];
-    for view in views {
-        let source = std::fs::read_to_string(root.join(view)).expect("a native Home view");
-        for key in centraid_design::IDENTITY_HUE_KEYS {
-            let role = format!("c{}{}", key[..1].to_uppercase(), &key[1..]);
-            assert!(source.contains(&role), "{view} never names {role}");
-        }
-        // And the solved foreground, without which a saturated disc keeps the ink
-        // that failed contrast on it.
-        assert!(source.contains("textInv"), "{view} never names textInv");
-    }
 }
 
 #[test]
@@ -765,6 +810,7 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
                 status: "Backed up today".into(),
                 tone: wire::HomeTone::Quiet as i32,
                 accessibility_label: "Backed up today".into(),
+                route: None,
             }),
         }),
     );

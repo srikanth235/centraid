@@ -5,8 +5,6 @@
 //! there, not restated.
 
 catalog! {
-    plain appearance_to_dark = ("Switch to dark", "Switch to dark");
-    plain appearance_to_light = ("Switch to light", "Switch to light");
     plain backup_status_open = ("Open backup", "Open backup");
     plain band_backup = ("Backup", "Backup");
     plain band_backup_spoken = ("Backup and recovery key", "Backup and recovery key");
@@ -79,25 +77,25 @@ catalog! {
     plain app_notes = ("Notes", "Notes");
     plain app_people = ("People", "People");
     plain app_photos = ("Photos", "Photos");
+    plain app_reminders = ("Reminders", "Reminders");
 
     // ---- the tiles ----
-    plain tile_agenda_all_day = ("all day", "all day");
     plain tile_agenda_count = ("on your plate", "on your plate");
-    plain tile_agenda_due = ("{n} due", "{n} due");
-    plain tile_agenda_nothing_after = ("nothing after it", "nothing after it");
-    plain tile_agenda_nothing_until = ("then nothing until the", "then nothing until the");
-    plain tile_agenda_no_events = ("No events coming up", "No events coming up");
-    plain tile_agenda_then = ("then", "then");
+    plain tile_agenda_foot_more = ("Agenda · {n} more", "Agenda · {n} more");
+    plain tile_agenda_none_today = ("No events today", "No events today");
     plain tile_docs_count_one = ("document", "document");
     plain tile_docs_count_many = ("documents", "documents");
+    plain tile_reminders_due = ("due", "due");
     plain tile_health_caption = ("steps today", "steps today");
     plain tile_health_slept = ("Slept {duration}", "Slept {duration}");
     plain tile_notes_count_one = ("note", "note");
     plain tile_notes_count_many = ("notes", "notes");
+    plain tile_notes_edited_on = ("Edited {day}", "Edited {day}");
+    plain tile_notes_edited_today = ("Edited today", "Edited today");
+    plain tile_notes_edited_yesterday = ("Edited yesterday", "Edited yesterday");
+    plain tile_people_reconnect = ("reconnect", "reconnect");
     plain tile_people_count_one = ("person", "person");
     plain tile_people_count_many = ("people", "people");
-    plain tile_people_everyone = ("That's everyone in your directory", "That's everyone in your directory");
-    plain tile_people_more = ("+{n} more in your directory", "+{n} more in your directory");
     plain tile_empty_agenda = ("Put something on the calendar", "Put something on the calendar");
     plain tile_empty_docs = ("Add your first document", "Add your first document");
     plain tile_empty_health = ("Connect your health app", "Connect your health app");

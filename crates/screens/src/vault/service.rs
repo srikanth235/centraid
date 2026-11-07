@@ -271,10 +271,14 @@ impl Service {
             standing.reading.frozen,
             standing.now_ms,
         );
+        // NOTHING PAIRED: the line is the way to pairing (decided in #1173), not
+        // the Backup place, whose page says the same and offers the same door.
+        let unpaired = standing.reading.destinations.is_empty() && !standing.reading.frozen;
         (!line.status.is_empty()).then_some(wire::HomeBackupLine {
             status: line.status,
             tone: line.tone,
             accessibility_label: line.accessibility_label,
+            route: unpaired.then(crate::pairing::routes::laptop),
         })
     }
 

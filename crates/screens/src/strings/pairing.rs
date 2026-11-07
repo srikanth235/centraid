@@ -56,5 +56,7 @@ catalog! {
         "Paired with {where}. Check the number below matches the safety number “centraid-gateway pair” printed on {who}. If it doesn't, pair again on a network you trust."
     );
     plain paired_at = ("{who} at {address}", "{who} at {address}");
+    plain safety_label = ("Safety number", "Safety number");
+    plain safety_hint = ("Same number on both screens means nobody is in between.", "Same number on both screens means nobody is in between.");
     plain paired_who = ("your backup device", "your backup device");
 }

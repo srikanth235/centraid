@@ -12,6 +12,13 @@ catalog! {
     plain rule_wifi_and_cellular_photos = ("Full-size photos back up and download on Wi-Fi or cellular; videos wait for Wi-Fi.", "Full-size photos back up and download on Wi-Fi or cellular; videos wait for Wi-Fi.");
     plain rule_manual = ("Full-size photos download when you tap one; backups wait for Wi-Fi.", "Full-size photos download when you tap one; backups wait for Wi-Fi.");
 
+    // THE RULE'S SHORT WORDS, for the "Back up over" row (the sentences above are what
+    // it opens). The last has no board word: it is "when you tap", the rule where
+    // nothing arrives on its own.
+    plain rule_short_wifi_only = ("Wi-Fi only", "Wi-Fi only");
+    plain rule_short_wifi_and_cellular_photos = ("Wi-Fi and cellular", "Wi-Fi and cellular");
+    plain rule_short_manual = ("On tap", "On tap");
+
     // WHERE THE RECOVERY KEY GOES, in the member's words, and what the platform
     // promises about getting it back. Android says the uncomfortable thing: Block
     // Store hands the key back during the new-phone setup and at no other time.

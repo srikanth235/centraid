@@ -81,7 +81,7 @@ struct VaultHeader: View {
         .accessibilityIdentifier("home-backup-status")
     }
 
-    /// The Backup tab shows the lockup too, but not the search and appearance keys.
+    /// The Backup tab shows the lockup too, but not the search and settings keys.
     private var onHome: Bool { shell.tab == .home }
 
     var body: some View {
@@ -158,14 +158,16 @@ struct VaultHeader: View {
                         shell.open(bar.searchRoute)
                     }
                 }
-                if onHome {
+                // SETTINGS: the appearance, the vault, the backup and the recovery key
+                // live behind it (the appearance key retired into it, #1173).
+                if onHome, bar.hasSettingsRoute {
                     KitIconKey(
-                        iconKey: bar.appearanceIcon,
-                        label: bar.appearanceLabel,
+                        iconKey: "Settings",
+                        label: bar.settingsLabel,
                         glass: true,
-                        identifier: "home-appearance"
+                        identifier: "home-settings-open"
                     ) {
-                        store.sendHome(.appearance(.init()))
+                        shell.open(bar.settingsRoute)
                     }
                 }
             }

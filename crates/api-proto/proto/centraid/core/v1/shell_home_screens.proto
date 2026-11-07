@@ -28,6 +28,8 @@ enum HomeTileStatus {
   HOME_TILE_STATUS_CONTENT = 4;
 }
 
+// A widget's width on the four-column grid: small is one column, medium two,
+// large four (all of them).
 enum HomeTileSize {
   HOME_TILE_SIZE_UNSPECIFIED = 0;
   HOME_TILE_SIZE_SMALL = 1;
@@ -61,6 +63,7 @@ message HomeTileBody {
     Notes notes = 6;
     Money money = 7;
     Health health = 8;
+    Reminders reminders = 9;
   }
 
   // A mosaic of the newest photographs that have a thumbnail on this phone. A
@@ -89,27 +92,46 @@ message HomeTileBody {
     }
   }
 
+  // THE CALENDAR WIDGET: today's weekday and date, then up to two of today's
+  // events, then what else there is. Tasks are the Reminders widget's.
   message Agenda {
-    // The next event, "No events coming up" when there is none.
-    string title = 1;
-    string at = 2;
-    string after = 3;
-    // What is owed today: overdue and due-today tasks.
-    uint32 due_count = 4;
-    string due_label = 5;
-    string due_title = 6;
+    // 1 to 6 were the next event's title, time and after-line and the due
+    // count, label and first title: the widget draws the day instead, and what
+    // is owed is `Reminders` (#1173).
+    reserved 1 to 6;
+    reserved "title", "at", "after", "due_count", "due_label", "due_title";
+    // "WEDNESDAY" is drawn in caps by the shell; the core sends "Wednesday".
+    string weekday = 7;
+    // The day of the month, "4".
+    string day = 8;
+    // Up to two of today's events still to come, soonest first.
+    repeated Event events = 9;
+    // "Agenda · 2 more", or "Agenda" when nothing is left over; with no event
+    // today the line says so ("No events today").
+    string foot = 10;
+    message Event {
+      string title = 1;
+      // "11:15 – 12:30", "11:45" or "All day".
+      string span = 2;
+    }
   }
 
+  // THE REMINDERS WIDGET: what is owed today (overdue and due today), its count
+  // on the tile, the first three titles, and the caption under them.
+  message Reminders {
+    repeated string titles = 1;
+    // "Today".
+    string caption = 2;
+  }
+
+  // A figure and its word: how many to reconnect with when any are due, else
+  // how many people there are.
   message People {
-    repeated Face faces = 1;
-    uint32 more = 2;
-    string more_label = 3;
-    message Face {
-      string party_id = 1;
-      string initials = 2;
-      // The identity hue key, resolved once here for both shells.
-      optional string color = 3;
-    }
+    // 1 to 3 were the first faces and the count beyond them (#1173).
+    reserved 1 to 3;
+    reserved "faces", "more", "more_label";
+    string figure = 4;
+    string caption = 5;
   }
 
   // A state and its words, never a row: a launcher says how many items and
@@ -122,20 +144,15 @@ message HomeTileBody {
     string line = 3;
   }
 
+  // THE NEWEST NOTE and when it was edited.
   message Notes {
+    // 3 and 4 were the notebooks and the newest notes (#1173).
+    reserved 3, 4;
+    reserved "notebooks", "recent";
     string note_id = 1;
     string title = 2;
-    repeated Notebook notebooks = 3;
-    repeated Recent recent = 4;
-    message Notebook {
-      string notebook_id = 1;
-      string name = 2;
-      uint32 note_count = 3;
-    }
-    message Recent {
-      string note_id = 1;
-      string title = 2;
-    }
+    // "Edited yesterday".
+    string edited = 5;
   }
 
   // This month's spending, one finished amount per currency.
@@ -159,7 +176,9 @@ message HomeTile {
   optional HomeTileCount count = 4;
   string count_label = 5;
   HomeTileSize size = 6;
-  bool wide = 7;
+  // 7 was `wide`: a widget's width is its `size` on four columns (#1173).
+  reserved 7;
+  reserved "wide";
   // What an empty tile says to do ("Add your first document").
   string empty_copy = 8;
   optional HomeTileBody body = 9;
@@ -169,10 +188,20 @@ message HomeTile {
   string accessibility_label = 11;
   // WHERE A TAP GOES: the app's home, as the route the shell pushes.
   Route route = 12;
+  // THE WIDGET'S OWN KEY, and the key a row lists. An app has one widget except
+  // Agenda, which has two (`agenda`, the day, and `reminders`, what is owed), so
+  // `app_id` is the mark and the colour (anything shown from an app wears that
+  // app's colour) and `widget` is the identity.
+  string widget = 13;
+  // How many grid rows tall: 1, or 2 for a widget with a list in it.
+  uint32 height = 14;
 }
 
 message HomeTileRow {
-  repeated string app_ids = 1;
+  // 1 was `app_ids`: a row lists widgets now, and Agenda has two (#1173).
+  reserved 1;
+  reserved "app_ids";
+  repeated string widgets = 2;
 }
 
 enum HomeTone {
@@ -255,6 +284,10 @@ message HomeBackupLine {
   string status = 1;
   HomeTone tone = 2;
   string accessibility_label = 3;
+  // Where a press on the line goes when it is not the Backup place: the pairing
+  // page while no backup device is paired ("Not backed up. Pair a backup
+  // device."). Absent: the Backup place.
+  optional Route route = 4;
 }
 
 // A vault the member is asked to delete or rename: the sheet's second step.
@@ -309,9 +342,12 @@ message HomeBar {
   Route search_route = 8;
   // The label of the gear beside "N originals waiting": "Download settings".
   string transfer_rules_label = 9;
-  // The appearance key: the glyph and the words of the switch it makes.
-  string appearance_icon = 4;
-  string appearance_label = 5;
+  // 4 and 5 were the appearance key's glyph and words: the appearance is Settings' now (#1173).
+  reserved 4, 5;
+  reserved "appearance_icon", "appearance_label";
+  // The settings key beside search: "Settings", and where it goes.
+  string settings_label = 12;
+  Route settings_route = 13;
   // 6 was `switch_spoken`: nothing read it (#1152).
   reserved 6;
   reserved "switch_spoken";
@@ -388,7 +424,6 @@ message HomeEvent {
   oneof kind {
     BackupPressed backup = 3;
     StatusPressed status = 4;
-    AppearancePressed appearance = 5;
     VaultPressed vault = 6;
     VaultPicked vault_picked = 7;
     SheetClosed sheet_closed = 8;
@@ -419,11 +454,17 @@ message HomeEvent {
     // The phone asked for a page from outside Home (a key slot, a system rationale link):
     // Home answers with the route, so the shell names no screen.
     EntryAsked entry_asked = 25;
+    // Settings chose the appearance: Home keeps it and draws the scheme it names.
+    AppearanceChosen appearance_chosen = 26;
   }
+  // 5 was `appearance`, the key that flipped light and dark: Settings chooses it now.
+  reserved 5;
+  reserved "appearance";
 
   message BackupPressed {}
   message StatusPressed {}
-  message AppearancePressed {}
+  // `stored` is what the Keychain holds: "", "light" or "dark".
+  message AppearanceChosen { string stored = 1; }
   message VaultPressed {}
   message VaultPicked { string vault_id = 1; }
   message SheetClosed {}

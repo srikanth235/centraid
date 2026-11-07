@@ -46,7 +46,15 @@ catalog! {
     plain backup_bytes_of = ("{part} of {whole}", "{part} of {whole}");
     plain backup_dest_pair_again = ("Pair it again", "Pair it again");
     plain backup_devices_heading = ("Backup devices", "Backup devices");
-    plain backup_held = ("Holds {size}", "Holds {size}");
+    plain backup_held = ("Holds {size} \u{b7} can't open it", "Holds {size} \u{b7} can't open it");
+    plain backup_key_summary_phone = ("Only on this phone", "Only on this phone");
+    plain backup_key_summary_saved = ("Saved elsewhere", "Saved elsewhere");
+    plain backup_key_summary_synced = ("Saved in {place}", "Saved in {place}");
+    plain backup_last_good = ("Last good backup {when}", "Last good backup {when}");
+    plain backup_not_backed_up_heading = ("Not backed up yet", "Not backed up yet");
+    plain backup_over = ("Back up over", "Back up over");
+    plain backup_unreachable = ("{name} hasn't answered. Check it's awake and on the same network as this phone.", "{name} hasn't answered. Check it's awake and on the same network as this phone.");
+    plain backup_travel_heading = ("What travels when", "What travels when");
     plain backup_forget = ("Forget", "Forget");
     plain backup_forget_failed = ("Couldn't forget {name}. Try again.", "Couldn't forget {name}. Try again.");
     plain backup_forgotten_not_revoked = ("Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.", "Forgot {name}, but it wasn't told. Run “centraid-gateway pairings revoke” there.");
@@ -71,7 +79,6 @@ catalog! {
     plain backup_now_running = ("Backing up…", "Backing up…");
     plain backup_progress = ("Backing up — {size} to go", "Backing up — {size} to go");
     plain backup_refused = ("Your backup device refused the backup. It may be full. Nothing was lost.", "Your backup device refused the backup. It may be full. Nothing was lost.");
-    plain backup_rule_heading = ("Wi-Fi and cellular", "Wi-Fi and cellular");
     plain backup_seen = ("Reached {when}", "Reached {when}");
     plain backup_seen_never = ("Not reached yet", "Not reached yet");
     plain backup_status_catching_up = ("Backing up, last {when}", "Backing up, last {when}");
@@ -79,7 +86,7 @@ catalog! {
     plain backup_status_frozen = ("Moved to your other phone", "Moved to your other phone");
     plain backup_status_never = ("Not backed up yet", "Not backed up yet");
     plain backup_status_pair_again = ("Pair your backup device again", "Pair your backup device again");
-    plain backup_status_unpaired = ("Not backed up", "Not backed up");
+    plain backup_status_unpaired = ("Not backed up. Pair a backup device.", "Not backed up. Pair a backup device.");
     plain backup_title = ("Backup", "Backup");
     plain backup_unnamed = ("Your backup device", "Your backup device");
     plain backup_wait_ask = ("{count} waiting. Tap Back up now.", "{count} waiting. Tap Back up now.");

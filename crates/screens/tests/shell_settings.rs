@@ -61,10 +61,6 @@ fn keychain_get(kind: &wire::effect::Kind) -> bool {
     matches!(kind, wire::effect::Kind::Keychain(op) if op.key == "appearance" && op.op == wire::keychain_op::Op::Get as i32)
 }
 
-fn keychain_set(kind: &wire::effect::Kind) -> bool {
-    matches!(kind, wire::effect::Kind::Keychain(op) if op.key == "appearance" && op.op == wire::keychain_op::Op::Set as i32)
-}
-
 fn stored(value: &str) -> wire::effect_result::Outcome {
     wire::effect_result::Outcome::Keychain(wire::KeychainValue {
         found: !value.is_empty(),
@@ -129,7 +125,7 @@ fn a_keychain_that_cannot_answer_leaves_the_system_appearance_not_a_spinner() {
 }
 
 #[test]
-fn picking_writes_the_same_key_home_reads_and_home_then_draws_that_scheme() {
+fn picking_is_kept_by_home_in_its_one_key_and_home_draws_that_scheme() {
     let (mut d, home, i) = started();
     // Home read its own key when it opened; settle it on the phone's scheme.
     answer(&mut d, home, keychain_get, stored(""));
@@ -144,13 +140,13 @@ fn picking_writes_the_same_key_home_reads_and_home_then_draws_that_scheme() {
         }),
     );
     assert_eq!(selected(&data(&d, i)), ["dark"]);
-    // The write is Home's key with Home's value.
+    // HOME writes its own key with the value (the one owner of the store).
     let written = d
         .effects
         .iter()
         .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
             wire::effect::Kind::Keychain(op)
-                if op.op == wire::keychain_op::Op::Set as i32 && request.instance == i =>
+                if op.op == wire::keychain_op::Op::Set as i32 && request.instance == home =>
             {
                 Some(op.value.clone())
             }
@@ -158,14 +154,7 @@ fn picking_writes_the_same_key_home_reads_and_home_then_draws_that_scheme() {
         })
         .expect("the choice is written");
     assert_eq!(written, b"dark");
-    // Home was woken and asks the key again; the shell answers with what was just written.
-    answer(
-        &mut d,
-        i,
-        keychain_set,
-        wire::effect_result::Outcome::Done(wire::EffectDone::default()),
-    );
-    answer(&mut d, home, keychain_get, stored("dark"));
+    // And it draws the scheme at once.
     match &d.view(home).kind {
         Some(wire::view_state::Kind::Home(home)) => {
             assert_eq!(home.scheme, wire::HomeScheme::Dark as i32);

@@ -18,6 +18,7 @@ use wire::screen_event::Kind as E;
 
 use super::line::{self, STALE_MS};
 use super::reading::Reading;
+use super::rule::TransferRule;
 use super::{claim, doors, freeze, home, routes};
 use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
@@ -795,7 +796,6 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     );
     assert_eq!(data.add_destination, Some(routes::add_destination()));
     assert_eq!(data.forget_label, words::backup_forget(EN));
-    assert_eq!(data.rule_label, words::backup_rule_heading(EN));
     assert_eq!(
         data.rule_choices
             .iter()
@@ -1698,11 +1698,14 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     );
     assert_eq!(data.apps[0].app_id, "photos");
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
-    assert_eq!(data.destinations[0].held, "Holds 5.1 GB");
+    assert_eq!(
+        data.destinations[0].held,
+        "Holds 5.1 GB \u{b7} can't open it"
+    );
     assert!(
         data.destinations[0]
             .accessibility_label
-            .contains("Holds 5.1 GB")
+            .contains("Holds 5.1 GB \u{b7} can't open it")
     );
 }
 
@@ -1780,4 +1783,114 @@ fn videos_left_out_are_the_photos_rows_note() {
         photos.accessibility_label,
         "Photos. 1,203 photos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
     );
+}
+
+// ---- THE SETTINGS-STYLE PAGE (#1173) ----
+
+fn condition_of(status: wire::BackupStatusResponse) -> wire::BackupCondition {
+    Page::open(status).data().condition()
+}
+
+#[test]
+fn the_page_names_where_the_backup_stands_in_one_condition() {
+    use wire::BackupCondition as C;
+    assert_eq!(condition_of(both()), C::UpToDate);
+    assert_eq!(condition_of(status(Vec::new())), C::Unpaired);
+    assert_eq!(
+        condition_of(wire::BackupStatusResponse {
+            frozen: true,
+            ..both()
+        }),
+        C::Moved
+    );
+    // A run that is going.
+    let mut running = Page::open(both());
+    running.say(wire::backup_home_event::Kind::BackUpNow(
+        wire::backup_home_event::BackUpNow {},
+    ));
+    assert_eq!(running.data().condition(), C::Running);
+    // Unreached is the line's own predicate: exactly STALE_MS ago still answers, one
+    // millisecond more does not, and never having answered does not either.
+    let seen = |at: i64| {
+        let mut unreached = both();
+        unreached.destinations[0].last_seen_ms = at;
+        condition_of(unreached)
+    };
+    assert_eq!(seen(NOW - STALE_MS), C::UpToDate);
+    assert_eq!(seen(NOW - STALE_MS - 1), C::NotReached);
+    assert_eq!(seen(0), C::NotReached);
+}
+
+#[test]
+fn a_backup_device_that_has_not_answered_says_when_it_last_did_and_what_to_check() {
+    let mut unreached = with_apps(eight_apps());
+    unreached.destinations = vec![gateway(
+        "gw-1",
+        "Srikanth's Mac mini",
+        Some("192.168.1.20:7443"),
+        NOW - 5 * DAY,
+        NOW - 5 * DAY,
+    )];
+    unreached.acked_at_ms = Some(NOW - 5 * DAY);
+    unreached.apps[7].waiting = 184;
+    unreached.apps[1].waiting = 28;
+    let data = Page::open(unreached).data();
+    assert_eq!(data.condition(), wire::BackupCondition::NotReached);
+    assert_eq!(data.last_good, "Last good backup 5 days ago");
+    assert_eq!(
+        data.reason,
+        "Srikanth's Mac mini hasn't answered. Check it's awake and on the same network as this phone."
+    );
+    // What waits is its own list, and "In this backup" is what the device holds.
+    assert_eq!(data.waiting_heading, "Not backed up yet");
+    let waiting: Vec<&str> = data.apps_waiting.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(waiting, ["Photos", "Docs"]);
+    assert!(data.apps_waiting.iter().all(|row| row.waiting));
+    assert_eq!(data.apps.len(), 6);
+    assert!(data.apps.iter().all(|row| !row.waiting));
+    // A healthy page carries none of it.
+    let calm = Page::open(with_apps(eight_apps())).data();
+    assert_eq!(
+        (
+            calm.last_good.as_str(),
+            calm.reason.as_str(),
+            calm.waiting_heading.as_str()
+        ),
+        ("", "", "")
+    );
+    assert!(calm.apps_waiting.is_empty());
+}
+
+#[test]
+fn what_travels_when_has_one_row_worth_the_rules_short_word_and_the_sentences_behind_it() {
+    let mut page = Page::open(both());
+    let data = page.data();
+    assert_eq!(data.travel_heading, "What travels when");
+    assert_eq!(data.over_label, "Back up over");
+    assert_eq!(data.over_value, "Wi-Fi only");
+    // The three short words are the rule's, one for each sentence a member can pick.
+    let shorts: Vec<String> = TransferRule::ALL.iter().map(|r| r.short(EN)).collect();
+    assert_eq!(shorts, ["Wi-Fi only", "Wi-Fi and cellular", "On tap"]);
+    // Choosing moves the value, and what is picked is the one sentence.
+    page.say(wire::backup_home_event::Kind::RuleChosen(
+        wire::backup_home_event::RuleChosen {
+            stored: "wifi-and-cellular-photos".into(),
+        },
+    ));
+    let data = page.data();
+    assert_eq!(data.over_value, "Wi-Fi and cellular");
+    assert_eq!(data.rule_choices.iter().filter(|c| c.picked).count(), 1);
+}
+
+#[test]
+fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
+    let data = Page::open(both()).data();
+    assert_eq!(data.restore_label, "Restore my vaults");
+    assert_eq!(data.key_summary, "Saved in iCloud Keychain");
+    let moved = Page::open(wire::BackupStatusResponse {
+        frozen: true,
+        ..both()
+    })
+    .data();
+    assert_eq!(moved.restore_label, "");
 }

@@ -189,8 +189,10 @@ message BackupHomeData {
   // One label for every row's forget control; empty on a vault that moved (the
   // core refuses it, because the gateway's row is where the moved mark lives).
   string forget_label = 7;
-  // The rule's heading and its three choices.
-  string rule_label = 8;
+  // 8 was `rule_label`, the rule's heading: the "Back up over" row says it now (#1173).
+  reserved 8;
+  reserved "rule_label";
+  // The rule's three choices.
   repeated BackupRuleChoice rule_choices = 9;
   bool include_videos = 10;
   string include_videos_label = 11;
@@ -232,6 +234,41 @@ message BackupHomeData {
   // "In this backup" and one row per app (#1144); empty heading, no section.
   string apps_heading = 28;
   repeated BackupAppRow apps = 29;
+
+  // ---- THE SETTINGS-STYLE PAGE (#1173) ----
+  BackupCondition condition = 30;
+  // NOT_REACHED: "Last good backup 5 days ago" and what to check, in the member's words.
+  string last_good = 31;
+  string reason = 32;
+  // NOT_REACHED: the apps that wait, under "Not backed up yet", out of `apps`.
+  string waiting_heading = 33;
+  repeated BackupAppRow apps_waiting = 34;
+  // "What travels when" with its first row, "Back up over", worth the picked
+  // rule's short word. `rule_choices` are what that row opens.
+  string travel_heading = 35;
+  string over_label = 36;
+  string over_value = 37;
+  // "Saved elsewhere", "Saved in iCloud Keychain", "Only on this phone": the
+  // recovery key row's second line, empty with no key section.
+  string key_summary = 38;
+  // "Restore my vaults": the row under the recovery key, and its event.
+  string restore_label = 39;
+}
+
+// WHERE THE BACKUP STANDS, in one word the page draws its status card from (#1173).
+enum BackupCondition {
+  BACKUP_CONDITION_UNSPECIFIED = 0;
+  // Backed up, or catching up on its own.
+  BACKUP_CONDITION_UP_TO_DATE = 1;
+  // A "Back up now" run is going.
+  BACKUP_CONDITION_RUNNING = 2;
+  // No backup device has answered for longer than a backup should go without
+  // (`line.STALE_MS`): the page says so and what to check.
+  BACKUP_CONDITION_NOT_REACHED = 3;
+  // No backup device is paired.
+  BACKUP_CONDITION_UNPAIRED = 4;
+  // The vault moved to another phone: read-only here.
+  BACKUP_CONDITION_MOVED = 5;
 }
 
 message BackupHomeEvent {
@@ -245,7 +282,11 @@ message BackupHomeEvent {
     SetKeySync set_key_sync = 4;
     RuleChosen rule_chosen = 5;
     Retry retry = 6;
+    // Restore this phone's vaults: Home's own restore, asked from here.
+    RestorePressed restore_pressed = 7;
   }
+
+  message RestorePressed {}
 
   message BackUpNow {}
 

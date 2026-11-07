@@ -9,10 +9,14 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-day-one` | Home | the first-run page |
 | `home-first-moves` | Home | the first-moves band |
 | `home-failure` | Home | the failed-read sentence (no grid) |
-| `home-tile-<appId>` | Home | one springboard tile, keyed on the app id — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
+| `home-tile-<appId>` | Home | one springboard widget, keyed on the widget id (the app id, except Agenda's second, `reminders`) — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
-| `home-appearance` | Home | the framed appearance key right of search — flips light and dark (R-CHROME-7) |
+| `home-settings-open` | Home | the framed settings key right of search: opens Settings, where the appearance is chosen (#1173; the appearance key retired into it) |
+| `home-tile-reminders` | Home | the Reminders widget, Agenda's second: what is owed today; `home-tile-agenda` is the day (#1173) |
+| `backup-over` | Backup | the "Back up over" row: the rule's short word, opening its three sentences |
+| `backup-last-good` | Backup | "Last good backup …", drawn while the backup device has not answered |
+| `backup-restore` | Backup | "Restore my vaults": Home's own restore |
 | `home-search-field` | Home search | the field (it takes focus on open) |
 | `home-search-cancel` | Home search | Cancel: back to Home, the field cleared |
 | `home-search-recent-<term>` | Home search | one of this session's recent searches, while the field is empty |
@@ -69,7 +73,9 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-band` | Home | the floating band plate |
 | `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |
-| `home-backup-status` | Home | the lockup's second line: the backup's status, the door to the Backup tab ([#1080](https://github.com/srikanth235/centraid/issues/1080), R-ONBOARD-11) |
+| `home-backup-status` | Home | the lockup's second line: the backup's status, the door to the Backup tab, or to pairing while no backup device is paired, "Not backed up. Pair a backup device." (#1173; [#1080](https://github.com/srikanth235/centraid/issues/1080), R-ONBOARD-11) |
+| `pair-command` | Pairing | the terminal line with the command to run on the backup device (WAITING and FAILED) |
+| `pair-safety-number` | Pairing | the safety number in its groups of 5, four to a row, once paired (a screen reader says the whole number) |
 | `backup-screen` | Backup | the Backup screen itself |
 | `backup-now` | Backup | "Back up now", dimmed and disabled when the machine's `back_up_now_enabled` is false |
 | `backup-progress` | Backup | the progress sentence while a run is under way |

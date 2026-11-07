@@ -11,8 +11,7 @@
 //!
 //! **The appearance has one store.** Home's key `appearance` holds `""`, `"light"` or `"dark"`;
 //! Settings writes the same three values to the same key and then wakes Home, which reads the key
-//! again and draws the scheme it names. There is no second copy to drift. Home keeps its own
-//! toggle until it is retired in favour of this page.
+//! again and draws the scheme it names. There is no second copy to drift.
 //!
 //! The pages the rows open are Backup's (`backup.home`, `words.show`); the words are theirs too.
 //! Home's entry point to this page is [`super::routes::settings`].
@@ -234,19 +233,20 @@ impl Screen for Settings {
                     && self.appearance != Some(chosen)
                 {
                     self.appearance = Some(chosen);
-                    // HOME READS THE KEY AGAIN: it is woken as if it had just appeared, so the
-                    // scheme it names is drawn at once and by the one owner of it.
+                    // HOME OWNS THE STORE AND THE SCHEME: it keeps the choice in the Keychain
+                    // and draws what it names.
                     ctx.post(
                         super::HOME,
                         wire::ScreenEvent {
-                            kind: Some(E::Appeared(wire::Appeared {})),
+                            kind: Some(E::Home(wire::HomeEvent {
+                                kind: Some(wire::home_event::Kind::AppearanceChosen(
+                                    wire::home_event::AppearanceChosen {
+                                        stored: chosen.stored().to_owned(),
+                                    },
+                                )),
+                            })),
                         },
                     );
-                    return vec![effect(wire::effect::Kind::Keychain(wire::KeychainOp {
-                        op: wire::keychain_op::Op::Set as i32,
-                        key: APPEARANCE_KEY.to_owned(),
-                        value: chosen.stored().as_bytes().to_vec(),
-                    }))];
                 }
             }
             _ => {}

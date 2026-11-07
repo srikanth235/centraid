@@ -71,7 +71,7 @@ public fun VaultHeader(
      */
     onSearch: (() -> Unit)? = null,
     /** THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light and dark. */
-    onAppearance: (() -> Unit)? = null,
+    onSettings: (() -> Unit)? = null,
 ) {
     val vault = bar.vault
     val name = vault?.name.orEmpty()
@@ -212,8 +212,8 @@ public fun VaultHeader(
             if (onSearch != null) {
                 IconKey(iconKey = "Search", label = bar.search_label, testTag = "home-search-open", onPress = onSearch)
             }
-            if (onAppearance != null) {
-                IconKey(iconKey = bar.appearance_icon, label = bar.appearance_label, testTag = "home-appearance", onPress = onAppearance)
+            if (onSettings != null) {
+                IconKey(iconKey = "Settings", label = bar.settings_label, testTag = "home-settings-open", onPress = onSettings)
             }
         }
     }
