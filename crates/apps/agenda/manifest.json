@@ -1712,7 +1712,17 @@
           },
           "color": {
             "type": ["string", "null"],
-            "enum": ["blue", "mustard", "violet", "petrol", "indigo", "graphite", "raspberry", "orchid", null]
+            "enum": [
+              "blue",
+              "mustard",
+              "violet",
+              "petrol",
+              "indigo",
+              "graphite",
+              "raspberry",
+              "orchid",
+              null
+            ]
           },
           "icon": {
             "type": ["string", "null"],
@@ -1763,7 +1773,17 @@
           },
           "color": {
             "type": ["string", "null"],
-            "enum": ["blue", "mustard", "violet", "petrol", "indigo", "graphite", "raspberry", "orchid", null]
+            "enum": [
+              "blue",
+              "mustard",
+              "violet",
+              "petrol",
+              "indigo",
+              "graphite",
+              "raspberry",
+              "orchid",
+              null
+            ]
           },
           "icon": {
             "type": ["string", "null"],

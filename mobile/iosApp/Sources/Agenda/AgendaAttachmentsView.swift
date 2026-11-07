@@ -141,7 +141,7 @@ struct AgendaAttachmentsView: View {
             if !tile.thumbnailPath.isEmpty {
                 ContentImage(path: tile.thumbnailPath)
                     .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous))
             } else {
                 KitTile(iconKey: tile.iconKey, size: 40)
             }
