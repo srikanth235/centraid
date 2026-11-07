@@ -114,6 +114,7 @@ fn work() -> wire::PhoneCalendar {
         source_title: "Google".to_owned(),
         title: "Work".to_owned(),
         color: "#007AFF".to_owned(),
+        ..wire::PhoneCalendar::default()
     }
 }
 
@@ -381,6 +382,7 @@ fn a_calendar_is_painted_with_the_wheel_hue_nearest_its_phone_colour_and_a_grey_
                 source_title: String::new(),
                 title: "Home".to_owned(),
                 color: color.to_owned(),
+                ..wire::PhoneCalendar::default()
             },
         )
         .color
@@ -404,6 +406,7 @@ fn a_calendar_names_itself_by_its_source_and_title() {
                 source_title: source.to_owned(),
                 title: title.to_owned(),
                 color: String::new(),
+                ..wire::PhoneCalendar::default()
             },
         )
         .label

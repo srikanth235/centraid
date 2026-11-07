@@ -775,7 +775,7 @@ impl Screen for Home {
                                 Sheet::NewProject | Sheet::NewCalendar | Sheet::EditCalendar
                             )
                         })
-                        .map(|draft| draft.sheet(locale)),
+                        .map(|draft| Box::new(draft.sheet(locale))),
                     // "Add", not "New event": on Day, Schedule and Waiting the Plus
                     // opens the sheet that adds an event or a task (R-1128-Z1).
                     add_label: if todo {

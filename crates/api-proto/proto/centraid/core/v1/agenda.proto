@@ -214,6 +214,13 @@ message AgendaEvent {
   string next_original_start_local = 35;
   // That occurrence's start in the request's `tz`, spelled as `local_start`.
   string next_local_start = 36;
+
+  // --- Wave 2 (#1173). ---
+  // Whether the event blocks its time; `false` is the member's "free". A row
+  // that does not say is busy, as the column's default is.
+  bool busy = 37;
+  // Minutes of travel the member allows before it starts. Absent for none.
+  optional int64 travel_min = 38;
 }
 
 // One reminder: how long before the start it fires.
@@ -356,6 +363,43 @@ message AgendaEventDetail {
   // name it. ABSENT when there is no event, the event names no calendar, or
   // the calendar is gone.
   optional AgendaCalendar calendar = 4;
+  // THE GUESTS THE PHONE'S CALENDAR STATES for an event the vault follows
+  // (#1173): a read-only list, the phone's own word. A guest that is a person
+  // here is also in `AgendaEvent.attendees`; the rest are only listed here.
+  repeated AgendaFollowedGuest followed_guests = 5;
+}
+
+// One guest a followed phone calendar states for an event.
+message AgendaFollowedGuest {
+  optional string name = 1;
+  optional string email = 2;
+  // `needs-action`, `accepted`, `declined` or `tentative`.
+  string state = 3;
+}
+
+// `agenda.attachments`: one page of what an event or a task has attached (#1173).
+message AgendaAttachments {
+  repeated AgendaAttachmentRow attachments = 1;
+  // The cursor of the next page, as the request's `after` spells it; absent
+  // when the attachments ended.
+  optional string next = 2;
+}
+
+// One attachment of an event or a task: a document or a photo.
+message AgendaAttachmentRow {
+  // The attached document's or photo's id (what `detach` takes as `to`).
+  string attachment_id = 1;
+  // `document` or `photo`.
+  string kind = 2;
+  optional string title = 3;
+  string content_id = 4;
+  string media_type = 5;
+  int64 byte_size = 6;
+  // When it was attached, as stored.
+  optional string attached_at = 7;
+  // The file that draws a thumbnail, when this phone holds one and it may be
+  // drawn inline. Empty: draw the kind's icon.
+  string thumbnail_path = 8;
 }
 
 message AgendaSearch {
@@ -555,6 +599,8 @@ message AgendaTask {
   // The task carries Agenda's Flag (the vault's starred flag, a `tagged` edge):
   // it is in the Flagged list (#1173).
   bool flagged = 40;
+  // The task's address, as stored (#1173). Absent for none.
+  optional string url = 41;
 }
 
 message AgendaTaskTag {

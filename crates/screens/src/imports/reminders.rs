@@ -199,6 +199,14 @@ fn lists_held(ctx: &Ctx) -> Option<HashMap<String, String>> {
     }
 }
 
+/// The list colour a phone's `#RRGGBB` becomes: the nearest of the eight list colours by hue (a
+/// red list is raspberry, a green one petrol, a grey graphite), `None` for no colour.
+#[must_use]
+pub fn list_color(title: &str, hex: &str) -> Option<String> {
+    let hex = hex.trim();
+    (!hex.is_empty()).then(|| centraid_design::list_color_key(title, Some(hex)).to_owned())
+}
+
 /// The list a reminder belongs to, made when the member has none of that name. `None` when it
 /// names no list or the list could not be made (the task then lands in the Inbox).
 fn list_for(
@@ -216,9 +224,7 @@ fn list_for(
         return Some(id.clone());
     }
     // Nearest of the eight list colours by hue: a red list is raspberry, a green one petrol.
-    let color = (!reminder.list_color.trim().is_empty())
-        .then(|| centraid_design::list_color_key(title, Some(reminder.list_color.trim())))
-        .map_or(Field::Keep, |key| Field::Is(key.to_owned()));
+    let color = list_color(title, &reminder.list_color).map_or(Field::Keep, Field::Is);
     let key = kit_act::key(&["import-reminder-list", title], kit_act::fresh());
     let made = kit_act::act(
         ctx,
@@ -392,7 +398,8 @@ mod tests {
                 l,
                 Outcome {
                     added: 0,
-                    refused: 2
+                    refused: 2,
+                    ..Outcome::default()
                 }
             ),
             "Reminders did not import."
@@ -402,7 +409,7 @@ mod tests {
                 l,
                 Outcome {
                     added: 1,
-                    refused: 0
+                    ..Outcome::default()
                 }
             ),
             "1 task imported"
@@ -412,7 +419,8 @@ mod tests {
                 l,
                 Outcome {
                     added: 4,
-                    refused: 1
+                    refused: 1,
+                    ..Outcome::default()
                 }
             ),
             "4 tasks imported"

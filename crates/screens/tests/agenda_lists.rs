@@ -34,7 +34,7 @@ fn send_home(d: &mut Driver, kind: H) {
 }
 
 fn style_of(d: &Driver) -> wire::AgendaStyleSheet {
-    home(d).style.clone().expect("the style sheet is up")
+    *home(d).style.clone().expect("the style sheet is up")
 }
 
 fn name_it(d: &mut Driver, name: &str) {

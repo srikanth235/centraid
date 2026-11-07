@@ -356,6 +356,7 @@ fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::AgendaTaskPro
         name: project.name.clone().unwrap_or_default(),
         area: project.area.clone(),
         color: project.color.clone(),
+        icon: project.icon.clone(),
         sort_order: project.sort_order.unwrap_or_default(),
         open_count: count(
             open.iter()
@@ -450,6 +451,7 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         age_days: placed.age_days.map(small),
         created_local_day: placed.created_day.clone(),
         flagged: task.flagged,
+        url: task.url.clone(),
         tags: task
             .tags
             .iter()

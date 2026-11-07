@@ -35,6 +35,26 @@ fn word(literal: &str) -> bool {
     !literal.is_empty() && literal.chars().all(|char| char.is_ascii_alphanumeric())
 }
 
+/// `line` with the literal that NAMES an input field blanked: the first string
+/// after `put_field(&mut map,` or `map.insert(`. What the field is given stays.
+fn without_field_names(line: &str) -> String {
+    let mut out = line.to_owned();
+    for opener in ["put_field(&mut map, ", "map.insert("] {
+        let mut from = 0;
+        while let Some(at) = out[from..].find(opener) {
+            let start = from + at + opener.len();
+            let rest = &out[start..];
+            if let Some(open) = rest.strip_prefix('"')
+                && let Some(len) = open.find('"')
+            {
+                out.replace_range(start..start + len + 2, "_");
+            }
+            from = start;
+        }
+    }
+    out
+}
+
 /// `(line, key)` for every key-like literal the file names as an icon.
 fn named(source: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
@@ -46,6 +66,11 @@ fn named(source: &str) -> Vec<(usize, String)> {
             break;
         }
         let line = raw.find("//").map_or(raw, |at| &raw[..at]);
+        // THE NAME OF AN INPUT FIELD IS NOT A KEY: the generated catalogue spells
+        // `put_field(&mut map, "icon", self.icon, ..)`, where "icon" names the
+        // field the vault reads, and `map.insert("icon", ..)` likewise.
+        let line = without_field_names(line);
+        let line = line.as_str();
         if line.contains("fn ") && line.to_lowercase().contains("icon") {
             in_icon_fn = true;
             fn_depth = depth;
@@ -114,9 +139,11 @@ fn kind_icon(key: &str) -> &'static str {
 }
 fn label() -> &'static str { \"Not an icon\" }
 const SPEC: Spec = Spec { icon_key: \"CheckSquare\" }; // \"Ghost\" icon in a comment
+fn put(map: &mut M) { put_field(&mut map, \"icon\", self.icon, |it| text(it)); map.insert(\"icon\".to_owned(), text(\"Heart\")); }
 #[cfg(test)]
 mod tests { fn icon() { let _ = \"strength\"; } }
 ";
     let keys: Vec<String> = named(source).into_iter().map(|(_, key)| key).collect();
-    assert_eq!(keys, ["Activity", "Gym", "CheckSquare"]);
+    // A field's name is skipped; what it is given is still a key.
+    assert_eq!(keys, ["Activity", "Gym", "CheckSquare", "Heart"]);
 }

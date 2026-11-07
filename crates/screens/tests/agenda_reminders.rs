@@ -355,7 +355,11 @@ fn an_imported_red_list_is_drawn_raspberry_and_a_list_never_has_a_state_colour()
         &d,
         act::agenda::CreateProject {
             title: "Imported red".into(),
-            color: Field::Is("#FF3B30".into()),
+            // What the reminders import writes for a phone's red list.
+            color: Field::Is(
+                centraid_screens::imports::reminders::list_color("Imported red", "#FF3B30")
+                    .expect("a colour"),
+            ),
             ..Default::default()
         },
     );

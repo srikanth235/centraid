@@ -24,7 +24,9 @@
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::clock::parse_iso_ms;
-use centraid_vault::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso};
+use centraid_vault::time::zone::{
+    FireZone, WallTime, parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso,
+};
 use serde_json::{Value, json};
 use wire::app_query_response::Answer;
 use wire::calendar_write_item::{Op, Span};
@@ -129,11 +131,23 @@ fn local_of(text: &str, timing: &str, zone: Option<&str>) -> Option<String> {
         "zoned" => {
             let zone = FireZone::named(zone?).ok()?;
             let wall = zone.zoned_parts(parse_iso_ms(text)?);
-            Some(wall_iso(WallTime { millisecond: 0, ..wall }, true))
+            Some(wall_iso(
+                WallTime {
+                    millisecond: 0,
+                    ..wall
+                },
+                true,
+            ))
         }
         _ => {
             let wall = parse_wall_iso(text)?;
-            Some(wall_iso(WallTime { millisecond: 0, ..wall }, true))
+            Some(wall_iso(
+                WallTime {
+                    millisecond: 0,
+                    ..wall
+                },
+                true,
+            ))
         }
     }
 }
@@ -147,13 +161,17 @@ fn plus_length(start: &str, from: &str, to: &str) -> Option<String> {
     );
     let length = wall_epoch(to) - wall_epoch(from);
     let at = wall_from_epoch(wall_epoch(start) + length.max(0));
-    let timed = start.hour != 0 || start.minute != 0 || start.second != 0 || length % 86_400_000 != 0;
+    let timed =
+        start.hour != 0 || start.minute != 0 || start.second != 0 || length % 86_400_000 != 0;
     Some(wall_iso(at, timed))
 }
 
 /// The times of a whole event: `(all_day, start, end, tz)`.
 fn when_of(fields: &Value) -> Option<(bool, String, String, String)> {
-    let timing = fields.get("timing").and_then(Value::as_str).unwrap_or("floating");
+    let timing = fields
+        .get("timing")
+        .and_then(Value::as_str)
+        .unwrap_or("floating");
     let zone = fields
         .get("zone")
         .and_then(Value::as_str)
@@ -295,9 +313,10 @@ fn day_stated(stated: &Value, day: &Value, zone: Option<&str>, timing: &str) -> 
     let Some(moved) = moved else {
         return false;
     };
-    let same_title = day.get(3).and_then(Value::as_str).is_none_or(|title| {
-        moved.get("title").and_then(Value::as_str) == Some(title.trim())
-    });
+    let same_title = day
+        .get(3)
+        .and_then(Value::as_str)
+        .is_none_or(|title| moved.get("title").and_then(Value::as_str) == Some(title.trim()));
     let same_start = day.get(2).and_then(Value::as_str).is_none_or(|starts| {
         local_of(starts, timing, zone).as_deref() == moved.get("starts").and_then(Value::as_str)
     });
@@ -449,7 +468,11 @@ pub fn prepare(owed: &Owed, device: &str) -> Option<Prepared> {
             one.fields = Some(write_fields(&owed.fields, None)?);
             let mut items = vec![one];
             // A series founded here pushes the days it already holds.
-            if owed.fields.get("overrides").is_some_and(|days| !days.is_null()) {
+            if owed
+                .fields
+                .get("overrides")
+                .is_some_and(|days| !days.is_null())
+            {
                 items.extend(days_of(owed, calendar)?);
             }
             ("create", items, owed.fields.clone())

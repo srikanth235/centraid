@@ -1048,6 +1048,7 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
         rows.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
         [
             cal_key.as_str(),
+            "new-calendar",
             "anytime",
             "logbook",
             "reminders",
@@ -1056,7 +1057,7 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
         ]
     );
     assert_eq!(
-        rows[1..]
+        rows[2..]
             .iter()
             .map(|row| row.label.as_str())
             .collect::<Vec<_>>(),
@@ -1073,11 +1074,11 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
         rows.iter()
             .map(|row| row.section.as_str())
             .collect::<Vec<_>>(),
-        ["Calendars", "Tasks", "", "", "", ""]
+        ["Calendars", "", "Tasks", "", "", "", ""]
     );
     assert_eq!(
         rows.iter().map(|row| row.toggle).collect::<Vec<_>>(),
-        [true, false, false, false, false, false]
+        [true, false, false, false, false, false, false]
     );
     assert!(
         rows[0].on
@@ -1089,7 +1090,7 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
             .all(|row| row.label != "Search" && row.key != "search")
     );
     assert_eq!(
-        rows[1..5]
+        rows[2..6]
             .iter()
             .map(|row| row.icon_key.as_str())
             .collect::<Vec<_>>(),
@@ -1097,19 +1098,19 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
     );
     // WHERE A TASKS PLACE GOES is the row's own route.
     assert_eq!(
-        rows[1].route,
+        rows[2].route,
         Some(agenda::routes::todo_list(wire::TodoView::Anytime))
     );
     assert_eq!(
-        rows[2].route,
+        rows[3].route,
         Some(agenda::routes::todo_list(wire::TodoView::Logbook))
     );
     assert_eq!(
-        rows[3].route,
+        rows[4].route,
         Some(agenda::routes::todo_list(wire::TodoView::Reminders))
     );
-    assert_eq!(rows[4].route, Some(agenda::routes::trash()));
-    assert!(rows[0].route.is_none() && rows[5].route.is_none());
+    assert_eq!(rows[5].route, Some(agenda::routes::trash()));
+    assert!(rows[0].route.is_none() && rows[1].route.is_none() && rows[6].route.is_none());
 
     // A CALENDAR ROW TOGGLES; the sheet stays up.
     r.more_row(&cal_key);
@@ -2248,7 +2249,7 @@ fn a_new_project_is_a_sheet_reachable_from_to_do_whatever_it_holds() {
     ));
     assert_eq!(r.state().sheet, Sheet::None as i32);
     assert_eq!(r.state().new_project_name, "");
-    assert_eq!(r.status().unwrap().sentence, "Project created");
+    assert_eq!(r.status().unwrap().sentence, "List created");
     let projects: Vec<String> = r
         .todo()
         .projects

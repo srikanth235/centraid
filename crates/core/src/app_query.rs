@@ -90,6 +90,8 @@ pub(crate) mod people;
 pub(crate) mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 pub(crate) mod agenda_task;
+// What an event or a task has attached, with its thumbnails (#1173).
+pub(crate) mod agenda_attachments;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -261,6 +263,15 @@ pub(crate) fn agenda_event(
                 now_local: local::now_local(&zone, now).unwrap_or_default(),
                 event: data.event.map(|event| event_to_wire(event, &zone)),
                 calendar: data.calendar.map(calendar_to_wire),
+                followed_guests: data
+                    .followed_guests
+                    .into_iter()
+                    .map(|guest| wire::AgendaFollowedGuest {
+                        name: guest.name,
+                        email: guest.email,
+                        state: guest.state,
+                    })
+                    .collect(),
             }))
         },
     )
@@ -881,6 +892,8 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         original_start_local: event.original_start_local,
         recurrence_overlap: event.recurrence_overlap,
         snippet: event.snippet,
+        busy: event.busy,
+        travel_min: event.travel_min,
         // `search` only, and filled there (`search_to_wire`).
         next_instance_key: String::new(),
         next_original_start_local: String::new(),
@@ -893,6 +906,7 @@ fn calendar_to_wire(calendar: agenda::CalendarRow) -> wire::AgendaCalendar {
         calendar_id: calendar.calendar_id,
         name: calendar.name,
         color: calendar.color,
+        icon: calendar.icon,
     }
 }
 

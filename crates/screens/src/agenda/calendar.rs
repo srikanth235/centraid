@@ -1094,7 +1094,9 @@ impl CalendarFollow {
             self.waiting = Waiting::Write;
             ctx.start_timer(WRITE_TIMER, READ_TIMEOUT);
             return vec![wire::Effect {
-                kind: Some(wire::effect::Kind::CalendarWrite(wire::CalendarWrite { items })),
+                kind: Some(wire::effect::Kind::CalendarWrite(wire::CalendarWrite {
+                    items,
+                })),
             }];
         }
         Vec::new()
@@ -1102,7 +1104,11 @@ impl CalendarFollow {
 
     /// The shell answered the write (`Some`), or it failed or was never answered (`None`).
     /// Record what went through; what did not is owed again.
-    fn written(&mut self, ctx: &Ctx, answered: Option<&wire::CalendarWritten>) -> Vec<wire::Effect> {
+    fn written(
+        &mut self,
+        ctx: &Ctx,
+        answered: Option<&wire::CalendarWritten>,
+    ) -> Vec<wire::Effect> {
         if self.waiting != Waiting::Write {
             return Vec::new();
         }
@@ -1116,7 +1122,10 @@ impl CalendarFollow {
                 items: push::pushed_items(&verdicts).to_string(),
             };
             let key = kit_act::key(
-                &["record-calendar-push", &asked.first().map_or("", |one| &one.event_id)],
+                &[
+                    "record-calendar-push",
+                    &asked.first().map_or("", |one| &one.event_id),
+                ],
                 kit_act::fresh(),
             );
             let settled = kit_act::act(ctx, request, &key);
@@ -1139,7 +1148,9 @@ impl CalendarFollow {
         // A failed write ends this round (the next pass or commit asks again); a good one goes on
         // to the next page, if the round has one.
         if failed {
+            // No hot retry: what is owed is asked again at the next pass or commit.
             self.cursor.clear();
+            self.want_push = false;
         } else if !self.cursor.is_empty() {
             self.want_push = true;
         }

@@ -22,7 +22,10 @@ fn made(shell: &mut Shell, reminders: bool) {
         instance,
         wire::screen_event::Kind::ImportsMade(wire::ImportsMadeEvent {
             kind: Some(wire::imports_made_event::Kind::Made(
-                wire::imports_made_event::Made { reminders },
+                wire::imports_made_event::Made {
+                    reminders,
+                    include_completed: false,
+                },
             )),
         }),
     );
@@ -101,6 +104,7 @@ fn calendar(titles: &[&str]) -> O {
             source_title: "Google".to_owned(),
             title: "Work".to_owned(),
             color: "#34C759".to_owned(),
+            ..wire::PhoneCalendar::default()
         }],
         events: titles
             .iter()
@@ -127,6 +131,7 @@ fn reminders(items: &[(&str, &str, &str)]) -> O {
                 title: (*title).to_owned(),
                 notes: (*notes).to_owned(),
                 due: (*due).to_owned(),
+                ..wire::PhoneReminder::default()
             })
             .collect(),
     })

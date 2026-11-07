@@ -184,6 +184,8 @@ message AppQueryResponse {
     AgendaTaskSearch agenda_task_search = 9;
     AgendaTaskCatchUp agenda_task_catch_up = 17;
     AgendaTaskTrash agenda_task_trash = 18;
+    // What an event or a task has attached (`agenda.attachments`, #1173).
+    AgendaAttachments agenda_attachments = 19;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;

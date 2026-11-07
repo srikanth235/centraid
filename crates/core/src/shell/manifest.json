@@ -90,6 +90,30 @@
       }
     },
     {
+      "name": "calendar-owed",
+      "kind": "followed_calendar",
+      "figures": ["items", "next"],
+      "description": "(imports, two-way calendar sync) What the phone's writable calendars are owed, derived at read time from the rows the follower keeps: events made or edited here and not yet written to the phone, and trashed ones the phone still holds. One page, in event-id order; `origins` is a JSON array of the origin refs (`calendar:<key>`) the shell reported writable.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "origins": {
+            "type": "string",
+            "description": "a JSON array of origin ids"
+          },
+          "after_event": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "backup-status",
       "kind": "backup",
       "figures": [

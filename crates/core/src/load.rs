@@ -276,6 +276,8 @@ macro_rules! en {
 
 /// A search's default window.
 const SEARCH_ROWS: u32 = 20;
+/// An attachments page the request sized no limit for: a screenful, under the read's own maximum.
+const ATTACHMENTS_ROWS: u32 = 30;
 
 /// Decode one query's arguments and run its reader; `None` when this core has no
 /// reader for the name.
@@ -346,6 +348,12 @@ fn read(
                 original_start_local: p.text("original_start_local")?,
                 tz,
             },
+        )?,
+        ("agenda", "attachments") => app_query::agenda_attachments::attachments(
+            door,
+            &p.text("item_id")?,
+            p.after()?,
+            p.limit(ATTACHMENTS_ROWS),
         )?,
         ("agenda", "board") => app_query::agenda_task::board(
             vault,
@@ -536,6 +544,14 @@ fn read(
         // ---- the shell's own catalogue (`shell/manifest.json`) ----
         // imports (lane I): the folders the vault follows, with each file's last stat
         ("shell", "files-followed") => app_query::imports::files_followed(door)?,
+        // imports (two-way calendar sync): what the writable phone calendars are owed
+        ("shell", "calendar-owed") => app_query::imports::calendar_owed(
+            vault,
+            door,
+            &p.list("origins")?,
+            &p.text("after_event")?,
+            p.limit(0),
+        )?,
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,

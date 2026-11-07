@@ -535,7 +535,7 @@ impl Screen for Project {
                         .style
                         .as_ref()
                         .filter(|_| self.sheet == Sheet::Style)
-                        .map(|draft| draft.sheet(locale)),
+                        .map(|draft| Box::new(draft.sheet(locale))),
                 },
             )),
             ..wire::ViewState::default()
