@@ -1,5 +1,27 @@
 package dev.centraid.android.screens.people
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -61,7 +83,11 @@ public fun PeopleEditorScreen(
             retryLabel = chrome?.retry.orEmpty(),
             skeleton = { RowSkeleton(rows = 4, meta = false, label = chrome?.loading.orEmpty()) },
         ) { profile ->
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("people-editor")) {
+            Column(
+                Modifier.fillMaxWidth().background(Surface.page).verticalScroll(rememberScrollState()).testTag("people-editor"),
+            ) {
+                // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
+                Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).kitCard()) {
                 EditableFieldRow(
                     key = chrome?.name_field.orEmpty(),
                     value = profile.display_name,
@@ -93,15 +119,37 @@ public fun PeopleEditorScreen(
                     testTag = "people-editor-met",
                     onEdit = { onEvent(PeopleEditorEvent(met = PeopleEditorEvent.MetChanged(it))) },
                 )
+                }
                 if (state.cadences.isNotEmpty()) {
                     Label(chrome?.cadence_field.orEmpty())
-                    state.cadences.forEach { cadence ->
-                        SheetRow(
-                            label = cadence.label,
-                            selected = cadence.selected,
-                            testTag = "people-cadence-${cadence.days}",
-                            onTap = { onEvent(PeopleEditorEvent(cadence = PeopleEditorEvent.CadencePicked(cadence.days))) },
-                        )
+                    // THE CHOSEN CADENCE IS FILLED in the app's colour under a white label; the
+                    // others are white pills with a hairline.
+                    val accent = appAccent("people")
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = KitGeometry.GUTTER + 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        state.cadences.forEach { cadence ->
+                            Box(
+                                Modifier
+                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .clip(CircleShape)
+                                    .background(if (cadence.selected) accent.fill else Surface.card)
+                                    .then(
+                                        if (cadence.selected) Modifier else Modifier.border(KitGeometry.HAIRLINE, Surface.border, CircleShape),
+                                    )
+                                    .clickable { onEvent(PeopleEditorEvent(cadence = PeopleEditorEvent.CadencePicked(cadence.days))) }
+                                    .padding(horizontal = 16.dp)
+                                    .testTag("people-cadence-${cadence.days}")
+                                    .semantics {
+                                        selected = cadence.selected
+                                        role = Role.RadioButton
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                KitText(cadence.label, KitType.Row, if (cadence.selected) Color.White else Surface.ink, maxLines = 1)
+                            }
+                        }
                     }
                 }
             }
@@ -112,10 +160,12 @@ public fun PeopleEditorScreen(
 @Composable
 private fun Label(text: String) {
     if (text.isEmpty()) return
-    Text(
+    KitText(
         text,
-        style = centraidType("eyebrow"),
-        color = centraidColor("textSoft"),
-        modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 12.dp),
+        KitType.Group,
+        Surface.meta,
+        modifier = Modifier
+            .padding(start = KitGeometry.GUTTER + 4.dp, end = KitGeometry.GUTTER, top = 22.dp, bottom = 8.dp)
+            .semantics { heading() },
     )
 }

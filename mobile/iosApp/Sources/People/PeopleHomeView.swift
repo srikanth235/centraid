@@ -183,11 +183,19 @@ enum PeopleEvents {
 
 // MARK: - Roster
 
+/// THE ROSTER (#1173): My card, the reconnect line, then the people. Under the Name order the
+/// people are A to Z in sections (a letter pinned as it scrolls) with the index beside them; under
+/// any other they are one flat list. Rust sent the sections, the index and where each letter jumps
+/// to; this only draws them and scrolls.
 private struct PeopleRosterList: View {
     let roster: Centraid_Core_V1_PeopleRosterData
     let importLabel: String
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
+
+    @Environment(\.isLargestText) private var largestText
+
+    private static func anchor(_ key: String) -> String { "people-section-\(key)" }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -201,20 +209,191 @@ private struct PeopleRosterList: View {
                 }
                 Spacer(minLength: 0)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(roster.rows, id: \.partyID) { row in
-                            PeopleRosterRowView(row: row, send: send, open: open)
-                        }
-                        if !roster.statusLine.isEmpty {
-                            PeopleStatusLine(text: roster.statusLine)
+                ScrollViewReader { proxy in
+                    ZStack(alignment: .trailing) {
+                        list
+                        if !roster.index.isEmpty, !largestText {
+                            PeopleIndexRail(letters: roster.index) { key in
+                                proxy.scrollTo(Self.anchor(key), anchor: .top)
+                            }
                         }
                     }
                 }
-                .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("people-roster")
             }
         }
+    }
+
+    private var list: some View {
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                if roster.hasMyCard {
+                    PeopleMyCardRow(card: roster.myCard, open: open)
+                }
+                if roster.hasReconnect {
+                    PeopleReconnectLine(line: roster.reconnect) {
+                        send(PeopleEvents.home { $0.band = .with { $0.key = "touch" } })
+                    }
+                }
+                ForEach(roster.rows, id: \.partyID) { row in
+                    PeopleRosterRowView(row: row, send: send, open: open)
+                }
+                ForEach(roster.sections, id: \.key) { section in
+                    Section {
+                        ForEach(section.rows, id: \.partyID) { row in
+                            PeopleRosterRowView(row: row, send: send, open: open)
+                        }
+                    } header: {
+                        PeopleSectionLetter(title: section.title)
+                            .id(Self.anchor(section.key))
+                    }
+                }
+                if !roster.statusLine.isEmpty {
+                    Text(roster.statusLine)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 12)
+                }
+            }
+            // The index sits over the trailing edge: the rows give it its own gutter.
+            .padding(.trailing, roster.index.isEmpty || largestText ? 0 : 18)
+        }
+        .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
+        .accessibilityIdentifier("people-roster")
+    }
+}
+
+/// A SECTION'S LETTER: 13 semibold in the quiet ink on the page, pinned while its people scroll.
+private struct PeopleSectionLetter: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .kitType(.meta)
+            .fontWeight(.semibold)
+            .foregroundStyle(Surface.meta)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .background(Surface.page)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// THE INDEX: every letter in the app's colour, the ones with nobody dim, a touch or a drag along
+/// it jumping to the letter's section. A screen reader steps through the letters and activates one.
+private struct PeopleIndexRail: View {
+    let letters: [Centraid_Core_V1_PeopleIndexLetter]
+    let jump: (String) -> Void
+
+    @Environment(\.appAccent) private var accent
+    @State private var current: String?
+    @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 15
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(letters, id: \.letter) { letter in
+                Text(letter.letter)
+                    .kitType(.badge)
+                    .foregroundStyle(accent.text.opacity(letter.hasRows_p ? 1 : 0.4))
+                    .frame(width: 18, height: cell)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(letter.accessibilityLabel)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { jump(letter.sectionKey) }
+            }
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    let at = min(max(Int(drag.location.y / cell), 0), letters.count - 1)
+                    let letter = letters[at]
+                    guard current != letter.letter else { return }
+                    current = letter.letter
+                    jump(letter.sectionKey)
+                }
+                .onEnded { _ in current = nil }
+        )
+        .padding(.trailing, 2)
+        .accessibilityIdentifier("people-index")
+    }
+}
+
+/// MY CARD: the owner's own card above the list, 52pt avatar, name, and the words "My card".
+private struct PeopleMyCardRow: View {
+    let card: Centraid_Core_V1_PeopleMyCard
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    var body: some View {
+        Button { open(card.route) } label: {
+            HStack(spacing: 12) {
+                PeopleAvatarView(avatar: card.avatar, size: 52)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.name)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                    Text(card.label)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KitRowPress())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(card.accessibilityLabel)
+        .accessibilityIdentifier("people-my-card")
+    }
+}
+
+/// THE RECONNECT LINE: who is overdue, in a pale pill in the app's colour; a tap is the band's
+/// Touch.
+private struct PeopleReconnectLine: View {
+    let line: Centraid_Core_V1_PeopleReconnectLine
+    let onTap: () -> Void
+
+    @Environment(\.appAccent) private var accent
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                CentraidIconView(iconKey: "Activity", tint: accent.text, size: 20)
+                Text(line.text)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(line.actionLabel)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(accent.text)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                accent.wash(dark: scheme == .dark),
+                in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous)
+            )
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(line.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("people-reconnect-line")
     }
 }
 
@@ -234,24 +413,68 @@ private struct PeopleImportButton: View {
     }
 }
 
-/// ONE PERSON IN A LIST: avatar, the kit row, and the star.
+/// ONE PERSON IN A LIST: avatar, name over role · last touch, and the star. A reminder ("Birthday ·
+/// in 5 days") is a word at the end of the meta line in the app's colour; a state ("Overdue") is the
+/// badge at the trailing edge.
 private struct PeopleRosterRowView: View {
     let row: Centraid_Core_V1_PeopleRow
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
 
+    @Environment(\.appAccent) private var accent
+
+    private func isReminder(_ chip: Centraid_Core_V1_StatusChip) -> Bool {
+        switch chip.tone {
+        case .neutral, .unspecified, .UNRECOGNIZED: return true
+        default: return false
+        }
+    }
+
+    private var meta: Text {
+        var line = Text([row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "))
+        for chip in row.chips where isReminder(chip) {
+            line = line + Text(" · ") + Text(chip.label).foregroundStyle(accent.text)
+        }
+        return line
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            PeopleAvatarView(avatar: row.avatar)
+            Button { open(row.route) } label: {
+                HStack(spacing: 12) {
+                    PeopleAvatarView(avatar: row.avatar, size: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.name)
+                            .kitType(.row)
+                            .foregroundStyle(Surface.ink)
+                            .lineLimit(1)
+                        meta
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
+                        StatusChipView(chip)
+                    }
+                }
                 .padding(.leading, CentraidGeometry.pageMargin)
-            CentraidRow(
-                title: row.name,
-                meta: [row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "),
-                chips: row.chips,
-                accessibility: row.accessibilityLabel,
-                identifier: "people-row-\(row.partyID)",
-                onTap: { open(row.route) }
-            )
+                .padding(.trailing, 4)
+                .padding(.vertical, 8)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Surface.line)
+                        .frame(height: CentraidGeometry.hairline)
+                        .padding(.leading, CentraidGeometry.pageMargin + 52)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(KitRowPress())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(row.accessibilityLabel)
+            .accessibilityIdentifier("people-row-\(row.partyID)")
             PeopleStarButton(
                 starred: row.starred,
                 label: row.starLabel,
@@ -440,21 +663,30 @@ struct PeopleAvatarView: View {
     }
 }
 
-/// The star: a set choice, drawn full when on, spoken by Rust's label.
+/// The star: a set choice, filled when on, in the app's colour (amber only ever means a state),
+/// spoken by Rust's label.
 struct PeopleStarButton: View {
     let starred: Bool
     let label: String
     let identifier: String
     let onTap: () -> Void
 
+    @Environment(\.appAccent) private var accent
+
     var body: some View {
-        KitIconKey(
-            iconKey: "Star",
-            label: label,
-            tint: starred ? "warning" : "textFaint",
-            identifier: identifier,
-            action: onTap
-        )
+        Button(action: onTap) {
+            CentraidIconView(
+                iconKey: "Star",
+                tint: starred ? accent.text : Surface.meta,
+                size: 18,
+                solid: starred
+            )
+            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
         .accessibilityAddTraits(starred ? .isSelected : [])
     }
 }

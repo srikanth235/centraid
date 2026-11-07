@@ -99,14 +99,17 @@ fn the_root_is_the_roster_under_a_band_with_one_filter_menu() {
     let sort = menu::find(&built, menu::SORT).unwrap();
     assert_eq!(sort.kind, wire::menu_section::Kind::Single as i32);
     assert_eq!(shown(sort), [("Recently added", 0), ("Name", 0)]);
-    assert_eq!(menu::checked(sort), ["recent"]);
+    assert_eq!(menu::checked(sort), ["name"], "A to Z is the default");
     assert!(!built.filtering);
     assert_eq!(built.spoken, "Filter and sort");
     assert_eq!(built.clear_label, "Clear filters");
     let data = roster_data(d.view(i));
     assert_eq!(data.status_line, "2 people · 0 to reconnect · 0 starred");
     // A person who was never touched says so; the row opens their page.
-    let dana = data.rows.iter().find(|r| r.name == "Dana Reyes").unwrap();
+    let dana = flat(data)
+        .into_iter()
+        .find(|r| r.name == "Dana Reyes")
+        .unwrap();
     assert_eq!(dana.meta, "No touch logged yet");
     assert_eq!(dana.avatar.as_ref().unwrap().initials, "DR");
     assert!(dana.avatar.as_ref().unwrap().hue_key.starts_with('c'));
@@ -176,9 +179,8 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
     let status = state.status.as_ref().expect("a status");
     assert_eq!(status.sentence, "Dana starred");
     assert!(!status.refused);
-    let row = roster_data(d.view(i))
-        .rows
-        .iter()
+    let row = flat(roster_data(d.view(i)))
+        .into_iter()
         .find(|r| r.party_id == dana)
         .unwrap();
     assert!(row.starred);
@@ -214,7 +216,7 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
     send_home(&mut d, i, H::FilterMenuCleared(wire::FilterMenuCleared {}));
     assert!(!menu_of(&d, i).filtering);
     assert_eq!(menu::checked(&show(&d)), ["all"]);
-    assert_eq!(roster_data(d.view(i)).rows.len(), 2);
+    assert_eq!(flat(roster_data(d.view(i))).len(), 2);
 }
 
 #[test]
@@ -259,7 +261,7 @@ fn a_touch_is_counted_in_the_members_days_on_the_row() {
     let mut d = clean();
     let dana = person(&d, "Dana");
     let i = begin(&mut d);
-    assert_eq!(roster_data(d.view(i)).rows[0].meta, "No touch logged yet");
+    assert_eq!(flat(roster_data(d.view(i)))[0].meta, "No touch logged yet");
     arrange(
         &d,
         act::people::LogInteraction {
@@ -269,7 +271,7 @@ fn a_touch_is_counted_in_the_members_days_on_the_row() {
         },
     );
     d.pump(std::time::Duration::from_millis(300));
-    assert_eq!(roster_data(d.view(i)).rows[0].meta, "Last touch today");
+    assert_eq!(flat(roster_data(d.view(i)))[0].meta, "Last touch today");
 }
 
 #[test]
@@ -284,7 +286,7 @@ fn a_birthday_within_a_month_is_a_chip_on_the_row() {
         },
     );
     let i = begin(&mut d);
-    let chips: Vec<String> = roster_data(d.view(i)).rows[0]
+    let chips: Vec<String> = flat(roster_data(d.view(i)))[0]
         .chips
         .iter()
         .map(|c| c.label.clone())
@@ -334,7 +336,7 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     assert_eq!(ask.scope, "people");
     assert_eq!(ask.question, "Find dan");
     // The roster stands under it.
-    assert_eq!(roster_data(d.view(i)).rows.len(), 2);
+    assert_eq!(flat(roster_data(d.view(i))).len(), 2);
 
     send_home(
         &mut d,
@@ -559,4 +561,81 @@ fn a_leap_day_birthday_is_shown_on_the_day_it_falls_on() {
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
     let day = if leap { "29" } else { "28" };
     assert_eq!(shown, format!("{day} February"), "falls on {falls}");
+}
+
+#[test]
+fn the_roster_opens_a_to_z_with_an_index_and_recently_added_is_the_flat_list() {
+    let mut d = clean();
+    for name in ["Zed", "Ana", "Émile", "Дана", "Bea", "Eve"] {
+        person(&d, name);
+    }
+    let i = begin(&mut d);
+    let data = roster_data(d.view(i));
+    assert!(data.rows.is_empty(), "the rows are in the sections");
+    assert_eq!(
+        data.sections
+            .iter()
+            .map(|s| (s.key.as_str(), s.rows.len()))
+            .collect::<Vec<_>>(),
+        [("A", 1), ("B", 1), ("E", 2), ("Z", 1), ("#", 1)]
+    );
+    assert_eq!(
+        data.sections[2]
+            .rows
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Eve", "Émile"],
+        "the core's order inside a letter"
+    );
+    assert_eq!(data.index.len(), 27);
+    assert_eq!(data.index.last().unwrap().letter, "#");
+    let of = |letter: &str| data.index.iter().find(|l| l.letter == letter).unwrap();
+    assert_eq!(
+        (of("E").has_rows, of("E").section_key.as_str()),
+        (true, "E")
+    );
+    assert_eq!(
+        (of("C").has_rows, of("C").section_key.as_str()),
+        (false, "E"),
+        "a letter with nobody jumps to the next one that has people"
+    );
+    // Recently added is the flat list, with no index.
+    send_home(&mut d, i, pick("sort", "recent"));
+    let data = roster_data(d.view(i));
+    assert!(data.sections.is_empty() && data.index.is_empty());
+    assert_eq!(data.rows.len(), 6);
+    assert_eq!(data.rows[0].name, "Eve", "newest added first");
+}
+
+#[test]
+fn my_card_is_the_owner_above_the_all_list_and_a_filter_takes_it_away() {
+    let mut d = clean();
+    person(&d, "Dana Reyes");
+    let i = begin(&mut d);
+    let owner = roster_of(&d).owner.expect("the vault has an owner");
+    let data = roster_data(d.view(i));
+    let card = data.my_card.as_ref().expect("My card");
+    assert_eq!(card.party_id, owner.party_id);
+    assert_eq!(card.label, "My card");
+    assert_eq!(
+        card.route,
+        Some(routes::person(&owner.party_id, &card.name, false))
+    );
+    assert!(
+        flat(data).iter().all(|row| row.party_id != owner.party_id),
+        "the owner is My card, not one of the people"
+    );
+    send_home(&mut d, i, pick("show", "starred"));
+    assert!(roster_data(d.view(i)).my_card.is_none());
+    send_home(&mut d, i, pick("show", "all"));
+    assert!(roster_data(d.view(i)).my_card.is_some());
+}
+
+#[test]
+fn nobody_overdue_is_no_reconnect_line() {
+    let mut d = clean();
+    person(&d, "Dana Reyes");
+    let i = begin(&mut d);
+    assert!(roster_data(d.view(i)).reconnect.is_none());
 }

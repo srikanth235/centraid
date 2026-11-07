@@ -115,7 +115,7 @@ fn the_day_one_tap_reads_the_address_book_and_a_snapshot_becomes_people() {
     assert!(sheet.dates.iter().any(|date| date.month_day == "12-10"));
     // The roster reads again by itself.
     d.pump(Duration::from_millis(300));
-    assert_eq!(roster_data(d.view(i)).rows.len(), 2);
+    assert_eq!(flat(roster_data(d.view(i))).len(), 2);
 }
 
 #[test]

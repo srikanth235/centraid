@@ -16,8 +16,9 @@ use centraid_apps_kit::reads::PageDoor;
 
 use crate::Denial;
 use crate::queries::{
-    ListEntry, PersonRow, ROSTER_MAX, ROSTER_MIN, Reminder, asked, dates, last_contacts, list_of,
-    lists, people_among, read_circle, read_trashed, reminders, starred, touch_stubs,
+    ListEntry, PersonCard, PersonRow, ROSTER_MAX, ROSTER_MIN, Reminder, asked, dates,
+    last_contacts, list_of, lists, owner_card, people_among, read_circle, read_trashed, reminders,
+    starred, touch_stubs,
 };
 
 /// What the roster was asked for.
@@ -65,6 +66,9 @@ pub struct PeopleData {
     /// Older people exist beyond the window: the walk's own answer.
     pub truncated: bool,
     pub window: usize,
+    /// MY CARD (#1173): the owner's own card, which the circle leaves out; none when the vault
+    /// names no owner.
+    pub owner: Option<PersonCard>,
 }
 
 /// What `search` answers: the same rows, in **vault rank order**.
@@ -168,12 +172,14 @@ pub fn load_people(
     let circle = asked!(read_circle(door, window), empty.clone());
     let lists = asked!(lists(door), empty.clone());
     let people = asked!(rows_of(door, &circle.members, &lists, true), empty);
+    let owner = asked!(owner_card(door), empty);
     Ok((
         PeopleData {
             people,
             lists,
             truncated: circle.filled,
             window,
+            owner,
         },
         None,
     ))

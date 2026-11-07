@@ -268,7 +268,9 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             ToolbarItemGroup(placement: .primaryAction) {
                 if let filter { FilterMenuButton(app: app, slot: filter) }
-                trailing()
+                // THE BAR IS HOSTED OUTSIDE THE PAGE'S ENVIRONMENT, so the filled `+` takes the
+                // app's accent from here and not the shell's teal.
+                trailing().environment(\.appAccent, AppAccent(app))
             }
             // The title is drawn in the page, so the bar's own is put away; the item keeps the
             // back label the system takes from `navigationTitle`.

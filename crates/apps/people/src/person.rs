@@ -5,7 +5,8 @@
 //! The header is the roster's row, so a list and the sheet it opens never
 //! disagree; the rest is what hangs off the person one table at a time
 //! ([`crate::queries`]). `None` is "no live person has this id" (unknown,
-//! trashed, the owner or a pet), which is not a denial.
+//! trashed or a pet), which is not a denial. The owner's own person IS a sheet (My card, #1173):
+//! the circle leaves the owner out of every list, but the member can open and edit their own card.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,8 +18,8 @@ use centraid_apps_kit::statement::PageBindValue;
 use crate::Denial;
 pub use crate::queries::RelationDirection;
 use crate::queries::{
-    DateRow, RelationRow, Touch, WIDE, asked, dates, describe, lists, people_among, relations,
-    touch_stubs, words_about,
+    DateRow, RelationRow, Touch, VaultLinks, WIDE, asked, dates, describe, lists, owner,
+    people_among, people_among_with, relations, touch_stubs, vault_links, words_about,
 };
 use crate::roster::{RosterRow, rows_of};
 
@@ -59,6 +60,10 @@ pub struct Person {
     pub touches: Vec<Touch>,
     /// Who they are related to, both directions, by name.
     pub relations: Vec<RelationRow>,
+    /// What else in the vault is about them (#1173).
+    pub vault: VaultLinks,
+    /// This is the owner's own card (My card), which the circle leaves out.
+    pub is_me: bool,
 }
 
 /// What `person` answers.
@@ -141,10 +146,14 @@ pub fn load_person(
         return Ok((PersonData::default(), None));
     }
     let empty = PersonData::default;
-    let Some(person) = asked!(people_among(door, &[id.to_owned()], true), empty()).remove(id)
-    else {
+    let Some(person) = asked!(
+        people_among_with(door, &[id.to_owned()], true, true),
+        empty()
+    )
+    .remove(id) else {
         return Ok((empty(), None));
     };
+    let is_me = asked!(owner(door), empty()).as_deref() == Some(id);
     let lists = asked!(lists(door), empty());
     let profile = asked!(
         rows_of(door, std::slice::from_ref(&person), &lists, true),
@@ -166,6 +175,7 @@ pub fn load_person(
     let stubs = asked!(touch_stubs(door, &[id.to_owned()]), empty());
     let touches = asked!(describe(door, &stubs), empty());
     let relations = asked!(relations(door, id), empty());
+    let vault = asked!(vault_links(door, id), empty());
     Ok((
         PersonData {
             person: Some(Person {
@@ -177,6 +187,8 @@ pub fn load_person(
                 notes,
                 touches,
                 relations,
+                vault,
+                is_me,
             }),
         },
         None,

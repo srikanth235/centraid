@@ -101,6 +101,12 @@ pub(crate) fn roster(
             count_all: count(counts.all),
             count_starred: count(counts.starred),
             count_due: count(counts.due),
+            owner: data.owner.map(|card| wire::PeopleCard {
+                party_id: card.party_id,
+                name: card.name,
+                role: card.role,
+                days_over: None,
+            }),
         })
     })
 }
@@ -477,6 +483,34 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                     == centraid_apps_people::person::RelationDirection::Incoming,
             })
             .collect(),
+        vault_more: count(person.vault.more),
+        vault: person
+            .vault
+            .items
+            .into_iter()
+            .map(|item| {
+                let all_day = item.timing.as_deref() == Some("all-day");
+                let local_start = match (item.starts.as_deref(), item.timing.as_deref()) {
+                    (Some(starts), Some("zoned")) => {
+                        local::now_local(&clock.zone, starts).unwrap_or_default()
+                    }
+                    (Some(starts), Some("all-day")) => {
+                        starts.get(..10).unwrap_or(starts).to_owned()
+                    }
+                    (Some(starts), _) => starts.get(..16).unwrap_or(starts).to_owned(),
+                    (None, _) => String::new(),
+                };
+                wire::PeopleVaultItem {
+                    created_local_day: clock.local_day(&item.created_at),
+                    kind: item.kind.key().to_owned(),
+                    id: item.id,
+                    title: item.title,
+                    local_start,
+                    all_day,
+                }
+            })
+            .collect(),
+        is_me: person.is_me,
         touches: person
             .touches
             .into_iter()
@@ -699,9 +733,21 @@ mod tests {
         assert_eq!(touch.count_all, 0);
 
         assert!(scratch.trash().people.is_empty());
-        for id in [&owner, &pet, "no-such-person"] {
+        for id in [&pet, "no-such-person"] {
             assert!(scratch.person(id).sheet.is_none(), "{id} has no sheet");
         }
+        // MY CARD (#1173): the owner is not a row of the circle, but is a sheet, and the roster
+        // names them for the card above the list.
+        let mine = scratch.person(&owner).sheet.expect("the owner's own sheet");
+        assert!(mine.is_me && mine.vault.is_empty());
+        assert_eq!(
+            roster.owner.as_ref().map(|card| card.party_id.as_str()),
+            Some(owner.as_str())
+        );
+        assert!(
+            !scratch.person(&pet).sheet.is_some_and(|sheet| sheet.is_me),
+            "only the owner's sheet is My card"
+        );
         assert!(scratch.search("Rex").people.is_empty());
     }
 

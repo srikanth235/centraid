@@ -192,8 +192,18 @@ pub fn draft(v: &wire::ViewState) -> &wire::PeopleProfileDraft {
     }
 }
 
+/// The roster's rows in the order they are drawn: A to Z sections (the Name order, the
+/// default) one after another, or the flat list.
+pub fn flat(data: &wire::PeopleRosterData) -> Vec<wire::PeopleRow> {
+    data.sections
+        .iter()
+        .flat_map(|section| section.rows.clone())
+        .chain(data.rows.clone())
+        .collect()
+}
+
 pub fn names(data: &wire::PeopleRosterData) -> Vec<String> {
-    data.rows.iter().map(|row| row.name.clone()).collect()
+    flat(data).iter().map(|row| row.name.clone()).collect()
 }
 
 // --- events --------------------------------------------------------------
