@@ -50,14 +50,9 @@ targets:
     platform: iOS
     settings:
       base:
-        # NO APP-ICON SET IN THE ASSET CATALOGUE YET (#1173). XcodeGen's iOS
-        # application preset passes `--app-icon AppIcon` to `actool`, and the
-        # first catalogue in this target (`Resources/Assets.xcassets`, the
-        # redesign's colour sets) holds no `AppIcon` set, so `actool` fails with
-        # "None of the input catalogs contained a matching ... app icon set".
-        # Empty says there is none; drop this line when the icon work adds the
-        # set (the squared-circle icon, #1173).
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        # The app icon is `Resources/Assets.xcassets/AppIcon.appiconset`, written
+        # by `cargo xtask design` (light, dark and tinted, #1173).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
         #
         # Every file in `Tests/` says `@testable import CentraidApp`. XcodeGen's

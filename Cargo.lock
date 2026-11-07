@@ -3980,6 +3980,7 @@ dependencies = [
  "anyhow",
  "centraid-design",
  "clap",
+ "png",
  "serde",
  "serde_json",
  "sha2",
