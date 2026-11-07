@@ -531,8 +531,8 @@ private struct AgendaChipView: View {
                 AgendaCheckCircle(
                     hueKey: chip.hueKey,
                     label: chip.accessibilityLabel,
-                    identifier: "agenda-grid-chip-check-\(chip.taskId)"
-                ) { send(AgendaCalendarEvents.taskChecked(chip.taskId)) }
+                    identifier: "agenda-grid-chip-check-\(chip.taskID)"
+                ) { send(AgendaCalendarEvents.taskChecked(chip.taskID)) }
             }
             if chip.hasRoute {
                 Button {
@@ -614,8 +614,8 @@ private struct AgendaBlockView: View {
                     AgendaCheckCircle(
                         hueKey: block.hueKey,
                         label: block.accessibilityLabel,
-                        identifier: "agenda-grid-block-check-\(block.taskId)"
-                    ) { send(AgendaCalendarEvents.taskChecked(block.taskId)) }
+                        identifier: "agenda-grid-block-check-\(block.taskID)"
+                    ) { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
                     .padding(.leading, 6)
                     .padding(.top, 4)
                 }

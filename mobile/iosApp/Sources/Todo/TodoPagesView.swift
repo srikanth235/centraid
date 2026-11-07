@@ -220,11 +220,11 @@ struct TodoProjectView: View {
                         verb: state.chrome.quickAddVerb,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
+                        onDismissChip: { send(event { $0.quickAddChipDismissed = .init() }) },
                         // THE KEYBOARD TOOLBAR (#1173).
                         onTool: { key in send(event { $0.quickTool = .with { $0.key = key } }) },
                         onDue: { key in send(event { $0.quickDue = .with { $0.key = key } }) },
-                        onTag: { text in send(event { $0.quickTag = .with { $0.text = text } }) },
-                        onDismissChip: { send(event { $0.quickAddChipDismissed = .init() }) }
+                        onTag: { text in send(event { $0.quickTag = .with { $0.text = text } }) }
                     )
                 }
             }
