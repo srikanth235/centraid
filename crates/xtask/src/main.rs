@@ -22,6 +22,7 @@ mod ci;
 mod design_checks;
 mod design_dark;
 mod design_emit;
+mod design_glance;
 mod design_site;
 mod design_words;
 mod doc_links;

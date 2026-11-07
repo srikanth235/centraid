@@ -1213,6 +1213,21 @@ pub fn emit(root: &Path) -> Result<Emitted> {
         design_words::swift(&words),
     );
 
+    // Agenda's static words for the platform, from its own catalogue.
+    let glance = crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
+    put(
+        format!("{SWIFT_DIR}/GlanceWords.swift"),
+        crate::design_glance::swift_words(&glance),
+    );
+    put(
+        format!("{SWIFT_DIR}/AgendaShortcuts.swift"),
+        crate::design_glance::swift_shortcuts(&glance),
+    );
+    put(
+        format!("{ANDROID_RES}/values/glance_strings.xml"),
+        crate::design_glance::android_xml(&glance),
+    );
+
     // The redesign's colours, scale and radii.
     let assets = color_assets(&tokens);
     put(

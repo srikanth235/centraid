@@ -8,6 +8,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_glance_screens.proto";
 import "centraid/core/v1/phone.proto";
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,9 @@ message ShellFact {
     PassAsked asked = 5;
     UploadSettled settled = 6;
     UploadsDrained drained = 7;
+    // The platform asked Agenda for something outside the app (Siri, a shortcut,
+    // a widget tap). The agenda glance service answers (`agenda_glance_screens.proto`).
+    AgendaIntent agenda_intent = 130;
   }
 }
 

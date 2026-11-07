@@ -31,6 +31,7 @@ pub mod catch_up;
 pub mod detail;
 pub mod editor;
 pub mod event;
+pub mod glance;
 pub mod home;
 pub mod list;
 pub mod project;

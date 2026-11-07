@@ -194,14 +194,14 @@ pub fn read_catalog(source: &str, strict: bool) -> Result<BTreeMap<String, Strin
     Ok(words)
 }
 
-fn lookup(words: &BTreeMap<String, String>, key: &str) -> Result<String> {
+pub(crate) fn lookup(words: &BTreeMap<String, String>, key: &str, source: &str) -> Result<String> {
     match words.get(key) {
         Some(text) if !text.is_empty() => Ok(text.clone()),
-        _ => bail!("design: `{key}` is not a plain entry of {WORDS_SOURCE}"),
+        _ => bail!("design: `{key}` is not a plain entry of {source}"),
     }
 }
 
-fn slotted(text: String, slot: &str, key: &str) -> Result<String> {
+pub(crate) fn slotted(text: String, slot: &str, key: &str) -> Result<String> {
     if !text.contains(&format!("{{{slot}}}")) {
         bail!("design: `{key}` has no {{{slot}}} slot: {text}");
     }
@@ -224,17 +224,21 @@ pub fn resolve(shared: &str, others: &BTreeMap<String, String>) -> Result<KitWor
             let Some(table) = tables.get(module) else {
                 bail!("design: no catalogue named {module}");
             };
-            lookup(table, own)?
+            lookup(table, own, WORDS_SOURCE)?
         } else {
-            lookup(&words, key)?
+            lookup(&words, key, WORDS_SOURCE)?
         };
         constants.push((name.to_owned(), text));
     }
     Ok(KitWords {
         constants,
-        back_to: slotted(lookup(&words, BACK_TO.0)?, BACK_TO.1, BACK_TO.0)?,
+        back_to: slotted(
+            lookup(&words, BACK_TO.0, WORDS_SOURCE)?,
+            BACK_TO.1,
+            BACK_TO.0,
+        )?,
         search_corrected: slotted(
-            lookup(&words, SEARCH_CORRECTED.0)?,
+            lookup(&words, SEARCH_CORRECTED.0, WORDS_SOURCE)?,
             SEARCH_CORRECTED.1,
             SEARCH_CORRECTED.0,
         )?,
@@ -242,7 +246,7 @@ pub fn resolve(shared: &str, others: &BTreeMap<String, String>) -> Result<KitWor
 }
 
 /// The Swift and Kotlin string quoting of a word.
-fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     let mut out = String::from("\"");
     for c in value.chars() {
         match c {
@@ -258,7 +262,7 @@ fn quote(value: &str) -> String {
 }
 
 /// Kotlin also interpolates `$`.
-fn kotlin_quote(value: &str) -> String {
+pub(crate) fn kotlin_quote(value: &str) -> String {
     quote(value).replace('$', "\\$")
 }
 

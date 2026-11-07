@@ -337,7 +337,8 @@ impl Service {
             Some(Fact::Window(granted)) => self
                 .conductor
                 .window_granted(&granted.window, granted.deadline_ms),
-            Some(Fact::Expired(_)) | None => Vec::new(),
+            // An Agenda intent is the glance service's (`agenda::glance`).
+            Some(Fact::Expired(_) | Fact::AgendaIntent(_)) | None => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults
