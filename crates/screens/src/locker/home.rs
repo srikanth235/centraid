@@ -782,7 +782,6 @@ impl Home {
             add_label: words::add_item(locale),
             add_route: Some(routes::add("", false)),
             retry: words::retry(locale),
-            lock_label: words::lock_now(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has
             // them: Import, Trash and Export — then what the phone adds, the

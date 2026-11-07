@@ -141,7 +141,8 @@ struct LockerCovered<Content: View>: View {
                 LockerWallView(wall: wall, send: send, onWords: onWords)
             }
         } else {
-            content()
+            // EVERY LOCKER PAGE WEARS THE APP'S GRAPHITE, pushed ones included.
+            content().environment(\.appAccent, AppAccent("locker"))
         }
     }
 }
@@ -168,7 +169,7 @@ struct LockerRowView: View {
     let row: Centraid_Core_V1_LockerRow
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         Button(action: onTap) {
@@ -176,26 +177,27 @@ struct LockerRowView: View {
                 LockerTypeChip(letters: row.typeChip)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                     if !row.meta.isEmpty {
                         Text(row.meta)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
                 if row.starred {
-                    CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 14)
+                    // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
+                    CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
                 }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .overlay(alignment: .bottom) { KitHairline() }
+            .overlay(alignment: .bottom) { KitHairline().padding(.leading, 58) }
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
@@ -206,21 +208,19 @@ struct LockerRowView: View {
     }
 }
 
-/// Two letters on the app's rose wash.
+/// Two letters in the app's graphite, white on its fill.
 struct LockerTypeChip: View {
     let letters: String
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
+    private let side: CGFloat = 32
 
     var body: some View {
         Text(letters)
-            .centraidType("annotLabelOn")
-            .foregroundStyle(Theme.color("cRose", scheme))
-            .frame(width: 32, height: 32)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                    .fill(Theme.color("cRose", scheme).opacity(scheme == .dark ? CentraidGeometry.iconChipTintDark : CentraidGeometry.iconChipTintLight))
-            )
+            .kitType(.badge)
+            .foregroundStyle(Color.white)
+            .frame(width: side, height: side)
+            .background(accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }
 }
@@ -258,8 +258,8 @@ struct LockerNote: View {
     var body: some View {
         if !text.isEmpty {
             Text(text)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 8)
@@ -307,4 +307,61 @@ func lockerContent<Value>(
     if let failure { return .failed(failure) }
     if let denied { return .gated(denied) }
     return .loading(true)
+}
+
+/// A WHITE CARD OF ROWS under an optional group head: Starred, Recently used, a category's list.
+struct LockerRowGroup: View {
+    let title: String
+    let rows: [Centraid_Core_V1_LockerRow]
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !title.isEmpty {
+                Text(title).kitType(.group).foregroundStyle(Surface.meta)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 10)
+            }
+            VStack(spacing: 0) {
+                ForEach(rows, id: \.itemID) { row in
+                    LockerRowView(row: row) { open(row.route) }
+                }
+            }
+            .kitCard()
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+        }
+    }
+}
+
+/// ONE CATEGORY CARD: a glyph tile in a list-palette colour, the count, the word.
+struct LockerCategoryCard: View {
+    let category: Centraid_Core_V1_LockerCategory
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    KitTile(iconKey: category.iconKey, size: 30, fill: AgendaPalette.list(category.colorKey))
+                    Spacer(minLength: 0)
+                    Text("\(category.count)").kitType(.title).foregroundStyle(Surface.ink)
+                }
+                Text(category.label).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kitCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(category.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("locker-category-\(category.key)")
+    }
+}
+
+extension Centraid_Core_V1_LockerCategory: Identifiable {
+    public var id: String { key }
 }

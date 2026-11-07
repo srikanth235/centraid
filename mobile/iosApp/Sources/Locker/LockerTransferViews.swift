@@ -45,7 +45,7 @@ struct LockerExportView: View {
 
     var body: some View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
-            PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+            PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
                 EmptyView()
             } content: {
                 LockerShield(secure: state.secure) {
@@ -86,25 +86,31 @@ struct LockerExportView: View {
     @ViewBuilder
     private func page(_ export: Centraid_Core_V1_LockerExportData) -> some View {
         Text(export.lede)
-            .centraidType("body")
-            .foregroundStyle(Theme.color("net", scheme))
+            .kitType(.row)
+            .foregroundStyle(StateColor.red.text)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 12)
             .accessibilityIdentifier("locker-export-lede")
-        FieldRow(key: export.whatLabel, value: export.whatValue, note: export.leavesOut)
-        VStack(alignment: .leading, spacing: 2) {
-            Text(export.formatLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-            LockerChoicePills(choices: export.formats, identifier: "locker-export-format") { key in
-                send(LockerExportEvents.make { $0.format = .with { $0.key = key } })
+        // THE THREE FACTS ARE ONE WHITE CARD: what leaves, the format, where it goes.
+        VStack(alignment: .leading, spacing: 0) {
+            FieldRow(key: export.whatLabel, value: export.whatValue, note: export.leavesOut)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(export.formatLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                LockerChoicePills(choices: export.formats, identifier: "locker-export-format") { key in
+                    send(LockerExportEvents.make { $0.format = .with { $0.key = key } })
+                }
+                LockerNote(text: export.formatNote)
             }
-            LockerNote(text: export.formatNote)
+            .padding(.top, 8)
+            FieldRow(key: export.whereLabel, value: export.whereValue, note: export.whereNote)
         }
-        .padding(.top, 8)
-        FieldRow(key: export.whereLabel, value: export.whereValue, note: export.whereNote)
+        .kitCard()
+        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        .padding(.horizontal, CentraidGeometry.pageMargin - 6)
         if !export.commitLabel.isEmpty {
             KitInkButton(label: export.commitLabel) {
                 send(LockerExportEvents.make { $0.commit = .init() })

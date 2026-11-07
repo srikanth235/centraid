@@ -231,8 +231,6 @@ message LockerHomeChrome {
   string search_placeholder = 9;
   string search_note = 10;
   string close_label = 11;
-  // The header's lock key (a glass tool key beside the filled add key).
-  string lock_label = 12;
 }
 
 message LockerMoreRow {
