@@ -42,6 +42,7 @@
 
 mod asset;
 mod attach;
+mod confirm;
 mod drawer;
 mod model;
 mod turn;

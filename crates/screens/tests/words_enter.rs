@@ -121,6 +121,7 @@ fn the_grid_opens_empty_and_secure_with_the_pairing_codes_field_only_for_a_resto
     assert_eq!(state.cells[4].prompt, "Word 5");
     assert_eq!(state.title, "Restore with your recovery key");
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
+    assert_eq!(state.endpoint_placeholder, "Pairing code");
     assert!(!state.primary_enabled);
 
     let rekey = open(routes::rekey_for_locker());
@@ -586,6 +587,28 @@ fn a_held_restore_lists_the_vaults_on_their_own_words_it_will_also_bring_back() 
         "These vaults have their own recovery key and come back too:"
     );
     assert_eq!(state.held_keys, vec!["A vault with its own recovery key"]);
+}
+
+#[test]
+fn a_held_restore_says_the_key_was_found_and_where_it_came_back_from_and_a_typed_one_says_neither()
+{
+    // THE RestoreHeld BOARD (#1173): "Recovery key found", "In iCloud Keychain".
+    let ios = held_phone(routes::restore_held());
+    let state = ios.enter();
+    assert_eq!(state.held_found, "Recovery key found");
+    assert_eq!(state.held_place, "In iCloud Keychain");
+
+    let mut android = phone(routes::restore_held(), "android");
+    android
+        .shell
+        .synced
+        .insert(secrets::SEED_KEY.to_owned(), "ab".repeat(64));
+    android.serve();
+    assert_eq!(android.enter().held_place, "In Google");
+
+    // The grid a member types into has no such card.
+    let state = open(routes::restore()).enter().clone();
+    assert!(state.held_found.is_empty() && state.held_place.is_empty());
 }
 
 #[test]

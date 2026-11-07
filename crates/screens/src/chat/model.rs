@@ -49,6 +49,11 @@ pub(super) struct Step {
     /// The app the row belongs to, by the kind the core named it by (`task`, `person`…); empty
     /// when the kind is not one an app owns.
     pub app: &'static str,
+    /// The runtime's verb, as `confirm::verb_of` keys it (`complete`, `create`…); empty when the
+    /// table does not know it. The confirm button is worded from it (#1173).
+    pub verb: &'static str,
+    /// The kind of row, as `confirm::noun_of` keys it; empty when the table does not know it.
+    pub noun: &'static str,
 }
 
 /// The app a row of `kind` lives in (#1173): the card is drawn in that app's colour. A kind this
@@ -559,6 +564,9 @@ impl Chat {
         }
     }
 
+    /// Ask for fresh suggestions, in an empty thread and, since #1173, in a live one: they show as
+    /// chips above the composer whenever no turn is running. One that arrives while a turn runs is
+    /// dropped (the turn clears them and the next answer asks again).
     pub fn suggest(&mut self, ctx: &Ctx) {
         let answer = ctx.assist(&assist(Ask::Suggest(wire::AssistSuggestRequest {
             app: self.scope.clone(),
@@ -566,7 +574,7 @@ impl Chat {
         })));
         if let Some(wire::assist_response::Kind::Suggestions(found)) =
             answer.ok().and_then(|answer| answer.kind)
-            && self.messages.is_empty()
+            && !self.running
         {
             self.suggestions = found
                 .prompts
@@ -767,6 +775,8 @@ mod proposal_app_tests {
                     summary: String::new(),
                     destructive: false,
                     app: app_of_kind(kind),
+                    verb: "",
+                    noun: "",
                 })
                 .collect(),
             more: 0,

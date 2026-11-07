@@ -284,6 +284,22 @@ struct ChatView: View {
                     .transition(.opacity)
                     .accessibilityIdentifier("chat-activity")
             }
+            // THE NEXT QUESTIONS, as chips above the composer in a live thread (#1173): the
+            // empty thread lists them in the page itself. A tap asks, like any sent line.
+            if !state.messages.isEmpty, !state.suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(state.suggestions.enumerated()), id: \.offset) { index, text in
+                            KitChip(
+                                label: text,
+                                selected: false,
+                                identifier: "chat-suggestion-\(index)"
+                            ) { send(text) }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("chat-suggestion-chips")
+            }
             ChatComposerCard(
                 chat: chat,
                 state: state,
@@ -474,8 +490,8 @@ private struct ChatDrawer: View {
     private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(verbatim: state.drawerLabel)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.title)
+                .foregroundStyle(Surface.ink)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
                 .padding(.bottom, 12)
@@ -511,8 +527,8 @@ private struct ChatDrawer: View {
 
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .accessibilityIdentifier("chat-drawer-empty")
@@ -549,8 +565,9 @@ private struct ChatDrawer: View {
                 if state.canDeleteAll {
                     Button(action: onDeleteAll) {
                         Text(verbatim: state.deleteAllLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("net", scheme))
+                            .kitType(.meta)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(StateColor.red.text)
                             .padding(.horizontal, 12)
                             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                             .contentShape(Rectangle())
@@ -569,10 +586,10 @@ private struct ChatDrawer: View {
         }
         .frame(width: width, alignment: .leading)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .top))
+        .background(Surface.plainPage.ignoresSafeArea(edges: .top))
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(width: CentraidGeometry.hairline)
         }
         .accessibilityElement(children: .contain)
@@ -586,33 +603,33 @@ private struct ChatDrawer: View {
 private struct ChatThreadRow: View {
     let row: Centraid_Core_V1_ChatThreadItem
     let currentLabel: String
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(row.current ? Theme.color("text", scheme) : Color.clear)
+                .fill(row.current ? Surface.ink : Color.clear)
                 .frame(width: 2)
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: row.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 if !row.ago.isEmpty {
                     Text(verbatim: row.ago)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
         }
-        .background(row.current ? Theme.color("bgSunken", scheme) : Color.clear)
+        .background(row.current ? Surface.fill : Color.clear)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
         }
     }

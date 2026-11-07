@@ -2,6 +2,13 @@ package dev.centraid.android.screens.chat
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
@@ -141,6 +148,11 @@ internal fun ChatScreen(
                 }
             }
             if (state.phase == ChatState.Phase.PHASE_READY) {
+                // THE NEXT QUESTIONS, as chips above the composer in a live thread (#1173): the
+                // empty thread lists them in the page itself. A tap asks, like any sent line.
+                if (state.messages.isNotEmpty() && state.suggestions.isNotEmpty()) {
+                    SuggestionChips(state.suggestions) { onEvent(ChatEvent(sent = ChatEvent.Sent(text = it))) }
+                }
                 state.vision_step?.let { VisionBanner(it, onDownload = { onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = true))) }) }
                 ChatComposer(
                     state,
@@ -226,6 +238,36 @@ internal fun ChatScreen(
             onDismiss = { deletingAll = false },
             cancelLabel = state.cancel_label,
         )
+    }
+}
+
+/** The suggestions as a row of pills above the composer: white, hairline-edged, scrolling sideways. */
+@Composable
+private fun SuggestionChips(suggestions: List<String>, onPick: (String) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .testTag("chat-suggestion-chips"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        suggestions.forEachIndexed { index, suggestion ->
+            Box(
+                Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clip(CircleShape)
+                    .background(Surface.card)
+                    .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
+                    .clickable { onPick(suggestion) }
+                    .padding(horizontal = 14.dp)
+                    .testTag("chat-suggestion-$index")
+                    .semantics { role = Role.Button },
+                contentAlignment = Alignment.Center,
+            ) {
+                KitText(suggestion, KitType.Meta, Surface.ink, maxLines = 1)
+            }
+        }
     }
 }
 
@@ -1013,15 +1055,21 @@ private fun ChatDrawer(
             Modifier
                 .width(width)
                 .fillMaxHeight()
-                .background(centraidColor("bg"))
+                .background(Surface.plainPage)
                 .testTag("chat-drawer-panel"),
         ) {
             Text(
                 state.drawer_label,
-                style = centraidType("title"),
-                color = centraidColor("text"),
+                style = kitTextStyle(KitType.Title),
+                color = Surface.ink,
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).semantics { heading() },
             )
+            // NEW CHAT IS THE OUTLINED PILL under the title, then the search (the ChatList board).
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+                OutlineButton(label = state.new_chat_label, testTag = "chat-drawer-new") {
+                    onEvent(ChatEvent(new_chat = ChatEvent.NewChat()))
+                }
+            }
             val search = state.drawer_search
             if (search != null && search.open_) {
                 CentraidSearchField(
@@ -1038,16 +1086,13 @@ private fun ChatDrawer(
                     onEvent(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
                 }
             }
-            ActionRow("Plus", state.new_chat_label, "chat-drawer-new") {
-                onEvent(ChatEvent(new_chat = ChatEvent.NewChat()))
-            }
             LazyColumn(Modifier.weight(1f)) {
                 if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {
                     item(key = "empty") {
                         Text(
                             state.threads_empty_line,
-                            style = centraidType("small"),
-                            color = centraidColor("textSoft"),
+                            style = kitTextStyle(KitType.Meta),
+                            color = Surface.meta,
                             modifier = Modifier.padding(KitGeometry.GUTTER),
                         )
                     }
@@ -1065,8 +1110,8 @@ private fun ChatDrawer(
             if (state.can_delete_all) {
                 Text(
                     state.delete_all_label,
-                    style = centraidType("smallStrong"),
-                    color = centraidColor("net"),
+                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                    color = StateColor.Red.text,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = KitGeometry.ROW_MIN)
@@ -1109,17 +1154,17 @@ private fun ThreadRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (row.current) centraidColor("bgSunken") else androidx.compose.ui.graphics.Color.Transparent)
+            .background(if (row.current) Surface.fill else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(onClick = onOpen)
             .heightIn(min = KitGeometry.ROW_MIN)
             .semantics { contentDescription = row.accessibility_label; role = Role.Button }
             .testTag("chat-thread-row"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(width = 3.dp, height = 28.dp).background(if (row.current) centraidColor("text") else androidx.compose.ui.graphics.Color.Transparent))
+        Box(Modifier.size(width = 3.dp, height = 28.dp).background(if (row.current) Surface.ink else androidx.compose.ui.graphics.Color.Transparent))
         Column(Modifier.weight(1f).padding(horizontal = 13.dp, vertical = 8.dp)) {
-            Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (row.ago.isNotEmpty()) Text(row.ago, style = centraidType("mono"), color = centraidColor("textFaint"))
+            Text(row.title, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = Surface.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (row.ago.isNotEmpty()) KitText(row.ago, KitType.Meta, Surface.meta)
         }
         Box {
             KeyButton("MoreVert", state.menu_label, "chat-thread-menu") { menu = true }

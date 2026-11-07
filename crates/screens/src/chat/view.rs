@@ -216,7 +216,7 @@ impl Chat {
             } else {
                 String::new()
             },
-            suggestions: if ready && empty {
+            suggestions: if ready && !self.running {
                 self.suggestions.clone()
             } else {
                 Vec::new()
@@ -451,7 +451,10 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
         more_line: more,
         title: words::proposal_title(locale),
         app: held.app().to_owned(),
-        confirm_label: words::confirm(locale),
+        confirm_label: super::confirm::label(
+            held.steps.iter().map(|step| (step.verb, step.noun)),
+            locale,
+        ),
         cancel_label: words::not_now(locale),
         destructive: held.destructive,
         settled_line: held.line.clone(),

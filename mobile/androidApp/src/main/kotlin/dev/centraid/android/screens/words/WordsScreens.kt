@@ -4,6 +4,22 @@ import dev.centraid.android.kit.SecureWindow
 import android.os.Build
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -134,7 +150,36 @@ import dev.centraid.android.theme.LocalCentraidTokens
 internal fun VaultWordsScreen(state: WordsMakeState, onEvent: (WordsMakeEvent) -> Unit) {
     SecureWindow(state.secure)
     NoAutofill()
-    WordsPage(testTag = "words-make", description = state.accessibility_label) {
+    WordsPage(
+        testTag = "words-make",
+        description = state.accessibility_label,
+        closeLabel = state.secondary_label,
+        closeTag = "words-make-secondary",
+        onClose = { onEvent(WordsMakeEvent(secondary = WordsSecondary())) },
+        footer = {
+            if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
+                WordsTonalButton(state.save_label, testTag = "words-save-copy", iconKey = "Share") {
+                    onEvent(WordsMakeEvent(save_copy = WordsSaveCopy()))
+                }
+            }
+            // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one ink button.
+            if (state.primary_label.isNotEmpty()) {
+                InkButton(
+                    label = state.primary_label,
+                    testTag = "words-make-primary",
+                    enabled = state.primary_enabled,
+                ) { onEvent(WordsMakeEvent(primary = WordsPrimary())) }
+            }
+            if (state.restore_label.isNotEmpty()) {
+                val restore = { onEvent(WordsMakeEvent(restore = WordsRestoreTapped())) }
+                if (state.primary_label.isEmpty()) {
+                    InkButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
+                } else {
+                    WordsTonalButton(state.restore_label, testTag = "words-make-restore", onPress = restore)
+                }
+            }
+        },
+    ) {
         WordsHead(state.title, state.body)
         // CHOOSE (R-1047-E18): the vault's name, and whether it gets its own
         // recovery key.
@@ -153,41 +198,13 @@ internal fun VaultWordsScreen(state: WordsMakeState, onEvent: (WordsMakeEvent) -
             }
         }
         if (state.words.isNotEmpty()) ShownWords(state.words)
-        if (state.custody.isNotEmpty()) {
-            Text(
-                state.custody,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.testTag("words-custody"),
-            )
-        }
-        if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
-            SaveCopyButton(state.save_label) { onEvent(WordsMakeEvent(save_copy = WordsSaveCopy())) }
-        }
+        // WHERE THE KEY IS KEPT, in the platform's own words: something the member should act
+        // on (Save a copy), so it is amber.
+        if (state.custody.isNotEmpty()) WordsCallout(state.custody, StateColor.Amber, testTag = "words-custody")
         WordsNotice(state.notice)
         if (state.phase == WordsMakeState.Phase.PHASE_CHECKING || state.phase == WordsMakeState.Phase.PHASE_MAKING) {
             Box(Modifier.fillMaxWidth().testTag("words-making"), contentAlignment = Alignment.Center) {
                 KitSpinner()
-            }
-        }
-        // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack.
-        ChoiceStack {
-            WordsControls(
-                primary = state.primary_label,
-                primaryEnabled = state.primary_enabled,
-                secondary = state.secondary_label,
-                prefix = "words-make",
-                onPrimary = { onEvent(WordsMakeEvent(primary = WordsPrimary())) },
-                onSecondary = { onEvent(WordsMakeEvent(secondary = WordsSecondary())) },
-            )
-            // ONE INK BUTTON: with the primary drawn, restoring is the outline.
-            if (state.restore_label.isNotEmpty()) {
-                val restore = { onEvent(WordsMakeEvent(restore = WordsRestoreTapped())) }
-                if (state.primary_label.isEmpty()) {
-                    InkButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
-                } else {
-                    OutlineButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
-                }
             }
         }
     }
@@ -217,71 +234,53 @@ private fun WordsCheckbox(label: String, on: Boolean, testTag: String, onToggle:
         ) {
             if (on) CentraidIcon(iconKey = "Check", tint = centraidColor("textInv"), size = 13.dp)
         }
-        Text(label, style = centraidType("body"), color = centraidColor("text"))
+        KitText(label, KitType.Row, Surface.ink)
     }
 }
 
 /**
- * SAVE A COPY (`WordsMakeState.save_label`). A tap sends `SaveCopy`; Rust answers
- * with the generic `Share` effect (the words as one line through the system
- * chooser), so the member picks where they live — a password manager, Files, a
- * note only they can open. Duty 2 above (no clipboard) is relaxed there, on the
- * member's own tap: the chooser carries the system's own Copy.
- */
-@Composable
-internal fun SaveCopyButton(label: String, onPress: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-            .clickable(onClick = onPress)
-            .testTag("words-save-copy")
-            .semantics { role = Role.Button },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, style = centraidType("smallStrong"), color = centraidColor("link"))
-    }
-}
-
-/**
- * THE WORDS, SHOWN ONCE: numbered, in two columns, in order down each column.
- * Plain `Text` outside any `SelectionContainer` — nothing here can be selected,
- * so nothing here can reach the clipboard.
+ * THE WORDS, SHOWN ONCE: numbered across three columns, each a white chip. Plain `Text` outside
+ * any `SelectionContainer` — nothing here can be selected, so nothing here can reach the
+ * clipboard.
  */
 @Composable
 internal fun ShownWords(cells: List<WordCell>) {
-    val half = (cells.size + 1) / 2
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(centraidColor("bgSunken"), RoundedCornerShape(KitGeometry.RADIUS))
-            .padding(16.dp)
-            .testTag("words-shown"),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    Column(
+        Modifier.fillMaxWidth().testTag("words-shown"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        for (column in listOf(cells.take(half), cells.drop(half))) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (cell in column) {
+        for (row in cells.chunked(WORD_COLUMNS)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (cell in row) {
                     Row(
                         Modifier
+                            .weight(1f)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .wordsBox()
+                            .padding(horizontal = 10.dp)
                             .testTag("words-word-${cell.position}")
                             .clearAndSetSemantics { contentDescription = cell.accessibility_label },
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Text("${cell.position}", style = centraidType("mono"), color = Surface.meta)
                         Text(
-                            "${cell.position}",
-                            style = centraidType("mono"),
-                            color = centraidColor("textFaint"),
-                            modifier = Modifier.widthIn(min = 22.dp),
+                            cell.word,
+                            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                            color = Surface.ink,
+                            maxLines = 1,
                         )
-                        Text(cell.word, style = centraidType("bodyStrong"), color = centraidColor("text"))
                     }
                 }
+                // A short last row keeps its cells the same width as the rows above it.
+                repeat(WORD_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
+
+/** The columns the words sit in, numbered across. */
+private const val WORD_COLUMNS = 3
 
 // ---------------------------------------------------------------------------
 // words.enter — type the words back
@@ -295,6 +294,7 @@ internal fun WordsEntryScreen(
     onPhoto: () -> Unit = {},
 ) {
     val working = state.phase == WordsEnterState.Phase.PHASE_WORKING
+    val held = state.held_found.isNotEmpty()
     val requesters = remember { mutableMapOf<Int, FocusRequester>() }
     var focus by remember { mutableStateOf<Int?>(null) }
     val focusManager = LocalFocusManager.current
@@ -331,70 +331,148 @@ internal fun WordsEntryScreen(
             leaveFields()
         }
     }
-    WordsPage(testTag = "words-enter", description = state.accessibility_label) {
-        WordsHead(state.title, state.body)
+    val scan = { if (state.scan_camera) onScan() else onPhoto() }
+    WordsPage(
+        testTag = "words-enter",
+        description = state.accessibility_label,
+        closeLabel = state.secondary_label,
+        closeTag = "words-enter-secondary",
+        onClose = {
+            leaveFields()
+            onEvent(WordsEnterEvent(secondary = WordsSecondary()))
+        },
+        footer = {
+            // LEAVE THE HELD SEED for the grid: a link, then the scan, then the verb.
+            if (state.words_label.isNotEmpty()) {
+                WordsLink(state.words_label, testTag = "words-use-words") {
+                    onEvent(WordsEnterEvent(use_words = WordsUseWords()))
+                }
+            }
+            if (state.scan_label.isNotEmpty() && held) {
+                WordsTonalButton(state.scan_label, testTag = "words-scan", iconKey = "Maximize", enabled = !working, onPress = scan)
+            }
+            if (state.retry_label.isNotEmpty()) {
+                WordsTonalButton(state.retry_label, testTag = "words-retry") {
+                    onEvent(WordsEnterEvent(retry = WordsRetry()))
+                }
+            }
+            if (state.primary_label.isNotEmpty()) {
+                InkButton(
+                    label = state.primary_label,
+                    testTag = "words-enter-primary",
+                    enabled = state.primary_enabled,
+                ) {
+                    leaveFields()
+                    onEvent(WordsEnterEvent(primary = WordsPrimary()))
+                }
+            }
+        },
+    ) {
+        // THE RESULT OF A RESTORE has its own head: a round mark over a centred title.
+        val done = state.phase == WordsEnterState.Phase.PHASE_DONE
+        if (done && (state.restored.isNotEmpty() || state.stayed.isNotEmpty())) {
+            WordsResultHead(if (state.stayed.isEmpty()) "Check" else "Refresh", state.title, state.body)
+        } else {
+            WordsHead(state.title, state.body)
+        }
+        // A HELD KEY IS ALREADY HERE: say so, and where it came from.
+        if (held) WordsHeldCard(state.held_found, state.held_place)
         if (state.cells.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (cell in state.cells) {
-                    EntryCell(
-                        cell = cell,
-                        enabled = !working,
-                        requester = requesters.getOrPut(cell.position) { FocusRequester() },
-                        onEdit = { text ->
-                            onEvent(WordsEnterEvent(typed = WordsWordTyped(position = cell.position, text = text)))
-                            // A SPACE IS HOW A MEMBER MOVES ON: the keyboard goes
-                            // at once — in this callback, not after a recomposition
-                            // or the machine's answer — to the cell the next letter
-                            // belongs in, so it lands where the member is looking.
-                            // That is the cell after the last word when the text
-                            // ends in a space, and the last word's own cell when
-                            // it does not (letters typed before the move landed).
-                            // The machine spreads the words; the cells follow it.
-                            if (text.any { it.isWhitespace() }) {
-                                val words = text.split(Regex("\\s+")).count { it.isNotEmpty() }
-                                val open = if (text.last().isWhitespace()) 0 else 1
-                                moveTo(cell.position + maxOf(words - open, 1))
+                for (row in state.cells.chunked(WORD_COLUMNS)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (cell in row) {
+                            Box(Modifier.weight(1f)) {
+                                EntryCell(
+                                    cell = cell,
+                                    enabled = !working,
+                                    requester = requesters.getOrPut(cell.position) { FocusRequester() },
+                                    onEdit = { text ->
+                                        onEvent(WordsEnterEvent(typed = WordsWordTyped(position = cell.position, text = text)))
+                                        // A SPACE IS HOW A MEMBER MOVES ON: the keyboard goes
+                                        // at once — in this callback, not after a recomposition
+                                        // or the machine's answer — to the cell the next letter
+                                        // belongs in, so it lands where the member is looking.
+                                        // That is the cell after the last word when the text
+                                        // ends in a space, and the last word's own cell when
+                                        // it does not (letters typed before the move landed).
+                                        // The machine spreads the words; the cells follow it.
+                                        if (text.any { it.isWhitespace() }) {
+                                            val words = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+                                            val open = if (text.last().isWhitespace()) 0 else 1
+                                            moveTo(cell.position + maxOf(words - open, 1))
+                                        }
+                                    },
+                                    onNext = { moveTo(cell.position + 1) },
+                                    last = cell.position == state.cells.size,
+                                )
                             }
-                        },
-                        onPick = { word ->
-                            onEvent(WordsEnterEvent(picked = WordsSuggestionPicked(position = cell.position, word = word)))
-                            moveTo(cell.position + 1)
-                        },
-                        onNext = { moveTo(cell.position + 1) },
-                        last = cell.position == state.cells.size,
-                    )
+                        }
+                        repeat(WORD_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            // THE LIST WORDS THE FOCUSED CELL'S PREFIX COULD BE, each a tap that sends
+            // `WordsSuggestionPicked`: one row under the grid, for the cell being typed in.
+            val suggesting = state.cells.firstOrNull { it.position == focus && it.suggestions.isNotEmpty() }
+                ?: state.cells.firstOrNull { it.suggestions.isNotEmpty() }
+            if (suggesting != null && !working) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (word in suggesting.suggestions) {
+                        Box(
+                            Modifier
+                                .heightIn(min = CentraidGeometry.TARGET_MIN_FINE.dp)
+                                .clip(CircleShape)
+                                .background(Surface.card)
+                                .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
+                                .clickable {
+                                    onEvent(WordsEnterEvent(picked = WordsSuggestionPicked(position = suggesting.position, word = word)))
+                                    moveTo(suggesting.position + 1)
+                                }
+                                .padding(horizontal = 12.dp)
+                                .testTag("words-suggestion-${suggesting.position}-$word")
+                                .semantics { role = Role.Button },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            KitText(word, KitType.Meta, Surface.ink)
+                        }
+                    }
                 }
             }
         }
-        // A HELD RESTORE NAMES the vaults on their own words it will also
-        // bring back (R-1047-E18).
-        if (state.held_keys_label.isNotEmpty()) {
-            Column(
-                Modifier.testTag("words-held-keys").semantics(mergeDescendants = true) { },
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(state.held_keys_label, style = centraidType("small"), color = centraidColor("textSoft"))
-                for (name in state.held_keys) {
-                    Text(name, style = centraidType("bodyStrong"), color = centraidColor("text"))
-                }
-            }
-        }
+        WordsNotice(state.notice)
         if (state.endpoint_label.isNotEmpty()) {
             EndpointField(
                 label = state.endpoint_label,
                 value = state.endpoint,
                 enabled = !working,
+                placeholder = state.endpoint_placeholder,
+                mono = held,
                 onEdit = { text -> onEvent(WordsEnterEvent(endpoint = WordsEndpointTyped(text = text))) },
+                // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is: the camera, or the
+                // photo picker where there is none (`scan_camera`). Beside the field while the
+                // words are typed; a held restore has the room for a full-width one below.
+                trailing = if (state.scan_label.isNotEmpty() && !held) {
+                    { WordsScanSquare(state.scan_label, enabled = !working, onPress = scan) }
+                } else {
+                    null
+                },
             )
         }
-        // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is: the camera,
-        // or the photo picker where there is none (`scan_camera`).
-        if (state.scan_label.isNotEmpty()) {
-            OutlineButton(label = state.scan_label, testTag = "words-scan", enabled = !working) {
-                if (state.scan_camera) onScan() else onPhoto()
+        // A HELD RESTORE NAMES the vaults on their own words it will also
+        // bring back (R-1047-E18).
+        if (state.held_keys_label.isNotEmpty()) {
+            Column(
+                Modifier.testTag("words-held-keys"),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                KitText(state.held_keys_label, KitType.Meta, Surface.meta)
+                WordsHeldKeys(state.held_keys)
             }
         }
-        WordsNotice(state.notice)
         if (state.progress.isNotEmpty()) {
             Row(
                 Modifier.testTag("words-progress").semantics(mergeDescendants = true) { },
@@ -404,36 +482,16 @@ internal fun WordsEntryScreen(
                 KitSpinner(state.progress)
             }
         }
-        for ((index, line) in state.restored.withIndex()) RestoredLine(line, index)
-        for ((index, line) in state.stayed.withIndex()) StayedLine(line, index)
-        if (state.retry_label.isNotEmpty()) {
-            StayedRetry(state.retry_label) { onEvent(WordsEnterEvent(retry = WordsRetry())) }
+        // WHAT CAME BACK AND WHAT STAYED, one card.
+        if (state.restored.isNotEmpty() || state.stayed.isNotEmpty()) {
+            WordsResultCard(state.restored, state.stayed)
         }
-        if (state.words_label.isNotEmpty()) {
-            StayedRetry(state.words_label, testTag = "words-use-words") {
-                onEvent(WordsEnterEvent(use_words = WordsUseWords()))
-            }
-        }
-        WordsControls(
-            primary = state.primary_label,
-            primaryEnabled = state.primary_enabled,
-            secondary = state.secondary_label,
-            prefix = "words-enter",
-            onPrimary = {
-                leaveFields()
-                onEvent(WordsEnterEvent(primary = WordsPrimary()))
-            },
-            onSecondary = {
-                leaveFields()
-                onEvent(WordsEnterEvent(secondary = WordsSecondary()))
-            },
-        )
     }
 }
 
 /**
- * One of the 24 cells: its number, the field, and the list words its prefix
- * could be — each a tap that sends `WordsSuggestionPicked`.
+ * One of the 24 cells: its number inside a white box, the field, and a mark on the edge: red for
+ * a word that is not on the list, the shell's teal for the cell being typed in.
  */
 @Composable
 private fun EntryCell(
@@ -441,66 +499,179 @@ private fun EntryCell(
     enabled: Boolean,
     requester: FocusRequester,
     onEdit: (String) -> Unit,
-    onPick: (String) -> Unit,
     onNext: () -> Unit,
     last: Boolean,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${cell.position}",
-                style = centraidType("mono"),
-                color = centraidColor("textFaint"),
-                modifier = Modifier.widthIn(min = 24.dp).clearAndSetSemantics { },
-            )
-            Box(Modifier.weight(1f)) {
-                WordField(
-                    value = cell.typed,
-                    tone = when (cell.mark) {
-                        WordEntry.Mark.MARK_KNOWN -> "success"
-                        WordEntry.Mark.MARK_UNKNOWN -> "attention"
-                        else -> "lineStrong"
-                    },
-                    spoken = cell.accessibility_label.ifEmpty { cell.prompt },
-                    testTag = "words-cell-${cell.position}",
-                    requester = requester,
-                    enabled = enabled,
-                    last = last,
-                    onEdit = onEdit,
-                    onNext = onNext,
-                )
-            }
+    WordField(
+        number = cell.position,
+        value = cell.typed,
+        placeholder = cell.prompt,
+        unknown = cell.mark == WordEntry.Mark.MARK_UNKNOWN,
+        spoken = cell.accessibility_label.ifEmpty { cell.prompt },
+        testTag = "words-cell-${cell.position}",
+        requester = requester,
+        enabled = enabled,
+        last = last,
+        onEdit = onEdit,
+        onNext = onNext,
+    )
+}
+
+/** The card that says a recovery key is already on this phone, and where it came from. */
+@Composable
+private fun WordsHeldCard(found: String, place: String) {
+    val accent = appAccent()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .kitCard()
+            .padding(12.dp)
+            .testTag("words-held-found")
+            .semantics(mergeDescendants = true) { },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(44.dp).wordsBox(fill = accent.wash(centraidDark()), border = null),
+            contentAlignment = Alignment.Center,
+        ) {
+            CentraidIcon(iconKey = "Key", tint = accent.text, size = 20.dp)
         }
-        if (cell.suggestions.isNotEmpty() && enabled) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(found, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = Surface.ink)
+            if (place.isNotEmpty()) KitText(place, KitType.Meta, Surface.meta)
+        }
+    }
+}
+
+/** The vaults on their own recovery key, one white card of rows: an initial, then the name. */
+@Composable
+private fun WordsHeldKeys(names: List<String>) {
+    Column(Modifier.fillMaxWidth().kitCard()) {
+        for ((at, name) in names.withIndex()) {
             Row(
-                Modifier
-                    .padding(start = 34.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                for (word in cell.suggestions) {
-                    Box(
-                        Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_FINE.dp)
-                            .background(centraidColor("bgSunken"), CircleShape)
-                            .clickable { onPick(word) }
-                            .padding(horizontal = 12.dp)
-                            .testTag("words-suggestion-${cell.position}-$word")
-                            .semantics { role = Role.Button },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(word, style = centraidType("small"), color = centraidColor("text"))
-                    }
+                Box(
+                    Modifier.size(32.dp).wordsBox(fill = Surface.fill, border = null).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        name.take(1).uppercase(),
+                        style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                        color = Surface.ink,
+                    )
                 }
+                KitText(name, KitType.Row, Surface.ink)
             }
+            if (at < names.size - 1) Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
         }
     }
 }
 
 /**
- * The laptop's address, for a restore that cannot find it on its own. Not a
- * word: an ordinary URL field, but it still learns nothing and offers no
- * autofill, since it sits on the same shielded screen.
+ * The result of a restore: a round mark over a centred title. A restore with a vault that stayed
+ * wears the refresh mark, one that brought everything back the check.
+ */
+@Composable
+private fun WordsResultHead(iconKey: String, title: String, lead: String) {
+    val accent = appAccent()
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(60.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
+            contentAlignment = Alignment.Center,
+        ) {
+            CentraidIcon(iconKey = iconKey, tint = accent.text, size = 26.dp)
+        }
+        Text(
+            title,
+            style = kitTextStyle(KitType.Title),
+            color = Surface.ink,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("words-title").semantics { heading() },
+        )
+        if (lead.isNotEmpty()) {
+            Text(lead, style = kitTextStyle(KitType.Row), color = Surface.body, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * WHAT CAME BACK AND WHAT STAYED (`restored`, `stayed`): one white card. Each restored vault is a
+ * check, its line, and its safety number large and grouped so it can be read against the backup
+ * device's; each vault that stayed with the other phone is the machine's sentence behind an amber
+ * mark — "not yet, and not wrong", since the vault is safe where it is
+ * (product-intuition/references/design-behaviour.md § Colour).
+ */
+@Composable
+private fun WordsResultCard(restored: List<RestoredVaultLine>, stayed: List<String>) {
+    Column(Modifier.fillMaxWidth().kitCard()) {
+        for ((index, line) in restored.withIndex()) {
+            ResultRow(first = index == 0, mark = { WordsResultMark(StateColor.Green, "Check") }) {
+                Column(
+                    Modifier.testTag("words-restored-$index").semantics(mergeDescendants = true) { },
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    KitText(line.line, KitType.Row, Surface.ink)
+                    if (line.safety_number.isNotEmpty()) {
+                        Text(
+                            line.safety_number,
+                            style = centraidType("display"),
+                            color = Surface.ink,
+                            modifier = Modifier.testTag("words-safety-number"),
+                        )
+                        KitText(line.safety_label, KitType.Meta, Surface.meta)
+                    }
+                }
+            }
+        }
+        for ((index, line) in stayed.withIndex()) {
+            ResultRow(first = restored.isEmpty() && index == 0, mark = { WordsResultMark(StateColor.Amber, "AlertCircle") }) {
+                Text(
+                    line,
+                    style = kitTextStyle(KitType.Row),
+                    color = Surface.ink,
+                    modifier = Modifier.testTag("words-stayed-$index").semantics(mergeDescendants = true) { },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultRow(first: Boolean, mark: @Composable () -> Unit, content: @Composable () -> Unit) {
+    if (!first) Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+    Row(
+        Modifier.fillMaxWidth().padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        mark()
+        Box(Modifier.weight(1f)) { content() }
+    }
+}
+
+/** A round state mark on a pale ground: a check for a vault that is back, a bang for one that stayed. */
+@Composable
+private fun WordsResultMark(state: StateColor, iconKey: String) {
+    Box(
+        Modifier.size(28.dp).clip(CircleShape).background(state.tint).clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        CentraidIcon(iconKey = iconKey, tint = state.text, size = 14.dp)
+    }
+}
+
+/**
+ * The pairing code, for a restore that cannot find the backup device on its own. Not a word: an
+ * ordinary URL field, but it still learns nothing and offers no autofill, since it sits on the
+ * same shielded screen. The vault's name (R-1047-E18) is the same box.
  */
 @Composable
 private fun EndpointField(
@@ -509,114 +680,65 @@ private fun EndpointField(
     enabled: Boolean,
     /** A vault's name (R-1047-E18): words capitalised, plain text, its own tag. */
     name: Boolean = false,
+    /** What the empty field says ("Pairing code"). */
+    placeholder: String = "",
+    /** The code is monospaced where it is shown whole, as a held restore does. */
+    mono: Boolean = false,
+    /** A control beside the field: the scan key. */
+    trailing: (@Composable () -> Unit)? = null,
     onEdit: (String) -> Unit,
 ) {
     val text = rememberSentText(value)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.clearAndSetSemantics { })
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = KitGeometry.ROW_MIN)
-                .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            NoLearning {
-                BasicTextField(
-                    value = text.first.value,
-                    onValueChange = { next ->
-                        val changed = next.text != text.first.value.text
-                        text.first.value = next
-                        if (changed) {
-                            text.second(next.text)
-                            onEdit(next.text)
-                        }
-                    },
-                    enabled = enabled,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = if (name) KeyboardCapitalization.Words else KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                        keyboardType = if (name) KeyboardType.Text else KeyboardType.Uri,
-                        imeAction = ImeAction.Done,
-                    ),
-                    textStyle = centraidType("body").copy(color = centraidColor("text")),
-                    cursorBrush = SolidColor(centraidColor("text")),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(if (name) "words-make-name" else "words-endpoint")
-                        .semantics {
-                            contentDescription = label
-                            contentDataType = ContentDataType.None
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        KitText(label, KitType.Meta, Surface.meta, modifier = Modifier.clearAndSetSemantics { })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = WORDS_FIELD_MIN)
+                    .wordsBox()
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                NoLearning {
+                    BasicTextField(
+                        value = text.first.value,
+                        onValueChange = { next ->
+                            val changed = next.text != text.first.value.text
+                            text.first.value = next
+                            if (changed) {
+                                text.second(next.text)
+                                onEdit(next.text)
+                            }
                         },
-                )
+                        enabled = enabled,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = if (name) KeyboardCapitalization.Words else KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = if (name) KeyboardType.Text else KeyboardType.Uri,
+                            imeAction = ImeAction.Done,
+                        ),
+                        textStyle = (if (mono) centraidType("mono") else kitTextStyle(KitType.Row)).copy(color = Surface.ink),
+                        cursorBrush = SolidColor(Surface.ink),
+                        decorationBox = { field ->
+                            if (text.first.value.text.isEmpty() && placeholder.isNotEmpty()) {
+                                KitText(placeholder, KitType.Row, Surface.meta)
+                            }
+                            field()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(if (name) "words-make-name" else "words-endpoint")
+                            .semantics {
+                                contentDescription = label
+                                contentDataType = ContentDataType.None
+                            },
+                    )
+                }
             }
+            trailing?.invoke()
         }
-    }
-}
-
-/**
- * One restored vault: its line, and its safety number large and grouped so it
- * can be read against the laptop's.
- */
-@Composable
-private fun RestoredLine(line: RestoredVaultLine, index: Int) {
-    Column(
-        Modifier.testTag("words-restored-$index").semantics(mergeDescendants = true) { },
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(line.line, style = centraidType("bodyStrong"), color = centraidColor("text"))
-        if (line.safety_number.isNotEmpty()) {
-            Text(
-                line.safety_number,
-                style = centraidType("display"),
-                color = centraidColor("text"),
-                modifier = Modifier.testTag("words-safety-number"),
-            )
-            Text(line.safety_label, style = centraidType("small"), color = centraidColor("textSoft"))
-        }
-    }
-}
-
-/**
- * One vault that stayed with the other phone (`WordsEnterState.stayed`,
- * R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and not
- * wrong" (product-intuition/references/design-behaviour.md § Colour), since the vault is safe where it is. The retry under the
- * list is [StayedRetry].
- */
-@Composable
-private fun StayedLine(line: String, index: Int) {
-    Row(
-        Modifier
-            .height(IntrinsicSize.Min)
-            .testTag("words-stayed-$index")
-            .semantics(mergeDescendants = true) { },
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.width(2.dp).fillMaxHeight().background(centraidColor("seam")))
-        Text(line, style = centraidType("body"), color = centraidColor("text"))
-    }
-}
-
-/**
- * `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
- * that stayed. A link-weight text button, like [WordsControls]' secondary; the
- * label and when it shows are the machine's. `words_label`'s control (leave a
- * held-seed restore for the grid) is the same link.
- */
-@Composable
-private fun StayedRetry(label: String, testTag: String = "words-retry", onRetry: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-            .clickable(onClick = onRetry)
-            .testTag(testTag)
-            .semantics { role = Role.Button },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(label, style = centraidType("smallStrong"), color = centraidColor("link"))
     }
 }
 
@@ -624,20 +746,66 @@ private fun StayedRetry(label: String, testTag: String = "words-retry", onRetry:
 // shared parts
 // ---------------------------------------------------------------------------
 
-/** The sheet's page: a scrolling column that rides above the keyboard. */
+/**
+ * THE WORDS PAGES' FRAME: a round X at the top leading edge (the screen's own leave control,
+ * `secondary_label`, spoken as its label), the content scrolling and riding above the keyboard,
+ * and the answers pinned at the foot. With no leave control and no answers it is just the page
+ * (pairing's page is drawn this way).
+ */
 @Composable
-internal fun WordsPage(testTag: String, description: String, content: @Composable () -> Unit) {
+internal fun WordsPage(
+    testTag: String,
+    description: String,
+    closeLabel: String = "",
+    closeTag: String = "",
+    onClose: () -> Unit = {},
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxWidth()
+            .background(Surface.page)
             .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 24.dp)
             .testTag(testTag)
             .semantics { if (description.isNotEmpty()) contentDescription = description },
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        content()
+        if (closeLabel.isNotEmpty()) {
+            Box(
+                Modifier
+                    .padding(start = CentraidGeometry.PAGE_MARGIN.dp, top = 8.dp)
+                    .size(KitGeometry.ROW_MIN)
+                    .clip(CircleShape)
+                    .background(Surface.card)
+                    .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
+                    .clickable(onClick = onClose)
+                    .testTag(closeTag)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = closeLabel
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                CentraidIcon(iconKey = "X", tint = Surface.ink, size = 16.dp)
+            }
+        }
+        Column(
+            Modifier
+                .weight(1f, fill = footer != null)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            content()
+        }
+        if (footer != null) {
+            Column(
+                Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                footer()
+            }
+        }
     }
 }
 
@@ -647,19 +815,40 @@ internal fun WordsHead(title: String, lead: String) {
         if (title.isNotEmpty()) {
             Text(
                 title,
-                style = centraidType("title"),
-                color = centraidColor("text"),
+                style = kitTextStyle(KitType.Title),
+                color = Surface.ink,
                 modifier = Modifier.testTag("words-title").semantics { heading() },
             )
         }
-        if (lead.isNotEmpty()) Text(lead, style = centraidType("body"), color = centraidColor("textSoft"))
+        if (lead.isNotEmpty()) Text(lead, style = kitTextStyle(KitType.Row), color = Surface.body)
+    }
+}
+
+/**
+ * A SENTENCE ABOUT A STATE on a pale ground of that state's colour, with its mark: a red one for
+ * what went wrong, an amber one for what the member should do.
+ */
+@Composable
+internal fun WordsCallout(text: String, state: StateColor, testTag: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .wordsBox(fill = state.tint, border = null)
+            .padding(12.dp)
+            .testTag(testTag)
+            .semantics(mergeDescendants = true) { },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        CentraidIcon(iconKey = "AlertCircle", tint = state.text, size = 18.dp, modifier = Modifier.padding(top = 1.dp).clearAndSetSemantics { })
+        Text(text, style = kitTextStyle(KitType.Row), color = state.text)
     }
 }
 
 @Composable
 internal fun WordsNotice(notice: String) {
     if (notice.isEmpty()) return
-    Text(notice, style = centraidType("small"), color = centraidColor("net"), modifier = Modifier.testTag("words-notice"))
+    WordsCallout(notice, StateColor.Red, testTag = "words-notice")
 }
 
 @Composable
@@ -683,20 +872,95 @@ internal fun WordsControls(
                 onPress = onPrimary,
             )
         }
-        if (secondary.isNotEmpty()) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-                    .clickable(onClick = onSecondary)
-                    .testTag("$prefix-secondary")
-                    .semantics { role = Role.Button },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(secondary, style = centraidType("smallStrong"), color = centraidColor("link"))
-            }
-        }
+        if (secondary.isNotEmpty()) WordsLink(secondary, testTag = "$prefix-secondary", onPress = onSecondary)
     }
+}
+
+/** A VERB THAT READS AS WORDS, in the shell's teal, centred. */
+@Composable
+internal fun WordsLink(label: String, testTag: String, onPress: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .clickable(onClick = onPress)
+            .testTag(testTag)
+            .semantics { role = Role.Button },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = appAccent().text)
+    }
+}
+
+/**
+ * A SECOND VERB IN THE SHELL'S TINT: the shell's teal over its own pale ground, full width,
+ * beside the one ink button ("Save a copy", "Scan QR code", "Try again").
+ */
+@Composable
+internal fun WordsTonalButton(
+    label: String,
+    testTag: String,
+    iconKey: String = "",
+    enabled: Boolean = true,
+    onPress: () -> Unit,
+) {
+    val accent = appAccent()
+    val ink = if (enabled) accent.text else Surface.meta
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(CircleShape)
+            .background(accent.wash(centraidDark()))
+            .clickable(enabled = enabled, onClick = onPress)
+            .testTag(testTag)
+            .semantics {
+                role = Role.Button
+                if (!enabled) disabled()
+            },
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (iconKey.isNotEmpty()) CentraidIcon(iconKey = iconKey, tint = ink, size = 16.dp)
+        Text(label, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = ink)
+    }
+}
+
+/** THE SCAN CONTROL BESIDE THE CODE'S FIELD: a square tonal key with the viewfinder, its words spoken, not drawn. */
+@Composable
+private fun WordsScanSquare(label: String, enabled: Boolean, onPress: () -> Unit) {
+    val accent = appAccent()
+    Box(
+        Modifier
+            .size(WORDS_FIELD_MIN)
+            .wordsBox(fill = accent.wash(centraidDark()), border = null)
+            .clickable(enabled = enabled, onClick = onPress)
+            .testTag("words-scan")
+            .semantics {
+                role = Role.Button
+                contentDescription = label
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        CentraidIcon(iconKey = "Maximize", tint = accent.text, size = 20.dp)
+    }
+}
+
+/** The height of a words field: a row and a little more, so a typed code is never cramped. */
+private val WORDS_FIELD_MIN = 52.dp
+
+/**
+ * A BOX OF THE WORDS PAGES: the control radius from the token scale, white by default with a
+ * hairline edge; a pale ground (a state, a tint) passes its fill and no edge.
+ */
+@Composable
+private fun Modifier.wordsBox(
+    fill: Color = Surface.card,
+    border: Color? = Surface.border,
+    width: Dp = KitGeometry.HAIRLINE,
+): Modifier {
+    val shape = RoundedCornerShape((LocalCentraidTokens.current.radii["lg"] ?: 0).dp)
+    return clip(shape).background(fill).then(if (border != null) Modifier.border(width, border, shape) else Modifier)
 }
 
 /** Moves the keyboard to [focus]'s field once it is drawn. */
@@ -723,8 +987,10 @@ private fun FocusOn(focus: Int?, requesters: Map<Int, FocusRequester>) {
  */
 @Composable
 private fun WordField(
+    number: Int,
     value: String,
-    tone: String,
+    placeholder: String,
+    unknown: Boolean,
     spoken: String,
     testTag: String,
     requester: FocusRequester,
@@ -734,14 +1000,25 @@ private fun WordField(
     enabled: Boolean = true,
 ) {
     val text = rememberSentText(value)
-    Box(
+    var focused by remember { mutableStateOf(false) }
+    val accent = appAccent()
+    Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-            .border(1.5.dp, centraidColor(tone), RoundedCornerShape(KitGeometry.RADIUS))
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.CenterStart,
+            .wordsBox(
+                border = when {
+                    unknown -> StateColor.Red.text
+                    focused -> accent.text
+                    else -> Surface.border
+                },
+                width = if (unknown || focused) 1.5.dp else KitGeometry.HAIRLINE,
+            )
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Text("$number", style = centraidType("mono"), color = Surface.meta, modifier = Modifier.clearAndSetSemantics { })
         NoClipboard {
             NoLearning(word = true) {
                 BasicTextField(
@@ -764,11 +1041,18 @@ private fun WordField(
                     ),
                     keyboardActions = KeyboardActions(onNext = { onNext() }, onDone = { onNext() }),
                     visualTransformation = VisualTransformation.None,
-                    textStyle = centraidType("body").copy(color = centraidColor("text")),
-                    cursorBrush = SolidColor(centraidColor("text")),
+                    textStyle = kitTextStyle(KitType.Row).copy(color = Surface.ink),
+                    cursorBrush = SolidColor(Surface.ink),
+                    decorationBox = { field ->
+                        if (text.first.value.text.isEmpty() && placeholder.isNotEmpty()) {
+                            KitText(placeholder, KitType.Row, Surface.meta, maxLines = 1)
+                        }
+                        field()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(requester)
+                        .onFocusChanged { focused = it.isFocused }
                         .testTag(testTag)
                         .semantics {
                             contentDescription = spoken

@@ -115,10 +115,11 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-download` | Chat | "Download model", in the model step |
 | `chat-model-note` | Chat | the model step's one sentence |
 | `chat-empty` | Chat | the empty thread's one line |
-| `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0 |
+| `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0: a row in the empty thread, a chip in `chat-suggestion-chips` above the composer once the thread has messages |
+| `chat-suggestion-chips` | Chat | the chips' row above the composer in a live thread |
 | `chat-card-<n>` | Chat | the n-th row-card under an answer, from 0 |
 | `chat-pending` | Chat | the lines of the confirm card under an answer that proposes a write, read as one element |
-| `chat-pending-confirm` | Chat | its Confirm (outlined in `net` when the card asks twice) |
+| `chat-pending-confirm` | Chat | its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
 | `chat-pending-cancel` | Chat | its Cancel |
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's New chat |
@@ -128,6 +129,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-shown` | words.make / words.show | the recovery key's 24 cells, read as one grid (each cell is `words-word-<n>`) |
 | `words-save-copy` | words.make / words.show | "Save a copy" — the share sheet with the key as one line |
 | `words-make-primary` | words.make | the sheet's primary ("I've saved it", "Done") |
+| `words-make-secondary`, `words-enter-secondary`, `words-show-secondary` | words.make / words.enter / words.show | the round X at the top: the screen's own leave control (Cancel), spoken as its label |
+| `words-held-found` | words.enter | the "Recovery key found" card of a held-key restore, with where it came from |
 | `health-band-<tab>` | Health | one band tab (`today` (the Summary), `trends`, `workouts`, `more`); `health-band` is the plate (#1129) |
 | `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
 | `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | The Summary's steps card, another pinned card and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |

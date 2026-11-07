@@ -58,6 +58,8 @@ catalog! {
     plain restore_first_body = ("Restore your vaults first, so a new vault doesn't replace one you already have.", "Restore your vaults first, so a new vault doesn't replace one you already have.");
     plain restore_first_title = ("Restore your vaults first", "Restore your vaults first");
     plain restore_held_body = ("Your recovery key came back with your Apple or Google account, so there's nothing to type.", "Your recovery key came back with your Apple or Google account, so there's nothing to type.");
+    plain restore_held_found = ("Recovery key found", "Recovery key found");
+    plain restore_held_in = ("In {place}", "In {place}");
     plain restore_held_own_label = ("These vaults have their own recovery key and come back too:", "These vaults have their own recovery key and come back too:");
     plain restore_held_own_unnamed = ("A vault with its own recovery key", "A vault with its own recovery key");
     plain restore_held_title = ("Restore your vaults", "Restore your vaults");

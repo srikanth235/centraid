@@ -91,6 +91,8 @@ pub struct Enter {
     origin: Origin,
     /// The locale of the last event, for sentences made when an answer lands.
     locale: Locale,
+    /// The platform of the last event ("ios", "android"), for where a held key came from.
+    platform: String,
     started: bool,
     finished: bool,
     /// The seed question is still being read: nothing is drawn yet.
@@ -145,6 +147,7 @@ impl Enter {
             },
             origin,
             locale: Locale::En,
+            platform: String::new(),
             started: false,
             finished: false,
             loading: false,
@@ -768,6 +771,11 @@ impl Enter {
             } else {
                 String::new()
             },
+            endpoint_placeholder: if self.restores() && !answered {
+                crate::strings::pairing::paste_label(locale)
+            } else {
+                String::new()
+            },
             endpoint: if self.restores() && !answered {
                 self.endpoint.clone()
             } else {
@@ -817,6 +825,16 @@ impl Enter {
             } else {
                 String::new()
             },
+            held_found: if held && entering {
+                words::restore_held_found(locale)
+            } else {
+                String::new()
+            },
+            held_place: if held && entering {
+                super::held_place(locale, &self.platform)
+            } else {
+                String::new()
+            },
             held_keys_label: if held && entering && !self.held_keys.is_empty() {
                 words::restore_held_own_label(locale)
             } else {
@@ -863,6 +881,7 @@ fn grouped(rows: i64) -> String {
 impl Screen for Enter {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         self.locale = ctx.locale();
+        self.platform = ctx.platform().to_owned();
         if self.finished {
             return Vec::new();
         }

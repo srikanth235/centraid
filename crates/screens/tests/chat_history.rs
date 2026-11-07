@@ -96,6 +96,8 @@ fn a_stored_thread_comes_back_with_its_messages_cards_and_session_and_the_follow
     assert_eq!(state.messages[1].text, FOUND_TASKS);
     assert_eq!(state.messages[1].cards.len(), 6);
     assert!(state.can_retry, "a stored question can be asked again");
+    // A REOPENED THREAD IS LIVE (#1173): the chips above the composer are offered again.
+    assert_eq!(state.suggestions.len(), 3, "{:?}", state.suggestions);
     // the follow-up is saved in the same thread
     chat.say("the first one");
     assert_eq!(chat.state().messages.len(), 4);
