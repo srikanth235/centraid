@@ -28,7 +28,7 @@ cuda = ["engine", "dep:llama-cpp-2"]
 centraid-assist = { path = "../assist" }
 centraid-assist-llama = { path = "../assist-llama", optional = true }
 centraid-nativetools = { path = "../nativetools" }
-llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+llama-cpp-2 = { version = "=0.1.160", default-features = false, features = [
   "cuda",
 ], optional = true }
 serde.workspace = true
