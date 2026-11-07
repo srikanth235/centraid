@@ -126,6 +126,7 @@ pub mod agenda;
 pub mod agenda_calendar;
 pub mod agenda_editor;
 pub mod agenda_event;
+pub mod agenda_grid;
 pub mod agenda_home;
 pub mod agenda_reminders;
 pub mod agenda_todo;
