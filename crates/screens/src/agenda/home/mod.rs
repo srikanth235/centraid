@@ -314,6 +314,17 @@ impl Home {
                     self.sheet = Sheet::NewProject;
                 }
             }
+            // THE CALENDAR'S GRIDS AND THE KEYBOARD TOOLBAR (#1173): not wired yet.
+            H::DayPicked(_)
+            | H::SlotPressed(_)
+            | H::EventMoved(_)
+            | H::EventResized(_)
+            | H::MonthStyle(_)
+            | H::PeriodStepped(_)
+            | H::TaskDeleted(_)
+            | H::QuickTool(_)
+            | H::QuickDue(_)
+            | H::QuickTag(_) => {}
             H::NextPage(_) => {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
@@ -566,6 +577,7 @@ impl Screen for Home {
                         focused: drawn && self.quick.focused,
                         add_label: task::add_task(locale),
                         drawn,
+                        ..wire::TodoQuickAdd::default()
                     }),
                     file_choices: if self.sheet == Sheet::File {
                         place::file_choices(locale, &self.held, &self.filing_task_id)

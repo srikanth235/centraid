@@ -136,6 +136,7 @@ pub mod routes {
                 original_start_local: original_start_local.map(str::to_owned),
                 day: day.to_owned(),
                 kind: kind as i32,
+                start_time: String::new(),
             }),
         )
     }

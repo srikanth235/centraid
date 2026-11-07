@@ -663,6 +663,9 @@ impl Editor {
                 _ => {}
             },
             K::ConfirmDismissed(_) => self.asking = Asking::None,
+            // THE NEW TASK SHEET (#1173): not wired yet.
+            K::List(_) | K::Priority(_) | K::TagAdded(_) | K::TagRemoved(_) | K::MoreDetails(_) => {
+            }
         }
         Vec::new()
     }
@@ -1063,6 +1066,7 @@ impl Editor {
             } else {
                 words::field_starts(locale)
             },
+            ..wire::AgendaEditorData::default()
         }
     }
 
@@ -1143,5 +1147,6 @@ fn chrome(locale: Locale) -> wire::AgendaEditorChrome {
         pick_date: words::pick_date(locale),
         pick_time: words::pick_time(locale),
         kind_label: words::kind_switch(locale),
+        ..wire::AgendaEditorChrome::default()
     }
 }

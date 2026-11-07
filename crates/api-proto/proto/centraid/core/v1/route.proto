@@ -155,6 +155,11 @@ enum AgendaDestination {
   AGENDA_DESTINATION_WAITING = 3;
   // The Inbox, then the projects by area (R-1128-1).
   AGENDA_DESTINATION_TODO = 4;
+  // THE CALENDAR'S GRIDS (#1173): seven hour columns, the month's weeks, and
+  // the twelve months of the anchor's year.
+  AGENDA_DESTINATION_WEEK = 5;
+  AGENDA_DESTINATION_MONTH = 6;
+  AGENDA_DESTINATION_YEAR = 7;
 }
 
 // What the add sheet adds: an event, or a to-do.
@@ -204,6 +209,10 @@ message AgendaEditorRoute {
   string day = 4;
   // A create's kind; UNSPECIFIED is the kind this device last added.
   AgendaEditorKind kind = 5;
+  // A create's start, `HH:MM` on `day` (#1173): the slot a long press on the
+  // Day or Week grid named, snapped by the core. Empty is the editor's own
+  // default time.
+  string start_time = 6;
 }
 
 // `agenda.todo_list`: the Anytime, All, Logbook or Reminders page.

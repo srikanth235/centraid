@@ -396,6 +396,10 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         landing: Some(landing),
         catch_up: Some(routes::catch_up()),
         todo: None,
+        week_strip: None,
+        time_grid: None,
+        month: None,
+        year: None,
     })
 }
 

@@ -276,6 +276,7 @@ pub fn draft_of(event: &wire::AgendaEvent) -> Draft {
             |reminder| reminder.minutes_before.to_string(),
         ),
         link: event.conferencing_uri.clone().unwrap_or_default(),
+        ..Draft::default()
     }
 }
 

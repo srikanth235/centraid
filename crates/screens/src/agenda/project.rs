@@ -253,6 +253,7 @@ impl Project {
             // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.
             add_label: String::new(),
             drawn: found,
+            ..wire::TodoQuickAdd::default()
         }
     }
 
