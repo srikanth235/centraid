@@ -69,6 +69,8 @@ internal class DocsPickers(
         try {
             when (kind) {
                 PickFile.Kind.KIND_SCAN -> scan()
+                // THE PHOTO LIBRARY (#1173): the system picker narrowed to images; the choice stages like an upload.
+                PickFile.Kind.KIND_PHOTO -> upload?.launch(arrayOf("image/*")) ?: fail(UNAVAILABLE)
                 else -> upload?.launch(arrayOf("*/*")) ?: fail(UNAVAILABLE)
             }
         } catch (why: ActivityNotFoundException) {

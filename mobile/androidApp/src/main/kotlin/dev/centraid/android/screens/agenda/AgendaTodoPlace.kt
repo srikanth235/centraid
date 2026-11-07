@@ -32,13 +32,12 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
-import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.theme.centraidColor
@@ -175,10 +174,13 @@ internal fun AgendaTodoPlace(
                             .clearAndSetSemantics { contentDescription = row.accessibility_label },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            Modifier.size(12.dp).clip(CircleShape)
-                                .background(agendaListColor(project.list_color_key) ?: centraidColor("textFaint")),
-                        )
+                        val listColor = agendaListColor(project.list_color_key) ?: centraidColor("textFaint")
+                        // A LIST'S OWN ICON (#1173 wave 2) replaces the dot, in the list's colour.
+                        if (project.icon_key.isNotEmpty()) {
+                            CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
+                        } else {
+                            Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                        }
                         Text(row.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f).padding(start = 12.dp))
                         Text(project.count, style = centraidType("body"), color = centraidColor("textSoft"))
                     }
@@ -244,20 +246,18 @@ internal fun AgendaTaskSheet(state: AgendaHomeState, words: TodoChrome, onEvent:
                 TodoChoiceRow(choice) { onEvent(AgendaHomeEvent(file_chosen = AgendaHomeEvent.FileChosen(key = it))) }
             }
         }
-        AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> SheetRoom(
-            title = words.new_project_title,
-            onDismiss = close,
-            primary = SheetPrimary(words.new_project_verb, enabled = state.new_project_can_submit) {
-                onEvent(AgendaHomeEvent(new_project_submitted = AgendaHomeEvent.NewProjectSubmitted()))
-            },
-        ) {
-            EditableFieldRow(
-                key = "",
-                value = state.new_project_name,
-                reload = state.new_project_name.takeIf { it.isEmpty() },
-                placeholder = words.new_project_placeholder,
-                onEdit = { onEvent(AgendaHomeEvent(new_project_name = AgendaHomeEvent.NewProjectNameChanged(name = it))) },
-                testTag = "tasks-new-project-field",
+        AgendaHomeState.Sheet.SHEET_NEW_PROJECT,
+        AgendaHomeState.Sheet.SHEET_NEW_CALENDAR,
+        AgendaHomeState.Sheet.SHEET_EDIT_CALENDAR,
+        -> state.style?.let { style ->
+            // ONE STYLE SHEET for a new list and a new or edited calendar (#1173 wave 2).
+            AgendaStyleSheetView(
+                style = style,
+                onName = { onEvent(AgendaHomeEvent(style_name = AgendaHomeEvent.StyleNameChanged(name = it))) },
+                onColor = { onEvent(AgendaHomeEvent(style_color = AgendaHomeEvent.StyleColorPicked(key = it))) },
+                onIcon = { onEvent(AgendaHomeEvent(style_icon = AgendaHomeEvent.StyleIconPicked(key = it))) },
+                onSubmit = { onEvent(AgendaHomeEvent(style_submitted = AgendaHomeEvent.StyleSubmitted())) },
+                onCancel = close,
             )
         }
         else -> Unit
