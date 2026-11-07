@@ -24,7 +24,7 @@ fn the_drive_opens_on_all_with_the_band_and_the_count() {
     let i = root(&d);
     let drive = state(&d, i);
     assert_eq!(drive.destination, wire::DocsDestination::All as i32);
-    assert_eq!(drive.chrome.as_ref().unwrap().title, "Docs");
+    assert_eq!(drive.chrome.as_ref().unwrap().title, "Recents");
     assert_eq!(drive.chrome.as_ref().unwrap().back, "Docs");
     let band: Vec<(&str, bool)> = drive
         .band
@@ -42,7 +42,7 @@ fn the_drive_opens_on_all_with_the_band_and_the_count() {
     );
     // The seeded vault holds four documents.
     assert!(
-        drive.head_meta.ends_with("documents"),
+        drive.head_meta.ends_with("documents in Docs"),
         "{}",
         drive.head_meta
     );
@@ -90,7 +90,7 @@ fn a_row_says_kind_size_and_when_in_words() {
         panic!("not a document route");
     };
     assert_eq!(args.document_id, row.document_id);
-    assert_eq!(args.parent, "Docs");
+    assert_eq!(args.parent, "Recents");
 }
 
 /// The menu the drive draws.
@@ -142,10 +142,10 @@ fn the_filter_menu_holds_three_nested_filters_the_sort_and_the_view() {
     assert_eq!(menu::checked(sort), ["changed_desc"]);
     assert_eq!(sort.options[0].label, "Date changed · Newest first");
     assert_eq!(sort.options[2].label, "Name · A to Z");
-    // The layout is a choice of the menu: a list until a grid is picked.
+    // The layout is a choice of the menu: a grid (real thumbnails) until a list is picked.
     let view = section(&d, i, "view");
     assert_eq!(view.title, "View");
-    assert_eq!(menu::checked(view), ["list"]);
+    assert_eq!(menu::checked(view), ["grid"]);
 }
 
 #[test]
@@ -246,19 +246,19 @@ fn the_layout_is_the_views_section_and_changes_no_filter() {
     let i = root(&d);
     assert_eq!(
         state(&d, i).layout,
-        wire::docs_drive_state::Layout::List as i32
-    );
-    menu_pick(&mut d, i, "view", "grid");
-    assert_eq!(
-        state(&d, i).layout,
         wire::docs_drive_state::Layout::Grid as i32
     );
-    assert_eq!(menu::checked(section(&d, i, "view")), ["grid"]);
-    assert!(!filter_menu(&d, i).filtering);
     menu_pick(&mut d, i, "view", "list");
     assert_eq!(
         state(&d, i).layout,
         wire::docs_drive_state::Layout::List as i32
+    );
+    assert_eq!(menu::checked(section(&d, i, "view")), ["list"]);
+    assert!(!filter_menu(&d, i).filtering);
+    menu_pick(&mut d, i, "view", "grid");
+    assert_eq!(
+        state(&d, i).layout,
+        wire::docs_drive_state::Layout::Grid as i32
     );
     // Clear filters keeps the layout.
     menu_pick(&mut d, i, "view", "grid");
@@ -641,7 +641,7 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Taxes");
     // A folder page carries the same filter menu (it holds no chip row of its own).
     assert!(drive.filter_menu.is_some());
-    assert_eq!(drive.chrome.as_ref().unwrap().back, "Docs");
+    assert_eq!(drive.chrome.as_ref().unwrap().back, "Browse");
     let data = drive_data(d.view(page));
     assert_eq!(data.folders.len(), 1);
     assert_eq!(data.folders[0].name, "2026");
@@ -816,4 +816,203 @@ fn the_trash_row_of_more_is_a_route_with_the_count_beside_it() {
     assert_eq!(trash.label, "Trash");
     assert_eq!(trash.detail, "1 document");
     assert_eq!(trash.route.as_ref().unwrap().screen, docs::TRASH);
+}
+
+// ---------------------------------------------------------------------------
+// The redesign (#1173): Recents · Browse · Starred, label chips, coloured labels
+// ---------------------------------------------------------------------------
+
+fn chips(d: &Driver, i: u64) -> Vec<(String, String, bool)> {
+    drive_data(d.view(i))
+        .label_chips
+        .iter()
+        .map(|chip| (chip.label.clone(), chip.color_key.clone(), chip.selected))
+        .collect()
+}
+
+#[test]
+fn the_band_reads_recents_browse_starred_and_each_page_names_itself() {
+    let mut d = driver();
+    let i = root(&d);
+    let drive = state(&d, i);
+    let labels: Vec<&str> = drive.band.iter().map(|tab| tab.label.as_str()).collect();
+    assert_eq!(labels, ["Recents", "Browse", "Starred", "More"]);
+    assert_eq!(drive.chrome.as_ref().unwrap().title, "Recents");
+    // Recents says what it is and how many there are; the seeded vault holds three live documents.
+    assert_eq!(drive.head_meta, "Changed lately \u{b7} 3 documents in Docs");
+    // The grid is the default layout.
+    assert_eq!(drive.layout, wire::docs_drive_state::Layout::Grid as i32);
+    band(&mut d, i, "folders");
+    assert_eq!(state(&d, i).chrome.as_ref().unwrap().title, "Browse");
+    band(&mut d, i, "starred");
+    assert_eq!(state(&d, i).chrome.as_ref().unwrap().title, "Starred");
+}
+
+#[test]
+fn recents_lists_the_newest_changed_first() {
+    let mut d = driver();
+    let i = root(&d);
+    let old = text(&d, "Zeta old", "a");
+    let newer = text(&d, "Alpha newer", "b");
+    // Changing the older one makes it the most recent change.
+    arrange(
+        &d,
+        act::docs::Edit {
+            document_id: old,
+            body_text: Some("changed".to_owned()),
+            title: None,
+        },
+    );
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    let order = titles(d.view(i));
+    assert_eq!(order[0], "Zeta old", "{order:?}");
+    assert_eq!(order[1], "Alpha newer", "{order:?}");
+    let _ = newer;
+}
+
+#[test]
+fn a_label_is_coloured_from_the_palette_and_the_chips_filter_the_shelf() {
+    let mut d = driver();
+    let i = root(&d);
+    let a = text(&d, "Lease", "x");
+    let b = text(&d, "Receipt", "y");
+    for (document, label) in [(&a, "taxes"), (&a, "home"), (&b, "receipts")] {
+        arrange(
+            &d,
+            act::docs::Tag {
+                document_id: document.clone(),
+                label: label.to_owned(),
+                color: None,
+            },
+        );
+    }
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    let shown = chips(&d, i);
+    let palette = centraid_design::tokens::LIST_IDS;
+    // Every chip wears a palette key, none is selected, and the labels this drive minted
+    // (tahoe from the seed, then three) spread over the palette before any colour repeats.
+    assert!(
+        shown
+            .iter()
+            .all(|(_, key, on)| palette.contains(&key.as_str()) && !on)
+    );
+    let mut keys: Vec<&str> = shown.iter().map(|(_, key, _)| key.as_str()).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    assert_eq!(keys.len(), shown.len(), "{shown:?}");
+    // A row's dot is its first label's colour, and its chips carry the same keys.
+    let lease = row(d.view(i), "Lease").clone();
+    assert!(!lease.dot_color_key.is_empty());
+    assert_eq!(lease.dot_color_key, lease.labels[0].color_key);
+    // Tapping a chip filters the shelf to it and marks it; tapping it again clears it.
+    drive_send(
+        &mut d,
+        i,
+        D::LabelChip(de::LabelChipPicked {
+            label: "receipts".to_owned(),
+        }),
+    );
+    assert_eq!(titles(d.view(i)), ["Receipt"]);
+    assert!(
+        chips(&d, i)
+            .iter()
+            .any(|(label, _, on)| label == "receipts" && *on)
+    );
+    assert!(state(&d, i).filter_menu.as_ref().unwrap().filtering);
+    drive_send(
+        &mut d,
+        i,
+        D::LabelChip(de::LabelChipPicked {
+            label: "receipts".to_owned(),
+        }),
+    );
+    assert!(titles(d.view(i)).len() > 1);
+    assert!(chips(&d, i).iter().all(|(_, _, on)| !on));
+}
+
+#[test]
+fn a_label_colour_set_by_the_vault_reaches_the_row_and_the_labels_sheet() {
+    let mut d = driver();
+    let i = root(&d);
+    let id = text(&d, "Passport", "x");
+    arrange(
+        &d,
+        act::docs::Tag {
+            document_id: id.clone(),
+            label: "id".to_owned(),
+            color: Some(centraid_screens::catalog::act::docs::TagColor::Orchid),
+        },
+    );
+    arrange(
+        &d,
+        act::docs::RecolorLabel {
+            label: "id".to_owned(),
+            color: centraid_screens::catalog::act::docs::RecolorLabelColor::Raspberry,
+        },
+    );
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    let passport = row(d.view(i), "Passport").clone();
+    assert_eq!(passport.labels[0].color_key, "raspberry");
+    assert_eq!(passport.dot_color_key, "raspberry");
+    row_menu(&mut d, i, &id);
+    pick(&mut d, i, "labels");
+    let sheet = state(&d, i).sheet.as_ref().unwrap();
+    let Some(wire::docs_sheet::Body::Labels(labels)) = &sheet.body else {
+        panic!("the labels sheet");
+    };
+    assert_eq!(labels.current[0].color_key, "raspberry");
+}
+
+#[test]
+fn the_screens_palette_is_the_vaults_and_a_label_without_a_stored_colour_gets_a_stable_one() {
+    assert_eq!(
+        centraid_design::tokens::LIST_IDS,
+        centraid_vault::commands::tag::LABEL_COLORS
+    );
+    let first = docs::fold::color_key("", "tag:old");
+    assert!(centraid_design::tokens::LIST_IDS.contains(&first.as_str()));
+    assert_eq!(first, docs::fold::color_key("", "tag:old"));
+    assert_eq!(docs::fold::color_key("orchid", "tag:old"), "orchid");
+    // A stored colour that is not a palette key is mapped onto one, red onto raspberry (red means a state).
+    assert_eq!(docs::fold::color_key("#ff0000", "tag:old"), "raspberry");
+}
+
+#[test]
+fn the_starred_shelf_is_only_what_is_starred_and_stars_have_no_amber() {
+    let mut d = driver();
+    let i = root(&d);
+    let one = text(&d, "One", "1");
+    let two = text(&d, "Two", "2");
+    for id in [&one, &two] {
+        arrange(
+            &d,
+            act::docs::Star {
+                document_id: id.clone(),
+            },
+        );
+    }
+    band(&mut d, i, "starred");
+    let shelf = titles(d.view(i));
+    assert_eq!(shelf.len(), 3, "the seed's one and these two: {shelf:?}");
+    assert!(shelf.contains(&"One".to_owned()) && shelf.contains(&"Two".to_owned()));
+    assert!(drive_data(d.view(i)).rows.iter().all(|row| row.starred));
+    arrange(&d, act::docs::Unstar { document_id: one });
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    assert!(!titles(d.view(i)).contains(&"One".to_owned()));
+}
+
+#[test]
+fn a_document_without_its_bytes_here_has_no_thumbnail_and_a_badge_from_its_name() {
+    let mut d = driver();
+    let i = root(&d);
+    pdf(&d, "Passport scan.pdf", 'c');
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    let scan = row(d.view(i), "Passport scan.pdf").clone();
+    assert_eq!(scan.badge, "PDF");
+    assert!(
+        scan.thumbnail_path.is_empty(),
+        "the bytes were never stored"
+    );
+    let tahoe = row(d.view(i), "Tahoe packing list");
+    assert!(!tahoe.badge.is_empty() && tahoe.badge.len() <= 4);
 }

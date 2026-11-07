@@ -1,4 +1,4 @@
-//! DOCS' DRIVE (`docs.drive`, #1046): All · Folders · Starred, with Recently
+//! DOCS' DRIVE (`docs.drive`, #1046): Recents · Browse · Starred, with Recently
 //! added from More, search as the room's bar (R-CHROME-2), the filters and the
 //! sort as the header's filter menu (R-CHROME-3), a folder's own page, and every
 //! write a row offers. One screen, the shelf a parameter (law 2): the tab's
@@ -6,7 +6,7 @@
 //!
 //! ## The band
 //!
-//! All · Folders · Starred · More. Shared left with the sharing plane (#1029),
+//! Recents · Browse · Starred · More (the keys stay `all`, `folders`, `starred`, `more`). Shared left with the sharing plane (#1029),
 //! "Coming due" has no data plane in this build (nothing reads obligations out
 //! of a document), and search is a field on the current surface, never a tab.
 //!
@@ -97,6 +97,8 @@ struct Held {
 pub(super) struct Rail {
     folders: Vec<wire::DocsFolder>,
     labels: Vec<String>,
+    /// The labels with their colours, as the chips draw them.
+    label_entries: Vec<wire::DocsLabel>,
     all_count: u32,
     unfiled_count: u32,
     starred_count: u32,
@@ -137,7 +139,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
             String::new()
         },
         query: Query::default(),
-        grid: false,
+        // THE GRID IS THE DEFAULT: real thumbnails are the board's whole point.
+        grid: true,
         search: Search::default(),
         phase: Phase::Loading,
         rail: None,
@@ -225,6 +228,7 @@ impl Drive {
                 self.rail = Some(Rail {
                     folders: drive.folders,
                     labels: drive.labels,
+                    label_entries: drive.label_entries,
                     all_count: drive.all_count,
                     unfiled_count: drive.unfiled_count,
                     starred_count: drive.starred_count,
@@ -329,6 +333,15 @@ impl Drive {
             Some(D::SheetClosed(_)) => self.sheet = Sheet::None,
             Some(D::Choice(picked)) => self.choice(ctx, &picked.key),
             Some(D::FilterMenuPicked(picked)) => self.menu_pick(ctx, menu::Pick::of(&picked)),
+            Some(D::LabelChip(picked)) => {
+                // A chip toggles the Label filter: the one set is the one tapped again.
+                if self.query.label == picked.label {
+                    self.query.label.clear();
+                } else {
+                    self.query.label = picked.label;
+                }
+                self.reload(ctx);
+            }
             Some(D::FilterMenuCleared(_)) => {
                 self.query.clear_filters();
                 self.reload(ctx);
@@ -635,6 +648,8 @@ impl Drive {
             act::docs::Tag {
                 document_id: document_id.clone(),
                 label: label.clone(),
+                // A NEW LABEL'S COLOUR IS THE VAULT'S CHOICE: the palette hue least in use.
+                color: None,
             },
             &format!("{document_id}:{label}"),
         );

@@ -183,7 +183,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                             "{} {}",
                             words::where_in(locale),
                             if drive.folder_name.is_empty() {
-                                words::band_folders(locale)
+                                words::band_browse(locale)
                             } else {
                                 drive.folder_name.clone()
                             }

@@ -448,6 +448,66 @@ fn emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn a_new_label_wears_the_palette_colour_fewest_labels_wear_and_a_recolour_sticks() {
+    let w = World::new();
+    w.note("n1", "Trip", "", None);
+    let colour = |key: &str| {
+        w.one::<Option<String>>("SELECT color FROM concept WHERE key = ?1", &[key])
+            .expect("a label always has a colour")
+    };
+    // The first eight labels take the eight hues, in palette order: no colour repeats early.
+    let labels = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    for label in labels {
+        w.ok("tag.add", json!({"id": "n1", "label": label}));
+    }
+    let seen: Vec<String> = labels.iter().map(|label| colour(label)).collect();
+    assert_eq!(
+        seen,
+        [
+            "blue",
+            "mustard",
+            "violet",
+            "petrol",
+            "indigo",
+            "graphite",
+            "raspberry",
+            "orchid"
+        ]
+    );
+    // The ninth starts the palette again, and a repeated tagging keeps the colour.
+    w.ok("tag.add", json!({"id": "n1", "label": "i"}));
+    assert_eq!(colour("i"), "blue");
+    w.ok("tag.add", json!({"id": "n1", "label": "A"}));
+    assert_eq!(colour("a"), "blue");
+    // A colour asked for wins on a NEW label and never recolours a known one.
+    w.ok(
+        "tag.add",
+        json!({"id": "n1", "label": "j", "color": "orchid"}),
+    );
+    assert_eq!(colour("j"), "orchid");
+    w.ok(
+        "tag.add",
+        json!({"id": "n1", "label": "j", "color": "violet"}),
+    );
+    assert_eq!(colour("j"), "orchid");
+    // The recolour is its own command, by the label's words.
+    let done = w.ok("tag.color", json!({"label": "  J ", "color": "violet"}));
+    assert_eq!(done["changed"], true);
+    assert_eq!(colour("j"), "violet");
+    assert_eq!(
+        w.ok("tag.color", json!({"label": "j", "color": "violet"}))["changed"],
+        false
+    );
+    assert!(
+        w.refused("tag.color", json!({"label": "nope", "color": "blue"}))
+            .contains("no such label")
+    );
+    // Only the palette's keys are colours.
+    let outcome = w.run("tag.color", json!({"label": "j", "color": "#FF0000"}));
+    assert_ne!(outcome.status, CommandStatus::Executed);
+}
+
+#[test]
 fn a_tag_is_minted_by_its_folded_label_and_a_tagging_changes_nothing_on_the_entity() {
     let w = World::new();
     w.note("n1", "Trip", "", None);

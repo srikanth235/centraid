@@ -170,7 +170,7 @@ pub(crate) fn drive(
         let (arms, denial) = read_arms(door, &view.shelf, data.window)?;
         Ok(((data, arms), denial))
     });
-    settle(door, loaded, |(data, arms)| {
+    let mut answer = settle(door, loaded, |(data, arms)| {
         let shelf = phone::shelve_with_arms(&data, &arms, &view, &zone, &clock.today, clock.now_ms);
         let truncated = arms.truncated(&view.shelf, data.truncated);
         Answer::DocsDrive(wire::DocsDrive {
@@ -192,6 +192,7 @@ pub(crate) fn drive(
                 })
                 .collect(),
             labels: shelf.labels,
+            label_entries: shelf.label_entries.into_iter().map(label_to_wire).collect(),
             all_count: count_of(shelf.all_count),
             unfiled_count: count_of(shelf.unfiled_count),
             starred_count: count_of(shelf.starred_count),
@@ -201,7 +202,11 @@ pub(crate) fn drive(
             today: clock.today,
             now_local: clock.now_local,
         })
-    })
+    })?;
+    if let Answer::DocsDrive(shelf) = &mut answer {
+        with_thumbnails(vault, &mut shelf.documents)?;
+    }
+    Ok(answer)
 }
 
 /// `docs.search`: the FTS door's hits over the same read connection the page
@@ -272,7 +277,7 @@ pub(crate) fn search(
             },
         )))
     })??;
-    settle(door, loaded, |((data, found), corrected)| {
+    let mut answer = settle(door, loaded, |((data, found), corrected)| {
         Answer::DocsSearch(wire::DocsSearch {
             corrected,
             documents: data
@@ -283,7 +288,11 @@ pub(crate) fn search(
             today: clock.today,
             containers: found.into_iter().map(named::to_wire).collect(),
         })
-    })
+    })?;
+    if let Answer::DocsSearch(found) = &mut answer {
+        with_thumbnails(vault, &mut found.documents)?;
+    }
+    Ok(answer)
 }
 
 /// `docs.document`: the row, its folder path, its version chain, its text and
@@ -428,20 +437,43 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
         folder_id: row.folder_id.unwrap_or_default(),
         starred: row.starred,
         trashed: row.trashed,
-        labels: row
-            .tags
-            .into_iter()
-            .map(|tag| wire::DocsLabel {
-                tag_id: tag.tag_id,
-                label: tag.label,
-            })
-            .collect(),
+        labels: row.tags.into_iter().map(label_to_wire).collect(),
         created_at,
         updated_at,
         trashed_at,
         purge_at,
         snippet: row.snippet.unwrap_or_default(),
+        thumbnail_path: String::new(),
     }
+}
+
+fn label_to_wire(tag: docs::queries::LabelEntry) -> wire::DocsLabel {
+    wire::DocsLabel {
+        tag_id: tag.tag_id,
+        label: tag.label,
+        color: tag.color.unwrap_or_default(),
+    }
+}
+
+/// How many rows of one answer are asked for a picture: a screenful and a
+/// scroll, so a drive of two thousand documents does not look up two thousand files.
+const THUMBNAILS: usize = 120;
+
+/// Hand each image and PDF row the file that draws it, when this phone holds
+/// the bytes and they may be drawn inline (the stage's rule, `embeddable`).
+fn with_thumbnails(vault: &Vault, rows: &mut [wire::DocsDocumentRow]) -> Result<()> {
+    for row in rows.iter_mut().take(THUMBNAILS) {
+        if row.trashed || !matches!(row.kind(), wire::DocsKind::Image | wire::DocsKind::Pdf) {
+            continue;
+        }
+        let location = vault.content_location(&row.document_id)?;
+        if location.embeddable
+            && let Some(path) = location.path
+        {
+            row.thumbnail_path = path.to_string_lossy().into_owned();
+        }
+    }
+    Ok(())
 }
 
 fn version_to_wire(version: VersionRow, zone: &FireZone) -> wire::DocsVersion {

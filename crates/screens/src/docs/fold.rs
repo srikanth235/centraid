@@ -27,6 +27,7 @@ pub const KEY_TRASH: &str = "trash";
 pub const KEY_RESTORE: &str = "restore";
 pub const KEY_PURGE: &str = "purge";
 pub const KEY_MORE: &str = "more";
+pub const KEY_SHARE: &str = "share";
 
 /// "1 document" / "24 documents".
 #[must_use]
@@ -113,17 +114,62 @@ pub fn row(
         starred: row.starred,
         trashed: row.trashed,
         folder_id: row.folder_id.clone(),
-        labels: row
-            .labels
-            .iter()
-            .map(|label| wire::DocsLabelChip {
-                tag_id: label.tag_id.clone(),
-                label: label.label.clone(),
-            })
-            .collect(),
+        labels: row.labels.iter().map(chip).collect(),
         snippet: snippet(&row.snippet),
         accessibility_label,
+        thumbnail_path: row.thumbnail_path.clone(),
+        badge: badge(row),
+        dot_color_key: row
+            .labels
+            .first()
+            .map(|label| color_key(&label.color, &label.tag_id))
+            .unwrap_or_default(),
     }
+}
+
+/// A label as a chip, wearing its colour.
+#[must_use]
+pub fn chip(label: &wire::DocsLabel) -> wire::DocsLabelChip {
+    wire::DocsLabelChip {
+        tag_id: label.tag_id.clone(),
+        label: label.label.clone(),
+        color_key: color_key(&label.color, &label.tag_id),
+        selected: false,
+    }
+}
+
+/// THE PALETTE KEY A LABEL IS DRAWN IN: the one the vault stores, else (a label
+/// minted before labels had colours) a stable one from its id, so a label never
+/// changes colour between reads and a view never has to choose.
+#[must_use]
+pub fn color_key(stored: &str, tag_id: &str) -> String {
+    centraid_design::list_color_key(tag_id, Some(stored)).to_owned()
+}
+
+/// The kind badge on a thumbnail: the file's own extension when it has a short
+/// one ("PDF", "MD", "XLSX"), else a short mark for its kind.
+#[must_use]
+pub fn badge(row: &wire::DocsDocumentRow) -> String {
+    let extension = row
+        .title
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .filter(|extension| (1..=4).contains(&extension.len()))
+        .filter(|extension| extension.chars().all(|c| c.is_ascii_alphanumeric()));
+    if let Some(extension) = extension {
+        return extension.to_uppercase();
+    }
+    match row.kind() {
+        wire::DocsKind::Pdf => "PDF",
+        wire::DocsKind::Image => "IMG",
+        wire::DocsKind::Video => "VID",
+        wire::DocsKind::Audio => "AUD",
+        wire::DocsKind::Spreadsheet => "XLS",
+        wire::DocsKind::Presentation => "PPT",
+        wire::DocsKind::Document => "DOC",
+        wire::DocsKind::Unspecified | wire::DocsKind::Other => "FILE",
+    }
+    .to_owned()
 }
 
 /// The index's highlight, `⟦`/`⟧` around the matched words, as runs.
@@ -258,6 +304,30 @@ pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::Do
     actions
 }
 
+/// THE QUICK LOOK BAR: Share, Star, Labels, Move and Trash on a live document
+/// (the five a viewer needs under its thumb); Restore and Delete forever on a
+/// trashed one. Everything else is behind More.
+#[must_use]
+pub fn bar_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
+    if row.trashed {
+        return head_actions(locale, row);
+    }
+    vec![
+        action(KEY_SHARE, words::action_share(locale), "Share"),
+        if row.starred {
+            action(KEY_UNSTAR, words::action_unstar(locale), "Star")
+        } else {
+            action(KEY_STAR, words::action_star(locale), "Star")
+        },
+        action(KEY_LABELS, words::action_labels(locale), "Tag"),
+        action(KEY_MOVE, words::action_move(locale), "Folder"),
+        wire::DocsAction {
+            destructive: true,
+            ..action(KEY_TRASH, words::action_trash(locale), TRASH_ICON)
+        },
+    ]
+}
+
 /// The labels sheet for a row, shared with the document page.
 #[must_use]
 pub fn labels_sheet(
@@ -269,14 +339,7 @@ pub fn labels_sheet(
     let on: Vec<&str> = row.labels.iter().map(|chip| chip.label.as_str()).collect();
     let typed = draft.trim();
     wire::DocsLabelsSheet {
-        current: row
-            .labels
-            .iter()
-            .map(|chip| wire::DocsLabelChip {
-                tag_id: chip.tag_id.clone(),
-                label: chip.label.clone(),
-            })
-            .collect(),
+        current: row.labels.iter().map(chip).collect(),
         available: drive_labels
             .iter()
             .filter(|label| !on.contains(&label.as_str()))
@@ -331,10 +394,45 @@ pub fn document(
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
         actions: head_actions(locale, found),
+        bar: bar_actions(locale, found),
+        kind_size: [view.kind_label.clone(), found.size.clone()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · "),
+        changed: dated(
+            locale,
+            &words::changed(locale),
+            if found.updated_local.is_empty() {
+                &found.created_local
+            } else {
+                &found.updated_local
+            },
+            &answer.today,
+        ),
+        subtitle: subtitle(locale, answer),
+        labels_heading: words::action_labels(locale),
         trashed_note: trashed_note(locale, found),
         folders: nodes,
         labels: drive.map(|d| d.labels.clone()).unwrap_or_default(),
         row: Some(view),
+    }
+}
+
+/// "Docs › Taxes 2025": where the document is filed, for the head's second line.
+fn subtitle(locale: Locale, answer: &wire::DocsDocument) -> String {
+    let root = words::subtitle_root(locale);
+    match answer
+        .path
+        .last()
+        .map(|folder| folder.name.trim())
+        .filter(|name| !name.is_empty())
+    {
+        Some(folder) => crate::strings::fill(
+            &words::subtitle_in(locale),
+            &[("root", &root), ("folder", folder)],
+        ),
+        None => root,
     }
 }
 

@@ -21,7 +21,7 @@ use wire::docs_document_state::Asking;
 use wire::screen_event::Kind as E;
 
 use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, KEY_RESTORE};
-use super::fold::{KEY_STAR, KEY_TRASH, KEY_UNSTAR};
+use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
 use super::{Phase, denied, refusal};
@@ -140,20 +140,47 @@ impl Document {
         settled.committed
     }
 
-    fn action(&mut self, ctx: &Ctx, key: &str) {
+    /// Hand the document's file to the platform's share sheet: the bytes are a
+    /// file in the store, so nothing is read here. A document whose bytes are
+    /// not on this phone says so on the status line.
+    fn share(&mut self, ctx: &Ctx, row: &wire::DocsDocumentRow) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        let path = self
+            .phase
+            .data()
+            .map(|answered| answered.document.bytes_path.clone())
+            .unwrap_or_default();
+        if path.is_empty() {
+            self.status = Some(refusal(words::share_missing(locale)));
+            return Vec::new();
+        }
+        self.status = None;
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::ShareFile(wire::ShareFile {
+                path,
+                name: row.title.clone(),
+                media_type: row.media_type.clone(),
+                chooser_title: words::share_title(locale),
+            })),
+        }]
+    }
+
+    fn action(&mut self, ctx: &Ctx, key: &str) -> Vec<wire::Effect> {
         let Some(row) = self.row().cloned() else {
-            return;
+            return Vec::new();
         };
         // Only what the head offers is done: a key for a verb this document
         // does not have (restore on a live one, trash on a trashed one) is nothing.
         let offered = fold::head_actions(ctx.locale(), &row)
             .into_iter()
+            .chain(fold::bar_actions(ctx.locale(), &row))
             .any(|action| action.key == key && action.enabled);
         if !offered {
-            return;
+            return Vec::new();
         }
         let id = row.document_id.clone();
         match key {
+            KEY_SHARE => return self.share(ctx, &row),
             KEY_STAR => {
                 self.write(ctx, act::docs::Star { document_id: id });
             }
@@ -167,7 +194,7 @@ impl Document {
                 if self.rename.is_some() {
                     self.close_rename(ctx);
                     if self.rename.is_some() {
-                        return;
+                        return Vec::new();
                     }
                 }
                 self.rename = Some(Rename::open(&id, &row.title));
@@ -179,6 +206,7 @@ impl Document {
             // `edit` is a route the shell pushes (the action carries it).
             _ => {}
         }
+        Vec::new()
     }
 
     fn choice(&mut self, ctx: &Ctx, key: &str) {
@@ -218,6 +246,7 @@ impl Document {
             act::docs::Tag {
                 document_id: row.document_id,
                 label,
+                color: None,
             },
         );
     }
@@ -269,7 +298,7 @@ impl Document {
         }
     }
 
-    fn event(&mut self, event: wire::DocsDocumentEvent, ctx: &Ctx) {
+    fn event(&mut self, event: wire::DocsDocumentEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
             // THE VERBS SHEET: every verb the head offers, as a list.
@@ -288,7 +317,7 @@ impl Document {
                         self.sheet = Sheet::More;
                     }
                 } else {
-                    self.action(ctx, &picked.key);
+                    return self.action(ctx, &picked.key);
                 }
             }
             Some(D::Choice(picked)) => self.choice(ctx, &picked.key),
@@ -310,6 +339,7 @@ impl Document {
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             None => {}
         }
+        Vec::new()
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
@@ -417,7 +447,7 @@ impl Screen for Document {
                     let _ = rename.close(ctx);
                 }
             }
-            Some(E::DocsDocument(event)) => self.event(event, ctx),
+            Some(E::DocsDocument(event)) => return self.event(event, ctx),
             _ => {}
         }
         Vec::new()

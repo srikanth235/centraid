@@ -590,3 +590,100 @@ fn restore_asks_nothing_and_brings_the_document_back_where_it_was() {
     assert!(!trash_ids(d.view(i)).contains(&id));
     assert_eq!(document(&d, &id).document.unwrap().folder_id, taxes);
 }
+
+// ---------------------------------------------------------------------------
+// The redesign (#1173): the Quick Look bar, the info card, Share, "Current"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_quick_look_bar_is_share_star_labels_move_trash_and_the_card_says_what_it_is() {
+    let mut d = driver();
+    let folder_id = folder(&d, "Taxes 2025", None);
+    let id = pdf(&d, "Passport scan.pdf", 'd');
+    arrange(
+        &d,
+        act::docs::Move {
+            document_id: id.clone(),
+            folder_id: Some(folder_id),
+        },
+    );
+    let i = open(&mut d, &id, "Passport scan.pdf", "Recents");
+    let data = document_data(d.view(i));
+    let bar: Vec<&str> = data.bar.iter().map(|action| action.key.as_str()).collect();
+    assert_eq!(bar, ["share", "star", "labels", "move", "trash"]);
+    assert!(data.bar.last().unwrap().destructive);
+    assert_eq!(data.subtitle, "Docs \u{203a} Taxes 2025");
+    assert_eq!(data.kind_size, "PDF \u{b7} 2 KB");
+    assert!(data.changed.starts_with("Changed "), "{}", data.changed);
+    assert_eq!(data.labels_heading, "Labels");
+    // A starred document's bar offers Unstar, in the same place.
+    pick_doc(&mut d, i, "star");
+    let bar: Vec<String> = document_data(d.view(i))
+        .bar
+        .iter()
+        .map(|a| a.key.clone())
+        .collect();
+    assert_eq!(bar[1], "unstar");
+}
+
+#[test]
+fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
+    let mut d = driver();
+    // A PDF over bytes nobody stored: nothing to hand over, and the sentence says so.
+    let id = pdf(&d, "Lease.pdf", 'e');
+    let i = open(&mut d, &id, "Lease.pdf", "Recents");
+    pick_doc(&mut d, i, "share");
+    assert!(
+        waiting(&d)
+            .iter()
+            .all(|effect| !matches!(effect.kind, Some(wire::effect::Kind::ShareFile(_)))),
+        "no file, no share sheet"
+    );
+    assert_eq!(
+        document_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "This document isn't on this phone yet."
+    );
+}
+
+#[test]
+fn only_the_current_version_says_current_and_none_is_dimmed() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    for body in ["second", "third"] {
+        arrange(
+            &d,
+            act::docs::Edit {
+                document_id: id.clone(),
+                body_text: Some(body.to_owned()),
+                title: None,
+            },
+        );
+    }
+    let i = open(&mut d, &id, "Letter", "Docs");
+    let route = document_data(d.view(i))
+        .versions
+        .as_ref()
+        .unwrap()
+        .route
+        .clone()
+        .unwrap();
+    let page = d.push(docs::TAB, route);
+    let state = versions_state(d.view(page));
+    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    let current: Vec<&str> = data
+        .versions
+        .iter()
+        .filter(|version| version.meta.contains("Current"))
+        .map(|version| version.label.as_str())
+        .collect();
+    assert_eq!(current, ["Version 3"]);
+    assert_eq!(
+        data.versions
+            .iter()
+            .filter(|version| version.current)
+            .count(),
+        1
+    );
+}

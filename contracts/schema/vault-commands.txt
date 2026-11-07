@@ -87,6 +87,7 @@ rule.apply
 rule.delete
 rule.edit
 tag.add
+tag.color
 tag.remove
 task.add
 task.cancel

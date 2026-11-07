@@ -107,6 +107,9 @@ CREATE TABLE concept (
   kind      TEXT NOT NULL CHECK (kind IN ('tag','flag','category','workout_kind','activity_kind','relation')),
   key       TEXT NOT NULL,
   parent_id TEXT REFERENCES concept(id),
+  -- A label's colour: one key of the design palette ([list] in design/tokens.toml). Tags only.
+  color     TEXT CHECK (color IS NULL OR (kind = 'tag' AND color IN
+              ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid'))),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (kind, key)
 ) STRICT;

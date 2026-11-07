@@ -30,6 +30,9 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `notes-filter-show-pinned`, `notes-filter-show-tag-<conceptId>`, `notes-filter-sort-<updated\|created\|title>` | Notes | Pinned and each tag (several may be checked), and the sort (one checked) |
 | `people-filter-show-<all\|starred\|due>`, `people-filter-sort-<recent\|name>` | People | the roster's filter with its counts, and the order |
 | `docs-filter-<type\|modified\|label>-<option>`, `docs-filter-sort-<order>`, `docs-filter-view-<list\|grid>` | Docs | a submenu's options (`any` first), the six orders, the layout |
+| `docs-label-chip-<label>` | Docs | a label chip over Recents, Browse and Starred (a dot in the label's colour and its word): a tap filters the shelf to it, again clears it; selected while it filters |
+| `docs-bar-<share\|star\|unstar\|labels\|move\|trash\|restore\|purge>` | Docs | a key of a document's Quick Look bar |
+| `docs-document-subtitle`, `docs-document-labels`, `docs-versions` | Docs | the page's second line ("Docs › Taxes 2025"), the info card's Labels row, and its row to the version history |
 | `money-filter-<account\|category>-<all\|id>` | Money | the account and category options (`all`, then ids; `uncategorised` for no category) |
 | `health-filter-kind-<all\|conceptId>` | Health (Workouts) | the workout kind |
 | `locker-filter-show-<all\|starred\|archived\|type>` | Locker | the shelf's filter with its counts |

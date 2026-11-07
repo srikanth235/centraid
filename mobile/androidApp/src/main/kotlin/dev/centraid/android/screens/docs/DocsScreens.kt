@@ -10,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -51,6 +53,7 @@ import centraid.core.v1.DocsAction
 import centraid.core.v1.DocsCrumb
 import centraid.core.v1.DocsDestination
 import centraid.core.v1.DocsDocumentEvent
+import centraid.core.v1.DocsDocumentData
 import centraid.core.v1.DocsDocumentState
 import centraid.core.v1.DocsDriveData
 import centraid.core.v1.DocsDriveEvent
@@ -436,26 +439,36 @@ private fun DriveData(
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
-        LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data, onOpen) }
+            if (data.label_chips.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {
+                    DocsLabelChips(data.label_chips) { label ->
+                        onEvent(DocsDriveEvent(label_chip = DocsDriveEvent.LabelChipPicked(label = label)))
+                    }
+                }
+            }
             items(containers, span = { GridItemSpan(maxLineSpan) }, key = { "c-${it.entity}-${it.id}" }) { container ->
                 SearchContainerRow(container, onOpen = onOpen)
             }
             items(data.folders, key = { "f-" + it.folder_id }) { folder ->
-                Tile(folder.name, folder.count_label, "Folder", folder.accessibility_label, "docs-folder-${folder.folder_id}", null, null) {
-                    folder.route?.let(onOpen)
-                }
+                DocsFolderTile(folder) { folder.route?.let(onOpen) }
             }
             items(data.rows, key = { "d-" + it.document_id }) { row ->
-                Tile(row.title, row.meta, row.kind_icon_key, row.accessibility_label, "docs-row-${row.document_id}", chrome?.row_menu, { openMenu(row) }) {
-                    row.route?.let(onOpen)
-                }
+                DocsDocTile(row, onTap = { row.route?.let(onOpen) }, onMenu = { openMenu(row) }, menuLabel = chrome?.row_menu.orEmpty())
             }
             item(span = { GridItemSpan(maxLineSpan) }, key = "foot") { DriveFoot(data) }
         }
     } else {
         LazyColumn(Modifier.fillMaxSize()) {
             item(key = "head") { DriveHead(data, onOpen) }
+            if (data.label_chips.isNotEmpty()) {
+                item(key = "chips") {
+                    DocsLabelChips(data.label_chips) { label ->
+                        onEvent(DocsDriveEvent(label_chip = DocsDriveEvent.LabelChipPicked(label = label)))
+                    }
+                }
+            }
             items(containers, key = { "c-${it.entity}-${it.id}" }) { container ->
                 SearchContainerRow(container, onOpen = onOpen)
             }
@@ -613,10 +626,10 @@ internal fun DocsDocumentScreen(
                 EmptyStateView(gone, onAction = null)
                 return@ReadStateView
             }
-            LazyColumn(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.weight(1f)) {
                 item(key = "path") {
-                    Crumbs(document.path, onOpen)
-                    if (row != null && row.meta.isNotEmpty()) StatusLine(row.meta)
+                    StatusLine(document.subtitle)
                     StatusLine(document.trashed_note)
                     RenameLine(
                         state.rename,
@@ -651,21 +664,19 @@ internal fun DocsDocumentScreen(
                         facts != null -> StatusLine(facts.sentence)
                     }
                 }
+                item(key = "info") { DocsInfoCard(document, onOpen) }
                 if (document.facts.isNotEmpty()) {
                     item(key = "facts-head") { Heading(chrome?.facts_heading.orEmpty()) }
                     items(document.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
                 }
-                // THE VERSION HISTORY is a page of its own: this row opens it.
-                document.versions?.let { versions ->
-                    item(key = "versions") {
-                        CentraidRow(
-                            title = versions.label,
-                            trailing = versions.count_label,
-                            testTag = "docs-versions",
-                            onTap = { versions.route?.let(onOpen) },
-                        )
-                    }
+            }
+            // THE QUICK LOOK BAR under the page.
+            if (document.bar.isNotEmpty()) {
+                DocsQuickLookBar(document.bar) { action ->
+                    onEvent(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = action.key)))
+                    action.route?.let(onOpen)
                 }
+            }
             }
         }
     }
@@ -691,6 +702,57 @@ internal fun DocsDocumentScreen(
             onConfirm = { onEvent(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed())) },
             onDismiss = { onEvent(DocsDocumentEvent(dismissed = DocsDocumentEvent.Dismissed())) },
         )
+    }
+}
+
+/**
+ * THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to its
+ * versions (a page of its own). A white card, 16 points round.
+ */
+@Composable
+private fun DocsInfoCard(document: DocsDocumentData, onOpen: (Route) -> Unit) {
+    val shape = RoundedCornerShape(androidx.compose.ui.res.dimensionResource(dev.centraid.android.R.dimen.centraid_radius_card))
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(shape)
+            .background(androidx.compose.ui.res.colorResource(dev.centraid.android.R.color.centraid_surface_card)),
+    ) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(document.kind_size, style = centraidType("small"), color = centraidColor("text"), modifier = Modifier.weight(1f))
+            Text(document.changed, style = centraidType("small"), color = centraidColor("textSoft"))
+        }
+        val labels = document.row?.labels.orEmpty()
+        if (labels.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 14.dp).testTag("docs-document-labels"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(document.labels_heading, style = centraidType("small"), color = centraidColor("text"), modifier = Modifier.weight(1f))
+                for (label in labels) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DocsDot(label.color_key)
+                        Text(label.label, style = centraidType("small"), color = centraidColor("textSoft"))
+                    }
+                }
+            }
+        }
+        document.versions?.let { versions ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .clickable { versions.route?.let(onOpen) }
+                    .padding(horizontal = 14.dp)
+                    .testTag("docs-versions"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(versions.label, style = centraidType("small"), color = centraidColor("text"), modifier = Modifier.weight(1f))
+                Text(versions.count_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            }
+        }
     }
 }
 
@@ -726,7 +788,7 @@ internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersions
                     CentraidRow(
                         title = version.label,
                         meta = version.meta,
-                        dimmed = !version.current,
+                        // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
                         testTag = "docs-version-${version.key}",
                         accessory = if (version.restore_label.isNotEmpty()) {
                             {

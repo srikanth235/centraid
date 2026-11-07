@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
-/// THE DRIVE — All · Folders · Starred, More as a sheet; and, pushed over it,
+/// THE DRIVE — Recents · Browse · Starred, More as a sheet; and, pushed over it,
 /// a folder's page (#1046, #1135).
 ///
 /// **THE VIEW DECIDES NOTHING.** The band, the header's filter menu (the filters,
@@ -191,10 +191,17 @@ struct DocsDriveView: View {
                     ForEach(drive.containers, id: \.id) { container in
                         SearchContainerRow(container: container) { _ in open(container.route) }
                     }
+                    if !drive.labelChips.isEmpty {
+                        DocsLabelChips(chips: drive.labelChips) { label in
+                            send(Self.event { $0.labelChip = .with { $0.label = label } })
+                        }
+                    }
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !drive.crumbs.isEmpty, isFolderPage { crumbs(drive.crumbs) }
-                        ForEach(drive.folders, id: \.folderID) { node in
-                            folderRow(node)
+                        if state.layout != .grid || drive.hasEmpty {
+                            ForEach(drive.folders, id: \.folderID) { node in
+                                folderRow(node)
+                            }
                         }
                         if drive.hasEmpty {
                             if drive.mode == .search {
@@ -204,7 +211,7 @@ struct DocsDriveView: View {
                                 EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
                             }
                         } else if state.layout == .grid {
-                            grid(drive.rows, state)
+                            grid(drive.folders, drive.rows, state)
                         } else {
                             ForEach(drive.rows, id: \.documentID) { row in
                                 DocsRowItem(
@@ -303,47 +310,27 @@ struct DocsDriveView: View {
         .accessibilityIdentifier("docs-folder-\(node.folderID)")
     }
 
-    private func grid(_ rows: [Centraid_Core_V1_DocsRowView], _ state: Centraid_Core_V1_DocsDriveState) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+    /// THE GRID (the default): three tiles across, Browse's folders first, each document a real
+    /// thumbnail under its kind badge. Labels are the chips over it.
+    private func grid(
+        _ folders: [Centraid_Core_V1_DocsFolderNode],
+        _ rows: [Centraid_Core_V1_DocsRowView],
+        _ state: Centraid_Core_V1_DocsDriveState
+    ) -> some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: 3),
+            spacing: 16
+        ) {
+            ForEach(folders, id: \.folderID) { node in
+                DocsFolderTile(node: node) { open(node.route) }
+            }
             ForEach(rows, id: \.documentID) { row in
-                Button {
-                    open(row.route)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        CentraidIconView(iconKey: row.kindIconKey, tint: Theme.color("textSoft", scheme), size: 28)
-                            .frame(maxWidth: .infinity, minHeight: 72)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                                    .fill(Theme.color("bgSunken", scheme))
-                            )
-                            .accessibilityHidden(true)
-                        Text(row.title)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(2)
-                        Text(row.meta)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                            .lineLimit(1)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityIdentifier("docs-row-\(row.documentID)")
-                .contextMenu {
-                    Button(state.chrome.rowMenu) {
-                        send(Self.event { $0.rowMenu = .with { $0.documentID = row.documentID } })
-                    }
-                }
+                DocsGridTile(
+                    row: row,
+                    onTap: { open(row.route) },
+                    onMenu: { send(Self.event { $0.rowMenu = .with { $0.documentID = row.documentID } }) },
+                    menuLabel: state.chrome.rowMenu
+                )
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
