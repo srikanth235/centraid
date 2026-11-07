@@ -98,7 +98,11 @@ struct AgendaHomeView: View {
                             if !typing { send(AgendaEvents.make { $0.quickAddClosed = .init() }) }
                         },
                         fieldIdentifier: "agenda-quick-add",
-                        verbIdentifier: "agenda-quick-add-verb"
+                        verbIdentifier: "agenda-quick-add-verb",
+                        // THE KEYBOARD TOOLBAR (#1173).
+                        onTool: { key in send(AgendaEvents.make { $0.quickTool = .with { $0.key = key } }) },
+                        onDue: { key in send(AgendaEvents.make { $0.quickDue = .with { $0.key = key } }) },
+                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) }
                     )
                 }
             }
@@ -438,6 +442,8 @@ private struct AgendaTaskGroup: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let catchUp: Centraid_Core_V1_Route?
+    /// Drawn as rows of a `List`, so a swipe lands on one task.
+    var inList = false
 
     var body: some View {
         TodoGroupView(
@@ -449,7 +455,9 @@ private struct AgendaTaskGroup: View {
             onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
             identifierPrefix: "agenda-task-row",
             chrome: chrome.tasks,
-            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) }
+            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+            onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) },
+            inList: inList
         )
     }
 }
@@ -491,17 +499,23 @@ private struct AgendaTodoList: View {
     var body: some View {
         let todo = home.todo
         let chrome = state.chrome
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+        // A LIST, so a task row can be swiped (#1173): each task is a row of its own.
+        List {
+            Group {
                 // THE REMINDERS HOME (#1173): the smart-list cards, then My Lists.
                 AgendaSmartListGrid(lists: todo.smartLists, open: open)
-                TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
+                if !todo.countLabel.isEmpty || !todo.windowLabel.isEmpty {
+                    TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
+                }
                 if !todo.empty.headline.isEmpty {
                     EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
                 }
-                ForEach(todo.groups, id: \.key) { group in
-                    AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
-                }
+            }
+            .todoPlainRow()
+            ForEach(todo.groups, id: \.key) { group in
+                AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil, inList: true)
+            }
+            Group {
                 if !todo.myListsTitle.isEmpty, !todo.projects.isEmpty {
                     Text(todo.myListsTitle)
                         .kitType(.section)
@@ -536,8 +550,10 @@ private struct AgendaTodoList: View {
                         .accessibilityIdentifier("agenda-project-\(row.id)")
                     }
                 }
-                ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
-                    send(AgendaEvents.make { $0.nextPage = .init() })
+                if todo.canShowMore {
+                    ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
+                        send(AgendaEvents.make { $0.nextPage = .init() })
+                    }
                 }
                 if !todo.newProjectLabel.isEmpty {
                     HStack {
@@ -550,8 +566,11 @@ private struct AgendaTodoList: View {
                     .padding(.top, 12)
                 }
             }
-            .padding(.bottom, 16)
+            .todoPlainRow()
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
         .refreshable { send(AgendaEvents.make { $0.refreshed = .init() }) }
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("agenda-todo-list")
@@ -599,7 +618,10 @@ private struct AgendaSectionView: View {
                                 fileVerb: chrome.tasks.fileVerb,
                                 onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
                                 embedded: true,
-                                identifierPrefix: "agenda-task-row"
+                                identifierPrefix: "agenda-task-row",
+                                chrome: chrome.tasks,
+                                onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) }
                             )
                         case let .nowLine(now):
                             AgendaNowLineView(now: now).id("now-\(section.day)")

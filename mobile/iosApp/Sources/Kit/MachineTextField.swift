@@ -22,6 +22,8 @@ struct MachineTextField: View {
     /// Told when the field takes or gives up the keyboard, for a screen that
     /// makes room for it (Tasks' quick add puts its band away, as an editor does).
     var onFocusChange: ((Bool) -> Void)? = nil
+    /// Return submits and KEEPS the keyboard, so the next one can be typed (the quick add).
+    var keepFocus: Bool = false
 
     @State private var typed = ""
     @State private var echoes = TypedText(initial: "")
@@ -30,7 +32,10 @@ struct MachineTextField: View {
     var body: some View {
         TextField(placeholder, text: $typed, axis: axis)
             .focused($focused)
-            .onSubmit { onSubmit?() }
+            .onSubmit {
+                onSubmit?()
+                if keepFocus { Task { @MainActor in focused = true } }
+            }
             .onAppear {
                 echoes = TypedText(initial: value)
                 typed = value

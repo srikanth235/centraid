@@ -22,6 +22,8 @@ struct AgendaEditorView: View {
     @State private var typedTitle = ""
     @State private var typedNotes = ""
     @State private var typedLink = ""
+    /// The tag field's typing, cleared when it is sent (`TagAdded`).
+    @State private var typedTag = ""
     @State private var seeded = false
     /// Which platform picker is up — presentation only: the value it opens on
     /// and the words over it are the draft's and Rust's.
@@ -66,7 +68,7 @@ struct AgendaEditorView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, [.calendar, .guests, .repeat, .reminder, .scope])) {
+        .sheet(isPresented: sheetBinding(state, [.calendar, .guests, .repeat, .reminder, .scope, .list])) {
             if let editorData { sheet(state, editorData) }
         }
         .sheet(item: $picking) { pick in
@@ -202,23 +204,30 @@ struct AgendaEditorView: View {
                         guard seeded, typed != draft.link else { return }
                         send(event { $0.link = .with { $0.text = typed } })
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(chrome.fieldNotes)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                        TextField(chrome.notesPlaceholder, text: $typedNotes, axis: .vertical)
-                            .centraidType("body")
-                            .lineLimit(3...10)
-                            .accessibilityLabel(chrome.fieldNotes)
-                            .accessibilityIdentifier("agenda-editor-notes")
-                            .onChange(of: typedNotes) { _, typed in
-                                guard seeded, typed != draft.notes else { return }
-                                send(event { $0.notes = .with { $0.text = typed } })
-                            }
+                    notesField(draft, chrome: chrome)
+                }
+                // THE NEW TASK SHEET (#1173): Notes, the list, and a More details row that opens
+                // priority, repeat and tags.
+                if editor.showTaskFields {
+                    notesField(draft, chrome: chrome)
+                    ChoiceFieldRow(
+                        key: chrome.fieldList,
+                        value: editor.listLabel,
+                        hueKey: editor.listHueKey,
+                        identifier: "agenda-editor-list"
+                    ) {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .list } })
                     }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.vertical, 8)
-                    .overlay(alignment: .bottom) { KitHairline() }
+                    ChoiceFieldRow(
+                        key: chrome.fieldMoreDetails,
+                        value: editor.moreDetailsSummary,
+                        identifier: "agenda-editor-more-details"
+                    ) {
+                        send(event { $0.moreDetails = .init() })
+                    }
+                    if editor.moreDetailsOpen {
+                        moreDetails(editor, draft: draft, chrome: chrome)
+                    }
                 }
                 if state.hasStatus, !state.status.sentence.isEmpty {
                     Text(state.status.sentence)
@@ -248,6 +257,93 @@ struct AgendaEditorView: View {
                 seeded = true
             }
         }
+    }
+
+    /// Notes: the member's typing, forwarded as it comes (an event's last field, a task's first below the due).
+    private func notesField(_ draft: Centraid_Core_V1_AgendaDraft, chrome: Centraid_Core_V1_AgendaEditorChrome) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(chrome.fieldNotes)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            TextField(chrome.notesPlaceholder, text: $typedNotes, axis: .vertical)
+                .centraidType("body")
+                .lineLimit(3...10)
+                .accessibilityLabel(chrome.fieldNotes)
+                .accessibilityIdentifier("agenda-editor-notes")
+                .onChange(of: typedNotes) { _, typed in
+                    guard seeded, typed != draft.notes else { return }
+                    send(event { $0.notes = .with { $0.text = typed } })
+                }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { KitHairline() }
+    }
+
+    /// THE OPEN MORE DETAILS ROW: priority, repeat and tags, every word Rust's.
+    @ViewBuilder
+    private func moreDetails(
+        _ editor: Centraid_Core_V1_AgendaEditorData,
+        draft: Centraid_Core_V1_AgendaDraft,
+        chrome: Centraid_Core_V1_AgendaEditorChrome
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(editor.priorityLabel.isEmpty ? chrome.fieldPriority : editor.priorityLabel)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            HStack(spacing: 6) {
+                ForEach(editor.priorities, id: \.key) { choice in
+                    KitChip(
+                        label: choice.label,
+                        selected: choice.selected,
+                        spoken: choice.accessibilityLabel,
+                        identifier: "agenda-editor-priority-\(choice.key)"
+                    ) {
+                        send(event { $0.priority = .with { $0.key = choice.key } })
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .overlay(alignment: .bottom) { KitHairline() }
+        ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") {
+            send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
+        }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(chrome.fieldTags)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            if !draft.tags.isEmpty {
+                // A TAG IS A LIT CHIP: a tap takes it off.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(draft.tags, id: \.self) { tag in
+                            KitChip(label: tag, selected: true, identifier: "agenda-editor-tag-\(tag)") {
+                                send(event { $0.tagRemoved = .with { $0.text = tag } })
+                            }
+                        }
+                    }
+                }
+            }
+            TextField(chrome.tagPlaceholder, text: $typedTag)
+                .centraidType("body")
+                .submitLabel(.done)
+                .onSubmit {
+                    let text = typedTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return }
+                    typedTag = ""
+                    send(event { $0.tagAdded = .with { $0.text = text } })
+                }
+                .accessibilityLabel(chrome.fieldTags)
+                .accessibilityIdentifier("agenda-editor-tag-field")
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) { KitHairline() }
     }
 
     /// Starts / Ends: Rust's day and time words, each its own tap that
@@ -323,6 +419,10 @@ struct AgendaEditorView: View {
             choiceSheet(chrome.fieldReminder, editor.reminders) { key in
                 send(event { $0.reminder = .with { $0.key = key } })
             }
+        case .list:
+            choiceSheet(chrome.fieldList, editor.lists, idPrefix: "agenda-editor-list", chosen: editor.draft.listKey) { key in
+                send(event { $0.list = .with { $0.key = key } })
+            }
         case .scope:
             SheetRoom(
                 title: chrome.scopeTitle,
@@ -347,6 +447,8 @@ struct AgendaEditorView: View {
         _ title: String,
         _ choices: [Centraid_Core_V1_AgendaChoice],
         status: String = "",
+        idPrefix: String = "agenda-choice",
+        chosen: String = "",
         onPick: @escaping (String) -> Void
     ) -> some View {
         OptionSheet(title: title, status: status) {
@@ -359,7 +461,7 @@ struct AgendaEditorView: View {
                                     .fill(Theme.color(KitHue.role(choice.hueKey) ?? "cSlate", scheme))
                                     .frame(width: 8, height: 8)
                             }
-                            SheetRow(label: choice.label, selected: choice.selected, identifier: "agenda-choice-\(choice.key)") {
+                            SheetRow(label: choice.label, selected: choice.selected || (!chosen.isEmpty && choice.key == chosen), identifier: "\(idPrefix)-\(choice.key)") {
                                 onPick(choice.key)
                             }
                         }
