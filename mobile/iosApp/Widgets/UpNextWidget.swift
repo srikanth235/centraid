@@ -72,6 +72,7 @@ private struct UpNextSmall: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .padding(.top, 4)
+                .privacySensitive()
             Text(item.title)
                 .font(WidgetType.body)
                 .foregroundStyle(WidgetPalette.ink)
@@ -82,6 +83,7 @@ private struct UpNextSmall: View {
                     .font(WidgetType.meta)
                     .foregroundStyle(WidgetPalette.meta)
                     .lineLimit(1)
+                    .privacySensitive()
             }
         }
         .accessibilityElement(children: .combine)
@@ -102,6 +104,7 @@ private struct UpNextRows: View {
                         .foregroundStyle(WidgetPalette.meta)
                         .lineLimit(1)
                         .padding(.top, 2)
+                        .privacySensitive()
                 }
                 row(item)
             }
@@ -117,6 +120,7 @@ private struct UpNextRows: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(width: timeWidth, alignment: .leading)
+                .privacySensitive()
             RoundedRectangle(cornerRadius: 2)
                 .fill(tint)
                 .frame(width: 3, height: 16)

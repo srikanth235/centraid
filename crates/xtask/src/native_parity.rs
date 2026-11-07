@@ -201,6 +201,9 @@ fn swift_sources(root: &Path) -> Vec<PathBuf> {
         &root.join("mobile/iosApp/CoreBridge"),
         "swift",
     ));
+    for dir in ["Widgets", "Shared"] {
+        out.extend(source_files(&root.join("mobile/iosApp").join(dir), "swift"));
+    }
     out.retain(|path| !relative(root, path).contains("/Generated/"));
     out.sort();
     out

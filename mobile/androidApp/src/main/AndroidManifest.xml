@@ -148,7 +148,8 @@
              binds a widget's provider; the only broadcasts they act on are the platform's update and
              the app's own redraw request, and both only redraw what is already on disk. The label
              and the description come from the generated strings, which the launcher reads before any
-             code runs. -->
+             code runs. Privacy ruling: titles never show on a locked phone, so both providers are
+             `home_screen` only (never `keyguard`) and the app adds no lock-screen surface. -->
         <receiver
             android:name="dev.centraid.android.glance.UpNextWidget"
             android:exported="true"

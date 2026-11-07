@@ -129,6 +129,7 @@ private struct RemindersRows: View {
                         .font(WidgetType.meta)
                         .foregroundStyle(row.overdue ? WidgetPalette.red : WidgetPalette.meta)
                         .lineLimit(1)
+                        .privacySensitive()
                 }
                 .frame(minHeight: 24)
                 .accessibilityElement(children: .combine)
