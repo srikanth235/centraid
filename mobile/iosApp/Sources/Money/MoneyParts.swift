@@ -189,193 +189,9 @@ private struct MoneyIdentifier: ViewModifier {
 
 // MARK: - Text
 
-/// A section label with the kit's header. Empty is nothing.
-struct MoneySection: View {
-    let title: String
 
-    var body: some View {
-        if !title.isEmpty { SectionHeader(title: title) }
-    }
-}
 
-/// A quiet sentence under a section. Empty is nothing.
-struct MoneyNote: View {
-    let text: String
-    var ink: String = "textSoft"
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    var body: some View {
-        if !text.isEmpty {
-            Text(text)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color(ink, scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, inset)
-                .padding(.vertical, 6)
-        }
-    }
-}
-
-/// A heading for a block inside a sheet or a page.
-struct MoneyHeading: View {
-    let text: String
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    var body: some View {
-        if !text.isEmpty {
-            Text(text)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, inset)
-                .padding(.vertical, 8)
-                .accessibilityAddTraits(.isHeader)
-        }
-    }
-}
-
-/// A label beside its figure, inked by the figure's own tone.
-struct MoneyFigureRow: View {
-    let label: String
-    let amount: String
-    var tone: Centraid_Core_V1_StatusChip.Tone = .neutral
-
-    @Environment(\.colorScheme) private var scheme
-
-    init(figure: Centraid_Core_V1_MoneyFigure) {
-        self.label = figure.label
-        self.amount = figure.amount
-        self.tone = figure.tone
-    }
-
-    init(label: String, amount: String, tone: Centraid_Core_V1_StatusChip.Tone = .neutral) {
-        self.label = label
-        self.amount = amount
-        self.tone = tone
-    }
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            Spacer(minLength: 8)
-            Text(MoneyWords.amount(amount))
-                .centraidType("mono")
-                .monospacedDigit()
-                .foregroundStyle(Theme.color(StatusChipView.ink(tone, neutral: "text"), scheme))
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(MoneyWords.spoken(label, amount))
-    }
-}
-
-// MARK: - The hero
-
-/// THE HERO: one display figure per currency, the sentence under it, and the
-/// bar when a plan is set. The bar is spent against plan; the tick is how far
-/// through the month today falls. Over plan reads as the `net` ink and the
-/// figure's own minus sign: colour is the second channel.
-struct MoneyHeroView: View {
-    let hero: Centraid_Core_V1_MoneyHero
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(MoneyWords.amount(hero.spent))
-                        .centraidType("display")
-                        .foregroundStyle(Theme.color(hero.over ? "net" : "text", scheme))
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                        .accessibilityLabel(MoneyWords.spoken(hero.spentLabel, hero.spent))
-                    Text(hero.spentLabel)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .accessibilityHidden(true)
-                }
-                if hero.hasBar_p {
-                    MoneyBar(fillBp: hero.fillBp, tickBp: hero.tickBp, over: hero.over, spoken: hero.accessibilityLabel)
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("money-hero")
-            // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
-            MoneyFigureColumns(figures: hero.figures)
-        }
-    }
-}
-
-/// A plan bar from the state's basis points: the fill, and a tick for the day.
-struct MoneyBar: View {
-    let fillBp: UInt32
-    let tickBp: UInt32
-    let over: Bool
-    let spoken: String
-
-    @Environment(\.colorScheme) private var scheme
-
-    private static let basis: Double = 10_000
-    private static let tickWidth: Double = 0.006
-
-    private func fraction(_ bp: UInt32) -> Double { Double(min(bp, 10_000)) / Self.basis }
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            ZStack(alignment: .leading) {
-                Rectangle().fill(Theme.color("bgSunken", scheme))
-                Rectangle()
-                    .fill(Theme.color(over ? "net" : "textSoft", scheme))
-                    .frame(width: width * fraction(fillBp))
-                if tickBp > 0 {
-                    Rectangle()
-                        .fill(Theme.color("text", scheme))
-                        .frame(width: width * Self.tickWidth)
-                        .offset(x: min(width * fraction(tickBp), width * (1 - Self.tickWidth)))
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
-        }
-        .frame(height: 6)
-        .padding(.top, 10)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
-    }
-}
-
-// MARK: - Rows
-
-/// THE TRANSACTION ROW: the one row, the signed amount as its figure.
-struct MoneyRowView: View {
-    let row: Centraid_Core_V1_MoneyRow
-    var onTap: (() -> Void)? = nil
-
-    var body: some View {
-        CentraidRow(
-            title: row.title,
-            meta: MoneyWords.meta(row.categoryLabel, row.meta),
-            trailing: MoneyWords.amount(row.amount),
-            trailingTone: StatusChipView.ink(row.amountTone, neutral: "text"),
-            chips: row.chips,
-            dimmed: row.dimmed,
-            accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
-            identifier: "money-row-\(row.txnID)",
-            onTap: onTap
-        )
-    }
-}
 
 /// A switch row: the state's label and whether it is on. The toggle is an event
 /// the screen forwards.
@@ -570,6 +386,9 @@ struct MoneySheetRow: View {
     var detail: String = ""
     var selected: Bool = false
     var destructive: Bool = false
+    /// A category's dot: its list-palette key, or empty for the dashed "no category" dot.
+    /// `nil` draws none.
+    var dot: String? = nil
     let identifier: String
     let onTap: () -> Void
 
@@ -579,6 +398,15 @@ struct MoneySheetRow: View {
         let ink = destructive ? "net" : "text"
         Button(action: onTap) {
             HStack(spacing: 12) {
+                if let dot {
+                    if dot.isEmpty {
+                        Circle()
+                            .strokeBorder(Surface.meta, style: StrokeStyle(lineWidth: 1.2, dash: [2, 2]))
+                            .frame(width: 10, height: 10)
+                    } else {
+                        Circle().fill(docsListColor(dot)).frame(width: 10, height: 10)
+                    }
+                }
                 if !iconKey.isEmpty {
                     CentraidIconView(iconKey: iconKey, tint: Theme.color(ink, scheme), size: 18)
                         .frame(width: 24, height: 24)
@@ -597,7 +425,7 @@ struct MoneySheetRow: View {
                 }
                 Spacer(minLength: 0)
                 if selected {
-                    CentraidIconView(iconKey: "Check", tint: Theme.color("text", scheme), size: 16)
+                    CentraidIconView(iconKey: "Check", tint: AppAccent("money").text, size: 16)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
@@ -609,28 +437,75 @@ struct MoneySheetRow: View {
     }
 }
 
-/// A SHEET OF CHOICES that scrolls: a month, an account, a category, a merge target.
+/// A SHEET OF CHOICES that scrolls: a month, an account, a category, a merge target. Choices
+/// that name a group (the category picker) stand in a card per group under its capitals heading;
+/// a category wears its colour as a dot, "No category" the dashed one.
 struct MoneyChoiceSheet: View {
     let title: String
     let choices: [Centraid_Core_V1_MoneyChoice]
     let identifierPrefix: String
     let onPick: (String) -> Void
 
+    /// A picker of categories: any choice with a colour, or the first (the "No category" row)
+    /// ahead of grouped ones.
+    private var hasDots: Bool {
+        choices.contains { !$0.colorKey.isEmpty } && choices.contains { !$0.detail.isEmpty }
+    }
+
+    /// The choices as runs sharing one group name, in order; the first run is the ungrouped lead.
+    private var runs: [(group: String, items: [Centraid_Core_V1_MoneyChoice])] {
+        var out: [(group: String, items: [Centraid_Core_V1_MoneyChoice])] = []
+        for choice in choices {
+            if let last = out.last, last.group == choice.detail {
+                out[out.count - 1].items.append(choice)
+            } else {
+                out.append((group: choice.detail, items: [choice]))
+            }
+        }
+        return out
+    }
+
     var body: some View {
         SheetRoom(title: title) {
             ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
-                        MoneySheetRow(
-                            label: choice.label,
-                            detail: choice.detail,
-                            selected: choice.selected,
-                            identifier: "\(identifierPrefix)-\(choice.key)"
-                        ) { onPick(choice.key) }
+                VStack(alignment: .leading, spacing: 0) {
+                    if hasDots {
+                        ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
+                            if !run.group.isEmpty {
+                                Text(run.group)
+                                    .kitType(.group)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, 4)
+                                    .padding(.top, 14)
+                                    .padding(.bottom, 4)
+                                    .accessibilityAddTraits(.isHeader)
+                            }
+                            VStack(spacing: 0) {
+                                ForEach(Array(run.items.enumerated()), id: \.offset) { index, choice in
+                                    if index > 0 { KitHairline(inset: 16) }
+                                    row(choice).padding(.horizontal, 16)
+                                }
+                            }
+                            .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                        }
+                    } else {
+                        ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
+                            row(choice)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private func row(_ choice: Centraid_Core_V1_MoneyChoice) -> some View {
+        MoneySheetRow(
+            label: choice.label,
+            detail: hasDots ? "" : choice.detail,
+            selected: choice.selected,
+            dot: hasDots ? choice.colorKey : nil,
+            identifier: "\(identifierPrefix)-\(choice.key)"
+        ) { onPick(choice.key) }
     }
 }
 
@@ -683,140 +558,9 @@ struct MoneyStatusFoot: View {
 
 // MARK: - Figures laid across, the category table and the cash-flow chart
 
-/// FIGURES SIDE BY SIDE, each a label over its value: the hero's Planned and
-/// Left, and In, Out and Net. The state decides the figures and their tones;
-/// this lays them across the page instead of down it.
-struct MoneyFigureColumns: View {
-    let figures: [Centraid_Core_V1_MoneyFigure]
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ForEach(Array(figures.enumerated()), id: \.offset) { _, figure in
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(figure.label)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                    Text(MoneyWords.amount(figure.amount))
-                        .centraidType("smallStrong")
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color(StatusChipView.ink(figure.tone, neutral: "text"), scheme))
-                        .minimumScaleFactor(0.8)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(MoneyWords.spoken(figure.label, figure.amount))
-            }
-        }
-        .padding(.horizontal, inset)
-        .padding(.vertical, 6)
-    }
-}
 
-/// THE IN / OUT / NET CARD: the same three figures on a raised plate.
-struct MoneyFigureCard: View {
-    let figures: [Centraid_Core_V1_MoneyFigure]
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    var body: some View {
-        MoneyFigureColumns(figures: figures)
-            .environment(\.moneyInset, 16)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .fill(Theme.color("bgElev", scheme))
-            )
-            .padding(.horizontal, inset)
-            .padding(.top, 12)
-    }
-}
-
-/// THE CATEGORY TABLE'S HEADER: the same four columns every line draws.
-struct MoneyCategoryHeader: View {
-    let planned: String
-    let spent: String
-    let left: String
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Spacer(minLength: 0)
-            column(planned)
-            column(spent)
-            column(left)
-        }
-        .padding(.horizontal, inset)
-        .padding(.top, 16)
-        .padding(.bottom, 4)
-        .accessibilityHidden(true)
-    }
-
-    private func column(_ text: String) -> some View {
-        Text(text)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color("textFaint", scheme))
-            .frame(width: MoneyCategoryRow.columnWidth, alignment: .trailing)
-            .lineLimit(1)
-    }
-}
-
-/// ONE CATEGORY, PLANNED · SPENT · LEFT across the page. A line with no plan
-/// draws a dash for planned and left, because it has nothing to compare to; a
-/// line over plan is `net` ink on its left column, the figure's own minus sign
-/// being the second channel.
-struct MoneyCategoryRow: View {
-    static let columnWidth: CGFloat = 68
-
-    let line: Centraid_Core_V1_MoneyCategoryLine
-    let accessibility: String
-    let identifier: String
-    let onTap: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    private let dash = "\u{2014}"
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Text(line.label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                figure(line.hasPlan_p ? MoneyWords.amount(line.planned) : dash, ink: "textSoft")
-                figure(MoneyWords.amount(line.spent), ink: "text")
-                figure(line.hasPlan_p ? MoneyWords.amount(line.left) : dash, ink: line.over ? "net" : "textSoft", strong: line.over)
-            }
-            .padding(.horizontal, inset)
-            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            .overlay(alignment: .top) { KitHairline() }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibility)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func figure(_ text: String, ink: String, strong: Bool = false) -> some View {
-        Text(text)
-            .centraidType(strong ? "annotLabelOn" : "annotLabel")
-            .monospacedDigit()
-            .foregroundStyle(Theme.color(ink, scheme))
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .frame(width: Self.columnWidth, alignment: .trailing)
-    }
-}
 
 /// THE CASH-FLOW CHART: a pair of bars per month, In and Out, from the state's
 /// own heights (`in_bp` and `out_bp`, basis points of the series' largest side
@@ -953,52 +697,144 @@ struct MoneyMonthRow: View {
             .foregroundStyle(Theme.color(ink, scheme))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .frame(width: MoneyCategoryRow.columnWidth, alignment: .trailing)
+            .frame(width: 68, alignment: .trailing)
     }
 }
 
-/// "NEEDS A CATEGORY · 4" AND WHAT IT COMES TO, ONE ROW. The seam ink says it is
-/// owed attention; a tap applies the category filter that lists exactly these
-/// rows (the state offers it as a choice, so no key is spelled here).
-struct MoneyNeedsRow: View {
-    let label: String
-    let figures: [Centraid_Core_V1_MoneyFigure]
-    let onTap: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 8) {
-                Text(label)
-                    .centraidType("annotLabelOn")
-                    .foregroundStyle(Theme.color("seam", scheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(figures.map { MoneyWords.amount($0.amount) }.joined(separator: " \u{00B7} "))
-                    .centraidType("annotLabel")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textGhost", scheme), size: 15)
-            }
-            .padding(.horizontal, inset)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(MoneyWords.spoken(label, figures.first?.amount))
-        .accessibilityIdentifier("money-needs-category")
-    }
-}
 
 // MARK: - The transaction page
 
-/// A FACT, LABEL BESIDE VALUE: the label in a fixed column, the value filling
-/// the rest. A fact the member can change is a button with a chevron; the
-/// state's own action (`category`, `name`) is what a tap sends, so the row and
-/// the action it replaces cannot disagree. An empty value reads in the seam ink
-/// as the thing still to do.
+
+// MARK: - Accounts
+
+
+
+// MARK: - Rules
+
+
+
+// MARK: - Import review
+
+
+// MARK: - The kit's look for the pages under Activity (#1173)
+
+/// A white card on a page of cards, with its page margin: the rows inside draw their own 16pt.
+struct MoneyPageCard<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0, content: content)
+            .environment(\.moneyInset, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kitCard()
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 6)
+    }
+}
+
+/// A section label with the kit's group head (12pt capitals). Empty is nothing.
+struct MoneySection: View {
+    let title: String
+
+    @Environment(\.moneyInset) private var inset
+
+    var body: some View {
+        if !title.isEmpty {
+            Text(title)
+                .kitType(.group)
+                .foregroundStyle(Surface.meta)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, inset + 4)
+                .padding(.top, 14)
+                .padding(.bottom, 2)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+/// A quiet sentence under a section. Empty is nothing. `ink` `net` is the state red.
+struct MoneyNote: View {
+    let text: String
+    var ink: String = "textSoft"
+
+    @Environment(\.moneyInset) private var inset
+
+    var body: some View {
+        if !text.isEmpty {
+            Text(text)
+                .kitType(.meta)
+                .foregroundStyle(ink == "net" ? StateColor.red.text : Surface.meta)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, inset + 4)
+                .padding(.vertical, 6)
+        }
+    }
+}
+
+/// A heading for a block inside a sheet or a page.
+struct MoneyHeading: View {
+    let text: String
+
+    @Environment(\.moneyInset) private var inset
+
+    var body: some View {
+        if !text.isEmpty {
+            Text(text)
+                .kitType(.meta)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, inset)
+                .padding(.vertical, 8)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+/// A label beside its figure, inked by the figure's own tone.
+struct MoneyFigureRow: View {
+    let label: String
+    let amount: String
+    var positive: Bool = false
+    var tone: Centraid_Core_V1_StatusChip.Tone = .neutral
+
+    @Environment(\.moneyInset) private var inset
+
+    init(figure: Centraid_Core_V1_MoneyFigure) {
+        self.label = figure.label
+        self.amount = figure.amount
+        self.positive = figure.positive
+        self.tone = figure.tone
+    }
+
+    init(label: String, amount: String, tone: Centraid_Core_V1_StatusChip.Tone = .neutral) {
+        self.label = label
+        self.amount = amount
+        self.tone = tone
+    }
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .kitType(.row)
+                .foregroundStyle(Surface.body)
+            Spacer(minLength: 8)
+            Text(MoneyWords.amount(amount))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .foregroundStyle(moneyInk(positive: positive, tone: tone))
+        }
+        .padding(.horizontal, inset)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(MoneyWords.spoken(label, amount))
+    }
+}
+
+/// A FACT, LABEL OVER VALUE: a fact the member can change is a button with a chevron; the
+/// state's own action (`category`, `name`) is what a tap sends. An empty value reads in the
+/// amber as the thing still to do.
 struct MoneyFactRow: View {
     let label: String
     let value: String
@@ -1006,13 +842,12 @@ struct MoneyFactRow: View {
     var onTap: (() -> Void)? = nil
     var identifier: String = ""
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
     var body: some View {
         if let onTap {
             Button(action: onTap) { row(chevron: true) }
-                .buttonStyle(.plain)
+                .buttonStyle(KitRowPress())
                 .accessibilityIdentifier(identifier)
         } else {
             row(chevron: false)
@@ -1020,89 +855,74 @@ struct MoneyFactRow: View {
     }
 
     private func row(chevron: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                .frame(width: 110, alignment: .leading)
-            Text(value)
-                .centraidType(chevron ? "smallStrong" : "body")
-                .foregroundStyle(Theme.color(owed ? "seam" : "text", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                Text(value)
+                    .kitType(.row)
+                    .foregroundStyle(owed ? StateColor.amber.text : Surface.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if chevron {
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textGhost", scheme), size: 15)
+                CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 15)
             }
         }
         .padding(.horizontal, inset)
         .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-        .overlay(alignment: .top) { KitHairline() }
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MoneyWords.spoken(label + ", " + value))
     }
 }
 
-// MARK: - Accounts
-
-/// NET WORTH ON A PLATE: the label, then one amount per currency (the first at
-/// display size, the rest at title size, never summed) with its currency code
-/// beside it. The note under it is the state's.
+/// NET WORTH ON A CARD: the label, then one amount per currency side by side (never summed) with
+/// its code above it, and the state's note under a hairline.
 struct MoneyNetWorthCard: View {
     let label: String
     let figures: [Centraid_Core_V1_MoneyFigure]
     let note: String
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textFaint", scheme))
-            ForEach(Array(figures.enumerated()), id: \.offset) { index, figure in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(MoneyWords.amount(figure.amount))
-                        .centraidType(index == 0 ? "display" : "title")
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(figure.label)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+            HStack(alignment: .top, spacing: 24) {
+                ForEach(Array(figures.enumerated()), id: \.offset) { _, figure in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(figure.label).kitType(.meta).foregroundStyle(Surface.meta)
+                        Text(MoneyWords.amount(figure.amount))
+                            .kitType(.title)
+                            .monospacedDigit()
+                            .foregroundStyle(Surface.ink)
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(MoneyWords.spoken(figure.label, figure.amount))
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(MoneyWords.spoken(figure.label, figure.amount))
             }
             if !note.isEmpty {
-                Text(note)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                KitHairline(inset: 0).padding(.top, 4)
+                Text(note).kitType(.meta).foregroundStyle(Surface.meta)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .fill(Theme.color("bgElev", scheme))
-        )
-        .padding(.horizontal, inset)
+        .kitCard()
+        .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
     }
 }
 
-/// ONE ACCOUNT: its name and balance, the account's own particulars beneath,
-/// and the statement check as its own line — a tick when the books agree, an
-/// alert with the difference when they do not, and plain words when there is no
-/// statement balance yet. The tone is the state's; this only draws it.
+/// ONE ACCOUNT: its name and balance, the account's own particulars beneath, and the statement
+/// check as its own line: a tick when the books agree, an alert with the difference when they do
+/// not (amber), plain words when there is no statement balance yet. The tone is the state's.
 struct MoneyAccountRowView: View {
     let row: Centraid_Core_V1_MoneyAccountRow
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
     private var checkLine: String {
@@ -1114,27 +934,28 @@ struct MoneyAccountRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(row.name)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(row.hasBalance_p ? MoneyWords.amount(row.balance) : row.balanceNote)
-                        .centraidType("smallStrong")
+                        .kitType(.row)
+                        .fontWeight(.semibold)
                         .monospacedDigit()
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                 }
                 if !row.meta.isEmpty {
-                    Text(row.meta)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
+                    Text(row.meta).kitType(.meta).foregroundStyle(Surface.meta).lineLimit(1)
                 }
                 if !checkLine.isEmpty {
                     HStack(spacing: 6) {
-                        if let icon { CentraidIconView(iconKey: icon.0, tint: Theme.color(icon.1, scheme), size: 15) }
+                        if row.checkpointTone == .warning {
+                            CentraidIconView(iconKey: "AlertCircle", tint: StateColor.amber.text, size: 14)
+                        }
                         Text(checkLine)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color(ink, scheme))
+                            .kitType(.meta)
+                            .foregroundStyle(row.checkpointTone == .warning ? StateColor.amber.text : Surface.meta)
                             .lineLimit(2)
                     }
                 }
@@ -1142,43 +963,24 @@ struct MoneyAccountRowView: View {
             .padding(.horizontal, inset)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .top) { KitHairline() }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KitRowPress())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MoneyWords.spoken(row.accessibilityLabel, row.hasBalance_p ? row.balance : nil))
     }
-
-    /// Matches (neutral) ticks, off (warning) alerts, none (seam) says plain words.
-    private var icon: (String, String)? {
-        switch row.checkpointTone {
-        case .neutral: return ("Check", "success")
-        case .warning: return ("AlertCircle", "seam")
-        default: return nil
-        }
-    }
-
-    private var ink: String {
-        switch row.checkpointTone {
-        case .warning: return "seam"
-        default: return "textFaint"
-        }
-    }
 }
 
-// MARK: - Rules
-
-/// A ROW THAT OPENS: a title, its particulars beneath (up to two lines) and a
-/// chevron saying a tap goes somewhere.
+/// A ROW THAT OPENS: a title (the rule's pattern, in the mono face), its particulars beneath (up
+/// to two lines) and a chevron saying a tap goes somewhere.
 struct MoneyChevronRow: View {
     let title: String
     var meta: String = ""
+    var mono: Bool = false
     var accessibility: String = ""
     var identifier: String = ""
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
     var body: some View {
@@ -1186,118 +988,157 @@ struct MoneyChevronRow: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.row)
+                        .fontWeight(mono ? .semibold : .regular)
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(2)
                     if !meta.isEmpty {
-                        Text(meta)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                            .lineLimit(2)
+                        Text(meta).kitType(.meta).foregroundStyle(Surface.meta).lineLimit(3)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textGhost", scheme), size: 15)
+                CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 15)
             }
             .padding(.horizontal, inset)
             .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            .overlay(alignment: .top) { KitHairline() }
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KitRowPress())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibility.isEmpty ? MoneyWords.meta(title, meta) : accessibility)
         .accessibilityIdentifier(identifier)
     }
 }
 
-/// WHAT THE NEXT MONTH WILL BE, SAID BEFORE THE MEMBER COMMITS: the label, the
-/// amount and the state's sentence about it, on one plate.
+/// WHAT THE NEXT MONTH WILL BE, SAID BEFORE THE MEMBER COMMITS: the label with its note under it
+/// and the amount at the trailing edge, on one card.
 struct MoneyPreviewCard: View {
     let label: String
     let amount: String
     let note: String
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textFaint", scheme))
-            Text(MoneyWords.amount(amount))
-                .centraidType("title")
-                .monospacedDigit()
-                .foregroundStyle(Theme.color("text", scheme))
-            if !note.isEmpty {
-                Text(note)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+                if !note.isEmpty {
+                    Text(note).kitType(.meta).foregroundStyle(Surface.meta)
+                }
             }
+            Spacer(minLength: 8)
+            Text(MoneyWords.amount(amount))
+                .kitType(.title)
+                .monospacedDigit()
+                .foregroundStyle(Surface.ink)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .fill(Theme.color("bgElev", scheme))
-        )
-        .padding(.horizontal, inset)
+        .kitCard()
+        .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MoneyWords.spoken(MoneyWords.meta(label, note), amount))
     }
 }
 
-// MARK: - Import review
-
-/// THE REVIEW'S COUNTS, two across: New, Already in, Check these, Can't read.
-/// The state's facts are the tiles' words and numbers; a count that asks for the
-/// member's eye (Check these, Can't read) is outlined in `seam` and `net` once it
-/// is above zero, read off the fact's label so no count is spelled here.
+/// THE REVIEW'S COUNTS in one strip: New, Already in, Check these, Twice in file, Can't read. A
+/// count that asks for the member's eye (Check these amber, Can't read red) wears that state's
+/// colour once it is above zero; the state says which (`tone`), so no count is spelled here.
 struct MoneyCountTiles: View {
     let counts: [Centraid_Core_V1_MoneyFact]
 
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.moneyInset) private var inset
-
-    private var pairs: [[Centraid_Core_V1_MoneyFact]] {
-        stride(from: 0, to: counts.count, by: 2).map { Array(counts[$0..<min($0 + 2, counts.count)]) }
-    }
-
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
-                HStack(spacing: 8) {
-                    ForEach(Array(pair.enumerated()), id: \.offset) { _, fact in tile(fact) }
-                    if pair.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+        HStack(alignment: .top, spacing: 4) {
+            ForEach(Array(counts.enumerated()), id: \.offset) { _, fact in
+                VStack(spacing: 2) {
+                    Text(fact.detail)
+                        .kitType(.section)
+                        .monospacedDigit()
+                        .foregroundStyle(ink(fact))
+                    Text(fact.label)
+                        .kitType(.meta)
+                        .foregroundStyle(ink(fact, plain: Surface.meta))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
                 }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(MoneyWords.meta(fact.label, fact.detail))
             }
         }
-        .padding(.horizontal, inset)
-        .padding(.top, 8)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
     }
 
-    private func tile(_ fact: Centraid_Core_V1_MoneyFact) -> some View {
-        // THE STATE SAYS WHICH COUNTS ARE OWED A LOOK, and in what tone.
-        let ink = StatusChipView.ink(fact.tone, neutral: "text")
-        let owed = ink != "text"
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(fact.detail)
-                .centraidType("display")
-                .foregroundStyle(Theme.color(ink, scheme))
-            Text(fact.label)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+    private func ink(_ fact: Centraid_Core_V1_MoneyFact, plain: Color = Surface.ink) -> Color {
+        switch fact.tone {
+        case .net: StateColor.red.text
+        case .seam, .warning: StateColor.amber.text
+        default: plain
         }
-        .padding(12)
+    }
+}
+
+/// THE FIGURES OF A SUMMARY SIDE BY SIDE on one card, each a label over its value: a target's
+/// six-month average, what is spent so far, what carries in. The state decides the figures.
+struct MoneyFigureCard: View {
+    let figures: [Centraid_Core_V1_MoneyFigure]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(Array(figures.enumerated()), id: \.offset) { _, figure in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(figure.label)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .lineLimit(3)
+                    Text(MoneyWords.amount(figure.amount))
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(moneyInk(positive: figure.positive, tone: figure.tone))
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(MoneyWords.spoken(figure.label, figure.amount))
+            }
+        }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .strokeBorder(Theme.color(owed ? ink : "lineStrong", scheme), lineWidth: 1)
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(MoneyWords.meta(fact.label, fact.detail))
+        .kitCard()
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+    }
+}
+
+/// A FULL-WIDTH SECONDARY VERB on a pale ground of the app's colour ("Apply to earlier rows").
+struct MoneyTintedButton: View {
+    let label: String
+    let identifier: String
+    let action: () -> Void
+
+    @Environment(\.appAccent) private var accent
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(accent.text)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(accent.wash(dark: scheme == .dark), in: Capsule())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .accessibilityIdentifier(identifier)
     }
 }

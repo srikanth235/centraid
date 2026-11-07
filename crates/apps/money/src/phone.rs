@@ -246,6 +246,28 @@ pub struct LastImportLine {
     pub account_name: Option<String>,
 }
 
+/// How many category lines Spending draws before the rest fold into one row.
+pub const COLLAPSED_CATEGORIES: usize = 3;
+
+/// The categories past the first [`COLLAPSED_CATEGORIES`] in one currency, as
+/// one line: how many and what they spent between them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpendingTail {
+    pub currency: String,
+    pub count: usize,
+    pub spent: Money,
+}
+
+/// One currency's month in buckets (weeks, or days), with the plan's pace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpendSeries {
+    pub currency: String,
+    pub buckets: Vec<engine::SpendBucket>,
+    /// What the plan allows in one bucket (the planned amount spread evenly over
+    /// the month's days), when the currency has a plan.
+    pub pace: Option<Money>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MoneySpending {
     pub month: String,
@@ -265,6 +287,62 @@ pub struct MoneySpending {
     pub last_import: Option<LastImportLine>,
     /// A month window held more than the ceiling: the figures are over a window.
     pub truncated: bool,
+    /// The month by week ([`engine::WEEK_DAYS`] days from the 1st), per currency.
+    pub weekly: Vec<SpendSeries>,
+    /// The month by day, per currency.
+    pub daily: Vec<SpendSeries>,
+    /// What the categories past the first [`COLLAPSED_CATEGORIES`] come to.
+    pub tail: Vec<SpendingTail>,
+}
+
+/// A series per currency with its pace: `planned * bucket_days / days_in_month`,
+/// rounded half up.
+fn series_of(
+    buckets: Vec<engine::CurrencyBuckets>,
+    bucket_days: u32,
+    days_in_month: u32,
+    planned: &BTreeMap<String, i64>,
+) -> Vec<SpendSeries> {
+    buckets
+        .into_iter()
+        .map(|series| SpendSeries {
+            pace: planned.get(&series.currency).map(|plan| {
+                let days = i128::from(days_in_month.max(1));
+                let scaled = i128::from(*plan) * i128::from(bucket_days);
+                money(
+                    i64::try_from((scaled + days / 2) / days).unwrap_or(0),
+                    &series.currency,
+                )
+            }),
+            currency: series.currency,
+            buckets: series.buckets,
+        })
+        .collect()
+}
+
+/// The categories past the first [`COLLAPSED_CATEGORIES`] of each currency.
+fn tail_of(categories: &[SpendingCategory]) -> Vec<SpendingTail> {
+    let mut tail: Vec<SpendingTail> = Vec::new();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    for category in categories {
+        let position = seen.entry(category.currency.as_str()).or_default();
+        *position += 1;
+        if *position <= COLLAPSED_CATEGORIES {
+            continue;
+        }
+        match tail.iter_mut().find(|t| t.currency == category.currency) {
+            Some(line) => {
+                line.count += 1;
+                line.spent.amount_minor += category.spent.amount_minor;
+            }
+            None => tail.push(SpendingTail {
+                currency: category.currency.clone(),
+                count: 1,
+                spent: category.spent.clone(),
+            }),
+        }
+    }
+    tail
 }
 
 /// The Spending screen for `month` (today decides how much of it is "so far").
@@ -367,7 +445,7 @@ pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mone
             .and_then(|c| c.parent.as_deref())
             .is_none_or(|parent| !statuses.contains_key(parent))
     };
-    let per_currency = folded
+    let per_currency: Vec<SpendingCurrency> = folded
         .iter()
         .map(|entry| {
             let planned: Option<i64> = {
@@ -433,6 +511,28 @@ pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mone
         0
     };
     let days_in_month = civil::month_length(month);
+    let planned_by_currency: BTreeMap<String, i64> = per_currency
+        .iter()
+        .filter_map(|c| {
+            Some((
+                c.spent.currency.code().to_owned(),
+                c.planned.as_ref()?.amount_minor,
+            ))
+        })
+        .collect();
+    let weekly = series_of(
+        engine::spend_buckets(&window.value, month, engine::WEEK_DAYS, &ctx),
+        engine::WEEK_DAYS,
+        days_in_month,
+        &planned_by_currency,
+    );
+    let daily = series_of(
+        engine::spend_buckets(&window.value, month, 1, &ctx),
+        1,
+        days_in_month,
+        &planned_by_currency,
+    );
+    let tail = tail_of(&categories);
     Ok(MoneySpending {
         month: month.to_owned(),
         day_of_month,
@@ -477,6 +577,9 @@ pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mone
         empty: data.accounts.is_empty() || last_import.is_none() && window.value.is_empty(),
         last_import,
         truncated: window.truncated || targets.truncated || data.truncated,
+        weekly,
+        daily,
+        tail,
     })
 }
 
@@ -518,6 +621,16 @@ pub struct MoneyActivity {
     pub cursor: Option<(String, String)>,
     /// The month's own count is over the window the needs-category count reads.
     pub truncated: bool,
+    /// What each day of `rows` came to, in the order the days appear.
+    pub days: Vec<DayLine>,
+}
+
+/// One day of Activity and its net per currency ([`engine::day_totals`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DayLine {
+    pub day: String,
+    pub totals: Vec<Money>,
+    pub complete: bool,
 }
 
 fn activity_row(row: &TxnRow, data: &MoneyData, today: &str) -> ActivityRow {
@@ -575,6 +688,18 @@ pub fn activity(
             .map(|(currency, (count, amount))| NeedsCategory {
                 count,
                 amount: money(amount, &currency),
+            })
+            .collect(),
+        days: engine::day_totals(&page.rows, &data.context(today), page.next.is_some())
+            .into_iter()
+            .map(|day| DayLine {
+                day: day.day,
+                totals: day
+                    .totals
+                    .iter()
+                    .map(|(currency, minor)| money(*minor, currency))
+                    .collect(),
+                complete: day.complete,
             })
             .collect(),
         cursor: page.next,

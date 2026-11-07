@@ -1,4 +1,4 @@
-//! Money's home: Spending, Activity and Cash flow, the header's filter menu, the
+//! Money's home: Activity (home), Spending and Cash flow, the header's filter menu, the
 //! month under the title, the More sheet. Ports of the home cases of `MoneyScreensSpec`, driven through the
 //! door a shell uses.
 
@@ -12,9 +12,15 @@ use wire::money_home_event::{self as he, Kind as H};
 use wire::money_home_state::{Destination, Sheet};
 
 #[test]
-fn spending_is_the_default_and_is_drawn_per_currency() {
-    let d = driver();
+fn activity_is_home_and_spending_is_drawn_per_currency() {
+    let mut d = driver();
     let i = home(&d);
+    assert_eq!(
+        home_state(d.view(i)).destination,
+        Destination::Activity as i32,
+        "Money opens on Activity"
+    );
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let state = home_state(d.view(i));
     assert_eq!(state.destination, Destination::Spending as i32);
     assert_eq!(state.chrome.as_ref().unwrap().title, "Money");
@@ -31,14 +37,14 @@ fn spending_is_the_default_and_is_drawn_per_currency() {
     }
     assert!(!spending.definitions.is_empty());
     let band: Vec<_> = state.band.iter().map(|t| t.key.as_str()).collect();
-    assert_eq!(band, ["spending", "activity", "cashflow", "more"]);
-    assert!(state.band[0].current);
+    assert_eq!(band, ["activity", "spending", "cashflow", "more"]);
+    assert!(state.band[1].current);
 }
 
 #[test]
 fn a_category_row_opens_its_target_for_the_month_in_view() {
-    let d = driver();
-    let i = home(&d);
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let data = home_data(d.view(i));
     let spending = data.spending.as_ref().unwrap();
     let line = spending
@@ -58,8 +64,8 @@ fn a_category_row_opens_its_target_for_the_month_in_view() {
 
 #[test]
 fn the_header_search_and_recurring_rows_are_routes() {
-    let d = driver();
-    let i = home(&d);
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let chrome = home_state(d.view(i)).chrome.as_ref().unwrap();
     assert_eq!(chrome.import_route.as_ref().unwrap().screen, "money.import");
     assert_eq!(chrome.search_route.as_ref().unwrap().screen, "money.search");
@@ -85,36 +91,62 @@ fn the_header_search_and_recurring_rows_are_routes() {
 }
 
 #[test]
-fn stepping_the_month_back_reads_the_month_before_and_never_goes_past_today() {
+fn the_month_is_the_title_second_line_on_activity_and_spending_and_not_on_cash_flow() {
+    let mut d = driver();
+    for (destination, shown) in [
+        (wire::MoneyDestination::Activity, true),
+        (wire::MoneyDestination::Spending, true),
+        (wire::MoneyDestination::Cashflow, false),
+    ] {
+        let i = land_on(&mut d, destination);
+        let state = home_state(d.view(i));
+        assert_eq!(state.subtitle.is_some(), shown, "{destination:?}");
+        if let Some(subtitle) = &state.subtitle {
+            assert_eq!(subtitle.label, home_data(d.view(i)).month_label);
+            assert!(subtitle.tappable, "a tap opens the month sheet");
+            assert!(subtitle.spoken.starts_with("Month, "));
+        }
+    }
+}
+
+#[test]
+fn the_month_sheet_is_the_one_way_to_step_back_and_never_offers_a_month_after_today() {
     let mut d = driver();
     let i = home(&d);
     let current = home_state(d.view(i)).month.clone();
     assert!(!current.is_empty(), "the answer names the month in view");
-    assert!(!home_data(d.view(i)).can_step_next);
+    event(&mut d, i, home_event(H::MonthTapped(he::MonthTapped {})));
+    assert_eq!(home_state(d.view(i)).sheet, Sheet::Month as i32);
+    let options = home_data(d.view(i)).month_options.clone();
+    assert_eq!(options[0].key, current, "the newest choice is this month");
+    assert!(options[0].selected);
+    assert!(options.iter().all(|o| o.key <= current));
+    // A month after this one, asked for anyway, lands on this one.
+    let after = format!("{}-12", &current[..4]);
     event(
         &mut d,
         i,
-        home_event(H::MonthStepped(he::MonthStepped { months: -1 })),
-    );
-    let back = home_state(d.view(i)).month.clone();
-    assert!(back < current);
-    assert!(home_data(d.view(i)).can_step_next);
-    event(
-        &mut d,
-        i,
-        home_event(H::MonthStepped(he::MonthStepped { months: 1 })),
+        home_event(H::MonthPicked(he::MonthPicked {
+            month: if after > current {
+                after
+            } else {
+                "9999-12".to_owned()
+            },
+        })),
     );
     assert_eq!(home_state(d.view(i)).month, current);
+    // A month back reads that month and the subtitle says it.
     event(
         &mut d,
         i,
-        home_event(H::MonthStepped(he::MonthStepped { months: 1 })),
+        home_event(H::MonthPicked(he::MonthPicked {
+            month: options[1].key.clone(),
+        })),
     );
-    assert_eq!(
-        home_state(d.view(i)).month,
-        current,
-        "there is no month after this one"
-    );
+    let state = home_state(d.view(i));
+    assert_eq!(state.month, options[1].key);
+    assert_eq!(state.subtitle.as_ref().unwrap().label, options[1].label);
+    assert_eq!(state.sheet, Sheet::None as i32);
 }
 
 #[test]
@@ -219,8 +251,8 @@ fn activity_has_the_filter_menu_and_the_month_under_the_title_and_nothing_else_d
     assert_eq!(subtitle.spoken, format!("Month, {}", subtitle.label));
     assert!(subtitle.tappable);
     assert!(!subtitle.clearable);
-    // Spending and Cash flow had no chips, so they have neither.
-    for key in ["spending", "cashflow"] {
+    // Spending has the month but no filter, and Cash flow has neither.
+    for (key, month) in [("spending", true), ("cashflow", false)] {
         event(
             &mut d,
             i,
@@ -228,7 +260,7 @@ fn activity_has_the_filter_menu_and_the_month_under_the_title_and_nothing_else_d
         );
         let state = home_state(d.view(i));
         assert!(state.filter_menu.is_none(), "{key}");
-        assert!(state.subtitle.is_none(), "{key}");
+        assert_eq!(state.subtitle.is_some(), month, "{key}");
     }
 }
 
@@ -273,10 +305,12 @@ fn picking_an_account_filters_the_lines_and_lights_the_menu() {
 fn a_category_pick_is_one_choice_and_a_clear_resets_both_filters_but_not_the_month() {
     let mut d = driver();
     let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    event(&mut d, i, home_event(H::MonthTapped(he::MonthTapped {})));
+    let older = home_data(d.view(i)).month_options[1].key.clone();
     event(
         &mut d,
         i,
-        home_event(H::MonthStepped(he::MonthStepped { months: -1 })),
+        home_event(H::MonthPicked(he::MonthPicked { month: older })),
     );
     let month = home_state(d.view(i)).month.clone();
     let (account_id, _) = accounts(&d).remove(0);
@@ -378,11 +412,11 @@ fn a_filter_that_matches_nothing_says_so_and_offers_no_import() {
 }
 
 #[test]
-fn cash_flow_has_twelve_months_per_currency_and_no_month_stepper() {
+fn cash_flow_has_twelve_months_per_currency_and_no_month_to_change() {
     let mut d = driver();
     let i = land_on(&mut d, wire::MoneyDestination::Cashflow);
     let data = home_data(d.view(i));
-    assert!(!data.shows_month);
+    assert!(home_state(d.view(i)).subtitle.is_none());
     let cashflow = data.cashflow.as_ref().unwrap();
     assert!(!cashflow.series.is_empty());
     let months = &cashflow.series[0].months;
@@ -415,12 +449,12 @@ fn the_more_sheet_opens_and_closes_behind_a_tapped_row() {
         &mut d,
         i,
         home_event(H::Band(he::BandPicked {
-            key: "spending".into(),
+            key: "activity".into(),
         })),
     );
     assert_eq!(
         home_state(d.view(i)).destination,
-        Destination::Spending as i32
+        Destination::Activity as i32
     );
 }
 
@@ -428,22 +462,24 @@ fn the_more_sheet_opens_and_closes_behind_a_tapped_row() {
 fn moving_a_tab_reads_that_tab_and_keeps_the_month() {
     let mut d = driver();
     let i = home(&d);
+    event(&mut d, i, home_event(H::MonthTapped(he::MonthTapped {})));
+    let older = home_data(d.view(i)).month_options[1].key.clone();
     event(
         &mut d,
         i,
-        home_event(H::MonthStepped(he::MonthStepped { months: -1 })),
+        home_event(H::MonthPicked(he::MonthPicked { month: older })),
     );
     let month = home_state(d.view(i)).month.clone();
     event(
         &mut d,
         i,
         home_event(H::Band(he::BandPicked {
-            key: "activity".into(),
+            key: "spending".into(),
         })),
     );
     let state = home_state(d.view(i));
-    assert_eq!(state.destination, Destination::Activity as i32);
+    assert_eq!(state.destination, Destination::Spending as i32);
     assert_eq!(state.month, month);
-    assert_eq!(state.band[1].key, "activity");
+    assert_eq!(state.band[1].key, "spending");
     assert!(state.band[1].current);
 }

@@ -128,102 +128,150 @@ struct MoneyHomeView: View {
 
     @ViewBuilder
     private func page(_ home: Centraid_Core_V1_MoneyHomeData, state: Centraid_Core_V1_MoneyHomeState) -> some View {
-        if home.showsMonth { monthStepper(home, chrome: state.chrome) }
         switch state.destination {
-        case .activity: activity(home.activity)
         case .cashflow: cashflow(home.cashflow)
-        default: spending(home.spending)
+        case .spending:
+            VStack(alignment: .leading, spacing: 16) { spending(home.spending) }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+        default:
+            VStack(alignment: .leading, spacing: 12) { activity(home.activity) }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
         }
     }
 
-    private func monthStepper(_ home: Centraid_Core_V1_MoneyHomeData, chrome: Centraid_Core_V1_MoneyHomeChrome) -> some View {
-        HStack(spacing: 0) {
-            KitIconKey(iconKey: "ChevronLeft", label: chrome.previousMonthLabel, identifier: "money-month-previous") {
-                send(event { $0.monthStepped = .with { $0.months = -1 } })
-            }
-            Text(home.monthLabel)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity)
-                .accessibilityAddTraits(.isHeader)
-            KitIconKey(iconKey: "ChevronRight", label: chrome.nextMonthLabel, identifier: "money-month-next") {
-                send(event { $0.monthStepped = .with { $0.months = 1 } })
-            }
-            .disabled(!home.canStepNext)
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin - 8)
-        .padding(.vertical, 4)
-    }
-
+    /// SPENDING: the chart card (spent so far, Week / Day, the bars and the sentence under the
+    /// selected one), the categories with their progress, then the notes and the recurring row.
     @ViewBuilder
     private func spending(_ spending: Centraid_Core_V1_MoneySpendingData) -> some View {
         if spending.hasEmpty {
             EmptyStateView(spending.empty, onAction: addStatement)
         } else {
-            ForEach(Array(spending.heroes.enumerated()), id: \.offset) { _, hero in
-                MoneyHeroView(hero: hero)
-            }
-            MoneyNote(text: spending.daysLeftLabel)
-            ForEach(Array(spending.inOutNet.enumerated()), id: \.offset) { _, group in
-                MoneyFigureCard(figures: group.figures)
+            ForEach(Array(spending.bars.enumerated()), id: \.offset) { index, bars in
+                let hero = index < spending.heroes.count ? spending.heroes[index] : spending.heroes.first
+                VStack(alignment: .leading, spacing: 12) {
+                    if !bars.heading.isEmpty {
+                        Text(bars.heading).kitType(.group).foregroundStyle(Surface.meta)
+                    }
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hero?.spentLabel ?? "")
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                            Text(hero?.spent ?? "")
+                                .kitType(.title)
+                                .monospacedDigit()
+                                .foregroundStyle(Surface.ink)
+                                .minimumScaleFactor(0.7)
+                                .lineLimit(1)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("money-hero")
+                        Spacer(minLength: 8)
+                        KitSegmented(
+                            options: bars.modes.map { (key: $0.key, label: $0.label) },
+                            selected: bars.modes.first(where: { $0.selected })?.key ?? "",
+                            identifier: "money-bars-mode",
+                            onSelect: { key in send(event { $0.barsModePicked = .with { $0.key = key } }) }
+                        )
+                    }
+                    MoneyBarsChart(bars: bars) { picked in
+                        send(event { $0.barPicked = .with { $0.index = UInt32(picked) } })
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kitCard()
             }
             ForEach(Array(spending.tables.enumerated()), id: \.offset) { _, table in
-                MoneySection(title: table.heading)
-                MoneyCategoryHeader(
-                    planned: table.plannedLabel,
-                    spent: table.spentLabel,
-                    left: table.leftLabel
-                )
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, line in
-                    categoryLine(line, currency: table.currency)
+                if !table.heading.isEmpty {
+                    Text(table.heading).kitType(.group).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+                }
+                MoneyCardStack {
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { index, line in
+                        if index > 0 { KitHairline(inset: 16) }
+                        MoneyCategoryProgressRow(line: line) { open(line.route) }
+                            .accessibilityIdentifier("money-category-\(line.route.moneyTarget.categoryID)")
+                    }
+                    if table.hasMore {
+                        KitHairline(inset: 16)
+                        MoneyRestRow(line: table.more, identifier: "money-categories-more") {
+                            send(event { $0.categoriesExpanded = .init() })
+                        }
+                    }
+                    if table.hasUncategorised {
+                        KitHairline(inset: 16)
+                        let needsKey = table.uncategorised.key
+                        MoneyRestRow(line: table.uncategorised, pending: true, identifier: "money-needs-category") {
+                            send(event { $0.categoryPicked = .with { $0.key = needsKey } })
+                        }
+                    }
+                }
+            }
+            if !spending.recurringLabel.isEmpty {
+                MoneyCardStack {
+                    CentraidRow(
+                        title: spending.recurringLabel,
+                        meta: spending.recurringMeta,
+                        identifier: "money-recurring"
+                    ) { open(spending.recurringRoute) }
                 }
             }
             ForEach(Array(spending.notes.enumerated()), id: \.offset) { _, note in
-                MoneyNote(text: note)
-            }
-            if !spending.recurringLabel.isEmpty {
-                CentraidRow(
-                    title: spending.recurringLabel,
-                    meta: spending.recurringMeta,
-                    identifier: "money-recurring"
-                ) { open(spending.recurringRoute) }
+                Text(note).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
             }
             ForEach(Array(spending.definitions.enumerated()), id: \.offset) { _, fact in
-                FieldRow(key: fact.label, value: fact.detail)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fact.label).kitType(.meta).fontWeight(.semibold).foregroundStyle(Surface.body)
+                    Text(fact.detail).kitType(.meta).foregroundStyle(Surface.meta)
+                }
+                .padding(.horizontal, 4)
             }
-            MoneyNote(text: spending.windowNote)
+            if !spending.windowNote.isEmpty {
+                Text(spending.windowNote).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+            }
         }
     }
 
-    private func categoryLine(_ line: Centraid_Core_V1_MoneyCategoryLine, currency: String) -> some View {
-        // Planned, spent and left across the page; a line with no plan has only what was spent.
-        let figure = line.hasPlan_p ? line.left : line.spent
-        return MoneyCategoryRow(
-            line: line,
-            accessibility: MoneyWords.spoken(line.accessibilityLabel, figure),
-            identifier: "money-category-\(line.route.moneyTarget.categoryID)"
-        ) { open(line.route) }
-    }
-
+    /// ACTIVITY, home: the month's overview card, the review banner, then each day's rows in
+    /// a card under its heading and what it came to.
     @ViewBuilder
     private func activity(_ activity: Centraid_Core_V1_MoneyActivityData) -> some View {
         if activity.hasEmpty {
             EmptyStateView(activity.empty, onAction: addStatement)
         } else {
-            if !activity.needsLabel.isEmpty {
+            ForEach(Array(activity.heroes.enumerated()), id: \.offset) { index, hero in
+                MoneyOverviewCard(
+                    hero: hero,
+                    daysLeft: activity.daysLeftLabel,
+                    inOut: index < activity.inOutNet.count ? activity.inOutNet[index] : nil
+                )
+            }
+            if !activity.needsTitle.isEmpty {
                 // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
                 let needsKey = activity.needsKey
-                MoneyNeedsRow(label: activity.needsLabel, figures: activity.needsCategory) {
+                MoneyReviewBanner(
+                    count: activity.needsCount,
+                    title: activity.needsTitle,
+                    review: activity.reviewLabel,
+                    spoken: activity.needsLabel
+                ) {
                     send(event { $0.categoryPicked = .with { $0.key = needsKey } })
                 }
             }
             ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
-                MoneySection(title: section.heading)
-                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                    MoneyRowView(row: row) { open(row.route) }
+                MoneyDayHeading(section: section)
+                MoneyCardStack {
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { KitHairline(inset: 64) }
+                        MoneyTxnRow(row: row) { open(row.route) }
+                    }
                 }
             }
-            MoneyNote(text: activity.window)
+            if !activity.window.isEmpty {
+                Text(activity.window).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+            }
             ShowMoreFooter(visible: activity.more) { send(event { $0.showMore = .init() }) }
         }
     }

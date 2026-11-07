@@ -752,6 +752,7 @@ impl Import {
                     label: words::statement_balance(locale),
                     amount: fold::text(stated.balance.as_ref()),
                     tone: Tone::Unspecified as i32,
+                    positive: false,
                 }),
             checkpoint_label: statement
                 .checkpoint

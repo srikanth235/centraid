@@ -271,17 +271,17 @@ fn target_event(kind: tg::Kind) -> wire::screen_event::Kind {
 
 /// A category line of Spending: its target route's arguments.
 fn a_category(d: &centraid_screens::testing::Driver) -> wire::Route {
-    let i = home(d);
-    home_data(d.view(i))
-        .spending
-        .as_ref()
-        .unwrap()
-        .tables
-        .iter()
-        .flat_map(|t| &t.rows)
-        .next()
-        .and_then(|row| row.route.clone())
-        .expect("a category line")
+    // Spending is not the home tab any more: ask the core for the month, as the screen does.
+    let wire::app_query_response::Answer::MoneySpending(spending) = load_answer(
+        d,
+        centraid_screens::catalog::load::money::Spending {
+            month: String::new(),
+        },
+    ) else {
+        panic!("not Spending");
+    };
+    let line = spending.categories.first().expect("a category line");
+    routes::target(&spending.month, &line.category_id, &line.currency)
 }
 
 #[test]
