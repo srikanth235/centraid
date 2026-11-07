@@ -77,7 +77,14 @@ import dev.centraid.android.screens.agenda.AgendaNoticeView
 import dev.centraid.android.screens.agenda.AgendaTaskActions
 import dev.centraid.android.screens.agenda.AgendaTaskSheet
 import dev.centraid.android.screens.agenda.AgendaTodoPlace
+import dev.centraid.android.screens.agenda.AgendaMonthView
+import dev.centraid.android.screens.agenda.AgendaPeriod
+import dev.centraid.android.screens.agenda.AgendaTimeView
+import dev.centraid.android.screens.agenda.AgendaTodayButton
 import dev.centraid.android.screens.agenda.AgendaViewMenu
+import dev.centraid.android.screens.agenda.AgendaYearView
+import dev.centraid.android.screens.agenda.agendaPeriod
+import dev.centraid.android.screens.agenda.stepPeriod
 import dev.centraid.android.screens.agenda.CATCH_UP
 import dev.centraid.android.screens.agenda.TodoQuickAddBar
 import dev.centraid.android.screens.agenda.TodoRowView
@@ -183,12 +190,22 @@ public fun AgendaHomeScreen(
         ) {
             Column(Modifier.fillMaxSize()) {
                 if (state.calendar_views.isNotEmpty()) {
-                    AgendaViewMenu(state.calendar_views, state.calendar_view_label) { destination ->
-                        onEvent(AgendaHomeEvent(destination = AgendaHomeEvent.DestinationChanged(destination = destination)))
-                    }
+                    AgendaViewMenu(
+                        views = state.calendar_views,
+                        label = state.calendar_view_label,
+                        monthStyles = state.data_?.month?.styles.orEmpty(),
+                        onPick = { destination ->
+                            onEvent(AgendaHomeEvent(destination = AgendaHomeEvent.DestinationChanged(destination = destination)))
+                        },
+                        onStyle = { style ->
+                            onEvent(AgendaHomeEvent(month_style = AgendaHomeEvent.MonthStyleChosen(style = style)))
+                        },
+                    )
                 }
                 val toolbar = state.toolbar
-                if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, onEvent)
+                if (toolbar != null && toolbar.shown) {
+                    AgendaToolbarRow(toolbar, chrome, agendaPeriod(state.destination, state.data_), onEvent)
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val loading = state.loading
                     val failure = state.failure
@@ -208,12 +225,28 @@ public fun AgendaHomeScreen(
                         }
                         data != null -> {
                             val todo = data.todo
+                            val timeGrid = data.time_grid
+                            val month = data.month
+                            val year = data.year
                             if (todo != null) {
                                 AgendaTodoPlace(todo, words, actions, onEvent)
+                            } else if (timeGrid != null) {
+                                AgendaTimeView(data.week_strip, timeGrid, onEvent, onOpen, actions.onCheck)
+                            } else if (month != null) {
+                                AgendaMonthView(month, actions, onEvent, onOpen)
+                            } else if (year != null) {
+                                AgendaYearView(year, onEvent)
                             } else {
                                 AgendaList(state, data, actions, onEvent, onOpen)
                             }
                         }
+                    }
+                    // THE FLOATING TODAY: over the content's bottom-start, above the band.
+                    if (toolbar != null && toolbar.shown && !toolbar.at_today) {
+                        AgendaTodayButton(
+                            label = chrome.today,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(KitGeometry.GUTTER),
+                        ) { onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested())) }
                     }
                 }
                 // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
@@ -252,6 +285,7 @@ private fun AgendaBandTab.toTab(): AppBandTab =
 private fun AgendaToolbarRow(
     toolbar: AgendaToolbar,
     chrome: AgendaChrome,
+    period: AgendaPeriod?,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
     Row(
@@ -267,16 +301,16 @@ private fun AgendaToolbarRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
-        if (!toolbar.at_today) {
-            OutlineButton(label = chrome.today, testTag = "agenda-today") {
-                onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested()))
-            }
-        }
+        // WEEK, MONTH AND YEAR STEP A PERIOD (`PeriodStepped`); the day lists step a day.
         KitStepper(
-            previousLabel = chrome.previous_day,
-            nextLabel = chrome.next_day,
-            onPrevious = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -1))) },
-            onNext = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = 1))) },
+            previousLabel = period?.previous ?: chrome.previous_day,
+            nextLabel = period?.next ?: chrome.next_day,
+            onPrevious = {
+                if (period != null) stepPeriod(onEvent, -1) else onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -1)))
+            },
+            onNext = {
+                if (period != null) stepPeriod(onEvent, 1) else onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = 1)))
+            },
             previousTag = "agenda-previous-day",
             nextTag = "agenda-next-day",
         )
@@ -456,7 +490,7 @@ private fun AgendaEmptyBlock(
     }
 }
 
-private fun LazyListScope.daySection(
+internal fun LazyListScope.daySection(
     section: AgendaDaySection,
     actions: AgendaTaskActions,
     onOpen: (Route) -> Unit,
