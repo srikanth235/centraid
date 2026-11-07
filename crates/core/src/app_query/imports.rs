@@ -17,7 +17,6 @@ use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::{KitError, KitResult};
 use centraid_vault::Vault;
 use centraid_vault::commands::calendar_push;
-use centraid_vault::rusqlite::OptionalExtension;
 
 use super::{Answer, VaultDoor, settle};
 use crate::error::Result;
@@ -122,20 +121,10 @@ pub(crate) fn calendar_owed(
 ) -> Result<Answer> {
     let limit = usize::try_from(limit).unwrap_or(usize::MAX).max(1);
     let after = (!after_event.is_empty()).then_some(after_event);
-    // The shell knows its calendars by origin ref (`calendar:<key>`); the vault's own origin ids are
-    // minted, so the refs are looked up here, inside the one read.
+    // The shell knows its calendars by origin ref (`calendar:<key>`); the vault's origin ids are
+    // minted, so the refs are looked up inside the one read.
     let page = vault.read(|connection| {
-        let mut ids: Vec<String> = Vec::new();
-        for reference in origins {
-            let found: Option<String> = connection
-                .query_row(
-                    "SELECT id FROM origin WHERE system = 'calendar' AND ref = ?1 ORDER BY created_at, id LIMIT 1",
-                    [reference],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            ids.extend(found);
-        }
+        let ids = calendar_push::origin_ids(connection, origins)?;
         calendar_push::owed_pushes(connection, &ids, after, limit)
     })?;
     let loaded: KitResult<(wire::ImportsCalendarOwed, Option<centraid_apps_kit::Denial>)> = Ok((

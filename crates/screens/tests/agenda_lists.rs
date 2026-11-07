@@ -336,6 +336,7 @@ fn the_old_new_project_events_still_make_a_list() {
 fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour() {
     let mut d = driver();
     let id = project(&d, "Allotment");
+    d.pump(std::time::Duration::from_millis(400));
     let i = d.push(agenda::TAB, routes::project(&id, "Allotment"));
     let data = project_data(d.view(i));
     assert_eq!(data.style_label, "Edit List");
@@ -428,6 +429,7 @@ fn a_key_outside_the_palette_or_the_icons_is_nothing() {
 fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
     let mut d = driver();
     let id = project(&d, "Doomed");
+    d.pump(std::time::Duration::from_millis(400));
     let i = d.push(agenda::TAB, routes::project(&id, "Doomed"));
     send_project(&mut d, i, pe::Kind::StyleRequested(pe::StyleRequested {}));
     // The list is trashed elsewhere while the sheet is up.
@@ -437,6 +439,7 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
             task_id: id.clone(),
         },
     );
+    d.pump(std::time::Duration::from_millis(400));
     send_project(
         &mut d,
         i,
@@ -446,7 +449,10 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
     );
     send_project(&mut d, i, pe::Kind::StyleSubmitted(pe::StyleSubmitted {}));
     let state = project_state(d.view(i));
-    let status = state.status.as_ref().expect("a status line");
+    let status = state
+        .status
+        .as_ref()
+        .unwrap_or_else(|| panic!("a status line: {state:?}"));
     assert!(status.refused, "{}", status.sentence);
     assert!(!status.sentence.is_empty());
     assert!(state.style.is_some(), "the sheet keeps the member's words");

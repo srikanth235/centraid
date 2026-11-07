@@ -150,6 +150,29 @@ fn writable_origins(
     Ok(found)
 }
 
+/// The vault's origin ids of the followed phone calendars the shell names by ref (`calendar:<key>`),
+/// in the order named; a ref no calendar is followed under is left out. The shell knows its
+/// calendars by ref, and the ids [`owed_pushes`] takes are minted.
+///
+/// # Errors
+///
+/// A database error.
+pub fn origin_ids(connection: &Connection, refs: &[String]) -> Result<Vec<String>> {
+    let mut ids = Vec::new();
+    for reference in refs {
+        let found: Option<String> = connection
+            .query_row(
+                "SELECT id FROM origin WHERE system = 'calendar' AND ref = ?1
+                  ORDER BY created_at, id LIMIT 1",
+                [reference],
+                |row| row.get(0),
+            )
+            .optional()?;
+        ids.extend(found);
+    }
+    Ok(ids)
+}
+
 /// The pushes owed to the phone calendars among `writable` (origin ids the shell reported
 /// writable), after the event `after`, at most `limit` of them (clamped to [`MAX_OWED`]).
 ///

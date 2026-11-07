@@ -32,8 +32,8 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
+use crate::shell::row_routes::{self, RowRef};
 use crate::strings::{Locale, agenda as agenda_words, agenda_event as words, fill};
-use crate::{docs, photos};
 
 /// Rows a first read asks for, and a Show more.
 const PAGE: usize = 30;
@@ -402,11 +402,19 @@ fn tile(
         &words::attachment_meta(locale),
         &[("kind", &kind), ("size", &format_byte_size(row.byte_size))],
     );
-    let route = if is_photo {
-        photos::routes::lightbox(&row.attachment_id, photos, "")
+    // WHERE A TAP GOES is the shell's one table of rows to pages (`row_routes`): this section
+    // names no other app's screen. The photographs beside a photo are what its viewer pages through.
+    let (app, entity) = if is_photo {
+        ("photos", PHOTO)
     } else {
-        docs::routes::document(&row.attachment_id, &title, &agenda_words::app_title(locale))
+        ("docs", "document")
     };
+    let row_ref = RowRef::new(app, entity, &row.attachment_id, &title);
+    let beside: Vec<RowRef> = photos
+        .iter()
+        .map(|id| RowRef::new("photos", PHOTO, id, ""))
+        .collect();
+    let route = row_routes::route(&row_ref, &agenda_words::app_title(locale), &beside);
     wire::AgendaAttachmentTile {
         attachment_id: row.attachment_id.clone(),
         accessibility_label: fill(
@@ -419,7 +427,7 @@ fn tile(
         thumbnail_path: row.thumbnail_path.clone(),
         icon_key: if is_photo { ICON_PHOTO } else { ICON_FILE }.to_owned(),
         badge: if is_photo { String::new() } else { kind },
-        route: Some(route),
+        route,
         title,
         meta,
     }
