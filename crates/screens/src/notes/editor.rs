@@ -13,6 +13,31 @@
 //! replaces words being typed. A pin is not typing: it is its own action, sent
 //! at once.
 //!
+//! **THE BODY, DRAWN.** With a draft, the view carries `rich`: the pure parse
+//! of the draft body ([`rich::parse`]) as blocks (heading, checklist, bullet,
+//! quote, paragraph) and spans (emphasis, strong, strike, code, faint syntax,
+//! links). Every range is in UTF-16 units of the draft body, the unit both
+//! shells index text in; `body_length` is the whole body's length in them. The
+//! parse is linear and bounded ([`rich::MAX_UTF16`], `MAX_BLOCKS`,
+//! `MAX_SPANS`; `truncated` says a bound was hit and the rest is plain), so the
+//! view parses on every call instead of caching: a cache behind `&self` would
+//! need interior mutability, and the parse costs a bounded pass.
+//!
+//! **Wiki links resolve in `update`, never in `view`.** `[[Title]]` is looked up
+//! once per typed title in a cache (resolved to a live note, trashed, or
+//! missing) filled by [`Editor::resolve`]: at most 32 `link-targets` reads (the
+//! parse caps distinct titles) plus ONE `trash` read per call, and none while
+//! typing adds no new title. A read that fails caches nothing (the chip shows
+//! MISSING and is retried on the next update). The cache is CLEARED on every
+//! reload event (`DataChanged`, `EnvironmentChanged`, `Refreshed`), since a note
+//! may have been renamed, trashed or restored. The view only consults it.
+//!
+//! **Core edits.** A checklist tap, Return and the status line's Undo are
+//! edits the core makes to the body (`rich::toggle`, `rich::return_at`) and
+//! saves like any other; Return also asks the shell to place the caret
+//! (`selection`, applied once per `seq`). A toggle says "Item checked" with
+//! an Undo that holds only until any other edit.
+//!
 //! **A new note is not read.** Nothing is in the vault under its id yet, and a
 //! read would answer "could not find this note". It opens on an empty draft;
 //! its first save is a create (whose output names the note), and every later
@@ -23,6 +48,7 @@ use wire::app_query_response::Answer;
 use wire::notes_editor_event::Kind as N;
 use wire::screen_event::Kind as E;
 
+use super::rich::{self, LinkTarget};
 use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
@@ -30,9 +56,27 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, notes as words};
+use crate::strings::{Locale, fill, notes as words};
+use std::collections::HashMap;
 
 const BRACKETS: &str = "[[";
+
+/// What a typed `[[title]]` is, as last read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Resolution {
+    Resolved { id: String, title: String },
+    Trashed,
+    Missing,
+}
+
+/// The toggle the status line's Undo takes back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Undo {
+    /// The checklist marker's UTF-16 start.
+    at: u32,
+    /// The item's state after the toggle.
+    checked_after: bool,
+}
 
 /// The words a member types: a note not yet created has no id.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -147,6 +191,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         tags: Vec::new(),
         meta: String::new(),
         status: None,
+        said: false,
+        undo: None,
+        selection: None,
+        selection_seq: 0,
+        resolutions: HashMap::new(),
         link: None,
         started: false,
     }))
@@ -178,6 +227,16 @@ struct Editor {
     meta: String,
     /// A pin's refusal.
     status: Option<String>,
+    /// `status` holds an editing sentence (item checked, no such note), which
+    /// any body edit takes away; a pin's refusal is not one.
+    said: bool,
+    /// The toggle Undo would take back; shown while its sentence is.
+    undo: Option<Undo>,
+    /// Where the caret goes after a core edit, until the shell's next edit.
+    selection: Option<u32>,
+    selection_seq: u64,
+    /// Typed `[[title]]` to what it resolved to. Never holds a failed read.
+    resolutions: HashMap<String, Resolution>,
     link: Option<LinkSheet>,
     /// `Appeared` has been seen.
     started: bool,
@@ -226,6 +285,7 @@ impl Editor {
                 if self.auto.loaded(incoming) {
                     // Nothing was typed over: the draft is the vault's.
                 }
+                self.resolve(ctx);
             }
             Reading::Denied(denial) => {
                 self.auto = Autosave::new();
@@ -296,7 +356,199 @@ impl Editor {
             "\n"
         };
         let next = format!("{body}{lead}- [ ] ");
+        self.forget_sentence();
         self.auto.edit(ctx, |draft| draft.body = next);
+        self.resolve(ctx);
+    }
+
+    /// An edit takes the editing sentence and its Undo away.
+    fn forget_sentence(&mut self) {
+        self.undo = None;
+        if self.said {
+            self.status = None;
+            self.said = false;
+        }
+    }
+
+    /// Say an editing sentence on the status line.
+    fn say(&mut self, sentence: String) {
+        self.status = Some(sentence);
+        self.said = true;
+    }
+
+    /// The draft body's parse: the view's and every event's one source.
+    fn parsed(&self) -> Option<rich::Rich> {
+        self.auto.draft().map(|draft| rich::parse(&draft.body))
+    }
+
+    /// FILL THE RESOLUTION CACHE for the typed titles it lacks: one
+    /// `link-targets` read each (at most 32, the parse's cap), then ONE `trash`
+    /// read for those no live note answered. A failed read caches nothing and
+    /// stops the round: the chip shows MISSING and the next update retries.
+    fn resolve(&mut self, ctx: &Ctx) {
+        let Some(rich) = self.parsed() else {
+            return;
+        };
+        let titles: Vec<String> = rich
+            .wiki_titles
+            .into_iter()
+            .filter(|title| !self.resolutions.contains_key(title))
+            .collect();
+        let mut unresolved = Vec::new();
+        for title in titles {
+            let reading = read::read(
+                ctx,
+                load::notes::LinkTargets {
+                    term: title.clone(),
+                },
+                |answer| match answer {
+                    Answer::NotesLinkTargets(found) => Some(found.targets),
+                    _ => None,
+                },
+            );
+            let Reading::Data(targets) = reading else {
+                return;
+            };
+            let wanted = title.trim().to_lowercase();
+            match targets.into_iter().find(|target| {
+                target.entity == "note" && target.title.trim().to_lowercase() == wanted
+            }) {
+                Some(target) => {
+                    self.resolutions.insert(
+                        title,
+                        Resolution::Resolved {
+                            id: target.id,
+                            title: target.title,
+                        },
+                    );
+                }
+                None => unresolved.push(title),
+            }
+        }
+        if unresolved.is_empty() {
+            return;
+        }
+        let reading = read::read(ctx, load::notes::Trash::default(), |answer| match answer {
+            Answer::NotesTrash(trash) => Some(trash),
+            _ => None,
+        });
+        let Reading::Data(trash) = reading else {
+            return;
+        };
+        for title in unresolved {
+            let wanted = title.trim().to_lowercase();
+            let trashed = trash.notes.iter().any(|row| {
+                row.title
+                    .as_deref()
+                    .is_some_and(|name| name.trim().to_lowercase() == wanted)
+            });
+            self.resolutions.insert(
+                title,
+                if trashed {
+                    Resolution::Trashed
+                } else {
+                    Resolution::Missing
+                },
+            );
+        }
+    }
+
+    /// A checklist circle tapped: flip the item, say so, and offer Undo.
+    fn toggle(&mut self, ctx: &Ctx, at: u32) {
+        let Some(body) = self.auto.draft().map(|draft| draft.body.clone()) else {
+            return;
+        };
+        let Some(toggled) = rich::toggle(&body, at) else {
+            return;
+        };
+        self.forget_sentence();
+        self.auto.edit(ctx, |draft| draft.body = toggled.body);
+        self.undo = Some(Undo {
+            at: toggled.marker.start,
+            checked_after: toggled.checked,
+        });
+        let locale = ctx.locale();
+        self.say(if toggled.checked {
+            words::item_checked(locale)
+        } else {
+            words::item_unchecked(locale)
+        });
+    }
+
+    /// Undo takes the toggle back only while the item is still as it left it.
+    fn undo(&mut self, ctx: &Ctx) {
+        let Some(undo) = self.undo.take() else {
+            return;
+        };
+        let Some(body) = self.auto.draft().map(|draft| draft.body.clone()) else {
+            return;
+        };
+        let intact = rich::parse(&body).blocks.iter().any(|block| {
+            block.kind == rich::BlockKind::Checklist
+                && block.checked == undo.checked_after
+                && block.marker.is_some_and(|marker| marker.start == undo.at)
+        });
+        self.forget_sentence();
+        if !intact {
+            return;
+        }
+        if let Some(toggled) = rich::toggle(&body, undo.at) {
+            self.auto.edit(ctx, |draft| draft.body = toggled.body);
+        }
+    }
+
+    /// A chip tapped: a web link opens outside; a note that is not there says
+    /// so (a live note's route is the shell's to open).
+    fn open_chip(&mut self, ctx: &Ctx, at: u32) -> Vec<wire::Effect> {
+        let Some(rich) = self.parsed() else {
+            return Vec::new();
+        };
+        let link = rich
+            .spans
+            .iter()
+            .filter(|span| span.link.is_some())
+            .find(|span| span.range.start == at)
+            .or_else(|| {
+                rich.spans
+                    .iter()
+                    .filter(|span| span.link.is_some())
+                    .find(|span| span.range.start <= at && at < span.range.end)
+            })
+            .and_then(|span| span.link.as_ref());
+        let Some(link) = link else {
+            return Vec::new();
+        };
+        let locale = ctx.locale();
+        match &link.target {
+            LinkTarget::Url(url) => vec![wire::Effect {
+                kind: Some(wire::effect::Kind::OpenUrl(wire::OpenUrl {
+                    url: url.clone(),
+                })),
+            }],
+            LinkTarget::Wiki(title) => {
+                let template = match self.resolutions.get(title) {
+                    Some(Resolution::Resolved { .. }) => return Vec::new(),
+                    Some(Resolution::Trashed) => words::link_trashed(locale),
+                    _ => words::link_missing(locale),
+                };
+                self.forget_sentence();
+                self.say(fill(&template, &[("title", title)]));
+                Vec::new()
+            }
+        }
+    }
+
+    /// Return, made by the core: the body and where the caret goes.
+    fn return_pressed(&mut self, ctx: &Ctx, caret: u32) {
+        let Some(body) = self.auto.draft().map(|draft| draft.body.clone()) else {
+            return;
+        };
+        let returned = rich::return_at(&body, caret);
+        self.forget_sentence();
+        self.auto.edit(ctx, |draft| draft.body = returned.body);
+        self.selection_seq += 1;
+        self.selection = Some(returned.caret);
+        self.resolve(ctx);
     }
 
     /// A FAILED READ REPLACES THE EDITOR: there is nothing to edit.
@@ -346,6 +598,8 @@ impl Editor {
         let key = kit_act::key(&[&request.action.clone(), id], kit_act::fresh());
         let settled = kit_act::act(ctx, request, &key);
         self.status = (!settled.committed).then_some(settled.refusal);
+        self.undo = None;
+        self.said = false;
     }
 
     fn pin(&mut self, ctx: &Ctx) {
@@ -353,6 +607,7 @@ impl Editor {
             return;
         }
         self.pinned = !self.pinned;
+        self.forget_sentence();
         self.status = None;
         // A note not yet in the vault takes the pin after its create lands.
         if let Some(id) = self.note_id.clone() {
@@ -391,6 +646,8 @@ impl Editor {
         let key = kit_act::key(&[&request.action.clone(), &id, label], kit_act::fresh());
         let settled = kit_act::act(ctx, request, &key);
         self.status = (!settled.committed).then_some(settled.refusal);
+        self.undo = None;
+        self.said = false;
         self.reload(ctx);
     }
 
@@ -405,10 +662,16 @@ impl Editor {
         let Some(before) = self.auto.draft().map(|draft| draft.body.clone()) else {
             return;
         };
+        // The shell has applied any caret it was told to place.
+        self.selection = None;
+        if before != after {
+            self.forget_sentence();
+        }
         self.auto.edit(ctx, |draft| draft.body.clone_from(&after));
         if let Some((anchor, replaces)) = bracket_opened(&before, &after) {
             self.open_link(ctx, anchor, replaces);
         }
+        self.resolve(ctx);
     }
 
     fn open_link(&mut self, ctx: &Ctx, anchor: usize, replaces: bool) {
@@ -458,10 +721,12 @@ impl Editor {
             return;
         };
         let spliced = splice_link(&body, sheet.anchor, sheet.replaces, &title);
+        self.forget_sentence();
         self.auto.edit(ctx, |draft| draft.body = spliced);
+        self.resolve(ctx);
     }
 
-    fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) {
+    fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
@@ -479,7 +744,7 @@ impl Editor {
             Some(N::LinkTerm(typed)) => {
                 if let Some(sheet) = &mut self.link {
                     if sheet.term == typed.term {
-                        return;
+                        return Vec::new();
                     }
                     sheet.term = typed.term;
                     self.read_links(ctx);
@@ -487,15 +752,133 @@ impl Editor {
             }
             Some(N::LinkPicked(picked)) => self.pick_link(ctx, &picked.id),
             Some(N::LinkDismissed(_)) => self.link = None,
-            Some(N::Refreshed(_)) => {
-                if self.note_id.is_some() {
-                    self.reload(ctx);
-                }
-            }
+            Some(N::Refreshed(_)) => self.reload_all(ctx),
+            Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
+            Some(N::StatusActed(_)) => self.undo(ctx),
+            Some(N::LinkOpened(opened)) => return self.open_chip(ctx, opened.at),
+            Some(N::ReturnPressed(pressed)) => self.return_pressed(ctx, pressed.caret),
             Some(N::Save(_)) => self.save_now(ctx),
             Some(N::TagAdded(added)) => self.tag(ctx, &added.label, true),
             Some(N::TagRemoved(removed)) => self.tag(ctx, &removed.label, false),
             None => {}
+        }
+        Vec::new()
+    }
+
+    /// A reload event: a note may have been renamed, trashed or restored, so
+    /// what the typed titles meant is forgotten and read again.
+    fn reload_all(&mut self, ctx: &Ctx) {
+        if self.note_id.is_some() {
+            self.resolutions.clear();
+            self.reload(ctx);
+        }
+    }
+
+    /// The draft body drawn, every `[[title]]` as the cache last read it.
+    fn rich_view(&self, locale: Locale, rich: &rich::Rich) -> wire::NotesRichText {
+        let range = |range: rich::Range| wire::NotesTextRange {
+            start: range.start,
+            end: range.end,
+        };
+        let blocks = rich
+            .blocks
+            .iter()
+            .map(|block| {
+                use rich::BlockKind as K;
+                let kind = match block.kind {
+                    K::Paragraph => wire::NotesRichBlockKind::Paragraph,
+                    K::Heading => wire::NotesRichBlockKind::Heading,
+                    K::Checklist => wire::NotesRichBlockKind::Checklist,
+                    K::Bullet => wire::NotesRichBlockKind::Bullet,
+                    K::Quote => wire::NotesRichBlockKind::Quote,
+                };
+                wire::NotesRichBlock {
+                    kind: kind.into(),
+                    range: Some(range(block.range)),
+                    marker: block.marker.map(range),
+                    content: Some(range(block.content)),
+                    level: block.level,
+                    checked: block.checked,
+                    accessibility_label: match (block.kind, block.checked) {
+                        (K::Checklist, true) => words::checklist_checked(locale),
+                        (K::Checklist, false) => words::checklist_unchecked(locale),
+                        _ => String::new(),
+                    },
+                }
+            })
+            .collect();
+        let spans = rich
+            .spans
+            .iter()
+            .map(|span| {
+                use rich::SpanStyle as S;
+                let style = match span.style {
+                    S::Emphasis => wire::NotesRichStyle::Emphasis,
+                    S::Strong => wire::NotesRichStyle::Strong,
+                    S::Strike => wire::NotesRichStyle::Strike,
+                    S::Code => wire::NotesRichStyle::Code,
+                    S::Syntax => wire::NotesRichStyle::Syntax,
+                    S::Link => wire::NotesRichStyle::Link,
+                };
+                wire::NotesRichSpan {
+                    style: style.into(),
+                    range: Some(range(span.range)),
+                    chip: span.link.as_ref().map(|link| self.chip(locale, link)),
+                }
+            })
+            .collect();
+        wire::NotesRichText {
+            blocks,
+            spans,
+            truncated: rich.truncated,
+            body_length: rich.length,
+        }
+    }
+
+    fn chip(&self, locale: Locale, link: &rich::Link) -> wire::NotesLinkChip {
+        let spoken =
+            |template: String, label: &str| fill(&template, &[("title", label), ("label", label)]);
+        match &link.target {
+            LinkTarget::Url(_) => wire::NotesLinkChip {
+                kind: wire::NotesLinkChipKind::Url.into(),
+                label: link.label.clone(),
+                resolution: wire::NotesLinkResolution::Resolved.into(),
+                route: None,
+                accessibility_label: spoken(words::link_web_spoken(locale), &link.label),
+            },
+            LinkTarget::Wiki(typed) => {
+                let (label, resolution, route, template) = match self.resolutions.get(typed) {
+                    Some(Resolution::Resolved { id, title }) => (
+                        if title.trim().is_empty() {
+                            typed.clone()
+                        } else {
+                            title.clone()
+                        },
+                        wire::NotesLinkResolution::Resolved,
+                        Some(routes::editor(id)),
+                        words::link_note_spoken(locale),
+                    ),
+                    Some(Resolution::Trashed) => (
+                        typed.clone(),
+                        wire::NotesLinkResolution::Trashed,
+                        None,
+                        words::link_trashed_spoken(locale),
+                    ),
+                    _ => (
+                        typed.clone(),
+                        wire::NotesLinkResolution::Missing,
+                        None,
+                        words::link_missing_spoken(locale),
+                    ),
+                };
+                wire::NotesLinkChip {
+                    kind: wire::NotesLinkChipKind::Note.into(),
+                    accessibility_label: spoken(template, &label),
+                    label,
+                    resolution: resolution.into(),
+                    route,
+                }
+            }
         }
     }
 
@@ -620,11 +1003,7 @@ impl Screen for Editor {
             // A CHANGE NEVER TAKES A MEMBER'S TYPING: `loaded` keeps unsaved
             // words and notes that the vault moved. The core sends a change for
             // every local commit, this editor's own saves included.
-            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
-                if self.note_id.is_some() {
-                    self.reload(ctx);
-                }
-            }
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload_all(ctx),
             Some(E::TimerFired(fired)) => {
                 if self.auto.fired(ctx, &fired.timer) {
                     self.reload(ctx);
@@ -633,7 +1012,7 @@ impl Screen for Editor {
             }
             // CLOSE = DONE: leaving saves what is unsaved.
             Some(E::Left(_)) => self.save_now(ctx),
-            Some(E::NotesEditor(event)) => self.event(event, ctx),
+            Some(E::NotesEditor(event)) => return self.event(event, ctx),
             _ => {}
         }
         Vec::new()
@@ -712,6 +1091,16 @@ impl Screen for Editor {
                         .or_else(|| self.status.clone())
                         .unwrap_or(save_status)
                 },
+                // Undo is offered while its sentence is the one shown.
+                status_action: if self.undo.is_some()
+                    && !autosave.refused
+                    && self.read_failure.is_none()
+                    && self.status.is_some()
+                {
+                    words::undo(locale)
+                } else {
+                    String::new()
+                },
                 title: if exists {
                     words::note_title(locale)
                 } else {
@@ -750,7 +1139,15 @@ impl Screen for Editor {
                     remove_label: words::remove_tag(locale),
                 })
                 .collect(),
+            rich: None,
+            selection: self.selection.map(|caret| wire::NotesEditorSelection {
+                caret,
+                seq: self.selection_seq,
+            }),
         };
+        if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {
+            state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
+        }
         if let Some(id) = draft.and_then(|draft| draft.id.as_deref()) {
             state.history = Some(routes::history(id, &title));
         }
@@ -775,10 +1172,30 @@ mod tests {
         core: &'a centraid_core::Handle,
         fail_reads: std::cell::Cell<bool>,
         fail_writes: std::cell::Cell<bool>,
+        /// `link-targets` and `trash` reads made through this ctx.
+        links: std::cell::Cell<usize>,
+        trashes: std::cell::Cell<usize>,
+    }
+
+    impl<'a> Flaky<'a> {
+        fn new(core: &'a centraid_core::Handle) -> Self {
+            Self {
+                core,
+                fail_reads: false.into(),
+                fail_writes: false.into(),
+                links: 0.into(),
+                trashes: 0.into(),
+            }
+        }
     }
 
     impl centraid_core::screens::ScreenCtx for Flaky<'_> {
         fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+            match request.query.as_str() {
+                "link-targets" => self.links.set(self.links.get() + 1),
+                "trash" => self.trashes.set(self.trashes.get() + 1),
+                _ => {}
+            }
             if self.fail_reads.get() {
                 Err(centraid_core::CoreError::Unavailable {
                     reason: "test read failure".into(),
@@ -816,11 +1233,7 @@ mod tests {
         let output: serde_json::Value =
             serde_json::from_slice(&created.output).expect("create output");
         let id = output["id"].as_str().expect("created id");
-        let core = Flaky {
-            core: &driver.handle,
-            fail_reads: false.into(),
-            fail_writes: false.into(),
-        };
+        let core = Flaky::new(&driver.handle);
         let env = crate::screen::Environment::default();
         let ctx = Ctx::new(&core, &env);
         let mut screen = build(&routes::editor(id)).expect("editor");
@@ -981,5 +1394,489 @@ mod tests {
         };
         assert_eq!(keep_derived(Some(&current), incoming.clone()).title, "");
         assert_eq!(keep_derived(None, incoming).title, "Milk");
+    }
+
+    // ---- the rich view, core edits and wiki resolution ----
+
+    use crate::testing::Driver;
+
+    fn make(driver: &Driver, title: &str, body: &str) -> String {
+        let mut request: wire::ActRequest = act::notes::CreateNote {
+            title: title.into(),
+            body: body.into(),
+            ..Default::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let created = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&created.output).expect("output");
+        output["id"].as_str().expect("id").to_owned()
+    }
+
+    fn trash(driver: &Driver, id: &str) {
+        let mut request: wire::ActRequest = act::notes::DeleteNote { note_id: id.into() }.into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        assert_eq!(driver.act(request).status, wire::ActStatus::Executed as i32);
+    }
+
+    fn stored_body(driver: &Driver, id: &str) -> String {
+        let stored = driver
+            .handle
+            .load(&load::notes::Note { note_id: id.into() }.into())
+            .expect("stored note");
+        let Some(Answer::NotesNote(note)) = stored.answer.and_then(|answer| answer.answer) else {
+            panic!("note answer")
+        };
+        note.body
+    }
+
+    fn send(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: E) -> Vec<wire::Effect> {
+        screen.update(wire::ScreenEvent { kind: Some(kind) }, ctx)
+    }
+
+    fn ev(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: N) -> Vec<wire::Effect> {
+        send(
+            screen,
+            ctx,
+            E::NotesEditor(wire::NotesEditorEvent { kind: Some(kind) }),
+        )
+    }
+
+    fn typed(screen: &mut Box<dyn Screen>, ctx: &Ctx, body: &str) {
+        ev(
+            screen,
+            ctx,
+            N::Body(wire::notes_editor_event::BodyEdited { body: body.into() }),
+        );
+    }
+
+    fn tap(screen: &mut Box<dyn Screen>, ctx: &Ctx, at: u32) {
+        ev(
+            screen,
+            ctx,
+            N::ChecklistToggled(wire::notes_editor_event::ChecklistToggled { at }),
+        );
+    }
+
+    fn undo(screen: &mut Box<dyn Screen>, ctx: &Ctx) {
+        ev(
+            screen,
+            ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+    }
+
+    fn state(screen: &dyn Screen, ctx: &Ctx) -> wire::NotesEditorState {
+        let Some(wire::view_state::Kind::NotesEditor(state)) = screen.view(ctx).kind else {
+            panic!("editor state")
+        };
+        state
+    }
+
+    fn body_of(state: &wire::NotesEditorState) -> String {
+        match &state.content {
+            Some(wire::notes_editor_state::Content::Draft(draft)) => draft.body.clone(),
+            other => panic!("no draft: {other:?}"),
+        }
+    }
+
+    fn opened<'a>(core: &'a Flaky, id: &str) -> (Box<dyn Screen>, Ctx<'a>) {
+        let env: &'static crate::screen::Environment =
+            Box::leak(Box::new(crate::screen::Environment::default()));
+        let ctx = Ctx::new(core, env);
+        let mut screen = build(&routes::editor(id)).expect("editor");
+        send(&mut screen, &ctx, E::Appeared(wire::Appeared {}));
+        (screen, ctx)
+    }
+
+    fn chips(state: &wire::NotesEditorState) -> Vec<wire::NotesLinkChip> {
+        state
+            .rich
+            .as_ref()
+            .expect("rich")
+            .spans
+            .iter()
+            .filter_map(|span| span.chip.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_view_carries_blocks_spans_and_labels() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let body = "# Plan\n- [x] done\n- [ ] todo\nsome **bold** and https://example.com/a b\n[docs](https://example.org)";
+        let id = make(&driver, "T", body);
+        let core = Flaky::new(&driver.handle);
+        let (screen, ctx) = opened(&core, &id);
+        let state = state(&*screen, &ctx);
+        let rich = state.rich.clone().expect("rich");
+        assert_eq!(rich.body_length, body.encode_utf16().count() as u32);
+        assert!(!rich.truncated);
+        let kinds: Vec<i32> = rich.blocks.iter().map(|b| b.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                wire::NotesRichBlockKind::Heading as i32,
+                wire::NotesRichBlockKind::Checklist as i32,
+                wire::NotesRichBlockKind::Checklist as i32,
+                wire::NotesRichBlockKind::Paragraph as i32,
+                wire::NotesRichBlockKind::Paragraph as i32,
+            ]
+        );
+        assert_eq!(rich.blocks[0].level, 1);
+        assert_eq!(
+            rich.blocks[0].range,
+            Some(wire::NotesTextRange { start: 0, end: 6 })
+        );
+        assert_eq!(
+            rich.blocks[1].marker,
+            Some(wire::NotesTextRange { start: 9, end: 12 })
+        );
+        assert!(rich.blocks[1].checked);
+        assert_eq!(rich.blocks[1].accessibility_label, "Checked");
+        assert!(!rich.blocks[2].checked);
+        assert_eq!(rich.blocks[2].accessibility_label, "Not checked");
+        assert!(rich.blocks[3].marker.is_none());
+        assert_eq!(rich.blocks[3].accessibility_label, "");
+        assert!(
+            rich.spans
+                .iter()
+                .any(|span| span.style == wire::NotesRichStyle::Strong as i32)
+        );
+        let chips = chips(&state);
+        assert_eq!(chips.len(), 2);
+        assert_eq!(chips[0].kind, wire::NotesLinkChipKind::Url as i32);
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
+        assert!(chips[0].route.is_none());
+        assert_eq!(
+            chips[0].accessibility_label,
+            format!("Link {}", chips[0].label)
+        );
+        assert_eq!(chips[1].label, "docs");
+    }
+
+    #[test]
+    fn ranges_are_utf16_units_after_an_emoji() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let body = "😀 [docs](https://example.org)";
+        let id = make(&driver, "T", body);
+        let core = Flaky::new(&driver.handle);
+        let (screen, ctx) = opened(&core, &id);
+        let rich = state(&*screen, &ctx).rich.expect("rich");
+        assert_eq!(rich.body_length, 2 + 1 + 27);
+        let link = rich
+            .spans
+            .iter()
+            .find(|span| span.style == wire::NotesRichStyle::Link as i32)
+            .expect("link span");
+        let range = link.range.expect("range");
+        assert_eq!(range.start, 3);
+        assert!(range.end <= rich.body_length);
+    }
+
+    #[test]
+    fn a_tap_checks_an_item_saves_it_and_undo_takes_it_back() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [ ] milk\n- [ ] eggs");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        tap(&mut screen, &ctx, 4);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "- [x] milk\n- [ ] eggs");
+        let chrome = view.chrome.expect("chrome");
+        assert_eq!(chrome.status, "Item checked");
+        assert_eq!(chrome.status_action, "Undo");
+        send(&mut screen, &ctx, E::Left(wire::Left {}));
+        assert_eq!(stored_body(&driver, &id), "- [x] milk\n- [ ] eggs");
+
+        undo(&mut screen, &ctx);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "- [ ] milk\n- [ ] eggs");
+        let chrome = view.chrome.expect("chrome");
+        assert_eq!(chrome.status_action, "");
+        assert_ne!(chrome.status, "Item checked");
+        // A second Undo does nothing.
+        undo(&mut screen, &ctx);
+        assert_eq!(body_of(&state(&*screen, &ctx)), "- [ ] milk\n- [ ] eggs");
+        send(&mut screen, &ctx, E::Left(wire::Left {}));
+        assert_eq!(stored_body(&driver, &id), "- [ ] milk\n- [ ] eggs");
+    }
+
+    #[test]
+    fn unchecking_says_so() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [x] milk");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        tap(&mut screen, &ctx, 0);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "- [ ] milk");
+        assert_eq!(view.chrome.expect("chrome").status, "Item unchecked");
+    }
+
+    #[test]
+    fn undo_after_the_item_was_edited_away_does_nothing() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [ ] milk");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        tap(&mut screen, &ctx, 0);
+        typed(&mut screen, &ctx, "milk");
+        let view = state(&*screen, &ctx);
+        assert_eq!(view.chrome.expect("chrome").status_action, "");
+        undo(&mut screen, &ctx);
+        assert_eq!(body_of(&state(&*screen, &ctx)), "milk");
+    }
+
+    #[test]
+    fn a_tap_off_a_checklist_changes_nothing() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "plain\n- [ ] item");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        tap(&mut screen, &ctx, 2);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "plain\n- [ ] item");
+        let chrome = view.chrome.expect("chrome");
+        assert_eq!(chrome.status_action, "");
+        assert_eq!(chrome.status, "");
+    }
+
+    #[test]
+    fn a_toggle_round_trip_keeps_crlf() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let body = "- [ ] a\r\n- [ ] b\r\n";
+        let id = make(&driver, "T", body);
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        tap(&mut screen, &ctx, 12);
+        assert_eq!(body_of(&state(&*screen, &ctx)), "- [ ] a\r\n- [x] b\r\n");
+        undo(&mut screen, &ctx);
+        assert_eq!(body_of(&state(&*screen, &ctx)), body);
+    }
+
+    fn pressed(screen: &mut Box<dyn Screen>, ctx: &Ctx, caret: u32) {
+        ev(
+            screen,
+            ctx,
+            N::ReturnPressed(wire::notes_editor_event::ReturnPressed { caret }),
+        );
+    }
+
+    #[test]
+    fn return_continues_a_checklist_and_moves_the_caret() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [x] milk");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        pressed(&mut screen, &ctx, 10);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "- [x] milk\n- [ ] ");
+        let selection = view.selection.expect("selection");
+        assert_eq!(selection.caret, 17);
+        assert_eq!(selection.seq, 1);
+        // The shell applied it: the next edit clears it.
+        typed(&mut screen, &ctx, "- [x] milk\n- [ ] e");
+        assert!(state(&*screen, &ctx).selection.is_none());
+        // The next Return is a new seq.
+        pressed(&mut screen, &ctx, 18);
+        assert_eq!(state(&*screen, &ctx).selection.expect("selection").seq, 2);
+    }
+
+    #[test]
+    fn return_on_an_empty_item_ends_the_list_and_on_a_plain_line_adds_a_newline() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [ ] ");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        pressed(&mut screen, &ctx, 6);
+        let view = state(&*screen, &ctx);
+        assert_eq!(body_of(&view), "");
+        assert_eq!(view.selection.expect("selection").caret, 0);
+        typed(&mut screen, &ctx, "hello");
+        pressed(&mut screen, &ctx, 5);
+        assert_eq!(body_of(&state(&*screen, &ctx)), "hello\n");
+    }
+
+    #[test]
+    fn return_does_not_open_the_powerbox() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "- [ ] see [");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        pressed(&mut screen, &ctx, 11);
+        assert!(state(&*screen, &ctx).link.is_none());
+    }
+
+    fn opened_link(screen: &mut Box<dyn Screen>, ctx: &Ctx, at: u32) -> Vec<wire::Effect> {
+        ev(
+            screen,
+            ctx,
+            N::LinkOpened(wire::notes_editor_event::LinkOpened { at }),
+        )
+    }
+
+    #[test]
+    fn wiki_chips_resolve_to_live_trashed_and_missing_notes() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let live = make(&driver, "Lisbon itinerary", "trip");
+        let old = make(&driver, "Old plan", "x");
+        trash(&driver, &old);
+        let body = "[[lisbon itinerary]] [[Old plan]] [[Nowhere]] [[ ]]";
+        let id = make(&driver, "Host", body);
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let chips = chips(&view);
+        assert_eq!(chips.len(), 3, "{chips:?}");
+        assert_eq!(chips[0].label, "Lisbon itinerary");
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
+        assert_eq!(chips[0].route, Some(routes::editor(&live)));
+        assert_eq!(chips[0].accessibility_label, "Note Lisbon itinerary");
+        assert_eq!(chips[1].label, "Old plan");
+        assert_eq!(
+            chips[1].resolution,
+            wire::NotesLinkResolution::Trashed as i32
+        );
+        assert!(chips[1].route.is_none());
+        assert_eq!(chips[1].accessibility_label, "Note in trash Old plan");
+        assert_eq!(chips[2].label, "Nowhere");
+        assert_eq!(
+            chips[2].resolution,
+            wire::NotesLinkResolution::Missing as i32
+        );
+        assert_eq!(chips[2].accessibility_label, "Missing note Nowhere");
+
+        let starts: Vec<u32> = view
+            .rich
+            .expect("rich")
+            .spans
+            .iter()
+            .filter(|span| span.chip.is_some())
+            .map(|span| span.range.expect("range").start)
+            .collect();
+        // A live note's tap is the shell's: no effect, no sentence.
+        assert!(opened_link(&mut screen, &ctx, starts[0]).is_empty());
+        assert_eq!(state(&*screen, &ctx).chrome.expect("chrome").status, "");
+        assert!(opened_link(&mut screen, &ctx, starts[2]).is_empty());
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "No note called Nowhere");
+        assert_eq!(chrome.status_action, "");
+        assert!(opened_link(&mut screen, &ctx, starts[1]).is_empty());
+        assert_eq!(
+            state(&*screen, &ctx).chrome.expect("chrome").status,
+            "Old plan is in the trash"
+        );
+        // Typing takes the sentence away.
+        typed(&mut screen, &ctx, "x");
+        assert_eq!(state(&*screen, &ctx).chrome.expect("chrome").status, "");
+    }
+
+    #[test]
+    fn a_url_chip_opens_outside_and_an_unsafe_link_is_no_link() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let body = "[ok](https://example.org/x) [bad](javascript:alert(1))";
+        let id = make(&driver, "T", body);
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let spans = view.rich.expect("rich").spans;
+        let links: Vec<_> = spans.iter().filter(|s| s.chip.is_some()).collect();
+        assert_eq!(links.len(), 1);
+        let at = links[0].range.expect("range").start;
+        let effects = opened_link(&mut screen, &ctx, at);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(
+            effects[0].kind,
+            Some(wire::effect::Kind::OpenUrl(wire::OpenUrl {
+                url: "https://example.org/x".into()
+            }))
+        );
+        // Offset inside the unsafe text: nothing.
+        let bad = body.find("[bad]").expect("bad") as u32 + 2;
+        assert!(opened_link(&mut screen, &ctx, bad).is_empty());
+    }
+
+    #[test]
+    fn resolution_reads_are_bounded_and_cached() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let body: String = (1..=40).map(|n| format!("[[t{n}]] ")).collect();
+        let id = make(&driver, "T", &body);
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(core.links.get() <= 32, "{}", core.links.get());
+        assert_eq!(core.links.get(), 32);
+        assert_eq!(core.trashes.get(), 1);
+        // Typing that adds no title reads nothing.
+        let (links, trashes) = (core.links.get(), core.trashes.get());
+        typed(&mut screen, &ctx, &format!("{body}more"));
+        typed(&mut screen, &ctx, &format!("{body}more words"));
+        assert_eq!(core.links.get(), links);
+        assert_eq!(core.trashes.get(), trashes);
+        // A reload event forgets and reads again, within the same bound.
+        send(
+            &mut screen,
+            &ctx,
+            E::DataChanged(wire::DataChanged::default()),
+        );
+        assert_eq!(core.links.get() - links, 32);
+        assert_eq!(core.trashes.get() - trashes, 1);
+    }
+
+    #[test]
+    fn a_failed_read_is_not_cached() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "[[Later]]");
+        let core = Flaky::new(&driver.handle);
+        core.fail_reads.set(true);
+        let env = crate::screen::Environment::default();
+        let ctx = Ctx::new(&core, &env);
+        let mut screen = build(&routes::editor(&id)).expect("editor");
+        send(&mut screen, &ctx, E::Appeared(wire::Appeared {}));
+        core.fail_reads.set(false);
+        // The first read failed: there is no draft yet, so the first success loads it.
+        send(
+            &mut screen,
+            &ctx,
+            E::DataChanged(wire::DataChanged::default()),
+        );
+        let chips = chips(&state(&*screen, &ctx));
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Missing as i32
+        );
+        let before = core.links.get();
+        typed(&mut screen, &ctx, "[[Later]] x");
+        assert_eq!(core.links.get(), before, "a resolved miss is cached");
+    }
+
+    #[test]
+    fn a_huge_body_is_truncated_not_swallowed() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "T", "x");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let huge = "- [ ] a\n".repeat(37_500);
+        assert!(huge.len() >= 300_000);
+        typed(&mut screen, &ctx, &huge);
+        let rich = state(&*screen, &ctx).rich.expect("rich");
+        assert!(rich.truncated);
+        assert!(rich.blocks.len() <= rich::MAX_BLOCKS);
+        assert_eq!(rich.body_length as usize, huge.len());
+    }
+
+    #[test]
+    fn there_is_no_rich_text_without_a_draft() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let core = Flaky::new(&driver.handle);
+        let env = crate::screen::Environment::default();
+        let ctx = Ctx::new(&core, &env);
+        let screen = build(&routes::editor("nothing")).expect("editor");
+        assert!(state(&*screen, &ctx).rich.is_none());
     }
 }
