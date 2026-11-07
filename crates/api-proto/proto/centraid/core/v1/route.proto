@@ -363,12 +363,13 @@ enum HealthDestination {
   HEALTH_DESTINATION_WORKOUTS = 3;
 }
 
-// A metric page's range: the last 7 days, 30 days, or 12 months.
+// A metric page's range: the last 7 days, 30 days, 6 months, or 12 months.
 enum HealthMetricRange {
   HEALTH_METRIC_RANGE_UNSPECIFIED = 0;
   HEALTH_METRIC_RANGE_WEEK = 1;
   HEALTH_METRIC_RANGE_MONTH = 2;
   HEALTH_METRIC_RANGE_YEAR = 3;
+  HEALTH_METRIC_RANGE_SIX_MONTHS = 4;
 }
 
 // `health.home`: UNSPECIFIED is Today.

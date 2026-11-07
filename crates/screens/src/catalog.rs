@@ -5090,6 +5090,7 @@ pub mod load {
             #[default]
             Week,
             Month,
+            SixMonths,
             Year,
         }
         impl SeriesRange {
@@ -5097,12 +5098,13 @@ pub mod load {
                 match self {
                     Self::Week => "week",
                     Self::Month => "month",
+                    Self::SixMonths => "six_months",
                     Self::Year => "year",
                 }
             }
         }
 
-        /// One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.
+        /// One metric over a week, a month, six months (26 weekly buckets) or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.
         #[derive(Clone, Debug, Default)]
         pub struct Series {
             pub metric: SeriesMetric,

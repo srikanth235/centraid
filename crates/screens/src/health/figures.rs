@@ -17,7 +17,7 @@ const WEEK_BACK: i64 = 6;
 pub const WORKOUT_ICON: &str = "Gym";
 
 /// Kotlin's `roundToLong`: ties toward positive infinity.
-fn round(value: f64) -> i64 {
+pub(crate) fn round(value: f64) -> i64 {
     #[allow(clippy::cast_possible_truncation)]
     {
         (value + 0.5).floor() as i64

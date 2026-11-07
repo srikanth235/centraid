@@ -1,8 +1,10 @@
-//! ONE METRIC OVER A WEEK, A MONTH OR A YEAR (#1129), opened from a Today or a
-//! Trends row: the period's per-day average against the member's typical, the
-//! chart's buckets with the typical line across them, and the facts. Every figure
-//! is `health.series`'s (R-1129-12); the identity hue marks only the bucket today
-//! falls in (R-1129-10).
+//! ONE METRIC OVER A WEEK, A MONTH, 6 MONTHS OR A YEAR (#1129, #1173), opened from a
+//! Summary card or a Trends row: the period's per-day average against the member's
+//! typical, the chart's buckets with the typical line (and, for a week or a month,
+//! the usual range) across them, and the facts. Every figure is `health.series`'s
+//! (R-1129-12). The Health colour marks the bucket today falls in; what a finger on a
+//! bar says (`HealthChartBar.callout`) is worded here and held by the shell, so a drag
+//! is never an event a frame.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -20,9 +22,30 @@ use crate::strings::{Locale, fill, health as words};
 
 const RANGE_WEEK: &str = "week";
 const RANGE_MONTH: &str = "month";
+const RANGE_SIX_MONTHS: &str = "six_months";
 const RANGE_YEAR: &str = "year";
 const WEEK: usize = 7;
+/// Weeks between the ticks of a 6-month chart.
+const FIVE_WEEKS: usize = 5;
 const QUARTER: usize = 3;
+
+/// What one bar of the chart is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Bars {
+    Days,
+    Weeks,
+    Months,
+}
+
+impl Bars {
+    fn of(range: wire::HealthMetricRange) -> Self {
+        match range {
+            wire::HealthMetricRange::SixMonths => Self::Weeks,
+            wire::HealthMetricRange::Year => Self::Months,
+            _ => Self::Days,
+        }
+    }
+}
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -33,6 +56,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         metric: Metric::of_key(&args.metric).unwrap_or(Metric::Steps),
         range: match wire::HealthMetricRange::try_from(args.range) {
             Ok(wire::HealthMetricRange::Month) => wire::HealthMetricRange::Month,
+            Ok(wire::HealthMetricRange::SixMonths) => wire::HealthMetricRange::SixMonths,
             Ok(wire::HealthMetricRange::Year) => wire::HealthMetricRange::Year,
             _ => wire::HealthMetricRange::Week,
         },
@@ -60,6 +84,7 @@ impl MetricPage {
         };
         let range = match self.range {
             wire::HealthMetricRange::Month => load::health::SeriesRange::Month,
+            wire::HealthMetricRange::SixMonths => load::health::SeriesRange::SixMonths,
             wire::HealthMetricRange::Year => load::health::SeriesRange::Year,
             _ => load::health::SeriesRange::Week,
         };
@@ -77,6 +102,7 @@ impl MetricPage {
         let range = match key {
             RANGE_WEEK => wire::HealthMetricRange::Week,
             RANGE_MONTH => wire::HealthMetricRange::Month,
+            RANGE_SIX_MONTHS => wire::HealthMetricRange::SixMonths,
             RANGE_YEAR => wire::HealthMetricRange::Year,
             _ => return,
         };
@@ -90,7 +116,7 @@ impl MetricPage {
     fn data(&self, ctx: &Ctx, series: &wire::HealthSeries) -> wire::HealthMetricData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
         let metric = self.metric;
-        let year = self.range == wire::HealthMetricRange::Year;
+        let bars_of = Bars::of(self.range);
         let caption = caption(locale, self.range, &series.buckets);
         if series.buckets.iter().all(|bucket| bucket.value.is_none()) {
             return wire::HealthMetricData {
@@ -116,30 +142,27 @@ impl MetricPage {
                     units,
                 );
                 let diff = diff.chars().skip(1).collect::<String>();
+                let (above, below, about) = match bars_of {
+                    Bars::Days => (
+                        words::versus_above(locale),
+                        words::versus_below(locale),
+                        words::versus_about(locale),
+                    ),
+                    Bars::Weeks => (
+                        words::versus_six_months_above(locale),
+                        words::versus_six_months_below(locale),
+                        words::versus_six_months_about(locale),
+                    ),
+                    Bars::Months => (
+                        words::versus_year_above(locale),
+                        words::versus_year_below(locale),
+                        words::versus_year_about(locale),
+                    ),
+                };
                 match sign {
-                    1 => fill(
-                        &if year {
-                            words::versus_year_above(locale)
-                        } else {
-                            words::versus_above(locale)
-                        },
-                        &[("diff", &diff)],
-                    ),
-                    -1 => fill(
-                        &if year {
-                            words::versus_year_below(locale)
-                        } else {
-                            words::versus_below(locale)
-                        },
-                        &[("diff", &diff)],
-                    ),
-                    _ => {
-                        if year {
-                            words::versus_year_about(locale)
-                        } else {
-                            words::versus_about(locale)
-                        }
-                    }
+                    1 => fill(&above, &[("diff", &diff)]),
+                    -1 => fill(&below, &[("diff", &diff)]),
+                    _ => about,
                 }
             }
             _ => String::new(),
@@ -151,7 +174,11 @@ impl MetricPage {
             .iter()
             .filter_map(|bucket| bucket.value)
             .fold(0.0_f64, f64::max);
-        let top = figures::scale_over(tallest.max(series.typical.unwrap_or(0.0)));
+        let top = figures::scale_over(
+            tallest
+                .max(series.typical.unwrap_or(0.0))
+                .max(series.typical_high.unwrap_or(0.0)),
+        );
         let last = series.buckets.len().saturating_sub(1);
         let bars: Vec<wire::HealthChartBar> = series
             .buckets
@@ -159,13 +186,16 @@ impl MetricPage {
             .enumerate()
             .map(|(index, bucket)| {
                 let value = bucket.value;
-                let words_ = [
-                    bucket_words(locale, self.range, bucket),
-                    value
-                        .map(|value| figures::phrase(locale, metric, value, units))
-                        .unwrap_or_default(),
-                ];
+                let figure = value
+                    .map(|value| figures::phrase(locale, metric, value, units))
+                    .unwrap_or_default();
+                let words_ = [bucket_words(locale, bars_of, bucket), figure.clone()];
                 wire::HealthChartBar {
+                    callout: if figure.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{} · {figure}", callout_when(locale, bars_of, bucket))
+                    },
                     has_value: value.is_some(),
                     height_bp: value.map_or(0, |value| figures::bp(value, top)),
                     current: index == last,
@@ -180,6 +210,13 @@ impl MetricPage {
             })
             .collect();
         let per = per_unit(locale, metric, &unit);
+        let versus_good = metric.higher_is_better()
+            && matches!(
+                (series.average, series.typical),
+                (Some(average), Some(typical)) if average > typical
+            )
+            && !versus.is_empty()
+            && series.versus_typical.is_some_and(|diff| diff > 0.0);
         let average_words = [number.as_str(), per.as_str()]
             .iter()
             .filter(|part| !part.is_empty())
@@ -202,9 +239,23 @@ impl MetricPage {
                 .map_or(0, |typical| figures::bp(typical, top)),
             typical_label: words::typical_line(locale),
             ticks: ticks(locale, self.range, &series.buckets),
-            facts: facts(locale, metric, series, year, units),
+            facts: facts(locale, metric, series, bars_of, units),
             foot: foot(locale, metric, &Store::of(ctx).name(locale)),
             empty: None,
+            has_typical_range: series.typical_low.is_some() && series.typical_high.is_some(),
+            typical_low_bp: series.typical_low.map_or(0, |low| figures::bp(low, top)),
+            typical_high_bp: series.typical_high.map_or(0, |high| figures::bp(high, top)),
+            about_heading: fill(
+                &words::about_title(locale),
+                &[("metric", &figures::label(locale, metric).to_lowercase())],
+            ),
+            versus_good,
+            average_label: match metric {
+                Metric::Sleep => words::average_label_night(locale),
+                Metric::RestingHr => words::average_label_reading(locale),
+                Metric::Weight => words::average_label_latest(locale),
+                _ => words::average_label_day(locale),
+            },
         }
     }
 }
@@ -213,23 +264,21 @@ fn facts(
     locale: Locale,
     metric: Metric,
     series: &wire::HealthSeries,
-    year: bool,
+    bars: Bars,
     units: Units,
 ) -> Vec<wire::HealthFact> {
     let mut facts = Vec::new();
     if let Some(best) = &series.best {
         let lowest = metric == Metric::RestingHr;
-        let label = match (year, lowest) {
-            (true, true) => words::fact_lowest_month(locale),
-            (true, false) => words::fact_best_month(locale),
-            (false, true) => words::fact_lowest_day(locale),
-            (false, false) => words::fact_best_day(locale),
+        let label = match (bars, lowest) {
+            (Bars::Months, true) => words::fact_lowest_month(locale),
+            (Bars::Months, false) => words::fact_best_month(locale),
+            (Bars::Weeks, true) => words::fact_lowest_week(locale),
+            (Bars::Weeks, false) => words::fact_best_week(locale),
+            (Bars::Days, true) => words::fact_lowest_day(locale),
+            (Bars::Days, false) => words::fact_best_day(locale),
         };
-        let at = if year {
-            month_of(locale, &best.start)
-        } else {
-            civil::dated(locale, &best.start)
-        };
+        let at = callout_when(locale, bars, best);
         if let Some(value) = best.value {
             facts.push(wire::HealthFact {
                 label,
@@ -250,10 +299,10 @@ fn facts(
     }
     if series.typical.is_some() && series.counted > 0 {
         facts.push(wire::HealthFact {
-            label: if year {
-                words::fact_above_months(locale)
-            } else {
-                words::fact_above_days(locale)
+            label: match bars {
+                Bars::Months => words::fact_above_months(locale),
+                Bars::Weeks => words::fact_above_weeks(locale),
+                Bars::Days => words::fact_above_days(locale),
             },
             detail: fill(
                 &words::fact_count(locale),
@@ -267,13 +316,24 @@ fn facts(
     facts
 }
 
+/// "About steps" in a paragraph: what the metric is, how its days are made, and that the vault
+/// only reads.
 fn foot(locale: Locale, metric: Metric, store: &str) -> String {
-    match metric {
+    let what = match metric {
+        Metric::Steps => words::about_steps(locale),
+        Metric::Sleep => words::about_sleep(locale),
+        Metric::Energy => words::about_energy(locale),
+        Metric::Exercise => words::about_exercise(locale),
+        Metric::RestingHr => words::about_heart(locale),
+        Metric::Weight => words::about_weight(locale),
+    };
+    let how = match metric {
         Metric::Sleep => words::metric_foot_sleep(locale),
         Metric::RestingHr => fill(&words::metric_foot_heart(locale), &[("store", store)]),
         Metric::Weight => words::metric_foot_weight(locale),
         _ => fill(&words::metric_foot_day(locale), &[("store", store)]),
-    }
+    };
+    format!("{what} {how} {}", words::metric_read_only(locale))
 }
 
 fn month_of(locale: Locale, day: &str) -> String {
@@ -291,6 +351,7 @@ fn caption(
     };
     match range {
         wire::HealthMetricRange::Month => words::caption_month(locale),
+        wire::HealthMetricRange::SixMonths => words::caption_six_months(locale),
         wire::HealthMetricRange::Year => {
             format!(
                 "{} – {}",
@@ -306,15 +367,31 @@ fn caption(
     }
 }
 
-fn bucket_words(
-    locale: Locale,
-    range: wire::HealthMetricRange,
-    bucket: &wire::HealthBucket,
-) -> String {
-    if range == wire::HealthMetricRange::Year {
-        month_of(locale, &bucket.start)
-    } else {
-        civil::day_month(locale, &bucket.start)
+fn bucket_words(locale: Locale, bars: Bars, bucket: &wire::HealthBucket) -> String {
+    match bars {
+        Bars::Months => month_of(locale, &bucket.start),
+        Bars::Weeks => fill(
+            &words::bucket_week_of(locale),
+            &[("day", &figures::short_date(locale, &bucket.start))],
+        ),
+        Bars::Days => civil::day_month(locale, &bucket.start),
+    }
+}
+
+/// When a bar is, for the scrubber and the best-of fact: "Thu 30 Oct", "Week of 23 Sep",
+/// "October".
+fn callout_when(locale: Locale, bars: Bars, bucket: &wire::HealthBucket) -> String {
+    match bars {
+        Bars::Months => month_of(locale, &bucket.start),
+        Bars::Weeks => fill(
+            &words::bucket_week_of(locale),
+            &[("day", &figures::short_date(locale, &bucket.start))],
+        ),
+        Bars::Days => format!(
+            "{} {}",
+            civil::weekday_short(locale, &bucket.start),
+            figures::short_date(locale, &bucket.start)
+        ),
     }
 }
 
@@ -331,6 +408,10 @@ pub fn ticks(
 ) -> Vec<String> {
     match range {
         wire::HealthMetricRange::Month => back(buckets, WEEK)
+            .iter()
+            .map(|bucket| figures::short_date(locale, &bucket.start))
+            .collect(),
+        wire::HealthMetricRange::SixMonths => back(buckets, FIVE_WEEKS)
             .iter()
             .map(|bucket| figures::short_date(locale, &bucket.start))
             .collect(),
@@ -419,6 +500,11 @@ impl Screen for MetricPage {
                             RANGE_MONTH,
                             wire::HealthMetricRange::Month,
                             words::range_month(locale),
+                        ),
+                        segment(
+                            RANGE_SIX_MONTHS,
+                            wire::HealthMetricRange::SixMonths,
+                            words::range_six_months(locale),
                         ),
                         segment(
                             RANGE_YEAR,

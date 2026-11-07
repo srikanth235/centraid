@@ -59,13 +59,14 @@ enum HealthMetric {
   HEALTH_METRIC_WEIGHT_KG = 6;
 }
 
-// A metric's series: the last 7 days, the last 30 days, or the last 12
-// calendar months (the current month to today).
+// A metric's series: the last 7 days, the last 30 days, the last 26 weeks
+// (182 days), or the last 12 calendar months (the current month to today).
 enum HealthRange {
   HEALTH_RANGE_UNSPECIFIED = 0;
   HEALTH_RANGE_WEEK = 1;
   HEALTH_RANGE_MONTH = 2;
   HEALTH_RANGE_YEAR = 3;
+  HEALTH_RANGE_SIX_MONTHS = 4;
 }
 
 // The trends: the last 30 days, the last 90 days, or the last 12 calendar
@@ -161,6 +162,13 @@ message HealthTodayMetric {
   optional double high = 6;
   // How many days fed `typical`.
   uint32 typical_days = 7;
+  // The 7 days to today, oldest first, one bucket a day (a day with no row has
+  // no value). The Summary card's sparkline.
+  repeated HealthBucket week = 8;
+  // The per-day average of the last 30 days against the 30 days before, as a
+  // percentage of the earlier (`HealthTrend.change_pct` for the 30-day range).
+  // Absent when either period has no row or the earlier averages 0.
+  optional double month_change_pct = 9;
 }
 
 message HealthToday {
@@ -191,16 +199,16 @@ message HealthSeries {
   HealthMetric metric = 1;
   HealthRange range = 2;
   string today = 3;
-  // WEEK: 7 days to today; MONTH: 30 days to today; YEAR: 12 months to
-  // today's, each the per-day average of its days that have a row. Oldest
-  // first.
+  // WEEK: 7 days to today; MONTH: 30 days to today; SIX_MONTHS: 26 runs of
+  // 7 days, the last ending today; YEAR: 12 months to today's, each the
+  // per-day average of its days that have a row. Oldest first.
   repeated HealthBucket buckets = 4;
   // The period's per-day average over its days that have a row (weight: the
   // newest value in it), and the equal period before it.
   optional double average = 5;
   optional double previous_average = 6;
-  // WEEK and MONTH: the 30-day typical (`HealthTodayMetric.typical`). YEAR:
-  // the previous year's per-day average.
+  // WEEK and MONTH: the 30-day typical (`HealthTodayMetric.typical`).
+  // SIX_MONTHS and YEAR: the per-day average of the period before.
   optional double typical = 7;
   // The best bucket: the highest, but the lowest for resting heart rate;
   // absent for weight, where no direction is better.
@@ -215,6 +223,10 @@ message HealthSeries {
   // `typical` (absent when `typical` is 0). Absent when either is.
   optional double versus_typical = 12;
   optional double versus_typical_pct = 13;
+  // WEEK and MONTH: the 25th and 75th percentiles of the days `typical` read
+  // (`HealthTodayMetric.low`, `high`). Absent for the longer ranges.
+  optional double typical_low = 14;
+  optional double typical_high = 15;
 }
 
 // `health.trends`: every metric over a range, with a sparkline.
