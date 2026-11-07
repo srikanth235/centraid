@@ -656,7 +656,7 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
             || (civil::plus_days(day, 1).as_deref() == Some(end_day)
                 && civil::clock(end) == "00:00");
         let (start, end) = clip(start, end_minute);
-        let (time_label, spoken) = fold::time_of(locale, input.cycle, event, day);
+        let (time_label, spoken) = fold::time_of(locale, input.tasks.cycle, event, day);
         let title = event_title(locale, event);
         let meta = if event
             .conferencing_uri
