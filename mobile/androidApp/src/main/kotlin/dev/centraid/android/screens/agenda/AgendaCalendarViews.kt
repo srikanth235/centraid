@@ -170,7 +170,7 @@ internal fun agendaPeriod(destination: AgendaDestination, data: AgendaHomeData?)
 }
 
 internal fun stepPeriod(onEvent: (AgendaHomeEvent) -> Unit, by: Int) {
-    onEvent(AgendaHomeEvent(period_stepped = AgendaHomeEvent.PeriodStepped(by = by)))
+    onEvent(AgendaHomeEvent(period_stepped = AgendaHomeEvent.PeriodStepped(by_ = by)))
 }
 
 private fun pickDay(onEvent: (AgendaHomeEvent) -> Unit, day: String, destination: AgendaDestination) {
