@@ -29,3 +29,6 @@ __pycache__
 
 # The v1 Rust workspace build directory (#1020).
 /target/
+
+# Agent verification output (screenshots, DerivedData); never committed.
+.verify/
