@@ -62,33 +62,3 @@ struct AgendaSmartListGrid: View {
         .padding(.vertical, 8)
     }
 }
-
-/// The Calendar tab's view menu: the current view's name and a chevron; a tap
-/// lists Day and List (Rust's rows), each picking its destination.
-struct AgendaViewMenu: View {
-    let views: [Centraid_Core_V1_AgendaCalendarView]
-    let label: String
-    let pick: (Centraid_Core_V1_AgendaDestination) -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Menu {
-            ForEach(views, id: \.key) { view in
-                Button(view.label) { pick(view.destination) }
-                    .accessibilityIdentifier("agenda-view-\(view.key)")
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(views.first(where: { $0.current })?.label ?? label)
-                    .centraidType("smallStrong")
-                CentraidIconView(iconKey: "ChevronDown", tint: Theme.color("textSoft", scheme), size: 14)
-            }
-            .foregroundStyle(Theme.color("text", scheme))
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-        }
-        .accessibilityLabel(label)
-        .accessibilityIdentifier("agenda-view-menu")
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}

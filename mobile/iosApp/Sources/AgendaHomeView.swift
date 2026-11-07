@@ -68,12 +68,26 @@ struct AgendaHomeView: View {
         } content: {
             VStack(spacing: 0) {
                 if !state.calendarViews.isEmpty {
-                    AgendaViewMenu(views: state.calendarViews, label: state.calendarViewLabel) { destination in
-                        send(AgendaEvents.make { $0.destination = .with { $0.destination = destination } })
-                    }
+                    AgendaViewMenu(
+                        views: state.calendarViews,
+                        label: state.calendarViewLabel,
+                        month: monthGrid(state),
+                        pick: { destination in
+                            send(AgendaEvents.make { $0.destination = .with { $0.destination = destination } })
+                        },
+                        pickStyle: { style in
+                            send(AgendaEvents.make { $0.monthStyle = .with { $0.style = style } })
+                        }
+                    )
                 }
                 if state.toolbar.shown {
-                    AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, send: send)
+                    AgendaToolbarView(
+                        toolbar: state.toolbar,
+                        eventCountText: eventCountText,
+                        chrome: state.chrome,
+                        stepsPeriod: stepsPeriod(state),
+                        send: send
+                    )
                 }
                 ReadStateView(
                     content: content,
@@ -81,6 +95,12 @@ struct AgendaHomeView: View {
                     onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
                 ) { home in
                     homeContent(home, state: state)
+                }
+                // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
+                .overlay(alignment: .bottomLeading) {
+                    if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
+                        AgendaTodayButton(label: state.chrome.today, send: send)
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "agenda-status-action") {
                     send(AgendaEvents.make { $0.statusActed = .init() })
@@ -201,6 +221,20 @@ struct AgendaHomeView: View {
         return field
     }
 
+    /// The Month the data holds, for the view menu's second group (Grid and List).
+    private func monthGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Centraid_Core_V1_AgendaMonthGrid? {
+        if case let .data(home)? = state.content, home.hasMonth { return home.month }
+        return nil
+    }
+
+    /// WEEK, MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); Day and the lists by days.
+    private func stepsPeriod(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        switch state.calendarViews.first(where: { $0.current })?.destination {
+        case .week?, .month?, .year?: return true
+        default: return false
+        }
+    }
+
     /// The day-one empty's words and import door, as the kit's message.
     private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
         var empty = Centraid_Core_V1_EmptyState()
@@ -217,6 +251,13 @@ struct AgendaHomeView: View {
     ) -> some View {
         if home.hasTodo {
             AgendaTodoList(home: home, state: state, send: send, open: open)
+        } else if home.hasTimeGrid {
+            // DAY AND WEEK: the hour grid, under the week strip on Day.
+            AgendaTimeGridView(home: home, send: send, open: open)
+        } else if home.hasMonth {
+            AgendaMonthView(home: home, chrome: state.chrome, send: send, open: open)
+        } else if home.hasYear {
+            AgendaYearView(year: home.year, send: send)
         } else if home.empty != .none, home.empty != .unspecified {
             if home.empty == .noMatch {
                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
@@ -294,13 +335,14 @@ private struct CalendarImportButton: View {
 
 // MARK: - Toolbar
 
-/// The day bar: range label, ‹ ›, and Today — hidden when the state says the
-/// anchor is already today.
+/// The day bar: range label and ‹ ›. Today is the floating key (`AgendaTodayButton`).
 private struct AgendaToolbarView: View {
     let toolbar: Centraid_Core_V1_AgendaToolbar
     /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").
     let eventCountText: String
     let chrome: Centraid_Core_V1_AgendaChrome
+    /// Week, Month and Year step a whole period (`PeriodStepped`); the rest step a day.
+    let stepsPeriod: Bool
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -317,14 +359,9 @@ private struct AgendaToolbarView: View {
                     nextLabel: chrome.nextDay,
                     previousIdentifier: "agenda-previous-day",
                     nextIdentifier: "agenda-next-day",
-                    onPrevious: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = -1 } }) },
-                    onNext: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = 1 } }) }
+                    onPrevious: { step(-1) },
+                    onNext: { step(1) }
                 )
-                if !toolbar.atToday {
-                    KitLink(label: chrome.today, identifier: "agenda-today") {
-                        send(AgendaEvents.make { $0.today = .init() })
-                    }
-                }
                 Spacer(minLength: 0)
                 Text([toolbar.monthLabel, eventCountText].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
                     .centraidType("annotLabel")
@@ -333,6 +370,14 @@ private struct AgendaToolbarView: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
+    }
+
+    private func step(_ by: Int32) {
+        if stepsPeriod {
+            send(AgendaEvents.make { $0.periodStepped = .with { $0.by = by } })
+        } else {
+            send(AgendaEvents.make { $0.dayStepped = .with { $0.days = by } })
+        }
     }
 }
 
@@ -558,7 +603,7 @@ private struct AgendaTodoList: View {
     }
 }
 
-private struct AgendaSectionView: View {
+struct AgendaSectionView: View {
     let section: Centraid_Core_V1_AgendaDaySection
     let chrome: Centraid_Core_V1_AgendaChrome
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
