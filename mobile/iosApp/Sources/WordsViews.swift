@@ -818,7 +818,7 @@ struct WordsControls: View {
 /// beside the one ink button ("Save a copy", "Scan QR code", "Try again").
 private struct WordsTonalButton: View {
     let label: String
-    var iconKey = ""
+    var iconKey: String? = nil
     var identifier = ""
     let action: () -> Void
 
@@ -829,7 +829,7 @@ private struct WordsTonalButton: View {
         let accent = AppAccent.shell
         Button(action: action) {
             HStack(spacing: 8) {
-                if !iconKey.isEmpty {
+                if let iconKey {
                     CentraidIconView(iconKey: iconKey, tint: enabled ? accent.text : Surface.meta, size: 16)
                 }
                 Text(label)
