@@ -40,7 +40,8 @@ pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
-use super::todo::ops::Ops;
+use super::todo::ops::{NewTask, Ops};
+use super::todo::quick::Quick;
 use super::todo::rows;
 use crate::catalog::act;
 use crate::kit::civil;
@@ -65,6 +66,8 @@ struct QuickAdd {
     /// The bar is drawn: the Plus (or Notes' "Send to Agenda") opened it.
     drawn: bool,
     focused: bool,
+    /// What the keyboard toolbar has staged for the next add (#1173).
+    staged: Quick,
 }
 
 pub(super) struct Home {
@@ -126,6 +129,7 @@ impl Home {
                 drawn: !seed.is_empty(),
                 focused: !seed.is_empty(),
                 title: seed,
+                staged: Quick::default(),
             },
             limit: rows::PAGE,
             ops: Ops::default(),
@@ -321,10 +325,12 @@ impl Home {
             | H::EventResized(_)
             | H::MonthStyle(_)
             | H::PeriodStepped(_)
-            | H::TaskDeleted(_)
-            | H::QuickTool(_)
-            | H::QuickDue(_)
-            | H::QuickTag(_) => {}
+            | H::TaskDeleted(_) => {}
+            // THE KEYBOARD TOOLBAR (#1173): drawn over To-do's bar only.
+            H::QuickTool(picked) if self.toolbar_up() => self.quick.staged.pick_tool(&picked.key),
+            H::QuickDue(picked) if self.toolbar_up() => self.quick.staged.pick_due(&picked.key),
+            H::QuickTag(added) if self.toolbar_up() => self.quick.staged.add_tag(&added.text),
+            H::QuickTool(_) | H::QuickDue(_) | H::QuickTag(_) => {}
             H::NextPage(_) => {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
@@ -368,16 +374,33 @@ impl Home {
         self.refresh(ctx);
     }
 
-    /// To-do's quick add: a bare title, landing in the Inbox. The bar keeps its
-    /// words when the vault refuses.
+    /// The bar is drawn on To-do, so its toolbar answers.
+    fn toolbar_up(&self) -> bool {
+        self.destination == Dest::Todo && self.quick.drawn && !self.denied()
+    }
+
+    /// To-do's quick add: a title, landing in the Inbox with what the toolbar
+    /// staged. The bar keeps its words and its staging when the vault refuses,
+    /// and after an add it stays drawn and focused for the next one.
     fn add(&mut self, ctx: &Ctx) {
         let title = self.quick.title.trim().to_owned();
         if title.is_empty() || self.denied() || self.destination != Dest::Todo {
             return;
         }
         let inbox = task::inbox(ctx.locale());
-        if self.ops.add(ctx, &title, "", &inbox, None, None) {
+        let due = self.quick.staged.due_day(&self.held.today());
+        let new = NewTask {
+            title: &title,
+            due: &due,
+            tags: self.quick.staged.tags(),
+            flagged: self.quick.staged.flagged(),
+            ..NewTask::default()
+        };
+        if self.ops.add_full(ctx, &new, &inbox).is_some() {
             self.quick.title.clear();
+            self.quick.staged.clear();
+            self.quick.drawn = true;
+            self.quick.focused = true;
         }
         self.refresh(ctx);
     }
@@ -564,20 +587,24 @@ impl Screen for Home {
                         .status()
                         .cloned()
                         .or_else(|| self.ops.status.clone()),
-                    quick_add: Some(wire::TodoQuickAdd {
-                        title: self.quick.title.clone(),
-                        can_submit: !self.quick.title.trim().is_empty(),
-                        lands_label: fill(
-                            &sentences::lands_in(locale),
-                            &[("place", &task::inbox(locale))],
-                        ),
-                        // Hidden while search is open, term or not: the bar and its
-                        // Plus would be a second verb over a field that is looking.
-                        shown: todo && !denied && data.is_some() && !self.search_open,
-                        focused: drawn && self.quick.focused,
-                        add_label: task::add_task(locale),
-                        drawn,
-                        ..wire::TodoQuickAdd::default()
+                    quick_add: Some({
+                        let mut bar = wire::TodoQuickAdd {
+                            title: self.quick.title.clone(),
+                            can_submit: !self.quick.title.trim().is_empty(),
+                            lands_label: fill(
+                                &sentences::lands_in(locale),
+                                &[("place", &task::inbox(locale))],
+                            ),
+                            // Hidden while search is open, term or not: the bar and its
+                            // Plus would be a second verb over a field that is looking.
+                            shown: todo && !denied && data.is_some() && !self.search_open,
+                            focused: drawn && self.quick.focused,
+                            add_label: task::add_task(locale),
+                            drawn,
+                            ..wire::TodoQuickAdd::default()
+                        };
+                        self.quick.staged.fill(locale, &mut bar);
+                        bar
                     }),
                     file_choices: if self.sheet == Sheet::File {
                         place::file_choices(locale, &self.held, &self.filing_task_id)

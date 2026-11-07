@@ -17,6 +17,10 @@ pub const REPEAT_MONTHLY: &str = "monthly";
 pub const REPEAT_YEARLY: &str = "yearly";
 pub const REPEAT_CUSTOM: &str = "custom";
 pub const REMINDER_NONE: &str = "none";
+/// A task's list key when it is filed in no project.
+pub const LIST_INBOX: &str = "inbox";
+/// The most urgent priority a task takes.
+pub const PRIORITY_MAX: i32 = 3;
 
 /// The rule each preset writes, in the order the sheet lists them. The member
 /// reads the label, never these.
@@ -223,8 +227,50 @@ pub fn new_draft(day: &str, upcoming: &wire::AgendaUpcoming) -> Draft {
             .unwrap_or_default(),
         repeat_key: REPEAT_NONE.to_owned(),
         reminder_key: REMINDER_NONE.to_owned(),
+        list_key: LIST_INBOX.to_owned(),
         ..Draft::default()
     }
+}
+
+/// A create route's start time (`HH:MM` on its day): the draft starts then and
+/// ends an hour later. A time that is not one leaves the defaults.
+#[must_use]
+pub fn starting_at(draft: &Draft, time: &str) -> Draft {
+    if clock_minutes(time).is_none() {
+        return draft.clone();
+    }
+    move_start(draft, &draft.start_day, time).unwrap_or_else(|| draft.clone())
+}
+
+/// A tag typed: trimmed, a leading `#` dropped, and one already there (in any
+/// case) is not added again.
+#[must_use]
+pub fn tag_added(draft: &Draft, text: &str) -> Option<Draft> {
+    let tag = text.trim().trim_start_matches('#').trim();
+    if tag.is_empty() || draft.tags.iter().any(|t| t.eq_ignore_ascii_case(tag)) {
+        return None;
+    }
+    let mut tags = draft.tags.clone();
+    tags.push(tag.to_owned());
+    Some(Draft {
+        tags,
+        ..draft.clone()
+    })
+}
+
+/// A tag taken off, matched in any case.
+#[must_use]
+pub fn tag_removed(draft: &Draft, text: &str) -> Option<Draft> {
+    let at = draft
+        .tags
+        .iter()
+        .position(|t| t.eq_ignore_ascii_case(text.trim()))?;
+    let mut tags = draft.tags.clone();
+    tags.remove(at);
+    Some(Draft {
+        tags,
+        ..draft.clone()
+    })
 }
 
 /// The values an occurrence has, as the editor binds them.
@@ -359,6 +405,9 @@ pub fn dirty(draft: &Draft, base: &Draft) -> bool {
         || draft.repeat_key != base.repeat_key
         || draft.reminder_key != base.reminder_key
         || draft.link.trim() != base.link.trim()
+        || draft.list_key != base.list_key
+        || draft.priority != base.priority
+        || draft.tags != base.tags
 }
 
 #[cfg(test)]
@@ -419,6 +468,39 @@ mod tests {
         );
         assert_eq!(repeat_key_of(None), REPEAT_NONE);
         assert_eq!(repeat_key_of(Some("  ")), REPEAT_NONE);
+    }
+
+    #[test]
+    fn a_start_time_puts_the_start_there_and_the_end_an_hour_on() {
+        let fresh = Draft {
+            start_day: "2099-06-17".into(),
+            start_time: "09:00".into(),
+            end_day: "2099-06-17".into(),
+            end_time: "10:00".into(),
+            ..Draft::default()
+        };
+        let at = starting_at(&fresh, "23:30");
+        assert_eq!(
+            (
+                at.start_time.as_str(),
+                at.end_day.as_str(),
+                at.end_time.as_str()
+            ),
+            ("23:30", "2099-06-18", "00:30")
+        );
+        assert_eq!(starting_at(&fresh, "late"), fresh);
+    }
+
+    #[test]
+    fn tags_are_trimmed_deduped_in_any_case_and_removed_in_any_case() {
+        let empty = Draft::default();
+        let one = tag_added(&empty, " #Errand ").expect("a tag");
+        assert_eq!(one.tags, ["Errand"]);
+        assert!(tag_added(&one, "errand").is_none());
+        assert!(tag_added(&one, "  ").is_none());
+        let none = tag_removed(&one, "ERRAND").expect("removed");
+        assert!(none.tags.is_empty());
+        assert!(tag_removed(&none, "errand").is_none());
     }
 
     #[test]

@@ -904,17 +904,16 @@ fn a_sheet_opened_on_task_is_a_title_and_a_due_day_all_day_until_a_time_is_wante
     world.title(page, "Call Mum");
     assert!(world.editor_data(page).can_save);
 
-    // THE EVENT FIELDS ARE NOT A TASK'S: their events change nothing.
+    // THE EVENT FIELDS ARE NOT A TASK'S: their events change nothing. (Notes and
+    // Repeat are a task's too since #1173, and tests/agenda_tasks.rs covers them.)
     let before = world.driver.view(page).clone();
     let maya = world.person("Maya Alvarez");
     let calendar_id = world.calendar_names()[0].0.clone();
     for stray in [
         guest(&maya),
-        repeat("weekly"),
         reminder("30"),
         calendar(&calendar_id),
         end("2099-06-18", "10:00"),
-        notes("x"),
         link("https://x.example"),
         sheet(Sheet::Calendar),
         skip(),

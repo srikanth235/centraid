@@ -128,6 +128,7 @@ pub mod agenda_editor;
 pub mod agenda_event;
 pub mod agenda_home;
 pub mod agenda_reminders;
+pub mod agenda_tasks;
 pub mod agenda_todo;
 pub mod backup;
 pub mod backup_home;

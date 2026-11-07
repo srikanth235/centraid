@@ -4,4 +4,5 @@
 pub mod buckets;
 pub mod ops;
 pub mod order;
+pub mod quick;
 pub mod rows;

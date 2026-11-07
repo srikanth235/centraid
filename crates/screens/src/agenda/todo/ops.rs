@@ -27,6 +27,23 @@ struct NextOf {
     series_id: Option<String>,
 }
 
+/// A task as a sheet or a toolbar stages it: what one add writes. Empty text is
+/// absent and priority 0 is none.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NewTask<'a> {
+    pub title: &'a str,
+    pub notes: &'a str,
+    /// A bare day or a floating local time.
+    pub due: &'a str,
+    pub priority: i64,
+    /// A repeat rule.
+    pub rule: Option<&'a str>,
+    pub project_id: Option<&'a str>,
+    pub section_id: Option<&'a str>,
+    pub tags: &'a [String],
+    pub flagged: bool,
+}
+
 /// What a to-do surface holds beside its answers: the one status line, what
 /// Undo reverses, and the count of completions this session.
 #[derive(Clone, Debug, Default)]
@@ -158,35 +175,81 @@ impl Ops {
         project_id: Option<&str>,
         section_id: Option<&str>,
     ) -> bool {
+        let task = NewTask {
+            title,
+            due: due_day,
+            project_id,
+            section_id,
+            ..NewTask::default()
+        };
+        self.add_full(ctx, &task, lands_in).is_some()
+    }
+
+    /// A NEW TASK WITH EVERYTHING THE SHEETS CAN STAGE (#1173): one `add-task`,
+    /// then its tags and its flag. Returns the new id when the task committed.
+    /// A tag or a flag the vault refuses after the add leaves the task made and
+    /// says the refusal, so a screen never files the same task twice.
+    pub fn add_full(&mut self, ctx: &Ctx, task: &NewTask, lands_in: &str) -> Option<String> {
         let locale = ctx.locale();
-        let request = act::agenda::AddTask {
-            title: title.to_owned(),
-            due: if due_day.is_empty() {
+        let text = |value: &str| {
+            if value.is_empty() {
                 Default::default()
             } else {
-                crate::field::Field::Is(due_day.to_owned())
-            },
-            project_id: project_id.map_or(Default::default(), |id| {
-                crate::field::Field::Is(id.to_owned())
-            }),
-            section_id: section_id.map_or(Default::default(), |id| {
-                crate::field::Field::Is(id.to_owned())
-            }),
+                crate::field::Field::Is(value.to_owned())
+            }
+        };
+        let request = act::agenda::AddTask {
+            title: task.title.to_owned(),
+            description: text(task.notes),
+            due: text(task.due),
+            priority: (task.priority > 0).then_some(task.priority),
+            rule: text(task.rule.unwrap_or_default()),
+            project_id: text(task.project_id.unwrap_or_default()),
+            section_id: text(task.section_id.unwrap_or_default()),
             ..Default::default()
         };
-        let key = kit_act::key(&["add-task", title], self.next_seq());
+        let key = kit_act::key(&["add-task", task.title], self.next_seq());
         let settled = kit_act::act(ctx, request, &key);
         self.undo = None;
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: format!("{} {lands_in}", words::added_to(locale)),
-                action_label: String::new(),
-                refused: false,
-            });
-        } else {
+        if !settled.committed {
             self.refused(&settled);
+            return None;
         }
-        settled.committed
+        self.status = Some(wire::StatusLine {
+            sentence: format!("{} {lands_in}", words::added_to(locale)),
+            action_label: String::new(),
+            refused: false,
+        });
+        let id = settled.output_text("id")?;
+        for label in task.tags {
+            let key = kit_act::key(&["add-task-tag", &id, label], self.next_seq());
+            let tagged = kit_act::act(
+                ctx,
+                act::agenda::AddTaskTag {
+                    task_id: id.clone(),
+                    label: label.clone(),
+                },
+                &key,
+            );
+            if !tagged.committed {
+                self.refused(&tagged);
+                return Some(id);
+            }
+        }
+        if task.flagged {
+            let key = kit_act::key(&["star-task", &id], self.next_seq());
+            let starred = kit_act::act(
+                ctx,
+                act::agenda::StarTask {
+                    task_id: id.clone(),
+                },
+                &key,
+            );
+            if !starred.committed {
+                self.refused(&starred);
+            }
+        }
+        Some(id)
     }
 
     /// File a task: a project (and section), or the Inbox (`project_id` None).

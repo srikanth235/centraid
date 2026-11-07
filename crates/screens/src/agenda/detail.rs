@@ -30,7 +30,7 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, task as words};
+use crate::strings::{Locale, agenda_tasks as card_words, task as words};
 
 /// `TodoField.key`s.
 pub const WHEN: &str = "when";
@@ -42,6 +42,10 @@ pub const PRIORITY: &str = "priority";
 pub const EFFORT: &str = "effort";
 pub const PROJECT: &str = "project";
 pub const TAGS: &str = "tags";
+/// The flag is a switch: its choices are `ON` and `OFF`.
+pub const FLAG: &str = "flag";
+pub const ON: &str = "on";
+pub const OFF: &str = "off";
 
 /// Choice keys.
 pub const NONE: &str = "none";
@@ -433,6 +437,20 @@ impl Detail {
                 }
             }
             PROJECT => self.file(ctx, &task, key),
+            // THE FLAG SWITCH: `on` sets it and `off` clears it, the same
+            // write the row swipe makes; a switch already so is nothing.
+            FLAG => {
+                let on = match key {
+                    ON => true,
+                    OFF => false,
+                    _ => return,
+                };
+                if on != task.flagged {
+                    self.ops.status = None;
+                    self.ops.flag(ctx, &task.task_id, on);
+                    self.reload(ctx);
+                }
+            }
             // A TAG CHIP IS ITS OWN REMOVAL: tapping it untags.
             TAGS => {
                 if let Some(tag) = task.tags.iter().find(|tag| tag.concept_id == key) {
@@ -926,6 +944,7 @@ fn fields(
     out.push(wire::TodoField {
         key: WHEN.to_owned(),
         label: words::field_when(locale),
+        group: card_words::group_date_time(locale),
         value: if dated {
             civil::relative_day(locale, &task.due_day, today)
         } else {
@@ -1077,6 +1096,43 @@ fn fields(
         });
     }
 
+    let project = task
+        .project_id
+        .as_deref()
+        .and_then(|id| projects.iter().find(|p| p.project_id == id));
+    let section = task
+        .section_id
+        .as_deref()
+        .and_then(|id| sections.iter().find(|s| s.section_id == id));
+    out.push(wire::TodoField {
+        key: PROJECT.to_owned(),
+        label: card_words::field_list(locale),
+        group: card_words::group_organisation(locale),
+        value: match (project, section) {
+            (None, _) => words::inbox(locale),
+            (Some(project), None) => project.name.clone(),
+            (Some(project), Some(section)) => format!("{} · {}", project.name, section.name),
+        },
+        choices: place_choices(locale, task, projects, sections),
+        sheet: true,
+        enabled: task.parent_task_id.is_none(),
+        ..wire::TodoField::default()
+    });
+
+    out.push(wire::TodoField {
+        key: FLAG.to_owned(),
+        label: card_words::field_flag(locale),
+        value: String::new(),
+        choices: vec![
+            simple(ON, card_words::quick_flagged(locale), task.flagged),
+            simple(OFF, card_words::flag_off(locale), !task.flagged),
+        ],
+        toggle: true,
+        on: task.flagged,
+        enabled: true,
+        ..wire::TodoField::default()
+    });
+
     let level = task.priority.clamp(0, 3);
     out.push(wire::TodoField {
         key: PRIORITY.to_owned(),
@@ -1121,28 +1177,6 @@ fn fields(
         ),
         choices: effort_choices,
         enabled: true,
-        ..wire::TodoField::default()
-    });
-
-    let project = task
-        .project_id
-        .as_deref()
-        .and_then(|id| projects.iter().find(|p| p.project_id == id));
-    let section = task
-        .section_id
-        .as_deref()
-        .and_then(|id| sections.iter().find(|s| s.section_id == id));
-    out.push(wire::TodoField {
-        key: PROJECT.to_owned(),
-        label: words::field_project(locale),
-        value: match (project, section) {
-            (None, _) => words::inbox(locale),
-            (Some(project), None) => project.name.clone(),
-            (Some(project), Some(section)) => format!("{} · {}", project.name, section.name),
-        },
-        choices: place_choices(locale, task, projects, sections),
-        sheet: true,
-        enabled: task.parent_task_id.is_none(),
         ..wire::TodoField::default()
     });
 
