@@ -11,6 +11,7 @@ import SwiftUI
 /// The Compose twin is `androidApp/.../screens/PlacesScreen.kt`.
 struct PlacesView: View {
     @Environment(\.colorScheme) private var scheme
+    private let accent = AppAccent("photos")
 
     let state: Centraid_Core_V1_PhotosPlacesState
     let send: (Centraid_Core_V1_PhotosPlacesEvent) -> Void
@@ -29,6 +30,9 @@ struct PlacesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                // THE TITLE AT 34 (#1173), then Cards · Map as one segmented control.
+                KitHeader(title: state.title)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
                 HStack {
                     KitSegmented(
                         options: [
@@ -48,7 +52,7 @@ struct PlacesView: View {
                 if state.hasStatus {
                     ScreenFailureView(sentence: state.status.sentence, remedy: "")
                         .padding(10)
-                        .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                        .kitCard()
                 }
 
                 switch state.content {
@@ -72,7 +76,9 @@ struct PlacesView: View {
             .padding(.vertical, 12)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle(state.title)
+        .background(Surface.page.ignoresSafeArea())
+        .appAccent("photos")
+        .navigationTitle("")
         .sheet(isPresented: Binding(
             get: { state.hasNameSheet },
             set: { shown in if !shown, state.hasNameSheet { event { $0.nameDismissed = .init() } } }
@@ -106,12 +112,17 @@ struct PlacesView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(data.unplacedLabel)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .kitType(.row)
+                            .foregroundStyle(Surface.ink)
                         Spacer(minLength: 0)
-                        CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme))
+                        Text(data.unplacedOpenLabel)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
                     }
+                    .padding(.horizontal, 14)
                     .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .kitCard()
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -193,7 +204,7 @@ private struct PlaceCard: View {
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             Color.clear
                 .aspectRatio(4 / 3, contentMode: .fit)
                 .overlay {
@@ -201,20 +212,28 @@ private struct PlaceCard: View {
                         ContentImage(path: cover)
                     } else {
                         // THE GROUND, when there are no bytes.
-                        Theme.color("bgSunken", scheme)
+                        Surface.fill
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
-            Text(row.title)
-                .centraidType("small")
-                .lineLimit(2)
-                .foregroundStyle(Theme.color("text", scheme))
-            if !row.countLabel.isEmpty {
-                Text(row.countLabel)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                .clipped()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.title)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .lineLimit(2)
+                    .foregroundStyle(Surface.ink)
+                if !row.countLabel.isEmpty {
+                    Text(row.countLabel)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .kitCard()
+        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }

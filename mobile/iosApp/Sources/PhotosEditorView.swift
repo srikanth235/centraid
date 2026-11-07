@@ -18,6 +18,7 @@ import UIKit
 /// (`RenderEdit`, performed by `PhotoEffects`).
 struct PhotosEditorView: View {
     @Environment(\.colorScheme) private var scheme
+    private let accent = AppAccent("photos")
 
     let state: Centraid_Core_V1_PhotosEditorState
     let send: (Centraid_Core_V1_PhotosEditorEvent.OneOf_Kind) -> Void
@@ -43,13 +44,13 @@ struct PhotosEditorView: View {
 
     var body: some View {
         ZStack {
-            Theme.color("stage", scheme).ignoresSafeArea()
+            Surface.page.ignoresSafeArea()
             switch state.content {
             case .loading?, nil:
                 // A STAGE'S OWN WORD, not a spinner: this ground is the stage.
                 Text(state.words.loading)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Surface.meta)
             case let .denied(denied)?:
                 DeniedGate(denied)
             case let .failure(failure)?:
@@ -60,7 +61,7 @@ struct PhotosEditorView: View {
                     } label: {
                         Text(state.words.cancel)
                             .centraidType("control")
-                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .foregroundStyle(Surface.ink)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
@@ -75,6 +76,7 @@ struct PhotosEditorView: View {
         // Cancel is, because Cancel asks first when there is something to lose.
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .appAccent("photos")
         .sheet(
             isPresented: Binding(
                 get: { state.hasDiscard },
@@ -108,9 +110,9 @@ struct PhotosEditorView: View {
                 }
                 VStack(spacing: 2) {
                     Text(state.title).centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
+                        .foregroundStyle(Surface.ink)
                     Text(data.meta).centraidType("small")
-                        .foregroundStyle(Theme.color("onStageSoft", scheme))
+                        .foregroundStyle(Surface.meta)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity)
@@ -123,7 +125,10 @@ struct PhotosEditorView: View {
                 stage(in: geometry.size)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .padding(CentraidGeometry.pageMargin)
+            .padding(8)
+            .background(Theme.color("stage", scheme), in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
 
             editBar
         }
@@ -164,7 +169,7 @@ struct PhotosEditorView: View {
             Text(state.saveRefusal.isEmpty ? state.words.loading : state.saveRefusal)
                 .centraidType("small")
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .foregroundStyle(Surface.meta)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         #else
@@ -310,20 +315,20 @@ struct PhotosEditorView: View {
             }
             Text(state.words.saveExplanation)
                 .centraidType("small")
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .foregroundStyle(Surface.meta)
             // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and
             // a save that did not land says so in the same place.
             if let refusal = refusalLine {
                 Text(refusal)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStage", scheme))
+                    .foregroundStyle(Surface.ink)
                     .accessibilityIdentifier("photos.editor.refusal")
             }
             // THE ONE STATUS LINE, drawn when there is something to say.
             if !state.statusLine.isEmpty {
                 Text(state.statusLine)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Surface.meta)
                     .accessibilityIdentifier("photos.editor.status")
             }
         }
@@ -342,18 +347,17 @@ struct PhotosEditorView: View {
 
     private var commit: some View {
         let live = isEditing && state.saveRefusal.isEmpty
-        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
         return Button {
             guard live else { return }
             send(.save(.init()))
         } label: {
             Text(state.words.save)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "stage" : "onStageSoft", scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(live ? Color.white : Surface.meta)
                 .padding(.horizontal, 16)
                 .frame(minHeight: 44)
-                .background(live ? Theme.color("onStage", scheme) : Color.clear, in: shape)
-                .overlay(shape.strokeBorder(Theme.color(live ? "onStage" : "stageLine", scheme), lineWidth: 1))
+                .background(live ? accent.fill : Surface.fill, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!live)
@@ -362,18 +366,19 @@ struct PhotosEditorView: View {
         .accessibilityIdentifier("photos.editor.save")
     }
 
-    /// A WORD IN THE TOP BAR: Cancel, with the commit's target and none of its plate.
+    /// THE WAY OUT: a round key with an X in glass, Cancel's word for a screen reader. Cancel
+    /// asks first when there is something to lose, so it is the same event.
     private func barButton(_ label: String, identifier: String, live: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "onStage" : "onStageSoft", scheme))
-                .padding(.horizontal, 4)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+            CentraidIconView(iconKey: "X", tint: live ? Surface.ink : Surface.meta, size: 18)
+                .frame(width: 44, height: 44)
+                .background(Surface.card, in: Circle())
+                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!live)
+        .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
 
@@ -383,24 +388,20 @@ struct PhotosEditorView: View {
         enabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
         return Button {
             guard enabled else { return }
             action()
         } label: {
             Text(label)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(enabled ? "onStage" : "onStageSoft", scheme))
+                .kitType(.meta)
+                .fontWeight(.semibold)
+                .foregroundStyle(selected ? Color.white : (enabled ? Surface.ink : Surface.meta))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .padding(.horizontal, 6)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(
-                    shape.strokeBorder(
-                        Theme.color(selected ? "onStage" : "stageLine", scheme),
-                        lineWidth: 1
-                    )
-                )
+                .background(selected ? accent.fill : Surface.card, in: shape)
                 .contentShape(shape)
         }
         .buttonStyle(.plain)

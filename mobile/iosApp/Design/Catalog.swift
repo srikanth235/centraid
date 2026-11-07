@@ -335,6 +335,10 @@ public enum CentraidCatalog {
         "Layers": [
             CentraidIconPath(d: "m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5", filled: false, evenOdd: false),
         ],
+        "Link": [
+            CentraidIconPath(d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71", filled: false, evenOdd: false),
+        ],
         "List": [
             CentraidIconPath(d: "M4 6h16M4 12h16M4 18h16", filled: false, evenOdd: false),
         ],

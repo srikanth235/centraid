@@ -405,7 +405,12 @@ public fun StageKey(
     showLabel: Boolean = false,
     destructive: Boolean = false,
 ) {
-    val ink = centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    // A LIT TOGGLE (the favourite) wears the app's colour, never amber: amber only means a state.
+    val ink = if (enabled && on && !destructive) {
+        appAccent("photos").tile
+    } else {
+        centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    }
     Column(
         modifier
             .defaultMinSize(minWidth = KitGeometry.ROW_MIN, minHeight = KitGeometry.ROW_MIN)

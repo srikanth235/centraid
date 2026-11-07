@@ -264,13 +264,13 @@ struct LibraryTimelineRows: View {
             } header: {
                 if let month = section.month {
                     Text(month.title)
-                        .centraidType("title")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.section)
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                         .padding(.top, 12)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .frame(maxWidth: .infinity, minHeight: LibraryMetrics.monthRow, maxHeight: LibraryMetrics.monthRow, alignment: .leading)
-                        .background(Theme.color("bg", scheme))
+                        .background(Surface.page)
                         .accessibilityAddTraits(.isHeader)
                 }
             }
@@ -330,8 +330,9 @@ struct LibraryTimelineRows: View {
     private func dayHeader(_ row: Centraid_Core_V1_PhotosTimelineRow) -> some View {
         HStack {
             Text(row.title)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.meta)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)

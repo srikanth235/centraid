@@ -69,7 +69,7 @@ struct PhotosCollectionsBody: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center) {
                 Text(section.title)
-                    .centraidType("title")
+                    .kitType(.section)
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)

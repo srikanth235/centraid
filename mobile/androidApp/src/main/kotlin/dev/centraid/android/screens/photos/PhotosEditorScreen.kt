@@ -61,6 +61,10 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidScale
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -101,8 +105,9 @@ public fun PhotosEditorScreen(
     /** The new photograph is in the vault. The shell pops and opens it. */
     onSaved: (Route) -> Unit,
 ) {
-    val ink = centraidColor("onStage")
-    val soft = centraidColor("onStageSoft")
+    // THE PAGE IS THE CARD PAGE (#1173); only the photograph's own ground is the stage.
+    val ink = Surface.ink
+    val soft = Surface.meta
     val words = state.words ?: PhotosEditorWords()
     // BACK IS CANCEL, and Cancel asks first when there is something to lose. It
     // is inert while a save runs: a back that fell through mid-save would pop an
@@ -122,7 +127,7 @@ public fun PhotosEditorScreen(
     val loading = state.loading
     val failure = state.failure
     val data = state.data_
-    Box(modifier = Modifier.fillMaxSize().background(centraidColor("stage"))) {
+    Box(modifier = Modifier.fillMaxSize().background(Surface.page)) {
         when {
             loading != null -> StageSpinner(modifier = Modifier.align(Alignment.Center))
 
@@ -134,7 +139,7 @@ public fun PhotosEditorScreen(
                 OutlineButton(
                     label = words.cancel,
                     testTag = "editor-failure-cancel",
-                    ink = "onStage",
+                    ink = "text",
                     onPress = { onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled())) },
                 )
             }
@@ -180,19 +185,24 @@ private fun Editor(
             Text(text = data.meta, color = soft, style = centraidType("small"))
         }
         BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(KitGeometry.GUTTER),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(KitGeometry.GUTTER)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                .background(centraidColor("stage")),
             contentAlignment = Alignment.Center,
         ) {
             val image = preview
             if (image == null) {
                 Text(
                     text = if (path == null) state.save_refusal else words.loading,
-                    color = soft,
+                    color = centraidColor("onStageSoft"),
                     style = centraidType("small"),
                     textAlign = TextAlign.Center,
                 )
             } else {
-                Stage(image, plan, editing, words, maxWidth.value, maxHeight.value, onEvent, ink)
+                Stage(image, plan, editing, words, maxWidth.value, maxHeight.value, onEvent, centraidColor("onStage"))
             }
         }
         // THE ROTATED FRAME'S SHAPE, for a centred ratio crop. The stage is the
@@ -466,12 +476,12 @@ private fun Commit(
     line: Color,
 ) {
     val live = editing && state.save_refusal.isEmpty()
-    val shape = RoundedCornerShape(radius("md").dp)
+    val shape = RoundedCornerShape(percent = 50)
     Box(
         modifier = Modifier
             .heightIn(min = TARGET.dp)
             .clip(shape)
-            .then(if (live) Modifier.background(ink) else Modifier.border(1.dp, line, shape))
+            .background(if (live) appAccent("photos").fill else Surface.fill)
             .clickable(enabled = live, role = Role.Button) {
                 onEvent(PhotosEditorEvent(save = PhotosEditorEvent.Saved()))
             }
@@ -479,10 +489,14 @@ private fun Commit(
                 contentDescription = words.save
                 if (!live) disabled()
             }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = words.save, color = if (live) centraidColor("stage") else soft, style = centraidType("control"))
+        Text(
+            text = words.save,
+            color = if (live) Color.White else soft,
+            style = centraidType("control").copy(fontWeight = FontWeight.SemiBold),
+        )
     }
 }
 
@@ -496,12 +510,12 @@ private fun Tool(
     line: Color,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius("md").dp)
+    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
     Box(
         modifier = Modifier
             .heightIn(min = TARGET.dp)
             .clip(shape)
-            .border(1.dp, if (selected) ink else line, shape)
+            .background(if (selected) appAccent("photos").fill else Surface.card)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = label
@@ -510,7 +524,11 @@ private fun Tool(
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = label, color = if (enabled) ink else soft, style = centraidType("control"))
+        Text(
+            text = label,
+            color = if (selected) Color.White else if (enabled) ink else soft,
+            style = centraidType("control"),
+        )
     }
 }
 

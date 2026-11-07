@@ -50,6 +50,10 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitCard
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -86,16 +90,16 @@ public fun PhotoShelfScreen(
         modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // THE TITLE AT 34 with its count under it (#1173).
+        Column {
+            KitText(state.title, KitType.Title, Surface.ink, maxLines = 2)
+            if (!data?.count_label.isNullOrEmpty()) KitText(data?.count_label.orEmpty(), KitType.Meta, Surface.meta, maxLines = 1)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = data?.count_label.orEmpty(),
-                style = centraidType("control"),
-                color = centraidColor("textSoft"),
-            )
             if (selecting) {
                 KitLink(
                     label = chrome?.done_label.orEmpty(),
@@ -157,14 +161,15 @@ public fun PhotoShelfScreen(
 
         val keep = state.keep_originals
         if (keep != null) {
+            // A WHITE CARD under the switch, the card radius (#1173).
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().kitCard().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = keep.title, style = centraidType("body"), color = centraidColor("text"))
-                    Text(text = keep.meta, style = centraidType("small"), color = centraidColor("textSoft"))
+                    KitText(keep.title, KitType.Row, Surface.ink)
+                    KitText(keep.meta, KitType.Meta, Surface.meta)
                 }
                 Switch(
                     checked = keep.keep,

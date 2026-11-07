@@ -27,10 +27,6 @@ struct PhotoPickerView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(state.refersNote)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-
                 if state.hasStatus {
                     ScreenFailureView(sentence: state.status.sentence, remedy: "")
                         .accessibilityIdentifier("photos.picker.writeFailure")
@@ -66,33 +62,35 @@ struct PhotoPickerView: View {
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
         .navigationTitle(state.title)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                // THE ONE FILLED ELEMENT (§18), disabled with nothing picked
-                // rather than absent: a control that appears when a member
-                // picks is a control that moves under their thumb.
-                ToolbarVerb(label: state.addLabel, identifier: "photos.picker.add") {
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Surface.page.ignoresSafeArea())
+        // THE FOOT: how many are chosen, the sentence about albums, and the one filled button,
+        // in the app's colour, greyed with nothing picked and never absent: a control that
+        // appears when a member picks is a control that moves under their thumb.
+        .safeAreaInset(edge: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(state.chosenLabel)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                Text(state.refersNote)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                KitInkButton(label: state.addLabel, identifier: "photos.picker.add") {
                     event { $0.confirm = .init() }
                 }
                 .disabled(!state.addEnabled)
+                .padding(.top, 8)
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(Theme.color("line", scheme))
-                    .frame(height: CentraidGeometry.hairline)
-                Text(state.chosenLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.vertical, 8)
-            }
-            .background(Theme.color("bgElev", scheme).ignoresSafeArea(edges: .bottom))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(Surface.page.ignoresSafeArea(edges: .bottom))
         }
         .onChange(of: state.finished) { _, done in
             if done { onFinished() }
         }
+        .appAccent("photos")
     }
 }

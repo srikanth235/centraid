@@ -1,5 +1,9 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -266,17 +270,16 @@ private fun MonthHeader(title: String) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(centraidColor("bg"))
+            .background(Surface.page)
             .height(MONTH_ROW_HEIGHT.dp)
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
             .padding(top = 12.dp),
     ) {
-        Text(
+        KitText(
             text = title,
-            style = centraidType("title"),
-            color = centraidColor("text"),
+            rung = KitType.Section,
+            color = Surface.ink,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.semantics { heading() },
         )
     }
@@ -305,8 +308,8 @@ private fun DayHeader(
     ) {
         Text(
             text = title,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
+            style = kitTextStyle(KitType.Meta).copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = Surface.meta,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },

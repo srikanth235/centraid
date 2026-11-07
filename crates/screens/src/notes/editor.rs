@@ -27,6 +27,7 @@ use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::civil;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words};
@@ -144,6 +145,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         denied: None,
         pinned: false,
         tags: Vec::new(),
+        meta: String::new(),
         status: None,
         link: None,
         started: false,
@@ -172,6 +174,8 @@ struct Editor {
     pinned: bool,
     /// The tags the vault holds for the note: `(concept id, label)`.
     tags: Vec<(String, String)>,
+    /// The line over the title: "Travel · Edited Wed 4 November".
+    meta: String,
     /// A pin's refusal.
     status: Option<String>,
     link: Option<LinkSheet>,
@@ -210,6 +214,7 @@ impl Editor {
                     .iter()
                     .map(|tag| (tag.concept_id.clone(), tag.label.clone()))
                     .collect();
+                self.meta = Self::meta_of(ctx, &note);
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -234,6 +239,64 @@ impl Editor {
                 self.blocked = Some(read::failure(locale));
             }
         }
+    }
+
+    /// THE LINE OVER THE TITLE: the notebook the note is filed in, then when it
+    /// was last edited, on the member's day. A note filed nowhere says only the
+    /// day; a read that gave neither says nothing.
+    fn meta_of(ctx: &Ctx, note: &wire::NotesNote) -> String {
+        let locale = ctx.locale();
+        let day = if note.updated_local_day.is_empty() {
+            note.updated_at.as_str()
+        } else {
+            note.updated_local_day.as_str()
+        };
+        let edited = day.get(..10).map(|day| {
+            format!(
+                "{} {}",
+                words::edited(locale),
+                civil::day_month(locale, day)
+            )
+        });
+        let notebook = note.notebook_id.as_deref().and_then(|id| {
+            let notebooks = read::read(
+                ctx,
+                load::notes::Notebooks::default(),
+                |answer| match answer {
+                    Answer::NotesNotebooks(notebooks) => Some(notebooks),
+                    _ => None,
+                },
+            );
+            let Reading::Data(notebooks) = notebooks else {
+                return None;
+            };
+            notebooks
+                .notebooks
+                .iter()
+                .find(|notebook| notebook.notebook_id == id)
+                .map(|notebook| fold::notebook_name(locale, notebook))
+        });
+        notebook
+            .into_iter()
+            .chain(edited)
+            .collect::<Vec<_>>()
+            .join(" · ")
+    }
+
+    /// THE TOOLBAR'S CHECKLIST KEY: a new unchecked line at the end of the note,
+    /// on a line of its own. It is an edit like any other, so it saves the same
+    /// way; the shell takes the body back from the state.
+    fn checklist(&mut self, ctx: &Ctx) {
+        let Some(body) = self.auto.draft().map(|draft| draft.body.clone()) else {
+            return;
+        };
+        let lead = if body.is_empty() || body.ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        let next = format!("{body}{lead}- [ ] ");
+        self.auto.edit(ctx, |draft| draft.body = next);
     }
 
     /// A FAILED READ REPLACES THE EDITOR: there is nothing to edit.
@@ -403,6 +466,7 @@ impl Editor {
             Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
             Some(N::Pin(_)) => self.pin(ctx),
+            Some(N::ChecklistRequested(_)) => self.checklist(ctx),
             // THE POWERBOX. The link button opens it at the END of the note,
             // whatever a field's caret says (no shell reports one); a pick
             // lands `[[title]]` there and saves like any edit.
@@ -662,6 +726,8 @@ impl Screen for Editor {
                 } else {
                     String::new()
                 },
+                checklist_label: words::checklist(locale),
+                keyboard_label: words::keyboard_hide(locale),
             }),
             autosave: Some(autosave),
             link: self
@@ -670,6 +736,11 @@ impl Screen for Editor {
                 .map(|sheet| self.sheet_view(locale, sheet)),
             history: None,
             send_to_agenda: None,
+            meta: if exists {
+                self.meta.clone()
+            } else {
+                String::new()
+            },
             tags: self
                 .tags
                 .iter()
