@@ -342,6 +342,8 @@ struct EditableFieldRow: View {
 struct ChoiceFieldRow: View {
     let key: String
     let value: String
+    /// A dot of this hue before the value (a task's list); empty draws none.
+    var hueKey: String = ""
     var identifier: String = ""
     let onTap: () -> Void
 
@@ -355,6 +357,11 @@ struct ChoiceFieldRow: View {
                     .centraidType("body")
                     .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
                 Spacer(minLength: 8)
+                if !hueKey.isEmpty {
+                    Circle()
+                        .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
+                        .frame(width: 8, height: 8)
+                }
                 Text(value)
                     .centraidType("body")
                     .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))

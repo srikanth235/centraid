@@ -18,6 +18,8 @@ struct KitRowAction: Identifiable {
     let label: String
     let iconKey: String
     var tone: Tone = .neutral
+    /// In the long-press menu only, not on the swipe (Move up, Move down, Move to project).
+    var menuOnly: Bool = false
     let action: () -> Void
 
     fileprivate var fill: Color {
@@ -47,7 +49,7 @@ private struct KitRowActions: ViewModifier {
             content
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     // Drawn right to left from the edge: Delete is the one nearest it.
-                    ForEach(actions.reversed()) { action in
+                    ForEach(actions.filter { !$0.menuOnly }.reversed()) { action in
                         Button(role: action.tone == .red ? .destructive : nil, action: action.action) {
                             // The system draws a swipe action's face from a text or an `Image`; the
                             // catalogue's glyphs are paths, so the word carries it.
