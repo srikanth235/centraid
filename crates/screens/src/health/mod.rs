@@ -1,12 +1,12 @@
-//! HEALTH'S SCREENS (#1135): Today · Trends · Workouts under one band with More
+//! HEALTH'S SCREENS (#1135, #1173): Summary · Trends · Workouts under one band with More
 //! as sheets, one metric over a week, a month or a year, one workout, and
 //! Connect. Every decision a person sees is made here; SwiftUI and Compose draw
 //! [`wire::ViewState`].
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Today · Trends · Workouts, with More | [`HOME`] | [`home`] |
-//! | One metric over a week, a month or a year | [`METRIC`] | [`metric`] |
+//! | Summary · Trends · Workouts, with More | [`HOME`] | [`home`] |
+//! | One metric over a week, a month, 6 months or a year | [`METRIC`] | [`metric`] |
 //! | One workout | [`WORKOUT`] | [`workout`] |
 //! | What Health may read, and Connect | [`CONNECT`] | [`connect`] |
 //!

@@ -746,6 +746,7 @@ fn metric_line(
         } else {
             Vec::new()
         },
+        icon_key: figures::metric_icon(metric).to_owned(),
         spark_label: if metric == Metric::Sleep {
             words::spark_nights(locale)
         } else {

@@ -225,11 +225,7 @@ fn six_months_is_a_bar_a_week_with_dates_for_ticks_and_weeks_in_its_words() {
     let data = metric_data(d.view(i));
     assert_eq!(data.caption, "Last 6 months");
     assert_eq!(data.bars.len(), 26);
-    assert!(
-        data.bars
-            .iter()
-            .all(|bar| bar.has_value && bar.above_typical)
-    );
+    assert!(data.bars.iter().all(|bar| bar.has_value));
     assert!(data.bars.last().unwrap().current);
     assert!(
         data.bars[0].callout.starts_with("Week of "),

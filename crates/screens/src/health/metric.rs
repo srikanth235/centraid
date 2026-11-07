@@ -199,7 +199,6 @@ impl MetricPage {
                     has_value: value.is_some(),
                     height_bp: value.map_or(0, |value| figures::bp(value, top)),
                     current: index == last,
-                    above_typical: matches!((value, series.typical), (Some(v), Some(t)) if v > t),
                     accessibility_label: words_
                         .iter()
                         .filter(|part| !part.is_empty())

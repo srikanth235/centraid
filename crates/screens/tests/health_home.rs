@@ -163,6 +163,14 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
         .map(|line| line.wide)
         .collect();
     assert_eq!(wide, [true, true, false, false, false, false]);
+    let icons: Vec<&str> = std::iter::once(hero)
+        .chain(&today_data.metrics)
+        .map(|line| line.icon_key.as_str())
+        .collect();
+    assert_eq!(
+        icons,
+        ["MapPin", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
+    );
     assert_eq!(sleep.spark_bp.len(), 7);
     assert!(
         today_data.metrics[1..]

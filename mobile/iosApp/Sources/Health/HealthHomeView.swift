@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// `health.home` — Today · Trends · Workouts, More a sheet (#1129, #1135), on the kit.
+/// `health.home` — Summary · Trends · Workouts, More a sheet (#1129, #1135, #1173), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** `HealthHomeState` carries the band, the segments, the filter menu,
 /// every word, figure and unit, and every length as basis points; this file lays them out and
@@ -15,7 +15,7 @@ struct HealthHomeView: View {
     let open: (Centraid_Core_V1_Route) -> Void
     let onHome: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    private let accent = AppAccent("health")
 
     private func event(_ build: (inout Centraid_Core_V1_HealthHomeEvent) -> Void) -> Centraid_Core_V1_HealthHomeEvent {
         var event = Centraid_Core_V1_HealthHomeEvent()
@@ -32,6 +32,7 @@ struct HealthHomeView: View {
             title: chrome.title,
             trailing: nil,
             filter: filter,
+            subtitle: subtitle,
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
@@ -79,6 +80,15 @@ struct HealthHomeView: View {
         }
     }
 
+    /// THE SUMMARY'S SUBTITLE: the day and where it was read from, Rust's words, plain.
+    private var subtitle: SubtitleSlot? {
+        guard case let .data(home)? = state.content, !home.dayLabel.isEmpty else { return nil }
+        return SubtitleSlot(subtitle: .with {
+            $0.label = home.dayLabel
+            $0.spoken = home.dayLabel
+        })
+    }
+
     /// THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu. A pick or the clear row is an
     /// event; which kind is checked, and whether the funnel is lit, is on the state.
     private var filter: FilterSlot? {
@@ -117,11 +127,6 @@ struct HealthHomeView: View {
                 open(home.connect)
             }
         } else {
-            if !home.dayLabel.isEmpty, state.destination == .today {
-                Text(home.dayLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
             switch state.destination {
             case .trends: trends(home.trends)
             case .workouts: workouts(home.workouts, chrome: state.chrome)
@@ -130,84 +135,61 @@ struct HealthHomeView: View {
         }
     }
 
+    /// THE SUMMARY: the pinned cards (the first two wide with a sparkline, the rest two to a row,
+    /// one column at the largest text), the highlights, and today's workouts.
     @ViewBuilder
     private func today(_ today: Centraid_Core_V1_HealthTodayData) -> some View {
-        hero(today.hero)
-        if !today.metrics.isEmpty {
-            HealthCard(padding: 0) {
-                if !today.metricsHeading.isEmpty {
-                    Text(today.metricsHeading)
-                        .centraidType("eyebrow")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .accessibilityAddTraits(.isHeader)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                }
-                ForEach(Array(today.metrics.enumerated()), id: \.offset) { index, line in
-                    if index > 0 { KitHairline() }
-                    HealthMetricLineView(line: line) { open(line.route) }
+        let pinned = [today.hero] + today.metrics
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(today.metricsHeading)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                Text(today.metricsNote)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
+            .padding(.horizontal, 4)
+            ForEach(pinned.filter(\.wide), id: \.metric) { line in
+                HealthPinnedCard(
+                    line: line,
+                    identifier: line.metric == "steps" ? "health-hero" : "health-metric-\(line.metric)"
+                ) { open(line.route) }
+            }
+            KitCardGrid(items: pinned.filter { !$0.wide }, gap: 8) { line in
+                HealthPinnedCard(line: line, identifier: "health-metric-\(line.metric)") { open(line.route) }
+            }
+        }
+        if !today.highlights.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(today.highlightsHeading)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 4)
+                ForEach(today.highlights, id: \.metric) { highlight in
+                    HealthHighlightCard(highlight: highlight) { open(highlight.route) }
                 }
             }
         }
         if !today.workoutsHeading.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(today.workoutsHeading)
-                    .centraidType("eyebrow")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
                     .accessibilityAddTraits(.isHeader)
-                HealthCard(padding: 0) {
+                    .padding(.horizontal, 4)
+                VStack(spacing: 0) {
                     ForEach(Array(today.workouts.enumerated()), id: \.offset) { index, row in
                         if index > 0 { KitHairline() }
                         HealthWorkoutRow(row: row) { open(row.route) }
                     }
                 }
+                .kitCard()
             }
         }
-        HealthNote(text: today.foot)
-            .accessibilityIdentifier("health-today-foot")
-    }
-
-    /// STEPS, DRAWN LARGE: the figure, when, the typical, and the day on the member's own range.
-    private func hero(_ hero: Centraid_Core_V1_HealthMetricLine) -> some View {
-        Button { open(hero.route) } label: {
-            HealthCard(padding: 20) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(hero.label)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                    Spacer(minLength: 8)
-                    Text(hero.whenLabel)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(hero.value)
-                        .centraidType("display")
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color("text", scheme))
-                    if !hero.unit.isEmpty {
-                        Text(hero.unit)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                    }
-                }
-                .padding(.top, 4)
-                if !hero.typical.isEmpty {
-                    Text(hero.typical)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-                if hero.hasBar {
-                    HealthRangeBarView(bar: hero.bar, hero: true).padding(.top, 16)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KitRowPress())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(hero.accessibilityLabel)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("health-hero")
     }
 
     @ViewBuilder
@@ -228,21 +210,22 @@ struct HealthHomeView: View {
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(row.value)
-                                .centraidType("title")
+                                .font(.system(size: 22, weight: .bold))
                                 .monospacedDigit()
-                                .foregroundStyle(Theme.color("text", scheme))
+                                .foregroundStyle(Surface.ink)
                             Text(row.unit)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
                         }
                         if !row.delta.isEmpty {
                             Text(row.delta)
-                                .centraidType("annotLabelOn")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
                         }
                     }
                     Spacer(minLength: 0)
@@ -266,8 +249,8 @@ struct HealthHomeView: View {
             ForEach(Array(workouts.sections.enumerated()), id: \.offset) { _, section in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(section.heading)
-                        .centraidType("eyebrow")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .kitType(.group)
+                        .foregroundStyle(Surface.meta)
                         .accessibilityAddTraits(.isHeader)
                     HealthCard(padding: 0) {
                         ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in

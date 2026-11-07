@@ -106,6 +106,9 @@ message HealthMetricLine {
   // The figure is above the member's usual range and higher is better for the
   // metric: the one place a card wears the state's green.
   bool good = 13;
+  // The metric's mark, drawn in the Health colour like every other (a heart rate
+  // is not red, exercise is not green).
+  string icon_key = 14;
 }
 
 // One workout as a list draws it.
@@ -385,7 +388,8 @@ message HealthChartBar {
   uint32 height_bp = 2;
   // The bucket today falls in: the Health colour's one mark on the chart.
   bool current = 3;
-  bool above_typical = 4;
+  // 4 was `above_typical`: the bars are one tint and the current one the colour (#1173).
+  reserved 4;
   string accessibility_label = 5;
   // What the scrubber says while a finger is on the bar: "Thu 30 Oct · 11,204".
   string callout = 6;
