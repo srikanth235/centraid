@@ -163,15 +163,20 @@ final class ScreenStore: ObservableObject {
         report(.expired(expired))
     }
 
-    /// Report the device's locale, zone and OS, and that Photos deletes from the
-    /// library behind its own confirmation; Rust formats from them and offers
-    /// "Free up space" only where the platform can.
+    /// Report the device's locale, zone, OS and 12 or 24 hour setting, and that
+    /// Photos deletes from the library behind its own confirmation; Rust formats
+    /// from them and offers "Free up space" only where the platform can.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
         environment.platform = "ios"
         environment.libraryDeletes = true
+        // The "j" template resolves to the phone's own hour cycle: "h a" (12-hour)
+        // carries an AM/PM marker, "HH" does not.
+        environment.hourCycle12 = DateFormatter
+            .dateFormat(fromTemplate: "j", options: 0, locale: .current)?
+            .contains("a") ?? false
         Task { await request(.environment(environment)) }
     }
 

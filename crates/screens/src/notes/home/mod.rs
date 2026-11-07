@@ -607,7 +607,7 @@ impl Screen for Home {
                 Phase::Loading => loading(),
                 Phase::Failed => C::Failure(read::failure(locale)),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Journal(Journal::data(locale, answer)),
+                Phase::Ready(answer) => C::Journal(Journal::data(locale, ctx.hour_cycle(), answer)),
             },
             _ => from_phase(self.library.content(locale)),
         };

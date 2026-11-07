@@ -103,6 +103,12 @@ message Environment {
   // (iOS PhotoKit; Android 11 and later). False draws no "Free up space" row:
   // an action the phone cannot take is not offered (#1080 A20).
   bool library_deletes = 4;
+  // The phone's own 12/24-hour preference, so every time the core words reads
+  // as the phone does ("9:00 AM", not "09:00"). iOS: the template "j" of
+  // `DateFormatter.dateFormat(fromTemplate:options:locale:)` contains "a";
+  // Android: `DateFormat.is24HourFormat(context)` is false. False (the
+  // default, and what a shell that never says reports) is 24-hour.
+  bool hour_cycle_12 = 5;
 }
 
 // A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.

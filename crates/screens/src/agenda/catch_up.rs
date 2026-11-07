@@ -15,6 +15,7 @@ use super::list::{self, Phase};
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
 use crate::catalog::load;
+use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_todo, task as words};
@@ -125,13 +126,16 @@ impl CatchUp {
             .cloned()
     }
 
-    fn data(&self, locale: Locale, answer: &Answered) -> wire::TodoCatchUpData {
+    fn data(&self, locale: Locale, cycle: HourCycle, answer: &Answered) -> wire::TodoCatchUpData {
         let catch_up = &answer.catch_up;
-        let row_ctx = Context::of(
-            &catch_up.today,
-            &answer.projects.projects,
-            &answer.projects.sections,
-        );
+        let row_ctx = Context {
+            cycle,
+            ..Context::of(
+                &catch_up.today,
+                &answer.projects.projects,
+                &answer.projects.sections,
+            )
+        };
         let piles: Vec<wire::TodoPile> = [
             (PILE_DATED, words::pile_dated(locale)),
             (PILE_REPEATING, words::pile_repeating(locale)),
@@ -269,7 +273,7 @@ impl Screen for CatchUp {
             Phase::Failed if self.incomplete => Content::Failure(read::incomplete(locale)),
             Phase::Failed => Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            Phase::Ready(answer) => Content::Data(self.data(locale, answer)),
+            Phase::Ready(answer) => Content::Data(self.data(locale, ctx.hour_cycle(), answer)),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoCatchUp(

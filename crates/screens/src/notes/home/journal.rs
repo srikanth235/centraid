@@ -13,7 +13,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
 use crate::catalog::load;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read;
 use crate::notes::{Phase, fold, routes};
 use crate::screen::Ctx;
@@ -61,7 +61,11 @@ impl Journal {
     }
 
     /// The core's days, as sections.
-    pub fn data(locale: Locale, journal: &wire::NotesJournal) -> wire::NotesJournalData {
+    pub fn data(
+        locale: Locale,
+        cycle: HourCycle,
+        journal: &wire::NotesJournal,
+    ) -> wire::NotesJournalData {
         let days: Vec<wire::NotesJournalDaySection> = journal
             .days
             .iter()
@@ -80,7 +84,11 @@ impl Journal {
                         let time = if entry.local_time.is_empty() {
                             String::new()
                         } else {
-                            civil::clock(&format!("{}T{}", day.day, entry.local_time))
+                            civil::clock_for(
+                                locale,
+                                &format!("{}T{}", day.day, entry.local_time),
+                                cycle,
+                            )
                         };
                         let check = fold::check_label(locale, entry.check_done, entry.check_total);
                         wire::NotesJournalRow {

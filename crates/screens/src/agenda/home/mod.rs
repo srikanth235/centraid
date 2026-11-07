@@ -405,11 +405,12 @@ impl Home {
     fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
         let locale = ctx.locale();
         if self.destination == Dest::Todo && self.active_term().is_none() {
-            return place::fold(locale, &self.held, self.limit);
+            return place::fold(locale, ctx.hour_cycle(), &self.held, self.limit);
         }
         let term = self.active_term();
         fold::events(&fold::Fold {
             locale,
+            cycle: ctx.hour_cycle(),
             destination: self.destination,
             anchor: &self.anchor,
             term: term.as_deref(),
@@ -586,7 +587,7 @@ impl Screen for Home {
                         chip: self
                             .quick
                             .chip
-                            .reading(locale, &self.quick.title)
+                            .reading(locale, ctx.hour_cycle(), &self.quick.title)
                             .map(|reading| reading.chip()),
                     }),
                     file_choices: if self.sheet == Sheet::File {

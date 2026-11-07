@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use super::held::Held;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
+use crate::kit::civil::HourCycle;
 use crate::strings::{
     Locale, agenda_home as sentences, agenda_reminders as reminders, task as words,
 };
@@ -19,11 +20,17 @@ use crate::strings::{
 /// To-do's data, or `None` when the Inbox board and the projects are not both
 /// held.
 #[must_use]
-pub fn fold(locale: Locale, held: &Held, limit: u32) -> Option<wire::AgendaHomeData> {
+pub fn fold(
+    locale: Locale,
+    cycle: HourCycle,
+    held: &Held,
+    limit: u32,
+) -> Option<wire::AgendaHomeData> {
     let board = held.inbox.as_ref()?;
     let answer = held.projects.as_ref()?;
     let (projects, sections) = held.projects_of();
-    let ctx = rows::Context::of(&board.today, projects, sections);
+    let mut ctx = rows::Context::of(&board.today, projects, sections);
+    ctx.cycle = cycle;
     let groups = rows::groups(locale, &board.groups, &ctx);
     let project_groups = project_groups(locale, answer);
     let counts = board.counts.as_ref();
@@ -350,7 +357,7 @@ mod tests {
     }
 
     fn empty_of(held: &Held) -> wire::EmptyState {
-        fold(Locale::En, held, rows::PAGE)
+        fold(Locale::En, HourCycle::default(), held, rows::PAGE)
             .unwrap()
             .todo
             .unwrap()
@@ -402,7 +409,7 @@ mod tests {
                 project("p3", "Launch", Some("Work"), 0, 0),
             ],
         );
-        let data = fold(Locale::En, &held, rows::PAGE).unwrap();
+        let data = fold(Locale::En, HourCycle::default(), &held, rows::PAGE).unwrap();
         let todo = data.todo.unwrap();
         assert_eq!(todo.empty.unwrap().headline, "", "projects are something");
         let shape: Vec<(String, Vec<String>)> = todo
@@ -447,11 +454,14 @@ mod tests {
         full.truncated = true;
         full.window = 100;
         let held = held(full, vec![]);
-        let todo = fold(Locale::En, &held, 100).unwrap().todo.unwrap();
+        let todo = fold(Locale::En, HourCycle::default(), &held, 100)
+            .unwrap()
+            .todo
+            .unwrap();
         assert_eq!(todo.window_label, "100 tasks · more not shown");
         assert!(todo.can_show_more);
         assert!(
-            !fold(Locale::En, &held, rows::MAX_WINDOW)
+            !fold(Locale::En, HourCycle::default(), &held, rows::MAX_WINDOW)
                 .unwrap()
                 .todo
                 .unwrap()

@@ -59,7 +59,7 @@ use super::event::{
 use super::todo::ops::Ops;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda as words, agenda_editor as editor_words, fill};
@@ -828,9 +828,11 @@ impl Screen for Editor {
                 receipt: denial.code.clone().unwrap_or_default(),
             }),
             Phase::Ready => match &self.draft {
-                Some(draft) => {
-                    wire::agenda_editor_state::Content::Data(Box::new(self.data(locale, draft)))
-                }
+                Some(draft) => wire::agenda_editor_state::Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.hour_cycle(),
+                    draft,
+                ))),
                 None => wire::agenda_editor_state::Content::Gone(wire::AgendaGone {
                     title: words::gone_title(locale),
                     body: words::gone_body(locale),
@@ -881,7 +883,7 @@ impl Editor {
         }
     }
 
-    fn data(&self, locale: Locale, draft: &Draft) -> wire::AgendaEditorData {
+    fn data(&self, locale: Locale, cycle: HourCycle, draft: &Draft) -> wire::AgendaEditorData {
         let Some(loaded) = &self.loaded else {
             return wire::AgendaEditorData::default();
         };
@@ -955,7 +957,10 @@ impl Editor {
             } else {
                 fill(
                     &editor_words::day_and_time(locale),
-                    &[("day", &long_day(locale, day)), ("time", time)],
+                    &[
+                        ("day", &long_day(locale, day)),
+                        ("time", &civil::time_for(locale, time, cycle)),
+                    ],
                 )
             }
         };
@@ -974,13 +979,13 @@ impl Editor {
             start_time_label: if draft.all_day {
                 String::new()
             } else {
-                draft.start_time.clone()
+                civil::time_for(locale, &draft.start_time, cycle)
             },
             end_day_label: long_day(locale, &draft.end_day),
             end_time_label: if draft.all_day {
                 String::new()
             } else {
-                draft.end_time.clone()
+                civil::time_for(locale, &draft.end_time, cycle)
             },
             calendar_label: calendar_name,
             calendar_hue_key: calendar_hue(
