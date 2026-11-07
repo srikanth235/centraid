@@ -66,6 +66,38 @@
       "x": 940,
       "y": 15080
     },
+    "AgendaQuickAddChip.dc.html": {
+      "h": 960,
+      "page": "light",
+      "title": "2 · Quick-add chip (iPhone and Android)",
+      "w": 880,
+      "x": 960,
+      "y": 23200
+    },
+    "AgendaQuickAddChipDark.dc.html": {
+      "h": 960,
+      "page": "dark",
+      "title": "2 · Quick-add chip (iPhone and Android) · dark",
+      "w": 880,
+      "x": 960,
+      "y": 23200
+    },
+    "AgendaWidgets.dc.html": {
+      "h": 1290,
+      "page": "light",
+      "title": "1 · Widgets (iPhone and Android)",
+      "w": 880,
+      "x": 0,
+      "y": 23200
+    },
+    "AgendaWidgetsDark.dc.html": {
+      "h": 1290,
+      "page": "dark",
+      "title": "1 · Widgets (iPhone and Android) · dark",
+      "w": 880,
+      "x": 0,
+      "y": 23200
+    },
     "AndroidChat.dc.html": {
       "h": 915,
       "page": "light",
@@ -1449,6 +1481,7 @@
     "light17",
     "light18",
     "light19",
+    "light20",
     "dark0",
     "dark1",
     "dark2",
@@ -1468,7 +1501,8 @@
     "dark16",
     "dark17",
     "dark18",
-    "dark19"
+    "dark19",
+    "dark20"
   ],
   "notes": {
     "dark0": {
@@ -1830,6 +1864,24 @@
       "w": 240,
       "x": 0,
       "y": 10240
+    },
+    "light20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
+    },
+    "dark20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
     }
   },
   "order": [
@@ -1926,6 +1978,8 @@
     "AndroidPhotos.dc.html",
     "AndroidChat.dc.html",
     "AndroidRecoveryKey.dc.html",
+    "AgendaWidgets.dc.html",
+    "AgendaQuickAddChip.dc.html",
     "WelcomeDark.dc.html",
     "HomeWidgetsDark.dc.html",
     "BackupSettingsDark.dc.html",
@@ -2009,7 +2063,9 @@
     "AndroidNotesDark.dc.html",
     "AndroidPhotosDark.dc.html",
     "AndroidChatDark.dc.html",
-    "AndroidRecoveryKeyDark.dc.html"
+    "AndroidRecoveryKeyDark.dc.html",
+    "AgendaWidgetsDark.dc.html",
+    "AgendaQuickAddChipDark.dc.html"
   ],
   "pages": [
     {
