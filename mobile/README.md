@@ -303,6 +303,14 @@ The pass service in Rust decides when a pass runs, over what, and what the Backu
 - **Back up now** is a run the platform keeps alive (Android's user-initiated job or a `dataSync` service, `backup/BackupNow.kt`; iOS's awake screen); a second press while a run goes starts nothing. The battery sentence is Rust's; whether battery saving applies is the shell's to read and report.
 - **The way back and free-up-space.** The download arrow on a grid cell or the lightbox is Rust's `fetch_original`; freeing space runs Rust's census/releasable/released flow and asks the shell only `LibraryDelete` (`PhotoLibraryDeleter.swift`, `backup/MediaStoreDeleter.kt`).
 
+## Notifications: reminders and alerts (#1173)
+
+The `agenda.notify` service in Rust (`crates/screens/src/agenda/notify`) decides which task reminders and event alerts the phone holds (the next 48 within two weeks, soonest first; iOS keeps at most 64 pending), when each fires and what each says. It sends the WHOLE set as `ScheduleNotifications` whenever it changes (an edit, a completion, a delete, a vault switch, the zone or the locale). A shell decides nothing:
+
+- **The diff.** The shell removes whatever it holds (pending and delivered) that is not in the set, and adds or replaces the rest. iOS reads what `UNUserNotificationCenter` holds and builds a calendar trigger from `fire_local` in `zone` (`Notifications.swift`). Android keeps its own record of the set in a private preferences file and arms one `AlarmManager` alarm per item (`notify/Notify.kt`). The alarm is exact when the platform grants `SCHEDULE_EXACT_ALARM` and inexact otherwise. A receiver posts each notification through `NotificationManager` on one channel named by Rust, and a boot, time or zone receiver re-arms from the record.
+- **Permission** is asked only when the set first holds something that would fire (`ask_permission`); refused is quiet: nothing is held and nothing is said. Each answer reports the permission and the count (`NotificationsScheduled`).
+- **The buttons.** Mark as done, Snooze 1 hour and Tomorrow, and a tap, come back as `ShellFact.notification_answered` with the id and the verb as received. Rust writes (`complete-task`, `edit-task`) and answers with a new set carrying a short receipt that offers Undo. The shell holds the app awake (iOS's delegate, Android's `goAsync`) until that set is performed. A repeating task offers Mark as done only, and an event offers no buttons; a tap opens it.
+
 ## Android, end to end
 
 ```sh

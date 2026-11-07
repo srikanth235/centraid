@@ -158,7 +158,7 @@ enum BackgroundPasses {
     }
 
     /// The store, now or within [seconds], or nil.
-    @MainActor private static func installed(within seconds: TimeInterval) async -> ScreenStore? {
+    @MainActor static func installed(within seconds: TimeInterval) async -> ScreenStore? {
         if let store { return store }
         let ticket = UUID()
         return await withCheckedContinuation { continuation in

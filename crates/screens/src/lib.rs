@@ -89,7 +89,15 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         .concat(),
     )
     .with_band(shell::band::view)
-    .with_services([passes::services(), custody::services(), vault::services()].concat());
+    .with_services(
+        [
+            passes::services(),
+            custody::services(),
+            vault::services(),
+            agenda::notify::services(),
+        ]
+        .concat(),
+    );
     (runtime, shelf)
 }
 

@@ -11,6 +11,7 @@
 //! | One task | [`TASK`] | [`detail`] |
 //! | Catch up | [`CATCH_UP`] | [`catch_up`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | Reminders and alerts, as notifications (a service, no view) | [`notify::NAME`] | [`notify`] |
 //!
 //! A row that opens a page carries the [`wire::Route`] to push (built by
 //! [`routes`]), so a shell never names a screen.
@@ -33,6 +34,7 @@ pub mod editor;
 pub mod event;
 pub mod home;
 pub mod list;
+pub mod notify;
 pub mod project;
 pub mod todo;
 pub mod trash;
@@ -58,6 +60,7 @@ pub fn registry() -> Registry {
         .with(TASK, detail::build)
         .with(CATCH_UP, catch_up::build)
         .with(TRASH, trash::build)
+        .with(notify::NAME, notify::build)
 }
 
 /// A runtime with Agenda's screens and one tab, `agenda`, rooted at its home.

@@ -1,0 +1,111 @@
+// NOTIFICATIONS (#1173, Agenda wave 1c): task reminders and event alerts, one
+// pipeline. Rust decides WHICH notifications the phone should hold, WHEN each
+// fires and WHAT each says (`crates/screens/src/agenda/notify`); a shell only
+// makes the operating system hold exactly that set and reports back what the
+// member tapped. Arms: Effect 120, EffectResult 120, ShellFact 8.
+//
+// THE SET IS DECLARATIVE. `ScheduleNotifications.all` is everything the app
+// wants pending, not a change to apply: a shell diffs it against what it put in
+// the OS (iOS `getPendingNotificationRequests`, Android its own record of the
+// alarms it set), removes what is not in the set (delivered ones included),
+// and adds or replaces what is. Sent again whenever the set changes: an edit,
+// a completion, a delete, a vault switch (the new vault's set, or none), the
+// locale or the zone.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// What a notification's button (or a tap on the notification itself) asks for.
+// A shell uses the number as the OS action's identifier and sends it back
+// unchanged in `NotificationAnswered`; it never decides what a verb does.
+enum NotificationVerb {
+  NOTIFICATION_VERB_UNSPECIFIED = 0;
+  // The notification itself was tapped: open what it is about.
+  NOTIFICATION_VERB_OPEN = 1;
+  // Mark the task as done.
+  NOTIFICATION_VERB_DONE = 2;
+  // Remind again in an hour.
+  NOTIFICATION_VERB_SNOOZE_HOUR = 3;
+  // Move the task to tomorrow.
+  NOTIFICATION_VERB_TOMORROW = 4;
+  // Reverse the action a receipt names.
+  NOTIFICATION_VERB_UNDO = 5;
+}
+
+// One button, worded in the device's locale.
+message NotificationAction {
+  NotificationVerb verb = 1;
+  string label = 2;
+}
+
+// A set of buttons a notification can carry (iOS `UNNotificationCategory`,
+// Android the actions added to each notification). The same few categories
+// are sent every time, so a shell registers them as they are.
+message NotificationCategory {
+  string category_id = 1;
+  repeated NotificationAction actions = 2;
+}
+
+// One notification the phone should hold.
+message PendingNotification {
+  // Stable for as long as the notification means the same thing (the same
+  // item, the same moment): a shell replaces by it. Opaque; sent back as is.
+  string notification_id = 1;
+  // When it fires: the wall clock and the zone it is read in (iOS builds its
+  // calendar trigger from these; Android recomputes from them after a reboot),
+  // and the instant they name (Android's alarm, and the test for "already
+  // past").
+  string fire_local = 2;
+  string zone = 3;
+  int64 fire_at_ms = 4;
+  string title = 5;
+  string body = 6;
+  // `NotificationCategory.category_id`; empty is no buttons.
+  string category_id = 7;
+  // Notifications of one thread are grouped (iOS `threadIdentifier`, Android
+  // the group key).
+  string thread_id = 8;
+  // Deliver now rather than at `fire_at_ms`: a receipt for a button just
+  // pressed, which carries Undo.
+  bool immediate = 9;
+}
+
+// Effect 120: make the operating system hold exactly `all`.
+message ScheduleNotifications {
+  // Soonest first, and bounded by construction (Rust sends at most the next 48
+  // inside two weeks; iOS keeps at most 64 pending).
+  repeated PendingNotification all = 1;
+  repeated NotificationCategory categories = 2;
+  // PERMISSION IS ASKED ONLY WHEN IT IS FIRST NEEDED: true when `all` holds a
+  // notification that would fire. A shell whose permission was never asked
+  // asks then, and never otherwise. Refused is a quiet state: nothing is
+  // scheduled and nothing is said.
+  bool ask_permission = 3;
+  // The Android channel's name, as the member sees it in system settings.
+  string channel_name = 4;
+}
+
+// What the OS said about notifications.
+enum NotificationPermission {
+  NOTIFICATION_PERMISSION_UNSPECIFIED = 0;
+  // Never asked, and not asked now (`ask_permission` was false).
+  NOTIFICATION_PERMISSION_NOT_ASKED = 1;
+  NOTIFICATION_PERMISSION_GRANTED = 2;
+  NOTIFICATION_PERMISSION_DENIED = 3;
+}
+
+// EffectResult 120: the answer to `ScheduleNotifications`.
+message NotificationsScheduled {
+  NotificationPermission permission = 1;
+  // How many the OS holds pending for the app now.
+  uint32 held = 2;
+}
+
+// ShellFact 8: the member pressed a button on a notification, or tapped it.
+// A shell sends it as the OS hands it over, even when the app was launched for
+// it; Rust decides what it does.
+message NotificationAnswered {
+  string notification_id = 1;
+  NotificationVerb verb = 2;
+}

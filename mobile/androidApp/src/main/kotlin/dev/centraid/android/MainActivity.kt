@@ -1,5 +1,6 @@
 package dev.centraid.android
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
@@ -22,6 +23,7 @@ import androidx.fragment.app.FragmentActivity
 import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.notify.NotifyTaps
 import dev.centraid.android.screens.RustRoot
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.theme.CentraidTheme
@@ -64,10 +66,21 @@ public class MainActivity : FragmentActivity() {
         open.scope.launch { open.screens.memoryWarning() }
     }
 
+    /** A tap on a notification while the activity is up: reported at once if the session is, else with the launch's. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        NotifyTaps.note(intent)
+        val open = AppSession.current.value ?: return
+        open.scope.launch { NotifyTaps.flush(open.screens) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A secret copied before the app was killed is cleared once its deadline has passed.
         ClipboardDeadline.sweep(applicationContext)
+        // A TAP ON A NOTIFICATION launched this: reported once the session is up (below).
+        NotifyTaps.note(intent)
         // EDGE TO EDGE: the page ground is the emitted `bg` and reaches the notch; the insets are paid
         // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
@@ -95,6 +108,7 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
+                        NotifyTaps.flush(opened.screens)
                         awaitCancellation()
                     } finally {
                         rust.detach()

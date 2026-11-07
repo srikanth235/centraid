@@ -35,6 +35,7 @@ import dev.centraid.android.backup.PassWork
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.SecretStores
+import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.docs.FolderReader
@@ -156,6 +157,13 @@ internal class ShellEffects(
                 PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
                 EffectResult(pass_noted = PassNoted())
             }
+            // ---- notifications (`crates/screens/src/agenda/notify`) ----------------------------
+            // THE PROMPT IS THE ACTIVITY'S (`UiHost.ask`); with none up nothing is asked and Rust hears NOT_ASKED.
+            effect.schedule_notifications != null -> EffectResult(
+                notifications_scheduled = withContext(Dispatchers.IO) {
+                    Notify.schedule(context, effect.schedule_notifications!!) { ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
+                },
+            )
             effect.long_run != null -> {
                 if (effect.long_run!!.start) BackupNow.start(context, effect.long_run!!.title, effect.long_run!!.channel_name) else BackupNow.stop(context)
                 EffectResult(pass_noted = PassNoted())

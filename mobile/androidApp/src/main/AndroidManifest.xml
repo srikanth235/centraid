@@ -101,6 +101,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- AGENDA'S REMINDERS AND ALERTS (#1173; `notify/Notify.kt`). POST_NOTIFICATIONS
+         above is asked for at the first reminder that would fire (never at launch).
+         SCHEDULE_EXACT_ALARM and NOT USE_EXACT_ALARM: Play restricts USE_EXACT_ALARM to
+         apps whose core function is an alarm clock or a calendar, and Centraid is a
+         vault whose Agenda is one app among many, so claiming it risks the listing.
+         SCHEDULE_EXACT_ALARM is a user-revocable grant (on by default on 31 and 32, off
+         on 33 and up); when it is not held the reminder is set inexact, a few minutes
+         late at worst, and the member is never sent to settings for it. The boot
+         receiver re-arms every alarm a reboot cleared. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- WHAT HEALTH ASKS THE PACKAGE MANAGER ABOUT (#1129): Health Connect
          itself (Android 9 to 13, where it is an app), and the apps that write
          to it — each declares one of the two rationale intents below — so a
@@ -173,6 +185,27 @@
             android:name="dev.centraid.android.backup.BackupForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- AGENDA'S NOTIFICATIONS (#1173). None is exported. The boot receiver hears
+             the system's own broadcasts (reboot, a new time or zone, this app updated,
+             the exact-alarm grant changing) and re-arms every recorded alarm. -->
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyActionReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- "Send a copy" (#816): the copies `PhotoHandOff` writes, and
              nothing else. Not exported; a receiving app reads one copy
