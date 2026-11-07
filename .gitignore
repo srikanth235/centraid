@@ -32,3 +32,7 @@ __pycache__
 
 # Agent verification output (screenshots, DerivedData); never committed.
 .verify/
+
+# Owner's untracked logo drafts and per-agent cargo targets; never committed.
+/brand-drafts/
+/target-*/
