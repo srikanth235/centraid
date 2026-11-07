@@ -43,6 +43,7 @@ import "centraid/core/v1/photos_shelf_screens.proto";
 import "centraid/core/v1/locker_screens.proto";
 import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
+import "centraid/core/v1/notify_screens.proto";
 import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
 import "centraid/core/v1/vault_screens.proto";
@@ -488,6 +489,9 @@ message Effect {
     // tapped row's route is pushed. For a screen that makes a thing and
     // opens it (a document just filed).
     OpenRoute open_route = 20;
+    // ---- agenda (100-199): notifications (#1173, `notify_screens.proto`) ----
+    // Make the OS hold exactly this set of reminders and alerts.
+    ScheduleNotifications schedule_notifications = 120;
     // ---- docs (200-299): files ----
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
@@ -875,6 +879,8 @@ message EffectResult {
     CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
     LibraryDeleted library_deleted = 17;
+    // ---- agenda (100-199): notifications (#1173) ----
+    NotificationsScheduled notifications_scheduled = 120;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;

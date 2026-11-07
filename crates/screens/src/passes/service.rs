@@ -338,6 +338,8 @@ impl Service {
                 .conductor
                 .window_granted(&granted.window, granted.deadline_ms),
             Some(Fact::Expired(_)) | None => Vec::new(),
+            // A button pressed on a notification is the notify service's (`agenda.notify`).
+            Some(Fact::NotificationAnswered(_)) => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults

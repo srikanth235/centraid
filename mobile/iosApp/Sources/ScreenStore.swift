@@ -66,6 +66,10 @@ final class ScreenStore: ObservableObject {
     /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
     /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
     private var windowWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
+    /// A NOTIFICATION BUTTON waits here for Rust's answer to be performed (the next
+    /// `ScheduleNotifications`, with its receipt), so iOS does not suspend the app before it is.
+    private var notifyWaiter: (token: UInt64, continuation: CheckedContinuation<Void, Never>)?
+    private var notifyTokens: UInt64 = 0
     /// The UIKit grace held while the app leaves the screen and Rust runs its pass; released
     /// on `PassWindowDone` for the background entry (or by iOS taking it back).
     #if os(iOS)
@@ -140,6 +144,37 @@ final class ScreenStore: ObservableObject {
         var shell = Centraid_Core_V1_ShellFact()
         shell.fact = fact
         Task { await request(.shellFact(shell)) }
+    }
+
+    /// A NOTIFICATION'S BUTTON OR TAP (#1173): tell Rust, and return once the core has it, so a
+    /// background action's completion handler is not called before the answer is in.
+    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb) async {
+        var answered = Centraid_Core_V1_NotificationAnswered()
+        answered.notificationID = id
+        answered.verb = verb
+        var shell = Centraid_Core_V1_ShellFact()
+        shell.fact = .notificationAnswered(answered)
+        // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and
+        // its Undo, the reminder gone), and the delegate's return lets iOS suspend the app. Rust
+        // answers within the same call; the bound only covers a performer that never runs.
+        notifyTokens += 1
+        let token = notifyTokens
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            notifyWaiter?.continuation.resume()
+            notifyWaiter = (token, continuation)
+            Task { await request(.shellFact(shell)) }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                self?.notifyPerformed(token: token)
+            }
+        }
+    }
+
+    /// Release the button that waits (only `token`'s, when one is named).
+    private func notifyPerformed(token: UInt64? = nil) {
+        guard let waiter = notifyWaiter, token == nil || waiter.token == token else { return }
+        notifyWaiter = nil
+        waiter.continuation.resume()
     }
 
     /// A BACKGROUND WINDOW THE OS GRANTED: tell Rust, then wait for the pass it runs to end.
@@ -441,6 +476,15 @@ final class ScreenStore: ObservableObject {
             answer(request, .windowsScheduled(BackgroundPasses.schedule(schedule.windows)))
             #else
             answer(request, .failed(Self.failure("no background windows on this platform")))
+            #endif
+        // NOTIFICATIONS (#1173, `agenda.notify`): Rust sends the whole desired set; this makes the
+        // OS hold it and answers the permission and the count.
+        case .scheduleNotifications(let schedule)?:
+            #if os(iOS)
+            answer(request, .notificationsScheduled(await Notifications.schedule(schedule)))
+            notifyPerformed()
+            #else
+            answer(request, .failed(Self.failure("no notifications on this platform")))
             #endif
         case .passWindowDone(let finished)?:
             #if os(iOS)

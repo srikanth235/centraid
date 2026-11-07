@@ -34,6 +34,7 @@ centraid-identity = { path = "../identity" }
 # The headless driver founds and seeds a scratch vault (`testing`).
 centraid-ontology = { path = "../ontology" }
 
-[dev-dependencies]
-# Photos' tests stage a photograph's bytes and need the digest the vault names them by.
+# Civil time is the vault's one engine (`time::FireZone`): a reminder's instant is read in
+# the member's zone by the same rule the core placed it with, never a second reader.
+# Photos' tests also stage a photograph's bytes and need the digest the vault names them by.
 centraid-vault = { path = "../vault" }
