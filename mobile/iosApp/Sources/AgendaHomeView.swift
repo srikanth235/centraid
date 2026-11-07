@@ -804,6 +804,12 @@ private struct AgendaMoreSheet: View {
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
+    /// A calendar row that wears a list colour draws its icon in the leading mark, so the
+    /// row itself names no icon; every other row keeps the icon the core sent.
+    private func sheetIcon(of row: Centraid_Core_V1_AgendaMoreRow) -> String {
+        row.colorKey.isEmpty ? row.iconKey : String()
+    }
+
     /// A `SheetRoom` of `SheetRow`s — what `OptionSheet` draws — with the
     /// title carrying the sheet's id, so the rows keep their own. THE ROWS ARE
     /// RUST'S (`more_rows`), the same list Android draws: a calendar row is a
@@ -829,7 +835,7 @@ private struct AgendaMoreSheet: View {
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(
-                                iconKey: row.colorKey.isEmpty ? row.iconKey : "",
+                                iconKey: sheetIcon(of: row),
                                 label: row.label,
                                 selected: row.toggle && row.on,
                                 identifier: "agenda-more-\(row.key)"

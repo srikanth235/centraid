@@ -183,6 +183,9 @@ public enum CentraidCatalog {
         "ChevronRight": [
             CentraidIconPath(d: "M9 6l6 6-6 6", filled: false, evenOdd: false),
         ],
+        "ChevronUp": [
+            CentraidIconPath(d: "M18 15l-6-6-6 6", filled: false, evenOdd: false),
+        ],
         "ChevronsDown": [
             CentraidIconPath(d: "m7 7 5 5 5-5M7 13l5 5 5-5", filled: false, evenOdd: false),
         ],

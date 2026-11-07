@@ -13,7 +13,6 @@
 //! | recurrence rule | `rule` when the vault can expand it; else the task imports without one and the outcome counts it |
 //! | alarms | `remind_before_min` from the FIRST alarm only (a relative one is its offset, an absolute one is due minus its date) |
 //! | its list (calendar) | a list (project) of that name, made when missing, in the nearest of the eight list colours |
-//! | parent reminder | `parent_id` (one level: a parent that is itself a subtask, or is completed, is ignored) |
 //! | URL | `url` |
 //! | completed, completion date | a done task (`done_at`); ONLY when the member turned "Include completed reminders" on |
 //!
@@ -139,12 +138,11 @@ fn rule_of(reminder: &wire::PhoneReminder, has_due: bool) -> (Option<String>, bo
     }
 }
 
-/// `add-task` for one reminder, in `project`, under `parent`, and whether its rule was dropped.
+/// `add-task` for one reminder, in `project`, and whether its rule was dropped.
 #[must_use]
 pub fn request(
     reminder: &wire::PhoneReminder,
     project: Option<&str>,
-    parent: Option<&str>,
 ) -> (act::agenda::AddTask, bool) {
     let (due, zone) = due_of(reminder);
     let (rule, dropped) = rule_of(reminder, due.is_some());
@@ -171,7 +169,6 @@ pub fn request(
             Field::Is(reminder.url.clone())
         },
         project_id: project.map_or(Field::Keep, |id| Field::Is(id.to_owned())),
-        parent_id: parent.map_or(Field::Keep, |id| Field::Is(id.to_owned())),
         done_at: done.map_or(Field::Keep, Field::Is),
         ..act::agenda::AddTask::default()
     };
@@ -242,40 +239,17 @@ fn list_for(
 }
 
 /// Write the read's tasks, one `add-task` each; a refused one is counted and the rest kept.
-/// Parents go first so a subtask can name the task its parent became.
 pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool) -> Outcome {
     let mut outcome = Outcome::default();
     let made = tasks(reminders, include_completed);
-    let by_external: HashMap<&str, &wire::PhoneReminder> = made
-        .iter()
-        .filter(|reminder| !reminder.external_id.is_empty())
-        .map(|reminder| (reminder.external_id.as_str(), reminder))
-        .collect();
-    // A parent is honoured when it is in the read, top-level itself, and not completed (the vault
-    // only takes a subtask under an open, top-level task).
-    let parent_of = |reminder: &wire::PhoneReminder| -> Option<String> {
-        by_external
-            .get(reminder.parent_id.as_str())
-            .filter(|parent| parent.parent_id.is_empty() && !parent.completed)
-            .map(|parent| parent.external_id.clone())
-    };
-    let (children, roots): (Vec<_>, Vec<_>) = made
-        .iter()
-        .partition(|reminder| parent_of(reminder).is_some());
     let mut held = lists_held(ctx);
-    let mut ids: HashMap<String, String> = HashMap::new();
-    for reminder in roots.into_iter().chain(children) {
+    for reminder in &made {
         if reminder.completed && reminder.completed_at.trim().is_empty() {
             outcome.refused += 1;
             continue;
         }
-        let parent = parent_of(reminder).and_then(|external| ids.get(&external).cloned());
-        let project = match &parent {
-            // A subtask lives in its parent's list.
-            Some(_) => None,
-            None => list_for(ctx, reminder, &mut held, &mut outcome),
-        };
-        let (add, dropped) = request(reminder, project.as_deref(), parent.as_deref());
+        let project = list_for(ctx, reminder, &mut held, &mut outcome);
+        let (add, dropped) = request(reminder, project.as_deref());
         let key = kit_act::key(
             &["import-reminder", &reminder.title, &reminder.due],
             kit_act::fresh(),
@@ -292,16 +266,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         };
         if reminder.flagged {
             let key = kit_act::key(&["import-reminder-flag", &id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::agenda::StarTask {
-                    task_id: id.clone(),
-                },
-                &key,
-            );
-        }
-        if !reminder.external_id.is_empty() {
-            ids.insert(reminder.external_id.clone(), id);
+            kit_act::act(ctx, act::agenda::StarTask { task_id: id }, &key);
         }
     }
     outcome

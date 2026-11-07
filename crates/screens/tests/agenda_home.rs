@@ -1910,7 +1910,6 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
     assert_eq!(tasks.quick_add_placeholder, "Task name");
     assert_eq!(tasks.file_verb, "Move to project");
     assert_eq!(tasks.show_more, "Show more");
-    assert_eq!(tasks.new_project_title, "New project");
     // OTHER PLACES: the Plus is the add sheet.
     r.destination(Dest::Day);
     assert_eq!(r.state().add_label, "Add");
@@ -2226,29 +2225,25 @@ fn a_new_project_is_a_sheet_reachable_from_to_do_whatever_it_holds() {
         sheet: Sheet::NewProject as i32,
     }));
     assert_eq!(r.state().sheet, Sheet::NewProject as i32);
-    assert!(!r.state().new_project_can_submit);
-    r.send(H::NewProjectName(
-        wire::agenda_home_event::NewProjectNameChanged {
-            name: "Zq Garden".to_owned(),
-        },
-    ));
-    assert!(r.state().new_project_can_submit);
+    assert!(!r.state().style.as_ref().unwrap().can_submit);
+    r.send(H::StyleName(wire::agenda_home_event::StyleNameChanged {
+        name: "Zq Garden".to_owned(),
+    }));
+    assert!(r.state().style.as_ref().unwrap().can_submit);
     // Closing the sheet drops the name.
     r.send(H::SheetClosed(wire::agenda_home_event::SheetClosed {}));
-    assert_eq!(r.state().new_project_name, "");
+    assert!(r.state().style.is_none());
     r.send(H::SheetOpened(wire::agenda_home_event::SheetOpened {
         sheet: Sheet::NewProject as i32,
     }));
-    r.send(H::NewProjectName(
-        wire::agenda_home_event::NewProjectNameChanged {
-            name: "Zq Garden".to_owned(),
-        },
-    ));
-    r.send(H::NewProjectSubmitted(
-        wire::agenda_home_event::NewProjectSubmitted {},
+    r.send(H::StyleName(wire::agenda_home_event::StyleNameChanged {
+        name: "Zq Garden".to_owned(),
+    }));
+    r.send(H::StyleSubmitted(
+        wire::agenda_home_event::StyleSubmitted {},
     ));
     assert_eq!(r.state().sheet, Sheet::None as i32);
-    assert_eq!(r.state().new_project_name, "");
+    assert!(r.state().style.is_none());
     assert_eq!(r.status().unwrap().sentence, "List created");
     let projects: Vec<String> = r
         .todo()
@@ -2266,8 +2261,8 @@ fn a_new_project_is_a_sheet_reachable_from_to_do_whatever_it_holds() {
     r.send(H::SheetOpened(wire::agenda_home_event::SheetOpened {
         sheet: Sheet::NewProject as i32,
     }));
-    r.send(H::NewProjectSubmitted(
-        wire::agenda_home_event::NewProjectSubmitted {},
+    r.send(H::StyleSubmitted(
+        wire::agenda_home_event::StyleSubmitted {},
     ));
     assert_eq!(r.state().sheet, Sheet::NewProject as i32);
 }

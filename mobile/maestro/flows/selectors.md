@@ -138,6 +138,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
 | `import-banner` | every route, at the foot above the band | an import's status line: progress and outcome (`import-sentence`), its one action (`import-action`, "Open People" after a made vault's imports) and its close key (`import-close`) |
+| `import-reminders` | made vault, under the import banner once its imports are over | the verb that reads the phone's Reminders and imports them as tasks — **iOS only**; Android has no Reminders store |
+| `import-completed-toggle` | made vault, beside `import-reminders` | the chip that also brings completed reminders in (selected while on) — **iOS only**; Android has no Reminders store |
 | `home-vault-sheet` | Home | the vault switcher sheet |
 | `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`, its **Delete**) |
 | `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |

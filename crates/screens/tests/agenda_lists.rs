@@ -274,12 +274,12 @@ fn a_list_is_made_with_a_colour_and_an_icon_from_add_list() {
     assert_eq!(home(&d).sheet, Sheet::NewProject as i32);
     let sheet = style_of(&d);
     assert_eq!(sheet.title, "New List");
-    assert!(!home(&d).new_project_can_submit);
+    assert!(!style_of(&d).can_submit);
     name_it(&mut d, "Garden");
     color_it(&mut d, "petrol");
     icon_it(&mut d, "Plant");
-    assert_eq!(home(&d).new_project_name, "Garden");
-    assert!(home(&d).new_project_can_submit);
+    assert_eq!(style_of(&d).name, "Garden");
+    assert!(style_of(&d).can_submit);
     submit(&mut d);
     assert_eq!(home(&d).sheet, Sheet::None as i32);
     assert_eq!(
@@ -312,34 +312,6 @@ fn a_list_is_made_with_a_colour_and_an_icon_from_add_list() {
         .expect("the row");
     assert_eq!(row.icon_key, "Plant");
     assert_eq!(row.list_color_key, "petrol");
-}
-
-#[test]
-fn the_old_new_project_events_still_make_a_list() {
-    let mut d = driver();
-    todo_home(&mut d);
-    send_home(
-        &mut d,
-        H::SheetOpened(wire::agenda_home_event::SheetOpened {
-            sheet: Sheet::NewProject as i32,
-        }),
-    );
-    send_home(
-        &mut d,
-        H::NewProjectName(wire::agenda_home_event::NewProjectNameChanged {
-            name: "Zq Errands".to_owned(),
-        }),
-    );
-    send_home(
-        &mut d,
-        H::NewProjectSubmitted(wire::agenda_home_event::NewProjectSubmitted {}),
-    );
-    let made = projects(&d)
-        .into_iter()
-        .find(|project| project.name == "Zq Errands")
-        .expect("the list");
-    assert_eq!(made.color.as_deref(), Some("blue"), "the palette's first");
-    assert_eq!(made.icon, None);
 }
 
 #[test]

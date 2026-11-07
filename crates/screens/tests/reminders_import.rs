@@ -50,7 +50,7 @@ fn a_dated_reminder_carries_its_time_zone_priority_alarm_link_and_notes() {
         url: "https://example.com/appointment".into(),
         ..wire::PhoneReminder::default()
     };
-    let (add, dropped) = reminders::request(&r, Some("project-1"), None);
+    let (add, dropped) = reminders::request(&r, Some("project-1"));
     assert!(!dropped);
     assert_eq!(add.title, "Dentist");
     assert_eq!(add.description, Field::Is("bring the form".into()));
@@ -68,14 +68,14 @@ fn a_date_only_reminder_stays_a_day_and_a_floating_time_has_no_zone() {
         due: "2026-12-01".into(),
         ..reminder("Day")
     };
-    let (add, _) = reminders::request(&day, None, None);
+    let (add, _) = reminders::request(&day, None);
     assert_eq!(add.due, Field::Is("2026-12-01".into()));
     assert_eq!(add.zone, Field::Keep);
     let floating = wire::PhoneReminder {
         due_time: "18:00".into(),
         ..day
     };
-    let (add, _) = reminders::request(&floating, None, None);
+    let (add, _) = reminders::request(&floating, None);
     assert_eq!(add.due, Field::Is("2026-12-01T18:00".into()));
     assert_eq!(add.zone, Field::Keep);
 }
@@ -86,7 +86,7 @@ fn an_alarm_with_no_due_is_dropped_because_it_has_nothing_to_count_back_from() {
         alarm_minutes_before: Some(10),
         ..reminder("No due")
     };
-    let (add, _) = reminders::request(&r, None, None);
+    let (add, _) = reminders::request(&r, None);
     assert_eq!(add.remind_before_min, Field::Keep);
 }
 
@@ -97,11 +97,11 @@ fn a_supported_rule_is_kept_and_an_unsupported_one_is_dropped_and_counted() {
         rrule: rrule.into(),
         ..reminder("Repeats")
     };
-    let (add, dropped) = reminders::request(&dated("RRULE:FREQ=WEEKLY;BYDAY=MO,WE"), None, None);
+    let (add, dropped) = reminders::request(&dated("RRULE:FREQ=WEEKLY;BYDAY=MO,WE"), None);
     assert!(!dropped);
     assert_eq!(add.rule, Field::Is("FREQ=WEEKLY;BYDAY=MO,WE".into()));
     // An hourly rule is below the engine's day.
-    let (add, dropped) = reminders::request(&dated("FREQ=HOURLY;INTERVAL=2"), None, None);
+    let (add, dropped) = reminders::request(&dated("FREQ=HOURLY;INTERVAL=2"), None);
     assert!(dropped);
     assert_eq!(add.rule, Field::Keep);
     // A rule with nothing to repeat from cannot be kept either.
@@ -109,7 +109,7 @@ fn a_supported_rule_is_kept_and_an_unsupported_one_is_dropped_and_counted() {
         rrule: "FREQ=DAILY".into(),
         ..reminder("Undated")
     };
-    let (_, dropped) = reminders::request(&undated, None, None);
+    let (_, dropped) = reminders::request(&undated, None);
     assert!(dropped);
 }
 
@@ -145,9 +145,9 @@ fn a_completed_reminder_is_kept_only_when_the_member_asked_for_them() {
     let both = [open.clone(), done.clone()];
     assert_eq!(reminders::tasks(&both, false).len(), 1);
     assert_eq!(reminders::tasks(&both, true).len(), 2);
-    let (add, _) = reminders::request(&done, None, None);
+    let (add, _) = reminders::request(&done, None);
     assert_eq!(add.done_at, Field::Is("2026-11-01T08:00:00Z".into()));
-    let (add, _) = reminders::request(&open, None, None);
+    let (add, _) = reminders::request(&open, None);
     assert_eq!(add.done_at, Field::Keep);
 }
 
@@ -419,37 +419,6 @@ fn a_reminders_list_becomes_a_list_made_once_in_the_nearest_colour() {
     );
     assert_eq!(line(&shell), "1 task imported");
     assert_eq!(projects(&shell).len(), lists.len());
-}
-
-#[test]
-fn a_subtask_is_filed_under_its_parent_and_a_missing_or_nested_parent_is_ignored() {
-    let mut shell = fresh_shell();
-    tap(&mut shell, false);
-    let item = |title: &str, id: &str, parent: &str| wire::PhoneReminder {
-        external_id: id.into(),
-        parent_id: parent.into(),
-        ..reminder(title)
-    };
-    answer(
-        &mut shell,
-        snapshot(vec![
-            // The child is listed BEFORE its parent: parents are written first.
-            item("Buy flour", "c1", "p1"),
-            item("Bake", "p1", ""),
-            item("Orphan", "o1", "nobody"),
-            // A grandchild flattens to the top.
-            item("Grandchild", "g1", "c1"),
-        ]),
-    );
-    let all = tasks(&shell);
-    let parent = find(&all, "Bake");
-    assert_eq!(parent.parent_task_id, None);
-    assert_eq!(
-        find(&all, "Buy flour").parent_task_id.as_deref(),
-        Some(parent.task_id.as_str())
-    );
-    assert_eq!(find(&all, "Orphan").parent_task_id, None);
-    assert_eq!(find(&all, "Grandchild").parent_task_id, None);
 }
 
 #[test]

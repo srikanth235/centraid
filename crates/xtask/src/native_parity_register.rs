@@ -38,6 +38,12 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 /// One reason, several rows.
+const NO_URL_COLUMN: &str = "SwiftUI sets `EKEvent.url`; Android's CalendarContract has no URL column, so the Android writer has nothing to say";
+
+/// One reason, several rows.
+const CALENDAR_OWED: &str = "`shell.calendar-owed` is read by Rust only: core/app_query/imports.rs builds the answer and agenda/calendar_push.rs reads it, then hands the shells `CalendarWriteFields`";
+
+/// One reason, several rows.
 const AGENDA_DRAFT: &str = "the editor holds its draft as this wire message and reads it back (agenda/editor.rs); the shells draw the choices' `selected` flags instead";
 
 /// One reason, several rows.
@@ -155,7 +161,45 @@ pub const REGISTER: &[Entry] = &[
             "an original that lives only in iCloud; Android's media store holds what is on the device",
         ),
     ),
+    (
+        "CalendarWriteFields.states_url",
+        platform(Shell::Ios, NO_URL_COLUMN),
+    ),
+    (
+        "ImportsMadeEvent.reminders_requested",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeEvent.Made.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeEvent.RemindersRequested.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeState.completed_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeState.reminders_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "PhoneReminder.alarm_minutes_before",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "PhoneReminder.completed_at",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("PhoneReminder.due", platform(Shell::Ios, REMINDERS)),
+    ("PhoneReminder.due_time", platform(Shell::Ios, REMINDERS)),
+    ("PhoneReminder.list_color", platform(Shell::Ios, REMINDERS)),
+    (
+        "RemindersRead.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("ShellFact.settled", platform(Shell::Ios, OS_UPLOADS)),
     (
         "UploadSettled.http_status",
@@ -210,6 +254,12 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.guest_ids", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.repeat_key", rust_only(AGENDA_DRAFT)),
+    ("AgendaDraft.repeat_rule", rust_only(AGENDA_DRAFT)),
+    ("AgendaDraft.second_reminder_key", rust_only(AGENDA_DRAFT)),
+    ("AgendaDraft.travel_min", rust_only(AGENDA_DRAFT)),
+    ("ImportsOwedPush.fields_json", rust_only(CALENDAR_OWED)),
+    ("ImportsOwedPush.origin_ref", rust_only(CALENDAR_OWED)),
+    ("ImportsOwedPush.stated_json", rust_only(CALENDAR_OWED)),
     (
         "Autosave.remote_changed",
         rust_only(

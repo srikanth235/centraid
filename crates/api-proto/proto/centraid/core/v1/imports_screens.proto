@@ -448,10 +448,10 @@ message PhoneReminder {
   string list_title = 10;
   // The list's colour, `#RRGGBB`, or empty. It becomes the nearest of the app's list colours.
   string list_color = 11;
-  // The reminder's own stable id (`calendarItemIdentifier`), and its parent's when it is a
-  // subtask (`parent_id`: empty for a top-level one). A parent not in the read is ignored.
-  string external_id = 12;
-  string parent_id = 13;
+  // 12 was `external_id` and 13 `parent_id`: EventKit's public API names no parent, so no
+  // platform could say one, and with no parent nothing read the id.
+  reserved 12, 13;
+  reserved "external_id", "parent_id";
   string url = 14;
   bool completed = 15;
   // When it was completed, `YYYY-MM-DDTHH:MM:SSZ` (UTC), or empty.

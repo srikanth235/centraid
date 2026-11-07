@@ -86,10 +86,6 @@ impl Draft {
         }
     }
 
-    pub(super) fn name(&self) -> &str {
-        &self.name
-    }
-
     pub(super) fn set_name(&mut self, name: String) {
         self.name = name;
     }

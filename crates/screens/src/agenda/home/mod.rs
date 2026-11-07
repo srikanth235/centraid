@@ -321,8 +321,6 @@ impl Home {
                     self.shut_quick_add();
                 }
             }
-            H::NewProjectName(typed) => self.style_name(typed.name),
-            H::NewProjectSubmitted(_) => self.submit_style(ctx),
             H::StyleName(typed) => self.style_name(typed.name),
             H::StyleColor(picked) => {
                 if let Some(draft) = &mut self.style {
@@ -550,17 +548,6 @@ impl Home {
         })
     }
 
-    /// What the new-list name field holds, while that sheet is up.
-    fn style_name_of(&self, sheet: Sheet) -> String {
-        if self.sheet != sheet {
-            return String::new();
-        }
-        self.style
-            .as_ref()
-            .map(|draft| draft.name().to_owned())
-            .unwrap_or_default()
-    }
-
     fn more_rows(&self, ctx: &Ctx) -> Vec<wire::AgendaMoreRow> {
         if self.denied() {
             return Vec::new();
@@ -763,9 +750,6 @@ impl Screen for Home {
                     } else {
                         Vec::new()
                     },
-                    new_project_name: self.style_name_of(Sheet::NewProject),
-                    new_project_can_submit: self.sheet == Sheet::NewProject
-                        && self.style.as_ref().is_some_and(Draft::can_submit),
                     style: self
                         .style
                         .as_ref()

@@ -86,9 +86,10 @@ message AgendaHomeState {
   reserved "filing_task_id";
   // SHEET_FILE: where the task being filed can go.
   repeated TodoChoice file_choices = 24;
-  // SHEET_NEW_PROJECT's name field.
-  string new_project_name = 25;
-  bool new_project_can_submit = 26;
+  // 25 was `new_project_name` and 26 `new_project_can_submit`: the unified
+  // style sheet (`style`) replaced the new-project sheet.
+  reserved 25, 26;
+  reserved "new_project_name", "new_project_can_submit";
   // THE HEADER PLUS (R-CHROME-1), per place: its accessibility label — "Add
   // task" on To-do, "Add" elsewhere (the sheet adds an event or a task) — and
   // what a tap does. On To-do it opens the quick-add bar (`QuickAddOpened`), so
@@ -705,6 +706,10 @@ enum AgendaEmpty {
 // container, the Plus on the add sheet, the Overdue verb, the notice. The
 // events below are the ones Rust must hear.
 message AgendaHomeEvent {
+  // 28 was `NewProjectNameChanged` and 29 `NewProjectSubmitted`: the style sheet's
+  // `StyleNameChanged` and `StyleSubmitted` replaced them.
+  reserved 28, 29;
+  reserved "new_project_name", "new_project_submitted";
   oneof kind {
     // The pull, and the failure state's retry.
     Refreshed refreshed = 2;
@@ -730,8 +735,6 @@ message AgendaHomeEvent {
     QuickAddChanged quick_add_changed = 25;
     QuickAddSubmitted quick_add_submitted = 26;
     QuickAddClosed quick_add_closed = 27;
-    NewProjectNameChanged new_project_name = 28;
-    NewProjectSubmitted new_project_submitted = 29;
     TodoEmptyActed todo_empty_acted = 30;
     NextPageRequested next_page = 32;
     // The empty state's Import (`EmptyState.import_source` = calendar): Rust asks
@@ -922,12 +925,6 @@ message AgendaHomeEvent {
   // The keyboard left the bar. It closes only when its field is empty, so
   // typed words are never thrown away.
   message QuickAddClosed {}
-
-  message NewProjectNameChanged {
-    string name = 1;
-  }
-
-  message NewProjectSubmitted {}
 
   // To-do's empty state action (`AgendaTodo.empty.action_label`).
   message TodoEmptyActed {}
@@ -1891,9 +1888,10 @@ message TodoChrome {
   string quick_add_placeholder = 10;
   string quick_add_verb = 11;
   string file_title = 12;
-  string new_project_title = 13;
-  string new_project_placeholder = 14;
-  string new_project_verb = 15;
+  // 13 to 15 were `new_project_title`, `new_project_placeholder` and
+  // `new_project_verb`: the style sheet carries its own words.
+  reserved 13, 14, 15;
+  reserved "new_project_title", "new_project_placeholder", "new_project_verb";
   string add_section_title = 16;
   string add_section_placeholder = 17;
   string add_section_verb = 18;
