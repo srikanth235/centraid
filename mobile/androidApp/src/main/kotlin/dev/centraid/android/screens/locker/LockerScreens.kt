@@ -10,6 +10,10 @@ import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.KitCardGrid
+import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.screens.docs.docsListColor
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.Canvas
@@ -41,6 +45,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -77,6 +82,7 @@ import centraid.core.v1.LockerEditorState
 import centraid.core.v1.LockerFieldRow
 import centraid.core.v1.LockerFieldSheet
 import centraid.core.v1.LockerGenerator
+import centraid.core.v1.LockerCategory
 import centraid.core.v1.LockerHomeData
 import centraid.core.v1.LockerHomeEvent
 import centraid.core.v1.LockerHomeState
@@ -305,6 +311,9 @@ internal fun LockerHomeScreen(
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
             ) { home ->
+                BackHandler(enabled = home.list_title.isNotEmpty()) {
+                    onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
+                }
                 if (generating) {
                     val generator = home.generator
                     if (generator != null) LockerGeneratorBody(generator, onEvent, onOpen)
@@ -313,7 +322,7 @@ internal fun LockerHomeScreen(
                         when (state.destination) {
                             LockerDestination.LOCKER_DESTINATION_REVIEW -> reviewTab(home, onOpen)
                             LockerDestination.LOCKER_DESTINATION_SEARCH -> searchTab(state, home, onOpen)
-                            else -> itemsTab(home, chrome?.add_route, onOpen)
+                            else -> itemsTab(home, chrome?.add_route, onOpen, onEvent)
                         }
                     }
                 }
@@ -339,7 +348,75 @@ internal fun LockerHomeScreen(
     }
 }
 
-private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (Route) -> Unit) {
+private fun LazyListScope.itemsTab(
+    home: LockerHomeData,
+    add: Route?,
+    onOpen: (Route) -> Unit,
+    onEvent: (LockerHomeEvent) -> Unit,
+) {
+    if (home.list_title.isNotEmpty()) {
+        listOfCategory(home, add, onOpen, onEvent)
+        return
+    }
+    // THE LANDING: the six category cards, then Starred and Recently used.
+    val empty = home.items_empty
+    if (home.status_line.isNotEmpty()) item(key = "landing-note") { LockerNote(home.status_line) }
+    if (empty != null) {
+        item(key = "empty") {
+            Box(Modifier.heightIn(min = 320.dp)) {
+                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
+            }
+        }
+    }
+    if (home.categories.isNotEmpty()) {
+        item(key = "categories") {
+            KitCardGrid(
+                items = home.categories,
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+            ) { category ->
+                LockerCategoryCard(category) {
+                    val route = category.route
+                    if (route != null) {
+                        onOpen(route)
+                    } else {
+                        onEvent(LockerHomeEvent(category_picked = LockerHomeEvent.CategoryPicked(key = category.key)))
+                    }
+                }
+            }
+        }
+    }
+    if (home.starred.isNotEmpty()) {
+        item(key = "starred") { LockerRowGroup(home.starred_title, home.starred, onOpen) }
+    }
+    if (home.recent.isNotEmpty()) {
+        item(key = "recent") { LockerRowGroup(home.recent_title, home.recent, onOpen) }
+    }
+}
+
+/** ONE CATEGORY'S LIST: the chevron back (also the system back) returns to the landing. */
+private fun LazyListScope.listOfCategory(
+    home: LockerHomeData,
+    add: Route?,
+    onOpen: (Route) -> Unit,
+    onEvent: (LockerHomeEvent) -> Unit,
+) {
+    item(key = "list-head") {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
+                    .padding(horizontal = 10.dp)
+                    .testTag("locker-category-back")
+                    .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
+            KitText(home.list_title, KitType.Section, Surface.ink)
+        }
+    }
     val empty = home.items_empty
     if (home.rows.isEmpty() && empty != null) {
         item(key = "empty") {
@@ -350,6 +427,45 @@ private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (R
     }
     items(home.rows, key = { "i-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
     if (home.window.isNotEmpty()) item(key = "window") { LockerNote(home.window) }
+}
+
+/** A WHITE CARD OF ROWS under a group head: Starred, Recently used. */
+@Composable
+private fun LockerRowGroup(title: String, rows: List<LockerRow>, onOpen: (Route) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        if (title.isNotEmpty()) {
+            KitText(
+                title,
+                KitType.Group,
+                Surface.meta,
+                Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
+            )
+        }
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER).kitCard()) {
+            rows.forEach { row -> LockerRowView(row) { row.route?.let(onOpen) } }
+        }
+    }
+}
+
+/** ONE CATEGORY CARD: a tile in a list-palette colour, the count, the word. */
+@Composable
+private fun LockerCategoryCard(category: LockerCategory, onTap: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .kitCard()
+            .clickable(onClick = onTap)
+            .padding(12.dp)
+            .testTag("locker-category-${category.key}")
+            .clearAndSetSemantics { contentDescription = category.accessibility_label },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            KitTile(category.icon_key, size = 30.dp, fill = docsListColor(category.color_key))
+            KitText(category.count.toString(), KitType.Title, Surface.ink)
+        }
+        KitText(category.label, KitType.Row, Surface.ink)
+    }
 }
 
 private fun LazyListScope.reviewTab(home: LockerHomeData, onOpen: (Route) -> Unit) {
@@ -385,11 +501,11 @@ private fun LazyListScope.searchTab(state: LockerHomeState, home: LockerHomeData
     items(home.hits, key = { "h-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
 }
 
-/** THE ITEM ROW: the type chip, the one kit row, and the star. */
+/** THE ITEM ROW: the type chip, the one kit row, and the star in the app's colour. */
 @Composable
 internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onTap).padding(start = KitGeometry.GUTTER),
+        Modifier.fillMaxWidth().clickable(onClick = onTap).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TypeChip(row.type_chip)
@@ -403,9 +519,10 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
             onTap = onTap,
         )
         if (row.starred) {
+            // AMBER ONLY MEANS A STATE: the star wears the app's colour.
             CentraidIcon(
                 iconKey = "Star",
-                tint = centraidColor("textSoft"),
+                tint = appAccent("locker").text,
                 size = 14.dp,
                 modifier = Modifier.padding(end = KitGeometry.GUTTER).clearAndSetSemantics { },
             )
@@ -413,19 +530,19 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
     }
 }
 
-/** The type's two letters on the rose wash. */
+/** The type's two letters in the app's fill, white on it. */
 @Composable
 private fun TypeChip(letters: String, modifier: Modifier = Modifier) {
     if (letters.isEmpty()) return
     Box(
         modifier
             .size(32.dp)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .background(centraidColor("cRose").copy(alpha = 0.14f))
+            .clip(RoundedCornerShape((32 * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+            .background(appAccent("locker").fill)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(letters, style = centraidType("eyebrow"), color = centraidColor("cRose"))
+        KitText(letters, KitType.Badge, androidx.compose.ui.graphics.Color.White)
     }
 }
 
@@ -435,8 +552,8 @@ internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String
     if (text.isEmpty()) return
     Text(
         text,
-        style = centraidType("annotLabel"),
-        color = centraidColor(ink),
+        style = kitTextStyle(KitType.Meta),
+        color = if (ink == "net") StateColor.Red.text else Surface.meta,
         modifier = modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
     )
 }
@@ -632,7 +749,7 @@ internal fun LockerItemScreen(
                                 color = centraidColor("textSoft"),
                                 modifier = Modifier.padding(start = 10.dp).weight(1f),
                             )
-                            if (item.starred) CentraidIcon(iconKey = "Star", tint = centraidColor("textSoft"), size = 16.dp)
+                            if (item.starred) CentraidIcon(iconKey = "Star", tint = appAccent("locker").text, size = 16.dp)
                             item.chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
                         }
                         LockerNote(item.trashed_note, ink = "net")
@@ -640,12 +757,27 @@ internal fun LockerItemScreen(
                     }
                     item.sections.forEachIndexed { index, section ->
                         item(key = "sec-$index") { if (section.title.isNotEmpty()) SectionHeader(SectionHead(title = section.title)) }
-                        items(section.rows, key = { "f-$index-" + it.key }) { row ->
-                            LockerFieldView(row) { verb ->
-                                onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
+                        // EACH SECTION IS A WHITE CARD OF ROWS; the verification code is the first.
+                        item(key = "card-$index") {
+                            Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).kitCard()) {
+                                section.rows.forEach { row ->
+                                    LockerFieldView(row) { verb ->
+                                        onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
+                                    }
+                                }
                             }
                         }
                         if (section.note.isNotEmpty()) item(key = "sec-note-$index") { LockerNote(section.note) }
+                        val change = item.change_password
+                        if (change != null && section.rows.any { it.key == "password" }) {
+                            item(key = "change-password") {
+                                Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+                                    OutlineButton(change.label, testTag = "locker-action-change_password") {
+                                        onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = change.key)))
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (item.tags.isNotEmpty()) {
                         item(key = "tags") {
@@ -838,7 +970,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
-            .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 6.dp, bottom = 6.dp)
+            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             .testTag("locker-field-${row.key}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -853,7 +985,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
                     },
                 ),
         ) {
-            Text(row.label, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
+            KitText(row.label, KitType.Meta, Surface.meta)
             val concealed = row.sealed_ && !row.revealed
             val shown = if (concealed) row.mask else row.value_
             val mono = row.monospace || concealed
@@ -861,7 +993,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
                 Text(
                     shown,
                     style = if (mono) {
-                        centraidType("body").copy(
+                        (if (row.key == "otp_seed") kitTextStyle(KitType.Title).copy(fontSize = 28.sp) else centraidType("body")).copy(
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                             letterSpacing = if (concealed) androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp) else androidx.compose.ui.unit.TextUnit.Unspecified,
                         )

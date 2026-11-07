@@ -140,11 +140,11 @@ struct LockerItemView: View {
             LockerTypeChip(letters: item.typeChip)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.title)
+                    .foregroundStyle(Surface.ink)
                 Text(item.typeLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
             Spacer(minLength: 0)
             ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
@@ -153,14 +153,30 @@ struct LockerItemView: View {
         .padding(.top, 8)
         LockerNote(text: item.trashedNote)
         LockerNote(text: item.statusLine)
-        ForEach(Array(item.sections.enumerated()), id: \.offset) { _, section in
+        ForEach(Array(item.sections.enumerated()), id: \.offset) { index, section in
             if !section.title.isEmpty { SectionHeader(title: section.title) }
-            ForEach(section.rows, id: \.key) { row in
-                LockerFieldRowView(row: row) { verb in
-                    send(LockerItemEvents.make { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
+            // EACH SECTION IS A WHITE CARD OF ROWS; the verification code is the first.
+            VStack(spacing: 0) {
+                ForEach(section.rows, id: \.key) { row in
+                    LockerFieldRowView(row: row) { verb in
+                        send(LockerItemEvents.make { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
+                    }
                 }
             }
+            .kitCard()
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
             if !section.note.isEmpty { LockerNote(text: section.note) }
+            // "Change password on website" sits under the type's own fields.
+            if item.hasChangePassword, section.rows.contains(where: { $0.key == "password" }) {
+                KitOutlineButton(label: item.changePassword.label) {
+                    send(LockerItemEvents.make { $0.action = .with { $0.key = item.changePassword.key } })
+                }
+                .accessibilityIdentifier("locker-item-action-change_password")
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+            }
         }
         if !item.tags.isEmpty {
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))
@@ -207,8 +223,8 @@ struct LockerFieldRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(row.label)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
             Group {
                 if row.sealed && !row.revealed {
                     Text(row.mask)
@@ -219,7 +235,8 @@ struct LockerFieldRowView: View {
                     HStack(spacing: 8) {
                         Text(row.value)
                             .centraidType(row.monospace ? "mono" : "body")
-                            .foregroundStyle(Theme.color("text", scheme))
+                            .font(row.key == "otp_seed" ? .system(size: 28, weight: .semibold, design: .monospaced) : nil)
+                            .foregroundStyle(Surface.ink)
                         if row.hasCountdown {
                             LockerCountdownRing(countdown: row.countdown)
                         }
@@ -244,10 +261,10 @@ struct LockerFieldRowView: View {
                 }
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-        .overlay(alignment: .bottom) { KitHairline() }
+        .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(row.accessibilityLabel)
     }

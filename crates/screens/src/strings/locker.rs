@@ -16,7 +16,15 @@ catalog! {
     plain band_more = ("More", "More");
     plain band_review = ("Review", "Review");
     plain cancel = ("Cancel", "Cancel");
+    plain category_all = ("All", "All");
+    plain category_cards = ("Cards", "Cards");
+    plain category_codes = ("Codes", "Codes");
+    plain category_review = ("Review", "Review");
+    plain category_trash = ("Trash", "Trash");
+    plain category_wifi = ("Wi-Fi", "Wi-Fi");
+    plain change_password = ("Change password on website", "Change password on website");
     plain chip_archived = ("ARCHIVED", "ARCHIVED");
+    plain chip_code = ("CODE", "CODE");
     plain chip_compromised = ("COMPROMISED", "COMPROMISED");
     plain chip_trashed = ("IN THE TRASH", "IN THE TRASH");
     plain close = ("Close", "Close");
@@ -300,6 +308,7 @@ catalog! {
     plain sealed_note = ("Revealing is logged.", "Revealing is logged.");
     plain sealed_on_save = ("Encrypted when you save", "Encrypted when you save");
     plain search_empty = ("Nothing matches “{term}”", "Nothing matches “{term}”");
+    plain recent_head = ("Recently used", "Recently used");
     plain search_note = ("Secrets and notes are not searched.", "Secrets and notes are not searched.");
     plain search_placeholder = ("Titles, usernames, addresses", "Titles, usernames, addresses");
     plain show_code = ("Show code", "Show code");
@@ -351,6 +360,8 @@ catalog! {
     plain unlock_again = ("Try again", "Try again");
     plain unlock_with = ("Unlock with", "Unlock with");
     plain unstar = ("Unstar", "Unstar");
+    plain unlocked_status = ("Unlocked · locks after 5 idle minutes", "Unlocked · locks after 5 idle minutes");
+    plain verification_code = ("Verification code", "Verification code");
     plain updated = ("Changed", "Changed");
     plain use_on_item = ("Put it on an item", "Put it on an item");
     plain window = ("Showing {shown} of {total}", "Showing {shown} of {total}");

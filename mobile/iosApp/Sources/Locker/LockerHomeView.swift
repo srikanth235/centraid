@@ -148,6 +148,17 @@ struct LockerHomeView: View {
 
     @ViewBuilder
     private func items(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
+        if home.listTitle.isEmpty {
+            landing(home)
+        } else {
+            list(home)
+        }
+    }
+
+    /// THE LANDING: the six category cards, then Starred and Recently used. Rust decides every
+    /// count, label and colour; this lays them out.
+    @ViewBuilder
+    private func landing(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         LockerNote(text: home.statusLine)
         if home.hasItemsEmpty {
             EmptyStateView(
@@ -155,8 +166,50 @@ struct LockerHomeView: View {
                 onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : { open(state.chrome.addRoute) }
             )
         }
-        ForEach(home.rows, id: \.itemID) { row in
-            LockerRowView(row: row) { open(row.route) }
+        if !home.categories.isEmpty {
+            KitCardGrid(items: home.categories) { category in
+                LockerCategoryCard(category: category) {
+                    if category.hasRoute {
+                        open(category.route)
+                    } else {
+                        send(LockerHomeEvents.make { $0.categoryPicked = .with { $0.key = category.key } })
+                    }
+                }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+        }
+        if !home.starred.isEmpty {
+            LockerRowGroup(title: home.starredTitle, rows: home.starred, open: open)
+        }
+        if !home.recent.isEmpty {
+            LockerRowGroup(title: home.recentTitle, rows: home.recent, open: open)
+        }
+    }
+
+    /// ONE CATEGORY'S LIST, with the chevron back to the landing (the Items key does the same).
+    @ViewBuilder
+    private func list(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                send(LockerHomeEvents.make { $0.categoryClosed = .init() })
+            } label: {
+                CentraidIconView(iconKey: "ChevronLeft", tint: Surface.ink, size: 18)
+                    .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(KitWords.backTo(parent: home.listBackLabel))
+            .accessibilityIdentifier("locker-category-back")
+            Text(home.listTitle).kitType(.section).foregroundStyle(Surface.ink)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin - 6)
+        if home.hasItemsEmpty {
+            EmptyStateView(home.itemsEmpty)
+        }
+        if !home.rows.isEmpty {
+            LockerRowGroup(title: "", rows: home.rows, open: open)
         }
         LockerNote(text: home.window)
     }

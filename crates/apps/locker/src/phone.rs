@@ -22,8 +22,8 @@ use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
 
 use crate::queries::{
-    ENTITY_COLUMNS, ITEMS_MAX, ItemRow, KIND_COLUMNS, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS,
-    items_window, subtitle_of,
+    ENTITY_COLUMNS, ITEMS_MAX, ItemRow, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS, items_window,
+    subtitle_of,
 };
 use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
 use crate::types::{ITEM_TYPES, degrade_type, degraded_from};
@@ -35,6 +35,8 @@ pub const DECORATION_ROWS: usize = 4_000;
 
 /// The search answer's default and ceiling.
 pub const SEARCH_DEFAULT: usize = 50;
+/// How many items "Recently used" lists.
+pub const RECENT_ROWS: usize = 5;
 /// The review walks at most this many live and archived items (v0's review
 /// ceiling); `ReviewData::truncated` says when it stopped.
 pub const REVIEW_ROWS: usize = 2_000;
@@ -116,11 +118,16 @@ const KIND: &str = "locker_item";
 const STARRED: &str = "flag:starred";
 const ARCHIVED: &str = "flag:archived";
 
+/// The kind columns plus whether a code seed is stored, as its presence only.
+const KIND_WITH_CODE_PRESENCE: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
+     fullname, email, phone, address, network, compromised, password_set_at, memo, last_used_at, \
+     otp_seed IS NOT NULL AS has_otp_seed";
+
 /// The kind rows of a set of items (their typed columns and the memo).
 const KIND_ROWS: Read = Read {
     name: "locker.phone.rows",
     table: "locker_item",
-    select: KIND_COLUMNS,
+    select: KIND_WITH_CODE_PRESENCE,
     order: ("id", "id"),
     column: "id",
 };
@@ -302,6 +309,10 @@ pub struct ItemsData {
     pub archived_count: Option<usize>,
     pub trashed_count: Option<usize>,
     pub tags: Vec<String>,
+    /// The live items that were opened lately, most recently used first, at
+    /// most [`RECENT_ROWS`]: ids into `items`' shelf. An item never used is not
+    /// here.
+    pub recent: Vec<String>,
 }
 
 /// `locker.item`.
@@ -397,8 +408,30 @@ pub fn load_items(door: &dyn PageDoor, archived: bool, limit: Option<i64>) -> Ki
         archived_count: counted.then_some(archived_rows.len()),
         trashed_count: (!trashed.filled).then_some(trashed.rows.len()),
         tags: tags.into_iter().collect(),
+        recent: recently_used(&live),
         items,
     })
+}
+
+/// The ids of the live items that were used, newest use first (ties by id, so
+/// the order is stable), at most [`RECENT_ROWS`]. A use is the core opening a
+/// sealed cell, which stamps `last_used_at`.
+#[must_use]
+pub fn recently_used(live: &[&ItemRow]) -> Vec<String> {
+    let mut used: Vec<(&str, &str)> = live
+        .iter()
+        .filter_map(|row| {
+            row.last_used_at
+                .as_deref()
+                .filter(|at| !at.is_empty())
+                .map(|at| (at, row.item_id.as_str()))
+        })
+        .collect();
+    used.sort_by(|a, b| b.0.cmp(a.0).then_with(|| a.1.cmp(b.1)));
+    used.into_iter()
+        .take(RECENT_ROWS)
+        .map(|(_, id)| id.to_owned())
+        .collect()
 }
 
 /// `locker.trash`: what is in the trash, most recently trashed first, each
@@ -1051,6 +1084,27 @@ mod tests {
         assert_eq!(card_month(" 4 - 27 "), Some(2027 * 12 + 3));
         assert_eq!(card_month("13/27"), None);
         assert_eq!(card_month("soon"), None);
+    }
+
+    #[test]
+    fn recently_used_is_newest_first_capped_and_skips_the_unused() {
+        let row = |id: &str, used: Option<&str>| ItemRow {
+            item_id: id.to_owned(),
+            last_used_at: used.map(str::to_owned),
+            ..ItemRow::default()
+        };
+        let rows = [
+            row("a", Some("2026-11-01T10:00:00Z")),
+            row("b", None),
+            row("c", Some("2026-11-03T09:00:00Z")),
+            row("d", Some("2026-11-02T09:00:00Z")),
+            row("e", Some("2026-11-03T09:00:00Z")),
+            row("f", Some("2026-10-01T09:00:00Z")),
+            row("g", Some("2026-10-02T09:00:00Z")),
+        ];
+        let refs: Vec<&ItemRow> = rows.iter().collect();
+        assert_eq!(recently_used(&refs), ["c", "e", "d", "a", "g"]);
+        assert_eq!(RECENT_ROWS, 5);
     }
 
     #[test]

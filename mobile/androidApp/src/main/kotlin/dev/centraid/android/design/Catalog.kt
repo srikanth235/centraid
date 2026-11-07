@@ -310,6 +310,9 @@ public object CentraidCatalog {
         "Habit" to listOf(
             NativeIconPath(d = "M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10z", filled = false, evenOdd = false),
         ),
+        "Hash" to listOf(
+            NativeIconPath(d = "M4 9h16M4 15h16M10 3 8 21M16 3l-2 18", filled = false, evenOdd = false),
+        ),
         "Heart" to listOf(
             NativeIconPath(d = "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z", filled = false, evenOdd = false),
         ),

@@ -274,6 +274,33 @@ message LockerHomeData {
   // The header's filter button: All · Starred · each type · Archived, with counts,
   // one single-choice section. Set on Items' data only.
   optional FilterMenu filter_menu = 14;
+
+  // THE LANDING (#1173): category cards (All, Codes, Cards, Wi-Fi, Review,
+  // Trash), then Starred and Recently used. Set on Items while no category is
+  // open; `rows` is then empty.
+  repeated LockerCategory categories = 15;
+  string starred_title = 16;
+  repeated LockerRow starred = 17;
+  string recent_title = 18;
+  repeated LockerRow recent = 19;
+  // The category being browsed ("Codes") when `rows` is a category's list; the
+  // chevron-only back reads `list_back_label` and sends `category_closed`.
+  string list_title = 20;
+  string list_back_label = 21;
+}
+
+// ONE CATEGORY CARD: an icon in a list-palette colour, a count and a word.
+message LockerCategory {
+  // `all`, `codes`, `card`, `wifi`, `review`, `trash`.
+  string key = 1;
+  string label = 2;
+  uint32 count = 3;
+  string icon_key = 4;
+  // A key of the `[list]` palette (`blue`, `violet`, ...).
+  string color_key = 5;
+  // The page it opens (Trash); absent for a category the home browses itself.
+  optional Route route = 6;
+  string accessibility_label = 7;
 }
 
 message LockerReviewSection {
@@ -338,6 +365,9 @@ message LockerHomeEvent {
     // The header's filter menu: a pick, or its Clear row (All).
     FilterMenuPicked filter_menu_picked = 16;
     FilterMenuCleared filter_menu_cleared = 17;
+    // A category card tapped (a key of `LockerCategory`), and the list's back.
+    CategoryPicked category_picked = 18;
+    CategoryClosed category_closed = 19;
   }
   reserved 2;
   reserved "filter";
@@ -381,6 +411,12 @@ message LockerHomeEvent {
   message GeneratorCopy {}
 
   message Refreshed {}
+
+  message CategoryPicked {
+    string key = 1;
+  }
+
+  message CategoryClosed {}
 
   message GeneratorUsed {}
 }
@@ -445,6 +481,9 @@ message LockerItemData {
   optional EmptyState gone = 15;
   // "This item is in the trash · it is erased on Mon 12 October".
   string trashed_note = 16;
+  // "Change password on website": opens the item's own address; absent when
+  // the item has none or is trashed (#1173). A tap is `Action` with its key.
+  optional LockerAction change_password = 17;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a

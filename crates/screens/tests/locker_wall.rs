@@ -154,7 +154,7 @@ fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     let mut d = driver();
     login(&d, "i1", "Bank");
     let id = open_home(&mut d);
-    assert_eq!(home_data(&d, id).rows.len(), 1);
+    assert_eq!(home_data(&d, id).categories.len(), 6);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
     }));
@@ -201,6 +201,17 @@ fn pick(d: &mut Driver, id: u64, option: &str) {
     );
 }
 
+/// Open a category card's list, as a tap on the card does.
+fn category(d: &mut Driver, id: u64, key: &str) {
+    home_event(
+        d,
+        id,
+        H::CategoryPicked(wire::locker_home_event::CategoryPicked {
+            key: key.to_owned(),
+        }),
+    );
+}
+
 /// The options of the menu's one section, as (key, count, checked).
 fn options(d: &Driver, id: u64) -> Vec<(String, u32, bool)> {
     let data = home_data(d, id);
@@ -238,8 +249,12 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
         },
     );
     d.pump(std::time::Duration::from_millis(300));
+    // The landing draws cards, not rows; a card opens the list.
+    assert!(home_data(&d, id).rows.is_empty());
+    category(&mut d, id, "all");
     let data = home_data(&d, id);
     assert_eq!(data.rows.len(), 2);
+    assert_eq!(data.list_title, "All");
     assert_eq!(
         options(&d, id),
         [
@@ -327,9 +342,12 @@ fn starred_and_archived_join_the_menu_when_there_are_some_and_clear_returns_to_a
         ["archived"]
     );
 
-    // Clear is All, and the live shelf is back.
+    // Clear is All, back on the landing, and the live shelf is read again.
     home_event(&mut d, id, H::FilterMenuCleared(wire::FilterMenuCleared {}));
     d.pump(std::time::Duration::from_millis(300));
+    let data = home_data(&d, id);
+    assert!(data.rows.is_empty() && data.categories.len() == 6);
+    category(&mut d, id, "all");
     let data = home_data(&d, id);
     assert_eq!(data.rows.len(), 2);
     let menu = data.filter_menu.as_ref().unwrap();
@@ -354,6 +372,7 @@ fn a_pick_in_another_section_changes_nothing_and_search_has_no_menu() {
         },
     );
     d.pump(std::time::Duration::from_millis(300));
+    category(&mut d, id, "all");
     home_event(
         &mut d,
         id,

@@ -504,6 +504,17 @@ impl Item {
                 self.confirming = Some(Confirming::Purge);
                 return Vec::new();
             }
+            // THE ITEM'S OWN SITE, where the member changes the password. The
+            // core opens nothing but the address it already stores.
+            "change_password" => {
+                return change_password_url(&item)
+                    .map(|url| {
+                        vec![wire::Effect {
+                            kind: Some(wire::effect::Kind::OpenUrl(wire::OpenUrl { url })),
+                        }]
+                    })
+                    .unwrap_or_default();
+            }
             _ => return Vec::new(),
         };
         if settled.committed && matches!(key, "star" | "archive") {
@@ -847,11 +858,24 @@ impl Item {
                 wire::status_chip::Tone::Seam,
             ));
         }
-        let mut sections = vec![wire::LockerSection {
-            title: (kind.label)(locale),
-            rows: self.own(locale, item),
-            note: String::new(),
-        }];
+        // THE VERIFICATION CODE IS ITS OWN CARD, first on the page; the type's
+        // other fields follow under the type's word.
+        let (code, own): (Vec<_>, Vec<_>) = self
+            .own(locale, item)
+            .into_iter()
+            .partition(|row| row.key == SEED);
+        let mut sections = vec![
+            wire::LockerSection {
+                title: String::new(),
+                rows: code,
+                note: String::new(),
+            },
+            wire::LockerSection {
+                title: (kind.label)(locale),
+                rows: own,
+                note: String::new(),
+            },
+        ];
         if !item.addresses.is_empty() {
             sections.push(wire::LockerSection {
                 title: words::addresses_head(locale),
@@ -946,6 +970,8 @@ impl Item {
             },
             actions,
             gone: None,
+            change_password: change_password_url(item)
+                .map(|_| action("change_password", words::change_password(locale), false)),
             trashed_note: if item.trashed {
                 fill(
                     &words::trashed_note(locale),
@@ -1115,7 +1141,7 @@ impl Item {
     /// A ONE-TIME CODE'S ROW: the code, grouped, with its seconds and a
     /// countdown while shown; a mask with Show code and Copy code otherwise.
     fn code_row(&self, locale: Locale) -> wire::LockerFieldRow {
-        let label = types::label(locale, SEED);
+        let label = words::verification_code(locale);
         if let (Some(code), Some(shown)) = (self.secrets.value(SEED), self.shown_code(SEED)) {
             let grouped = if code.chars().count() == 6 {
                 format!(
@@ -1534,6 +1560,26 @@ fn plain_value(item: &wire::LockerItem, key: &str) -> Option<String> {
     (key == "passkey:rp")
         .then(|| item.passkey.as_ref().map(|passkey| passkey.rp_id.clone()))
         .flatten()
+}
+
+/// Where a login's password is changed: its own address, opened as a link. A
+/// trashed item, a type with no address and an empty address have none. The
+/// item's `url` column leads; its first extra address is the fallback.
+#[must_use]
+pub fn change_password_url(item: &wire::LockerItem) -> Option<String> {
+    if item.trashed || item.r#type != "login" {
+        return None;
+    }
+    let stored = item.url.trim();
+    let address = if stored.is_empty() {
+        item.addresses
+            .iter()
+            .map(|address| address.url.trim())
+            .find(|url| !url.is_empty())?
+    } else {
+        stored
+    };
+    Some(openable(address))
 }
 
 /// A stored address as a link the OS can open: one with no scheme is https.
