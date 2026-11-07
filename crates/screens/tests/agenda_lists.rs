@@ -447,7 +447,9 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
             key: "mustard".into(),
         }),
     );
-    send_project(&mut d, i, pe::Kind::StyleSubmitted(pe::StyleSubmitted {}));
+    eprintln!("DBG before submit: {:?}", project_state(d.view(i)).style.as_ref().map(|s| (s.can_submit, s.color_key.clone())));
+    let up = d.send(i, wire::screen_event::Kind::TodoProject(wire::TodoProjectEvent { kind: Some(pe::Kind::StyleSubmitted(pe::StyleSubmitted {})) }));
+    eprintln!("DBG update views: {:?} closed {:?}", up.views.len(), up.closed);
     let state = project_state(d.view(i));
     let status = state
         .status
