@@ -21,7 +21,7 @@ name: search-containers
 - tapOn:
     id: "home-tile-agenda"
 - tapOn:
-    id: "agenda-band-todo"
+    id: "agenda-band-reminders"
 - runFlow:
     when:
       notVisible: "Orchard"

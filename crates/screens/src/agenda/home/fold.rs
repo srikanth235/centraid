@@ -37,7 +37,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
-use super::held::{Held, span_of};
+use super::grid::{self, WeekStart};
+use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
@@ -49,7 +50,7 @@ const NEEDS_ACTION: &str = "needs-action";
 const MIDNIGHT: &str = "00:00";
 const META_SEPARATOR: &str = " · ";
 /// A party hue for an event on no calendar: neutral, and never a brand.
-const NO_CALENDAR_HUE: &str = "cSlate";
+pub(super) const NO_CALENDAR_HUE: &str = "cSlate";
 
 /// What a fold reads besides the held answers.
 pub struct Fold<'a> {
@@ -60,17 +61,21 @@ pub struct Fold<'a> {
     pub term: Option<&'a str>,
     pub hidden: &'a [String],
     pub held: &'a Held,
+    /// The region's first weekday: where a week, a month's cells and the year's
+    /// weeks begin.
+    pub week_start: WeekStart,
+    pub month_style: wire::AgendaMonthStyle,
 }
 
 /// The calendar's colour role by id: People's convention, so no view converts
 /// a wheel word. A calendar that stores `var(--c-<hue>)` gets that hue; one that
 /// stores nothing, or a colour the wheel cannot name, gets its id's own.
-struct Hues<'a> {
+pub(super) struct Hues<'a> {
     stored: HashMap<&'a str, Option<&'a str>>,
 }
 
 impl<'a> Hues<'a> {
-    fn of(calendars: &'a [wire::AgendaCalendar]) -> Self {
+    pub(super) fn of(calendars: &'a [wire::AgendaCalendar]) -> Self {
         Self {
             stored: calendars
                 .iter()
@@ -79,7 +84,7 @@ impl<'a> Hues<'a> {
         }
     }
 
-    fn hue(&self, id: Option<&str>) -> String {
+    pub(super) fn hue(&self, id: Option<&str>) -> String {
         let Some(id) = id else {
             return NO_CALENDAR_HUE.to_owned();
         };
@@ -135,6 +140,16 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         .filter_map(|n| civil::plus_days(anchor, n))
         .collect();
     let in_window: HashSet<&str> = window.iter().map(String::as_str).collect();
+    // THE READ RANGE: the grids draw the anchor's whole week or month, while the
+    // list below draws the window.
+    let range: Vec<String> = range_of(fold.destination, anchor, fold.week_start)
+        .map(|(first, count)| {
+            (0..count)
+                .filter_map(|n| civil::plus_days(&first, n))
+                .collect()
+        })
+        .unwrap_or_else(|| window.clone());
+    let in_range: HashSet<&str> = range.iter().map(String::as_str).collect();
 
     let shown = |event: &wire::AgendaEvent| {
         event
@@ -164,7 +179,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
     let mut by_day: BTreeMap<String, Vec<&wire::AgendaEvent>> = BTreeMap::new();
     for event in &visible {
         for day in days_of(event) {
-            if search.is_some() || in_window.contains(day.as_str()) {
+            if search.is_some() || in_range.contains(day.as_str()) {
                 by_day.entry(day).or_default().push(event);
             }
         }
@@ -172,14 +187,18 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
 
     // TASKS DUE ON A DAY of the window: Day and Schedule only, and never under
     // a search or Waiting.
-    let dated =
-        search.is_none() && !waiting_only && matches!(fold.destination, Dest::Day | Dest::Schedule);
+    let dated = search.is_none()
+        && !waiting_only
+        && matches!(
+            fold.destination,
+            Dest::Day | Dest::Schedule | Dest::Week | Dest::Month
+        );
     let (projects, sections) = held.projects_of();
     let mut task_ctx = rows::Context::of(today, projects, sections);
     // THE DAY'S HEAD NAMES THE DAY, so a row says its time only.
     task_ctx.day_in_head = true;
     let due_on = if dated {
-        tasks_by_day(held, &in_window)
+        tasks_by_day(held, &in_range)
     } else {
         BTreeMap::new()
     };
@@ -195,7 +214,11 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                     .push(birthday);
                 acc
             });
-    let mut days: Vec<String> = by_day.keys().cloned().collect();
+    let mut days: Vec<String> = by_day
+        .keys()
+        .filter(|day| search.is_some() || in_window.contains(day.as_str()))
+        .cloned()
+        .collect();
     if search.is_none() && !waiting_only {
         for day in &window {
             let decorated = birthdays.contains_key(day.get(5..).unwrap_or_default())
@@ -292,11 +315,47 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         })
         .unwrap_or_default();
 
+    // THE CALENDAR'S GRIDS (#1173): Day and Week draw the strip and the hour
+    // grid, Month its cells, Year its twelve months; none under a search, which
+    // is a list of hits. Week, Month and Year draw no list of days, so the
+    // anchor's rows go to the month's list style.
+    let gridded = fold.term.is_none();
+    let selected = if gridded && matches!(fold.destination, Dest::Week | Dest::Month | Dest::Year) {
+        std::mem::take(&mut sections_out)
+    } else {
+        Vec::new()
+    };
+    let grids = if gridded {
+        grid::build(
+            &grid::Input {
+                locale,
+                destination: fold.destination,
+                anchor,
+                today,
+                now,
+                start: fold.week_start,
+                style: fold.month_style,
+                by_day: &by_day,
+                due_on: &due_on,
+                birthdays: &birthdays,
+                hues: &hues,
+                tasks: &task_ctx,
+            },
+            selected,
+        )
+    } else {
+        grid::Grids::default()
+    };
+    let drawn_grid = grids.time_grid.is_some() || grids.month.is_some() || grids.year.is_some();
+
     // "NOTHING ON THIS DAY" IS FOR A DAY WITH NEITHER EVENTS NOR TASKS: Day on
     // today that draws an Overdue group or the absence notice has something on
     // it, so it says nothing (R-1128-3). A day whose only task was just checked
     // off draws no row and no group, and there the sentence is right.
-    let empty = if !sections_out.is_empty() || overdue.is_some() || notice.is_some() {
+    let empty = if drawn_grid && fold.destination != Dest::Day {
+        // A GRID IS DRAWN EMPTY: its cells say what they hold.
+        wire::AgendaEmpty::None
+    } else if !sections_out.is_empty() || overdue.is_some() || notice.is_some() {
         wire::AgendaEmpty::None
     } else if fold.term.is_some() {
         // A PROJECT FOUND BY NAME IS AN ANSWER too: no "nothing matches" over it.
@@ -396,6 +455,10 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         landing: Some(landing),
         catch_up: Some(routes::catch_up()),
         todo: None,
+        week_strip: grids.week_strip,
+        time_grid: grids.time_grid,
+        month: grids.month,
+        year: grids.year,
     })
 }
 
@@ -501,7 +564,7 @@ fn items(
 
 /// All-day "0", then (see [`task_key`]) "01", what runs in from before "1", the
 /// rest by start.
-fn event_key(event: &wire::AgendaEvent, day: &str) -> String {
+pub(super) fn event_key(event: &wire::AgendaEvent, day: &str) -> String {
     if event.all_day {
         "0".to_owned()
     } else if start_day(event) < day {
@@ -512,7 +575,7 @@ fn event_key(event: &wire::AgendaEvent, day: &str) -> String {
 }
 
 /// Untimed right after the all-day rows; timed among the timed ones, by time.
-fn task_key(task: &wire::AgendaTask, day: &str) -> String {
+pub(super) fn task_key(task: &wire::AgendaTask, day: &str) -> String {
     if task.due_time.is_empty() {
         "01".to_owned()
     } else {
@@ -644,7 +707,7 @@ fn event_row(
 /// An all-day row is "All day": a day has no 00:00 (#1046, a v0 defect not
 /// carried). A timed run's end is EXCLUSIVE, so one ending at the next local
 /// midnight still ends on `day`.
-fn time_of(locale: Locale, event: &wire::AgendaEvent, day: &str) -> (String, String) {
+pub(super) fn time_of(locale: Locale, event: &wire::AgendaEvent, day: &str) -> (String, String) {
     if event.all_day {
         return (words::all_day(locale), words::all_day(locale));
     }
@@ -740,7 +803,7 @@ fn days_of(event: &wire::AgendaEvent) -> Vec<String> {
     }
 }
 
-fn start_day(event: &wire::AgendaEvent) -> &str {
+pub(super) fn start_day(event: &wire::AgendaEvent) -> &str {
     event.local_start.get(..10).unwrap_or_default()
 }
 
@@ -851,6 +914,8 @@ mod tests {
             term: None,
             hidden,
             held,
+            week_start: WeekStart::Monday,
+            month_style: wire::AgendaMonthStyle::Grid,
         })
         .unwrap()
     }
@@ -1047,6 +1112,8 @@ mod tests {
             term: Some("survey"),
             hidden: &[],
             held: &held,
+            week_start: WeekStart::Monday,
+            month_style: wire::AgendaMonthStyle::Grid,
         })
         .unwrap();
         let row = rows_of(&data)[0].clone();

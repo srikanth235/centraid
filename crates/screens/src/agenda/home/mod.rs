@@ -1,8 +1,10 @@
 //! AGENDA'S HOME (#1046, #1128): Day, Schedule, Waiting and To-do, with Search
 //! as a mode and More as a sheet.
 //!
-//! The band holds places only (R-CHROME-5): Day, Schedule, Waiting, To-do, then
-//! More; there is no month or hour grid. To-do is the Inbox and the projects
+//! The band holds places only (R-CHROME-5): Calendar, Reminders, Invites, then
+//! More. The Calendar's views are Day, Week, Month, Schedule and Year behind its
+//! view menu; Day and Week draw an hour grid, Month and Year their cells, all
+//! laid out here ([`grid`]) and only drawn by a shell. To-do is the Inbox and the projects
 //! ([`place`]); it reads tasks and no event, and has no day bar. Search is the
 //! bar under the title (R-CHROME-2), opened by `SearchOpened`, and the More
 //! sheet's rows are computed here ([`chrome::more_rows`]) so both platforms draw
@@ -25,7 +27,9 @@
 //! push; this screen never sees the tap.
 
 mod chrome;
+mod drag;
 mod fold;
+mod grid;
 mod held;
 mod place;
 mod search;
@@ -40,7 +44,8 @@ pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
-use super::todo::ops::Ops;
+use super::todo::ops::{NewTask, Ops};
+use super::todo::quick::Quick;
 use super::todo::rows;
 use crate::catalog::act;
 use crate::kit::civil;
@@ -65,6 +70,8 @@ struct QuickAdd {
     /// The bar is drawn: the Plus (or Notes' "Send to Agenda") opened it.
     drawn: bool,
     focused: bool,
+    /// What the keyboard toolbar has staged for the next add (#1173).
+    staged: Quick,
 }
 
 pub(super) struct Home {
@@ -78,6 +85,10 @@ pub(super) struct Home {
     search_term: String,
     /// Calendars switched off, for the session.
     hidden: Vec<String>,
+    /// The Month's style, Grid until the view menu says otherwise.
+    month_style: wire::AgendaMonthStyle,
+    /// The Calendar view last used: where the band's Calendar tab returns to.
+    last_calendar: Dest,
     sheet: Sheet,
     filing_task_id: String,
     new_project_name: String,
@@ -119,6 +130,12 @@ impl Home {
             search_open: false,
             search_term: String::new(),
             hidden: Vec::new(),
+            month_style: wire::AgendaMonthStyle::Grid,
+            last_calendar: if grid::is_calendar_view(destination) {
+                destination
+            } else {
+                Dest::Day
+            },
             sheet: Sheet::None,
             filing_task_id: String::new(),
             new_project_name: String::new(),
@@ -126,6 +143,7 @@ impl Home {
                 drawn: !seed.is_empty(),
                 focused: !seed.is_empty(),
                 title: seed,
+                staged: Quick::default(),
             },
             limit: rows::PAGE,
             ops: Ops::default(),
@@ -161,6 +179,9 @@ impl Home {
         self.shut_quick_add();
         self.close_search();
         self.destination = destination;
+        if grid::is_calendar_view(destination) {
+            self.last_calendar = destination;
+        }
         self.sheet = Sheet::None;
         self.read(ctx);
     }
@@ -196,21 +217,15 @@ impl Home {
             }
             H::Band(picked) => match picked.key.as_str() {
                 // The Calendar tab lands on the view the member last used.
-                chrome::BAND_CALENDAR => {
-                    let view = if self.destination == Dest::Schedule {
-                        Dest::Schedule
-                    } else {
-                        Dest::Day
-                    };
-                    self.move_to(view, ctx);
-                }
+                chrome::BAND_CALENDAR => self.move_to(self.last_calendar, ctx),
                 chrome::BAND_REMINDERS => self.move_to(Dest::Todo, ctx),
                 chrome::BAND_INVITES => self.move_to(Dest::Waiting, ctx),
                 chrome::BAND_MORE => self.sheet = Sheet::More,
                 _ => {}
             },
             // TO-DO HAS NO DAY: the bar is not drawn, and a stray step is nothing.
-            H::DayStepped(_) | H::Today(_) if self.destination == Dest::Todo => {}
+            H::DayStepped(_) | H::Today(_) | H::PeriodStepped(_)
+                if self.destination == Dest::Todo => {}
             H::DayStepped(step) => {
                 if self.anchor.is_empty() || step.days == 0 {
                     return;
@@ -314,6 +329,56 @@ impl Home {
                     self.sheet = Sheet::NewProject;
                 }
             }
+            // A STRIP DAY, A MONTH CELL OR A YEAR'S MONTH: the anchor moves to the
+            // day and the view to the cell's `opens`. A day that is not one is
+            // nothing, and no destination keeps the view.
+            H::DayPicked(picked) => {
+                if civil::epoch_day_of(&picked.day).is_none() {
+                    return;
+                }
+                let opens = Dest::try_from(picked.destination).unwrap_or(Dest::Unspecified);
+                self.anchor = picked.day;
+                self.move_to(
+                    if grid::is_calendar_view(opens) {
+                        opens
+                    } else {
+                        self.destination
+                    },
+                    ctx,
+                );
+            }
+            // ‹ and › and a swipe: one day, week, month or year.
+            H::PeriodStepped(step) => {
+                if self.anchor.is_empty() || step.by == 0 {
+                    return;
+                }
+                if let Some(moved) = grid::step(self.destination, &self.anchor, step.by) {
+                    self.anchor = moved;
+                    self.read(ctx);
+                }
+            }
+            H::MonthStyle(chosen) => match wire::AgendaMonthStyle::try_from(chosen.style) {
+                Ok(style) if style != wire::AgendaMonthStyle::Unspecified => {
+                    self.month_style = style;
+                }
+                _ => {}
+            },
+            H::EventMoved(moved) => self.move_event(ctx, &moved),
+            H::EventResized(resized) => self.resize_event(ctx, &resized),
+            // THE SWIPE'S DELETE: to the trash, with Undo.
+            H::TaskDeleted(deleted) => {
+                if self.held.find(&deleted.task_id).is_some() {
+                    self.ops.delete(ctx, &deleted.task_id);
+                    self.refresh(ctx);
+                }
+            }
+            // TAKEN IN `update`: the press returns the shell's effect.
+            H::SlotPressed(_) => {}
+            // THE KEYBOARD TOOLBAR (#1173): drawn over To-do's bar only.
+            H::QuickTool(picked) if self.toolbar_up() => self.quick.staged.pick_tool(&picked.key),
+            H::QuickDue(picked) if self.toolbar_up() => self.quick.staged.pick_due(&picked.key),
+            H::QuickTag(added) if self.toolbar_up() => self.quick.staged.add_tag(&added.text),
+            H::QuickTool(_) | H::QuickDue(_) | H::QuickTag(_) => {}
             H::NextPage(_) => {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
@@ -357,16 +422,33 @@ impl Home {
         self.refresh(ctx);
     }
 
-    /// To-do's quick add: a bare title, landing in the Inbox. The bar keeps its
-    /// words when the vault refuses.
+    /// The bar is drawn on To-do, so its toolbar answers.
+    fn toolbar_up(&self) -> bool {
+        self.destination == Dest::Todo && self.quick.drawn && !self.denied()
+    }
+
+    /// To-do's quick add: a title, landing in the Inbox with what the toolbar
+    /// staged. The bar keeps its words and its staging when the vault refuses,
+    /// and after an add it stays drawn and focused for the next one.
     fn add(&mut self, ctx: &Ctx) {
         let title = self.quick.title.trim().to_owned();
         if title.is_empty() || self.denied() || self.destination != Dest::Todo {
             return;
         }
         let inbox = task::inbox(ctx.locale());
-        if self.ops.add(ctx, &title, "", &inbox, None, None) {
+        let due = self.quick.staged.due_day(&self.held.today());
+        let new = NewTask {
+            title: &title,
+            due: &due,
+            tags: self.quick.staged.tags(),
+            flagged: self.quick.staged.flagged(),
+            ..NewTask::default()
+        };
+        if self.ops.add_full(ctx, &new, &inbox).is_some() {
             self.quick.title.clear();
+            self.quick.staged.clear();
+            self.quick.drawn = true;
+            self.quick.focused = true;
         }
         self.refresh(ctx);
     }
@@ -402,6 +484,8 @@ impl Home {
             term: term.as_deref(),
             hidden: &self.hidden,
             held: &self.held,
+            week_start: grid::week_start_of(ctx.region()),
+            month_style: self.month_style,
         })
     }
 
@@ -427,6 +511,19 @@ impl Screen for Home {
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add
+                // sheet at the snapped time.
+                Some(H::SlotPressed(pressed)) => {
+                    return drag::slot(&pressed.day, pressed.minute)
+                        .map(|route| {
+                            vec![wire::Effect {
+                                kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                                    route: Some(route),
+                                })),
+                            }]
+                        })
+                        .unwrap_or_default();
+                }
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
@@ -527,6 +624,7 @@ impl Screen for Home {
                         self.destination,
                         &self.anchor,
                         &today,
+                        grid::week_start_of(ctx.region()),
                         !denied && term.is_none(),
                     )),
                     chrome: Some(chrome::words_of(locale)),
@@ -553,19 +651,24 @@ impl Screen for Home {
                         .status()
                         .cloned()
                         .or_else(|| self.ops.status.clone()),
-                    quick_add: Some(wire::TodoQuickAdd {
-                        title: self.quick.title.clone(),
-                        can_submit: !self.quick.title.trim().is_empty(),
-                        lands_label: fill(
-                            &sentences::lands_in(locale),
-                            &[("place", &task::inbox(locale))],
-                        ),
-                        // Hidden while search is open, term or not: the bar and its
-                        // Plus would be a second verb over a field that is looking.
-                        shown: todo && !denied && data.is_some() && !self.search_open,
-                        focused: drawn && self.quick.focused,
-                        add_label: task::add_task(locale),
-                        drawn,
+                    quick_add: Some({
+                        let mut bar = wire::TodoQuickAdd {
+                            title: self.quick.title.clone(),
+                            can_submit: !self.quick.title.trim().is_empty(),
+                            lands_label: fill(
+                                &sentences::lands_in(locale),
+                                &[("place", &task::inbox(locale))],
+                            ),
+                            // Hidden while search is open, term or not: the bar and its
+                            // Plus would be a second verb over a field that is looking.
+                            shown: todo && !denied && data.is_some() && !self.search_open,
+                            focused: drawn && self.quick.focused,
+                            add_label: task::add_task(locale),
+                            drawn,
+                            ..wire::TodoQuickAdd::default()
+                        };
+                        self.quick.staged.fill(locale, &mut bar);
+                        bar
                     }),
                     file_choices: if self.sheet == Sheet::File {
                         place::file_choices(locale, &self.held, &self.filing_task_id)

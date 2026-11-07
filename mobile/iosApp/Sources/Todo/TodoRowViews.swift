@@ -38,14 +38,49 @@ struct TodoRowView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// A GROUP, NOT A STACK: in a `List` the task and each subtask are rows of their own, so a swipe
+    /// lands on the one the finger is on; in a stack they sit one under the other as before.
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             line
             ForEach(row.children, id: \.taskID) { child in
-                TodoRowView(row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix)
-                    .padding(.leading, 28)
+                TodoRowView(
+                    row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix,
+                    chrome: chrome, onFlag: onFlag, onDelete: onDelete
+                )
+                .padding(.leading, 28)
             }
         }
+    }
+
+    /// THE SWIPE AND THE LONG PRESS (#1173, the Swipe board): Details, Flag and Delete in the chrome's
+    /// words, and the row's own extras (reorder, filing) in the menu only. One list of actions, so the
+    /// two are never out of step.
+    private var rowActions: [KitRowAction] {
+        guard let chrome else { return [] }
+        var actions = [
+            KitRowAction(id: "details", label: chrome.detailsVerb, iconKey: "FileText") { onPick(row.route) },
+        ]
+        if let onFlag {
+            actions.append(
+                KitRowAction(id: "flag", label: row.flagged ? chrome.unflagVerb : chrome.flagVerb, iconKey: "Flag", tone: .amber) {
+                    onFlag(row.taskID, !row.flagged)
+                }
+            )
+        }
+        if let onMoveUp {
+            actions.append(KitRowAction(id: "move-up", label: chrome.moveUpVerb, iconKey: "ChevronUp", menuOnly: true, action: onMoveUp))
+        }
+        if let onMoveDown {
+            actions.append(KitRowAction(id: "move-down", label: chrome.moveDownVerb, iconKey: "ChevronDown", menuOnly: true, action: onMoveDown))
+        }
+        if row.canFile, let onFile, !fileVerb.isEmpty {
+            actions.append(KitRowAction(id: "file", label: fileVerb, iconKey: "Folder", menuOnly: true) { onFile(row.taskID) })
+        }
+        if let onDelete {
+            actions.append(KitRowAction(id: "delete", label: chrome.deleteVerb, iconKey: "Trash", tone: .red) { onDelete(row.taskID) })
+        }
+        return actions
     }
 
     private var settled: Bool { row.check == .done || row.check == .wontDo }
@@ -120,28 +155,6 @@ struct TodoRowView: View {
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("\(identifierPrefix)-\(row.taskID)")
-            .contextMenu {
-                if let chrome {
-                    Button(chrome.detailsVerb) { onPick(row.route) }
-                        .accessibilityIdentifier("\(identifierPrefix)-details-\(row.taskID)")
-                    if let onFlag {
-                        Button(row.flagged ? chrome.unflagVerb : chrome.flagVerb) { onFlag(row.taskID, !row.flagged) }
-                            .accessibilityIdentifier("\(identifierPrefix)-flag-\(row.taskID)")
-                    }
-                    if let onMoveUp { Button(chrome.moveUpVerb, action: onMoveUp) }
-                    if let onMoveDown { Button(chrome.moveDownVerb, action: onMoveDown) }
-                    if let onDelete {
-                        Button(chrome.deleteVerb, role: .destructive) { onDelete(row.taskID) }
-                            .accessibilityIdentifier("\(identifierPrefix)-delete-\(row.taskID)")
-                    }
-                }
-                if row.canFile, let onFile, !fileVerb.isEmpty {
-                    Button { onFile(row.taskID) } label: {
-                        Label(fileVerb, systemImage: "folder")
-                    }
-                    .accessibilityIdentifier("\(identifierPrefix)-file-\(row.taskID)")
-                }
-            }
             .accessibilityActions {
                 if let chrome {
                     Button(chrome.detailsVerb) { onPick(row.route) }
@@ -164,6 +177,17 @@ struct TodoRowView: View {
         .overlay(alignment: .bottom) {
             if !embedded { KitHairline(inset: CentraidGeometry.pageMargin + 20 + Self.boxOverhang) }
         }
+        .kitRowActions(rowActions)
+    }
+}
+
+extension View {
+    /// A row of a task `List`: edge to edge, no system separator or fill, since the row draws its own
+    /// rule. Outside a `List` it does nothing.
+    func todoPlainRow() -> some View {
+        listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 
@@ -203,11 +227,23 @@ struct TodoGroupView: View {
     var onFlag: ((String, Bool) -> Void)? = nil
     var onDelete: ((String) -> Void)? = nil
     var onMove: ((String, String) -> Void)? = nil
+    /// Drawn as the rows of a `List` (the head and each task its own row, so a swipe lands on one task)
+    /// and not as one stack.
+    var inList: Bool = false
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        if inList {
+            Group { rows }.todoPlainRow()
+        } else {
+            VStack(alignment: .leading, spacing: 0) { rows }
+        }
+    }
+
+    @ViewBuilder
+    private var rows: some View {
+        Group {
             if group.hasMonthHeading {
                 Text(group.monthHeading)
                     .centraidType("title")
@@ -255,12 +291,23 @@ struct TodoQuickAddBar: View {
     /// The field's id and its Add verb's (`agenda-quick-add` on To-do).
     var fieldIdentifier: String = "tasks-quick-add-field"
     var verbIdentifier: String = "tasks-quick-add-verb"
+    /// THE KEYBOARD TOOLBAR (#1173): what its keys send. Nil on a bar that has none.
+    var onTool: ((String) -> Void)? = nil
+    var onDue: ((String) -> Void)? = nil
+    var onTag: ((String) -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    /// The title field has the keyboard. The toolbar is drawn while it does, or while a tool the
+    /// member opened (the tag field) holds it.
+    @State private var typing = false
 
     var body: some View {
         if quickAdd.shown && quickAdd.drawn {
             let prompt = quickAdd.landsLabel.isEmpty ? placeholder : quickAdd.landsLabel
+            VStack(spacing: 0) {
+            if let onTool, let onDue, let onTag, typing || !quickAdd.openTool.isEmpty || quickAdd.focused {
+                QuickAddToolbar(quickAdd: quickAdd, onTool: onTool, onDue: onDue, onTag: onTag)
+            }
             HStack(spacing: 8) {
                 // RUST SAYS WHEN THE BAR TAKES THE KEYBOARD: the Plus
                 // opened it, or Notes' "Send to Agenda" landed with words in it.
@@ -270,7 +317,13 @@ struct TodoQuickAddBar: View {
                     focusOnAppear: quickAdd.focused,
                     onEdit: onChange,
                     onSubmit: { if quickAdd.canSubmit { onSubmit() } },
-                    onFocusChange: onFocusChange
+                    onFocusChange: { now in
+                        typing = now
+                        // THE TAG FIELD TAKES THE KEYBOARD from the title: that is not the keyboard
+                        // leaving, which would put an empty bar away.
+                        if now || quickAdd.openTool != "tag" { onFocusChange?(now) }
+                    },
+                    keepFocus: onTool != nil
                 )
                 .centraidType("body")
                 .submitLabel(.done)
@@ -288,6 +341,7 @@ struct TodoQuickAddBar: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 6)
+            }
         }
     }
 }

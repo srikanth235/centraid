@@ -54,7 +54,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `room-subtitle`, `room-subtitle-clear` | Notes (the notebook the library is scoped to, with its ✕ `room-subtitle-clear`), Money (the month, tappable: opens the month sheet) | the title's second line, which replaced the notebook and month chips |
 | `photos-grain-<years\|months\|all>` | Photos | one segment of the zoom control in the band (Years · Months · All), between the folded place key and the search key; `photos-band-places` is that folded key, which brings the plate of places back |
 | `agenda-search` | Agenda | Agenda's search field once open, at the foot in the band's place; it finds events, tasks and projects: the projects whose name matched as `search-container-schedule.project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |
-| `agenda-band-<key>` | Agenda | one band place, keyed on the machine's key: `day`, `schedule`, `waiting`, `todo`, `more` ([#1128](https://github.com/srikanth235/centraid/issues/1128), R-1128-1); `agenda-band-home` is the home capsule |
+| `agenda-band-<key>` | Agenda | one band place, keyed on the machine's key: `calendar`, `reminders`, `invites`, `more` (#1173); `agenda-band-home` is the home capsule |
 | `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
 | `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
 | `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |
@@ -67,6 +67,21 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `anytime`, `logbook`, `reminders`, `trash`, `reads` |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
+| `agenda-view-menu` | Agenda (Calendar) | the Calendar's view menu key (#1173); its rows are `agenda-view-<key>`: `day`, `week`, `month`, `list`, `year`, and on Month `agenda-month-style-grid` / `agenda-month-style-list` |
+| `agenda-week-strip` | Agenda (Day, Week) | the week strip; a swipe changes week, and a day is `agenda-strip-day-<YYYY-MM-DD>` |
+| `agenda-time-grid` | Agenda (Day, Week) | the hour grid; a long press on an empty slot opens the add sheet at that time |
+| `agenda-grid-allday-<day>` | Agenda (Day, Week) | one day's all-day strip; a chip in it is `agenda-grid-chip-<key>` |
+| `agenda-grid-block-<key>` | Agenda (Day, Week) | one timed block (`<day>\|<instance_key>` or `<day>\|task:<id>`); drag moves it, its foot resizes it; a task block's circle is `agenda-grid-block-check-<taskId>` |
+| `agenda-now-line` | Agenda (Day, Week on today) | the now line |
+| `agenda-today-button` | Agenda (Calendar) | the floating Today button, drawn away from today |
+| `agenda-month-grid` | Agenda (Month) | the month; a cell is `agenda-month-cell-<YYYY-MM-DD>` |
+| `agenda-year-grid` | Agenda (Year) | the twelve months; one is `agenda-year-month-<YYYY-MM>` |
+| `agenda-quick-tool-<key>` | Agenda (To-do), a list page | the keyboard toolbar's `date`, `tag` and `flag` keys over the quick add; the date choices are `agenda-quick-due-<key>`, the tag field `agenda-quick-tag-field`, and what the next add carries `agenda-quick-staged` |
+| `agenda-editor-notes` | the add sheet (task) | the task's notes field |
+| `agenda-editor-list` | the add sheet (task) | the List row; a list in its sheet is `agenda-editor-list-<key>` (`inbox` or a project id) |
+| `agenda-editor-more-details` | the add sheet (task) | the More details row; under it `agenda-editor-priority-<0..3>`, `agenda-editor-tag-field` and a tag chip `agenda-editor-tag-<text>` |
+| `tasks-detail-group-<key>` | a task's page | the head of one grouped card, keyed on its first field (`when`, `project`, …); the Flag switch is `tasks-field-flag` |
+| `row-action-<id>` / `row-menu-<id>` | any swipeable task row | the swipe's and the long press's Details, Flag and Delete (`details`, `flag`, `delete`) |
 | `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
 | `tasks-list` / `tasks-project` | Tasks pages (pushed from Agenda's More and To-do) | a list page (Anytime, Logbook, Reminders) and a project page; their back control reads "Agenda" |
 | `home-search-group-chat` | Home search (iOS only) | the head of the Chats group: the member's own conversations, last among the groups, drawn only where the shell has a Chat tab ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-24); its rows are `home-search-row-chat.thread-<id>`, and a tap opens that thread in the Chat tab |

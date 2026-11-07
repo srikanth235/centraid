@@ -3,7 +3,7 @@
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Day · Schedule · Waiting · To-do, with Search and More | [`HOME`] | [`home`] |
+//! | Day · Week · Month · Schedule · Year · Waiting · To-do, with Search and More | [`HOME`] | [`home`] |
 //! | One occurrence of an event | [`EVENT`] | [`event`] |
 //! | The add sheet (Event \| Task) and the event editor | [`EDITOR`] | [`editor`] |
 //! | Anytime · All · Logbook · Reminders | [`TODO_LIST`] | [`list`] |
@@ -136,6 +136,22 @@ pub mod routes {
                 original_start_local: original_start_local.map(str::to_owned),
                 day: day.to_owned(),
                 kind: kind as i32,
+                start_time: String::new(),
+            }),
+        )
+    }
+
+    /// The add sheet for a new EVENT on `day` starting at `start_time` (`HH:MM`):
+    /// the slot a long press on the hour grid named, already snapped.
+    #[must_use]
+    pub fn editor_at(day: &str, start_time: &str) -> wire::Route {
+        route(
+            EDITOR,
+            wire::route::Args::AgendaEditor(wire::AgendaEditorRoute {
+                day: day.to_owned(),
+                kind: wire::AgendaEditorKind::Event as i32,
+                start_time: start_time.to_owned(),
+                ..wire::AgendaEditorRoute::default()
             }),
         )
     }

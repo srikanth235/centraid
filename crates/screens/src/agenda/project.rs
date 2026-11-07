@@ -11,8 +11,9 @@ use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
-use super::todo::ops::Ops;
+use super::todo::ops::{NewTask, Ops};
 use super::todo::order;
+use super::todo::quick::Quick;
 use super::todo::rows::{self, Context};
 use crate::catalog::{act, load};
 use crate::kit::read;
@@ -33,6 +34,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         ops: Ops::default(),
         quick_title: String::new(),
+        quick: Quick::default(),
+        quick_focused: false,
         target_section_id: String::new(),
         sheet: Sheet::None,
         new_section_name: String::new(),
@@ -49,6 +52,10 @@ struct Project {
     phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
     quick_title: String,
+    /// What the keyboard toolbar has staged for the next add.
+    quick: Quick,
+    /// The field has the keyboard: Return added one and the next is typed at once.
+    quick_focused: bool,
     /// The section a quick add lands in; empty is the project's unsectioned work.
     target_section_id: String,
     sheet: Sheet,
@@ -167,6 +174,14 @@ impl Project {
         self.reload(ctx);
     }
 
+    /// The core's today, for a staged due.
+    fn today(&self) -> String {
+        self.phase
+            .data()
+            .map(|board| board.today.clone())
+            .unwrap_or_default()
+    }
+
     /// This list's colour on the one palette of eight.
     fn color_key(&self, board: &wire::AgendaTaskBoard) -> String {
         let project = board
@@ -238,7 +253,7 @@ impl Project {
 
     fn quick_add(&self, locale: Locale) -> wire::TodoQuickAdd {
         let found = self.found();
-        wire::TodoQuickAdd {
+        let mut bar = wire::TodoQuickAdd {
             title: self.quick_title.clone(),
             can_submit: !self.quick_title.trim().is_empty(),
             // THE INLINE ROW (#1173) says "New Reminder"; pointed at a section it
@@ -249,11 +264,14 @@ impl Project {
                 format!("{} {}", words::lands_in(locale), self.lands_in())
             },
             shown: found,
-            focused: false,
+            focused: self.quick_focused,
             // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.
             add_label: String::new(),
             drawn: found,
-        }
+            ..wire::TodoQuickAdd::default()
+        };
+        self.quick.fill(locale, &mut bar);
+        bar
     }
 
     fn submit_quick_add(&mut self, ctx: &Ctx) {
@@ -263,15 +281,21 @@ impl Project {
         }
         let section = (!self.target_section_id.is_empty()).then(|| self.target_section_id.clone());
         let lands_in = self.lands_in();
-        if self.ops.add(
-            ctx,
-            &title,
-            "",
-            &lands_in,
-            Some(&self.project_id),
-            section.as_deref(),
-        ) {
+        let due = self.quick.due_day(&self.today());
+        let task = NewTask {
+            title: &title,
+            due: &due,
+            project_id: Some(&self.project_id),
+            section_id: section.as_deref(),
+            tags: self.quick.tags(),
+            flagged: self.quick.flagged(),
+            ..NewTask::default()
+        };
+        if self.ops.add_full(ctx, &task, &lands_in).is_some() {
+            // RETURN KEEPS THE KEYBOARD: the next one is typed at once.
             self.quick_title.clear();
+            self.quick.clear();
+            self.quick_focused = true;
         }
         self.reload(ctx);
     }
@@ -336,6 +360,19 @@ impl Project {
             }
             Some(P::QuickAddChanged(changed)) => self.quick_title = changed.title,
             Some(P::QuickAddSubmitted(_)) => self.submit_quick_add(ctx),
+            // THE KEYBOARD TOOLBAR (#1173): each key stages what the next add carries.
+            Some(P::QuickTool(picked)) if self.found() => {
+                self.quick.pick_tool(&picked.key);
+                self.quick_focused = true;
+            }
+            Some(P::QuickDue(picked)) if self.found() => {
+                self.quick.pick_due(&picked.key);
+                self.quick_focused = true;
+            }
+            Some(P::QuickTag(added)) if self.found() => {
+                self.quick.add_tag(&added.text);
+                self.quick_focused = true;
+            }
             // `add:<section_id>` points the quick add at a section; `add:` at
             // the project's unsectioned work.
             Some(P::GroupVerb(verb)) => {

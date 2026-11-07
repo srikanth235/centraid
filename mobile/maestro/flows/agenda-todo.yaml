@@ -13,7 +13,7 @@ name: agenda-todo
 - tapOn:
     id: "home-tile-agenda"
 - tapOn:
-    id: "agenda-band-todo"
+    id: "agenda-band-reminders"
 - extendedWaitUntil:
     visible:
       id: "agenda-todo-list"

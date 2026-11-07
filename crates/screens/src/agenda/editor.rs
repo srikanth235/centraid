@@ -23,6 +23,14 @@
 //!   from its first occurrence.
 //! - Skip: `edit-occurrence`, `skip`, scope `occurrence`.
 //!
+//! ## The new task sheet (#1173, decided)
+//!
+//! Title and due first, then Notes (the task's description), List (the Inbox,
+//! then the projects A to Z) and a "More details" row that opens priority,
+//! repeat and tags. Save is one `add-task` carrying the notes, the priority, the
+//! repeat rule and the project, then one `add-task-tag` per tag. A task has no
+//! place: the vault's task has no such field, so the sheet does not draw one.
+//!
 //! ## The add sheet is Event | Task (#1128)
 //!
 //! A CREATE carries a switch at its top; an edit has none. ONE DRAFT SERVES
@@ -50,19 +58,23 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
 use self::draft::{
-    Draft, REMINDER_NONE, REMINDERS, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY, REPEAT_MONTHLY,
-    REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
+    Draft, LIST_INBOX, PRIORITY_MAX, REMINDER_NONE, REMINDERS, REPEAT_BIWEEKLY, REPEAT_CUSTOM,
+    REPEAT_DAILY, REPEAT_MONTHLY, REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use super::event::{
     calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
 };
-use super::todo::ops::Ops;
+use super::todo::ops::{NewTask, Ops};
+use super::todo::rows;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda as words, agenda_editor as editor_words, fill};
+use crate::strings::{
+    Locale, agenda as words, agenda_editor as editor_words, agenda_tasks as task_words, fill,
+    task as task_strings,
+};
 
 /// The keychain key of the kind the member last added on this device.
 pub const ADD_KIND_KEY: &str = "agenda_add_kind";
@@ -71,6 +83,9 @@ const TASK_WORD: &[u8] = b"task";
 /// The editor reads calendars and the clock, never events: a window the vault
 /// has no event in (the epoch's first second) answers both and nothing else.
 const CALENDARS_ONLY: (&str, &str) = ("1970-01-01T00:00:00Z", "1970-01-01T00:00:01Z");
+
+/// The Inbox's dot: a neutral list colour, since the Inbox is no one's project.
+const INBOX_HUE: &str = "graphite";
 
 /// The registry factory.
 #[must_use]
@@ -102,6 +117,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         baseline: None,
         draft: None,
         sheet: Sheet::None,
+        more_open: false,
         asking: Asking::None,
         scope: None,
         save_tried: false,
@@ -124,6 +140,9 @@ struct Loaded {
     parties: wire::AgendaParties,
     /// An edit's event, read by id.
     detail: Option<wire::AgendaEventDetail>,
+    /// The projects a task can be filed in; empty when the read did not land,
+    /// and then the Inbox is the one list.
+    projects: Vec<wire::AgendaTaskProject>,
 }
 
 struct Editor {
@@ -140,6 +159,8 @@ struct Editor {
     baseline: Option<Draft>,
     draft: Option<Draft>,
     sheet: Sheet,
+    /// The More details row is open (a new task).
+    more_open: bool,
     asking: Asking,
     /// The save scope picked.
     scope: Option<wire::AgendaScope>,
@@ -203,6 +224,22 @@ impl Editor {
                 },
             )
         });
+        // THE LISTS A TASK CAN LAND IN: a refused or missing read leaves the Inbox.
+        let projects = if self.is_task() || self.mode == Mode::Create {
+            match kit_read::read(
+                ctx,
+                load::agenda::Projects::default(),
+                |answer| match answer {
+                    Answer::AgendaTaskProjects(projects) => Some(projects),
+                    _ => None,
+                },
+            ) {
+                Reading::Data(projects) => projects.projects,
+                _ => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
         let denial = [
             denial_of(&upcoming),
             denial_of(&parties),
@@ -235,13 +272,16 @@ impl Editor {
             upcoming,
             parties,
             detail,
+            projects,
         });
         self.phase = Phase::Ready;
         if self.draft.is_none() {
             self.baseline = match self.mode {
                 Mode::Edit => self.event().map(draft::draft_of),
                 _ => self.loaded.as_ref().map(|loaded| {
-                    let fresh = draft::new_draft(&self.route.day, &loaded.upcoming);
+                    let named = draft::new_draft(&self.route.day, &loaded.upcoming);
+                    // A SLOT PRESSED ON THE GRID names the start; the end follows by an hour.
+                    let fresh = draft::starting_at(&named, &self.route.start_time);
                     if self.is_task() {
                         draft::shaped(&fresh, self.kind)
                     } else {
@@ -436,14 +476,22 @@ impl Editor {
             .unwrap_or_default();
         let lands = civil::relative_day(locale, &draft.start_day, &today);
         self.status = None;
-        if self.ops.add(
-            ctx,
-            draft.title.trim(),
-            &draft::due_of(draft),
-            &lands,
-            None,
-            None,
-        ) {
+        let due = draft::due_of(draft);
+        let notes = draft.notes.trim();
+        let project = self
+            .project_of(&draft.list_key)
+            .map(|project| project.project_id.clone());
+        let task = NewTask {
+            title: draft.title.trim(),
+            notes,
+            due: &due,
+            priority: i64::from(draft.priority.clamp(0, PRIORITY_MAX)),
+            rule: draft::rule_of(&draft.repeat_key),
+            project_id: project.as_deref(),
+            tags: &draft.tags,
+            ..NewTask::default()
+        };
+        if self.ops.add_full(ctx, &task, &lands).is_some() {
             self.dismissed = true;
             return self.remember_kind();
         }
@@ -522,22 +570,35 @@ impl Editor {
 
     fn on_editor_event(&mut self, event: K, ctx: &Ctx) -> Vec<wire::Effect> {
         // A TASK HAS NO EVENT FIELDS (#1128): their pickers are not drawn, and a
-        // stray event for one changes nothing.
-        if self.is_task()
-            && matches!(
-                event,
-                K::Notes(_)
-                    | K::End(_)
-                    | K::Calendar(_)
-                    | K::Guest(_)
-                    | K::Repeat(_)
-                    | K::Reminder(_)
-                    | K::Link(_)
-                    | K::SheetOpened(_)
-                    | K::Skip(_)
-            )
-        {
+        // stray event for one changes nothing. Its own are Notes, Repeat and the
+        // List and Repeat sheets (#1173); an event has none of the task's.
+        let task_event = matches!(
+            event,
+            K::List(_) | K::Priority(_) | K::TagAdded(_) | K::TagRemoved(_) | K::MoreDetails(_)
+        );
+        if task_event != self.is_task() && task_event {
             return Vec::new();
+        }
+        if self.is_task() {
+            let sheet_of_a_task = |opened: &wire::agenda_editor_event::SheetOpened| {
+                matches!(
+                    Sheet::try_from(opened.sheet),
+                    Ok(Sheet::List | Sheet::Repeat)
+                )
+            };
+            let stray = match &event {
+                K::End(_)
+                | K::Calendar(_)
+                | K::Guest(_)
+                | K::Reminder(_)
+                | K::Link(_)
+                | K::Skip(_) => true,
+                K::SheetOpened(opened) => !sheet_of_a_task(opened),
+                _ => false,
+            };
+            if stray {
+                return Vec::new();
+            }
         }
         match event {
             K::Refreshed(_) => self.reload(ctx),
@@ -663,6 +724,36 @@ impl Editor {
                 _ => {}
             },
             K::ConfirmDismissed(_) => self.asking = Asking::None,
+            // THE NEW TASK SHEET (#1173).
+            K::List(picked) => {
+                if self.list_keys().contains(&picked.key) {
+                    self.close_sheet();
+                    self.edit(|d| {
+                        Some(Draft {
+                            list_key: picked.key,
+                            ..d.clone()
+                        })
+                    });
+                }
+            }
+            K::Priority(picked) => {
+                let level = picked
+                    .key
+                    .parse::<i32>()
+                    .ok()
+                    .filter(|level| (0..=PRIORITY_MAX).contains(level));
+                if let Some(priority) = level {
+                    self.edit(|d| {
+                        Some(Draft {
+                            priority,
+                            ..d.clone()
+                        })
+                    });
+                }
+            }
+            K::TagAdded(added) => self.edit(|d| draft::tag_added(d, &added.text)),
+            K::TagRemoved(removed) => self.edit(|d| draft::tag_removed(d, &removed.text)),
+            K::MoreDetails(_) => self.more_open = !self.more_open,
         }
         Vec::new()
     }
@@ -693,6 +784,117 @@ impl Editor {
             );
         }
         choices
+    }
+
+    /// The project a task's list key names, when the read still lists it.
+    fn project_of(&self, key: &str) -> Option<&wire::AgendaTaskProject> {
+        self.loaded
+            .as_ref()?
+            .projects
+            .iter()
+            .find(|project| project.project_id == key)
+    }
+
+    /// The projects A to Z (case aside), the Inbox's own order being first.
+    fn sorted_projects(&self) -> Vec<&wire::AgendaTaskProject> {
+        let mut projects: Vec<&wire::AgendaTaskProject> = self
+            .loaded
+            .iter()
+            .flat_map(|loaded| loaded.projects.iter())
+            .collect();
+        projects.sort_by_cached_key(|project| (project.name.to_lowercase(), project.sort_order));
+        projects
+    }
+
+    fn list_keys(&self) -> Vec<String> {
+        std::iter::once(LIST_INBOX.to_owned())
+            .chain(
+                self.sorted_projects()
+                    .into_iter()
+                    .map(|project| project.project_id.clone()),
+            )
+            .collect()
+    }
+
+    /// The Inbox, then each project: the list a new task lands in.
+    fn lists(&self, locale: Locale, draft: &Draft) -> Vec<wire::AgendaChoice> {
+        // A list that is gone files in the Inbox, and the sheet says so.
+        let chosen = if self.project_of(&draft.list_key).is_some() {
+            draft.list_key.as_str()
+        } else {
+            LIST_INBOX
+        };
+        let inbox = task_strings::inbox(locale);
+        std::iter::once(wire::AgendaChoice {
+            key: LIST_INBOX.to_owned(),
+            selected: chosen == LIST_INBOX,
+            hue_key: INBOX_HUE.to_owned(),
+            accessibility_label: inbox.clone(),
+            label: inbox,
+        })
+        .chain(
+            self.sorted_projects()
+                .into_iter()
+                .map(|project| wire::AgendaChoice {
+                    key: project.project_id.clone(),
+                    selected: chosen == project.project_id,
+                    hue_key: rows::list_color_of(&project.project_id, Some(project)),
+                    accessibility_label: project.name.clone(),
+                    label: project.name.clone(),
+                }),
+        )
+        .collect()
+    }
+
+    /// None, !, !!, !!!: the symbol is the label and Soon, Next, Now the spoken name.
+    fn priorities(locale: Locale, draft: &Draft) -> Vec<wire::AgendaChoice> {
+        let level = draft.priority.clamp(0, PRIORITY_MAX);
+        [
+            (
+                task_strings::priority_none(locale),
+                task_strings::priority_none(locale),
+            ),
+            (
+                task_words::priority_1(locale),
+                task_strings::priority_soon(locale),
+            ),
+            (
+                task_words::priority_2(locale),
+                task_strings::priority_next(locale),
+            ),
+            (
+                task_words::priority_3(locale),
+                task_strings::priority_now(locale),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(at, (label, spoken))| wire::AgendaChoice {
+            key: at.to_string(),
+            label,
+            selected: i32::try_from(at).is_ok_and(|at| at == level),
+            hue_key: String::new(),
+            accessibility_label: spoken,
+        })
+        .collect()
+    }
+
+    /// The closed More details row: what is set, else what is inside.
+    fn more_details_summary(&self, locale: Locale, draft: &Draft, repeat_label: &str) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let priority = Self::priorities(locale, draft)
+            .into_iter()
+            .find(|choice| choice.selected && choice.key != "0");
+        parts.extend(priority.map(|choice| choice.label));
+        if draft.repeat_key != REPEAT_NONE {
+            parts.push(repeat_label.to_owned());
+        }
+        parts.extend(draft.tags.iter().map(|tag| format!("#{tag}")));
+        if parts.is_empty() {
+            task_words::more_details_empty(locale)
+        } else {
+            parts.join(" · ")
+        }
     }
 
     fn repeat_keys(&self) -> Vec<String> {
@@ -941,6 +1143,15 @@ impl Editor {
                 }
             })
             .collect();
+        let repeat_label = repeats.iter().find(|choice| choice.selected).map_or_else(
+            || words::repeat_never(locale),
+            |choice| choice.label.clone(),
+        );
+        let (lists, priorities) = if task {
+            (self.lists(locale, draft), Self::priorities(locale, draft))
+        } else {
+            (Vec::new(), Vec::new())
+        };
         let saved_scopes = if self.sheet == Sheet::Scope {
             self.save_scopes(locale)
         } else {
@@ -1021,10 +1232,7 @@ impl Editor {
                     accessibility_label: name.clone(),
                 })
                 .collect(),
-            repeat_label: repeats.iter().find(|choice| choice.selected).map_or_else(
-                || words::repeat_never(locale),
-                |choice| choice.label.clone(),
-            ),
+            repeat_label: repeat_label.clone(),
             repeats,
             repeat_note: if series {
                 words::repeat_series_note(locale)
@@ -1063,6 +1271,34 @@ impl Editor {
             } else {
                 words::field_starts(locale)
             },
+            show_task_fields: task,
+            list_label: lists
+                .iter()
+                .find(|choice| choice.selected)
+                .map(|choice| choice.label.clone())
+                .unwrap_or_default(),
+            list_hue_key: lists
+                .iter()
+                .find(|choice| choice.selected)
+                .map(|choice| choice.hue_key.clone())
+                .unwrap_or_default(),
+            lists,
+            more_details_open: task && self.more_open,
+            more_details_summary: if task {
+                self.more_details_summary(locale, draft, &repeat_label)
+            } else {
+                String::new()
+            },
+            priority_label: if task {
+                priorities
+                    .iter()
+                    .find(|choice| choice.selected)
+                    .map(|choice| choice.label.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            priorities,
         }
     }
 
@@ -1143,5 +1379,10 @@ fn chrome(locale: Locale) -> wire::AgendaEditorChrome {
         pick_date: words::pick_date(locale),
         pick_time: words::pick_time(locale),
         kind_label: words::kind_switch(locale),
+        field_list: task_words::field_list(locale),
+        field_more_details: task_words::field_more_details(locale),
+        field_priority: task_strings::field_priority(locale),
+        field_tags: task_strings::field_tags(locale),
+        tag_placeholder: task_strings::tags_add(locale),
     }
 }

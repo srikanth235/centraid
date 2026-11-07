@@ -206,6 +206,9 @@ internal fun TodoProjectScreen(
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TodoProjectEvent(quick_add_changed = TodoProjectEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TodoProjectEvent(quick_add_submitted = TodoProjectEvent.QuickAddSubmitted())) },
+                onTool = { onEvent(TodoProjectEvent(quick_tool = TodoProjectEvent.QuickToolPicked(key = it))) },
+                onDue = { onEvent(TodoProjectEvent(quick_due = TodoProjectEvent.QuickDuePicked(key = it))) },
+                onTag = { onEvent(TodoProjectEvent(quick_tag = TodoProjectEvent.QuickTagAdded(text = it))) },
             )
         }
     }

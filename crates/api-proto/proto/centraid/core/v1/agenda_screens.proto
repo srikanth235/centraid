@@ -122,10 +122,9 @@ message AgendaHomeState {
   }
 }
 
-// One entry of the Calendar's view menu: Day or List today (Week, Month and
-// Year follow).
+// One entry of the Calendar's view menu: Day, Week, Month, List or Year.
 message AgendaCalendarView {
-  // `day`, `list`.
+  // `day`, `week`, `month`, `list`, `year`.
   string key = 1;
   string label = 2;
   string icon_key = 3;
@@ -241,6 +240,15 @@ message AgendaHomeData {
   repeated TodoRowGroup task_hits = 16;
   // To-do's content; set on `AGENDA_DESTINATION_TODO` only.
   AgendaTodo todo = 17;
+  // THE CALENDAR'S GRIDS (#1173). The core lays them out and a shell only
+  // draws them; each is set on its own view and absent elsewhere (and under a
+  // search, which is a list of hits).
+  // The week the anchor is in, over the Day grid and the Week grid.
+  AgendaWeekStrip week_strip = 21;
+  // Day (one column, the anchor) and Week (seven columns).
+  AgendaTimeGrid time_grid = 22;
+  AgendaMonthGrid month = 23;
+  AgendaYearGrid year = 24;
   // SEARCH'S CONTAINERS (#1097 R-1097-19, #1128 Q-1128-1): the projects whose
   // own name the term matched (`search`'s `containers`), drawn by the one
   // container row each shell has, above `task_hits`. Empty without a term, and
@@ -281,6 +289,233 @@ message AgendaTodo {
   string my_lists_title = 9;
   // "Add List": the home's quiet verb, which opens the new-project sheet.
   string add_list_label = 10;
+}
+
+// THE WEEK STRIP (#1173): the seven days of the anchor's week, from the
+// region's first weekday, each with a dot per calendar it has events on. A tap
+// sends `DayPicked` with the day's `opens`; a swipe sends `DayStepped` with
+// `step_days` (minus it for the week before).
+message AgendaWeekStrip {
+  repeated AgendaStripDay days = 1;
+  // 7.
+  int32 step_days = 2;
+  // The swipe's spoken names: "Previous week", "Next week".
+  string previous_label = 3;
+  string next_label = 4;
+}
+
+message AgendaStripDay {
+  // `YYYY-MM-DD`.
+  string day = 1;
+  // "M".
+  string weekday_initial = 2;
+  string day_number = 3;
+  bool is_today = 4;
+  // The anchor: the filled circle.
+  bool is_selected = 5;
+  // Saturday and Sunday, drawn in the quiet text role.
+  bool is_weekend = 6;
+  // At most three list-palette hue keys, one per calendar with an event
+  // that day, in the order they first start.
+  repeated string dot_hue_keys = 7;
+  // "Wednesday 4 November, 3 events".
+  string accessibility_label = 8;
+  // What a tap opens: Day (from the Week strip) — sent back in `DayPicked`.
+  AgendaDestination opens = 9;
+}
+
+// THE HOUR GRID (#1173): the Day view's one column or the Week view's seven,
+// with the all-day strip over them. Minutes count from the column day's local
+// midnight, 0 to 1440; a shell maps them to its own hour height.
+message AgendaTimeGrid {
+  // 24 marks: minute 0 "00:00" … minute 1380 "23:00".
+  repeated AgendaHourMark hours = 1;
+  repeated AgendaGridDay days = 2;
+  // Where the grid opens scrolled to: an hour before now on today, else an
+  // hour before the first timed block, else 08:00.
+  int32 scroll_to_minute = 3;
+  // A drop or a long press lands on this grid (15): the core snaps, a shell
+  // only reports the minute under the finger.
+  int32 snap_minutes = 4;
+  // "all-day".
+  string all_day_label = 5;
+  // The now line, when today is a column. Absent otherwise.
+  AgendaGridNow now = 6;
+  // What a screen reader says of an empty slot: "Hold to add an event".
+  string slot_hint = 7;
+  // A drag's spoken names: "Move", "Change end time".
+  string move_label = 8;
+  string resize_label = 9;
+}
+
+message AgendaHourMark {
+  int32 minute = 1;
+  // "09:00".
+  string label = 2;
+}
+
+message AgendaGridNow {
+  string day = 1;
+  int32 minute = 2;
+  // "13:36".
+  string label = 3;
+  // "Now, 13:36".
+  string accessibility_label = 4;
+}
+
+message AgendaGridDay {
+  string day = 1;
+  // The Week view's column head: "Wed 4". Empty on Day, which has the strip.
+  string heading = 2;
+  bool is_today = 3;
+  // All-day events, birthdays, and the open tasks due that day with no time.
+  repeated AgendaGridChip all_day = 4;
+  // The timed events and timed tasks, placed.
+  repeated AgendaGridBlock blocks = 5;
+  // "Wednesday 4 November".
+  string accessibility_label = 6;
+}
+
+message AgendaGridChip {
+  // Stable within the day: `event:<instance_key>`, `task:<id>`, `birthday:<name>`.
+  string key = 1;
+  string title = 2;
+  string hue_key = 3;
+  // A task's chip draws a check circle; its tap sends `TaskChecked`.
+  bool is_task = 4;
+  string task_id = 5;
+  // An event's or a task's page; absent on a birthday.
+  Route route = 6;
+  string accessibility_label = 7;
+}
+
+// ONE TIMED BLOCK, placed: from `start_minute` to `end_minute` (at least 15
+// minutes tall), in `column` of `columns` equal lanes. Blocks that overlap
+// share a cluster and each takes the first lane free at its start; `columns`
+// is the cluster's lane count, so a block's width is the column's over it.
+message AgendaGridBlock {
+  // `<day>|<instance_key>` or `<day>|task:<id>`.
+  string key = 1;
+  // An event's occurrence: what `EventMoved` and `EventResized` carry.
+  // Empty on a task.
+  string instance_key = 2;
+  string title = 3;
+  // "09:30 – 10:15", "Until 10:00", "From 22:00".
+  string time_label = 4;
+  // "Call" (the place), the task's list; empty for none.
+  string meta = 5;
+  string hue_key = 6;
+  int32 start_minute = 7;
+  int32 end_minute = 8;
+  int32 column = 9;
+  int32 columns = 10;
+  bool is_past = 11;
+  // A timed task: drawn dashed with a check circle (`TaskChecked`).
+  bool is_task = 12;
+  string task_id = 13;
+  // A drag moves it and a drag on its foot resizes it. False on a task, on
+  // a run over midnight, and on an event the member is a guest at.
+  bool movable = 14;
+  // "Team standup, 09:30 to 10:15, Call".
+  string accessibility_label = 15;
+  Route route = 16;
+}
+
+// THE MONTH (#1173): whole weeks from the region's first weekday, so the
+// month's first and last weeks carry the days of the months around it
+// (`in_month` false). Two styles from the view menu: the grid shows titles in
+// the cells; the list shows dots, and the selected day's rows under the grid.
+message AgendaMonthGrid {
+  // "November 2026".
+  string title = 1;
+  // Seven initials, from the first weekday.
+  repeated string weekday_labels = 2;
+  // 28, 35 or 42 cells, a week per seven.
+  repeated AgendaMonthCell cells = 3;
+  AgendaMonthStyle style = 4;
+  // The style choices, Grid and List, for the view menu's second group.
+  repeated AgendaMonthStyleChoice styles = 5;
+  // LIST STYLE: the anchor day's rows, drawn under the grid as the list
+  // draws a day; empty in the grid style.
+  repeated AgendaDaySection selected = 6;
+  // "Nothing on this day." when the list style's day has no rows.
+  string selected_empty = 7;
+  // The swipe's spoken names: "Previous month", "Next month".
+  string previous_label = 8;
+  string next_label = 9;
+}
+
+enum AgendaMonthStyle {
+  AGENDA_MONTH_STYLE_UNSPECIFIED = 0;
+  AGENDA_MONTH_STYLE_GRID = 1;
+  AGENDA_MONTH_STYLE_LIST = 2;
+}
+
+message AgendaMonthStyleChoice {
+  AgendaMonthStyle style = 1;
+  // "Grid", "List".
+  string label = 2;
+  bool current = 3;
+}
+
+message AgendaMonthCell {
+  string day = 1;
+  string day_number = 2;
+  // False for the leading and trailing days of the months around it.
+  bool in_month = 3;
+  bool is_today = 4;
+  bool is_selected = 5;
+  // GRID STYLE: the first three items' titles; `more_label` counts the rest.
+  repeated AgendaMonthChip chips = 6;
+  // "+2"; empty for none.
+  string more_label = 7;
+  // LIST STYLE: one dot per calendar, at most three.
+  repeated string dot_hue_keys = 8;
+  // What a tap opens: Day in the grid style, the Month itself (the day
+  // selected) in the list style — sent back in `DayPicked`.
+  AgendaDestination opens = 9;
+  // "Wednesday 4 November, 3 events".
+  string accessibility_label = 10;
+}
+
+message AgendaMonthChip {
+  string title = 1;
+  string hue_key = 2;
+  bool is_task = 3;
+}
+
+// THE YEAR (#1173): twelve small months. A month's tap sends `DayPicked` with
+// its `first_day` and `AGENDA_DESTINATION_MONTH`. No event marks: a year of
+// occurrences is not read for twelve thumbnails.
+message AgendaYearGrid {
+  // "2026".
+  string title = 1;
+  repeated AgendaYearMonth months = 2;
+  // "Previous year", "Next year".
+  string previous_label = 3;
+  string next_label = 4;
+}
+
+message AgendaYearMonth {
+  // `YYYY-MM`.
+  string month = 1;
+  // "November".
+  string label = 2;
+  // Today is in it: the label takes the app's accent.
+  bool is_current = 3;
+  // Whole weeks from the first weekday; a day outside the month has an
+  // empty `day_number` and draws nothing.
+  repeated AgendaYearDay days = 4;
+  // What a tap selects: today in the current month, else the 1st.
+  string first_day = 5;
+  // "November 2026".
+  string accessibility_label = 6;
+}
+
+message AgendaYearDay {
+  string day = 1;
+  string day_number = 2;
+  bool is_today = 3;
 }
 
 // One smart-list card on the Reminders home.
@@ -485,6 +720,73 @@ message AgendaHomeEvent {
     ImportRequested import_requested = 37;
     // The swipe on a task row (#1173).
     TaskFlagged task_flagged = 38;
+    // THE CALENDAR'S GRIDS (#1173).
+    DayPicked day_picked = 39;
+    SlotPressed slot_pressed = 40;
+    EventMoved event_moved = 41;
+    EventResized event_resized = 42;
+    MonthStyleChosen month_style = 43;
+    // ‹ and › and a swipe on Week, Month and Year: one week, month or year.
+    PeriodStepped period_stepped = 44;
+    // The swipe's Delete on a task row: to the trash, with Undo.
+    TaskDeleted task_deleted = 45;
+    // THE KEYBOARD TOOLBAR over To-do's quick add (#1173).
+    QuickToolPicked quick_tool = 46;
+    QuickDuePicked quick_due = 47;
+    QuickTagAdded quick_tag = 48;
+  }
+
+  // A strip day, a month cell or a year's month: the anchor moves to `day`
+  // and the view to `destination` (the cell's `opens`).
+  message DayPicked {
+    string day = 1;
+    AgendaDestination destination = 2;
+  }
+
+  // A long press on an empty slot: the minute under the finger on `day`. The
+  // core snaps it and opens the add sheet there (`OpenRoute`).
+  message SlotPressed {
+    string day = 1;
+    int32 minute = 2;
+  }
+
+  // A block dropped with its top at `minute` on `day`; it keeps its length.
+  message EventMoved {
+    string instance_key = 1;
+    string day = 2;
+    int32 minute = 3;
+  }
+
+  // A block's foot dropped at `end_minute` on its own day.
+  message EventResized {
+    string instance_key = 1;
+    int32 end_minute = 2;
+  }
+
+  message MonthStyleChosen {
+    AgendaMonthStyle style = 1;
+  }
+
+  message PeriodStepped {
+    int32 by = 1;
+  }
+
+  message TaskDeleted {
+    string task_id = 1;
+  }
+
+  message QuickToolPicked {
+    // `TodoQuickTool.key`.
+    string key = 1;
+  }
+
+  message QuickDuePicked {
+    // `TodoChoice.key` of `TodoQuickAdd.due_choices`.
+    string key = 1;
+  }
+
+  message QuickTagAdded {
+    string text = 1;
   }
   // 13 was `due_toggled`; 17, 18 and 33-36 were the intents (`new_event`,
   // `event_picked`, `task_picked`, `project_picked`, `group_verb`,
@@ -808,6 +1110,8 @@ message AgendaEditorState {
     SHEET_REMINDER = 5;
     // Saving a change to one occurrence of a series.
     SHEET_SCOPE = 6;
+    // A task's list (#1173).
+    SHEET_LIST = 7;
   }
 
   enum Asking {
@@ -847,6 +1151,13 @@ message AgendaEditorChrome {
   string pick_time = 23;
   // The spoken name of the Event | Task switch (#1128).
   string kind_label = 24;
+  // THE NEW TASK SHEET (#1173): "List", "More details", "Priority", "Tags",
+  // and the tag field's placeholder.
+  string field_list = 25;
+  string field_more_details = 26;
+  string field_priority = 27;
+  string field_tags = 28;
+  string tag_placeholder = 29;
 }
 
 // THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,
@@ -867,6 +1178,13 @@ message AgendaDraft {
   // `AgendaChoice.key` of the reminder list.
   string reminder_key = 11;
   string link = 12;
+  // A TASK's list (#1173): `AgendaChoice.key` of `lists` — a project id, or
+  // `inbox`.
+  string list_key = 13;
+  // A task's priority, 0 (none) to 3.
+  int32 priority = 14;
+  // A task's tags, as typed, in order.
+  repeated string tags = 15;
 }
 
 message AgendaChoice {
@@ -924,6 +1242,23 @@ message AgendaEditorData {
   bool show_event_fields = 29;
   // The key of the start row: "Starts" for an event, "Due" for a task.
   string start_field_label = 30;
+  // THE NEW TASK SHEET (#1173, decided): title and due first, then Notes,
+  // List, and a "More details" row that opens priority, repeat and tags. True
+  // while a task is being added.
+  bool show_task_fields = 31;
+  // The list the task lands in, its dot, and the choices (Inbox, then the
+  // projects A→Z).
+  string list_label = 32;
+  string list_hue_key = 33;
+  repeated AgendaChoice lists = 34;
+  // The More details row is open: priority, repeat and tags are drawn.
+  bool more_details_open = 35;
+  // The closed row's summary: "Priority, repeat, tags" while nothing is set,
+  // else what is ("!! · Every week · #errand").
+  string more_details_summary = 36;
+  // None, !, !!, !!!.
+  repeated AgendaChoice priorities = 37;
+  string priority_label = 38;
 }
 
 // One side of the Event | Task switch (#1128).
@@ -959,7 +1294,31 @@ message AgendaEditorEvent {
     Confirmed confirmed = 22;
     ConfirmDismissed confirm_dismissed = 23;
     KindPicked kind_picked = 25;
+    // THE NEW TASK SHEET (#1173).
+    ListPicked list = 26;
+    PriorityPicked priority = 27;
+    TagAdded tag_added = 28;
+    TagRemoved tag_removed = 29;
+    MoreDetailsToggled more_details = 30;
   }
+
+  message ListPicked {
+    string key = 1;
+  }
+
+  message PriorityPicked {
+    string key = 1;
+  }
+
+  message TagAdded {
+    string text = 1;
+  }
+
+  message TagRemoved {
+    string text = 1;
+  }
+
+  message MoreDetailsToggled {}
 
   // The Event | Task switch (#1128). Ignored on an EDIT.
   message KindPicked {
@@ -1205,6 +1564,31 @@ message TodoQuickAdd {
   // to Agenda") opened it, until the keyboard leaves an empty field
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
+  // THE KEYBOARD TOOLBAR (#1173), drawn over the keyboard while the field
+  // has it: Date, Tag and Flag. Each stages what the next add carries; Return
+  // adds it, clears the field and keeps the keyboard for the next one.
+  repeated TodoQuickTool tools = 8;
+  // What the next add carries, under the field: "Tomorrow · #errand ·
+  // Flagged"; empty when nothing is staged.
+  string staged_label = 9;
+  // The tool that is open: `date` draws `due_choices`, `tag` a tag field;
+  // empty for none.
+  string open_tool = 10;
+  // Today, Tomorrow, This weekend, Next week, No date.
+  repeated TodoChoice due_choices = 11;
+  // The tag field's placeholder, "Add a tag".
+  string tag_placeholder = 12;
+}
+
+// One key of the quick add's keyboard toolbar.
+message TodoQuickTool {
+  // `date`, `tag`, `flag`.
+  string key = 1;
+  // The spoken name: "Date", "Tag", "Flag".
+  string label = 2;
+  string icon_key = 3;
+  // Something is staged (a due, a tag, the flag): drawn filled.
+  bool on = 4;
 }
 
 // One area's projects on To-do (`AgendaTodo.projects`).
@@ -1372,6 +1756,22 @@ message TodoProjectEvent {
     RowMoved row_moved = 17;
     CompletedToggled completed_toggled = 18;
     CompletedCleared completed_cleared = 19;
+    // THE KEYBOARD TOOLBAR (#1173), as on Agenda's home.
+    QuickToolPicked quick_tool = 20;
+    QuickDuePicked quick_due = 21;
+    QuickTagAdded quick_tag = 22;
+  }
+
+  message QuickToolPicked {
+    string key = 1;
+  }
+
+  message QuickDuePicked {
+    string key = 1;
+  }
+
+  message QuickTagAdded {
+    string text = 1;
   }
 
   message RowFlagged {
@@ -1539,6 +1939,14 @@ message TodoField {
   string time = 14;
   // The words on the picker row: "Pick a date" / "Pick a time".
   string pick_label = 15;
+  // THE GROUPED CARDS (#1173): the heading of the card this field opens
+  // ("Date & time", "Organisation"); empty for a field that continues the
+  // card above it.
+  string group = 16;
+  // A switch row (Flag): `on` is its state, and a tap sends `FieldChoice`
+  // with `on` or `off`.
+  bool toggle = 17;
+  bool on = 18;
 }
 
 message TodoDetailEvent {

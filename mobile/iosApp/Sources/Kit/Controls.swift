@@ -29,6 +29,8 @@ struct KitIconKey: View {
     /// Glass on iOS 26 — in place of the hairline frame.
     var glass: Bool = false
     var tint: String = "text"
+    /// The glyph is filled in its ink (a toggle that is on).
+    var solid: Bool = false
     var identifier: String = ""
     let action: () -> Void
 
@@ -54,7 +56,8 @@ struct KitIconKey: View {
                 CentraidIconView(
                     iconKey: iconKey,
                     tint: Theme.color(enabled ? tint : Self.disabledToken, scheme),
-                    size: 18
+                    size: 18,
+                    solid: solid
                 )
             }
             .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)

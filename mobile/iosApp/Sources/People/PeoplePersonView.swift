@@ -33,9 +33,9 @@ struct PeoplePersonView: View {
             if case let .data(data)? = state.content { return data }
             return nil
         }()
-        // THE NAME IS THE HERO'S, so the bar carries no title of its own: only the back chevron and
-        // the keys.
-        // Until the read lands the bar carries the name the route brought (`nameHint`).
+        // THE NAME IS THE HERO'S, so the bar carries no title of its own once the person is read:
+        // only the back chevron and the keys. Until then the bar holds the name the row carried
+        // (`nameHint`), as Android's does.
         PushedPage(
             title: person == nil ? state.nameHint : "",
             parentTitle: chrome.back,

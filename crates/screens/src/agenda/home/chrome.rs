@@ -6,11 +6,13 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::fold::long_day;
+use super::grid::{self, WeekStart};
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
 use crate::strings::{
-    Locale, agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
+    Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
+    agenda_reminders as reminders, fill, task,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
@@ -48,7 +50,7 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
             BAND_CALENDAR,
             reminders::band_calendar(locale),
             "Calendar",
-            matches!(destination, Dest::Day | Dest::Schedule),
+            grid::is_calendar_view(destination),
         ),
         tab(
             BAND_REMINDERS,
@@ -71,11 +73,11 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
     ]
 }
 
-/// The Calendar's view menu: Day and List. Empty off the Calendar tab, where
-/// there is nothing to switch.
+/// The Calendar's view menu: Day, Week, Month, List (Schedule) and Year, in
+/// that order. Empty off the Calendar tab, where there is nothing to switch.
 #[must_use]
 pub fn calendar_views(locale: Locale, destination: Dest) -> Vec<wire::AgendaCalendarView> {
-    if !matches!(destination, Dest::Day | Dest::Schedule) {
+    if !grid::is_calendar_view(destination) {
         return Vec::new();
     }
     let view = |key: &str, label: String, icon: &str, of: Dest| wire::AgendaCalendarView {
@@ -87,7 +89,15 @@ pub fn calendar_views(locale: Locale, destination: Dest) -> Vec<wire::AgendaCale
     };
     vec![
         view("day", reminders::view_day(locale), "Clock", Dest::Day),
+        view("week", sayings::view_week(locale), "Table", Dest::Week),
+        view(
+            "month",
+            sayings::view_month(locale),
+            "Calendar",
+            Dest::Month,
+        ),
         view("list", reminders::view_list(locale), "List", Dest::Schedule),
+        view("year", sayings::view_year(locale), "Grid", Dest::Year),
     ]
 }
 
@@ -99,12 +109,45 @@ pub fn toolbar(
     destination: Dest,
     anchor: &str,
     today: &str,
+    start: WeekStart,
     shown: bool,
 ) -> wire::AgendaToolbar {
     if !shown || anchor.is_empty() || today.is_empty() || destination == Dest::Todo {
         return wire::AgendaToolbar::default();
     }
-    let range_label = if destination == Dest::Day {
+    // THE PERIOD'S OWN WORDS: a week, a month or a year, and today is in it
+    // when the Today button has nowhere to go.
+    let year = anchor.get(..4).unwrap_or_default();
+    let (range_label, at_today) = match destination {
+        Dest::Week => (
+            grid::week_label(locale, anchor, start),
+            grid::week_first(anchor, start) == grid::week_first(today, start),
+        ),
+        Dest::Month => (
+            rows::month_year(locale, anchor),
+            anchor.get(..7) == today.get(..7),
+        ),
+        Dest::Year => (year.to_owned(), anchor.get(..4) == today.get(..4)),
+        _ => (
+            day_label(locale, destination, anchor, today),
+            anchor == today,
+        ),
+    };
+    wire::AgendaToolbar {
+        shown: true,
+        range_label,
+        month_label: if destination == Dest::Year {
+            year.to_owned()
+        } else {
+            rows::month_year(locale, anchor)
+        },
+        at_today,
+    }
+}
+
+/// Day's and the lists' range label.
+fn day_label(locale: Locale, destination: Dest, anchor: &str, today: &str) -> String {
+    if destination == Dest::Day {
         if anchor == today {
             words::today(locale)
         } else if civil::plus_days(today, 1).as_deref() == Some(anchor) {
@@ -121,12 +164,6 @@ pub fn toolbar(
             &sentences::from_day(locale),
             &[("day", &long_day(locale, anchor))],
         )
-    };
-    wire::AgendaToolbar {
-        shown: true,
-        range_label,
-        month_label: rows::month_year(locale, anchor),
-        at_today: anchor == today,
     }
 }
 

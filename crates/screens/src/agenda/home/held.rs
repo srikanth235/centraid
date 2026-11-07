@@ -6,6 +6,14 @@
 //! dated boards were, and `todo` says the Inbox and the projects are current; a
 //! change event clears all three, so coming back to a place reads again.
 //!
+//! ## The read range
+//!
+//! Day and Week read the anchor's whole week (the strip's dots), Month its
+//! whole cell range (the leading and trailing days), and Year the anchor's day
+//! alone: twelve small months carry no event marks, so no year of occurrences
+//! is read. The window key names the range ([`range_of`]), so a step inside the
+//! held week or month reads nothing.
+//!
 //! ## The window is padded, and the fold cuts it
 //!
 //! `upcoming` takes INSTANTS, and the instant an anchor's local midnight falls
@@ -23,6 +31,7 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
+use super::grid::{self, WeekStart};
 use super::{Home, Phase};
 use crate::agenda::todo::rows;
 use crate::catalog::load::agenda as query;
@@ -153,6 +162,18 @@ pub fn span_of(destination: wire::AgendaDestination) -> i64 {
     }
 }
 
+/// The days a read covers for `destination` anchored on `anchor`: the first day
+/// and how many. Day and Week read the anchor's whole week (the strip has dots),
+/// Month its whole cell range, and every other place its own window.
+#[must_use]
+pub fn range_of(
+    destination: wire::AgendaDestination,
+    anchor: &str,
+    start: WeekStart,
+) -> Option<(String, i64)> {
+    grid::range_of(destination, anchor, start, span_of(destination))
+}
+
 /// The UTC midnight opening `day`, in the vault's instant spelling.
 fn midnight(day: &str) -> Option<String> {
     civil::epoch_day_of(day).map(|_| format!("{day}T00:00:00Z"))
@@ -250,7 +271,7 @@ impl Home {
         Ok(())
     }
 
-    /// THE EVENTS' WINDOW, and the dated boards Day and Schedule draw on it.
+    /// THE EVENTS' WINDOW, and the dated boards Day, Schedule, Week and Month draw on it.
     fn fill_window(&mut self, ctx: &Ctx) -> Result<(), Stop> {
         if self.anchor.is_empty() {
             // TODAY IS THE CORE'S: no bounds is today in the zone.
@@ -260,13 +281,21 @@ impl Home {
             }
             self.anchor.clone_from(&context.today);
         }
-        let span = span_of(self.destination);
-        let key = format!("{span}|{}", self.anchor);
+        // THE WINDOW KEY NAMES THE RANGE, so a step inside the week a Day or
+        // Week view already holds reads nothing.
+        let Some((first, span)) = range_of(
+            self.destination,
+            &self.anchor,
+            grid::week_start_of(ctx.region()),
+        ) else {
+            return Err(Stop::Failed);
+        };
+        let key = format!("{span}|{first}");
         if self.held.window.as_deref() != Some(key.as_str()) {
             let (Some(before), Some(after), Some(last)) = (
-                civil::plus_days(&self.anchor, -1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span + 1).and_then(|day| midnight(&day)),
-                civil::plus_days(&self.anchor, span - 1),
+                civil::plus_days(&first, -1).and_then(|day| midnight(&day)),
+                civil::plus_days(&first, span + 1).and_then(|day| midnight(&day)),
+                civil::plus_days(&first, span - 1),
             ) else {
                 return Err(Stop::Failed);
             };
@@ -284,7 +313,7 @@ impl Home {
             let context = get(read(
                 ctx,
                 query::DayContext {
-                    from: Some(self.anchor.clone()),
+                    from: Some(first.clone()),
                     to: Some(last),
                 },
                 pick_context,
@@ -297,9 +326,19 @@ impl Home {
         self.today = self.held.today();
         let dated = matches!(
             self.destination,
-            wire::AgendaDestination::Day | wire::AgendaDestination::Schedule
+            wire::AgendaDestination::Day
+                | wire::AgendaDestination::Schedule
+                | wire::AgendaDestination::Week
+                | wire::AgendaDestination::Month
         );
-        if dated && self.held.dated.as_deref() != Some(key.as_str()) {
+        // DAY'S BOARDS ARE KEYED BY THE ANCHOR TOO: the absence notice is read
+        // on today alone, and a step inside the held week lands there.
+        let dated_key = if self.destination == wire::AgendaDestination::Day {
+            format!("{key}|{}", self.anchor)
+        } else {
+            key.clone()
+        };
+        if dated && self.held.dated.as_deref() != Some(dated_key.as_str()) {
             let board = |view| {
                 read(
                     ctx,
@@ -329,7 +368,7 @@ impl Home {
             self.held.today_board = Some(today_board);
             self.held.upcoming_board = Some(upcoming_board);
             self.held.catch_up = catch_up;
-            self.held.dated = Some(key);
+            self.held.dated = Some(dated_key);
         }
         Ok(())
     }
