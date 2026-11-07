@@ -312,7 +312,7 @@ private fun whenOf(fields: CalendarWriteFields): Moment =
         val start = instant(fields.start, UTC)
         Moment(true, start, maxOf(start, instant(fields.end, UTC)) + DAY_MS, "UTC")
     } else {
-        val zone = fields.tz.takeIf { it.isNotEmpty() && it in TimeZone.getAvailableIDs() }?.let(TimeZone::getTimeZone) ?: TimeZone.getDefault()
+        val zone = fields.tz.takeIf { it.isNotEmpty() && it in TimeZone.getAvailableIDs() }?.let { TimeZone.getTimeZone(it) } ?: TimeZone.getDefault()
         val start = instant(fields.start, zone)
         Moment(false, start, maxOf(start, instant(fields.end, zone)), zone.id)
     }
