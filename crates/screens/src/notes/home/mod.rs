@@ -506,6 +506,9 @@ impl Home {
             cancel: words::cancel(locale),
             close: words::close(locale),
             new_note: words::new_note(locale),
+            pin_label: words::pin(locale),
+            unpin_label: words::unpin(locale),
+            file_label: words::file_verb(locale),
         }
     }
 

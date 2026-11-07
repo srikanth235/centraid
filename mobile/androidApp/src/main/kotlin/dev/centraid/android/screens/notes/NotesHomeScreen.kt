@@ -1,12 +1,33 @@
 package dev.centraid.android.screens.notes
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitRowAction
+import dev.centraid.android.kit.KitSwipeRow
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.SearchAskRow
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -136,7 +157,7 @@ public fun NotesHomeScreen(
                 items(search.containers, key = { "c-${it.entity}-${it.id}" }) { container ->
                     SearchContainerRow(container, onOpen = onOpen)
                 }
-                items(results.rows, key = { "s-" + it.note_id }) { row -> NoteRow(row, "", onOpen, onEvent) }
+                itemsIndexed(results.rows, key = { _, row -> "s-" + row.note_id }) { at, row -> NoteTile(row, state, at, results.rows.size, onOpen, onEvent) }
                 // THE ASK ROW closes the answer, whether or not anything matched (#1097).
                 item(key = "ask") { SearchAskRow(search.ask, onOpen) }
             }
@@ -180,7 +201,6 @@ private fun LibraryList(
     onOpen: (Route) -> Unit,
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
-    val menuLabel = state.chrome?.row_menu_label.orEmpty()
     LazyColumn(Modifier.testTag("notes-library")) {
         val empty = data.empty
         if (data.sections.all { it.rows.isEmpty() } && empty != null) {
@@ -188,7 +208,7 @@ private fun LibraryList(
                 EmptyStateView(empty, onAction = { state.new_note?.let(onOpen) })
             }
         }
-        sections(data, menuLabel, onOpen, onEvent)
+        sections(data, state, onOpen, onEvent)
         if (data.truncated) {
             item(key = "window") {
                 Row(Modifier.fillMaxWidth().padding(KitGeometry.GUTTER)) {
@@ -211,66 +231,153 @@ private fun LibraryList(
 
 private fun LazyListScope.sections(
     data: NotesLibraryData,
-    menuLabel: String,
+    state: NotesHomeState,
     onOpen: (Route) -> Unit,
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
     data.sections.forEachIndexed { index, section ->
         val head = section.head
         if (head != null && head.title.isNotEmpty()) {
-            item(key = "head-$index") { SectionHeader(SectionHead(title = head.title, count = head.count)) }
+            item(key = "head-$index") { NotesSectionTitle(head.title, pinned = section.rows.firstOrNull()?.pinned == true) }
         }
-        items(section.rows, key = { "$index-" + it.note_id }) { row -> NoteRow(row, menuLabel, onOpen, onEvent) }
+        itemsIndexed(section.rows, key = { _, row -> "$index-" + row.note_id }) { at, row ->
+            NoteTile(row, state, at, section.rows.size, onOpen, onEvent)
+        }
+        item(key = "gap-$index") { Spacer(Modifier.height(12.dp)) }
     }
 }
 
-/** One note: title over snippet and meta, the checklist word as a chip, and the menu key. */
+/** A section's title at the section rung; Pinned wears its pin in the app's colour. */
 @Composable
-private fun NoteRow(row: NotesNoteRow, menuLabel: String, onOpen: (Route) -> Unit, onEvent: (NotesHomeEvent) -> Unit) {
-    val matchInk = centraidColor("text")
-    CentraidRow(
-        title = row.title,
-        meta = listOf(row.snippet, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-        chips = listOfNotNull(if (row.check_label.isNotEmpty()) StatusChip(label = row.check_label) else null),
-        // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked
-        // them (`snippet_runs`); the meta follows as on any row.
-        metaRuns = row.snippet_runs.takeIf { it.isNotEmpty() }?.let { runs ->
-            androidx.compose.ui.text.buildAnnotatedString {
-                runs.forEach { run ->
+private fun NotesSectionTitle(title: String, pinned: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        if (pinned) {
+            CentraidIcon(iconKey = "Pin", tint = appAccent().text, size = 14.dp)
+            Spacer(Modifier.width(6.dp))
+        }
+        KitText(title, KitType.Section, Surface.ink, maxLines = 1)
+    }
+}
+
+/**
+ * One note as a tile of its section: the first and last rows take the card radius, the ones
+ * between a small one, a 2dp gap apart (M3 Expressive's grouped list). The checklist tally is a
+ * pill in the app's colour; a swipe reveals Pin, File into notebook and Trash, and a long press
+ * opens the same as a menu. Each is Rust's event for this note.
+ */
+@Composable
+private fun NoteTile(
+    row: NotesNoteRow,
+    state: NotesHomeState,
+    at: Int,
+    count: Int,
+    onOpen: (Route) -> Unit,
+    onEvent: (NotesHomeEvent) -> Unit,
+) {
+    val chrome = state.chrome
+    val big = CentraidScale.cardRadius.dp
+    val small = 4.dp
+    val shape = RoundedCornerShape(
+        topStart = if (at == 0) big else small,
+        topEnd = if (at == 0) big else small,
+        bottomStart = if (at == count - 1) big else small,
+        bottomEnd = if (at == count - 1) big else small,
+    )
+    val actions = if (chrome == null) {
+        emptyList()
+    } else {
+        listOf(
+            KitRowAction("pin-${row.note_id}", if (row.pinned) chrome.unpin_label else chrome.pin_label) {
+                onEvent(NotesHomeEvent(pin = NotesHomeEvent.PinToggled(row.note_id)))
+            },
+            KitRowAction("file-${row.note_id}", chrome.file_label) {
+                onEvent(NotesHomeEvent(file_into = NotesHomeEvent.FileIntoOpened(row.note_id)))
+            },
+            KitRowAction("trash-${row.note_id}", chrome.trash_label, KitRowAction.Tone.Red) {
+                onEvent(NotesHomeEvent(trash = NotesHomeEvent.TrashAsked(row.note_id)))
+            },
+        )
+    }
+    Box(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(bottom = 2.dp).clip(shape)) {
+        KitSwipeRow(
+            actions = actions,
+            modifier = Modifier.testTag("notes-row-${row.note_id}"),
+            onTap = { row.route?.let(onOpen) },
+        ) { NoteBody(row) }
+    }
+}
+
+/** A tile of a grouped list: the card radius at the group's ends, a small one between. */
+private fun tileShape(at: Int, count: Int): RoundedCornerShape {
+    val big = CentraidScale.cardRadius.dp
+    val small = 4.dp
+    return RoundedCornerShape(
+        topStart = if (at == 0) big else small,
+        topEnd = if (at == 0) big else small,
+        bottomStart = if (at == count - 1) big else small,
+        bottomEnd = if (at == count - 1) big else small,
+    )
+}
+
+@Composable
+private fun NoteBody(row: NotesNoteRow) {
+    val accent = appAccent()
+    val matchInk = Surface.ink
+    Column(
+        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            KitText(
+                row.title,
+                KitType.Row,
+                Surface.ink,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            if (row.check_label.isNotEmpty()) {
+                Text(
+                    row.check_label,
+                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                    color = accent.text,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(Surface.page)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                )
+            }
+        }
+        // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked them.
+        val snippet = androidx.compose.ui.text.buildAnnotatedString {
+            if (row.snippet_runs.isEmpty()) {
+                append(row.snippet)
+            } else {
+                row.snippet_runs.forEach { run ->
                     if (run.highlighted) {
-                        pushStyle(
-                            androidx.compose.ui.text.SpanStyle(
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.W600,
-                                color = matchInk,
-                            ),
-                        )
+                        pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.W600, color = matchInk))
                         append(run.text)
                         pop()
                     } else {
                         append(run.text)
                     }
                 }
-                if (row.meta.isNotEmpty()) append(" · ${row.meta}")
             }
-        },
-        testTag = "notes-row-${row.note_id}",
-        onTap = { row.route?.let(onOpen) },
-    ) {
-        if (menuLabel.isNotEmpty()) {
-            IconKey(
-                iconKey = "MoreHoriz",
-                label = "$menuLabel, ${row.title}",
-                testTag = "notes-row-menu-${row.note_id}",
-                bordered = false,
-            ) { onEvent(NotesHomeEvent(row_menu = NotesHomeEvent.RowMenuOpened(row.note_id))) }
         }
+        Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
     }
 }
 
 @Composable
 private fun NotebooksList(data: NotesNotebooksData, state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit) {
     LazyColumn(Modifier.testTag("notes-notebooks")) {
-        items(data.rows, key = { it.id }) { row ->
+        itemsIndexed(data.rows, key = { _, row -> row.id }) { at, row ->
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(bottom = 2.dp).clip(tileShape(at, data.rows.size)).background(Surface.card)) {
             CentraidRow(
                 title = row.title,
                 trailing = row.count,
@@ -286,6 +393,7 @@ private fun NotebooksList(data: NotesNotebooksData, state: NotesHomeState, onEve
                         bordered = false,
                     ) { onEvent(NotesHomeEvent(notebook_menu = NotesHomeEvent.NotebookMenuOpened(row.id))) }
                 }
+            }
             }
         }
         val empty = data.empty
@@ -313,18 +421,21 @@ private fun JournalList(
         item(key = "origin") { Quiet(state.chrome?.journal_origin.orEmpty()) }
         data.days.forEach { day ->
             day.head?.let { head ->
-                item(key = "d-" + day.day) { SectionHeader(SectionHead(title = head.title, count = head.count)) }
+                item(key = "d-" + day.day) { NotesSectionTitle(head.title, pinned = false) }
             }
-            items(day.rows, key = { day.day + "-" + it.note_id }) { row ->
-                CentraidRow(
-                    title = row.title,
-                    meta = row.meta,
-                    trailing = row.trailing,
-                    a11y = row.accessibility_label,
-                    testTag = "notes-entry-${row.note_id}",
-                    onTap = { row.route?.let(onOpen) },
-                )
+            itemsIndexed(day.rows, key = { _, row -> day.day + "-" + row.note_id }) { at, row ->
+                Box(Modifier.padding(horizontal = KitGeometry.GUTTER).padding(bottom = 2.dp).clip(tileShape(at, day.rows.size)).background(Surface.card)) {
+                    CentraidRow(
+                        title = row.title,
+                        meta = row.meta,
+                        trailing = row.trailing,
+                        a11y = row.accessibility_label,
+                        testTag = "notes-entry-${row.note_id}",
+                        onTap = { row.route?.let(onOpen) },
+                    )
+                }
             }
+            item(key = "gap-" + day.day) { Spacer(Modifier.height(12.dp)) }
         }
         if (data.truncated && data.window_end_verb.isNotEmpty()) {
             item(key = "window") {

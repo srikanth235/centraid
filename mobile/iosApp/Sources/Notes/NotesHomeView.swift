@@ -218,9 +218,13 @@ struct NotesHomeView: View {
                         ForEach(state.search.containers, id: \.id) { container in
                             SearchContainerRow(container: container) { _ in open(container.route) }
                         }
-                        LazyVStack(spacing: 0) {
-                            ForEach(state.search.results.rows, id: \.noteID) { row in
-                                NotesRowView(row: row, menuLabel: "", onTap: { open(row.route) })
+                        let found = state.search.results.rows
+                        if !found.isEmpty {
+                            NotesCard {
+                                ForEach(Array(found.enumerated()), id: \.element.noteID) { at, row in
+                                    NotesRowView(row: row, chrome: nil, onTap: { open(row.route) }, send: send)
+                                    if at < found.count - 1 { NotesCardRule() }
+                                }
                             }
                         }
                         if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
@@ -236,7 +240,7 @@ struct NotesHomeView: View {
             if notebooks.rows.count <= 1, notebooks.hasEmpty {
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(notebooks.rows, id: \.id) { row in notebookRow(row) }
+                        notebookCard(notebooks.rows)
                         EmptyStateView(notebooks.empty, onAction: {
                             send(NotesEvents.home { $0.formOpened = .with { $0.notebookID = "" } })
                         })
@@ -244,12 +248,19 @@ struct NotesHomeView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(notebooks.rows, id: \.id) { row in notebookRow(row) }
-                    }
+                    notebookCard(notebooks.rows)
                 }
                 .refreshable { send(NotesEvents.home { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("notes-notebooks")
+            }
+        }
+    }
+
+    private func notebookCard(_ rows: [Centraid_Core_V1_NotesNotebookRow]) -> some View {
+        NotesCard {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { at, row in
+                notebookRow(row)
+                if at < rows.count - 1 { NotesCardRule() }
             }
         }
     }
@@ -290,18 +301,22 @@ struct NotesHomeView: View {
                 EmptyStateView(journal.empty)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         if !state.chrome.journalOrigin.isEmpty {
                             Text(state.chrome.journalOrigin)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                                .padding(.bottom, 4)
                         }
                         ForEach(journal.days, id: \.day) { day in
-                            SectionHeader(title: day.head.title, count: day.head.count)
-                            ForEach(day.rows, id: \.noteID) { row in
-                                CentraidRow(journalListRow(row)) { open(row.route) }
+                            NotesSectionTitle(title: day.head.title, pinned: false)
+                            NotesCard {
+                                ForEach(Array(day.rows.enumerated()), id: \.element.noteID) { at, row in
+                                    CentraidRow(journalListRow(row)) { open(row.route) }
+                                    if at < day.rows.count - 1 { NotesCardRule() }
+                                }
                             }
                         }
                         ShowMoreFooter(
@@ -344,26 +359,30 @@ private struct NotesLibraryList: View {
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         if !library.countLabel.isEmpty {
                             Text(library.countLabel)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                                .padding(.top, 4)
+                                .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                                .padding(.bottom, 4)
+                                .accessibilityIdentifier("notes-count")
                         }
                         ForEach(Array(library.sections.enumerated()), id: \.offset) { _, section in
                             if !section.head.title.isEmpty {
-                                SectionHeader(title: section.head.title, count: section.head.count)
+                                NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
                             }
-                            ForEach(section.rows, id: \.noteID) { row in
-                                NotesRowView(
-                                    row: row,
-                                    menuLabel: state.chrome.rowMenuLabel,
-                                    onTap: { open(row.route) },
-                                    onMenu: { send(NotesEvents.home { $0.rowMenu = .with { $0.noteID = row.noteID } }) }
-                                )
+                            NotesCard {
+                                ForEach(Array(section.rows.enumerated()), id: \.element.noteID) { at, row in
+                                    NotesRowView(
+                                        row: row,
+                                        chrome: state.chrome,
+                                        onTap: { open(row.route) },
+                                        send: send
+                                    )
+                                    if at < section.rows.count - 1 { NotesCardRule() }
+                                }
                             }
                         }
                         if library.truncated {
@@ -388,70 +407,116 @@ private struct NotesLibraryList: View {
     }
 }
 
-/// ONE NOTE: title, the snippet (with the search's highlighted runs), the
-/// meta, a pin mark and the row's menu.
-struct NotesRowView: View {
-    let row: Centraid_Core_V1_NotesNoteRow
-    var menuLabel: String = ""
-    let onTap: () -> Void
-    var onMenu: (() -> Void)? = nil
-
-    @Environment(\.colorScheme) private var scheme
+/// A WHITE CARD OF ROWS on the page, the card radius, no shadow (#1173).
+struct NotesCard<Content: View>: View {
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onTap) {
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            if row.pinned {
-                                CentraidIconView(iconKey: "Pin", tint: Theme.color("textSoft", scheme), size: 12)
-                            }
-                            Text(row.title)
-                                .centraidType("smallStrong")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .lineLimit(1)
-                        }
-                        snippet
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(2)
-                        if !row.meta.isEmpty {
-                            Text(row.meta)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
-                        }
-                    }
+        VStack(spacing: 0, content: content)
+            .kitCard()
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.bottom, 12)
+    }
+}
+
+/// The line between two rows of a card: the page margin in from the start.
+struct NotesCardRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(Surface.line)
+            .frame(height: CentraidGeometry.hairline)
+            .padding(.leading, 14)
+    }
+}
+
+/// A SECTION'S TITLE at the section rung; Pinned wears its pin in the app's colour.
+private struct NotesSectionTitle: View {
+    let title: String
+    let pinned: Bool
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if pinned { CentraidIconView(iconKey: "Pin", tint: accent.text, size: 14) }
+            Text(title)
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+}
+
+/// ONE NOTE: title with its checklist tally at the end in the app's colour, the snippet (with
+/// the search's highlighted runs), the meta. A long press opens the row's own actions, Pin,
+/// File into notebook and Trash, each Rust's event for this note.
+struct NotesRowView: View {
+    let row: Centraid_Core_V1_NotesNoteRow
+    let chrome: Centraid_Core_V1_NotesHomeChrome?
+    let onTap: () -> Void
+    let send: (Centraid_Core_V1_NotesHomeEvent) -> Void
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.title)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
                     Spacer(minLength: 8)
                     if !row.checkLabel.isEmpty {
                         Text(row.checkLabel)
-                            .centraidType("annotLabel")
+                            .kitType(.meta)
+                            .fontWeight(.semibold)
                             .monospacedDigit()
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .foregroundStyle(accent.text)
+                            .lineLimit(1)
                     }
                 }
-                .padding(.leading, CentraidGeometry.pageMargin)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                .contentShape(Rectangle())
+                snippet
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.body)
+                    .lineLimit(1)
+                if !row.meta.isEmpty {
+                    Text(row.meta)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .lineLimit(1)
+                }
             }
-            .buttonStyle(KitRowPress())
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
-            .accessibilityIdentifier("notes-row-\(row.noteID)")
-            if let onMenu {
-                KitIconKey(
-                    iconKey: "MoreHoriz",
-                    label: menuLabel,
-                    tint: "textSoft",
-                    identifier: "notes-row-menu-\(row.noteID)",
-                    action: onMenu
-                )
-                .padding(.trailing, 4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KitRowPress())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
+        .accessibilityIdentifier("notes-row-\(row.noteID)")
+        .contextMenu {
+            if let chrome {
+                Button(row.pinned ? chrome.unpinLabel : chrome.pinLabel) {
+                    send(NotesEvents.home { $0.pin = .with { $0.noteID = row.noteID } })
+                }
+                .accessibilityIdentifier("notes-menu-pin-\(row.noteID)")
+                Button(chrome.fileLabel) {
+                    send(NotesEvents.home { $0.fileInto = .with { $0.noteID = row.noteID } })
+                }
+                .accessibilityIdentifier("notes-menu-file-\(row.noteID)")
+                Button(chrome.trashLabel, role: .destructive) {
+                    send(NotesEvents.home { $0.trash = .with { $0.noteID = row.noteID } })
+                }
+                .accessibilityIdentifier("notes-menu-trash-\(row.noteID)")
             }
         }
-        .overlay(alignment: .bottom) { KitHairline() }
     }
 
     /// The snippet, its highlighted runs in full ink.
@@ -459,7 +524,7 @@ struct NotesRowView: View {
         if row.snippetRuns.isEmpty { return Text(row.snippet) }
         return row.snippetRuns.reduce(Text("")) { text, run in
             text + (run.highlighted
-                ? Text(run.text).bold().foregroundColor(Theme.color("text", scheme))
+                ? Text(run.text).bold().foregroundColor(Surface.ink)
                 : Text(run.text))
         }
     }

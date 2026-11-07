@@ -48,14 +48,16 @@ struct NotesEditorView: View {
         }
     }
 
+    @FocusState private var tagFocused: Bool
+    @FocusState private var bodyFocused: Bool
+
     var body: some View {
         let chrome = state.chrome
-        EditorRoom(
+        NotesEditorRoom(
             title: chrome.title,
             status: state.autosave,
             closeLabel: chrome.close,
-            onClose: onClose,
-            onDeparted: {}
+            onClose: onClose
         ) {
             if draft != nil {
                 Menu {
@@ -79,44 +81,49 @@ struct NotesEditorView: View {
                 skeleton: { RowSkeleton(rows: 4, meta: false, label: "") },
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { draft in
-                VStack(alignment: .leading, spacing: 8) {
-                    if !chrome.status.isEmpty {
-                        Text(chrome.status)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                    }
-                    TextField(chrome.titlePlaceholder, text: $typedTitle)
-                        .centraidType("title")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .accessibilityIdentifier("note-title-field")
-                        // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an
-                        // assignment to the field: seeding writes to it too.
-                        .onChange(of: typedTitle) { _, typed in
-                            guard typed != draft.title else { return }
-                            send(event { $0.title = .with { $0.title = typed } })
-                        }
-                    NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, send: send)
-                    ZStack(alignment: .topLeading) {
-                        if typedBody.isEmpty {
-                            Text(chrome.bodyPlaceholder)
-                                .centraidType("reading")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: $typedBody)
-                            .centraidType("reading")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .scrollContentBackground(.hidden)
-                            .accessibilityIdentifier("note-body-field")
-                            .onChange(of: typedBody) { _, typed in
-                                guard typed != draft.body else { return }
-                                send(event { $0.body = .with { $0.body = typed } })
+                VStack(alignment: .leading, spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            metaLine(draft)
+                            TextField(chrome.titlePlaceholder, text: $typedTitle, axis: .vertical)
+                                .kitType(.title)
+                                .foregroundStyle(Surface.ink)
+                                .accessibilityIdentifier("note-title-field")
+                                // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an
+                                // assignment to the field: seeding writes to it too.
+                                .onChange(of: typedTitle) { _, typed in
+                                    guard typed != draft.title else { return }
+                                    send(event { $0.title = .with { $0.title = typed } })
+                                }
+                            NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, focused: $tagFocused, send: send)
+                            ZStack(alignment: .topLeading) {
+                                if typedBody.isEmpty {
+                                    Text(chrome.bodyPlaceholder)
+                                        .kitType(.row)
+                                        .foregroundStyle(Surface.meta)
+                                        .padding(.top, 8)
+                                        .padding(.leading, 5)
+                                        .allowsHitTesting(false)
+                                }
+                                TextEditor(text: $typedBody)
+                                    .kitType(.row)
+                                    .foregroundStyle(Surface.ink)
+                                    .scrollContentBackground(.hidden)
+                                    .frame(minHeight: 280)
+                                    .focused($bodyFocused)
+                                    .accessibilityIdentifier("note-body-field")
+                                    .onChange(of: typedBody) { _, typed in
+                                        guard typed != draft.body else { return }
+                                        send(event { $0.body = .with { $0.body = typed } })
+                                    }
                             }
+                        }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.bottom, 80)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .overlay(alignment: .bottom) { toolbar(chrome) }
                 .onAppear {
                     // ONCE. See `seeded`.
                     if !seeded {
@@ -141,49 +148,239 @@ struct NotesEditorView: View {
             // Rust holds, so the field takes it.
             if !shown, let draft { typedBody = draft.body }
         }
+        // THE CHECKLIST KEY is Rust's edit to the body; the field takes it back.
+        .onChange(of: draft?.body ?? "") { _, body in
+            if body != typedBody, !bodyFocused { typedBody = body }
+        }
+        .appAccent("notes")
+    }
+
+    /// The line over the title, the pin first when the note is pinned: "Travel · Edited Wed 4 November".
+    @ViewBuilder
+    private func metaLine(_ draft: Centraid_Core_V1_NotesEditorDraft) -> some View {
+        if !state.meta.isEmpty {
+            HStack(spacing: 6) {
+                if draft.pinned { NotesPinMark() }
+                Text(state.meta)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("notes-editor-meta")
+            }
+        }
+    }
+
+    /// THE TOOLBAR over the keyboard: a floating glass bar. Checklist and Add link are Rust's
+    /// events; the tag key reaches the tag field; the last hides the keyboard.
+    private func toolbar(_ chrome: Centraid_Core_V1_NotesEditorChrome) -> some View {
+        HStack(spacing: 0) {
+            NotesToolKey(iconKey: "Todo", label: chrome.checklistLabel, identifier: "notes-tool-checklist") {
+                send(event { $0.checklistRequested = .init() })
+            }
+            NotesToolKey(iconKey: "Link", label: chrome.linkLabel, identifier: "notes-tool-link") {
+                send(event { $0.linkRequested = .init() })
+            }
+            if !chrome.tagPlaceholder.isEmpty {
+                NotesToolKey(iconKey: "Hash", label: chrome.tagPlaceholder, identifier: "notes-tool-tag") {
+                    bodyFocused = false
+                    tagFocused = true
+                }
+            }
+            NotesToolKey(iconKey: "ChevronDown", label: chrome.keyboardLabel, identifier: "notes-tool-keyboard") {
+                bodyFocused = false
+                tagFocused = false
+            }
+        }
+        .padding(.horizontal, 8)
+        .modifier(NotesGlassBar())
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 }
 
-/// THE NOTE'S TAGS, each removable, and the field that adds one (`add-tag`,
-/// `remove-tag`; Rust writes at once). The field is offered only once the
-/// note exists (`tag_placeholder` is empty before).
+/// A floating bar in Liquid Glass on iOS 26, and a solid card before it and under Reduce
+/// Transparency or Increase Contrast. Only floating glass casts a shadow.
+private struct NotesGlassBar: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), !reduceTransparency, contrast != .increased {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(Surface.card, in: Capsule())
+                .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 2)
+        }
+    }
+}
+
+private struct NotesToolKey: View {
+    let iconKey: String
+    let label: String
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            CentraidIconView(iconKey: iconKey, tint: Surface.ink, size: 20)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+private struct NotesPinMark: View {
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        CentraidIconView(iconKey: "Pin", tint: accent.text, size: 12)
+    }
+}
+
+/// THE NOTES EDITOR'S PAGE: the kit's editor room with the app's colour on Done and the plain
+/// list page under it (#1173). Close is Done; the status is the autosave's word, centred.
+private struct NotesEditorRoom<Trailing: View, Content: View>: View {
+    let title: String
+    let status: Centraid_Core_V1_Autosave
+    let closeLabel: String
+    let onClose: () -> Void
+    @ViewBuilder let trailing: () -> Trailing
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Surface.plainPage.ignoresSafeArea())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onClose) {
+                        Text(closeLabel)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 8)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("kit-editor-close")
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(status.label)
+                        .kitType(.meta)
+                        .foregroundStyle(status.refused ? StateColor.red.text : Surface.meta)
+                        .accessibilityIdentifier("kit-autosave-status")
+                }
+                ToolbarItem(placement: .topBarTrailing) { trailing() }
+            }
+    }
+}
+
+/// THE NOTE'S TAGS as chips, each removable (`add-tag`, `remove-tag`; Rust writes at once), and
+/// the dashed chip that adds one. The field is offered only once the note exists
+/// (`tag_placeholder` is empty before).
 private struct NotesTagsRow: View {
     let tags: [Centraid_Core_V1_NotesEditorTag]
     let placeholder: String
+    var focused: FocusState<Bool>.Binding
     let send: (Centraid_Core_V1_NotesEditorEvent) -> Void
 
     @State private var typed = ""
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(tags, id: \.conceptID) { tag in
-                HStack(spacing: 6) {
-                    Text(tag.label)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                    KitIconKey(iconKey: "X", label: tag.removeLabel, tint: "textSoft", identifier: "note-tag-remove-\(tag.conceptID)") {
-                        var event = Centraid_Core_V1_NotesEditorEvent()
-                        event.tagRemoved = .with { $0.label = tag.label }
-                        send(event)
+        if !tags.isEmpty || !placeholder.isEmpty {
+            NotesFlow(spacing: 8) {
+                ForEach(tags, id: \.conceptID) { tag in
+                    HStack(spacing: 4) {
+                        Text(tag.label)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.body)
+                        Button {
+                            var event = Centraid_Core_V1_NotesEditorEvent()
+                            event.tagRemoved = .with { $0.label = tag.label }
+                            send(event)
+                        } label: {
+                            CentraidIconView(iconKey: "X", tint: Surface.meta, size: 10)
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(tag.removeLabel)
+                        .accessibilityIdentifier("note-tag-remove-\(tag.conceptID)")
                     }
+                    .padding(.leading, 10)
+                    .padding(.trailing, 4)
+                    .frame(minHeight: 30)
+                    .background(Surface.fill, in: Capsule())
+                }
+                if !placeholder.isEmpty {
+                    TextField(placeholder, text: $typed)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.ink)
+                        .submitLabel(.done)
+                        .focused(focused)
+                        .frame(minWidth: 96)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 30)
+                        .overlay(Capsule().strokeBorder(Surface.border, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                        .accessibilityIdentifier("note-tag-field")
+                        .onSubmit {
+                            let label = typed
+                            typed = ""
+                            var event = Centraid_Core_V1_NotesEditorEvent()
+                            event.tagAdded = .with { $0.label = label }
+                            send(event)
+                        }
                 }
             }
-            if !placeholder.isEmpty {
-                TextField(placeholder, text: $typed)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .submitLabel(.done)
-                    .accessibilityIdentifier("note-tag-field")
-                    .onSubmit {
-                        let label = typed
-                        typed = ""
-                        var event = Centraid_Core_V1_NotesEditorEvent()
-                        event.tagAdded = .with { $0.label = label }
-                        send(event)
-                    }
-            }
         }
+    }
+}
+
+/// Chips that wrap onto the next line.
+private struct NotesFlow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(proposal.width ?? 0, subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let laid = arrange(bounds.width, subviews)
+        for (subview, point) in zip(subviews, laid.points) {
+            subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
+        var points: [CGPoint] = []
+        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += row + spacing
+                row = 0
+            }
+            points.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            row = max(row, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (CGSize(width: widest, height: y + row), points)
     }
 }
 
@@ -250,6 +447,50 @@ private struct NotesLinkSheet: View {
     }
 }
 
+/// ONE VERSION: its label (the date, or "Current version"), its first words, and Restore in the
+/// app's colour on every row but the current one.
+private struct NotesVersionRow: View {
+    let row: Centraid_Core_V1_NotesVersionRow
+    let onRestore: () -> Void
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.label)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(1)
+                Text(row.preview)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.body)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(row.accessibilityLabel)
+            .accessibilityIdentifier("notes-version-\(row.contentID)")
+            Spacer(minLength: 8)
+            if !row.current, !row.restoreLabel.isEmpty {
+                Button(action: onRestore) {
+                    Text(row.restoreLabel)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(accent.text)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("notes-restore-\(row.contentID)")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+    }
+}
+
 /// `notes.history` — one note's versions, newest first (#1135).
 struct NotesHistoryView: View {
     let state: Centraid_Core_V1_NotesHistoryState
@@ -272,7 +513,7 @@ struct NotesHistoryView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack) {
+        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack, showsTitle: true) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -286,27 +527,14 @@ struct NotesHistoryView: View {
                         EmptyStateView(history.empty)
                     } else {
                         ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(history.rows, id: \.contentID) { row in
-                                    HStack(spacing: 0) {
-                                        CentraidRow(
-                                            title: row.label,
-                                            meta: row.preview,
-                                            dimmed: row.current,
-                                            accessibility: row.accessibilityLabel,
-                                            identifier: "notes-version-\(row.contentID)"
-                                        )
-                                        if !row.current, !row.restoreLabel.isEmpty {
-                                            KitLink(
-                                                label: row.restoreLabel,
-                                                dense: true,
-                                                identifier: "notes-restore-\(row.contentID)"
-                                            ) {
-                                                send(event { $0.restore = .with { $0.contentID = row.contentID } })
-                                            }
-                                            .padding(.trailing, 8)
-                                        }
+                            // NOTHING IS DIMMED: the current version says "Current" in its label
+                            // and has no Restore; every other row is dated and restorable.
+                            NotesCard {
+                                ForEach(Array(history.rows.enumerated()), id: \.element.contentID) { at, row in
+                                    NotesVersionRow(row: row) {
+                                        send(event { $0.restore = .with { $0.contentID = row.contentID } })
                                     }
+                                    if at < history.rows.count - 1 { NotesCardRule() }
                                 }
                             }
                         }
@@ -316,5 +544,6 @@ struct NotesHistoryView: View {
                 }
             }
         }
+        .appAccent("notes")
     }
 }

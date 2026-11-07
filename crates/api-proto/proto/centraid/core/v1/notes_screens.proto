@@ -121,6 +121,11 @@ message NotesHomeChrome {
   string close = 17;
   // The header's one action in the Notes place.
   string new_note = 18;
+  // A row's own actions (long press, swipe): Pin or Unpin by the row's `pinned`,
+  // File into notebook, and `trash_label`'s Trash. Each acts on that row.
+  string pin_label = 19;
+  string unpin_label = 20;
+  string file_label = 21;
 }
 
 message NotesMoreRow {
@@ -440,6 +445,9 @@ message NotesEditorState {
   optional Route send_to_agenda = 10;
   // The note's tags, each removable; empty before the note exists.
   repeated NotesEditorTag tags = 11;
+  // The line over the title: the notebook it is filed in, then "Edited Wed 4
+  // November" ("Travel · Edited Wed 4 November"). Empty before the note exists.
+  string meta = 12;
 }
 
 message NotesEditorTag {
@@ -473,6 +481,10 @@ message NotesEditorChrome {
   string retry = 12;
   // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
   string tag_placeholder = 13;
+  // The toolbar's checklist key: starts a checklist line at the end of the note.
+  string checklist_label = 14;
+  // The toolbar's keyboard key.
+  string keyboard_label = 15;
 }
 
 message NotesLinkSheet {
@@ -524,7 +536,11 @@ message NotesEditorEvent {
     Saved save = 9;
     TagAdded tag_added = 10;
     TagRemoved tag_removed = 11;
+    // The toolbar's checklist key: a new "- [ ]" line at the end of the body.
+    ChecklistRequested checklist_requested = 12;
   }
+
+  message ChecklistRequested {}
 
   message TagAdded {
     string label = 1;

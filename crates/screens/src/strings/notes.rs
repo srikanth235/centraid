@@ -8,6 +8,7 @@ catalog! {
     plain band_notes = ("Notes", "Notes");
     plain body_placeholder = ("Write something", "Write something");
     plain cancel = ("Cancel", "Cancel");
+    plain checklist = ("Checklist", "Checklist");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
     plain current_version = ("Current version", "Current version");
@@ -82,6 +83,7 @@ catalog! {
     plain link_kind_person = ("Person", "Person");
     plain link_kind_photograph = ("Photo", "Photo");
     plain link_kind_task = ("Task", "Task");
+    plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
     plain link_label = ("Add link", "Add link");
     plain link_no_match_body = ("Nothing matches that search.", "Nothing matches that search.");
     plain link_search = ("Search everything", "Search everything");

@@ -1,6 +1,29 @@
 package dev.centraid.android.screens.notes
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
@@ -92,6 +115,7 @@ public fun NotesEditorScreen(
     }
     val bodyReload: Any? = reload ?: linkCloses.intValue.takeIf { it > 0 }?.let { Pair(state.note_id, it) }
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
+    CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
         title = chrome?.title.orEmpty(),
         status = state.autosave,
@@ -115,6 +139,19 @@ public fun NotesEditorScreen(
             skeleton = { RowSkeleton(rows = 4, meta = false) },
         ) { note ->
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                // THE LINE OVER THE TITLE: the pin when pinned, then "Travel · Edited Wed 4 November".
+                if (state.meta.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (note.pinned) {
+                            CentraidIcon(iconKey = "Pin", tint = appAccent().text, size = 12.dp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        KitText(state.meta, KitType.Meta, Surface.meta, maxLines = 1, modifier = Modifier.testTag("notes-editor-meta"))
+                    }
+                }
                 EditableFieldRow(
                     key = "",
                     value = note.title,
@@ -136,8 +173,23 @@ public fun NotesEditorScreen(
                     modifier = Modifier.padding(top = 4.dp),
                     onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
                 )
+                // THE TOOLS under the words: checklist and link are Rust's events.
+                if (chrome != null) {
+                    Row(
+                        Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        IconKey("Todo", chrome.checklist_label, "notes-tool-checklist") {
+                            onEvent(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
+                        }
+                        IconKey("Link", chrome.link_label, "notes-tool-link") {
+                            onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                        }
+                    }
+                }
             }
         }
+    }
     }
     if (menuOpen && chrome != null && draft != null) {
         val options = buildList {
@@ -172,17 +224,29 @@ public fun NotesEditorScreen(
 @Composable
 private fun TagsRow(state: NotesEditorState, onEvent: (NotesEditorEvent) -> Unit) {
     val placeholder = state.chrome?.tag_placeholder.orEmpty()
-    state.tags.forEach { tag ->
-        CentraidRow(
-            title = tag.label,
-            testTag = "notes-tag-${tag.concept_id}",
-        ) {
-            IconKey(
-                iconKey = "X",
-                label = tag.remove_label,
-                testTag = "notes-tag-remove-${tag.concept_id}",
-                bordered = false,
-            ) { onEvent(NotesEditorEvent(tag_removed = NotesEditorEvent.TagRemoved(tag.label))) }
+    @OptIn(ExperimentalLayoutApi::class)
+    FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        state.tags.forEach { tag ->
+            Row(
+                Modifier
+                    .padding(vertical = 2.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Surface.fill)
+                    .padding(start = 12.dp)
+                    .testTag("notes-tag-${tag.concept_id}"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                KitText(tag.label, KitType.Meta, Surface.body, maxLines = 1)
+                IconKey(
+                    iconKey = "X",
+                    label = tag.remove_label,
+                    testTag = "notes-tag-remove-${tag.concept_id}",
+                    bordered = false,
+                ) { onEvent(NotesEditorEvent(tag_removed = NotesEditorEvent.TagRemoved(tag.label))) }
+            }
         }
     }
     if (placeholder.isNotEmpty()) {
@@ -262,6 +326,7 @@ public fun NotesHistoryScreen(
     onEvent: (NotesHistoryEvent) -> Unit,
     onBack: () -> Unit,
 ) {
+    CompositionLocalProvider(LocalAppAccentId provides "notes") {
     PushedPage(
         title = state.title,
         parentTitle = state.back,
@@ -278,27 +343,37 @@ public fun NotesHistoryScreen(
             if (data.rows.size <= 1 && empty != null) {
                 EmptyStateView(empty, onAction = null)
             } else {
-                LazyColumn(Modifier.testTag("notes-history")) {
-                    items(data.rows, key = { it.content_id }) { row ->
-                        CentraidRow(
-                            title = row.label,
-                            meta = row.preview,
-                            dimmed = row.current,
-                            a11y = row.accessibility_label,
-                            testTag = "notes-version-${row.content_id}",
+                // NOTHING IS DIMMED: the current version says "Current" and has no Restore.
+                Column(
+                    Modifier.padding(horizontal = KitGeometry.GUTTER).kitCard().testTag("notes-history"),
+                ) {
+                    data.rows.forEach { row ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("notes-version-${row.content_id}"),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Column(Modifier.weight(1f)) {
+                                KitText(row.label, KitType.Row, Surface.ink, maxLines = 1)
+                                KitText(row.preview, KitType.Meta, Surface.body, maxLines = 1)
+                            }
                             if (row.restore_label.isNotEmpty() && !row.current) {
-                                OutlineButton(
+                                Text(
                                     row.restore_label,
-                                    testTag = "notes-restore-${row.content_id}",
-                                    modifier = Modifier.padding(start = 8.dp),
-                                ) { onEvent(NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(row.content_id))) }
+                                    style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                                    color = appAccent().text,
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .clickable { onEvent(NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(row.content_id))) }
+                                        .padding(vertical = 12.dp)
+                                        .testTag("notes-restore-${row.content_id}"),
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
     }
 }
 
