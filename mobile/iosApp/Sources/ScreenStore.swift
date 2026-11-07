@@ -305,7 +305,7 @@ final class ScreenStore: ObservableObject {
                 madeTold.insert(view.instance).inserted
             {
                 var made = Centraid_Core_V1_ImportsMadeEvent()
-                made.made = .with { $0.reminders = true }
+                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
                 sendRoot(RustScreens.madeTab, .importsMade(made))
             }
         }
@@ -483,6 +483,9 @@ final class ScreenStore: ObservableObject {
             }
         case .calendarRead(let read)?:
             answer(request, await PhoneCalendar.snapshot(read))
+        // TWO-WAY SYNC (#1173): what Rust asks written to the phone's calendars, one answer per item.
+        case .calendarWrite(let write)?:
+            answer(request, await PhoneCalendarWrite.perform(write))
         case .contactsRead(let read)?:
             answer(request, await PhoneContacts.snapshot(read))
             if read.askPermission, PhoneContacts.limited { onContactsLimited?() }

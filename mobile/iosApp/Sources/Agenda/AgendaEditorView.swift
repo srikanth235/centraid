@@ -22,6 +22,8 @@ struct AgendaEditorView: View {
     @State private var typedTitle = ""
     @State private var typedNotes = ""
     @State private var typedLink = ""
+    /// A task's address, typed (seeded once like the others).
+    @State private var typedUrl = ""
     /// The tag field's typing, cleared when it is sent (`TagAdded`).
     @State private var typedTag = ""
     @State private var seeded = false
@@ -68,7 +70,7 @@ struct AgendaEditorView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, [.calendar, .guests, .repeat, .reminder, .scope, .list])) {
+        .sheet(isPresented: sheetBinding(state, [.calendar, .guests, .repeat, .reminder, .scope, .list, .customRepeat, .location, .secondReminder, .availability, .zone, .travel])) {
             if let editorData { sheet(state, editorData) }
         }
         .sheet(item: $picking) { pick in
@@ -192,8 +194,32 @@ struct AgendaEditorView: View {
                     if !editor.repeatNote.isEmpty {
                         note(editor.repeatNote)
                     }
-                    ChoiceFieldRow(key: chrome.fieldReminder, value: editor.reminderLabel, identifier: "agenda-editor-reminder") {
+                    ChoiceFieldRow(key: chrome.fieldFirstAlert, value: editor.reminderLabel, identifier: "agenda-editor-reminder") {
                         send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
+                    }
+                    // THE SECOND ALERT waits for the first: Rust says when it is drawn.
+                    if editor.showSecondReminder {
+                        ChoiceFieldRow(
+                            key: chrome.fieldSecondAlert,
+                            value: editor.secondReminderLabel,
+                            identifier: "agenda-editor-second-reminder"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .secondReminder } })
+                        }
+                    }
+                    ChoiceFieldRow(key: chrome.fieldLocation, value: editor.locationLabel, identifier: "agenda-editor-location") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .location } })
+                    }
+                    ChoiceFieldRow(key: chrome.fieldAvailability, value: editor.availabilityLabel, identifier: "agenda-editor-availability") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .availability } })
+                    }
+                    if editor.showZone {
+                        ChoiceFieldRow(key: chrome.fieldZone, value: editor.zoneLabel, identifier: "agenda-editor-zone") {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .zone } })
+                        }
+                    }
+                    ChoiceFieldRow(key: chrome.fieldTravel, value: editor.travelLabel, identifier: "agenda-editor-travel") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .travel } })
                     }
                     EditableFieldRow(
                         key: chrome.fieldLink,
@@ -229,6 +255,21 @@ struct AgendaEditorView: View {
                         moreDetails(editor, draft: draft, chrome: chrome)
                     }
                 }
+                // A TASK'S ADDRESS: typed as it comes, and what Save will write said under it.
+                if editor.showUrl {
+                    EditableFieldRow(
+                        key: chrome.fieldUrl,
+                        text: $typedUrl,
+                        placeholder: chrome.urlPlaceholder,
+                        identifier: "agenda-editor-url"
+                    ) { typed in
+                        guard seeded, typed != draft.url else { return }
+                        send(event { $0.url = .with { $0.text = typed } })
+                    }
+                    if !editor.urlSavedAs.isEmpty {
+                        note(editor.urlSavedAs)
+                    }
+                }
                 if state.hasStatus, !state.status.sentence.isEmpty {
                     Text(state.status.sentence)
                         .centraidType("small")
@@ -254,6 +295,7 @@ struct AgendaEditorView: View {
                 typedTitle = draft.title
                 typedNotes = draft.notes
                 typedLink = draft.link
+                typedUrl = draft.url
                 seeded = true
             }
         }
@@ -422,6 +464,47 @@ struct AgendaEditorView: View {
         case .list:
             choiceSheet(chrome.fieldList, editor.lists, idPrefix: "agenda-editor-list", chosen: editor.draft.listKey) { key in
                 send(event { $0.list = .with { $0.key = key } })
+            }
+        case .customRepeat:
+            if editor.hasCustomRepeat {
+                AgendaCustomRepeatSheetView(sheet: editor.customRepeat, fallbackTitle: chrome.customRepeatTitle, send: send)
+            }
+        case .location:
+            AgendaSearchChoiceSheet(
+                title: chrome.fieldLocation,
+                placeholder: chrome.placeSearchPlaceholder,
+                query: editor.placeQuery,
+                searchIdentifier: "agenda-editor-place-search",
+                idPrefix: "agenda-editor-place",
+                choices: editor.places,
+                clearLabel: editor.showClearLocation ? chrome.clearLocation : "",
+                clearIdentifier: "agenda-editor-place-clear",
+                onSearch: { text in send(event { $0.placeSearch = .with { $0.text = text } }) },
+                onPick: { key in send(event { $0.place = .with { $0.key = key } }) },
+                onClear: { send(event { $0.placeCleared = .init() }) }
+            )
+        case .secondReminder:
+            choiceSheet(chrome.fieldSecondAlert, editor.secondReminders, idPrefix: "agenda-editor-second-reminder") { key in
+                send(event { $0.secondReminder = .with { $0.key = key } })
+            }
+        case .availability:
+            choiceSheet(chrome.fieldAvailability, editor.availabilities, idPrefix: "agenda-editor-availability") { key in
+                send(event { $0.availability = .with { $0.key = key } })
+            }
+        case .zone:
+            AgendaSearchChoiceSheet(
+                title: chrome.fieldZone,
+                placeholder: chrome.zoneSearchPlaceholder,
+                query: editor.zoneQuery,
+                searchIdentifier: "agenda-editor-zone-search",
+                idPrefix: "agenda-editor-zone",
+                choices: editor.zones,
+                onSearch: { text in send(event { $0.zoneSearch = .with { $0.text = text } }) },
+                onPick: { key in send(event { $0.zone = .with { $0.key = key } }) }
+            )
+        case .travel:
+            choiceSheet(chrome.fieldTravel, editor.travels, idPrefix: "agenda-editor-travel") { key in
+                send(event { $0.travel = .with { $0.key = key } })
             }
         case .scope:
             SheetRoom(

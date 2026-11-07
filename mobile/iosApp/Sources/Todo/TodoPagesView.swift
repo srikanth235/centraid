@@ -150,6 +150,12 @@ struct TodoProjectView: View {
         PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(project) = content, project.found {
                 HStack(spacing: 4) {
+                    // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
+                    if !project.styleLabel.isEmpty {
+                        ToolbarVerb(label: project.styleLabel, identifier: "tasks-project-edit") {
+                            send(event { $0.styleRequested = .init() })
+                        }
+                    }
                     if !project.renameLabel.isEmpty {
                         ToolbarVerb(label: project.renameLabel, identifier: "tasks-rename-project") {
                             send(event { $0.rename = .init() })
@@ -171,14 +177,19 @@ struct TodoProjectView: View {
                 ) { project in
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
-                            // THE TITLE IN THE LIST'S COLOUR (#1173).
+                            // THE TITLE IN THE LIST'S COLOUR (#1173), with the list's own icon beside it.
                             if let color = AgendaPalette.list(project.listColorKey) {
-                                Text(state.title)
-                                    .centraidType("title")
-                                    .foregroundStyle(color)
-                                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                                    .accessibilityHidden(true)
-                                    .todoPlainRow()
+                                HStack(spacing: 8) {
+                                    if !project.iconKey.isEmpty {
+                                        CentraidIconView(iconKey: project.iconKey, tint: color, size: 24)
+                                    }
+                                    Text(state.title)
+                                        .centraidType("title")
+                                        .foregroundStyle(color)
+                                }
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .accessibilityHidden(true)
+                                .todoPlainRow()
                             }
                             if !project.countLabel.isEmpty {
                                 TodoCountLine(count: project.countLabel, window: "")
@@ -248,6 +259,20 @@ struct TodoProjectView: View {
                 .accessibilityLabel(state.chrome.addSectionPlaceholder)
                 .accessibilityIdentifier("tasks-new-section-field")
             }
+        }
+        // THE STYLE SHEET: "Edit list".
+        .sheet(isPresented: Binding(
+            get: { state.sheet == .style },
+            set: { open in if !open, state.sheet == .style { send(event { $0.sheetClosed = .init() }) } }
+        )) {
+            AgendaStyleSheetView(
+                style: state.style,
+                onName: { name in send(event { $0.styleName = .with { $0.name = name } }) },
+                onColor: { key in send(event { $0.styleColor = .with { $0.key = key } }) },
+                onIcon: { key in send(event { $0.styleIcon = .with { $0.key = key } }) },
+                onSubmit: { send(event { $0.styleSubmitted = .init() }) },
+                onCancel: { send(event { $0.sheetClosed = .init() }) }
+            )
         }
         .sheet(isPresented: Binding(
             get: { state.sheet == .rename },

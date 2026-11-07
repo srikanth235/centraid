@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.CalendarContract
 import centraid.core.v1.CalendarSnapshot
+import centraid.core.v1.PhoneAttendee
 import centraid.core.v1.PhoneCalendar
 import centraid.core.v1.PhoneCalendarEvent
 import centraid.core.v1.PhoneCalendarSeries
@@ -122,6 +123,8 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
     val masterIds = rows.mapNotNull { row -> row.originalId ?: row.eventId.takeIf { row.rrule.isNotEmpty() } }.toSet()
     val metas = readEventMeta(resolver, masterIds + rows.map { it.eventId })
     val series = readSeries(resolver, masterIds, device, metas)
+    val alerts = readAlerts(resolver, rows.map { it.eventId })
+    val attendees = readAttendees(resolver, rows.map { it.eventId })
     val events = rows.mapNotNull { row ->
         // AN INSTANCE WHOSE CALENDAR IS NOT ONE OF THE MEMBER'S VISIBLE, WRITABLE ONES is not read.
         val meta = metas[row.eventId] ?: return@mapNotNull null
@@ -146,6 +149,8 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
                 location = row.location,
+                alerts = alerts[row.eventId].orEmpty(),
+                attendees = attendees[row.eventId].orEmpty(),
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -166,6 +171,8 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
                 phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
                 calendar_key = calendar.key,
                 location = row.location,
+                alerts = alerts[row.eventId].orEmpty(),
+                attendees = attendees[row.eventId].orEmpty(),
             )
         }
     }
@@ -184,6 +191,7 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
         SYNC_ID,
         CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
         CalendarContract.Calendars.CALENDAR_COLOR,
+        CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
     )
     val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR} AND " +
         "${CalendarContract.Calendars.VISIBLE} = 1"
@@ -200,6 +208,9 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
                     source_title = cursor.getString(2).orEmpty(),
                     title = cursor.getString(4).orEmpty(),
                     color = if (cursor.isNull(5)) "" else "#%06X".format(cursor.getInt(5) and 0xFFFFFF),
+                    // TWO-WAY SYNC: a contributor can add; only an editor or better can change or delete.
+                    writable = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR,
+                    allows_modifications = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_EDITOR,
                 ),
             )
         }
@@ -228,6 +239,56 @@ private fun readEventMeta(resolver: ContentResolver, ids: Collection<Long>): Map
         }
     }
     return found
+}
+
+/**
+ * EACH EVENT'S ALERTS, minutes before its start (`Reminders.MINUTES`), in the order the provider
+ * lists them. A reminder that asks for the calendar's default (`MINUTES_DEFAULT`) or an email or
+ * SMS is not an alert here.
+ */
+private fun readAlerts(resolver: ContentResolver, ids: Collection<Long>): Map<Long, List<Int>> {
+    val found = mutableMapOf<Long, MutableList<Int>>()
+    for (chunk in ids.distinct().chunked(META_CHUNK)) {
+        val selection = "${CalendarContract.Reminders.EVENT_ID} IN (${chunk.joinToString(",")}) AND " +
+            "${CalendarContract.Reminders.MINUTES} >= 0 AND " +
+            "${CalendarContract.Reminders.METHOD} IN (${CalendarContract.Reminders.METHOD_DEFAULT}, ${CalendarContract.Reminders.METHOD_ALERT})"
+        val projection = arrayOf(CalendarContract.Reminders.EVENT_ID, CalendarContract.Reminders.MINUTES)
+        resolver.query(CalendarContract.Reminders.CONTENT_URI, projection, selection, null, "${CalendarContract.Reminders.MINUTES} ASC")?.use {
+            while (it.moveToNext()) found.getOrPut(it.getLong(0)) { mutableListOf() }.add(it.getInt(1))
+        }
+    }
+    return found
+}
+
+/** EACH EVENT'S GUESTS, as the `Attendees` table holds them; a row with neither a name nor an address is skipped. */
+private fun readAttendees(resolver: ContentResolver, ids: Collection<Long>): Map<Long, List<PhoneAttendee>> {
+    val found = mutableMapOf<Long, MutableList<PhoneAttendee>>()
+    for (chunk in ids.distinct().chunked(META_CHUNK)) {
+        val selection = "${CalendarContract.Attendees.EVENT_ID} IN (${chunk.joinToString(",")})"
+        val projection = arrayOf(
+            CalendarContract.Attendees.EVENT_ID,
+            CalendarContract.Attendees.ATTENDEE_NAME,
+            CalendarContract.Attendees.ATTENDEE_EMAIL,
+            CalendarContract.Attendees.ATTENDEE_STATUS,
+        )
+        resolver.query(CalendarContract.Attendees.CONTENT_URI, projection, selection, null, "${CalendarContract.Attendees._ID} ASC")?.use {
+            while (it.moveToNext()) {
+                val name = it.getString(1).orEmpty()
+                val email = it.getString(2).orEmpty()
+                if (name.isEmpty() && email.isEmpty()) continue
+                found.getOrPut(it.getLong(0)) { mutableListOf() }.add(PhoneAttendee(name = name, email = email, status = attendeeStatus(it.getInt(3))))
+            }
+        }
+    }
+    return found
+}
+
+/** `Attendees.ATTENDEE_STATUS` as the wire says it; none or invited is still waiting for a reply. */
+internal fun attendeeStatus(status: Int): String = when (status) {
+    CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED -> "accepted"
+    CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED -> "declined"
+    CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE -> "tentative"
+    else -> "needs-action"
 }
 
 private const val SYNC_ID: String = "_sync_id"

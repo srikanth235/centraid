@@ -172,6 +172,29 @@ private fun EventBody(
                 )
             }
         }
+        // THE GUESTS OF A FOLLOWED CALENDAR'S EVENT (#1173): names and replies the phone's calendar holds.
+        if (data.followed_guests.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().testTag("agenda-event-followed")) {
+                SectionHeader(SectionHead(title = data.followed_heading))
+                data.followed_guests.forEachIndexed { index, guest ->
+                    CentraidRow(
+                        title = guest.name,
+                        meta = listOf(guest.detail, guest.reply_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                        hueKey = guest.hue_key,
+                        a11y = guest.accessibility_label,
+                        testTag = "agenda-event-followed-guest-$index",
+                    )
+                }
+            }
+        }
+        data.attachments?.let { section ->
+            AgendaAttachmentsView(
+                section = section,
+                prefix = "agenda-event",
+                onEvent = { onEvent(AgendaEventEvent(attachment = it)) },
+                onOpen = onOpen,
+            )
+        }
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             data.actions.forEach { action ->
                 OutlineButton(

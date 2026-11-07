@@ -157,7 +157,20 @@ struct TodoDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
+                // THE TASK'S ADDRESS, as it is stored, opened by the core's own OpenUrl effect.
+                if detail.hasLink {
+                    linkRow(detail.link)
+                }
                 subtasks(detail)
+                if detail.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: detail.attachments,
+                        idPrefix: "agenda-detail-attachment",
+                        headIdentifier: "agenda-detail-attachments",
+                        open: open,
+                        send: { attachment in send(event { $0.attachment = attachment }) }
+                    )
+                }
                 HStack(spacing: 12) {
                     if !detail.deleteLabel.isEmpty {
                         KitOutlineButton(label: detail.deleteLabel, tone: "net") { send(event { $0.delete = .init() }) }
@@ -257,6 +270,31 @@ struct TodoDetailView: View {
             .disabled(!field.enabled)
             .accessibilityIdentifier("tasks-field-\(field.key)")
         }
+    }
+
+    /// The link row: its key, the address and the verb that opens it.
+    private func linkRow(_ link: Centraid_Core_V1_TodoLink) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(link.label)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                Text(link.url)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            KitLink(label: link.openLabel, identifier: "agenda-detail-link-open") {
+                send(event { $0.openLink = .init() })
+            }
+            .accessibilityLabel(link.accessibilityLabel.isEmpty ? link.openLabel : link.accessibilityLabel)
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .overlay(alignment: .bottom) { KitHairline() }
+        .accessibilityIdentifier("agenda-detail-link")
     }
 
     /// One card of fields: the heading its first field carries, and the id of that field.

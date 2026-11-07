@@ -1,5 +1,6 @@
 import AVFoundation
 import PDFKit
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import VisionKit
@@ -26,6 +27,8 @@ final class DocsFiles: ObservableObject {
     @Published var importing = false
     /// The document camera is up.
     @Published var scanning = false
+    /// The photo library's picker is up (`KIND_PHOTO`, images only).
+    @Published var choosingPhoto = false
 
     /// The core the copy is staged into, given with the ask.
     private var core: (any ScreenCore)?
@@ -42,7 +45,10 @@ final class DocsFiles: ObservableObject {
         self.core = core
         self.kind = kind
         self.answer = answer
-        if kind == .scan {
+        if kind == .photo {
+            // THE SYSTEM'S OWN PICKER needs no grant: the app is handed only what the member picks.
+            choosingPhoto = true
+        } else if kind == .scan {
             if VNDocumentCameraViewController.isSupported {
                 scanning = true
             } else {
@@ -75,6 +81,21 @@ final class DocsFiles: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: The photo picker
+
+    /// The picker closed with a copy this app owns (staged like an upload), or with nothing.
+    func photoChosen(_ copied: DocsFileCopies.Copied?, cancelled: Bool) {
+        choosingPhoto = false
+        if cancelled { return done() }
+        guard let copied else { return fail("the photo cannot be read") }
+        stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+    }
+
+    /// The sheet went without a pick (a swipe down): the same as closing it.
+    func photoDismissed() {
+        if answer != nil, kind == .photo { done() }
     }
 
     // MARK: The scanner
@@ -152,6 +173,10 @@ struct DocsFilesRoot: View {
         Color.clear
             .fileImporter(isPresented: $model.importing, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
                 model.imported(result)
+            }
+            .sheet(isPresented: $model.choosingPhoto, onDismiss: { model.photoDismissed() }) {
+                DocsPhotoPicker { copied, cancelled in model.photoChosen(copied, cancelled: cancelled) }
+                    .ignoresSafeArea()
             }
             .fullScreenCover(isPresented: $model.scanning) {
                 DocsScanner(
@@ -252,6 +277,45 @@ struct DocsScanner: UIViewControllerRepresentable {
 
         nonisolated func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Swift.Error) {
             Task { @MainActor [weak self] in self?.parent.onFailed() }
+        }
+    }
+}
+
+/// THE SYSTEM PHOTO PICKER for exactly one image, answering once with a copy this app owns.
+struct DocsPhotoPicker: UIViewControllerRepresentable {
+    /// The copy (nil when the photo would not read) and whether the member just closed the picker.
+    let onDone: (DocsFileCopies.Copied?, Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        configuration.preferredAssetRepresentationMode = .current
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
+
+    @MainActor
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: DocsPhotoPicker
+
+        init(_ parent: DocsPhotoPicker) { self.parent = parent }
+
+        nonisolated func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider else {
+                Task { @MainActor [weak self] in self?.parent.onDone(nil, true) }
+                return
+            }
+            // THE FILE IS LENT for the length of this callback: copy it before it returns.
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
+                let copied = url.flatMap { DocsFileCopies.copy($0) }
+                Task { @MainActor [weak self] in self?.parent.onDone(copied, false) }
+            }
         }
     }
 }

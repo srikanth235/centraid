@@ -147,25 +147,23 @@ struct AgendaHomeView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, .newProject)) {
-            SheetRoom(
-                title: state.chrome.tasks.newProjectTitle,
-                primary: state.newProjectCanSubmit
-                    ? SheetPrimary(label: state.chrome.tasks.newProjectVerb) {
-                        send(AgendaEvents.make { $0.newProjectSubmitted = .init() })
-                    }
-                    : nil
-            ) {
-                MachineTextField(
-                    placeholder: state.chrome.tasks.newProjectPlaceholder,
-                    value: state.newProjectName,
-                    focusOnAppear: true,
-                    onEdit: { name in send(AgendaEvents.make { $0.newProjectName = .with { $0.name = name } }) }
-                )
-                .centraidType("body")
-                .accessibilityLabel(state.chrome.tasks.newProjectPlaceholder)
-                .accessibilityIdentifier("tasks-new-project-field")
+        // THE STYLE SHEET, one for the new list, the new calendar and an edited calendar.
+        .sheet(isPresented: Binding(
+            get: { [.newProject, .newCalendar, .editCalendar].contains(state.sheet) },
+            set: { open in
+                if !open, [.newProject, .newCalendar, .editCalendar].contains(state.sheet) {
+                    send(AgendaEvents.make { $0.sheetClosed = .init() })
+                }
             }
+        )) {
+            AgendaStyleSheetView(
+                style: state.style,
+                onName: { name in send(AgendaEvents.make { $0.styleName = .with { $0.name = name } }) },
+                onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
+                onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
+                onSubmit: { send(AgendaEvents.make { $0.styleSubmitted = .init() }) },
+                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
+            )
         }
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
@@ -575,9 +573,11 @@ private struct AgendaTodoList: View {
                         let row = project.row
                         Button { open(project.route) } label: {
                             HStack(spacing: 12) {
-                                Circle()
-                                    .fill(AgendaPalette.list(project.listColorKey) ?? Theme.color("textFaint", scheme))
-                                    .frame(width: 12, height: 12)
+                                AgendaListMark(
+                                    colorKey: project.listColorKey,
+                                    iconKey: project.iconKey,
+                                    fallback: Theme.color("textFaint", scheme)
+                                )
                                 Text(row.title)
                                     .centraidType("body")
                                     .foregroundStyle(Theme.color("text", scheme))
@@ -818,13 +818,18 @@ private struct AgendaMoreSheet: View {
                             SectionHeader(title: row.section)
                         }
                         HStack(spacing: 8) {
-                            if !row.hueKey.isEmpty {
+                            // A CALENDAR WEARS THE ONE LIST PALETTE and its own icon; an events
+                            // calendar with no list colour keeps its hue dot.
+                            if !row.colorKey.isEmpty {
+                                AgendaListMark(colorKey: row.colorKey, iconKey: row.iconKey)
+                                    .padding(.leading, 12)
+                            } else if !row.hueKey.isEmpty {
                                 Circle()
                                     .fill(Theme.color(KitHue.role(row.hueKey) ?? "cSlate", scheme))
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(
-                                iconKey: row.iconKey,
+                                iconKey: row.colorKey.isEmpty ? row.iconKey : "",
                                 label: row.label,
                                 selected: row.toggle && row.on,
                                 identifier: "agenda-more-\(row.key)"
@@ -833,6 +838,20 @@ private struct AgendaMoreSheet: View {
                                 if row.hasRoute { open(row.route) }
                             }
                             .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                            // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.
+                            if !row.editLabel.isEmpty {
+                                let calendarID = String(row.key.dropFirst("calendar-".count))
+                                Button {
+                                    send(AgendaEvents.make { $0.calendarEdit = .with { $0.calendarID = calendarID } })
+                                } label: {
+                                    CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme), size: 18)
+                                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(row.editLabel)
+                                .accessibilityIdentifier("agenda-calendar-edit-\(calendarID)")
+                            }
                         }
                     }
                 }
