@@ -1,5 +1,15 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -148,17 +158,35 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
+        // THE GROUPED CARDS (#1173): a field with a `group` opens a card under that heading and the fields
+        // after it (with none) continue it; fields before the first heading stand on the page.
+        val blocks = mutableListOf<List<TodoField>>()
         data.fields.forEach { field ->
-            if (field.enabled) {
-                ChoiceFieldRow(
-                    key = field.label,
-                    value = field.value_,
-                    testTag = "tasks-field-${field.key}",
-                    onTap = { onEvent(TodoDetailEvent(field_opened = TodoDetailEvent.FieldOpened(field_ = field.key))) },
-                )
-                if (field.note.isNotEmpty()) FieldNote(field.note)
+            if (field.group.isNotEmpty() || blocks.isEmpty()) blocks.add(listOf(field)) else blocks[blocks.lastIndex] = blocks.last() + field
+        }
+        blocks.forEach { block ->
+            val head = block.first()
+            if (head.group.isEmpty()) {
+                block.forEach { TodoFieldRow(it, onEvent) }
             } else {
-                FieldRow(key = field.label, value = field.value_, note = field.note)
+                Text(
+                    head.group,
+                    style = centraidType("eyebrow"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
+                )
+                val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+                Column(
+                    Modifier
+                        .padding(horizontal = KitGeometry.GUTTER)
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(Surface.card)
+                        .border(KitGeometry.HAIRLINE, Surface.border, shape)
+                        .testTag("tasks-detail-group-${head.key}"),
+                ) {
+                    block.forEach { TodoFieldRow(it, onEvent) }
+                }
             }
         }
         if (data.subtasks_label.isNotEmpty() || data.subtasks.isNotEmpty()) {
@@ -189,6 +217,43 @@ private fun TodoDetailBody(
                 }
             }
         }
+    }
+}
+
+/** One field: a switch row for a `toggle`, else the choice row that opens its sheet (or a plain row while it takes no edit). */
+@Composable
+private fun TodoFieldRow(field: TodoField, onEvent: (TodoDetailEvent) -> Unit) {
+    if (field.toggle) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .toggleable(
+                    value = field.on,
+                    enabled = field.enabled,
+                    role = Role.Switch,
+                    onValueChange = { next ->
+                        onEvent(TodoDetailEvent(field_choice = TodoDetailEvent.FieldChoice(field_ = field.key, key = if (next) "on" else "off")))
+                    },
+                )
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+                .testTag("tasks-field-${field.key}"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(field.label, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+            Switch(checked = field.on, onCheckedChange = null, enabled = field.enabled, colors = kitSwitchColors())
+        }
+        if (field.note.isNotEmpty()) FieldNote(field.note)
+    } else if (field.enabled) {
+        ChoiceFieldRow(
+            key = field.label,
+            value = field.value_,
+            testTag = "tasks-field-${field.key}",
+            onTap = { onEvent(TodoDetailEvent(field_opened = TodoDetailEvent.FieldOpened(field_ = field.key))) },
+        )
+        if (field.note.isNotEmpty()) FieldNote(field.note)
+    } else {
+        FieldRow(key = field.label, value = field.value_, note = field.note)
     }
 }
 

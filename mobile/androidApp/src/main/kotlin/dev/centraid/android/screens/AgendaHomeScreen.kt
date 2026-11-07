@@ -262,6 +262,9 @@ public fun AgendaHomeScreen(
                     verb = words.quick_add_verb,
                     onChange = { onEvent(AgendaHomeEvent(quick_add_changed = AgendaHomeEvent.QuickAddChanged(title = it))) },
                     onSubmit = { onEvent(AgendaHomeEvent(quick_add_submitted = AgendaHomeEvent.QuickAddSubmitted())) },
+                    onTool = { onEvent(AgendaHomeEvent(quick_tool = AgendaHomeEvent.QuickToolPicked(key = it))) },
+                    onDue = { onEvent(AgendaHomeEvent(quick_due = AgendaHomeEvent.QuickDuePicked(key = it))) },
+                    onTag = { onEvent(AgendaHomeEvent(quick_tag = AgendaHomeEvent.QuickTagAdded(text = it))) },
                     // THE KEYBOARD LEFT: the machine puts an empty bar away.
                     onBlur = { onEvent(AgendaHomeEvent(quick_add_closed = AgendaHomeEvent.QuickAddClosed())) },
                     testTag = "agenda-quick-add",
@@ -433,6 +436,7 @@ private fun AgendaList(
             onFile = actions.onFile,
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
+            menu = actions.menu,
         )
         data.days.forEach { section -> daySection(section, actions, onOpen) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
@@ -544,6 +548,7 @@ internal fun LazyListScope.daySection(
                     fileVerb = actions.fileVerb,
                     idPrefix = AGENDA_TASK_ROW,
                     indent = DAY_TASK_INDENT,
+                    menu = actions.menu,
                 )
             }
         } else if (now != null) {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,8 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -58,6 +57,9 @@ import dev.centraid.design.CentraidTokens
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitRowAction
+import dev.centraid.android.kit.KitSwipeRow
+import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetRow
@@ -68,8 +70,9 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * THE TO-DO ROW, ONE SHAPE: the box, the title over its due word and meta line,
- * the priority word and the project dot. An open root offers "Move to project"
- * on a long press (and to a screen reader as an action), never as a verb on
+ * the priority word and the project dot. With a `menu` the row swipes (Details, Flag, Delete; the long
+ * press is the same three). Without one, an open root offers "Move to project"
+ * on a long press (and to a screen reader as an action in both), never as a verb on
  * every row. Every word is the row's own; the view only lays them out. A tap
  * hands the row's own `route` to [onOpen], which the shell pushes.
  *
@@ -91,123 +94,119 @@ internal fun TodoRowView(
     indent: Dp = 0.dp,
     menu: TodoRowMenu? = null,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .padding(start = KitGeometry.GUTTER / 2 + indent + (depth * 24).dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.width(2.dp).height(28.dp))
-        TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}", round = !row.subtask) { onCheck(row.task_id) }
-        val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
-        Column(
+    // THE SWIPE (#1173): Details, Flag and Delete sit behind the row, and the kit's long press opens
+    // the same three; a row with no `menu` (a subtask, a completed row) is the plain row.
+    val actions = menu?.actions(row, onOpen).orEmpty()
+    val swipes = actions.isNotEmpty()
+    val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
+    val body: @Composable () -> Unit = {
+        Row(
             Modifier
-                .weight(1f)
-                .combinedClickable(
-                    onClick = { row.route?.let(onOpen) },
-                    onLongClick = if (menu != null) ({ menuOpen = true }) else file,
-                    onLongClickLabel = fileVerb.ifEmpty { null },
-                )
-                .padding(vertical = 8.dp)
-                .testTag("$idPrefix-${row.task_id}")
-                .clearAndSetSemantics {
-                    contentDescription = row.accessibility_label.ifEmpty { row.title }
-                    role = Role.Button
-                    val actions = buildList {
-                        if (file != null) add(CustomAccessibilityAction(fileVerb) { file(); true })
-                        if (menu != null) addAll(menu.accessibilityActions(row, onOpen))
-                    }
-                    if (actions.isNotEmpty()) customActions = actions
-                },
+                .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .padding(start = KitGeometry.GUTTER / 2 + indent + (depth * 24).dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (menu != null) {
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    menu.items(row, onOpen, file).forEach { item ->
-                        DropdownMenuItem(
-                            text = { Text(item.label) },
-                            onClick = {
-                                menuOpen = false
-                                item.run()
-                            },
-                            modifier = Modifier.testTag("$idPrefix-${item.tag}-${row.task_id}"),
-                        )
-                    }
-                }
-            }
-            Text(
-                row.title,
-                style = centraidType(if (row.subtask) "small" else "body"),
-                color = centraidColor(if (row.check == TodoCheck.TODO_CHECK_OPEN) "text" else "textFaint"),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val line = listOf(row.due_label, row.meta).filter { it.isNotEmpty() }
-            if (line.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (row.due_label.isNotEmpty()) {
-                        Text(
-                            row.due_label,
-                            style = centraidType("annotLabel"),
-                            color = centraidColor(if (row.overdue) "warning" else "textSoft"),
-                            maxLines = 1,
-                        )
-                    }
-                    if (row.meta.isNotEmpty()) {
-                        Text(
-                            (if (row.due_label.isNotEmpty()) " · " else "") + row.meta,
-                            style = centraidType("annotLabel"),
-                            color = centraidColor("textSoft"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-        if (row.priority_label.isNotEmpty()) {
-            Text(
-                row.priority_label,
-                style = centraidType("annotLabel"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(start = 6.dp),
-            )
-        }
-        if (row.flagged) {
-            CentraidIcon(
-                "Flag",
-                tint = agendaTokenColor("stateAmberText") ?: centraidColor("warning"),
-                size = 14.dp,
-                modifier = Modifier.padding(start = 6.dp).clearAndSetSemantics { },
-            )
-        }
-        // THE LIST'S COLOUR (#1173): one of the eight, a dot after the title.
-        val listColor = agendaListColor(row.list_color_key)
-        if (listColor != null) {
-            Box(Modifier.padding(start = 8.dp).size(6.dp).clip(CircleShape).background(listColor))
-        } else if (row.project_hue_key.isNotEmpty()) {
-            Box(
+            Box(Modifier.width(2.dp).height(28.dp))
+            TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}", round = !row.subtask) { onCheck(row.task_id) }
+            Column(
                 Modifier
-                    .padding(start = 8.dp)
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(hueColor(row.project_hue_key)),
-            )
+                    .weight(1f)
+                    .then(
+                        // THE SWIPE ROW OWNS THE TAP AND THE LONG PRESS; a plain row's long press files.
+                        if (swipes) {
+                            Modifier
+                        } else {
+                            Modifier.combinedClickable(
+                                onClick = { row.route?.let(onOpen) },
+                                onLongClick = file,
+                                onLongClickLabel = fileVerb.ifEmpty { null },
+                            )
+                        },
+                    )
+                    .padding(vertical = 8.dp)
+                    .testTag("$idPrefix-${row.task_id}")
+                    .clearAndSetSemantics {
+                        contentDescription = row.accessibility_label.ifEmpty { row.title }
+                        role = Role.Button
+                        val spoken = buildList {
+                            if (file != null) add(CustomAccessibilityAction(fileVerb) { file(); true })
+                            if (menu != null) addAll(menu.accessibilityActions(row, onOpen))
+                        }
+                        if (spoken.isNotEmpty()) customActions = spoken
+                    },
+            ) {
+                Text(
+                    row.title,
+                    style = centraidType(if (row.subtask) "small" else "body"),
+                    color = centraidColor(if (row.check == TodoCheck.TODO_CHECK_OPEN) "text" else "textFaint"),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val line = listOf(row.due_label, row.meta).filter { it.isNotEmpty() }
+                if (line.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (row.due_label.isNotEmpty()) {
+                            Text(
+                                row.due_label,
+                                style = centraidType("annotLabel"),
+                                color = centraidColor(if (row.overdue) "warning" else "textSoft"),
+                                maxLines = 1,
+                            )
+                        }
+                        if (row.meta.isNotEmpty()) {
+                            Text(
+                                (if (row.due_label.isNotEmpty()) " · " else "") + row.meta,
+                                style = centraidType("annotLabel"),
+                                color = centraidColor("textSoft"),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            if (row.priority_label.isNotEmpty()) {
+                Text(
+                    row.priority_label,
+                    style = centraidType("annotLabel"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+            if (row.flagged) {
+                CentraidIcon(
+                    "Flag",
+                    tint = agendaTokenColor("stateAmberText") ?: centraidColor("warning"),
+                    size = 14.dp,
+                    modifier = Modifier.padding(start = 6.dp).clearAndSetSemantics { },
+                )
+            }
+            // THE LIST'S COLOUR (#1173): one of the eight, a dot after the title.
+            val listColor = agendaListColor(row.list_color_key)
+            if (listColor != null) {
+                Box(Modifier.padding(start = 8.dp).size(6.dp).clip(CircleShape).background(listColor))
+            } else if (row.project_hue_key.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .padding(start = 8.dp)
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(hueColor(row.project_hue_key)),
+                )
+            }
         }
     }
+    if (swipes) KitSwipeRow(actions = actions, onTap = { row.route?.let(onOpen) }, content = body) else body()
     row.children.forEach { child ->
         TodoRowView(child, onCheck, onOpen, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent)
     }
 }
 
-/** One entry of a row's long-press menu. */
-internal class TodoMenuItem(val tag: String, val label: String, val run: () -> Unit)
-
 /**
- * WHAT A ROW'S LONG PRESS OFFERS (#1173): Details, Flag/Unflag, Move up and
- * down (the non-drag reorder, only where a move is wired), Delete, and the
- * filing verb where the row can file. The words are the chrome's.
+ * WHAT A ROW OFFERS (#1173): the swipe's Details, Flag/Unflag and Delete ([actions], the kit's
+ * `KitSwipeRow`, which is the long press too), and for a screen reader also Move up and down (the
+ * non-drag reorder, only where a move is wired). The words are the chrome's.
  */
 internal class TodoRowMenu(
     val chrome: TodoChrome,
@@ -218,20 +217,27 @@ internal class TodoRowMenu(
     /** The ids of the row's group in order, for Move up and down. */
     val siblings: List<String> = emptyList(),
 ) {
-    fun items(row: TodoRow, onOpen: (Route) -> Unit, file: (() -> Unit)?): List<TodoMenuItem> = buildList {
-        add(TodoMenuItem("details", chrome.details_verb) { row.route?.let(onOpen) })
-        onFlag?.let { flag -> add(TodoMenuItem("flag", if (row.flagged) chrome.unflag_verb else chrome.flag_verb) { flag(row.task_id, !row.flagged) }) }
-        val at = siblings.indexOf(row.task_id)
-        if (onMove != null && at > 0) add(TodoMenuItem("up", chrome.move_up_verb) { onMove.invoke(row.task_id, siblings[at - 1]) })
-        if (onMove != null && at >= 0 && at < siblings.size - 1) {
-            add(TodoMenuItem("down", chrome.move_down_verb) { onMove.invoke(row.task_id, siblings.getOrElse(at + 2) { "" }) })
+    fun actions(row: TodoRow, onOpen: (Route) -> Unit): List<KitRowAction> = buildList {
+        add(KitRowAction("details", chrome.details_verb.ifEmpty { KitWords.DETAILS }) { row.route?.let(onOpen) })
+        onFlag?.let { flag ->
+            val verb = if (row.flagged) chrome.unflag_verb.ifEmpty { KitWords.UNFLAG } else chrome.flag_verb.ifEmpty { KitWords.FLAG }
+            add(KitRowAction("flag", verb, KitRowAction.Tone.Amber) { flag(row.task_id, !row.flagged) })
         }
-        file?.let { add(TodoMenuItem("file", chrome.file_verb) { it() }) }
-        onDelete?.let { delete -> add(TodoMenuItem("delete", chrome.delete_verb) { delete(row.task_id) }) }
+        onDelete?.let { delete ->
+            add(KitRowAction("delete", chrome.delete_verb.ifEmpty { KitWords.DELETE }, KitRowAction.Tone.Red) { delete(row.task_id) })
+        }
     }
 
-    fun accessibilityActions(row: TodoRow, onOpen: (Route) -> Unit): List<CustomAccessibilityAction> =
-        items(row, onOpen, null).map { item -> CustomAccessibilityAction(item.label) { item.run(); true } }
+    fun accessibilityActions(row: TodoRow, onOpen: (Route) -> Unit): List<CustomAccessibilityAction> = buildList {
+        actions(row, onOpen).forEach { action -> add(CustomAccessibilityAction(action.label) { action.onPress(); true }) }
+        val at = siblings.indexOf(row.task_id)
+        if (onMove != null && at > 0) {
+            add(CustomAccessibilityAction(chrome.move_up_verb) { onMove.invoke(row.task_id, siblings[at - 1]); true })
+        }
+        if (onMove != null && at >= 0 && at < siblings.size - 1) {
+            add(CustomAccessibilityAction(chrome.move_down_verb) { onMove.invoke(row.task_id, siblings.getOrElse(at + 2) { "" }); true })
+        }
+    }
 }
 
 /**
@@ -335,6 +341,9 @@ internal fun TodoQuickAddBar(
     onSubmit: () -> Unit,
     onBlur: () -> Unit = {},
     testTag: String = "tasks-quick-add",
+    onTool: (String) -> Unit = {},
+    onDue: (String) -> Unit = {},
+    onTag: (String) -> Unit = {},
 ) {
     if (quickAdd == null || !quickAdd.shown || !quickAdd.drawn) return
     val focus = remember { FocusRequester() }
@@ -353,7 +362,22 @@ internal fun TodoQuickAddBar(
     // field takes the keyboard.
     LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
+    // THE BAR RIDES ABOVE THE KEYBOARD (`imePadding`), and its toolbar is drawn only while focus is
+    // anywhere in it: the tag field takes focus from the title, and that is still "the keyboard is here".
+    Column(
+        Modifier
+            .imePadding()
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .onFocusChanged {
+                if (it.hasFocus) {
+                    held.value = true
+                } else if (held.value) {
+                    held.value = false
+                    onBlur()
+                }
+            },
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -379,14 +403,6 @@ internal fun TodoQuickAddBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focus)
-                        .onFocusChanged {
-                            if (it.isFocused) {
-                                held.value = true
-                            } else if (held.value) {
-                                held.value = false
-                                onBlur()
-                            }
-                        }
                         .testTag(testTag)
                         .clearAndSetSemantics { contentDescription = prompt },
                 )
@@ -394,6 +410,19 @@ internal fun TodoQuickAddBar(
             if (quickAdd.can_submit) {
                 OutlineButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
+        }
+        // WHAT THE NEXT ADD CARRIES ("Tomorrow · #errand · Flagged"), under the field.
+        if (quickAdd.staged_label.isNotEmpty()) {
+            Text(
+                quickAdd.staged_label,
+                style = centraidType("annotLabel"),
+                color = centraidColor("textSoft"),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("agenda-quick-staged"),
+            )
+        }
+        // THE KEYBOARD TOOLBAR, while the field (or its tag field) has the keyboard.
+        if (held.value) {
+            QuickAddToolbar(quickAdd, onTool = onTool, onDue = onDue, onTag = onTag, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
