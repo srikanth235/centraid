@@ -119,7 +119,7 @@ fn a_rows_meta_line_says_project_repeats_missed_effort_tags_and_family() {
         "Home admin · Monthly · missed 2 · next is Fri 19 June · ~25 min · #home · 1 of 2"
     );
     let row = rows::row(EN, &behind, &ctx, false);
-    assert_eq!(row.priority_label, "Now");
+    assert_eq!(row.priority_label, "!!!");
     assert!(row.children.iter().all(|child| child.subtask));
 }
 
@@ -128,11 +128,11 @@ fn priority_runs_higher_more_urgent_and_anything_above_three_is_now() {
     for none in [0, -1] {
         assert_eq!(rows::priority_label(EN, none), "");
     }
-    assert_eq!(rows::priority_label(EN, 1), "Soon");
-    assert_eq!(rows::priority_label(EN, 2), "Next");
-    assert_eq!(rows::priority_label(EN, 3), "Now");
+    assert_eq!(rows::priority_label(EN, 1), "!");
+    assert_eq!(rows::priority_label(EN, 2), "!!");
+    assert_eq!(rows::priority_label(EN, 3), "!!!");
     for high in [4, 5, 9] {
-        assert_eq!(rows::priority_label(EN, high), "Now");
+        assert_eq!(rows::priority_label(EN, high), "!!!");
     }
 }
 

@@ -8,6 +8,9 @@ catalog! {
     plain priority_1 = ("!", "!");
     plain priority_2 = ("!!", "!!");
     plain priority_3 = ("!!!", "!!!");
+    plain priority_1_spoken = ("Low priority", "Low priority");
+    plain priority_2_spoken = ("Medium priority", "Medium priority");
+    plain priority_3_spoken = ("High priority", "High priority");
     plain quick_date = ("Date", "Date");
     plain quick_tag = ("Tag", "Tag");
     plain quick_flag = ("Flag", "Flag");

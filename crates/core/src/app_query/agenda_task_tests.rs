@@ -752,7 +752,7 @@ fn a_project_is_found_by_name_beside_the_tasks() {
 /// and 1..9 run HIGHER MORE URGENT — Todoist's, ruled by D-1020-S5 — not RFC
 /// 5545's 1-is-highest. The question arrived believing the vault followed RFC
 /// 5545 and the proto and the phone's mapping were the outliers; the vault, the
-/// open order, the proto and Soon / Next / Now are all one scale, and the
+/// open order, the proto and !, !!, !!! are all one scale, and the
 /// outlier was the assistant's own sentence about the vault. This is the open
 /// order's half of the agreement, over the real vault: the number goes in as
 /// sent, comes out as sent, and a task's subtasks — the one place the phone's

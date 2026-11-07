@@ -13,7 +13,9 @@ use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
 use crate::kit::civil;
-use crate::strings::{Locale, agenda_reminders as reminders, task as words};
+use crate::strings::{
+    Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,
+};
 
 pub const STATUS_OPEN: &str = "open";
 pub const STATUS_DONE: &str = "done";
@@ -112,7 +114,8 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
     let priority = priority_label(locale, task.priority);
     let check = check_of(&task.status);
     let open = matches!(check, wire::TodoCheck::Open | wire::TodoCheck::InProcess);
-    let accessibility = [title.as_str(), &due, &meta, &priority]
+    let spoken = priority_spoken(locale, task.priority);
+    let accessibility = [title.as_str(), &due, &meta, &spoken]
         .iter()
         .filter(|part| !part.is_empty())
         .copied()
@@ -301,9 +304,20 @@ pub fn effort_label(locale: Locale, minutes: i64) -> String {
 pub fn priority_label(locale: Locale, priority: i64) -> String {
     match priority {
         i64::MIN..=0 => String::new(),
-        1 => words::priority_soon(locale),
-        2 => words::priority_next(locale),
-        _ => words::priority_now(locale),
+        1 => card_words::priority_1(locale),
+        2 => card_words::priority_2(locale),
+        _ => card_words::priority_3(locale),
+    }
+}
+
+/// What a screen reader says for [`priority_label`]: the bangs are not words.
+#[must_use]
+pub fn priority_spoken(locale: Locale, priority: i64) -> String {
+    match priority {
+        i64::MIN..=0 => String::new(),
+        1 => card_words::priority_1_spoken(locale),
+        2 => card_words::priority_2_spoken(locale),
+        _ => card_words::priority_3_spoken(locale),
     }
 }
 

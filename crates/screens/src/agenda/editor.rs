@@ -846,7 +846,7 @@ impl Editor {
         .collect()
     }
 
-    /// None, !, !!, !!!: the symbol is the label and Soon, Next, Now the spoken name.
+    /// None, !, !!, !!!: the symbol is the label and Low, Medium, High priority the spoken name.
     fn priorities(locale: Locale, draft: &Draft) -> Vec<wire::AgendaChoice> {
         let level = draft.priority.clamp(0, PRIORITY_MAX);
         [
@@ -856,15 +856,15 @@ impl Editor {
             ),
             (
                 task_words::priority_1(locale),
-                task_strings::priority_soon(locale),
+                task_words::priority_1_spoken(locale),
             ),
             (
                 task_words::priority_2(locale),
-                task_strings::priority_next(locale),
+                task_words::priority_2_spoken(locale),
             ),
             (
                 task_words::priority_3(locale),
-                task_strings::priority_now(locale),
+                task_words::priority_3_spoken(locale),
             ),
         ]
         .into_iter()

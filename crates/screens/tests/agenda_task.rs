@@ -199,11 +199,10 @@ fn priority_chips_run_none_soon_next_now() {
         .iter()
         .map(|c| (c.key.clone(), c.label.clone()))
         .collect();
-    let expect: Vec<(String, String)> =
-        [("none", "None"), ("1", "Soon"), ("2", "Next"), ("3", "Now")]
-            .iter()
-            .map(|(k, l)| ((*k).to_owned(), (*l).to_owned()))
-            .collect();
+    let expect: Vec<(String, String)> = [("none", "None"), ("1", "!"), ("2", "!!"), ("3", "!!!")]
+        .iter()
+        .map(|(k, l)| ((*k).to_owned(), (*l).to_owned()))
+        .collect();
     assert_eq!(keys, expect);
 }
 
@@ -447,7 +446,7 @@ fn a_vault_change_never_overwrites_typing_and_the_fields_refresh_around_the_word
     );
     assert_eq!(
         field(v, "priority").value,
-        "Next",
+        "!!",
         "the fields are the vault's"
     );
     assert!(autosave(v).remote_changed);
@@ -614,7 +613,7 @@ fn reminder_repeats_priority_and_effort_are_each_one_write() {
     assert!(!task_of(&d, &id).repeats);
     choose(&mut d, i, "priority", "3");
     assert_eq!(task_of(&d, &id).priority, 3);
-    assert_eq!(field(d.view(i), "priority").value, "Now");
+    assert_eq!(field(d.view(i), "priority").value, "!!!");
     choose(&mut d, i, "effort", "25");
     assert_eq!(task_of(&d, &id).effort_min, Some(25));
     assert_eq!(field(d.view(i), "effort").value, "~25 min");
@@ -648,7 +647,7 @@ fn a_choice_already_so_is_nothing_and_made_again_later_is_a_new_command() {
     choose(&mut d, i, "bogus", "x");
     choose(&mut d, i, "priority", "9");
     assert_eq!(task_of(&d, &id).updated_at, before);
-    // Now, Soon, Now again: each a command of its own, so none is a replay.
+    // !!!, !, !!! again: each a command of its own, so none is a replay.
     choose(&mut d, i, "priority", "3");
     choose(&mut d, i, "priority", "1");
     assert_eq!(task_of(&d, &id).priority, 1);

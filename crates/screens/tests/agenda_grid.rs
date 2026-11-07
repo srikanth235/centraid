@@ -743,6 +743,64 @@ fn a_refused_write_says_the_vaults_sentence_and_leaves_the_event() {
 }
 
 #[test]
+fn an_event_with_other_guests_cannot_be_dragged_and_a_move_writes_nothing() {
+    let mut r = rig(Dest::Week);
+    let wire::app_query_response::Answer::AgendaParties(parties) = r
+        .driver
+        .handle
+        .load(&load::agenda::Parties::default().into())
+        .expect("parties load")
+        .answer
+        .and_then(|answer| answer.answer)
+        .expect("an answer")
+    else {
+        panic!("parties");
+    };
+    let me = parties.me.expect("the owner has a party");
+    let other = parties
+        .parties
+        .iter()
+        .find(|party| !party.is_you)
+        .expect("another person")
+        .party_id
+        .clone();
+    let zone = r.zone.clone();
+    r.write(act::agenda::Propose {
+        id: Some("zq-guests".to_owned()),
+        title: "Zq Guests".to_owned(),
+        starts: "2027-06-09T10:00".to_owned(),
+        ends: Field::Is("2027-06-09T11:00".to_owned()),
+        busy: Some(false),
+        zone: Field::Is(zone.clone()),
+        attendees: Some(serde_json::to_string(&[&me, &other]).expect("json")),
+        ..Default::default()
+    });
+    r.write(act::agenda::Propose {
+        id: Some("zq-solo".to_owned()),
+        title: "Zq Solo".to_owned(),
+        starts: "2027-06-09T13:00".to_owned(),
+        ends: Field::Is("2027-06-09T14:00".to_owned()),
+        busy: Some(false),
+        zone: Field::Is(zone),
+        attendees: Some(serde_json::to_string(&[&me]).expect("json")),
+        ..Default::default()
+    });
+    r.pick(WED, Dest::Week);
+    assert!(!r.block(WED, "zq-guests").movable);
+    assert!(r.block(WED, "zq-solo").movable);
+    r.send(H::EventMoved(wire::agenda_home_event::EventMoved {
+        instance_key: "zq-guests".to_owned(),
+        day: WED.to_owned(),
+        minute: 600 + 120,
+    }));
+    assert!(r.state().status.is_none());
+    assert_eq!(
+        r.occurrence("zq-guests", WED).local_start,
+        "2027-06-09T10:00"
+    );
+}
+
+#[test]
 fn a_run_over_midnight_and_an_all_day_event_cannot_be_dragged() {
     let mut r = rig(Dest::Week);
     r.event(

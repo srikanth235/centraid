@@ -1144,9 +1144,9 @@ fn fields(
         // row, so no note says that priority is optional.
         choices: vec![
             simple(NONE, words::priority_none(locale), level == 0),
-            simple("1", words::priority_soon(locale), level == 1),
-            simple("2", words::priority_next(locale), level == 2),
-            simple("3", words::priority_now(locale), level == 3),
+            simple("1", card_words::priority_1(locale), level == 1),
+            simple("2", card_words::priority_2(locale), level == 2),
+            simple("3", card_words::priority_3(locale), level == 3),
         ],
         enabled: true,
         ..wire::TodoField::default()
