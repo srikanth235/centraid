@@ -365,6 +365,37 @@ impl Ops {
         true
     }
 
+    /// A WRITE THE CORE KNOWS NO INVERSE FOR (an event dragged to other times):
+    /// `revert` is the same command carrying the old values, and Undo sends it
+    /// under a key of its own. The status line says `sentence`.
+    pub fn changed(
+        &mut self,
+        ctx: &Ctx,
+        subject: &str,
+        request: impl Into<wire::ActRequest>,
+        revert: impl Into<wire::ActRequest>,
+        sentence: String,
+    ) -> bool {
+        let request = request.into();
+        let revert = revert.into();
+        let key = kit_act::key(&[&request.action, subject], self.next_seq());
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            self.refused(&settled);
+            return false;
+        }
+        self.status = Some(wire::StatusLine {
+            sentence,
+            action_label: words::undo(ctx.locale()),
+            refused: false,
+        });
+        self.undo = Some(wire::ActInverse {
+            action: revert.action,
+            input: revert.input,
+        });
+        true
+    }
+
     /// DRAG TO REORDER (#1173): put `task_id` at `position`. Only the position
     /// changes: the project and the section stay as stored.
     pub fn reposition(&mut self, ctx: &Ctx, task_id: &str, position: f64) -> bool {

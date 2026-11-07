@@ -207,7 +207,7 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
 }
 
 #[test]
-fn the_calendar_tab_has_a_view_menu_of_day_and_list() {
+fn the_calendar_tab_has_a_view_menu_of_day_week_month_list_and_year() {
     let mut d = driver();
     let i = d.push(agenda::TAB, routes::home(wire::AgendaDestination::Day, ""));
     let state = match &d.view(i).kind {
@@ -224,7 +224,10 @@ fn the_calendar_tab_has_a_view_menu_of_day_and_list() {
         menu,
         [
             ("Day", true, wire::AgendaDestination::Day as i32),
+            ("Week", false, wire::AgendaDestination::Week as i32),
+            ("Month", false, wire::AgendaDestination::Month as i32),
             ("List", false, wire::AgendaDestination::Schedule as i32),
+            ("Year", false, wire::AgendaDestination::Year as i32),
         ]
     );
 }
