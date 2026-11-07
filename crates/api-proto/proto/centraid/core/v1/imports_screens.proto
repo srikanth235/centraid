@@ -418,13 +418,16 @@ message RemindersSnapshot {
 // (`RemindersRead.include_completed`).
 //
 // THE MAPPINGS (the shell sends what EventKit holds; Rust decides what it means):
-// - `priority` is EventKit's raw 0..9 (`EKReminder.priority`): 0 none, 1..4 high, 5 medium, 6..9
-//   low. It becomes the app's `!`/`!!`/`!!!` levels: 1..4 -> 3 (`!!!`), 5 -> 2 (`!!`), 6..9 -> 1 (`!`).
-// - `alarm_minutes_before` is the FIRST alarm only: a relative alarm is its offset in minutes
-//   before the due time; an absolute alarm is `due - alarm date` in minutes when there is a due
-//   time (else it is dropped). Only the first alarm is kept (`remind_before_min` is one value).
-// - `rrule` is built by the shell from the first `EKRecurrenceRule` (RFC 5545 text); a rule the
-//   vault cannot expand imports the task without it and is counted in the outcome.
+//
+// `priority` is EventKit's raw 0..9 (`EKReminder.priority`): 0 none, 1..4 high, 5 medium, 6..9
+// low. It becomes the app's `!`/`!!`/`!!!` levels: 1..4 is 3 (`!!!`), 5 is 2 (`!!`), 6..9 is 1 (`!`).
+//
+// `alarm_minutes_before` is the FIRST alarm only: a relative alarm is its offset in minutes before
+// the due time; an absolute alarm is `due - alarm date` in minutes when there is a due time (else
+// it is dropped). Only the first alarm is kept (`remind_before_min` is one value).
+//
+// `rrule` is built by the shell from the first `EKRecurrenceRule` (RFC 5545 text); a rule the
+// vault cannot expand imports the task without it and is counted in the outcome.
 message PhoneReminder {
   string title = 1;
   string notes = 2;

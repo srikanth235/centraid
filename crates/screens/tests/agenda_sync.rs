@@ -807,3 +807,34 @@ fn a_calendar_the_shell_never_reported_is_treated_as_read_only() {
     phone.edit_title(&id, "Changed");
     assert!(phone.writes().is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// What an import carries of alerts and guests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn alerts_and_guests_ride_the_record_alerts_once_each_and_guests_only_when_there_are_any() {
+    use centraid_screens::agenda::calendar;
+    use centraid_screens::strings::Locale;
+    let mut event = meeting("Party", "uid:party");
+    event.alerts = vec![10, 60, 10];
+    event.attendees = vec![
+        wire::PhoneAttendee {
+            name: " Ada ".into(),
+            email: "ada@example.com".into(),
+            status: "accepted".into(),
+        },
+        wire::PhoneAttendee::default(),
+    ];
+    let bare = meeting("Bare", "uid:bare");
+    let batch = calendar::batch(Locale::En, &writable_work(vec![event, bare]));
+    let party = &batch.records[0].fields;
+    assert_eq!(party["reminders"], serde_json::json!([10, 60]));
+    assert_eq!(
+        party["attendees"],
+        serde_json::json!([{ "name": "Ada", "email": "ada@example.com", "state": "accepted" }])
+    );
+    let bare = &batch.records[1].fields;
+    assert!(bare["reminders"].is_null());
+    assert!(bare.get("attendees").is_none());
+}

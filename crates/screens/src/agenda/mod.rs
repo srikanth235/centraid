@@ -26,6 +26,7 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
 
+mod attachments;
 pub mod calendar;
 pub mod calendar_push;
 pub mod catch_up;

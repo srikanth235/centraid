@@ -24,6 +24,15 @@
 //!   (`dismissed`).
 //! - **Edit** is the editor on this occurrence: the `edit` action carries that
 //!   route and the shell pushes it.
+//!
+//! ## What the facts say (#1173)
+//!
+//! Repeats, location (the place's name), joining link, reminder, second reminder, availability
+//! (only when free: busy is what every event is), time zone (only when the event's own zone is
+//! not the phone's), travel time (only when set) and calendar. The guests the phone's own
+//! calendar states for a followed event are a read-only list with the reply in words. The
+//! attachments section is [`super::attachments`]'s: photos and files, added, opened and removed
+//! from here.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::agenda_event_event::Kind as K;
@@ -31,6 +40,7 @@ use wire::agenda_event_state::Sheet;
 use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
+use super::attachments::Attachments;
 use super::routes;
 use super::todo::rows::hue_role;
 use crate::catalog::{act, load};
@@ -38,7 +48,9 @@ use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda as words, agenda_event as event_words, fill};
+use crate::strings::{
+    Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
+};
 
 pub const ACTION_EDIT: &str = "edit";
 pub const ACTION_CANCEL: &str = "cancel";
@@ -63,6 +75,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     if args.instance_key.is_empty() {
         args.instance_key.clone_from(&args.event_id);
     }
+    let attachments = Attachments::of(&args.event_id);
     Some(Box::new(EventPage {
         route: args,
         content: Content::Loading,
@@ -71,6 +84,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         scope: None,
         status: None,
         dismissed: false,
+        attachments,
     }))
 }
 
@@ -92,6 +106,8 @@ struct EventPage {
     scope: Option<wire::AgendaScope>,
     status: Option<wire::StatusLine>,
     dismissed: bool,
+    /// The photos and files on the event (#1173).
+    attachments: Attachments,
 }
 
 impl EventPage {
@@ -120,6 +136,7 @@ impl EventPage {
                 }
             }
         }
+        self.attachments.reload(ctx);
     }
 
     /// The answered event, when it is the series this screen is on.
@@ -264,6 +281,12 @@ impl Screen for EventPage {
         }
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
+            Some(E::EffectResult(result)) => {
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
+            }
             Some(E::AgendaEvent(event)) => match event.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
@@ -283,6 +306,7 @@ impl Screen for EventPage {
                 }
                 Some(K::Confirmed(_)) => self.confirmed(ctx),
                 Some(K::ConfirmDismissed(_)) => self.confirm = false,
+                Some(K::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             },
             _ => {}
         }
@@ -303,9 +327,12 @@ impl Screen for EventPage {
             }
             Content::Data(detail) => match self.event() {
                 None => wire::agenda_event_state::Content::Gone(gone(locale)),
-                Some(event) => wire::agenda_event_state::Content::Data(Box::new(
-                    self.data(locale, event, detail),
-                )),
+                Some(event) => wire::agenda_event_state::Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.zone(),
+                    event,
+                    detail,
+                ))),
             },
         };
         let series_sheet = self.sheet == Sheet::CancelScope;
@@ -339,6 +366,7 @@ impl EventPage {
     fn data(
         &self,
         locale: Locale,
+        device_zone: &str,
         event: &wire::AgendaEvent,
         detail: &wire::AgendaEventDetail,
     ) -> wire::AgendaEventData {
@@ -396,6 +424,33 @@ impl EventPage {
         }
         if let Some(reminder) = &reminder {
             facts.push(fact(words::field_reminder(locale), reminder));
+        }
+        if let Some(second) = event.reminders.get(1) {
+            facts.push(fact(
+                editor_words::field_second_alert(locale),
+                &reminder_label(locale, second.minutes_before),
+            ));
+        }
+        // BUSY IS WHAT EVERY EVENT IS UNLESS SAID: the row is drawn only where the member made it free.
+        if !event.busy {
+            facts.push(fact(
+                editor_words::field_availability(locale),
+                &editor_words::free(locale),
+            ));
+        }
+        // THE EVENT'S OWN ZONE, only where it is not the phone's: a wall clock the member
+        // would otherwise read as their own.
+        if let Some(zone) = own_zone(event, device_zone) {
+            facts.push(fact(
+                editor_words::field_zone(locale),
+                &zone_title(locale, zone),
+            ));
+        }
+        if let Some(travel) = event.travel_min.filter(|minutes| *minutes > 0) {
+            facts.push(fact(
+                editor_words::field_travel(locale),
+                &travel_label(locale, travel),
+            ));
         }
         facts.push(fact(words::field_calendar(locale), &calendar_name));
 
@@ -475,7 +530,19 @@ impl EventPage {
         if series {
             spoken_parts.push(words::meta_repeats(locale));
         }
+        let followed: Vec<wire::AgendaFollowedGuestRow> = detail
+            .followed_guests
+            .iter()
+            .map(|guest| followed_row(locale, guest))
+            .collect();
         wire::AgendaEventData {
+            followed_heading: if followed.is_empty() {
+                String::new()
+            } else {
+                event_words::followed_heading(locale, followed.len() as u64)
+            },
+            followed_guests: followed,
+            attachments: Some(self.attachments.view(locale)),
             title,
             date_label: date,
             when_label: when,
@@ -528,6 +595,77 @@ impl EventPage {
             },
             call_uri,
         }
+    }
+}
+
+/// The zone a zoned event is in, when it is not the phone's: shown beside the time so the wall
+/// clock is not read as the member's own.
+fn own_zone<'a>(event: &'a wire::AgendaEvent, device_zone: &str) -> Option<&'a str> {
+    (event.recurrence_semantics.as_deref() == Some("zoned"))
+        .then_some(event.start_tz.as_deref())
+        .flatten()
+        .map(str::trim)
+        .filter(|zone| !zone.is_empty() && *zone != device_zone)
+}
+
+/// `London, Europe` for `Europe/London`; an id with no region is its own name.
+#[must_use]
+pub fn zone_title(locale: Locale, id: &str) -> String {
+    let city = id.rsplit('/').next().unwrap_or(id).replace('_', " ");
+    match id.split_once('/') {
+        Some((region, _)) => fill(
+            &editor_words::zone_name(locale),
+            &[("city", &city), ("region", &region.replace('_', " "))],
+        ),
+        None => city,
+    }
+}
+
+/// "30 minutes", "1 hour": the leads the editor offers are named, the rest counted.
+#[must_use]
+pub fn travel_label(locale: Locale, minutes: i64) -> String {
+    match minutes {
+        0 => editor_words::travel_none(locale),
+        5 => editor_words::travel_5(locale),
+        15 => editor_words::travel_15(locale),
+        30 => editor_words::travel_30(locale),
+        60 => editor_words::travel_60(locale),
+        90 => editor_words::travel_90(locale),
+        120 => editor_words::travel_120(locale),
+        other => editor_words::travel_minutes(locale, u64::try_from(other).unwrap_or(0)),
+    }
+}
+
+/// One guest the phone's calendar states: a name, else the address, else "Guest"; the reply in
+/// words. The address shows beneath a name, and nothing here is editable.
+fn followed_row(locale: Locale, guest: &wire::AgendaFollowedGuest) -> wire::AgendaFollowedGuestRow {
+    let text = |value: &Option<String>| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    let (name, email) = (text(&guest.name), text(&guest.email));
+    let shown = name
+        .clone()
+        .or_else(|| email.clone())
+        .unwrap_or_else(|| event_words::followed_guest_unnamed(locale));
+    let reply = reply_label(locale, &guest.state);
+    wire::AgendaFollowedGuestRow {
+        initial: shown
+            .chars()
+            .find(|c| c.is_alphanumeric())
+            .map(|c| c.to_uppercase().collect::<String>())
+            .unwrap_or_default(),
+        hue_key: person_hue(email.as_deref().unwrap_or(&shown)),
+        accessibility_label: fill(
+            &event_words::guest_spoken(locale),
+            &[("name", &shown), ("reply", &reply)],
+        ),
+        detail: name.and(email).unwrap_or_default(),
+        reply_label: reply,
+        name: shown,
     }
 }
 

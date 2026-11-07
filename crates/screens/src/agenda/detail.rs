@@ -19,6 +19,8 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
+use super::attachments::Attachments;
+use super::editor::draft::normalize_url;
 use super::list::{self, Phase};
 use super::routes;
 use super::todo::ops::Ops;
@@ -30,7 +32,9 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda_tasks as card_words, task as words};
+use crate::strings::{
+    Locale, agenda_event as link_words, agenda_tasks as card_words, task as words,
+};
 
 /// `TodoField.key`s.
 pub const WHEN: &str = "when";
@@ -162,6 +166,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         open_field: String::new(),
         ops: Ops::default(),
         finished: false,
+        attachments: Attachments::of(&args.task_id),
     }))
 }
 
@@ -176,6 +181,8 @@ struct Detail {
     ops: Ops,
     /// The task left (deleted): the shell pops.
     finished: bool,
+    /// The photos and files on the task (#1173).
+    attachments: Attachments,
 }
 
 impl Detail {
@@ -215,6 +222,7 @@ impl Detail {
         let Some(task) = answer.task() else {
             return;
         };
+        self.attachments.reload(ctx);
         let open: Vec<&wire::AgendaTask> = task
             .children
             .iter()
@@ -554,7 +562,33 @@ impl Detail {
         }
     }
 
-    fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) {
+    /// One control of the page. Most are writes; an open link and an add ask the shell.
+    fn event(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        match event.kind {
+            Some(D::OpenLink(_)) => return self.open_link(),
+            Some(D::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
+            _ => self.changed(event, ctx),
+        }
+        Vec::new()
+    }
+
+    /// The address as the browser is asked for it: a web address, with `https://` put on a bare
+    /// domain. Nothing else is ever opened from a task.
+    fn open_link(&self) -> Vec<wire::Effect> {
+        let Some(url) = self
+            .task()
+            .and_then(|task| task.url)
+            .and_then(|url| normalize_url(&url))
+            .filter(|url| !url.is_empty())
+        else {
+            return Vec::new();
+        };
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OpenUrl(wire::OpenUrl { url })),
+        }]
+    }
+
+    fn changed(&mut self, event: wire::TodoDetailEvent, ctx: &Ctx) {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
             Some(D::Title(typed)) => self.autosave.edit(ctx, |draft| draft.title = typed.title),
@@ -656,7 +690,8 @@ impl Detail {
             Some(D::Release(_)) => self.asking = Asking::Release,
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
-            None => {}
+            // The page's asks of the shell are `event`'s.
+            Some(D::OpenLink(_) | D::Attachment(_)) | None => {}
         }
     }
 
@@ -759,8 +794,28 @@ impl Detail {
             release_label: words::release(locale),
             can_release: open,
             today: today.to_owned(),
+            link: link_of(locale, task),
+            attachments: Some(self.attachments.view(locale)),
         }
     }
+}
+
+/// The task's address and the control that opens it: absent when it has none.
+fn link_of(locale: Locale, task: &wire::AgendaTask) -> Option<wire::TodoLink> {
+    let url = task
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())?;
+    Some(wire::TodoLink {
+        label: link_words::link_label(locale),
+        url: url.to_owned(),
+        open_label: link_words::link_open_label(locale),
+        accessibility_label: crate::strings::fill(
+            &link_words::link_spoken_label(locale),
+            &[("url", url)],
+        ),
+    })
 }
 
 fn say(sentence: String) -> wire::StatusLine {
@@ -784,7 +839,13 @@ impl Screen for Detail {
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
             }
-            Some(E::TodoDetail(detail)) => self.event(detail, ctx),
+            Some(E::TodoDetail(detail)) => return self.event(detail, ctx),
+            // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
+            Some(E::EffectResult(result)) => {
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
+            }
             _ => {}
         }
         Vec::new()

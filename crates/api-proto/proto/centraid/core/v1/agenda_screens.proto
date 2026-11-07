@@ -657,8 +657,8 @@ message AgendaCalendarChoice {
 // (R-1128-6): the calendars, then the Tasks places (Anytime, Logbook,
 // Reminders, Trash) under a "Tasks" heading, then "What Agenda may read".
 message AgendaMoreRow {
-  // `calendar-<calendar_id>`, a Tasks place (`anytime`, `logbook`,
-  // `reminders`, `trash`) or `reads`.
+  // `calendar-<calendar_id>`, `new-calendar` (opens SHEET_NEW_CALENDAR), a Tasks
+  // place (`anytime`, `logbook`, `reminders`, `trash`) or `reads`.
   string key = 1;
   string label = 2;
   // "Shown" / "Hidden" on a calendar row; empty on an action row.
@@ -1031,9 +1031,10 @@ message AgendaEventData {
   string when_label = 3;
   string calendar_name = 4;
   string calendar_hue_key = 5;
-  // Label and value rows, in the handoff's order: repeats, where (the place's
-  // name), joining link, reminder, calendar. A row with nothing to say is
-  // absent.
+  // Label and value rows, in the handoff's order: repeats, location (the
+  // place's name), joining link, reminder, second reminder, availability (only
+  // when free), time zone (only when it is not the phone's), travel time,
+  // calendar. A row with nothing to say is absent.
   repeated AgendaFact facts = 6;
   string notes = 7;
   // "3 guests · 1 awaiting". Empty with no guests.
@@ -1049,6 +1050,111 @@ message AgendaEventData {
   string call_uri = 15;
   // The button that opens `call_uri`: "Join call". Empty with no link.
   string call_label = 16;
+  // WAVE 2 (#1173). The attachments section: photos and files on the event.
+  AgendaAttachmentsSection attachments = 17;
+  // "2 guests on your calendar". Empty when the phone's calendar names none.
+  string followed_heading = 18;
+  // The guests the phone's calendar states for an event the vault follows,
+  // read-only.
+  repeated AgendaFollowedGuestRow followed_guests = 19;
+}
+
+// One guest the phone's calendar states: a name or an address, and the reply
+// in words. Nothing on it is editable.
+message AgendaFollowedGuestRow {
+  // The name, else the address, else "Guest".
+  string name = 1;
+  // The address, when the name is the line above it; else empty.
+  string detail = 2;
+  string initial = 3;
+  string reply_label = 4;
+  string hue_key = 5;
+  string accessibility_label = 6;
+}
+
+// THE ATTACHMENTS SECTION of an event or a task page (#1173): what is attached,
+// a page at a time, and the controls that attach and detach. Shared by both
+// pages so the two shells draw it once.
+message AgendaAttachmentsSection {
+  // "Attachments", or "Attachments · 3" once some are counted.
+  string heading = 1;
+  repeated AgendaAttachmentTile items = 2;
+  // "Nothing attached yet." Empty while there are items or the read is out.
+  string empty_label = 3;
+  string add_photo_label = 4;
+  string add_file_label = 5;
+  // Another page of attachments exists.
+  bool has_more = 6;
+  string more_label = 7;
+  // An add is under way (the picker is up or the file is being kept): the
+  // controls are off and `busy_label` says what is happening. Empty otherwise.
+  bool busy = 8;
+  string busy_label = 9;
+  // The confirm for removing one attachment, while it is asked. The photo or
+  // file itself stays in Photos or Docs, and the words say so.
+  optional Confirm remove_confirm = 10;
+  // The sentence for an add the platform or the vault refused. Absent otherwise.
+  optional StatusLine status = 11;
+  // "Add photo" / "Add file" icon keys (`design/icons.toml`).
+  string add_photo_icon_key = 12;
+  string add_file_icon_key = 13;
+}
+
+// One attachment, as a tile or a row draws it.
+message AgendaAttachmentTile {
+  // The attached photo's or document's id: what remove names.
+  string attachment_id = 1;
+  string title = 2;
+  // "PDF · 2.4 MB", "Photo · 1.2 MB".
+  string meta = 3;
+  // `photo` or `document`.
+  string kind = 4;
+  // The file that draws a thumbnail, when this phone holds one. Empty: draw
+  // the kind's icon tile (`icon_key`).
+  string thumbnail_path = 5;
+  string icon_key = 6;
+  // The kind badge on a document's tile: "PDF", "Text". Empty for a photo.
+  string badge = 7;
+  // WHERE A TAP GOES: the photo's viewer or the document's page.
+  Route route = 8;
+  string accessibility_label = 9;
+  // "Remove", and what a screen reader says of it.
+  string remove_label = 10;
+  string remove_accessibility_label = 11;
+}
+
+// What either page's attachments section sends back.
+message AgendaAttachmentEvent {
+  oneof kind {
+    // Asks the shell for a photo (`PickFile` with `KIND_PHOTO`), then attaches it.
+    AddPhoto add_photo = 1;
+    // Asks the shell for a file (`PickFile` with `KIND_UPLOAD`), then attaches it.
+    AddFile add_file = 2;
+    // Opens the remove confirm for one attachment.
+    RemoveAsked remove_asked = 3;
+    RemoveConfirmed remove_confirmed = 4;
+    RemoveDismissed remove_dismissed = 5;
+    // The next page.
+    ShowMore show_more = 6;
+    // The status sentence is put away.
+    StatusDismissed status_dismissed = 7;
+  }
+
+  message AddPhoto {}
+
+  message AddFile {}
+
+  message RemoveAsked {
+    string attachment_id = 1;
+  }
+
+  message RemoveConfirmed {}
+
+  message RemoveDismissed {}
+
+  message ShowMore {}
+
+  message StatusDismissed {}
 }
 
 message AgendaGuestRow {
@@ -1092,6 +1198,8 @@ message AgendaEventEvent {
     // The confirm, or the scope sheet's commit.
     Confirmed confirmed = 10;
     ConfirmDismissed confirm_dismissed = 11;
+    // The attachments section's controls (#1173).
+    AgendaAttachmentEvent attachment = 20;
   }
 
   message Refreshed {}
@@ -2282,6 +2390,22 @@ message TodoDetailData {
   // WHERE THE PARENT LINK GOES, as the route the shell pushes; absent on a
   // top-level task.
   optional Route parent_route = 19;
+  // WAVE 2 (#1173). The task's address, with the control that opens it. Absent
+  // when the task has none.
+  optional TodoLink link = 20;
+  // The attachments section: photos and files on the task.
+  AgendaAttachmentsSection attachments = 21;
+}
+
+// A task's address and the one control that opens it in the browser.
+message TodoLink {
+  // "Link".
+  string label = 1;
+  // The address as stored, drawn as it is.
+  string url = 2;
+  // "Open link".
+  string open_label = 3;
+  string accessibility_label = 4;
 }
 
 message TodoField {
@@ -2346,9 +2470,15 @@ message TodoDetailEvent {
     Confirmed confirmed = 16;
     Dismissed dismissed = 17;
     StatusActed status_acted = 24;
+    // WAVE 2 (#1173): the link's open control, and the attachments section.
+    OpenLinkTapped open_link = 30;
+    AgendaAttachmentEvent attachment = 31;
   }
 
   message Refreshed {}
+
+  // Asks the shell to open the task's address (an `OpenUrl` effect).
+  message OpenLinkTapped {}
 
   message TitleChanged {
     string title = 1;

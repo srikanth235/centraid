@@ -657,3 +657,145 @@ fn a_change_elsewhere_redraws_the_page_once() {
     world.driver.pump(Duration::from_millis(300));
     assert_eq!(world.event_data(page).title, "Design review");
 }
+
+/// WAVE 2 FACTS (#1173): a second alert, free, and travel time are said when set, in the editor's
+/// words; busy and no travel are the defaults and say nothing.
+#[test]
+fn the_detail_says_a_second_alert_free_and_travel_only_when_they_are_set() {
+    let mut world = World::new();
+    let plain = world.propose(
+        "Standup",
+        "2099-06-16T09:00:00",
+        "2099-06-16T09:15:00",
+        |_| {},
+    );
+    let page = world.open_event(&plain, &plain, None, "2099-06-16");
+    let labels: Vec<&str> = facts(world.event_data(page)).iter().map(|f| f.0).collect();
+    assert_eq!(
+        labels,
+        ["Calendar"],
+        "busy, no travel, one zone: nothing to add"
+    );
+
+    let dinner = world.propose(
+        "Dinner",
+        "2099-06-16T19:00:00",
+        "2099-06-16T20:00:00",
+        |p| {
+            p.reminders = Field::Is("[60, 1440]".to_owned());
+            p.busy = Some(false);
+            p.travel_min = Field::Is(30);
+        },
+    );
+    let page = world.open_event(&dinner, &dinner, None, "2099-06-16");
+    let (_, calendar) = world.calendar_names().remove(0);
+    assert_eq!(
+        facts(world.event_data(page)),
+        [
+            ("Reminder", "1 hour before"),
+            ("Second reminder", "1 day before"),
+            ("Show as", "Free"),
+            ("Travel time", "30 minutes"),
+            ("Calendar", calendar.as_str()),
+        ]
+    );
+}
+
+/// The place's name is the Location row; an event in the phone's own zone says no zone, and one in
+/// another says which.
+#[test]
+fn the_detail_names_the_zone_only_when_it_is_not_the_phones() {
+    let mut world = World::new();
+    let call = world.propose(
+        "Call New York",
+        "2099-06-17T09:00:00",
+        "2099-06-17T10:00:00",
+        |p| p.zone = Field::Is("America/New_York".to_owned()),
+    );
+    let page = world.open_event(&call, &call, None, "2099-06-17");
+    assert!(
+        facts(world.event_data(page)).contains(&("Time zone", "New York, America")),
+        "{:?}",
+        facts(world.event_data(page))
+    );
+
+    let local = world.propose(
+        "Lunch",
+        "2099-06-17T12:00:00",
+        "2099-06-17T13:00:00",
+        |_| {},
+    );
+    let page = world.open_event(&local, &local, None, "2099-06-17");
+    assert!(
+        facts(world.event_data(page))
+            .iter()
+            .all(|fact| fact.0 != "Time zone"),
+        "an event in the phone's own zone names none"
+    );
+
+    // The phone travels: the same event is now in another zone than the phone's.
+    world.zone("Asia/Tokyo");
+    let page = world.open_event(&local, &local, None, "2099-06-17");
+    assert!(
+        facts(world.event_data(page)).contains(&("Time zone", "London, Europe")),
+        "{:?}",
+        facts(world.event_data(page))
+    );
+}
+
+/// The guests a phone calendar states for a followed event are listed read-only with the reply in
+/// words: a name over its address, an address alone, and "Guest" for neither.
+#[test]
+fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
+    let mut world = World::new();
+    world.act(act::agenda::FollowCalendar {
+        origin: serde_json::json!({
+            "ref": "calendar:work", "label": "Work", "device_id": "phone-1"
+        })
+        .to_string(),
+        records: serde_json::json!([{
+            "external_id": "uid:1", "device_id": "phone-1", "fields": {
+                "title": "Planning", "starts": "2099-06-19T09:00", "ends": "2099-06-19T10:00",
+                "timing": "floating",
+                "attendees": [
+                    { "name": "Sam Rivers", "email": "sam@example.com", "state": "accepted" },
+                    { "email": "lee@example.com", "state": "declined" },
+                    { "state": "tentative" },
+                    { "name": "Ada", "state": "needs-action" }
+                ]
+            }
+        }])
+        .to_string(),
+        complete: Some(true),
+        since: None,
+    });
+    let found = world.window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z");
+    let id = found.first().expect("the followed event").event_id.clone();
+    let page = world.open_event(&id, &id, None, "2099-06-19");
+    let data = world.event_data(page);
+    assert_eq!(data.followed_heading, "4 guests on your calendar");
+    let rows: Vec<(&str, &str, &str)> = data
+        .followed_guests
+        .iter()
+        .map(|g| (g.name.as_str(), g.detail.as_str(), g.reply_label.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Sam Rivers", "sam@example.com", "Going"),
+            ("lee@example.com", "", "Not going"),
+            ("Guest", "", "Maybe"),
+            ("Ada", "", "No answer yet"),
+        ]
+    );
+    assert_eq!(data.followed_guests[0].initial, "S");
+    assert_eq!(
+        data.followed_guests[0].accessibility_label,
+        "Sam Rivers, Going"
+    );
+    // An event that follows no phone calendar has no such list.
+    let own = world.propose("Own", "2099-06-19T12:00:00", "2099-06-19T13:00:00", |_| {});
+    let page = world.open_event(&own, &own, None, "2099-06-19");
+    assert!(world.event_data(page).followed_guests.is_empty());
+    assert_eq!(world.event_data(page).followed_heading, "");
+}

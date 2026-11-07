@@ -1124,7 +1124,7 @@ impl CalendarFollow {
             let key = kit_act::key(
                 &[
                     "record-calendar-push",
-                    &asked.first().map_or("", |one| &one.event_id),
+                    asked.first().map_or("", |one| &one.event_id),
                 ],
                 kit_act::fresh(),
             );

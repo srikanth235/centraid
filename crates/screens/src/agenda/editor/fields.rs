@@ -14,7 +14,7 @@ use crate::agenda::event::reminder_label;
 use crate::catalog::load;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::Ctx;
-use crate::strings::{Locale, agenda as words, agenda_editor as editor_words, fill};
+use crate::strings::{Locale, agenda as words, agenda_editor as editor_words};
 
 pub const AVAILABILITY_BUSY: &str = "busy";
 pub const AVAILABILITY_FREE: &str = "free";
@@ -136,16 +136,9 @@ pub const ZONES: [&str; 74] = [
     "America/Jamaica",
 ];
 
-/// `London, Europe` for `Europe/London`; an id with no region is its own name.
+/// `London, Europe` for `Europe/London`: the page's one spelling of a zone.
 fn zone_title(locale: Locale, id: &str) -> String {
-    let city = id.rsplit('/').next().unwrap_or(id).replace('_', " ");
-    match id.split_once('/') {
-        Some((region, _)) => fill(
-            &editor_words::zone_name(locale),
-            &[("city", &city), ("region", &region.replace('_', " "))],
-        ),
-        None => city,
-    }
+    crate::agenda::event::zone_title(locale, id)
 }
 
 /// Whether `text` is in the choice's words, in any case, an underscore being a space.
@@ -462,16 +455,7 @@ impl Editor {
     }
 
     pub(super) fn travel_label(locale: Locale, minutes: i32) -> String {
-        match minutes {
-            0 => editor_words::travel_none(locale),
-            5 => editor_words::travel_5(locale),
-            15 => editor_words::travel_15(locale),
-            30 => editor_words::travel_30(locale),
-            60 => editor_words::travel_60(locale),
-            90 => editor_words::travel_90(locale),
-            120 => editor_words::travel_120(locale),
-            other => editor_words::travel_minutes(locale, u64::try_from(other).unwrap_or(0)),
-        }
+        crate::agenda::event::travel_label(locale, i64::from(minutes))
     }
 
     pub(super) fn travel_choices(&self, locale: Locale, draft: &Draft) -> Vec<wire::AgendaChoice> {

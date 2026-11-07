@@ -441,6 +441,14 @@ pub fn draft_of(event: &wire::AgendaEvent) -> Draft {
         } else {
             String::new()
         },
+        // WHAT THE EVENT STORES, so a Save that touches neither writes neither:
+        // an event made free, or with travel time, opens as it was saved.
+        free: !event.busy,
+        travel_min: event
+            .travel_min
+            .and_then(|minutes| i32::try_from(minutes).ok())
+            .filter(|minutes| *minutes > 0)
+            .unwrap_or_default(),
         ..Draft::default()
     }
 }

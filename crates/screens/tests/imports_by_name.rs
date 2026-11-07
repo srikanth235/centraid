@@ -156,7 +156,10 @@ fn a_made_vault_asks_the_photo_prompt_itself_and_a_grant_starts_the_rolls_walk()
         made,
         E::ImportsMade(wire::ImportsMadeEvent {
             kind: Some(wire::imports_made_event::Kind::Made(
-                wire::imports_made_event::Made { reminders: false },
+                wire::imports_made_event::Made {
+                    reminders: false,
+                    include_completed: false,
+                },
             )),
         }),
     );

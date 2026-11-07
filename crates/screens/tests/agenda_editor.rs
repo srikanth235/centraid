@@ -1879,3 +1879,69 @@ fn travel_time_and_a_task_address_commit_through_the_vault() {
     );
     assert_eq!(world.tasks_titled("Read the article").len(), 1);
 }
+
+/// AN EXISTING EVENT OPENS AS IT WAS SAVED (#1173): free, and its travel time, from the read, so a
+/// Save that touches neither writes neither; and choosing "None" for travel writes the column null.
+#[test]
+fn an_event_opens_with_its_stored_availability_and_travel_and_none_clears_travel() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Dinner out",
+        "2099-06-17T19:00:00",
+        "2099-06-17T20:00:00",
+        |p| {
+            p.busy = Some(false);
+            p.travel_min = Field::Is(45);
+        },
+    );
+    let stored = world.event_row(&id).expect("event");
+    assert!(!stored.busy);
+    assert_eq!(stored.travel_min, Some(45));
+
+    let page = world.open_edit(&id, "", None, "2099-06-17");
+    assert!(world.draft(page).free, "it opens free, as it was saved");
+    assert_eq!(world.draft(page).travel_min, 45);
+    let data = world.editor_data(page);
+    assert_eq!(data.availability_label, "Free");
+    assert_eq!(data.travel_label, "45 minutes");
+    assert!(
+        data.travels.iter().any(|t| t.key == "45" && t.selected),
+        "a stored length is offered and picked"
+    );
+    assert!(!data.dirty, "opening an event is no change");
+
+    world.send_editor(page, travel("0"));
+    assert!(world.editor_data(page).dirty);
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let saved = world.event_row(&id).expect("event");
+    assert_eq!(saved.travel_min, None, "None writes null, not zero");
+    assert!(!saved.busy, "the availability it did not touch stands");
+}
+
+/// An event that is busy opens busy and with no travel, and a Save that changes only its title
+/// leaves both alone.
+#[test]
+fn a_busy_event_with_no_travel_opens_as_the_defaults_and_a_title_edit_keeps_them() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Standup",
+        "2099-06-18T09:00:00",
+        "2099-06-18T09:15:00",
+        |_| {},
+    );
+    let page = world.open_edit(&id, "", None, "2099-06-18");
+    assert!(!world.draft(page).free);
+    assert_eq!(world.draft(page).travel_min, 0);
+    world.title(page, "Daily standup");
+    world.save(page);
+    assert!(world.editor_state(page).dismissed);
+    let saved = world.event_row(&id).expect("event");
+    assert_eq!(saved.summary.as_deref(), Some("Daily standup"));
+    assert!(saved.busy);
+    assert_eq!(saved.travel_min, None);
+}

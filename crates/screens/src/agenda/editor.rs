@@ -65,7 +65,7 @@
 //! would file the event again.
 
 mod custom;
-mod draft;
+pub(super) mod draft;
 mod fields;
 pub mod repeat;
 pub mod write;

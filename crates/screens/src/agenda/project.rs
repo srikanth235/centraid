@@ -1,6 +1,6 @@
 //! ONE PROJECT (`agenda.project`): its work in no section, then every section
 //! in its order — an empty section drawn too, with its own "Add task" — "Add
-//! section" and "Rename".
+//! section", "Rename" and "Edit List" (name, colour and icon: [`super::style`]).
 //!
 //! A quick add here is one write: `add-task` filed in the project and, when
 //! the member pointed a section's "Add task" at it, in that section.

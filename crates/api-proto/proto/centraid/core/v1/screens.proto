@@ -1252,6 +1252,9 @@ message PickFile {
     KIND_UNSPECIFIED = 0;
     KIND_UPLOAD = 1;
     KIND_SCAN = 2;
+    // The photo library's picker, images only (#1173): the choice is staged
+    // like an upload and answered as `FilePicked`.
+    KIND_PHOTO = 3;
   }
 }
 

@@ -59,7 +59,11 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-quick-add` | Agenda (To-do) | the quick-add bar's field, drawn only after `agenda-add-task`; Add is `agenda-quick-add-verb`, and appears once there are words |
 | `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
 | `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-project sheet, whose field is `tasks-new-project-field` |
-| `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `anytime`, `logbook`, `reminders`, `trash`, `reads` |
+| `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `new-calendar` (opens the new-calendar sheet, #1173), `anytime`, `logbook`, `reminders`, `trash`, `reads` |
+| `agenda-calendar-edit-<calendarId>` | Agenda's More sheet | a calendar row's edit control: opens the style sheet on that calendar to rename it and change its colour and icon (#1173) |
+| `agenda-style-name` / `agenda-style-submit` / `agenda-style-cancel` | Agenda's style sheet (a new list from "Add List", a list's "Edit List", a new or edited calendar) | the name field, Create or Save, and Cancel; the new list sheet's field is `agenda-style-name` too (it was `tasks-new-project-field`) |
+| `agenda-style-color-<key>` / `agenda-style-icon-<key>` / `agenda-style-icon-none` | the same | one of the eight `[list]` swatches (`blue`, `mustard`, `violet`, `petrol`, `indigo`, `graphite`, `raspberry`, `orchid`), one icon of the grid (a `design/icons.toml` key such as `Gym`), and the row that clears the icon; the selected one carries `selected=true` |
+| `tasks-project-edit` | a project page | the header verb "Edit List": opens the style sheet on the list |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
 | `agenda-view-menu` | Agenda (Calendar) | the Calendar's view menu key (#1173); its rows are `agenda-view-<key>`: `day`, `week`, `month`, `list`, `year`, and on Month `agenda-month-style-grid` / `agenda-month-style-list` |
