@@ -30,7 +30,9 @@
 //! as due today with its missed periods counted, never as a week overdue.
 
 use centraid_vault::time::civil::parse_civil_ms;
-use centraid_vault::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch, wall_iso};
+use centraid_vault::time::zone::{
+    FireZone, WallTime, parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso,
+};
 
 /// One civil day, in milliseconds.
 const DAY_MS: i64 = 86_400_000;
@@ -108,6 +110,14 @@ pub fn today(zone: &FireZone, now: &str) -> Option<Civil> {
             time: Some(wall),
         }
     })
+}
+
+/// The civil day `days` before `today`, as `YYYY-MM-DD`: wall-calendar
+/// arithmetic, never instants divided by 24 hours.
+#[must_use]
+pub fn days_before(today: &Civil, days: i64) -> String {
+    let shifted = wall_from_epoch(wall_epoch(today.day) - days * DAY_MS);
+    wall_iso(midnight(shifted), false)
 }
 
 /// Whole CIVIL days from `from` to `to`, negative when `to` is earlier.

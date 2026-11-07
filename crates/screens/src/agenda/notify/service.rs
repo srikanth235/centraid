@@ -26,7 +26,7 @@ use crate::strings::agenda_reminders as reminders;
 /// The route name of the service.
 pub const NAME: &str = "agenda.notify";
 
-/// How many tasks one read looks at.
+/// How many reminders one read looks at (the query's own ceiling).
 const TASK_LIMIT: u32 = 500;
 /// How long a receipt is held.
 const RECEIPT_FOR: Duration = Duration::from_secs(10 * 60);
@@ -123,18 +123,14 @@ fn midnight(day: &str) -> Option<String> {
 }
 
 impl Service {
-    /// The board's reminders and the events of the window, or `None` when
+    /// The reminders and the events of the window, or `None` when
     /// either did not land.
     fn read(ctx: &Ctx) -> Option<Loaded> {
         let Reading::Data(board) = read::read(
             ctx,
-            load::agenda::Board {
-                limit: TASK_LIMIT,
-                view: Some(load::agenda::BoardView::Reminders),
-                project_id: None,
-            },
+            load::agenda::Reminders { limit: TASK_LIMIT },
             |answer| match answer {
-                Answer::AgendaTaskBoard(board) => Some(board),
+                Answer::AgendaTaskReminders(board) => Some(board),
                 _ => None,
             },
         ) else {

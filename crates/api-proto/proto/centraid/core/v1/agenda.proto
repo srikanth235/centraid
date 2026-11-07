@@ -455,6 +455,16 @@ message AgendaTaskCatchUpRequest {
   string tz = 1;
 }
 
+// `agenda.task.reminders`: the open tasks that carry a reminder and a due, nearest
+// stored due first, answered as an `AgendaTaskBoard` (view `REMINDERS`, one group).
+message AgendaTaskRemindersRequest {
+  // The zone (the file header's rule).
+  string tz = 1;
+  // The window's size. ZERO IS THE DEFAULT (500); any other value is clamped to
+  // 20…500. The answer's `truncated` says more reminders exist beyond it.
+  uint32 limit = 2;
+}
+
 // `agenda.task.trash`: the trashed tasks, most recently trashed first.
 message AgendaTaskTrashRequest {
   // The zone the rows' days are read in: the stated IANA name, else the vault's;

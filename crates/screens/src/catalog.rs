@@ -5021,6 +5021,25 @@ pub mod load {
             }
         }
 
+        /// The open tasks that carry a reminder and a due, nearest stored due first, in the board's row shape (a repeating task's next period read as its due): one statement over the due index, at most a caller-sized window of them, so an old task's reminder is never pushed out by newer work. A trashed task is left out; `truncated` says more exist beyond the window.
+        #[derive(Clone, Debug, Default)]
+        pub struct Reminders {
+            pub limit: u32,
+        }
+        impl Reminders {
+            pub const NAME: &str = "reminders";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<Reminders> for wire::LoadRequest {
+            fn from(value: Reminders) -> Self {
+                value.request()
+            }
+        }
+
         /// The tasks in the 30-day trash, most recently trashed first, each with when it was deleted and when it is erased.
         #[derive(Clone, Debug, Default)]
         pub struct Trash {

@@ -851,6 +851,126 @@ pub fn load_board(
     ))
 }
 
+/// How many civil days before today the reminders read starts, so a due
+/// stored as a UTC instant, whose local day is at most a day off its text, is
+/// kept. A repeating task's stored due may be older and is kept by its rule.
+pub const REMINDERS_LOOKBACK_DAYS: i64 = 2;
+
+/// What `reminders` answers: the open tasks that carry a reminder and a due,
+/// in the board's row shape, nearest stored due first.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RemindersData {
+    pub tasks: Vec<TaskRow>,
+    pub projects: Vec<ProjectRow>,
+    /// More matching tasks exist beyond the window (the walk's own cursor).
+    pub truncated: bool,
+    pub window: usize,
+}
+
+/// `reminders`: open, live tasks with a due and `remind_before_min`, whose stored
+/// due is `since` or later or that repeat, ordered by `(due, id)` over
+/// `task_by_due`, at most the caller's window (20..500) of them.
+///
+/// The statement stops at the window by construction. A trashed task still has
+/// status `open` in `task`, so the entities of each page say which rows are
+/// live, and a following page is read only to fill what trashed rows left.
+///
+/// # Errors
+///
+/// A door refusal becomes the payload's denial; a reached bound is an `Err`.
+pub fn load_reminders(
+    door: &dyn PageDoor,
+    limit: Option<i64>,
+    since: &str,
+    now: &str,
+    zone: &FireZone,
+) -> KitResult<(RemindersData, Option<Denial>)> {
+    let window = board_window(limit);
+    let found = match reminder_rows(door, window, since) {
+        Ok(found) => found,
+        Err(KitError::Door(message)) => {
+            return Ok((
+                RemindersData {
+                    window,
+                    ..RemindersData::default()
+                },
+                Some(denial_of(message)),
+            ));
+        }
+        Err(other) => return Err(other),
+    };
+    let (rows, truncated) = found;
+    let ids: Vec<String> = rows.iter().map(|task| task.task_id.clone()).collect();
+    let decorations = read_decorations(door, &ids, true)?;
+    let tasks = rows
+        .iter()
+        .map(|task| family(task, &[], &decorations, now, zone))
+        .collect();
+    let (projects, _) = load_chrome(door)?;
+    Ok((
+        RemindersData {
+            tasks,
+            projects,
+            truncated,
+            window,
+        },
+        None,
+    ))
+}
+
+fn reminder_rows(
+    door: &dyn PageDoor,
+    window: usize,
+    since: &str,
+) -> KitResult<(Vec<TaskRow>, bool)> {
+    let query = PageQuery::new(
+        "agenda.task.reminders",
+        TASK_COLUMNS,
+        "task",
+        PageOrder::asc("due", "id"),
+    )
+    .filter(
+        "status = ? AND remind_before_min IS NOT NULL AND due IS NOT NULL \
+         AND (due >= ? OR rule IS NOT NULL)",
+        vec![text("open"), text(since)],
+    );
+    let mut live: Vec<TaskRow> = Vec::new();
+    let mut after = None;
+    for _ in 0..OPEN_WALK_PAGES {
+        let page = door.page(
+            &query,
+            &PageRequest {
+                limit: window,
+                after: after.take(),
+            },
+        )?;
+        let entities = live_entities(
+            door,
+            "agenda.task.reminders.entities",
+            &ids_of(&page.rows, "id"),
+        )?;
+        let by_id = by_text(&entities, "id");
+        for row in &page.rows {
+            let Some(entity) = text_of(row, "id").and_then(|id| by_id.get(&id).copied()) else {
+                continue;
+            };
+            if live.len() == window {
+                return Ok((live, true));
+            }
+            live.push(task_of(entity, row));
+        }
+        match page.next {
+            None => return Ok((live, false)),
+            Some(_) if live.len() == window => return Ok((live, true)),
+            Some(next) => after = Some(next),
+        }
+    }
+    Err(KitError::FanOutExceeded {
+        query: "agenda.task.reminders".to_owned(),
+        cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
+    })
+}
+
 /// `search`: the board's row shape, in the order the index ranked them.
 ///
 /// # Errors

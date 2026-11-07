@@ -79,7 +79,7 @@ message AppQueryRequest {
     AgendaPartiesRequest agenda_parties = 3;
     AgendaSearchRequest agenda_search = 4;
     AgendaEventRequest agenda_event = 5;
-    // Agenda's tasks: 6-9, 17 and 18. They were `tasks_*` at 10-14 and 16 before
+    // Agenda's tasks: 6-9 and 17-19. They were `tasks_*` at 10-14 and 16 before
     // Tasks folded into Agenda (#1135); a renamed arm takes a new number, because
     // WIRE_JSON keeps a number's JSON name, so those are reserved above.
     AgendaTaskBoardRequest agenda_task_board = 6;
@@ -89,6 +89,8 @@ message AppQueryRequest {
     AgendaTaskCatchUpRequest agenda_task_catch_up = 17;
     // The trashed tasks (#1135): the shelf the page door cannot read, since the trash is the entity's.
     AgendaTaskTrashRequest agenda_task_trash = 18;
+    // The reminders the notification service schedules from, a bounded read of its own.
+    AgendaTaskRemindersRequest agenda_task_reminders = 19;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -184,6 +186,7 @@ message AppQueryResponse {
     AgendaTaskSearch agenda_task_search = 9;
     AgendaTaskCatchUp agenda_task_catch_up = 17;
     AgendaTaskTrash agenda_task_trash = 18;
+    AgendaTaskBoard agenda_task_reminders = 19;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;
