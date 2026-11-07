@@ -204,7 +204,8 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
     when {
         tile.status == HomeTileStatus.HOME_TILE_STATUS_LOADING -> Skeleton(loading, modifier)
         tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null ->
-            Invitation(tile, modifier)
+            // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
+            if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) Glance(tile, "", tile.empty_copy, modifier) else Invitation(tile, modifier)
         body.agenda != null -> AgendaWidget(tile, body.agenda!!, modifier)
         body.reminders != null -> RemindersWidget(tile, body.reminders!!, modifier)
         body.money != null -> Glance(tile, body.money!!.amounts.firstOrNull().orEmpty(), body.money!!.caption, modifier)

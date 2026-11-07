@@ -158,7 +158,8 @@ private struct WidgetBody: View {
         if tile.status == .loading {
             skeleton
         } else if tile.status != .content {
-            invitation
+            // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
+            if tile.size == .small { glance(figure: "", caption: tile.emptyCopy) } else { invitation }
         } else {
             switch tile.body.kind {
             case let .agenda(day): agenda(day)
