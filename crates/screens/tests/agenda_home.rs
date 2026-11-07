@@ -2436,3 +2436,25 @@ fn a_row_s_time_follows_the_phones_12_or_24_hour_setting() {
     r.settle();
     assert_eq!(label(&r), "09:00 – 13:30");
 }
+
+/// A WIDGET'S "NEW REMINDER" opens To-do with the quick-add bar drawn and focused and
+/// EMPTY, and writes nothing (#1173): the seeded-title path opens it only with words.
+#[test]
+fn the_new_reminder_route_opens_an_empty_bar_on_todo() {
+    let mut driver = Driver::with_runtime(Runtime::new(
+        agenda::registry(),
+        vec![(agenda::TAB.to_owned(), agenda::routes::home_adding(""))],
+    ));
+    driver.start();
+    let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let mut r = Rig {
+        driver,
+        id,
+        zone: "UTC".to_owned(),
+        seq: 0,
+    };
+    r.settle();
+    assert_eq!(r.state().destination, Dest::Todo as i32);
+    assert!(r.quick().drawn && r.quick().focused, "{:?}", r.quick());
+    assert!(r.quick().title.is_empty() && !r.quick().can_submit);
+}

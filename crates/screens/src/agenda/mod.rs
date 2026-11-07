@@ -97,6 +97,21 @@ pub mod routes {
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: destination as i32,
                 quick_add_title: quick_add_title.to_owned(),
+                open_quick_add: false,
+            }),
+        )
+    }
+
+    /// To-do with its quick-add bar open, drawn and focused, and holding `title`
+    /// (which may be empty). Nothing is written until the member taps Add.
+    #[must_use]
+    pub fn home_adding(title: &str) -> wire::Route {
+        route(
+            HOME,
+            wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
+                destination: wire::AgendaDestination::Todo as i32,
+                quick_add_title: title.to_owned(),
+                open_quick_add: true,
             }),
         )
     }

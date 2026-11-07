@@ -30,18 +30,36 @@
 //! version, state ("ready" | "unavailable"), today, now_local, zone,
 //! refresh_after (local wall clock; after it the widget shows words.stale),
 //! words {..every sentence the widget draws..},
+//! open_up_next, open_reminders, open_add (keys, see below),
 //! up_next [ {id, kind ("event"|"task"), title, time_label, day_label,
-//!            starts_local, ends_local, all_day, tint} ],
+//!            starts_local, ends_local, all_day, tint, open} ],
 //! reminders { today_count, overdue_count, flagged_count,
-//!             rows [ {id, title, due_label, overdue, flagged} ] },
+//!             rows [ {id, title, due_label, overdue, flagged, open} ] },
 //! siri { next_sentence }
 //! ```
+//!
+//! **Additive keys**: the schema grows by adding keys and keeps `version` 1; a
+//! reader tolerates a key it does not know and a shell never requires a new one
+//! (a document an older core wrote has no `open` keys: a tap then opens the app).
+//! A change that removes or retypes a key is a new version.
+//!
+//! # What a tap opens: the `open` keys
+//!
+//! Every row, and the widget's body, carries an OPEN KEY: an opaque short string
+//! the shell hands back untouched (`centraid://agenda?open=<key>` on iOS, an
+//! intent extra on Android) and the core answers with a page. **The shells name
+//! no screen and no destination**, and a key the core did not emit in its last
+//! document opens Agenda's home and nothing else, so what an outside app can
+//! push into Agenda is exactly what the snapshot offered. The keys are
+//! `e:<event id>:<local start>` (one occurrence), `t:<task id>`, `up_next`
+//! (Agenda's Day), `reminders` (To-do) and `add` (To-do, the quick-add bar open
+//! and empty). [`Opens`] is the table the service keeps for the last document.
 //!
 //! An all-day row's `starts_local` is its day at `T00:00` and its `ends_local`
 //! is empty; a task's `ends_local` is empty. `tint` is a colour key the shells
 //! map to their tokens, never a colour.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Map, Value, json};
@@ -64,6 +82,37 @@ pub const MAX_BYTES: usize = 8 * 1024;
 const ELLIPSIS: char = '\u{2026}';
 const TINT_AGENDA: &str = "agenda";
 const TINT_RED: &str = "red";
+
+/// The key that opens Agenda's Day.
+pub const KEY_UP_NEXT: &str = "up_next";
+/// The key that opens To-do.
+pub const KEY_REMINDERS: &str = "reminders";
+/// The key that opens To-do with the quick-add bar open.
+pub const KEY_ADD: &str = "add";
+
+/// What an open key names, for the service to turn into a route.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Open {
+    /// One occurrence of an event, drawn under `day`.
+    Event {
+        event_id: String,
+        instance_key: String,
+        original_start_local: Option<String>,
+        day: String,
+    },
+    /// One task.
+    Task { task_id: String },
+    /// Agenda's Day.
+    UpNext,
+    /// To-do.
+    Reminders,
+    /// To-do with the quick-add bar open.
+    Add,
+}
+
+/// The keys a document offered and what each opens: the only keys the service
+/// will answer.
+pub type Opens = BTreeMap<String, Open>;
 
 /// What the reads answered. Every day and wall clock is the core's, in the
 /// device's zone.
@@ -101,6 +150,9 @@ struct Item {
     tint: &'static str,
     /// Tomorrow's, for the sentence Siri speaks.
     tomorrow: bool,
+    /// What a tap on the row opens, and the key that says so.
+    open: Open,
+    open_key: String,
 }
 
 /// One reminder row.
@@ -110,11 +162,20 @@ struct Reminder {
     due_label: String,
     overdue: bool,
     flagged: bool,
+    /// What a tap on the row opens, and the key that says so.
+    open: Open,
+    open_key: String,
 }
 
 /// The document for a day that was read.
 #[must_use]
 pub fn ready(inputs: &Inputs) -> Vec<u8> {
+    ready_with_opens(inputs).0
+}
+
+/// The document for a day that was read, and the keys it offers.
+#[must_use]
+pub fn ready_with_opens(inputs: &Inputs) -> (Vec<u8>, Opens) {
     let locale = inputs.locale;
     let tomorrow = civil::plus_days(inputs.today, 1).unwrap_or_default();
     let mut up_next = up_next(inputs, &tomorrow);
@@ -138,7 +199,7 @@ pub fn ready(inputs: &Inputs) -> Vec<u8> {
             counts,
             siri_sentence(locale, up_next.first()),
         );
-        if document.len() <= MAX_BYTES || (up_next.is_empty() && reminders.is_empty()) {
+        if document.0.len() <= MAX_BYTES || (up_next.is_empty() && reminders.is_empty()) {
             return document;
         }
         // DROP FROM THE LONGER LIST'S END until the document fits.
@@ -154,6 +215,13 @@ pub fn ready(inputs: &Inputs) -> Vec<u8> {
 /// read, or a vault that refused. Never an empty `ready`.
 #[must_use]
 pub fn unavailable(locale: Locale, zone: &str) -> Vec<u8> {
+    unavailable_with_opens(locale, zone).0
+}
+
+/// The document for a day that could not be read, and the keys it offers (the
+/// three that open a place: a tap on the widget still opens Agenda).
+#[must_use]
+pub fn unavailable_with_opens(locale: Locale, zone: &str) -> (Vec<u8>, Opens) {
     let inputs = Inputs {
         locale,
         zone,
@@ -223,8 +291,20 @@ fn document(
     reminders: &[Reminder],
     counts: Counts,
     sentence: String,
-) -> Vec<u8> {
+) -> (Vec<u8>, Opens) {
     let locale = inputs.locale;
+    let mut opens: Opens = BTreeMap::from([
+        (KEY_UP_NEXT.to_owned(), Open::UpNext),
+        (KEY_REMINDERS.to_owned(), Open::Reminders),
+        (KEY_ADD.to_owned(), Open::Add),
+    ]);
+    for (key, open) in up_next
+        .iter()
+        .map(|item| (&item.open_key, &item.open))
+        .chain(reminders.iter().map(|row| (&row.open_key, &row.open)))
+    {
+        opens.insert(key.clone(), open.clone());
+    }
     let mut root = Map::new();
     root.insert("version".into(), json!(VERSION));
     root.insert("state".into(), json!(state));
@@ -232,6 +312,9 @@ fn document(
     root.insert("now_local".into(), json!(inputs.now_local));
     root.insert("zone".into(), json!(inputs.zone));
     root.insert("refresh_after".into(), json!(refresh_after));
+    root.insert("open_up_next".into(), json!(KEY_UP_NEXT));
+    root.insert("open_reminders".into(), json!(KEY_REMINDERS));
+    root.insert("open_add".into(), json!(KEY_ADD));
     root.insert(
         "words".into(),
         json!({
@@ -264,6 +347,7 @@ fn document(
                         "ends_local": item.ends_local,
                         "all_day": item.all_day,
                         "tint": item.tint,
+                        "open": item.open_key,
                     })
                 })
                 .collect(),
@@ -281,12 +365,16 @@ fn document(
                 "due_label": row.due_label,
                 "overdue": row.overdue,
                 "flagged": row.flagged,
+                "open": row.open_key,
             })).collect::<Vec<_>>(),
         }),
     );
     root.insert("siri".into(), json!({ "next_sentence": sentence }));
     // A map of strings, numbers and bools always serialises.
-    serde_json::to_vec(&Value::Object(root)).unwrap_or_default()
+    (
+        serde_json::to_vec(&Value::Object(root)).unwrap_or_default(),
+        opens,
+    )
 }
 
 /// A title as one short line: whitespace collapsed, at most [`MAX_TITLE`]
@@ -393,7 +481,15 @@ fn up_next(inputs: &Inputs, tomorrow: &str) -> Vec<Item> {
                     event.local_end.clone(),
                 )
             };
+            let open = Open::Event {
+                event_id: event.event_id.clone(),
+                instance_key: event.instance_key.clone(),
+                original_start_local: event.original_start_local.clone(),
+                day: day.to_owned(),
+            };
             items.push(Item {
+                open_key: format!("e:{}:{}", id_of(key), starts),
+                open,
                 id: id_of(key),
                 kind: "event",
                 title: event_title(locale, event),
@@ -414,6 +510,10 @@ fn up_next(inputs: &Inputs, tomorrow: &str) -> Vec<Item> {
                 continue;
             }
             items.push(Item {
+                open_key: format!("t:{}", id_of(&task.task_id)),
+                open: Open::Task {
+                    task_id: task.task_id.clone(),
+                },
                 id: id_of(&task.task_id),
                 kind: "task",
                 title: task_title(locale, task),
@@ -482,6 +582,10 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
     due.into_iter()
         .take(MAX_ROWS)
         .map(|task| Reminder {
+            open_key: format!("t:{}", id_of(&task.task_id)),
+            open: Open::Task {
+                task_id: task.task_id.clone(),
+            },
             id: id_of(&task.task_id),
             title: task_title(locale, task),
             // A task due today with no time is in the Today list already: it

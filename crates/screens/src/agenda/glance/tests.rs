@@ -169,6 +169,9 @@ fn a_ready_document_has_the_schema_and_the_pinned_clock() {
         keys,
         [
             "now_local",
+            "open_add",
+            "open_reminders",
+            "open_up_next",
             "refresh_after",
             "reminders",
             "siri",
@@ -194,6 +197,7 @@ fn a_ready_document_has_the_schema_and_the_pinned_clock() {
     assert_eq!(first["ends_local"], "2026-11-07T16:00");
     assert_eq!(first["all_day"], false);
     assert_eq!(first["tint"], "agenda");
+    assert_eq!(first["open"], "e:e1:2026-11-07T15:00");
     assert_eq!(doc["siri"]["next_sentence"], "Next is Dentist at 15:00.");
     // The example a reader of this schema is written against.
     println!("{}", serde_json::to_string_pretty(&doc).expect("pretty"));
@@ -682,4 +686,73 @@ fn times_follow_the_phones_hour_cycle() {
     let plain = build(events(), tasks());
     assert_eq!(plain["up_next"][0]["time_label"], "15:00");
     assert_eq!(plain["up_next"][1]["time_label"], "17:30");
+}
+
+/// THE OPEN KEYS: opaque, short, one per row and one per place, and every key a
+/// document carries is one the table the service answers from holds.
+#[test]
+fn rows_carry_open_keys_and_the_table_names_each() {
+    use super::snapshot::{Open, ready_with_opens, unavailable_with_opens};
+    let upcoming = wire::AgendaUpcoming {
+        events: vec![event(
+            "series",
+            "Dentist",
+            "2026-11-07T15:00",
+            "2026-11-07T16:00",
+            false,
+            &[TODAY],
+        )],
+        ..Default::default()
+    };
+    let tasks = vec![
+        task("t1", "Send invoice", TODAY, "17:30"),
+        task("t2", "Water plants", TODAY, ""),
+    ];
+    let counts = counted(&tasks);
+    let (raw, opens) = ready_with_opens(&Inputs {
+        locale: Locale::En,
+        zone: ZONE,
+        today: TODAY,
+        now_local: NOW,
+        upcoming: &upcoming,
+        tasks: &tasks,
+        cycle: HourCycle::default(),
+        counts: &counts,
+    });
+    let doc: Value = serde_json::from_slice(&raw).expect("JSON");
+    assert_eq!(doc["version"], 1);
+    assert_eq!(doc["open_up_next"], "up_next");
+    assert_eq!(doc["open_reminders"], "reminders");
+    assert_eq!(doc["open_add"], "add");
+    assert_eq!(doc["up_next"][0]["open"], "e:series:2026-11-07T15:00");
+    assert_eq!(doc["up_next"][1]["open"], "t:t1");
+    // A date-only due is listed before a timed one.
+    assert_eq!(doc["reminders"]["rows"][0]["open"], "t:t2");
+    assert_eq!(doc["reminders"]["rows"][1]["open"], "t:t1");
+    assert_eq!(
+        opens.get("t:t2"),
+        Some(&Open::Task {
+            task_id: "t2".to_owned()
+        })
+    );
+    assert!(matches!(
+        opens.get("e:series:2026-11-07T15:00"),
+        Some(Open::Event { event_id, day, .. }) if event_id == "series" && day == TODAY
+    ));
+    assert_eq!(opens.get("add"), Some(&Open::Add));
+    // Nothing the document names is missing from the table.
+    for key in doc["up_next"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(doc["reminders"]["rows"].as_array().into_iter().flatten())
+        .filter_map(|row| row["open"].as_str())
+    {
+        assert!(opens.contains_key(key), "{key}");
+    }
+    // The unavailable document still opens the app's places, and only those.
+    let (raw, opens) = unavailable_with_opens(Locale::En, ZONE);
+    let doc: Value = serde_json::from_slice(&raw).expect("JSON");
+    assert_eq!(doc["open_add"], "add");
+    assert_eq!(opens.len(), 3);
 }

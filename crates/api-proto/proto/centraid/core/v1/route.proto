@@ -184,6 +184,10 @@ message AgendaHomeRoute {
   // Words waiting in To-do's quick add, focused (Notes' "Send to Agenda");
   // empty is an empty bar. Naming words also names To-do as the place.
   string quick_add_title = 2;
+  // Open To-do's quick-add bar drawn and focused, empty, though no words wait
+  // (a widget's "New Reminder"). Nothing is written until the member taps Add.
+  // It names To-do as the place, as naming words does.
+  bool open_quick_add = 3;
 }
 
 // `agenda.event`: one occurrence of an event.

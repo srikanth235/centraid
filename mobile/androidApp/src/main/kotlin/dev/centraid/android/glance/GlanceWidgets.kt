@@ -28,6 +28,15 @@ internal object GlanceWidgets {
     /** An optional extra on that action: the reminder's title, seeded into the bar (empty when absent). */
     const val EXTRA_TITLE: String = "dev.centraid.extra.REMINDER_TITLE"
 
+    /**
+     * A WIDGET'S TAP: the app on this action with one OPAQUE KEY from the snapshot as
+     * [EXTRA_OPEN_KEY]. The core names the page; this shell names none.
+     */
+    const val ACTION_AGENDA_OPEN: String = "dev.centraid.action.AGENDA_OPEN"
+
+    /** The key a widget's tap carries, copied untouched from the snapshot's `open` fields. */
+    const val EXTRA_OPEN_KEY: String = "dev.centraid.extra.OPEN_KEY"
+
     /** The alarm's broadcast: redraw, so a snapshot past its `refresh_after` shows its stale words. */
     const val ACTION_REFRESH: String = "dev.centraid.action.GLANCE_REFRESH"
 
@@ -113,19 +122,51 @@ internal object GlanceWidgets {
         schedule(context, AppWidgetManager.getInstance(context), GlanceSnapshot.load(context), System.currentTimeMillis())
     }
 
-    /** A tap on the widget: the app, as its launcher icon would open it. Null if the app has no launcher entry. */
-    fun open(context: Context): PendingIntent? {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-        return PendingIntent.getActivity(context, REQUEST_OPEN, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    /**
+     * A TAP ON A WIDGET'S BODY OR ROW (#1173): the app on [ACTION_AGENDA_OPEN] with the core's opaque
+     * [key], delivered to the running activity when there is one. [slot] is a request code unique to
+     * this widget's body or row: a `PendingIntent` is told apart by its request code and not by its
+     * extras, so two slots with the same code would share one key. A snapshot with no key (none
+     * kept yet, or one an older core wrote) opens the app as its launcher icon would, as it always
+     * did; null if the app has no launcher entry.
+     */
+    fun open(context: Context, key: String?, slot: Int): PendingIntent? {
+        if (key.isNullOrEmpty()) {
+            val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+            return PendingIntent.getActivity(context, slot, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+        val intent = Intent(context, MainActivity::class.java)
+            .setAction(ACTION_AGENDA_OPEN)
+            .putExtra(EXTRA_OPEN_KEY, key)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        return PendingIntent.getActivity(context, slot, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** The New Reminder button: the app on [ACTION_ADD_REMINDER], delivered to the running activity when there is one. */
-    fun add(context: Context): PendingIntent {
+    /**
+     * The New Reminder button: the `open_add` [key] the snapshot carries, or, with no snapshot to
+     * name one, the shortcut's own [ACTION_ADD_REMINDER] (which opens the same bar). Delivered to the
+     * running activity when there is one.
+     */
+    fun add(context: Context, key: String?): PendingIntent {
+        if (!key.isNullOrEmpty()) return open(context, key, SLOT_ADD) ?: addShortcut(context)
+        return addShortcut(context)
+    }
+
+    private fun addShortcut(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setAction(ACTION_ADD_REMINDER)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        return PendingIntent.getActivity(context, REQUEST_ADD, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return PendingIntent.getActivity(context, SLOT_ADD, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
+
+    /** The request code of Up next's body; its rows follow, one per slot. */
+    const val SLOT_UP_NEXT: Int = 100
+
+    /** The request code of Reminders' body; its rows follow, one per slot. */
+    const val SLOT_REMINDERS: Int = 200
+
+    /** The request code of the New Reminder button. */
+    const val SLOT_ADD: Int = 300
 
     /** One widget's two layouts. */
     internal interface Renderer {
@@ -138,8 +179,6 @@ internal object GlanceWidgets {
         RemindersWidget::class.java to RemindersWidget.Draw,
     )
 
-    private const val REQUEST_OPEN = 1
-    private const val REQUEST_ADD = 2
     private const val REQUEST_REFRESH = 3
 }
 

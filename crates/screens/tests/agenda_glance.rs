@@ -2,7 +2,8 @@
 //! widgets' snapshot is asked for on start and on a change, is not asked for
 //! twice when nothing moved, says `unavailable` when nothing can be read, and
 //! the platform's "Add a reminder" opens Agenda's Reminders with the quick-add
-//! bar holding the title. Effects are counted; nothing here measures time.
+//! bar holding the title, and a widget tap opens the page the core names for the
+//! key it offered (and Agenda's home for any other). Effects are counted; nothing here measures time.
 
 mod todo_support;
 
@@ -300,10 +301,7 @@ fn add_a_reminder_opens_reminders_with_the_title_in_the_quick_add_bar() {
         })
         .collect();
     assert_eq!(routes_opened.len(), 1);
-    assert_eq!(
-        *routes_opened[0],
-        routes::home(wire::AgendaDestination::Todo, "Buy oat milk")
-    );
+    assert_eq!(*routes_opened[0], routes::home_adding("Buy oat milk"));
     // Nothing was written: no task has the title.
     assert!(
         todo_support::load_board(
@@ -327,6 +325,162 @@ fn add_a_reminder_opens_reminders_with_the_title_in_the_quick_add_bar() {
     assert!(update.effects.iter().any(|request| matches!(
         request.effect.as_ref().and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::OpenRoute(open))
-            if open.route.as_ref() == Some(&routes::home(wire::AgendaDestination::Todo, ""))
+            if open.route.as_ref() == Some(&routes::home_adding(""))
     )));
+}
+
+// ---------------------------------------------------------------------------
+// A widget tap opens the page the core names (#1173).
+// ---------------------------------------------------------------------------
+
+fn open_key(d: &mut Driver, key: &str) -> wire::Route {
+    let update = d.call(wire::screen_request::Kind::ShellFact(wire::ShellFact {
+        fact: Some(wire::shell_fact::Fact::AgendaIntent(wire::AgendaIntent {
+            kind: Some(wire::agenda_intent::Kind::Open(wire::AgendaIntentOpen {
+                key: key.to_owned(),
+            })),
+        })),
+    }));
+    let mut opened: Vec<wire::Route> = update
+        .effects
+        .iter()
+        .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::OpenRoute(open) => open.route.clone(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(opened.len(), 1, "one tap, one route");
+    opened.remove(0)
+}
+
+fn home() -> wire::Route {
+    routes::home(wire::AgendaDestination::Unspecified, "")
+}
+
+/// Agenda with an all-day event today, a task due today and a timed one.
+fn busy_day() -> (Driver, String) {
+    let mut d = Driver::with_runtime(runtime());
+    d.start();
+    answer_glance(&mut d, done());
+    let today = todo_support::today(&d);
+    arrange(
+        &d,
+        centraid_screens::catalog::act::agenda::Propose {
+            id: Some("zq-event".to_owned()),
+            title: "Zq all-day".to_owned(),
+            starts: today.clone(),
+            ends: Field::Is(today.clone()),
+            timing: Some(centraid_screens::catalog::act::agenda::ProposeTiming::AllDay),
+            busy: Some(false),
+            ..Default::default()
+        },
+    );
+    arrange(
+        &d,
+        centraid_screens::catalog::act::agenda::AddTask {
+            title: "Zq due today".to_owned(),
+            due: Field::Is(today.clone()),
+            ..Default::default()
+        },
+    );
+    d.send(SERVICE, changed());
+    (d, today)
+}
+
+/// EVERY KEY THE DOCUMENT OFFERS OPENS ITS PAGE, chosen by the core: an event its
+/// occurrence, a task its detail, the body's keys a place, "New Reminder" the
+/// quick-add bar open and empty.
+#[test]
+fn each_key_the_snapshot_offers_opens_its_page() {
+    let (mut d, today) = busy_day();
+    let doc = documents(&d).pop().expect("a snapshot");
+    assert_eq!(doc["open_up_next"], "up_next");
+    assert_eq!(doc["open_reminders"], "reminders");
+    assert_eq!(doc["open_add"], "add");
+
+    let event = doc["up_next"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["title"] == "Zq all-day"))
+        .expect("the event is up next");
+    let key = event["open"].as_str().expect("a key");
+    assert!(key.starts_with("e:zq-event"), "{key}");
+    let route = open_key(&mut d, key);
+    assert_eq!(route.screen, centraid_screens::agenda::EVENT);
+    let Some(wire::route::Args::AgendaEvent(args)) = route.args else {
+        panic!("{route:?}")
+    };
+    assert_eq!(
+        (args.event_id.as_str(), args.day.as_str()),
+        ("zq-event", today.as_str())
+    );
+
+    let row = doc["reminders"]["rows"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["title"] == "Zq due today"))
+        .expect("the task is a reminder");
+    let key = row["open"].as_str().expect("a key");
+    assert_eq!(key, format!("t:{}", row["id"].as_str().expect("an id")));
+    assert_eq!(
+        open_key(&mut d, key),
+        routes::task(row["id"].as_str().expect("an id"))
+    );
+
+    assert_eq!(
+        open_key(&mut d, "up_next"),
+        routes::home(wire::AgendaDestination::Day, "")
+    );
+    assert_eq!(
+        open_key(&mut d, "reminders"),
+        routes::home(wire::AgendaDestination::Todo, "")
+    );
+    assert_eq!(open_key(&mut d, "add"), routes::home_adding(""));
+}
+
+/// A KEY THE CORE DID NOT OFFER IS NOT A ROUTE: an unknown key, one of the wrong
+/// shape, an empty one and a screen's own name all open Agenda's home.
+#[test]
+fn an_unknown_key_opens_agenda_home() {
+    let (mut d, _) = busy_day();
+    for key in [
+        "",
+        "nope",
+        "t:no-such-task",
+        "e:no-such-event:2000-01-01T00:00",
+        "agenda.trash",
+        "agenda.task",
+        "../../etc",
+    ] {
+        assert_eq!(open_key(&mut d, key), home(), "{key:?}");
+    }
+}
+
+/// A KEY FROM AN OLDER SNAPSHOT IS STALE: the task was finished and the document
+/// rebuilt, so the row's old key opens Agenda's home.
+#[test]
+fn a_key_from_an_older_snapshot_opens_agenda_home() {
+    let (mut d, _) = busy_day();
+    let doc = documents(&d).pop().expect("a snapshot");
+    let row = doc["reminders"]["rows"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["title"] == "Zq due today"))
+        .expect("the task is a reminder");
+    let (key, id) = (
+        row["open"].as_str().expect("a key").to_owned(),
+        row["id"].as_str().expect("an id").to_owned(),
+    );
+    assert_eq!(open_key(&mut d, &key), routes::task(&id));
+    answer_glance(&mut d, done());
+    arrange(
+        &d,
+        centraid_screens::catalog::act::agenda::CompleteTask { task_id: id },
+    );
+    d.send(SERVICE, changed());
+    let newer = documents(&d).pop().expect("a newer snapshot");
+    assert!(
+        newer["reminders"]["rows"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().all(|row| row["open"] != key.as_str())),
+        "the finished task has no row"
+    );
+    assert_eq!(open_key(&mut d, &key), home());
 }

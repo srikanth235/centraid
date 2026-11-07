@@ -21,8 +21,14 @@
 //! `refresh_after`, never a device clock.
 //!
 //! **What the platform asks**: `ShellFact.agenda_intent` `add` opens Agenda's
-//! home on Reminders with the quick-add bar holding the title. Nothing is
-//! written until the member taps Add.
+//! home on Reminders with the quick-add bar open, holding the title when there
+//! is one. `open` is a widget tap: its key is one the last document offered
+//! (the service keeps them with the routes they name), and it opens that event,
+//! that task, Agenda's Day, Reminders, or Reminders with the quick-add bar open.
+//! **A key it did not offer, or offered in an older document, opens Agenda's
+//! home on its default place**: never an error and never a route the document
+//! did not name, so nothing outside the app can push Agenda anywhere else.
+//! Nothing is written by any of them until the member taps Add.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -84,6 +90,8 @@ struct Service {
     outstanding: VecDeque<Asked>,
     /// The vault in front when the document was last built.
     front: Option<String>,
+    /// The keys the last document offered, and what each opens.
+    opens: snapshot::Opens,
 }
 
 impl Screen for Service {
@@ -142,7 +150,8 @@ fn front_of(ctx: &Ctx) -> Option<String> {
 impl Service {
     fn refresh(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.front = front_of(ctx);
-        let document = document(ctx);
+        let (document, opens) = document(ctx);
+        self.opens = opens;
         self.arm(ctx, &document);
         if self.last.as_deref() == Some(document.as_slice()) {
             return Vec::new();
@@ -175,19 +184,35 @@ impl Service {
     }
 
     fn intent(&mut self, intent: wire::AgendaIntent) -> Vec<wire::Effect> {
-        match intent.kind {
-            Some(wire::agenda_intent::Kind::Add(add)) => {
-                self.outstanding.push_back(Asked::Route);
-                vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
-                        route: Some(routes::home(
-                            wire::AgendaDestination::Todo,
-                            add.title.trim(),
-                        )),
-                    })),
-                }]
-            }
-            None => Vec::new(),
+        let route = match intent.kind {
+            Some(wire::agenda_intent::Kind::Add(add)) => routes::home_adding(add.title.trim()),
+            Some(wire::agenda_intent::Kind::Open(open)) => self.route_for(&open.key),
+            None => return Vec::new(),
+        };
+        self.outstanding.push_back(Asked::Route);
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                route: Some(route),
+            })),
+        }]
+    }
+
+    /// The page a tap's key opens: what the last document offered under it, else
+    /// Agenda's home on its default place.
+    fn route_for(&self, key: &str) -> wire::Route {
+        use snapshot::Open;
+        match self.opens.get(key) {
+            Some(Open::Event {
+                event_id,
+                instance_key,
+                original_start_local,
+                day,
+            }) => routes::event(event_id, instance_key, original_start_local.as_deref(), day),
+            Some(Open::Task { task_id }) => routes::task(task_id),
+            Some(Open::UpNext) => routes::home(wire::AgendaDestination::Day, ""),
+            Some(Open::Reminders) => routes::home(wire::AgendaDestination::Todo, ""),
+            Some(Open::Add) => routes::home_adding(""),
+            None => routes::home(wire::AgendaDestination::Unspecified, ""),
         }
     }
 }
@@ -200,8 +225,8 @@ fn pick_context(answer: Answer) -> Option<wire::AgendaDayContext> {
 }
 
 /// The document for what the vault in front holds now.
-fn document(ctx: &Ctx) -> Vec<u8> {
-    let unavailable = || snapshot::unavailable(ctx.locale(), ctx.zone());
+fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
+    let unavailable = || snapshot::unavailable_with_opens(ctx.locale(), ctx.zone());
     let Reading::Data(context) = read(ctx, query::DayContext::default(), pick_context) else {
         return unavailable();
     };
@@ -278,7 +303,7 @@ fn document(ctx: &Ctx) -> Vec<u8> {
     if counts.today_day != context.today {
         return unavailable();
     }
-    snapshot::ready(&Inputs {
+    snapshot::ready_with_opens(&Inputs {
         locale: ctx.locale(),
         zone: ctx.zone(),
         today: &context.today,

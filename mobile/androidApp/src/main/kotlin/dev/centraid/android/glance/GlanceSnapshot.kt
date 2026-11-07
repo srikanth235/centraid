@@ -33,12 +33,16 @@ internal data class GlanceWords(
     val addLabel: String,
 )
 
-/** One row of the Up next list. [tint] is a colour key (`agenda` or `red`), never a colour. */
+/**
+ * One row of the Up next list. [tint] is a colour key (`agenda` or `red`), never a colour. [open] is
+ * the core's opaque key for a tap on the row (empty in a document an older core wrote).
+ */
 internal data class UpNextRow(
     val title: String,
     val timeLabel: String,
     val dayLabel: String,
     val tint: String,
+    val open: String = "",
 )
 
 /** One row of the Reminders list. */
@@ -47,6 +51,8 @@ internal data class ReminderRow(
     val dueLabel: String,
     val overdue: Boolean,
     val flagged: Boolean,
+    /** The core's opaque key for a tap on the row (empty in a document an older core wrote). */
+    val open: String = "",
 )
 
 internal data class GlanceSnapshot(
@@ -55,6 +61,14 @@ internal data class GlanceSnapshot(
     /** Local wall clock in [zone], `yyyy-MM-ddTHH:mm`; after it the widget shows [GlanceWords.stale]. */
     val refreshAfter: String,
     val zone: String,
+    /**
+     * The core's opaque keys for a tap on a widget's body and on its New Reminder button (empty in
+     * a document an older core wrote: the tap then opens the app, as it always did). Never a
+     * screen: the shell hands a key back and the core names the page.
+     */
+    val openUpNext: String = "",
+    val openReminders: String = "",
+    val openAdd: String = "",
     val words: GlanceWords,
     val upNext: List<UpNextRow>,
     val todayCount: Int,
@@ -121,6 +135,9 @@ internal data class GlanceSnapshot(
                     ready = root.optString("state") == "ready",
                     refreshAfter = root.optString("refresh_after"),
                     zone = root.optString("zone"),
+                    openUpNext = root.optString("open_up_next"),
+                    openReminders = root.optString("open_reminders"),
+                    openAdd = root.optString("open_add"),
                     words = GlanceWords(
                         upNextTitle = words.optString("up_next_title"),
                         todayTitle = words.optString("today_title"),
@@ -140,6 +157,7 @@ internal data class GlanceSnapshot(
                             timeLabel = row.optString("time_label"),
                             dayLabel = row.optString("day_label"),
                             tint = row.optString("tint"),
+                            open = row.optString("open"),
                         )
                     },
                     todayCount = reminders.optInt("today_count"),
@@ -151,6 +169,7 @@ internal data class GlanceSnapshot(
                             dueLabel = row.optString("due_label"),
                             overdue = row.optBoolean("overdue"),
                             flagged = row.optBoolean("flagged"),
+                            open = row.optString("open"),
                         )
                     },
                 )

@@ -69,6 +69,9 @@ struct CentraidApp: App {
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
             }
+            // A WIDGET'S TAP (#1173): `centraid://agenda?open=<key>`, the core's opaque
+            // key; the core answers with the page. Any other URL is ignored.
+            .onOpenURL { shell.handleOpenURL($0) }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask

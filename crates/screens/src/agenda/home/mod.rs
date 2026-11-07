@@ -108,9 +108,10 @@ impl Home {
         // SEEDED WORDS (Notes' "Send to Agenda") wait in To-do's bar, focused,
         // and they name To-do as the place.
         let seed = args.quick_add_title.trim().to_owned();
+        let bar = !seed.is_empty() || args.open_quick_add;
         let named = Dest::try_from(args.destination).unwrap_or(Dest::Unspecified);
         let destination = match named {
-            Dest::Unspecified if !seed.is_empty() => Dest::Todo,
+            Dest::Unspecified if bar => Dest::Todo,
             Dest::Unspecified => Dest::Day,
             other => other,
         };
@@ -126,8 +127,8 @@ impl Home {
             filing_task_id: String::new(),
             new_project_name: String::new(),
             quick: QuickAdd {
-                drawn: !seed.is_empty(),
-                focused: !seed.is_empty(),
+                drawn: bar,
+                focused: bar,
                 title: seed,
                 chip: Chipper::default(),
             },

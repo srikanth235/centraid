@@ -43,7 +43,9 @@ public class UpNextWidget : AppWidgetProvider() {
 
         override fun small(context: Context, snapshot: GlanceSnapshot?, now: Long): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.glance_up_next_small)
-            GlanceWidgets.open(context)?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
+            // The body opens the page the core names for it (Agenda's Day); with no key, the app.
+            GlanceWidgets.open(context, snapshot?.openUpNext, GlanceWidgets.SLOT_UP_NEXT)
+                ?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
             if (snapshot == null) return bare(context, views)
             val first = snapshot.upNext.firstOrNull()
             val message = snapshot.sentence(now) ?: if (first == null) snapshot.words.nothingNext else null
@@ -66,7 +68,9 @@ public class UpNextWidget : AppWidgetProvider() {
 
         override fun wide(context: Context, snapshot: GlanceSnapshot?, now: Long): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.glance_up_next_wide)
-            GlanceWidgets.open(context)?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
+            // The body opens the page the core names for it (Agenda's Day); a row opens its own.
+            GlanceWidgets.open(context, snapshot?.openUpNext, GlanceWidgets.SLOT_UP_NEXT)
+                ?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
             if (snapshot == null) {
                 // Every slot is set every time: an update re-applies onto the view already on screen.
                 hideRows(views, 0)
@@ -95,6 +99,10 @@ public class UpNextWidget : AppWidgetProvider() {
                 }
                 val red = row.tint == "red"
                 views.show(ROWS[slot], true)
+                // A request code per slot: the key is an extra, which tells no two intents apart.
+                GlanceWidgets.open(context, row.open, GlanceWidgets.SLOT_UP_NEXT + 1 + slot)
+                    ?.let { views.setOnClickPendingIntent(ROWS[slot], it) }
+                views.describe(ROWS[slot], row.timeLabel, row.title)
                 views.setTextViewText(TIMES[slot], row.timeLabel)
                 views.setTextViewText(TIMES_RED[slot], row.timeLabel)
                 views.show(TIMES[slot], !red)

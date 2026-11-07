@@ -32,7 +32,9 @@ public class RemindersWidget : AppWidgetProvider() {
 
         override fun small(context: Context, snapshot: GlanceSnapshot?, now: Long): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.glance_reminders_small)
-            GlanceWidgets.open(context)?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
+            // The body opens the page the core names for it (Reminders); with no key, the app.
+            GlanceWidgets.open(context, snapshot?.openReminders, GlanceWidgets.SLOT_REMINDERS)
+                ?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
             if (snapshot == null) {
                 val name = context.getString(R.string.glance_widget_reminders_name)
                 views.setTextViewText(R.id.glance_title, name)
@@ -72,9 +74,12 @@ public class RemindersWidget : AppWidgetProvider() {
 
         override fun wide(context: Context, snapshot: GlanceSnapshot?, now: Long): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.glance_reminders_wide)
-            GlanceWidgets.open(context)?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
-            // The button is the one control, and it works without a snapshot: it only opens the app.
-            views.setOnClickPendingIntent(R.id.glance_add, GlanceWidgets.add(context))
+            // The body opens the page the core names for it (Reminders); a row opens its task.
+            GlanceWidgets.open(context, snapshot?.openReminders, GlanceWidgets.SLOT_REMINDERS)
+                ?.let { views.setOnClickPendingIntent(R.id.glance_root, it) }
+            // The button opens Reminders with the quick-add bar open (the core's `open_add` key). It
+            // works without a snapshot: it then sends the shortcut's own intent, which opens the same bar.
+            views.setOnClickPendingIntent(R.id.glance_add, GlanceWidgets.add(context, snapshot?.openAdd))
             if (snapshot == null) {
                 val name = context.getString(R.string.glance_widget_reminders_name)
                 val add = context.getString(R.string.glance_shortcut_add_short)
@@ -103,6 +108,10 @@ public class RemindersWidget : AppWidgetProvider() {
                 val row = rows.getOrNull(slot)
                 views.show(ROWS[slot], row != null)
                 if (row == null) continue
+                // A request code per slot: the key is an extra, which tells no two intents apart.
+                GlanceWidgets.open(context, row.open, GlanceWidgets.SLOT_REMINDERS + 1 + slot)
+                    ?.let { views.setOnClickPendingIntent(ROWS[slot], it) }
+                views.describe(ROWS[slot], row.title, row.dueLabel)
                 views.setTextViewText(TITLES[slot], row.title)
                 views.setTextViewText(DUES[slot], row.dueLabel)
                 views.setTextViewText(DUES_RED[slot], row.dueLabel)
