@@ -186,6 +186,42 @@ pub fn contrast_ratio(foreground: &str, background: &str) -> Option<f64> {
     Some((lighter + 0.05) / (darker + 0.05))
 }
 
+/// The app icon's colours beyond `[brand]` (`[icon]`): the tiles, and the tinted
+/// and themed variants.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Icon {
+    pub light_tile: String,
+    pub light_edge: String,
+    pub dark_tile: String,
+    pub tinted_tile: String,
+    pub tinted_teal: String,
+    pub tinted_orange: String,
+    pub tinted_blue: String,
+    pub tinted_pink: String,
+    pub themed_tile: String,
+    pub themed_glyph: String,
+}
+
+impl Icon {
+    /// Every colour by field name, for the well-formed-hex check.
+    #[must_use]
+    pub fn colours(&self) -> [(&'static str, &str); 10] {
+        [
+            ("light_tile", &self.light_tile),
+            ("light_edge", &self.light_edge),
+            ("dark_tile", &self.dark_tile),
+            ("tinted_tile", &self.tinted_tile),
+            ("tinted_teal", &self.tinted_teal),
+            ("tinted_orange", &self.tinted_orange),
+            ("tinted_blue", &self.tinted_blue),
+            ("tinted_pink", &self.tinted_pink),
+            ("themed_tile", &self.themed_tile),
+            ("themed_glyph", &self.themed_glyph),
+        ]
+    }
+}
+
 /// One accent: an app, a state or the shell.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -450,6 +486,8 @@ pub struct Tokens {
     pub list: BTreeMap<String, String>,
     /// The four brand colours of the app mark (teal, orange, blue, pink). Not app keys.
     pub brand: BTreeMap<String, String>,
+    /// The app icon's tiles and its tinted and themed colours (`[icon]`).
+    pub icon: Icon,
     #[serde(rename = "type")]
     pub scale: BTreeMap<String, ScaleStep>,
     pub radius: Radii,
@@ -619,6 +657,9 @@ impl Tokens {
         }
         for (name, value) in &self.brand {
             hexes.push((format!("brand.{name}"), value));
+        }
+        for (name, value) in self.icon.colours() {
+            hexes.push((format!("icon.{name}"), value));
         }
         for app in &self.native.app {
             for (field, value) in [

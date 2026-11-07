@@ -1293,6 +1293,14 @@ pub fn emit(root: &Path) -> Result<Emitted> {
     ];
     owned.extend(SITE_ASSETS.iter().map(|dir| format!("{dir}/fonts")));
 
+    // The app icon: master SVGs, the iOS AppIcon set, the Android adaptive icon.
+    files.extend(crate::design_icon::files(&tokens)?);
+    owned.extend(
+        crate::design_icon::OWNED
+            .iter()
+            .map(|dir| (*dir).to_owned()),
+    );
+
     // The dark mockups, from the light ones.
     for (path, text) in crate::design_dark::dark_boards(root)? {
         files.insert(path, text.into_bytes());
