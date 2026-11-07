@@ -76,7 +76,32 @@ fn board(tasks: Vec<wire::AgendaTask>) -> wire::AgendaTaskBoard {
     }
 }
 
+/// What the core's count read would say about `tasks` if they were every open
+/// task there is (the fixtures below that are small enough to be).
+fn counted(tasks: &[wire::AgendaTask]) -> wire::AgendaTaskSmartCounts {
+    let open = || tasks.iter().filter(|task| task.status == "open");
+    let count = |keep: &dyn Fn(&wire::AgendaTask) -> bool| {
+        u32::try_from(open().filter(|task| keep(task)).count()).expect("a small count")
+    };
+    wire::AgendaTaskSmartCounts {
+        today: count(&|task| task.lands_today && !task.overdue),
+        overdue: count(&|task| task.overdue),
+        flagged: count(&|task| task.flagged),
+        today_day: TODAY.to_owned(),
+    }
+}
+
 fn bytes(events: Vec<wire::AgendaEvent>, tasks: Vec<wire::AgendaTask>) -> Vec<u8> {
+    let counts = counted(&tasks);
+    bytes_counting(events, tasks, &counts)
+}
+
+/// The document when the counts are the vault's and the rows are only the window.
+fn bytes_counting(
+    events: Vec<wire::AgendaEvent>,
+    tasks: Vec<wire::AgendaTask>,
+    counts: &wire::AgendaTaskSmartCounts,
+) -> Vec<u8> {
     let upcoming = wire::AgendaUpcoming {
         events,
         ..Default::default()
@@ -89,6 +114,7 @@ fn bytes(events: Vec<wire::AgendaEvent>, tasks: Vec<wire::AgendaTask>) -> Vec<u8
         now_local: NOW,
         upcoming: &upcoming,
         tasks: &tasks,
+        counts,
     })
 }
 
@@ -414,6 +440,7 @@ fn refresh_after_is_the_next_midnight_or_the_nearest_boundary() {
         now_local: "2026-12-31T23:10",
         upcoming: &upcoming,
         tasks: &tasks,
+        counts: &wire::AgendaTaskSmartCounts::default(),
     });
     assert_eq!(
         refresh_after_of(&year_end).as_deref(),
@@ -552,6 +579,44 @@ fn a_thousand_long_rows_stay_in_bounds_with_true_counts() {
     assert_eq!(doc["reminders"]["today_count"], 500);
     assert_eq!(doc["reminders"]["overdue_count"], 500);
     assert_eq!(doc["reminders"]["flagged_count"], 100);
+}
+
+/// THE COUNTS ARE THE VAULT'S, NOT THE WINDOW'S (#1173): the rows come from a
+/// window that holds a few tasks, and the count read says the vault holds far
+/// more. The document says the vault's numbers and draws at most six rows.
+#[test]
+fn counts_are_independent_of_the_rows_the_window_held() {
+    let tasks: Vec<wire::AgendaTask> = (0..20)
+        .map(|n| {
+            if n % 2 == 0 {
+                task(&format!("today-{n}"), "Due", TODAY, "")
+            } else {
+                task(&format!("late-{n}"), "Late", "2026-11-01", "")
+            }
+        })
+        .collect();
+    let counts = wire::AgendaTaskSmartCounts {
+        today: 1_200,
+        overdue: 1_500,
+        flagged: 90,
+        today_day: TODAY.to_owned(),
+    };
+    let doc: Value = serde_json::from_slice(&bytes_counting(vec![], tasks, &counts)).expect("JSON");
+    assert_eq!(doc["reminders"]["today_count"], 1_200);
+    assert_eq!(doc["reminders"]["overdue_count"], 1_500);
+    assert_eq!(doc["reminders"]["flagged_count"], 90);
+    assert_eq!(doc["words"]["overdue_label"], "1500 overdue");
+    assert_eq!(doc["words"]["today_label"], "1200 today");
+    let rows = doc["reminders"]["rows"].as_array().expect("rows");
+    assert_eq!(
+        rows.len(),
+        MAX_ROWS,
+        "the rows are capped, the counts are not"
+    );
+    assert!(
+        rows.iter().all(|row| row["overdue"] == true),
+        "overdue fills the rows first"
+    );
 }
 
 #[test]

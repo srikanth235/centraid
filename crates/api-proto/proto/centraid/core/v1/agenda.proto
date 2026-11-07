@@ -455,6 +455,13 @@ message AgendaTaskCatchUpRequest {
   string tz = 1;
 }
 
+// `agenda.task.smart-counts`: the Today, Overdue and Flagged counts of every open task, at any
+// vault size.
+message AgendaTaskSmartCountsRequest {
+  // The zone the day is read in (the file header's rule).
+  string tz = 1;
+}
+
 // `agenda.task.trash`: the trashed tasks, most recently trashed first.
 message AgendaTaskTrashRequest {
   // The zone the rows' days are read in: the stated IANA name, else the vault's;
@@ -677,6 +684,22 @@ message AgendaTaskBoard {
   bool truncated = 9;
   // The window actually read, after the clamp.
   uint32 window = 10;
+}
+
+// THE TRUE COUNTS (#1173): one aggregate over the vault's open tasks, never over a board's window,
+// so a vault with more open work than any window holds still says its real numbers. They count the
+// open ROOTS exactly as the board draws them (a subtask of an open parent is its parent's, an
+// unfinished child of a closed or trashed parent is a root) and read each due as the board does
+// (`next_due` of a repeating task, a due in the request's zone).
+message AgendaTaskSmartCounts {
+  // Open roots due today and not overdue.
+  uint32 today = 1;
+  // Open roots due on a day before today.
+  uint32 overdue = 2;
+  // Open roots carrying the Flag.
+  uint32 flagged = 3;
+  // The day `today` and `overdue` are counted against, `YYYY-MM-DD`: the vault clock's day in `tz`.
+  string today_day = 4;
 }
 
 message AgendaTaskDetail {

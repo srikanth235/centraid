@@ -77,8 +77,11 @@ pub struct Inputs<'a> {
     /// The events covering today and tomorrow, padded (see `held.rs`): a row is
     /// kept for the days its `local_days` names.
     pub upcoming: &'a wire::AgendaUpcoming,
-    /// The `all` board: every open task, dated first.
+    /// The `all` board's window: the open tasks the rows are drawn from, dated
+    /// first. Its size says nothing about how many tasks there are.
     pub tasks: &'a wire::AgendaTaskBoard,
+    /// The true Today, Overdue and Flagged counts, over the whole vault.
+    pub counts: &'a wire::AgendaTaskSmartCounts,
 }
 
 /// One `up_next` row, before it is words.
@@ -112,7 +115,12 @@ pub fn ready(inputs: &Inputs) -> Vec<u8> {
     let tomorrow = civil::plus_days(inputs.today, 1).unwrap_or_default();
     let mut up_next = up_next(inputs, &tomorrow);
     let open = open_roots(inputs.tasks);
-    let (mut reminders, counts) = reminders(inputs, &open);
+    let mut reminders = reminders(inputs, &open);
+    let counts = Counts {
+        today: inputs.counts.today as usize,
+        overdue: inputs.counts.overdue as usize,
+        flagged: inputs.counts.flagged as usize,
+    };
     up_next.truncate(MAX_ROWS);
     reminders.truncate(MAX_ROWS);
     let refresh_after = refresh_after(inputs.today, inputs.now_local, &up_next);
@@ -149,6 +157,7 @@ pub fn unavailable(locale: Locale, zone: &str) -> Vec<u8> {
         now_local: "",
         upcoming: &wire::AgendaUpcoming::default(),
         tasks: &wire::AgendaTaskBoard::default(),
+        counts: &wire::AgendaTaskSmartCounts::default(),
     };
     document(
         &inputs,
@@ -440,9 +449,9 @@ fn day_label(locale: Locale, tomorrow: bool) -> String {
     }
 }
 
-/// Overdue first, then today's, each by due then sort order; the counts are the
-/// board's, not the rows'.
-fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> (Vec<Reminder>, Counts) {
+/// Overdue first, then today's, each by due then sort order. The rows are the
+/// window's; the counts are the vault's ([`Inputs::counts`]).
+fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
     let locale = inputs.locale;
     let context = rows::Context {
         today: inputs.today,
@@ -469,16 +478,7 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> (Vec<Reminder>, Cou
                 &b.task_id,
             ))
     });
-    let counts = Counts {
-        overdue: open.iter().filter(|task| task.overdue).count(),
-        today: open
-            .iter()
-            .filter(|task| task.lands_today && !task.overdue)
-            .count(),
-        flagged: open.iter().filter(|task| task.flagged).count(),
-    };
-    let list = due
-        .into_iter()
+    due.into_iter()
         .take(MAX_ROWS)
         .map(|task| Reminder {
             id: id_of(&task.task_id),
@@ -493,8 +493,7 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> (Vec<Reminder>, Cou
             overdue: task.overdue,
             flagged: task.flagged,
         })
-        .collect();
-    (list, counts)
+        .collect()
 }
 
 /// The local wall clock after which the document is stale: the next local

@@ -52,6 +52,7 @@ use crate::task::board::{
     BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, FamilyRow, LOGBOOK_ROWS, by_urgency, is_open_status,
     nest_task_families,
 };
+use crate::task::local::Civil;
 use crate::{Denial, denial_of};
 
 /// A join per windowed task: the kit's default, 500 x 8 = 4,000 rows.
@@ -379,6 +380,88 @@ fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, b
     }
     Err(KitError::FanOutExceeded {
         query: "agenda.task.board.open".to_owned(),
+        cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
+    })
+}
+
+/// How many open REPEATING roots are overdue and how many are due today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RepeatingDue {
+    pub overdue: usize,
+    pub today: usize,
+}
+
+/// The repeating open roots' share of the true counts (#1173): a repeating task's
+/// due is its next open period, which only the recurrence engine computes, so
+/// SQL leaves these tasks to this read. They are walked a page at a time by the
+/// index's own order (`task_by_due`), so the cost is the repeating tasks the member
+/// keeps, and a vault with more than [`OPEN_WALK_PAGES`] pages of them refuses
+/// ([`KitError::FanOutExceeded`]) rather than answering a short count.
+///
+/// A task counts as the board draws it: live, open, and a root (a subtask of an
+/// open, live parent is its parent's).
+///
+/// # Errors
+///
+/// A door refusal or the walk's bound.
+pub fn load_repeating_due(
+    door: &dyn PageDoor,
+    now: &str,
+    zone: &FireZone,
+    today: &Civil,
+) -> KitResult<RepeatingDue> {
+    let query = PageQuery::new(
+        "agenda.task.smart-counts.repeating",
+        TASK_COLUMNS,
+        "task",
+        PageOrder::asc("due", "id"),
+    )
+    .filter("status = ? AND rule IS NOT NULL", vec![text("open")]);
+    let mut counted = RepeatingDue::default();
+    let mut after = None;
+    for _ in 0..OPEN_WALK_PAGES {
+        let page = door.page(
+            &query,
+            &PageRequest {
+                limit: MAX_PAGE_ROWS,
+                after: after.take(),
+            },
+        )?;
+        let ids = ids_of(&page.rows, "id");
+        let entities = live_entities(door, "agenda.task.smart-counts.entities", &ids)?;
+        let tasks = tasks_of(&entities, &page.rows);
+        let parent_ids: Vec<String> = tasks
+            .iter()
+            .filter_map(|task| task.parent_task_id.clone())
+            .collect::<BTreeSet<String>>()
+            .into_iter()
+            .collect();
+        let open_parents: BTreeSet<String> =
+            live_tasks(door, "agenda.task.smart-counts.parents", "id", &parent_ids)?
+                .into_iter()
+                .filter(|parent| is_open_status(&parent.status))
+                .map(|parent| parent.task_id)
+                .collect();
+        for mut task in tasks {
+            if task
+                .parent_task_id
+                .as_ref()
+                .is_some_and(|parent| open_parents.contains(parent))
+            {
+                continue;
+            }
+            task.recurrence = recurrence_of(&task, now, zone);
+            let placed = crate::task::views::place(&task, zone, today);
+            counted.overdue += usize::from(placed.due.overdue);
+            counted.today += usize::from(placed.due.lands_today && !placed.due.overdue);
+        }
+        match page.next {
+            None => return Ok(counted),
+            Some(next) => after = Some(next),
+        }
+    }
+    Err(KitError::FanOutExceeded {
+        query: "agenda.task.smart-counts.repeating".to_owned(),
         cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
     })
 }

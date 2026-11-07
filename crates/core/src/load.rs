@@ -379,6 +379,12 @@ fn read(
             now,
             &wire::AgendaTaskCatchUpRequest { tz },
         )?,
+        ("agenda", "smart-counts") => app_query::agenda_task::smart_counts(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskSmartCountsRequest { tz },
+        )?,
         ("agenda", "trash") => {
             app_query::agenda_task::trash(vault, door, &wire::AgendaTaskTrashRequest { tz })?
         }

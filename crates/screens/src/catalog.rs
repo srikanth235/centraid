@@ -5038,6 +5038,24 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// How many open tasks are due today, overdue and flagged, counted over every open task in the vault and never over a board's window, so the figure is true at any vault size. It counts the open top-level tasks the board draws (an unfinished subtask of a closed or trashed task counts as its own) and reads each due as the board does, in the request's zone against the vault clock. Returns three numbers and the `today_day` they were counted against; no rows.
+        #[derive(Clone, Debug, Default)]
+        pub struct SmartCounts {
+        }
+        impl SmartCounts {
+            pub const NAME: &str = "smart-counts";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<SmartCounts> for wire::LoadRequest {
+            fn from(value: SmartCounts) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {

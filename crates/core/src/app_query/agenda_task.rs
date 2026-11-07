@@ -196,6 +196,58 @@ pub(crate) fn projects(
     })
 }
 
+/// `agenda.task.smart-counts`: the true Today, Overdue and Flagged counts (#1173).
+///
+/// One aggregate over every open task (`Vault::open_task_counts`), never over a
+/// board's window, plus the repeating tasks it cannot date: their due is the next
+/// open period, which the recurrence engine reads in Rust
+/// ([`task::load_repeating_due`]). The day is the vault clock's in the request's
+/// zone, and the two midnights the statement compares an instant against are that
+/// zone's, so no figure is the host's or UTC's.
+pub(crate) fn smart_counts(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaTaskSmartCountsRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    let today = today_in(&zone, now)?;
+    let day = today.day_text();
+    let midnight = |at: centraid_vault::time::zone::WallTime| -> Result<i64> {
+        let wall = format!("{}T00:00", centraid_vault::time::zone::wall_iso(at, false));
+        centraid_vault::time::civil::parse_civil_ms(&wall, &zone)
+            .map(|millis| millis.div_euclid(1_000))
+            .ok_or_else(|| CoreError::Invariant {
+                context: format!("the zone has no reading for the midnight {wall}"),
+            })
+    };
+    let starts_at = midnight(today.day)?;
+    let ends_at = midnight(centraid_vault::time::zone::add_wall_days(today.day, 1))?;
+    let counted = vault.open_task_counts(&centraid_vault::task_counts::CountDay {
+        today: &day,
+        starts_at,
+        ends_at,
+    })?;
+    door.tables
+        .borrow_mut()
+        .extend(["edge", "entity", "task"].map(str::to_owned));
+    settle(
+        door,
+        task::load_repeating_due(door, now, &zone, &today).map(|repeating| (repeating, None)),
+        |repeating| {
+            let sum = |one_off: u64, repeating: usize| {
+                u32::try_from(one_off.saturating_add(repeating as u64)).unwrap_or(u32::MAX)
+            };
+            Answer::AgendaTaskSmartCounts(wire::AgendaTaskSmartCounts {
+                today: sum(counted.today, repeating.today),
+                overdue: sum(counted.overdue, repeating.overdue),
+                flagged: u32::try_from(counted.flagged).unwrap_or(u32::MAX),
+                today_day: day,
+            })
+        },
+    )
+}
+
 /// `agenda.task.trash`: the trashed tasks, each day read in the request's zone (none
 /// when no zone resolved).
 pub(crate) fn trash(

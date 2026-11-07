@@ -122,6 +122,48 @@ fn a_new_task_asks_for_one_new_snapshot() {
     assert!(documents(&d).is_empty());
 }
 
+/// THE COUNTS ARE THE VAULT'S, NOT THE BOARD'S WINDOW (#1173): more overdue
+/// tasks than the board's window holds are all counted, and the document draws
+/// six rows of them.
+#[test]
+fn the_counts_say_every_open_task_when_the_rows_are_only_a_window() {
+    let mut d = Driver::with_runtime(runtime());
+    d.start();
+    // A founded vault holds a few starter tasks; the added ones are on top.
+    let before = documents(&d)[0]["reminders"].clone();
+    let (was_overdue, was_today) = (
+        before["overdue_count"].as_u64().expect("a count"),
+        before["today_count"].as_u64().expect("a count"),
+    );
+    answer_glance(&mut d, done());
+    let overdue = centraid_screens::agenda::todo::rows::MAX_WINDOW as usize + 20;
+    for n in 0..overdue {
+        arrange(
+            &d,
+            centraid_screens::catalog::act::agenda::AddTask {
+                title: format!("Zq long overdue {n}"),
+                due: Field::Is("2000-01-01".to_owned()),
+                ..Default::default()
+            },
+        );
+    }
+    d.send(SERVICE, changed());
+    let asked = documents(&d);
+    assert_eq!(asked.len(), 1);
+    let reminders = &asked[0]["reminders"];
+    assert_eq!(
+        reminders["overdue_count"].as_u64(),
+        Some(was_overdue + overdue as u64),
+        "{reminders:?}"
+    );
+    assert_eq!(reminders["today_count"].as_u64(), Some(was_today));
+    assert_eq!(
+        reminders["rows"].as_array().map(Vec::len),
+        Some(6),
+        "six rows are drawn of {overdue}"
+    );
+}
+
 #[test]
 fn the_runtime_relays_a_commit_to_the_service_once() {
     let mut d = Driver::with_runtime(runtime());

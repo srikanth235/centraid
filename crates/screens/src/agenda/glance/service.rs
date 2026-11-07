@@ -9,7 +9,7 @@
 //! when the roster of held vaults moves, when a tab's roots open again (a vault
 //! switch closes and reopens them, and the service is told of each opening),
 //! and when its rollover timer fires. Reads are synchronous and bounded: the
-//! day, two days of events, and the open tasks.
+//! day, two days of events, the open tasks' window and their true counts.
 //!
 //! **When it emits**: only when the bytes differ from the last it emitted, and
 //! at most once per update. A refused effect forgets those bytes, so the next
@@ -241,6 +241,20 @@ fn document(ctx: &Ctx) -> Vec<u8> {
     ) else {
         return unavailable();
     };
+    // THE TRUE COUNTS are their own read: the board above is a window of the
+    // newest open tasks, so counting it would undercount a vault with more
+    // open work than the window holds. A count for another day than the one
+    // the rest was read on (the clock crossed midnight between the reads) is
+    // not a figure for this document.
+    let Reading::Data(counts) = read(ctx, query::SmartCounts::default(), |answer| match answer {
+        Answer::AgendaTaskSmartCounts(counts) => Some(counts),
+        _ => None,
+    }) else {
+        return unavailable();
+    };
+    if counts.today_day != context.today {
+        return unavailable();
+    }
     snapshot::ready(&Inputs {
         locale: ctx.locale(),
         zone: ctx.zone(),
@@ -248,5 +262,6 @@ fn document(ctx: &Ctx) -> Vec<u8> {
         now_local: &context.now_local,
         upcoming: &upcoming,
         tasks: &tasks,
+        counts: &counts,
     })
 }

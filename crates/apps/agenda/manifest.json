@@ -1947,6 +1947,37 @@
           }
         }
       }
+    },
+    {
+      "name": "smart-counts",
+      "kind": "task",
+      "figures": ["today", "overdue", "flagged"],
+      "description": "How many open tasks are due today, overdue and flagged, counted over every open task in the vault and never over a board's window, so the figure is true at any vault size. It counts the open top-level tasks the board draws (an unfinished subtask of a closed or trashed task counts as its own) and reads each due as the board does, in the request's zone against the vault clock. Returns three numbers and the `today_day` they were counted against; no rows.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "number"
+          },
+          "overdue": {
+            "type": "number"
+          },
+          "flagged": {
+            "type": "number"
+          },
+          "today_day": {
+            "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [
