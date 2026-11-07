@@ -1064,6 +1064,12 @@ private fun ChatDrawer(
                 color = Surface.ink,
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).semantics { heading() },
             )
+            // NEW CHAT IS THE OUTLINED PILL under the title, then the search (the ChatList board).
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+                OutlineButton(label = state.new_chat_label, testTag = "chat-drawer-new") {
+                    onEvent(ChatEvent(new_chat = ChatEvent.NewChat()))
+                }
+            }
             val search = state.drawer_search
             if (search != null && search.open_) {
                 CentraidSearchField(
@@ -1079,9 +1085,6 @@ private fun ChatDrawer(
                 ActionRow("Search", state.drawer_search_placeholder, "chat-drawer-search-open") {
                     onEvent(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
                 }
-            }
-            ActionRow("Plus", state.new_chat_label, "chat-drawer-new") {
-                onEvent(ChatEvent(new_chat = ChatEvent.NewChat()))
             }
             LazyColumn(Modifier.weight(1f)) {
                 if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {

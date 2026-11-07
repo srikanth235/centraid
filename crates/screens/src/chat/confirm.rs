@@ -23,6 +23,11 @@ pub(super) fn verb_of(verb: &str) -> &'static str {
         "add_to" => "add_to",
         "remove_from" => "remove_from",
         "undo" => "undo",
+        "tag" => "tag",
+        "untag" => "untag",
+        "unlink" => "unlink",
+        "archive" => "archive",
+        "unarchive" => "unarchive",
         _ => "",
     }
 }
@@ -99,6 +104,11 @@ fn say(verb: &str, locale: Locale) -> Option<Say> {
         "star" => Say::Verb(words::verb_star(locale)),
         "unstar" => Say::Verb(words::verb_unstar(locale)),
         "log" => Say::Verb(words::verb_log(locale)),
+        "archive" => Say::Verb(words::verb_archive(locale)),
+        "unarchive" => Say::Verb(words::verb_unarchive(locale)),
+        "tag" => Say::Phrase(words::phrase_tag(locale)),
+        "untag" => Say::Phrase(words::phrase_untag(locale)),
+        "unlink" => Say::Phrase(words::phrase_unlink(locale)),
         "edit" => Say::Phrase(words::phrase_edit(locale)),
         "add_to" => Say::Phrase(words::phrase_add_to(locale)),
         "remove_from" => Say::Phrase(words::phrase_remove_from(locale)),

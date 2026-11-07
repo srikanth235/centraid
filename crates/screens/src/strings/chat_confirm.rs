@@ -14,6 +14,11 @@ catalog! {
     plain verb_star = ("Star", "Star");
     plain verb_unstar = ("Unstar", "Unstar");
     plain verb_log = ("Log", "Log");
+    plain verb_archive = ("Archive", "Archive");
+    plain verb_unarchive = ("Unarchive", "Unarchive");
+    plain phrase_tag = ("Add tag", "Add tag");
+    plain phrase_untag = ("Remove tag", "Remove tag");
+    plain phrase_unlink = ("Remove link", "Remove link");
     plain phrase_edit = ("Save changes", "Save changes");
     plain phrase_add_to = ("Add to list", "Add to list");
     plain phrase_remove_from = ("Remove from list", "Remove from list");

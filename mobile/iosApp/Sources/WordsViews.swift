@@ -719,6 +719,9 @@ private struct WordsFrame<Content: View, Footer: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())
+        // THE ROUND X IS THE WAY OUT: with it drawn the stack's own back chevron would be a
+        // second one (the board has a single control).
+        .toolbar(closeLabel.isEmpty ? .automatic : .hidden, for: .navigationBar)
         .accessibilityIdentifier(identifier)
     }
 }

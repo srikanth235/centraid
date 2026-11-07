@@ -201,6 +201,8 @@ message ChatPending {
   State state = 2;
   repeated ChatPendingStep steps = 3;
   string more_line = 4;
+  // What the button does, in the card's own verb ("Add reminder"); "Confirm" when the steps
+  // disagree or name a verb the label table lacks.
   string confirm_label = 5;
   string cancel_label = 6;
   bool destructive = 7;
