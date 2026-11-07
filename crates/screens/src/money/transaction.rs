@@ -402,7 +402,7 @@ impl Transaction {
                 .iter()
                 .filter(|c| !c.archived || Some(&c.category_id) == answer.category_id.as_ref())
             {
-                category_options.push(fold::choice(
+                category_options.push(fold::category_choice(
                     &category.category_id,
                     &category.label,
                     Some(&category.category_id) == answer.category_id.as_ref(),
@@ -417,11 +417,9 @@ impl Transaction {
                 answer.display_name.clone()
             },
             amount: fold::text(answer.amount.as_ref()),
-            amount_tone: if struck {
-                Tone::Seam
-            } else {
-                fold::sign_tone(answer.amount.as_ref())
-            } as i32,
+            // Money out is ink, not red: red is a state. Money in is green.
+            amount_tone: if struck { Tone::Seam } else { Tone::Neutral } as i32,
+            amount_positive: !struck && answer.amount.as_ref().is_some_and(|a| a.minor > 0),
             direction_label: if minor < 0 {
                 words::money_out(locale)
             } else {

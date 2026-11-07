@@ -43,6 +43,9 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `docs-bar-<share\|star\|unstar\|labels\|move\|trash\|restore\|purge>` | Docs | a key of a document's Quick Look bar |
 | `docs-document-subtitle`, `docs-document-labels`, `docs-versions` | Docs | the page's second line ("Docs › Taxes 2025"), the info card's Labels row, and its row to the version history |
 | `money-filter-<account\|category>-<all\|id>` | Money | the account and category options (`all`, then ids; `uncategorised` for no category) |
+| `money-hero`, `money-needs-category` | Money | Activity's overview card (and Spending's spent figure), and the review banner / Spending's "No category" row: a tap lists the rows with no category in Activity |
+| `money-bars-mode`, `money-bar-<n>`, `money-bars-caption`, `money-categories-more` | Money (Spending) | the Week / Day switch (`money-bars-mode-<week\|day>` on Android), a bar of the chart by index and the sentence under the selected one, and the "N more categories" row that opens the rest |
+| `money-category-<id>`, `money-row-<txnId>` | Money | a category line on Spending (opens its target) and a transaction row (opens it). The month is the title's second line; the month stepper (`money-month-previous` / `money-month-next`) is gone |
 | `health-filter-kind-<all\|conceptId>` | Health (Workouts) | the workout kind |
 | `locker-filter-show-<all\|starred\|archived\|type>` | Locker | the shelf's filter with its counts |
 | `locker-category-<all\|codes\|card\|wifi\|review\|trash>` | Locker | the landing's category cards (#1173); Trash pushes its page, Review switches to Review, the rest open that category's list |

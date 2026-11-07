@@ -543,7 +543,7 @@ enum MoneyDestination {
   MONEY_DESTINATION_CASHFLOW = 3;
 }
 
-// `money.home`: lands on `destination`, Spending when unspecified.
+// `money.home`: lands on `destination`, Activity when unspecified.
 message MoneyHomeRoute {
   MoneyDestination destination = 1;
 }

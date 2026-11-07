@@ -670,7 +670,7 @@ impl Rules {
                 .iter()
                 .filter(|c| !c.archived || c.category_id == selected)
             {
-                category_options.push(fold::choice(
+                category_options.push(fold::category_choice(
                     &category.category_id,
                     &category.label,
                     category.category_id == selected,

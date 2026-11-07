@@ -158,6 +158,41 @@ message MoneySpending {
   optional LastImportLine last_import = 15;
   // A month window held more than the ceiling: the figures are over a window.
   bool truncated = 16;
+  // The month by week (seven days from the 1st: 1-7, 8-14, ..., then what is
+  // left), one series per currency.
+  repeated SpendSeries weekly = 17;
+  // The month by day, one series per currency.
+  repeated SpendSeries daily = 18;
+  // What the categories past the first few come to, per currency.
+  repeated SpendingTail tail = 19;
+
+  message SpendSeries {
+    string currency = 1;
+    repeated SpendBucket buckets = 2;
+    // What the plan allows in one bucket; absent with no plan in this currency.
+    optional MoneyAmount pace = 3;
+  }
+
+  // Days `first_day..=last_day` of the month.
+  message SpendBucket {
+    uint32 first_day = 1;
+    uint32 last_day = 2;
+    MoneyAmount spent = 3;
+    // Largest first, the uncategorised part last.
+    repeated SpendPart parts = 4;
+  }
+
+  message SpendPart {
+    // Empty for the uncategorised part.
+    string category_id = 1;
+    MoneyAmount spent = 2;
+  }
+
+  message SpendingTail {
+    string currency = 1;
+    uint32 count = 2;
+    MoneyAmount spent = 3;
+  }
 
   message SpendingCurrency {
     MoneyAmount spent = 1;
@@ -237,6 +272,19 @@ message MoneyActivity {
   // Absent on the last page.
   optional MoneyCursor next = 5;
   bool truncated = 6;
+  // What each day of `rows` came to, in the order the days appear.
+  repeated MoneyDayTotal days = 7;
+}
+
+// One day of Activity: the net of the rows that count (a transfer, a void, an
+// off-budget account's row and a row dated after today do not), per currency.
+message MoneyDayTotal {
+  // `YYYY-MM-DD`.
+  string day = 1;
+  // Signed: negative is money out. Empty when no row of the day counts.
+  repeated MoneyAmount totals = 2;
+  // False for the last day of a page that has another after it: no total yet.
+  bool complete = 3;
 }
 
 // `money.transaction`: one transaction and everything derived about it.

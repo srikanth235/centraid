@@ -7,7 +7,7 @@
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Spending · Activity · Cash flow, with More | [`HOME`] | [`home`] |
+//! | Activity (home) · Spending · Cash flow, with More | [`HOME`] | [`home`] |
 //! | One transaction | [`TRANSACTION`] | [`transaction`] |
 //! | A category's plan for a month | [`TARGET`] | [`target`] |
 //! | Search | [`SEARCH`] | [`search`] |
@@ -79,7 +79,7 @@ pub fn runtime() -> crate::Runtime {
         registry(),
         vec![(
             TAB.to_owned(),
-            routes::home(wire::MoneyDestination::Spending),
+            routes::home(wire::MoneyDestination::Activity),
         )],
     )
 }

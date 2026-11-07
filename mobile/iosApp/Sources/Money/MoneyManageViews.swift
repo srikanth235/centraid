@@ -32,7 +32,7 @@ struct MoneyAccountsView: View {
         // presents one sheet at a time. On its own it is the page's.
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
         let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: addLabel,
@@ -83,14 +83,17 @@ struct MoneyAccountsView: View {
         }
         ForEach(Array(accounts.sections.enumerated()), id: \.offset) { _, section in
             MoneySection(title: section.title)
-            ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                let accountID = row.accountID
-                MoneyAccountRowView(row: row) { send(event { $0.account = .with { $0.accountID = accountID } }) }
-                    .accessibilityIdentifier("money-account-\(accountID)")
+            MoneyPageCard {
+                ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                    let accountID = row.accountID
+                    if index > 0 { KitHairline(inset: 16) }
+                    MoneyAccountRowView(row: row) { send(event { $0.account = .with { $0.accountID = accountID } }) }
+                        .accessibilityIdentifier("money-account-\(accountID)")
+                }
             }
         }
         ForEach(Array(accounts.definitions.enumerated()), id: \.offset) { _, fact in
-            FieldRow(key: fact.label, value: fact.detail)
+            MoneyNote(text: "\(fact.label). \(fact.detail)")
         }
     }
 
@@ -168,7 +171,13 @@ struct MoneyRulesView: View {
         // presents one sheet at a time. On its own it is the page's.
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
         let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        PushedPage(
+            title: state.chrome.title,
+            parentTitle: state.chrome.backLabel,
+            onBack: onBack,
+            showsTitle: true,
+            meta: content.loaded?.limitLine ?? ""
+        ) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: addLabel,
@@ -205,18 +214,21 @@ struct MoneyRulesView: View {
 
     @ViewBuilder
     private func page(_ rules: Centraid_Core_V1_MoneyRulesData) -> some View {
-        MoneyNote(text: rules.limitLine)
-        ForEach(Array(rules.rows.enumerated()), id: \.offset) { _, row in
-            let ruleID = row.ruleID
-            MoneyChevronRow(
-                title: row.title,
-                meta: row.meta,
-                accessibility: row.accessibilityLabel,
-                identifier: "money-rule-\(ruleID)"
-            ) { send(event { $0.rule = .with { $0.ruleID = ruleID } }) }
+        MoneyPageCard {
+            ForEach(Array(rules.rows.enumerated()), id: \.offset) { index, row in
+                let ruleID = row.ruleID
+                if index > 0 { KitHairline(inset: 16) }
+                MoneyChevronRow(
+                    title: row.title,
+                    meta: row.meta,
+                    mono: true,
+                    accessibility: row.accessibilityLabel,
+                    identifier: "money-rule-\(ruleID)"
+                ) { send(event { $0.rule = .with { $0.ruleID = ruleID } }) }
+            }
         }
         if !rules.applyLabel.isEmpty {
-            MoneyQuietButton(label: rules.applyLabel, identifier: "money-rules-apply") {
+            MoneyTintedButton(label: rules.applyLabel, identifier: "money-rules-apply") {
                 send(event { $0.apply = .init() })
             }
         }
@@ -331,7 +343,7 @@ struct MoneyCategoriesView: View {
         let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
         let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: addLabel,
@@ -370,15 +382,18 @@ struct MoneyCategoriesView: View {
     private func page(_ categories: Centraid_Core_V1_MoneyCategoriesData) -> some View {
         ForEach(Array(categories.groups.enumerated()), id: \.offset) { _, group in
             MoneySection(title: group.label)
-            ForEach(Array(group.rows.enumerated()), id: \.offset) { _, row in
-                let categoryID = row.categoryID
-                CentraidRow(
-                    title: row.label,
-                    meta: row.meta,
-                    dimmed: row.archived,
-                    accessibility: row.accessibilityLabel,
-                    identifier: "money-category-row-\(categoryID)"
-                ) { send(event { $0.category = .with { $0.categoryID = categoryID } }) }
+            MoneyPageCard {
+                ForEach(Array(group.rows.enumerated()), id: \.offset) { index, row in
+                    let categoryID = row.categoryID
+                    if index > 0 { KitHairline(inset: 16) }
+                    CentraidRow(
+                        title: row.label,
+                        meta: row.meta,
+                        dimmed: row.archived,
+                        accessibility: row.accessibilityLabel,
+                        identifier: "money-category-row-\(categoryID)"
+                    ) { send(event { $0.category = .with { $0.categoryID = categoryID } }) }
+                }
             }
         }
     }

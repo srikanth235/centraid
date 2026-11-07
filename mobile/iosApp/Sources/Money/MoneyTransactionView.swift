@@ -60,17 +60,22 @@ struct MoneyTransactionView: View {
 
     @ViewBuilder
     private func page(_ transaction: Centraid_Core_V1_MoneyTransactionData) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(transaction.directionLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            Text(MoneyWords.amount(transaction.amount))
-                .centraidType("display")
-                .foregroundStyle(Theme.color(StatusChipView.ink(transaction.amountTone, neutral: "text"), scheme))
+        VStack(alignment: .leading, spacing: 6) {
             Text(transaction.title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.title)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(MoneyWords.amount(transaction.amount))
+                    .kitType(.title)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .foregroundStyle(moneyInk(positive: transaction.amountPositive, tone: transaction.amountTone))
+                Text(transaction.directionLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
             HStack(spacing: 6) {
                 ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
             }
@@ -84,8 +89,9 @@ struct MoneyTransactionView: View {
         // Category and Name facts carry the `category` and `name` actions, so those
         // two actions are not drawn a second time below.
         let folded = Set(transaction.facts.compactMap { actionKey(forFact: $0, in: transaction) })
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(transaction.facts.enumerated()), id: \.offset) { _, fact in
+        MoneyPageCard {
+            ForEach(Array(transaction.facts.enumerated()), id: \.offset) { index, fact in
+                if index > 0 { KitHairline(inset: 16) }
                 if let key = actionKey(forFact: fact, in: transaction),
                    let action = transaction.actions.first(where: { $0.key == key }) {
                     MoneyFactRow(
@@ -133,17 +139,18 @@ struct MoneyTransactionView: View {
     private func offer(_ offer: Centraid_Core_V1_MoneyOffer, key: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(offer.title)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.ink)
             if !offer.body.isEmpty {
                 Text(offer.body)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
             }
             if !offer.detail.isEmpty {
                 Text(offer.detail)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
             HStack(spacing: 8) {
                 KitOutlineButton(label: offer.acceptLabel) {
@@ -159,10 +166,7 @@ struct MoneyTransactionView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .strokeBorder(Theme.color("seam", scheme), lineWidth: 1)
-        )
+        .background(StateColor.amber.tint, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 16)
     }
@@ -220,7 +224,9 @@ struct MoneyTargetView: View {
         PushedPage(
             title: content.loaded?.title ?? state.chrome.title,
             parentTitle: state.chrome.backLabel,
-            onBack: onBack
+            onBack: onBack,
+            showsTitle: true,
+            meta: content.loaded?.monthLabel ?? ""
         ) {
             EmptyView()
         } content: {
@@ -246,7 +252,6 @@ struct MoneyTargetView: View {
 
     @ViewBuilder
     private func page(_ target: Centraid_Core_V1_MoneyTargetData, state: Centraid_Core_V1_MoneyTargetState) -> some View {
-        MoneyNote(text: target.monthLabel)
         MoneyTextField(
             key: MoneyWords.meta(target.amountLabel, target.currencyLabel),
             value: state.amountText,
@@ -255,9 +260,7 @@ struct MoneyTargetView: View {
         ) { text in send(event { $0.amount = .with { $0.text = text } }) }
         MoneyNote(text: target.issue, ink: "net")
         MoneyNote(text: target.exponentHint)
-        ForEach(Array(target.figures.enumerated()), id: \.offset) { _, figure in
-            MoneyFigureRow(figure: figure)
-        }
+        MoneyFigureCard(figures: target.figures)
         MoneyQuietButton(label: target.useAverageLabel, identifier: "money-target-average") {
             send(event { $0.useAverage = .init() })
         }
@@ -288,7 +291,7 @@ struct MoneyRecurringView: View {
     let onBack: () -> Void
 
     var body: some View {
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
             EmptyView()
         } content: {
             ReadStateView(
@@ -300,18 +303,21 @@ struct MoneyRecurringView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(recurring.rows.enumerated()), id: \.offset) { _, row in
-                                CentraidRow(
-                                    title: row.merchant,
-                                    meta: MoneyWords.meta(row.meta, row.detail),
-                                    trailing: MoneyWords.amount(row.amount),
-                                    chips: row.chips,
-                                    accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
-                                    identifier: "money-recurring-\(row.key)"
-                                )
+                            MoneyPageCard {
+                                ForEach(Array(recurring.rows.enumerated()), id: \.offset) { index, row in
+                                    if index > 0 { KitHairline(inset: 16) }
+                                    CentraidRow(
+                                        title: row.merchant,
+                                        meta: MoneyWords.meta(row.meta, row.detail),
+                                        trailing: MoneyWords.amount(row.amount),
+                                        chips: row.chips,
+                                        accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
+                                        identifier: "money-recurring-\(row.key)"
+                                    )
+                                }
                             }
                             ForEach(Array(recurring.definitions.enumerated()), id: \.offset) { _, fact in
-                                FieldRow(key: fact.label, value: fact.detail)
+                                MoneyNote(text: "\(fact.label). \(fact.detail)")
                             }
                             MoneyNote(text: recurring.windowNote)
                         }

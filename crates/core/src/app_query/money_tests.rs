@@ -275,6 +275,87 @@ fn spending_says_the_month_in_figures_with_their_exponent() {
 }
 
 #[test]
+fn spending_carries_the_month_by_week_and_by_day_and_they_add_up_to_its_hero() {
+    let scratch = ledger();
+    let february = scratch.spending("2024-02");
+    let hero = minor(&february.per_currency[0].spent);
+    assert_eq!(february.weekly.len(), 1, "one currency, one series");
+    let weeks: Vec<(u32, u32, i64)> = february.weekly[0]
+        .buckets
+        .iter()
+        .map(|b| (b.first_day, b.last_day, minor(&b.spent)))
+        .collect();
+    assert_eq!(
+        weeks,
+        vec![
+            (1, 7, 6100 + 1549 + 610),
+            (8, 14, 50_000),
+            (15, 21, 0),
+            (22, 28, 0),
+            (29, 29, 0),
+        ],
+        "a leap February ends on a bucket of one day"
+    );
+    assert_eq!(weeks.iter().map(|w| w.2).sum::<i64>(), hero);
+    let days = &february.daily[0].buckets;
+    assert_eq!(days.len(), 29);
+    assert_eq!(days.iter().map(|d| minor(&d.spent)).sum::<i64>(), hero);
+    assert_eq!(minor(&days[7].spent), 50_000, "the 8th");
+    assert!(february.weekly[0].pace.is_none(), "no target, no pace");
+    assert!(february.tail.is_empty(), "fewer than four categories");
+    // January's neighbours (December's Netflix, February's rows) are in no bucket.
+    let january = scratch.spending("2024-01");
+    assert_eq!(
+        january.weekly[0]
+            .buckets
+            .iter()
+            .map(|b| minor(&b.spent))
+            .sum::<i64>(),
+        minor(&january.per_currency[0].spent)
+    );
+    assert_eq!(january.weekly[0].buckets.len(), 5);
+}
+
+#[test]
+fn activity_totals_each_day_and_holds_back_the_day_a_page_cuts() {
+    let scratch = ledger();
+    let page = |limit, after| {
+        scratch.activity(wire::MoneyActivityRequest {
+            tz: TZ.to_owned(),
+            month: "2024-02".to_owned(),
+            limit,
+            after,
+            ..wire::MoneyActivityRequest::default()
+        })
+    };
+    let whole = page(50, None);
+    let totals: Vec<(&str, Vec<i64>, bool)> = whole
+        .days
+        .iter()
+        .map(|d| {
+            (
+                d.day.as_str(),
+                d.totals.iter().map(|t| t.minor).collect(),
+                d.complete,
+            )
+        })
+        .collect();
+    // Newest first. The 8th holds the 500.00 debit on checking and the same
+    // sum credited to savings, an off-budget account? No: both count until a
+    // transfer is accepted, so the day nets what the two halves net.
+    assert_eq!(totals.len(), 4);
+    assert!(totals.iter().all(|t| t.2), "the last page is whole");
+    assert_eq!(totals[3], ("2024-02-03", vec![-6100], true));
+    let cut = page(1, None);
+    assert!(cut.next.is_some());
+    assert_eq!(cut.days.len(), 1);
+    assert!(
+        !cut.days[0].complete,
+        "the next page may hold more of this day"
+    );
+}
+
+#[test]
 fn activity_pages_a_month_with_a_cursor_and_filters() {
     let scratch = ledger();
     let first = scratch.activity(wire::MoneyActivityRequest {
