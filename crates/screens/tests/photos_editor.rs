@@ -517,3 +517,78 @@ fn the_lightboxs_edit_button_is_live_only_over_a_still_whose_original_is_here() 
         Some("This photo is not in a vault yet.")
     );
 }
+
+/// THE EDITOR ONLY CROPS, ROTATES AND FLIPS (#1173, decided): no adjustments, no filters, no
+/// markup. Both matches below are exhaustive on purpose: a new tool is a new event kind or a
+/// new plan field, and either stops this test compiling until the decision is revisited.
+#[test]
+fn the_editor_only_crops_rotates_and_flips_and_saves_a_new_photograph() {
+    // The plan: the quarter turns and the straighten (rotate), the flip, and the crop with its
+    // ratio. Nothing about light, colour or marks.
+    let wire::PhotosEditPlan {
+        quarters: _,
+        straighten: _,
+        flip: _,
+        ratio: _,
+        crop: _,
+    } = editor::fresh_plan();
+    // The events: each is crop, rotate, flip, or the editor's own frame (read, reset, save,
+    // cancel, discard).
+    let tool = |kind: &ev::Kind| match kind {
+        ev::Kind::Ratio(_) | ev::Kind::CropMoved(_) | ev::Kind::CropScaled(_) => "crop",
+        ev::Kind::Rotate(_) | ev::Kind::Straighten(_) => "rotate",
+        ev::Kind::Flip(_) => "flip",
+        ev::Kind::Refreshed(_)
+        | ev::Kind::Reset(_)
+        | ev::Kind::Save(_)
+        | ev::Kind::Cancel(_)
+        | ev::Kind::Discard(_) => "frame",
+    };
+    assert_eq!(tool(&ev::Kind::Flip(ev::Flipped {})), "flip");
+
+    let (mut d, at, original) = opened(b"editor-set-1");
+    let state = state_of(&d, at);
+    // The words the board shows, from the core.
+    assert_eq!(state.title, "Crop and rotate");
+    let words = state.words.clone().expect("words");
+    assert_eq!(words.save, "Save new photo");
+    assert_eq!(words.rotate, "Rotate 90°");
+    assert_eq!(words.reset, "Reset");
+    // The ratios offered are the three crops: Original, Square and 3 : 2.
+    let ratios: Vec<&str> = state.ratios.iter().map(|r| r.label.as_str()).collect();
+    assert_eq!(ratios, ["Original", "Square", "3 : 2"]);
+    // Saving is a new photograph and never a change to the original's file.
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    send(&mut d, at, ev::Kind::Save(ev::Saved {}));
+    let wire::effect::Kind::RenderEdit(_) = d
+        .effects
+        .last()
+        .expect("effect")
+        .effect
+        .clone()
+        .and_then(|e| e.kind)
+        .expect("kind")
+    else {
+        panic!("not a render");
+    };
+    let staged = stage_bytes(&d, b"rendered edit bytes for the set");
+    d.answer_effect(wire::effect_result::Outcome::EditRendered(
+        wire::EditRendered {
+            content_hash: staged.content_hash,
+            byte_size: staged.byte_size,
+            media_type: "image/jpeg".to_owned(),
+            width: 300,
+            height: 400,
+        },
+    ));
+    let route = state_of(&d, at).saved_route.expect("the new photograph");
+    let Some(wire::route::Args::PhotosLightbox(args)) = route.args else {
+        panic!("not the lightbox");
+    };
+    assert_ne!(args.photo_id, original, "a new photograph");
+    assert_eq!(
+        title_of(&d, &args.photo_id).1.as_deref(),
+        Some(original.as_str()),
+        "an edit of the original"
+    );
+}

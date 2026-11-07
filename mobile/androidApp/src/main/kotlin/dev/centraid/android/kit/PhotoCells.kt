@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.EmptyState
 import centraid.core.v1.PhotoTile as WireTile
 import dev.centraid.android.theme.centraidColor
+import androidx.compose.ui.graphics.Color
 import dev.centraid.android.theme.centraidType
 import centraid.core.v1.PhotosPackedRow
 
@@ -197,7 +198,7 @@ public fun PhotoTile(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .border(SELECTION_OUTLINE.dp, centraidColor("text")),
+                    .border(SELECTION_OUTLINE.dp, appAccent("photos").fill),
             )
         }
         HeldState(cell, onFetch)
@@ -268,13 +269,15 @@ private fun BoxScope.HeldState(
 
 /**
  * SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6
- * in. Selecting and not picked is an outline in the stage's ink; picked is a
- * filled ink circle with the inverse tick. INK, never a hue: product-intuition/references/design-behaviour.md § Colour keeps
- * colour off controls, and a picked photograph is a control's state.
+ * in. Not picked is a white outline over the photograph; picked is the app's fill under a white
+ * tick (#1173); taken, already in the album, is a white disc with a grey tick.
  */
 @Composable
 private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
-    val ink = if (muted) centraidColor("textSoft") else centraidColor("text")
+    // NOT PICKED is a white outline over the photograph; PICKED is the app's fill under a white
+    // tick (#1173); TAKEN (already in the album) is a white disc with a grey tick, so the two
+    // never read alike.
+    val fill = appAccent("photos").fill
     Box(
         Modifier
             .align(Alignment.TopEnd)
@@ -282,15 +285,16 @@ private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
             .size(SELECTION_DOT.dp)
             .clip(CircleShape)
             .then(
-                if (selected) {
-                    Modifier.background(ink).border(1.5.dp, ink, CircleShape)
-                } else {
-                    Modifier.border(1.5.dp, centraidColor("onStage"), CircleShape)
+                when {
+                    muted -> Modifier.background(Color.White)
+                    selected -> Modifier.background(fill).border(1.5.dp, Color.White, CircleShape)
+                    else -> Modifier.border(1.5.dp, Color.White, CircleShape)
                 },
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) CentraidIcon(iconKey = "Check", tint = centraidColor("textInv"), size = 13.dp)
+        if (muted) CentraidIcon(iconKey = "Check", tint = Surface.meta, size = 13.dp)
+        else if (selected) CentraidIcon(iconKey = "Check", tint = Color.White, size = 13.dp)
     }
 }
 

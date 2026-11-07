@@ -5,6 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -181,8 +187,10 @@ private fun PlaceCard(
     onOpen: (Route) -> Unit,
     onName: (PhotosPlaceRow) -> Unit,
 ) {
+    // A WHITE CARD: the cover on top, the name and the count under it (#1173).
     Column(
         modifier = Modifier
+            .kitCard()
             .clickable { row.open_?.let(onOpen) }
             .semantics { contentDescription = row.spoken },
     ) {
@@ -190,27 +198,17 @@ private fun PlaceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(4f / 3f)
-                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
                 // THE GROUND, when there are no bytes: a surface the eye reads as empty.
-                .background(centraidColor("bgSunken")),
+                .background(Surface.fill),
         ) {
             val cover = row.cover?.thumbnail_path
             if (!cover.isNullOrEmpty()) ContentImage(path = cover)
         }
-        Text(
-            text = row.title,
-            style = centraidType("small"),
-            color = centraidColor("text"),
-            maxLines = 2,
-        )
-        if (row.count_label.isNotEmpty()) {
-            Text(
-                text = row.count_label,
-                style = centraidType("mono"),
-                color = centraidColor("textFaint"),
-            )
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            KitText(row.title, KitType.Row, Surface.ink, maxLines = 2)
+            if (row.count_label.isNotEmpty()) KitText(row.count_label, KitType.Meta, Surface.meta, maxLines = 1)
+            KitLink(label = row.name_label, dense = true, onClick = { onName(row) })
         }
-        KitLink(label = row.name_label, dense = true, onClick = { onName(row) })
     }
 }
 
@@ -311,21 +309,18 @@ private fun Footer(data: PhotosPlacesData, isMap: Boolean, onOpen: (Route) -> Un
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .kitCard()
                 .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                 .clickable(enabled = unplacedOpen != null) { unplacedOpen?.let(onOpen) }
+                .padding(horizontal = 14.dp)
                 .semantics(mergeDescendants = true) {
                     contentDescription = "${data.unplaced_label} ${data.unplaced_open_label}"
                     role = Role.Button
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = data.unplaced_label,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.weight(1f),
-            )
-            CentraidIcon(iconKey = "ChevronRight", tint = centraidColor("textFaint"))
+            KitText(data.unplaced_label, KitType.Row, Surface.ink, modifier = Modifier.weight(1f))
+            KitText(data.unplaced_open_label, KitType.Row, appAccent("photos").text, maxLines = 1)
         }
     }
     if (isMap) {

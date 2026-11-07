@@ -250,6 +250,10 @@ struct PhotosLightboxView: View {
                     pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID)
                 }
             }
+            // A FLOATING BAR in Liquid Glass on iOS 26, solid before it and under Reduce
+            // Transparency or Increase Contrast.
+            .padding(.horizontal, 8)
+            .modifier(PhotosStageGlass(shape: Capsule(), solid: Theme.color("stageSunken", scheme)))
             ForEach(reasons, id: \.self) { reason in
                 Text(reason)
                     .centraidType("small")
@@ -269,7 +273,10 @@ struct PhotosLightboxView: View {
             // Edit is a page: the shell pushes the route Rust built.
             if verb.hasRoute { open(verb.route) } else { send(verbEvent(verb)) }
         } label: {
-            let ink = Theme.color(verb.enabled ? (verb.destructive ? "net" : "onStage") : "onStageSoft", scheme)
+            // A LIT TOGGLE (the favourite) wears the app's colour, never amber.
+            let ink = verb.enabled && verb.on
+                ? AppAccent("photos").tile
+                : Theme.color(verb.enabled ? (verb.destructive ? "net" : "onStage") : "onStageSoft", scheme)
             VStack(spacing: 2) {
                 CentraidIconView(
                     iconKey: verb.iconKey,
@@ -302,7 +309,7 @@ struct PhotosLightboxView: View {
         Button(action: action) {
             CentraidIconView(iconKey: icon, tint: Theme.color("onStage", scheme), size: 20)
                 .frame(width: 44, height: 44)
-                .background(Theme.color("stageSunken", scheme), in: Circle())
+                .modifier(PhotosStageGlass(shape: Circle(), solid: Theme.color("stageSunken", scheme)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -511,45 +518,74 @@ private struct PhotosLightboxInfoSheet: View {
         let words = state.words
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(words.infoTitle).centraidType("title").padding(.top, 8)
+                Text(words.infoTitle).kitType(.title).foregroundStyle(Surface.ink).padding(.top, 8)
 
                 // A REFUSED EDIT IS SAID HERE, where the member made it.
                 if state.hasStatus, state.status.refused, !state.status.sentence.isEmpty {
-                    Text(state.status.sentence).centraidType("small").foregroundStyle(Theme.color("net", scheme))
+                    Text(state.status.sentence).kitType(.meta).foregroundStyle(StateColor.red.text)
                 }
 
-                heading(words.captionLabel, icon: "FileEdit")
-                TextField(words.captionPlaceholder, text: $caption)
-                    .centraidType("body")
-                    .focused($captionFocused)
-                    .submitLabel(.done)
-                    .onSubmit(commitCaption)
-                    .accessibilityLabel(words.captionLabel)
-                    // COMMITTED WHEN THE FIELD IS LEFT: the typed text stays
-                    // exactly where it is if the vault says no.
-                    .onChange(of: captionFocused) { _, focused in
-                        if !focused { commitCaption() }
-                    }
+                // THE CAPTION, ITS OWN CARD.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(words.captionLabel).kitType(.meta).foregroundStyle(Surface.meta)
+                    TextField(words.captionPlaceholder, text: $caption)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .focused($captionFocused)
+                        .submitLabel(.done)
+                        .onSubmit(commitCaption)
+                        .accessibilityLabel(words.captionLabel)
+                        // COMMITTED WHEN THE FIELD IS LEFT: the typed text stays
+                        // exactly where it is if the vault says no.
+                        .onChange(of: captionFocused) { _, focused in
+                            if !focused { commitCaption() }
+                        }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
 
-                ForEach(photo.facts, id: \.label) { fact in
-                    VStack(alignment: .leading, spacing: 2) {
-                        heading(fact.label, icon: fact.iconKey)
-                        Text(fact.text).centraidType("body")
+                // WHEN AND WITH WHAT, one card of rows.
+                if !photo.facts.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(photo.facts.enumerated()), id: \.offset) { at, fact in
+                            HStack(alignment: .top, spacing: 12) {
+                                CentraidIconView(iconKey: fact.iconKey, tint: AppAccent("photos").text, size: 16)
+                                    .padding(.top, 3)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(fact.label).kitType(.meta).foregroundStyle(Surface.meta)
+                                    Text(fact.text).kitType(.row).foregroundStyle(Surface.ink)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(14)
+                            .accessibilityElement(children: .combine)
+                            if at < photo.facts.count - 1 {
+                                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 14)
+                            }
+                        }
                     }
+                    .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                 }
 
-                place(words)
-                labels(words)
+                // PLACE AND LABELS, one card.
+                VStack(alignment: .leading, spacing: 0) {
+                    place(words).padding(14)
+                    Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 14)
+                    labels(words).padding(14)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
 
                 // WHERE THE BYTES ARE, in a sentence that says what fetching costs.
                 Text(photo.whereabouts)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
                 if !photo.trashLine.isEmpty {
-                    Text(photo.trashLine).centraidType("small").foregroundStyle(Theme.color("textSoft", scheme))
+                    Text(photo.trashLine).kitType(.meta).foregroundStyle(Surface.meta)
                 }
                 if state.hasStatus, !state.status.refused, !state.status.sentence.isEmpty {
-                    Text(state.status.sentence).centraidType("small").foregroundStyle(Theme.color("textSoft", scheme))
+                    Text(state.status.sentence).kitType(.meta).foregroundStyle(Surface.meta)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -558,6 +594,8 @@ private struct PhotosLightboxInfoSheet: View {
             // NOTHING UNDER THE SHEET'S CORNERS: the last line scrolls clear of the radius.
             .padding(.bottom, 48)
         }
+        .background(Surface.sheet.ignoresSafeArea())
+        .appAccent("photos")
         .onAppear(perform: resetCaption)
         .onChange(of: state.photoID) { _, _ in resetCaption() }
         .onDisappear { if captionFocused { commitCaption() } }
@@ -613,10 +651,7 @@ private struct PhotosLightboxInfoSheet: View {
                     .accessibilityLabel(chip.removeLabel)
                 }
                 .padding(.leading, 10)
-                .background(
-                    Theme.color("bgSunken", scheme),
-                    in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous)
-                )
+                .background(Surface.fill, in: Capsule())
             }
             TextField(words.addLabelPlaceholder, text: $tag)
                 .centraidType("body")
@@ -634,10 +669,10 @@ private struct PhotosLightboxInfoSheet: View {
     /// ONE HEADING STYLE for every section of the sheet: the mark, then the word.
     private func heading(_ text: String, icon: String) -> some View {
         HStack(spacing: 6) {
-            CentraidIconView(iconKey: icon, tint: Theme.color("textSoft", scheme), size: 14)
+            CentraidIconView(iconKey: icon, tint: AppAccent("photos").text, size: 14)
             Text(text)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
         }
         .accessibilityElement(children: .combine)
     }
@@ -714,4 +749,23 @@ struct PhotosLightboxModel {
 
     /// The spoken name of the stage.
     var stageLabel: String { photo?.spoken ?? "" }
+}
+
+
+/// A floating control over the stage: Liquid Glass on iOS 26, a solid plate before it and under
+/// Reduce Transparency or Increase Contrast. Only floating glass casts a shadow.
+private struct PhotosStageGlass<S: Shape>: ViewModifier {
+    let shape: S
+    let solid: Color
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), !reduceTransparency, contrast != .increased {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(solid, in: shape)
+        }
+    }
 }

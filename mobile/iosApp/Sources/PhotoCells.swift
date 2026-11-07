@@ -119,6 +119,7 @@ struct PhotoCellSquare: View {
 /// mark would say nothing.
 struct PhotoTile: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
     let cell: Centraid_Core_V1_PhotoTile
     let width: CGFloat
     let height: CGFloat
@@ -145,7 +146,7 @@ struct PhotoTile: View {
                 // THE OUTLINE IS DRAWN INSIDE THE BOX: the gutter is 2 and an
                 // overhang would paint over the neighbour's edge.
                 if selected {
-                    Rectangle().strokeBorder(Theme.color("text", scheme), lineWidth: PhotoTileMetrics.outline)
+                    Rectangle().strokeBorder(accent.fill, lineWidth: PhotoTileMetrics.outline)
                 }
             }
             .overlay(alignment: .bottomLeading) { PhotoHeldMark(cell: cell, onFetch: onFetch) }
@@ -216,23 +217,26 @@ struct PhotoHeldMark: View {
     }
 }
 
-/// SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6
-/// in. Selecting and not picked is an outline in the stage's ink; picked is a
-/// filled ink circle with the inverse tick. INK, never a hue: product-intuition/references/design-behaviour.md § Colour keeps
-/// colour off controls, and a picked photograph is a control's state.
+/// SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6 in. Not picked is a
+/// white outline over the photograph; picked is the app's fill under a white tick (#1173: a
+/// chosen photograph wears Photos' orchid, and the tile carries the same colour as its edge);
+/// taken (already in the album) is a white disc with a grey tick, so the two never read alike.
 struct PhotoSelectionDot: View {
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
     let selected: Bool
     var muted = false
 
     var body: some View {
-        let ink = Theme.color(muted ? "textSoft" : "text", scheme)
         ZStack {
-            if selected {
-                Circle().fill(ink)
-                CentraidIconView(iconKey: "Check", tint: Theme.color("textInv", scheme), size: 13)
+            if muted {
+                Circle().fill(Color.white)
+                CentraidIconView(iconKey: "Check", tint: Surface.meta, size: 13)
+            } else if selected {
+                Circle().fill(accent.fill)
+                Circle().strokeBorder(Color.white, lineWidth: 1.5)
+                CentraidIconView(iconKey: "Check", tint: .white, size: 13)
             } else {
-                Circle().strokeBorder(Theme.color("onStage", scheme), lineWidth: 1.5)
+                Circle().strokeBorder(Color.white, lineWidth: 1.5)
             }
         }
         .frame(width: PhotoTileMetrics.dot, height: PhotoTileMetrics.dot)

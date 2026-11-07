@@ -13,6 +13,9 @@ import centraid.core.v1.PhotosPickerState
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.ScreenEmpty
@@ -44,8 +47,8 @@ public fun PhotoPickerScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {
-            Text(text = state.title, style = centraidType("bodyStrong"), color = centraidColor("text"))
-            Text(text = state.chosen_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            KitText(state.title, KitType.Section, Surface.ink, maxLines = 2)
+            KitText(state.chosen_label, KitType.Row, Surface.ink, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
         }
         // The one ink button: drawn disabled with nothing picked rather than absent,
         // so it does not move under a thumb.
@@ -55,7 +58,7 @@ public fun PhotoPickerScreen(
             enabled = state.add_enabled,
             onPress = { onEvent(PhotosPickerEvent(confirm = PhotosPickerEvent.ConfirmRequested())) },
         )
-        Text(text = state.refers_note, style = centraidType("small"), color = centraidColor("textSoft"))
+        KitText(state.refers_note, KitType.Meta, Surface.meta)
 
         state.status?.let { ScreenFailure(it.sentence, "") }
 
