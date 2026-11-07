@@ -48,7 +48,7 @@ pub struct Inputs<'a> {
     pub locale: Locale,
     /// The core's now, `YYYY-MM-DDTHH:MM`, in `zone`.
     pub now_local: &'a str,
-    /// Every task of the board, children included, each once ([`flatten`]).
+    /// Every task of the reminders answer, each once ([`flatten`]).
     pub tasks: &'a [wire::AgendaTask],
     pub projects: &'a [wire::AgendaTaskProject],
     pub events: &'a [wire::AgendaEvent],

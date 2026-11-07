@@ -145,6 +145,7 @@ pub(crate) fn answer_recording(
         Q::AgendaTaskProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
         Q::AgendaTaskSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
         Q::AgendaTaskCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
+        Q::AgendaTaskReminders(asked) => agenda_task::reminders(vault, &door, &now, asked)?,
         Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,

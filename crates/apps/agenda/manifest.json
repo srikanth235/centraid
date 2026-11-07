@@ -1927,6 +1927,43 @@
       }
     },
     {
+      "name": "reminders",
+      "kind": "task",
+      "figures": ["groups"],
+      "description": "The open tasks that carry a reminder and a due, nearest stored due first, in the board's row shape (a repeating task's next period read as its due): one statement over the due index, at most a caller-sized window of them, so an old task's reminder is never pushed out by newer work. A trashed task is left out; `truncated` says more exist beyond the window.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array"
+          },
+          "projects": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "trash",
       "kind": "task",
       "figures": ["tasks"],

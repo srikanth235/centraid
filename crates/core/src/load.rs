@@ -379,6 +379,15 @@ fn read(
             now,
             &wire::AgendaTaskCatchUpRequest { tz },
         )?,
+        ("agenda", "reminders") => app_query::agenda_task::reminders(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskRemindersRequest {
+                tz,
+                limit: p.limit(0),
+            },
+        )?,
         ("agenda", "trash") => {
             app_query::agenda_task::trash(vault, door, &wire::AgendaTaskTrashRequest { tz })?
         }

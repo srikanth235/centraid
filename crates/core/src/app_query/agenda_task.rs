@@ -336,6 +336,44 @@ pub(crate) fn catch_up(
     })
 }
 
+/// `agenda.task.reminders`: the board's row shape for the open tasks that carry a
+/// reminder, answered as a `REMINDERS` board of one group with no counts, sections
+/// or tags (a board's other readings are not this read's).
+pub(crate) fn reminders(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaTaskRemindersRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    let today = today_in(&zone, now)?;
+    let since = local::days_before(&today, task::queries::REMINDERS_LOOKBACK_DAYS);
+    settle(
+        door,
+        task::load_reminders(door, limit_of(asked.limit), &since, now, &zone),
+        |data| {
+            let open = placed(&data.tasks, &zone, &today);
+            let groups = views::groups(&View::Reminders, &open, &[], &data.projects, &[]);
+            Answer::AgendaTaskReminders(wire::AgendaTaskBoard {
+                today: today.day_text(),
+                now_local: today.local_text(),
+                view: wire::AgendaTaskView::Reminders as i32,
+                groups: groups.into_iter().map(group_to_wire).collect(),
+                counts: None,
+                projects: data
+                    .projects
+                    .iter()
+                    .map(|project| project_to_wire(project, &open))
+                    .collect(),
+                sections: Vec::new(),
+                tags: Vec::new(),
+                truncated: data.truncated,
+                window: count(data.window),
+            })
+        },
+    )
+}
+
 // ---------------------------------------------------------------------------
 // The conversion. ONE place, so a field that moved is one edit.
 // ---------------------------------------------------------------------------

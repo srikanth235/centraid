@@ -117,6 +117,21 @@ impl Scratch {
         self.board_for(view, "")
     }
 
+    fn board_for_limit(&self, limit: u32) -> wire::AgendaTaskBoard {
+        match self
+            .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
+                tz: TZ.to_owned(),
+                limit,
+                view: wire::AgendaTaskView::All as i32,
+                project_id: String::new(),
+            }))
+            .expect("the board answers")
+        {
+            A::AgendaTaskBoard(board) => board,
+            other => panic!("the board answered as {other:?}"),
+        }
+    }
+
     fn board_for(&self, view: wire::AgendaTaskView, project_id: &str) -> wire::AgendaTaskBoard {
         match self
             .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
@@ -129,6 +144,19 @@ impl Scratch {
         {
             A::AgendaTaskBoard(board) => board,
             other => panic!("the board answered as {other:?}"),
+        }
+    }
+
+    fn reminders(&self, limit: u32) -> wire::AgendaTaskBoard {
+        match self
+            .ask(Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest {
+                tz: TZ.to_owned(),
+                limit,
+            }))
+            .expect("the reminders answer")
+        {
+            A::AgendaTaskReminders(board) => board,
+            other => panic!("the reminders answered as {other:?}"),
         }
     }
 
@@ -262,6 +290,98 @@ fn a_trashed_task_and_its_family_are_on_no_place() {
     }
     let counts = all.counts.expect("counts");
     assert_eq!((counts.open, counts.closed), (1, 0));
+}
+
+/// THE REMINDERS READ IS ITS OWN BOUNDED STATEMENT, not the board's newest-N
+/// window: the oldest-created task still answers when more open tasks than the
+/// limit sit after it, and what is not a live open reminder is absent.
+#[test]
+fn the_reminders_read_reaches_the_oldest_task_past_the_boards_window() {
+    let scratch = Scratch::founded();
+    let oldest = scratch.add(serde_json::json!({
+        "title": "Oldest", "due": "2099-06-10T14:00:00.000Z", "remind_before_min": 30,
+    }));
+    // More open tasks than the smallest window, all newer than `oldest` (the
+    // stopped clock is moved so creation order is not a tie).
+    for n in 0..25 {
+        scratch.advance_minutes(1);
+        scratch.titled(&format!("Newer {n}"), Some("2099-07-01"));
+    }
+    let earlier = scratch.add(serde_json::json!({
+        "title": "Earlier", "due": "2099-06-05T14:00:00.000Z", "remind_before_min": 15,
+    }));
+    let repeating = scratch.add(serde_json::json!({
+        "title": "Daily", "due": "2099-05-20T14:00:00.000Z", "rule": "FREQ=DAILY",
+        "remind_before_min": 60,
+    }));
+    let done = scratch.add(serde_json::json!({
+        "title": "Done", "due": "2099-06-06T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    let trashed = scratch.add(serde_json::json!({
+        "title": "Trashed", "due": "2099-06-07T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    scratch.add(serde_json::json!({
+        "title": "No reminder", "due": "2099-06-08T14:00:00.000Z",
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Long past", "due": "2099-05-01T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Subtask", "parent_id": earlier, "due": "2099-06-11T14:00:00.000Z",
+        "remind_before_min": 10,
+    }));
+
+    // The board's window of 20 does not hold the oldest task...
+    let board = scratch.board_for_limit(20);
+    assert!(!every_id(&board).contains(&oldest));
+    // ...and the reminders read does.
+    let answer = scratch.reminders(20);
+    assert_eq!(answer.view, wire::AgendaTaskView::Reminders as i32);
+    assert_eq!(answer.groups.len(), 1);
+    assert_eq!(
+        titles(&answer.groups[0]),
+        ["Daily", "Earlier", "Oldest", "Subtask"]
+    );
+    assert!(!answer.truncated);
+    assert_eq!(answer.window, 20);
+    let tasks = &answer.groups[0].tasks;
+    assert_eq!(tasks[0].task_id, repeating);
+    assert!(tasks[0].repeats);
+    assert_eq!(
+        tasks[0].next_due.as_deref(),
+        Some("2099-06-02T14:00:00.000Z")
+    );
+    assert_eq!(tasks[0].remind_at_local, "2099-06-02T09:00");
+    assert_eq!(tasks[1].task_id, earlier);
+    assert_eq!(tasks[1].remind_at_local, "2099-06-05T09:45");
+    assert_eq!(tasks[2].task_id, oldest);
+    assert_eq!(tasks[3].remind_before_min, Some(10));
+    assert!(
+        tasks
+            .iter()
+            .all(|task| task.task_id != done && task.task_id != trashed)
+    );
+    assert!(answer.today == "2099-06-01" && !answer.now_local.is_empty());
+}
+
+/// A WINDOW THAT FILLS SAYS SO, nearest due first.
+#[test]
+fn a_full_reminders_window_is_truncated_and_ordered_by_due() {
+    let scratch = Scratch::founded();
+    for n in (0..21).rev() {
+        scratch.add(serde_json::json!({
+            "title": format!("Reminder {n:02}"),
+            "due": format!("2099-07-{:02}T14:00:00.000Z", n + 1),
+            "remind_before_min": 10,
+        }));
+    }
+    let answer = scratch.reminders(20);
+    assert!(answer.truncated);
+    let wanted: Vec<String> = (0..20).map(|n| format!("Reminder {n:02}")).collect();
+    assert_eq!(titles(&answer.groups[0]), wanted);
+    assert!(!scratch.reminders(0).truncated);
 }
 
 /// THE FOLD ACROSS DST, AND THE REMINDER. The same UTC hour reads 09:00 in
