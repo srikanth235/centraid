@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,10 +32,16 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaCalendarView
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.AgendaMonthStyle
+import centraid.core.v1.AgendaMonthStyleChoice
 import centraid.core.v1.AgendaSmartList
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -98,12 +105,18 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
     }
 }
 
-/** The Calendar tab's view menu: the current view and a chevron; a tap lists Day and List. */
+/**
+ * The Calendar tab's view menu: the current view and a chevron; a tap lists Day, Week, Month, List
+ * and Year, with the current one checked. On Month a second group holds its styles (Grid, List).
+ * Material 3 Expressive: a tonal card surface and the card radius.
+ */
 @Composable
 internal fun AgendaViewMenu(
     views: List<AgendaCalendarView>,
     label: String,
+    monthStyles: List<AgendaMonthStyleChoice>,
     onPick: (AgendaDestination) -> Unit,
+    onStyle: (AgendaMonthStyle) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
@@ -118,16 +131,52 @@ internal fun AgendaViewMenu(
             Text(views.firstOrNull { it.current }?.label ?: label, style = centraidType("smallStrong"), color = centraidColor("text"))
             CentraidIcon("ChevronDown", tint = centraidColor("textSoft"), size = 14.dp, modifier = Modifier.padding(start = 4.dp))
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            containerColor = Surface.card,
+            shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
+        ) {
             views.forEach { view ->
                 DropdownMenuItem(
-                    text = { Text(view.label) },
+                    text = { Text(view.label, style = kitTextStyle(KitType.Row), color = Surface.ink) },
+                    leadingIcon = if (view.icon_key.isNotEmpty()) {
+                        { CentraidIcon(view.icon_key, tint = Surface.body, size = 18.dp) }
+                    } else {
+                        null
+                    },
+                    trailingIcon = if (view.current) {
+                        { CentraidIcon("Check", tint = appAccent("agenda").text, size = 18.dp) }
+                    } else {
+                        null
+                    },
                     onClick = {
                         open = false
                         onPick(view.destination)
                     },
                     modifier = Modifier.testTag("agenda-view-${view.key}"),
                 )
+            }
+            // MONTH'S SECOND GROUP: how it draws, Grid or List.
+            if (monthStyles.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(KitGeometry.HAIRLINE).background(Surface.line))
+                monthStyles.forEach { choice ->
+                    DropdownMenuItem(
+                        text = { Text(choice.label, style = kitTextStyle(KitType.Row), color = Surface.ink) },
+                        trailingIcon = if (choice.current) {
+                            { CentraidIcon("Check", tint = appAccent("agenda").text, size = 18.dp) }
+                        } else {
+                            null
+                        },
+                        onClick = {
+                            open = false
+                            onStyle(choice.style)
+                        },
+                        modifier = Modifier.testTag(
+                            if (choice.style == AgendaMonthStyle.AGENDA_MONTH_STYLE_LIST) "agenda-month-style-list" else "agenda-month-style-grid",
+                        ),
+                    )
+                }
             }
         }
     }
