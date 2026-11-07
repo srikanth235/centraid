@@ -75,6 +75,8 @@ pub struct NewEvent<'a> {
     pub description: Option<&'a str>,
     pub place_id: Option<&'a str>,
     pub url: Option<&'a str>,
+    /// Minutes of travel to allow before it starts.
+    pub travel_min: Option<i64>,
     /// `confirmed` when none is said.
     pub status: Option<&'a str>,
     /// Whether it blocks its time; it does when none is said.
@@ -93,8 +95,8 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
     };
     ctx.connection().execute(
         "INSERT INTO event (id, starts, ends, timing, zone, rule, rule_supported, status, busy,
-                            calendar_id, place_id, url, reminders, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                            calendar_id, place_id, url, reminders, description, travel_min)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         rusqlite::params![
             id,
             event.starts,
@@ -110,6 +112,7 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
             event.url,
             event.reminders,
             event.description,
+            event.travel_min,
         ],
     )?;
     Ok(id)
@@ -349,6 +352,10 @@ fn day_times(
 /// a wall clock and its zone become the instant, so the statement a source makes
 /// and the row it leaves compare equal.
 pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::Result<(), String> {
+    if let Some(alerts) = fields.get("reminders") {
+        let alerts = alerts_text(alerts)?;
+        fields.insert("reminders".to_owned(), alerts);
+    }
     if !["starts", "ends", "timing", "zone"]
         .iter()
         .any(|key| fields.contains_key(*key))
@@ -363,6 +370,155 @@ pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::
     fields.insert("timing".to_owned(), at.timing.as_str().into());
     fields.insert("zone".to_owned(), at.zone.into());
     Ok(())
+}
+
+/// The alerts a source states (minutes before it starts), in the one text the `reminders` column
+/// holds: a JSON array in the order stated, a minute once. No alert is `null`.
+fn alerts_text(alerts: &Json) -> std::result::Result<Json, String> {
+    let list: Vec<i64> = match alerts {
+        Json::Null => return Ok(Json::Null),
+        // Already the column's own text (a statement read back).
+        Json::String(text) => match serde_json::from_str::<Json>(text) {
+            Ok(Json::Array(list)) => list.iter().filter_map(Json::as_i64).collect(),
+            _ => return Err("reminders are minutes before the start".to_owned()),
+        },
+        Json::Array(list) => list
+            .iter()
+            .map(|minutes| {
+                minutes
+                    .as_i64()
+                    .filter(|minutes| *minutes >= 0)
+                    .ok_or_else(|| "reminders are minutes before the start".to_owned())
+            })
+            .collect::<std::result::Result<_, _>>()?,
+        _ => return Err("reminders are minutes before the start".to_owned()),
+    };
+    let mut seen = BTreeSet::new();
+    let list: Vec<i64> = list
+        .into_iter()
+        .filter(|minutes| seen.insert(*minutes))
+        .collect();
+    Ok(if list.is_empty() {
+        Json::Null
+    } else {
+        Json::String(json!(list).to_string())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The guests a phone states
+// ---------------------------------------------------------------------------
+
+/// One guest a phone states, in the one form two statements of the same guest share: an email
+/// (lower case), a name and an answer of [`ANSWERS`].
+fn guest_canon(guest: &Json) -> Json {
+    let text = |key: &str| {
+        guest
+            .get(key)
+            .and_then(Json::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+    };
+    let state = text("state")
+        .filter(|state| ANSWERS.contains(state))
+        .unwrap_or("needs-action");
+    let mut out = serde_json::Map::new();
+    if let Some(name) = text("name") {
+        out.insert("name".to_owned(), name.into());
+    }
+    if let Some(email) = text("email") {
+        out.insert("email".to_owned(), email.to_lowercase().into());
+    }
+    out.insert("state".to_owned(), state.into());
+    Json::Object(out)
+}
+
+/// `attendees`, canonical: each guest in its one form, in a stable order.
+pub(crate) fn attendees_canon(statement: &Json) -> Json {
+    let Some(list) = statement.as_array() else {
+        return statement.clone();
+    };
+    let mut guests: Vec<Json> = list.iter().map(guest_canon).collect();
+    guests.sort_by_key(Json::to_string);
+    Json::Array(guests)
+}
+
+/// The people the guests of a statement are, by an exact email match with a live person's email,
+/// with the answer each gave.
+fn matched_guests(
+    connection: &Connection,
+    statement: Option<&Json>,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    let mut people = std::collections::BTreeMap::new();
+    for guest in statement.and_then(Json::as_array).into_iter().flatten() {
+        let guest = guest_canon(guest);
+        let (Some(email), Some(state)) = (
+            guest.get("email").and_then(Json::as_str),
+            guest.get("state").and_then(Json::as_str),
+        ) else {
+            continue;
+        };
+        let key = crate::commands::contact_point::reach_key("email", email);
+        let person: Option<String> = connection
+            .query_row(
+                "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
+                  WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
+                  ORDER BY p.person_id LIMIT 1",
+                [&key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(person) = person {
+            people.insert(person, state.to_owned());
+        }
+    }
+    Ok(people)
+}
+
+/// The follower's `attendees` merge: a guest the phone states whose email is a person's becomes
+/// that person's `attendee` edge, with the answer the phone states; one the phone no longer
+/// states is taken off. A guest nobody's email matches mints no person and stays in the
+/// statement ([`attendees_read`]). Guests are never pushed back.
+pub(crate) fn attendees_merge(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    before: Option<&Json>,
+    now: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let wanted = matched_guests(connection, Some(now))?;
+    let had = matched_guests(connection, before)?;
+    let mut changed = false;
+    for person in had.keys().filter(|person| !wanted.contains_key(*person)) {
+        changed |= connection.execute(
+            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+            [id, person],
+        )? > 0;
+    }
+    for (person, state) in &wanted {
+        let held: Option<Option<String>> = connection
+            .query_row(
+                "SELECT state FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+                [id, person],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if held.as_ref().and_then(Option::as_deref) != Some(state.as_str()) {
+            edge::put(
+                ctx,
+                id,
+                Rel::Attendee,
+                person,
+                None,
+                &Extras {
+                    state: Some(state),
+                    ..Extras::default()
+                },
+            )?;
+            changed = true;
+        }
+    }
+    Ok(changed)
 }
 
 // ---------------------------------------------------------------------------
@@ -771,6 +927,7 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             description: ctx.optional_str("description"),
             place_id: ctx.optional_str("place_id"),
             url: ctx.optional_str("url"),
+            travel_min: ctx.input.get("travel_min").and_then(Json::as_i64),
             status: ctx.optional_str("status"),
             busy: ctx.input.get("busy").and_then(Json::as_bool),
         },
@@ -800,6 +957,7 @@ fn write_event(ctx: &CommandCtx<'_, '_>, id: &str, after: &Times) -> Result<()> 
         "calendar_id",
         "status",
         "busy",
+        "travel_min",
     ] {
         if let Some(value) = ctx.input.get(column) {
             connection.execute(
@@ -1201,6 +1359,19 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
     })
 }
 
+/// What the vault holds of a series' changed and skipped days, in the form [`overrides_read`] gives
+/// an edited series: `{ "held": [[day, cancelled, starts, title, timing, url, place], ...] }`, or
+/// `null` for a series whose days are all as its rule has them. It is what a series the vault
+/// founded pushes for its days, there being no statement to compare with.
+pub(crate) fn overrides_held(connection: &Connection, id: &str) -> Result<Json> {
+    let rows = held(connection, id)?;
+    Ok(if rows.is_empty() {
+        Json::Null
+    } else {
+        json!({ "held": rows.iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
+    })
+}
+
 pub(crate) fn overrides_canon(statement: &Json) -> Json {
     statement.clone()
 }
@@ -1302,8 +1473,10 @@ const PROPOSE_SCHEMA: &str = r#"{
     "calendar_id": { "type": "string", "minLength": 1 },
     "place_id": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"] },
+    "travel_min": { "type": ["integer", "null"], "minimum": 0,
+      "description": "Minutes of travel to allow before it starts." },
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 },
-      "description": "Minutes before it starts." },
+      "description": "Minutes before it starts, one per alert: the first and a second." },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
     "busy": { "type": "boolean" }
@@ -1324,6 +1497,7 @@ const EDIT_SCHEMA: &str = r#"{
     "calendar_id": { "type": "string", "minLength": 1 },
     "place_id": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"] },
+    "travel_min": { "type": ["integer", "null"], "minimum": 0 },
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 } },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },

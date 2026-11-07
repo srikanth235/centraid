@@ -72,7 +72,7 @@ pub const OPEN_STATUSES: [&str; 1] = ["open"];
 pub const CLOSED_STATUSES: [&str; 2] = ["done", "cancelled"];
 
 const TASK_COLUMNS: &str = "id, parent_id, project_id, section_id, status, description, priority, \
-     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position";
+     due, done_at, effort_min, remind_before_min, rule, zone, anchor, series_id, position, url";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 const ARCHIVED: &str = "flag:archived";
 
@@ -132,6 +132,8 @@ pub struct TaskRow {
     pub rrule: Option<String>,
     pub tz: Option<String>,
     pub recurrence_anchor: Option<String>,
+    /// A link the task points at.
+    pub url: Option<String>,
     pub series_id: Option<String>,
     pub sort_order: Option<i64>,
     pub created_at: Option<String>,
@@ -170,6 +172,8 @@ pub struct ProjectRow {
     /// The area it sits in, by name.
     pub area: Option<String>,
     pub color: Option<String>,
+    /// A key of `design/icons.toml`, when the member chose one.
+    pub icon: Option<String>,
     pub sort_order: Option<i64>,
 }
 
@@ -291,6 +295,7 @@ fn task_of(entity: &Row, row: &Row) -> TaskRow {
         rrule: text_of(row, "rule"),
         tz: text_of(row, "zone"),
         recurrence_anchor: text_of(row, "anchor"),
+        url: text_of(row, "url"),
         series_id: text_of(row, "series_id"),
         // A place in a list is a REAL; the shell counts in whole places.
         sort_order: match row.get("position") {
@@ -623,7 +628,7 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
     let placed: BTreeMap<String, Row> = by_ids(
         "agenda.task.board.containers",
         "container",
-        "id, parent_id, color, position",
+        "id, parent_id, color, icon, position",
         "id",
     )
     .within(WIDE, door, &ids, None)?
@@ -684,6 +689,7 @@ pub fn load_chrome(door: &dyn PageDoor) -> KitResult<(Vec<ProjectRow>, Vec<Secti
                         .and_then(|held| text_of(held, "parent_id"))
                         .and_then(|area| areas.get(&area).cloned()),
                     color: held.and_then(|held| text_of(held, "color")),
+                    icon: held.and_then(|held| text_of(held, "icon")),
                     sort_order: Some(position(&id).round() as i64),
                     project_id: id,
                 },

@@ -1182,7 +1182,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
         seeder
             .run(
                 "container.create",
-                json!({ "kind": "project", "title": "Tahoe trip", "color": "steelblue", "position": 1 }),
+                json!({ "kind": "project", "title": "Tahoe trip", "color": "blue", "position": 1 }),
             )
             .as_ref(),
         "id",

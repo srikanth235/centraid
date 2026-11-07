@@ -64,6 +64,10 @@ pub struct NewTask<'a> {
     pub project_id: Option<&'a str>,
     pub section_id: Option<&'a str>,
     pub position: Option<f64>,
+    /// A link the task points at.
+    pub url: Option<&'a str>,
+    /// Closed as done at this instant: an import of an item already completed. `None` is open.
+    pub done_at: Option<&'a str>,
 }
 
 /// Found a task: the entity and the kind row. Returns its id.
@@ -78,10 +82,12 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
     };
     ctx.connection().execute(
         "INSERT INTO task (id, due, description, priority, effort_min, remind_before_min, rule,
-                           anchor, zone, parent_id, project_id, section_id, position)
+                           anchor, zone, parent_id, project_id, section_id, position, url,
+                           status, done_at)
          VALUES (?1, ?2, ?3, COALESCE(?4, 0), ?5, ?6, ?7, COALESCE(?8, 'scheduled'), ?9, ?10, ?11,
                  ?12, COALESCE(?13, (SELECT COALESCE(MAX(position), 0) + 1 FROM task
-                                      WHERE project_id IS ?11)))",
+                                      WHERE project_id IS ?11)), ?14,
+                 CASE WHEN ?15 IS NULL THEN 'open' ELSE 'done' END, ?15)",
         rusqlite::params![
             id,
             task.due,
@@ -96,6 +102,8 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
             task.project_id,
             task.section_id,
             task.position,
+            task.url.map(str::trim),
+            task.done_at,
         ],
     )?;
     Ok(id)
@@ -300,9 +308,28 @@ fn live_task(ctx: &CommandCtx<'_, '_>) -> Result<std::result::Result<(), String>
     )
 }
 
+/// A link, when one is stated, says something: a blank one is cleared with `null`, not kept.
+fn url_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
+    ctx.optional_str("url")
+        .filter(|url| url.trim().is_empty())
+        .map(|_| "a link needs an address; clear it instead".to_owned())
+}
+
 fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some("a task needs a title".to_owned()));
+    }
+    if let Some(sentence) = url_refusal(ctx) {
+        return Ok(Some(sentence));
+    }
+    if let Some(done_at) = ctx.optional_str("done_at")
+        && !matches!(temporal::classify(done_at), Some(temporal::Kind::Instant))
+    {
+        return Ok(Some(temporal::refusal(
+            "done_at",
+            done_at,
+            &[temporal::Kind::Instant],
+        )));
     }
     if let Some(id) = ctx.optional_str("id")
         && find(ctx.connection(), id)?.is_some()
@@ -335,6 +362,9 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if ctx.input.get("title").is_some() && ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some("a task needs a title".to_owned()));
     }
+    if let Some(sentence) = url_refusal(ctx) {
+        return Ok(Some(sentence));
+    }
     refusal(ctx.connection(), &image(ctx)?)
 }
 
@@ -365,6 +395,8 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             project_id: ctx.optional_str("project_id"),
             section_id: ctx.optional_str("section_id"),
             position: ctx.input.get("position").and_then(Json::as_f64),
+            url: ctx.optional_str("url"),
+            done_at: ctx.optional_str("done_at"),
         },
     )?;
     Ok(json!({ "id": id }))
@@ -377,6 +409,8 @@ fn set_stated(ctx: &CommandCtx<'_, '_>, id: &str, columns: &[(&str, &str)]) -> R
         if let Some(value) = ctx.input.get(*key) {
             let value = if *key == "rule" {
                 value.as_str().map(rrule::canonicalize).map(Json::from)
+            } else if *key == "url" {
+                value.as_str().map(|url| Json::from(url.trim()))
             } else {
                 Some(value.clone())
             };
@@ -404,6 +438,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ("effort_min", "effort_min"),
             ("remind_before_min", "remind_before_min"),
             ("rule", "rule"),
+            ("url", "url"),
         ],
     )?;
     if let Some(title) = ctx.optional_str("title") {
@@ -537,9 +572,9 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
     connection.execute(
         "INSERT INTO task (id, status, priority, due, rule, anchor, zone, series_id,
                            remind_before_min, effort_min, parent_id, project_id, section_id,
-                           description, position)
+                           description, position, url)
          SELECT ?2, 'open', priority, ?3, rule, anchor, zone, series_id, remind_before_min,
-                effort_min, parent_id, project_id, section_id, description, position
+                effort_min, parent_id, project_id, section_id, description, position, url
            FROM task WHERE id = ?1",
         rusqlite::params![id, next, next_due],
     )?;
@@ -607,7 +642,9 @@ const ADD_SCHEMA: &str = r#"{
     "parent_id": { "type": ["string", "null"] },
     "project_id": { "type": ["string", "null"] },
     "section_id": { "type": ["string", "null"] },
-    "position": { "type": "number" }
+    "position": { "type": "number" },
+    "url": { "type": ["string", "null"], "maxLength": 2048, "description": "A link the task points at." },
+    "done_at": { "type": ["string", "null"], "description": "Founds the task already done, at this instant (an import of a completed item)." }
   }
 }"#;
 
@@ -621,7 +658,8 @@ const EDIT_SCHEMA: &str = r#"{
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
     "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "remind_before_min": { "type": ["integer", "null"], "minimum": 0 },
-    "rule": { "type": ["string", "null"] }
+    "rule": { "type": ["string", "null"] },
+    "url": { "type": ["string", "null"], "maxLength": 2048 }
   }
 }"#;
 

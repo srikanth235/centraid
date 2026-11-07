@@ -120,6 +120,8 @@ CREATE TABLE container (
   kind      TEXT NOT NULL CHECK (kind IN ('notebook','folder','album','list','project','section','area','calendar')),
   parent_id TEXT REFERENCES container(id),
   color     TEXT,
+  -- A key of `design/icons.toml`; the command boundary says which keys a list or calendar may wear.
+  icon      TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover     TEXT REFERENCES blob(hash),
   position  REAL NOT NULL DEFAULT 0,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -349,6 +351,8 @@ CREATE TABLE event (
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
   reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
+  -- Minutes of travel the member allows before it starts.
+  travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (calendar_id, calendar_kind) REFERENCES entity(id, kind),
@@ -392,6 +396,7 @@ CREATE TABLE task (
   zone              TEXT,
   series_id         TEXT REFERENCES task(id),
   remind_before_min INTEGER CHECK (remind_before_min IS NULL OR remind_before_min >= 0),
+  url               TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
   effort_min        INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   parent_id         TEXT REFERENCES task(id) CHECK (parent_id IS NULL OR parent_id <> id),
   project_id        TEXT,

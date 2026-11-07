@@ -42,6 +42,7 @@
 //! | A denial turned into an error | [`Denial`] is a value every query answers beside its payload |
 //! | A raw RRULE shown to a member | `recurrence_summary` is [`centraid_vault::time::rrule::describe`]'s sentence, resolved here; a second summariser is the defect that function exists to prevent (#834) |
 
+pub mod attachments;
 pub mod commands;
 pub mod detail;
 pub mod expansion;
@@ -51,8 +52,11 @@ pub mod queries;
 pub mod task;
 pub mod window;
 
+pub use attachments::{ATTACHMENTS_PAGE_MAX, AttachmentRow, AttachmentsData, load_attachments};
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use detail::{EventDetailData, NEXT_OCCURRENCE_REACH_DAYS, load_event, next_occurrence};
+pub use detail::{
+    EventDetailData, FollowedGuest, NEXT_OCCURRENCE_REACH_DAYS, load_event, next_occurrence,
+};
 pub use expansion::{
     DEFAULT_EXPAND_MS, MAX_TOTAL_INSTANCES, SPAN_BUFFER_MS, expand_recurring_events,
 };

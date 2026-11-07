@@ -60,6 +60,11 @@
         "verbs": "read"
       },
       {
+        "schema": "vault",
+        "table": "source",
+        "verbs": "read"
+      },
+      {
         "schema": "event",
         "table": "propose",
         "verbs": "act"
@@ -87,6 +92,11 @@
       {
         "schema": "follow",
         "table": "calendar",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "pushed",
         "verbs": "act"
       },
       {
@@ -157,6 +167,11 @@
       {
         "schema": "container",
         "table": "create",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "style",
         "verbs": "act"
       },
       {
@@ -270,6 +285,11 @@
           "zone": {
             "type": ["string", "null"],
             "description": "An IANA zone; with it a wall clock is that zone's."
+          },
+          "travel_min": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Minutes of travel to allow before it starts; null clears it."
           }
         },
         "required": ["title", "starts"],
@@ -425,6 +445,11 @@
           "zone": {
             "type": ["string", "null"],
             "description": "An IANA zone; with it a wall clock is that zone's."
+          },
+          "travel_min": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Minutes of travel to allow before it starts; null clears it."
           }
         },
         "required": ["id"],
@@ -749,7 +774,7 @@
         "add a task to buy milk",
         "put 'file taxes' on my list for April 15"
       ],
-      "description": "Add a task through task.add: dated, prioritized, estimated, repeating, reminded, filed in a project and section, or as a subtask of an open top-level task.",
+      "description": "Add a task through task.add: dated, prioritized, estimated, repeating, reminded, linked, filed in a project and section, or as a subtask of an open top-level task; or founded already done (`done_at`), which is how a completed imported item lands.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -812,6 +837,15 @@
           },
           "position": {
             "type": "number"
+          },
+          "url": {
+            "type": ["string", "null"],
+            "maxLength": 2048,
+            "description": "A link the task points at; null clears it."
+          },
+          "done_at": {
+            "type": ["string", "null"],
+            "description": "Founds the task already done, at this instant: an import of a completed item."
           }
         },
         "required": ["title"],
@@ -845,7 +879,7 @@
         "make buying milk high priority",
         "add a note to the taxes task"
       ],
-      "description": "Edit a task's title, note, due date, priority, effort, reminder lead time or repeat rule through task.edit. A key that is present is set (null clears it); a key that is absent is left alone.",
+      "description": "Edit a task's title, note, link, due date, priority, effort, reminder lead time or repeat rule through task.edit. A key that is present is set (null clears it); a key that is absent is left alone.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -886,6 +920,11 @@
             "minimum": 0,
             "maximum": 9,
             "aliases": ["priority"]
+          },
+          "url": {
+            "type": ["string", "null"],
+            "maxLength": 2048,
+            "description": "A link the task points at; null clears it."
           }
         },
         "required": ["id"],
@@ -1244,6 +1283,10 @@
           },
           "position": {
             "type": ["number", "null"]
+          },
+          "icon": {
+            "type": ["string", "null"],
+            "description": "A key of design/icons.toml a list may wear."
           }
         },
         "required": ["kind", "title"],
@@ -1276,7 +1319,7 @@
         "call the Errands list Chores",
         "retitle the Finance project"
       ],
-      "description": "Retitle a project or an area through entity.retitle.",
+      "description": "Retitle a project, an area or a calendar through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1635,6 +1678,186 @@
           }
         }
       }
+    },
+    {
+      "name": "create-calendar",
+      "verb": "create:kind",
+      "kind": "list",
+      "inverse": "delete-task",
+      "sealed": [],
+      "command": "container.create",
+      "phrasings": [
+        "make a calendar called Family",
+        "create a calendar named Work",
+        "start a new calendar for the kids' school"
+      ],
+      "description": "Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["calendar"],
+            "default": "calendar"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["name"]
+          },
+          "color": {
+            "type": ["string", "null"],
+            "enum": ["blue", "mustard", "violet", "petrol", "indigo", "graphite", "raspberry", "orchid", null]
+          },
+          "icon": {
+            "type": ["string", "null"],
+            "description": "A key of design/icons.toml a calendar may wear."
+          },
+          "position": {
+            "type": ["number", "null"]
+          }
+        },
+        "required": ["kind", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "style-container",
+      "verb": "edit:color",
+      "kind": "list",
+      "inverse": "style-container",
+      "sealed": [],
+      "command": "container.style",
+      "phrasings": [
+        "make the Errands list blue",
+        "give the Family calendar a heart icon",
+        "change the colour of my Work calendar"
+      ],
+      "description": "Set or clear the colour (one of the eight list colours) and the icon of a list or a calendar through container.style. A key that is present is set (null clears it); a key that is absent is left alone.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": ["string", "null"],
+            "enum": ["blue", "mustard", "violet", "petrol", "indigo", "graphite", "raspberry", "orchid", null]
+          },
+          "icon": {
+            "type": ["string", "null"],
+            "description": "A key of design/icons.toml a list or calendar may wear."
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "record-calendar-push",
+      "verb": "import:items",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.pushed",
+      "phrasings": [
+        "record what was written back to my phone's calendar",
+        "mark these events as pushed to the phone",
+        "note which events the phone's calendar now holds"
+      ],
+      "description": "Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "op": {
+                  "type": "string",
+                  "enum": ["create", "update", "delete"]
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "external_id": {
+                  "type": ["string", "null"]
+                },
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "fields": {
+                  "type": ["object", "null"]
+                },
+                "phone_kept": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["event_id", "op", "ok"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [
@@ -1941,6 +2164,55 @@
         "properties": {
           "tasks": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "attachments",
+      "kind": "event",
+      "figures": ["attachments"],
+      "description": "What is attached to one event or task, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live event or task answers an empty page, and an attached file in the trash is left out until it is restored.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "sortKey": {
+                "type": "string"
+              },
+              "pk": {
+                "type": "string"
+              }
+            },
+            "required": ["sortKey", "pk"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array"
+          },
+          "next": {
+            "type": ["object", "null"]
           },
           "vaultDenied": {
             "type": "object"

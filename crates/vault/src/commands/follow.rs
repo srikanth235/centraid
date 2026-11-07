@@ -55,7 +55,7 @@ use serde_json::{Map, Value as Json};
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{contact_point, container, document, event, workout};
+use crate::commands::{calendar_push, contact_point, container, document, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -207,6 +207,11 @@ pub struct SystemMap {
     /// What a row the source has just ADDED is called, run once after its fields are written
     /// (a statement line takes the payee a rule names; a re-import never renames).
     pub named: Settle,
+    /// Whether a row the member edited, whose record the phone then deleted, keeps its source
+    /// row with `gone_at` set (and the row live) instead of losing it: the mark that says the
+    /// phone unlinked it, so the vault does not hand it back to the phone as a new event
+    /// ([`crate::commands::calendar_push`], C5).
+    pub unlink_mark: bool,
 }
 
 /// See [`SystemMap::shape`].
@@ -248,7 +253,7 @@ impl SystemMap {
     }
 
     /// Whether two values of the field say the same thing.
-    fn agree(&self, name: &str, left: Option<&Json>, right: Option<&Json>) -> bool {
+    pub(crate) fn agree(&self, name: &str, left: Option<&Json>, right: Option<&Json>) -> bool {
         match self.child(name) {
             Some(child) => same(
                 left.map(child.canon).as_ref(),
@@ -387,6 +392,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: nothing_to_settle,
         replaced: nothing_replaced,
         named: nothing_to_settle,
+        unlink_mark: false,
     },
     SystemMap {
         system: "calendar",
@@ -404,14 +410,26 @@ pub const SYSTEMS: &[SystemMap] = &[
             "zone",
             "rule",
             "busy",
+            // The alerts, minutes before, as the event's own JSON ([`event::shape`]).
+            "reminders",
         ],
         fixed: &[],
-        children: &[Child {
-            name: "overrides",
-            read: event::overrides_read,
-            canon: event::overrides_canon,
-            merge: event::overrides_merge,
-        }],
+        children: &[
+            Child {
+                name: "overrides",
+                read: event::overrides_read,
+                canon: event::overrides_canon,
+                merge: event::overrides_merge,
+            },
+            // The guests the phone states: a guest whose email is a person's is that person's
+            // `attendee` edge; the rest stay in the statement and are read from it.
+            Child {
+                name: "attendees",
+                read: |connection, id| stated_read(connection, id, "attendees"),
+                canon: event::attendees_canon,
+                merge: event::attendees_merge,
+            },
+        ],
         match_on: &[Match::Title, Match::Column("starts")],
         gone: Gone::Trash,
         window: None,
@@ -421,6 +439,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: event::settle,
         replaced: nothing_replaced,
         named: nothing_to_settle,
+        unlink_mark: true,
     },
     SystemMap {
         system: "files",
@@ -441,6 +460,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: nothing_to_settle,
         replaced: document::keep_replaced_by_write,
         named: nothing_to_settle,
+        unlink_mark: false,
     },
     // A workout: an activity of a workout kind, its span, and what the store
     // measured. A record states the store's word for the kind and the vault
@@ -465,6 +485,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: workout::settle,
         replaced: nothing_replaced,
         named: nothing_to_settle,
+        unlink_mark: false,
     },
     // A line of a statement: its title is the bank's words until the member
     // renames it, its day and amount are the bank's and never edited, and the
@@ -488,6 +509,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: nothing_to_settle,
         replaced: nothing_replaced,
         named: super::rule::name_new_line,
+        unlink_mark: false,
     },
 ];
 
@@ -521,7 +543,11 @@ fn same(left: Option<&Json>, right: Option<&Json>) -> bool {
 }
 
 /// The columns a row holds now, for the fields named, as JSON.
-fn current(connection: &Connection, map: &SystemMap, id: &str) -> Result<Map<String, Json>> {
+pub(crate) fn current(
+    connection: &Connection,
+    map: &SystemMap,
+    id: &str,
+) -> Result<Map<String, Json>> {
     let mut out = Map::new();
     let title: String =
         connection.query_row("SELECT title FROM entity WHERE id = ?1", [id], |row| {
@@ -1221,6 +1247,7 @@ struct Followed {
     device_id: Option<String>,
     entity_id: Option<String>,
     stated: Json,
+    gone_at: Option<String>,
 }
 
 /// Whether a row is dated before the read began, so the read could not have held
@@ -1263,7 +1290,7 @@ fn settle_absent(
     let connection = ctx.connection();
     let rows: Vec<Followed> = connection
         .prepare(
-            "SELECT id, external_id, device_id, entity_id, stated FROM source
+            "SELECT id, external_id, device_id, entity_id, stated, gone_at FROM source
               WHERE origin_id = ?1",
         )?
         .query_map([&origin.id], |row| {
@@ -1274,9 +1301,21 @@ fn settle_absent(
                 device_id: row.get(2)?,
                 entity_id: row.get(3)?,
                 stated: serde_json::from_str(&stated).unwrap_or(Json::Null),
+                gone_at: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
+    // A row the phone unlinked (marked, still live) is nobody's record any more.
+    let unlinked = |row: &Followed| {
+        map.unlink_mark
+            && row.gone_at.is_some()
+            && row.entity_id.as_deref().is_some_and(|id| {
+                entity::find(connection, id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|held| held.deleted_at.is_none())
+            })
+    };
     let absent = |row: &Followed| {
         !seen.iter().any(|(seen_id, seen_device)| {
             *seen_id == row.external_id
@@ -1294,6 +1333,7 @@ fn settle_absent(
                 continue;
             };
             if other_phone(row)
+                || unlinked(row)
                 || before_window(connection, map, entity_id, since)?
                 || entity::require(connection, entity_id)?.deleted_at.is_some()
             {
@@ -1308,7 +1348,7 @@ fn settle_absent(
         }
     }
 
-    for row in rows.iter().filter(|row| absent(row)) {
+    for row in rows.iter().filter(|row| absent(row) && !unlinked(row)) {
         let Some(entity_id) = &row.entity_id else {
             // A tombstone whose record is gone is forgotten; the table does not
             // grow with every contact the member ever purged. A record dated
@@ -1334,7 +1374,14 @@ fn settle_absent(
         }
         let held = entity::require(connection, entity_id)?;
         if map.gone == Gone::Forget || edited(connection, map, entity_id, &row.stated)? {
-            connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
+            if map.unlink_mark && held.deleted_at.is_none() {
+                connection.execute(
+                    "UPDATE source SET gone_at = ?2 WHERE id = ?1",
+                    [&row.id, &ctx.now],
+                )?;
+            } else {
+                connection.execute("DELETE FROM source WHERE id = ?1", [&row.id])?;
+            }
             tally.forgotten += 1;
         } else if held.deleted_at.is_none() {
             let stamp = trash_stamp(ctx)?;
@@ -1560,5 +1607,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         }],
         stop,
     ));
+    definitions.extend(calendar_push::definitions());
     definitions
 }

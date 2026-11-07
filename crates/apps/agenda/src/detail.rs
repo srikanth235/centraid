@@ -16,7 +16,8 @@
 //! answered — its status is what the detail shows.
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::reads::PageDoor;
+use centraid_apps_kit::reads::{PageDoor, Read};
+use centraid_apps_kit::row::text_of;
 use centraid_vault::time::occurrence::{SEARCH_WINDOW_DAYS, search_window};
 
 use crate::expansion::expand_recurring_events;
@@ -24,6 +25,17 @@ use crate::queries::{
     CalendarRow, EventRow, events_among, name_places, read_calendars, read_exceptions,
 };
 use crate::{Denial, denial_of};
+
+/// One guest a followed phone calendar states for an event: a read-only list that is the phone's own
+/// word. A guest whose email is a person's is also one of the event's attendees; the rest are only
+/// here, because the vault mints no person for a stranger on a phone's invitation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowedGuest {
+    pub name: Option<String>,
+    pub email: Option<String>,
+    /// `needs-action`, `accepted`, `declined` or `tentative`.
+    pub state: String,
+}
 
 /// What `event` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -34,6 +46,42 @@ pub struct EventDetailData {
     /// names the calendar without reading `upcoming` (#1047). Absent with no
     /// event, no calendar edge, or a calendar that is gone.
     pub calendar: Option<CalendarRow>,
+    /// The guests the phone calendar last stated (an event the vault follows), read-only.
+    pub followed_guests: Vec<FollowedGuest>,
+}
+
+/// The guests a followed event's source last stated.
+fn followed_guests(door: &dyn PageDoor, event_id: &str) -> KitResult<Vec<FollowedGuest>> {
+    let rows = Read {
+        name: "agenda.event.followed-guests",
+        table: "source",
+        select: "entity_id, stated",
+        order: ("entity_id", "entity_id"),
+        column: "entity_id",
+    }
+    .of(door, &[event_id.to_owned()], None)?;
+    let stated = rows
+        .first()
+        .and_then(|row| text_of(row, "stated"))
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+    let text = |guest: &serde_json::Value, key: &str| {
+        guest
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    Ok(stated
+        .as_ref()
+        .and_then(|stated| stated.get("attendees"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|guest| FollowedGuest {
+            name: text(guest, "name"),
+            email: text(guest, "email"),
+            state: text(guest, "state").unwrap_or_else(|| "needs-action".to_owned()),
+        })
+        .collect())
 }
 
 /// The occurrence a request names: `original_start_local`, else the wall
@@ -99,7 +147,18 @@ pub fn load_event(
             .find(|calendar| calendar.calendar_id == calendar_id),
         None => None,
     };
-    Ok((EventDetailData { event, calendar }, None))
+    let followed_guests = match event.as_ref() {
+        Some(row) => followed_guests(door, &row.event_id)?,
+        None => Vec::new(),
+    };
+    Ok((
+        EventDetailData {
+            event,
+            calendar,
+            followed_guests,
+        },
+        None,
+    ))
 }
 
 /// How far either side of the vault clock [`next_occurrence`] looks.
