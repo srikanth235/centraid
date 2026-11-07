@@ -9,6 +9,8 @@ catalog! {
     plain body_placeholder = ("Write something", "Write something");
     plain cancel = ("Cancel", "Cancel");
     plain checklist = ("Checklist", "Checklist");
+    plain checklist_checked = ("Checked", "Checked");
+    plain checklist_unchecked = ("Not checked", "Not checked");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
     plain current_version = ("Current version", "Current version");
@@ -58,6 +60,8 @@ catalog! {
     plain history_empty_headline = ("No earlier versions", "No earlier versions");
     plain history_title = ("Version history", "Version history");
     plain home = ("Home", "Home");
+    plain item_checked = ("Item checked", "Item checked");
+    plain item_unchecked = ("Item unchecked", "Item unchecked");
     plain journal_empty_body = (
         "Entries you write about people in People appear here.",
         "Entries you write about people in People appear here."
@@ -85,9 +89,15 @@ catalog! {
     plain link_kind_task = ("Task", "Task");
     plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
     plain link_label = ("Add link", "Add link");
+    plain link_missing = ("No note called {title}", "No note called {title}");
+    plain link_missing_spoken = ("Missing note {title}", "Missing note {title}");
+    plain link_note_spoken = ("Note {title}", "Note {title}");
     plain link_no_match_body = ("Nothing matches that search.", "Nothing matches that search.");
     plain link_search = ("Search everything", "Search everything");
     plain link_title = ("Link to", "Link to");
+    plain link_trashed = ("{title} is in the trash", "{title} is in the trash");
+    plain link_trashed_spoken = ("Note in trash {title}", "Note in trash {title}");
+    plain link_web_spoken = ("Link {label}", "Link {label}");
     plain loading = ("Loading notes", "Loading notes");
     plain loading_history = ("Loading versions", "Loading versions");
     plain loading_journal = ("Loading the journal", "Loading the journal");
@@ -142,6 +152,7 @@ catalog! {
     plain title_placeholder = ("Title", "Title");
     plain trash_label = ("Trash", "Trash");
     plain unfiled_row = ("Unfiled", "Unfiled");
+    plain undo = ("Undo", "Undo");
     plain unpin = ("Unpin", "Unpin");
     plain untitled = ("Untitled note", "Untitled note");
     plain untitled_notebook = ("Untitled notebook", "Untitled notebook");

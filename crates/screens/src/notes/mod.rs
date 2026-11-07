@@ -25,6 +25,7 @@ pub mod editor;
 pub mod fold;
 pub mod history;
 pub mod home;
+pub(crate) mod rich;
 pub mod trash;
 
 pub const HOME: &str = "notes.home";
