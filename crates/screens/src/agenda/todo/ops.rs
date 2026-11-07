@@ -12,6 +12,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
+use super::natural::Fields;
 use super::rows;
 use crate::catalog::act;
 use crate::kit::act::{self as kit_act, Settled};
@@ -42,6 +43,22 @@ pub struct NewTask<'a> {
     pub section_id: Option<&'a str>,
     pub tags: &'a [String],
     pub flagged: bool,
+    /// The due is a wall clock: the request names the device's zone beside it.
+    pub timed: bool,
+}
+
+impl<'a> NewTask<'a> {
+    /// A task of what the date chip read. A repeat with no due is never sent.
+    #[must_use]
+    pub fn dated(fields: &'a Fields) -> Self {
+        Self {
+            title: &fields.title,
+            due: &fields.due,
+            rule: fields.rule.as_deref().filter(|_| !fields.due.is_empty()),
+            timed: fields.timed,
+            ..Self::default()
+        }
+    }
 }
 
 /// What a to-do surface holds beside its answers: the one status line, what
@@ -175,12 +192,28 @@ impl Ops {
         project_id: Option<&str>,
         section_id: Option<&str>,
     ) -> bool {
+        let fields = Fields {
+            title: title.to_owned(),
+            due: due_day.to_owned(),
+            ..Fields::default()
+        };
+        self.add_fields(ctx, &fields, lands_in, project_id, section_id)
+    }
+
+    /// [`Self::add`] with what the date chip read: a due, a repeat rule, and the
+    /// device's zone beside a wall-clock due. A repeat with no due is never sent.
+    pub fn add_fields(
+        &mut self,
+        ctx: &Ctx,
+        fields: &Fields,
+        lands_in: &str,
+        project_id: Option<&str>,
+        section_id: Option<&str>,
+    ) -> bool {
         let task = NewTask {
-            title,
-            due: due_day,
             project_id,
             section_id,
-            ..NewTask::default()
+            ..NewTask::dated(fields)
         };
         self.add_full(ctx, &task, lands_in).is_some()
     }
@@ -204,6 +237,11 @@ impl Ops {
             due: text(task.due),
             priority: (task.priority > 0).then_some(task.priority),
             rule: text(task.rule.unwrap_or_default()),
+            zone: if task.timed && !task.due.is_empty() {
+                crate::field::Field::Is(ctx.zone().to_owned())
+            } else {
+                Default::default()
+            },
             project_id: text(task.project_id.unwrap_or_default()),
             section_id: text(task.section_id.unwrap_or_default()),
             ..Default::default()

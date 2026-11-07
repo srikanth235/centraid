@@ -1,0 +1,34 @@
+// AGENDA OUTSIDE THE APP (#1173, wave 3): the widgets' snapshot and what the
+// platform asks of Agenda from Siri, a shortcut or a widget tap. Rust decides
+// every word and every row of the snapshot (`crates/screens/src/agenda/glance`);
+// a shell keeps the file and reloads the widgets, and reports what the platform
+// asked. Arms: Effect 150, ShellFact 130.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// Rust asks the shell to keep the widgets' snapshot: write `document` atomically
+// to the shared container (iOS App Group, Android app files) under the shell's
+// one file name, then ask the platform to reload the widgets. Answered EffectDone
+// or EffectFailed.
+message AgendaGlance {
+  // The JSON snapshot, UTF-8.
+  bytes document = 1;
+  // The document's schema version (1).
+  uint32 version = 2;
+}
+
+// The shell heard the platform ask Agenda for something outside the app (Siri,
+// a shortcut, a widget tap). Reported as a ShellFact; the glance service answers.
+message AgendaIntent {
+  oneof kind {
+    AgendaIntentAdd add = 1;
+  }
+}
+
+// "Add a reminder": open Reminders with the quick-add bar holding `title` (may
+// be empty). Nothing is written until the member taps Add.
+message AgendaIntentAdd {
+  string title = 1;
+}

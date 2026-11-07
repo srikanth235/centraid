@@ -34,6 +34,8 @@ import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.glance.GlanceSnapshot
+import dev.centraid.android.glance.GlanceWidgets
 import dev.centraid.android.kit.SecretStores
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
@@ -249,6 +251,18 @@ internal class ShellEffects(
                 EffectResult(camera_read = CameraRead(camera = camera.orEmpty()))
             }
             effect.render_edit != null -> PhotosEditRender.perform(context, core, effect.render_edit!!)
+            // ---- Agenda's widgets (#1173) --------------------------------------------------------
+            // The snapshot Rust composed, kept as the one file the widgets draw, then redrawn. A
+            // version this shell does not draw is refused, so a newer core never paints a half read.
+            effect.agenda_glance != null -> {
+                val glance = effect.agenda_glance!!
+                if (glance.version != GlanceSnapshot.VERSION) {
+                    failed("the widgets draw another snapshot version")
+                } else {
+                    effectAttempt { withContext(Dispatchers.IO) { GlanceWidgets.keep(context, glance.document.toByteArray()) } }
+                        .fold({ done }, { failed("the widgets' snapshot could not be kept") })
+                }
+            }
             // ---- generic platform work -----------------------------------------------------------
             effect.clipboard_set != null -> {
                 val set = effect.clipboard_set!!

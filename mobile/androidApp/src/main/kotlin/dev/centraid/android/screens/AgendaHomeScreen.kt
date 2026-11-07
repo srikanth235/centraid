@@ -53,6 +53,7 @@ import centraid.core.v1.AgendaMoreRow
 import centraid.core.v1.AgendaNowLine
 import centraid.core.v1.AgendaRowStatus
 import centraid.core.v1.AgendaToolbar
+import centraid.core.v1.QuickAddChipDismissed
 import centraid.core.v1.Route
 import centraid.core.v1.SearchContainer
 import centraid.core.v1.TodoChrome
@@ -265,6 +266,7 @@ public fun AgendaHomeScreen(
                     onTool = { onEvent(AgendaHomeEvent(quick_tool = AgendaHomeEvent.QuickToolPicked(key = it))) },
                     onDue = { onEvent(AgendaHomeEvent(quick_due = AgendaHomeEvent.QuickDuePicked(key = it))) },
                     onTag = { onEvent(AgendaHomeEvent(quick_tag = AgendaHomeEvent.QuickTagAdded(text = it))) },
+                    onDismissChip = { onEvent(AgendaHomeEvent(quick_add_chip_dismissed = QuickAddChipDismissed())) },
                     // THE KEYBOARD LEFT: the machine puts an empty bar away.
                     onBlur = { onEvent(AgendaHomeEvent(quick_add_closed = AgendaHomeEvent.QuickAddClosed())) },
                     testTag = "agenda-quick-add",

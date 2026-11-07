@@ -44,6 +44,7 @@ pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
+use super::todo::natural::{Chipper, Fields};
 use super::todo::ops::{NewTask, Ops};
 use super::todo::quick::Quick;
 use super::todo::rows;
@@ -72,6 +73,8 @@ struct QuickAdd {
     focused: bool,
     /// What the keyboard toolbar has staged for the next add (#1173).
     staged: Quick,
+    /// The core's clock and the chip's dismissal (#1173 Wave 3).
+    chip: Chipper,
 }
 
 pub(super) struct Home {
@@ -144,6 +147,7 @@ impl Home {
                 focused: !seed.is_empty(),
                 title: seed,
                 staged: Quick::default(),
+                chip: Chipper::default(),
             },
             limit: rows::PAGE,
             ops: Ops::default(),
@@ -300,12 +304,17 @@ impl Home {
             }
             H::FileChosen(chosen) => self.file(&chosen.key, ctx),
             H::QuickAddChanged(typed) => self.quick.title = typed.title,
+            H::QuickAddChipDismissed(_) => {
+                let words = self.quick.title.clone();
+                self.quick.chip.dismiss(&words);
+            }
             H::QuickAddSubmitted(_) => self.add(ctx),
             // THE PLUS OPENS THE BAR on the keyboard (R-CHROME-1), on To-do only.
             H::QuickAddOpened(_) => {
                 if self.destination == Dest::Todo {
                     self.quick.drawn = true;
                     self.quick.focused = true;
+                    self.quick.chip.hold(ctx);
                 }
             }
             // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep it
@@ -427,25 +436,37 @@ impl Home {
         self.destination == Dest::Todo && self.quick.drawn && !self.denied()
     }
 
-    /// To-do's quick add: a title, landing in the Inbox with what the toolbar
-    /// staged. The bar keeps its words and its staging when the vault refuses,
-    /// and after an add it stays drawn and focused for the next one.
+    /// To-do's quick add, landing in the Inbox: the words as typed, or, while
+    /// the date chip shows, the title and day it names, plus what the toolbar
+    /// staged (a staged day wins over a phrase in the words). The bar keeps its
+    /// words and its staging when the vault refuses, and after an add it stays
+    /// drawn and focused for the next one.
     fn add(&mut self, ctx: &Ctx) {
         let title = self.quick.title.trim().to_owned();
         if title.is_empty() || self.denied() || self.destination != Dest::Todo {
             return;
         }
         let inbox = task::inbox(ctx.locale());
-        let due = self.quick.staged.due_day(&self.held.today());
+        // THE CORE'S CLOCK, read just now, never the device's. A day the toolbar
+        // staged is the member's explicit pick: it wins, and the words stay as typed.
+        let staged_day = self.quick.staged.due_day(&self.held.today());
+        let fields = if staged_day.is_empty() {
+            self.quick.chip.fields(ctx, &title)
+        } else {
+            Fields {
+                title: title.clone(),
+                due: staged_day,
+                ..Fields::default()
+            }
+        };
         let new = NewTask {
-            title: &title,
-            due: &due,
             tags: self.quick.staged.tags(),
             flagged: self.quick.staged.flagged(),
-            ..NewTask::default()
+            ..NewTask::dated(&fields)
         };
         if self.ops.add_full(ctx, &new, &inbox).is_some() {
             self.quick.title.clear();
+            self.quick.chip.clear();
             self.quick.staged.clear();
             self.quick.drawn = true;
             self.quick.focused = true;
@@ -505,6 +526,10 @@ impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_)) => {
+                // SEEDED WORDS wait in the bar: read them against the core's clock.
+                if self.quick.drawn {
+                    self.quick.chip.hold(ctx);
+                }
                 self.refresh(ctx);
                 return self.calendar.attach();
             }
@@ -665,6 +690,15 @@ impl Screen for Home {
                             focused: drawn && self.quick.focused,
                             add_label: task::add_task(locale),
                             drawn,
+                            // A day the toolbar staged is the date: no second reading.
+                            chip: if self.quick.staged.due_day(&self.held.today()).is_empty() {
+                                self.quick
+                                    .chip
+                                    .reading(locale, &self.quick.title)
+                                    .map(|reading| reading.chip())
+                            } else {
+                                None
+                            },
                             ..wire::TodoQuickAdd::default()
                         };
                         self.quick.staged.fill(locale, &mut bar);

@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import centraid.core.v1.QuickAddChipDismissed
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCatchUpEvent
 import centraid.core.v1.TodoCatchUpState
@@ -209,6 +210,7 @@ internal fun TodoProjectScreen(
                 onTool = { onEvent(TodoProjectEvent(quick_tool = TodoProjectEvent.QuickToolPicked(key = it))) },
                 onDue = { onEvent(TodoProjectEvent(quick_due = TodoProjectEvent.QuickDuePicked(key = it))) },
                 onTag = { onEvent(TodoProjectEvent(quick_tag = TodoProjectEvent.QuickTagAdded(text = it))) },
+                onDismissChip = { onEvent(TodoProjectEvent(quick_add_chip_dismissed = QuickAddChipDismissed())) },
             )
         }
     }

@@ -202,7 +202,29 @@ final class ShellModel: ObservableObject {
         Task {
             store.reportEnvironment()
             await store.start()
+            storeStarted = true
+            let queued = queuedFacts
+            queuedFacts = []
+            for fact in queued { store.report(fact) }
             refreshUploadPins()
+        }
+    }
+
+    // MARK: Facts from outside the app
+
+    /// FACTS THE PLATFORM REPORTED BEFORE THE STORE WAS UP (#1173). An App Intent can
+    /// launch the app and run `perform()` before the core is open; the fact waits here
+    /// and is delivered, in order, once the store has started.
+    private var queuedFacts: [Centraid_Core_V1_ShellFact.OneOf_Fact] = []
+    private var storeStarted = false
+
+    /// Report a fact from outside a view (an App Intent): straight to Rust through the
+    /// store when it is running, queued until it is when it is not.
+    func reportWhenReady(_ fact: Centraid_Core_V1_ShellFact.OneOf_Fact) {
+        if storeStarted, let screens {
+            screens.report(fact)
+        } else {
+            queuedFacts.append(fact)
         }
     }
 

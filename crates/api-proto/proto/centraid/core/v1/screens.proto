@@ -25,6 +25,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_glance_screens.proto";
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
@@ -493,6 +494,11 @@ message Effect {
     // Make the OS hold exactly this set of reminders and alerts.
     ScheduleNotifications schedule_notifications = 120;
     // ---- docs (200-299): files ----
+    // ---- agenda (100-199): outside the app ----
+    // Keep the widgets' snapshot: write the document to the shared container,
+    // then reload the widgets (`agenda_glance_screens.proto`). 150 stays clear
+    // of a parallel notifications branch.
+    AgendaGlance agenda_glance = 150;
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;

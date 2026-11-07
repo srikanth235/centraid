@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An Up next row's tint bar (`tint` is the key `agenda`): a drawable, so the host resolves its
+     colour in its own light or dark configuration when it draws the widget (#1173). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/centraid_app_agenda" />
+    <corners android:radius="2dp" />
+</shape>

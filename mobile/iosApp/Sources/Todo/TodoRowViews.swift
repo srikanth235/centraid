@@ -284,6 +284,8 @@ struct TodoQuickAddBar: View {
     let verb: String
     let onChange: (String) -> Void
     let onSubmit: () -> Void
+    /// The date chip's ×: keep the typed words as they are.
+    var onDismissChip: () -> Void = {}
     /// The field took or gave up the keyboard. The screen that hosts the bar
     /// uses it to put its band away while the keyboard is up, so the bar sits
     /// on the keyboard and not under it.
@@ -303,46 +305,100 @@ struct TodoQuickAddBar: View {
 
     var body: some View {
         if quickAdd.shown && quickAdd.drawn {
-            let prompt = quickAdd.landsLabel.isEmpty ? placeholder : quickAdd.landsLabel
             VStack(spacing: 0) {
-            if let onTool, let onDue, let onTag, typing || !quickAdd.openTool.isEmpty || quickAdd.focused {
-                QuickAddToolbar(quickAdd: quickAdd, onTool: onTool, onDue: onDue, onTag: onTag)
-            }
-            HStack(spacing: 8) {
-                // RUST SAYS WHEN THE BAR TAKES THE KEYBOARD: the Plus
-                // opened it, or Notes' "Send to Agenda" landed with words in it.
-                MachineTextField(
-                    placeholder: prompt,
-                    value: quickAdd.title,
-                    focusOnAppear: quickAdd.focused,
-                    onEdit: onChange,
-                    onSubmit: { if quickAdd.canSubmit { onSubmit() } },
-                    onFocusChange: { now in
-                        typing = now
-                        // THE TAG FIELD TAKES THE KEYBOARD from the title: that is not the keyboard
-                        // leaving, which would put an empty bar away.
-                        if now || quickAdd.openTool != "tag" { onFocusChange?(now) }
-                    },
-                    keepFocus: onTool != nil
-                )
-                .centraidType("body")
-                .submitLabel(.done)
-                .accessibilityLabel(prompt)
-                .accessibilityIdentifier(fieldIdentifier)
-                // ADD ONLY ONCE THERE ARE WORDS: a greyed verb read as a second
-                // placeholder.
-                if quickAdd.canSubmit {
-                    KitLink(label: verb, identifier: verbIdentifier, action: onSubmit)
+                if let onTool, let onDue, let onTag, typing || !quickAdd.openTool.isEmpty || quickAdd.focused {
+                    QuickAddToolbar(quickAdd: quickAdd, onTool: onTool, onDue: onDue, onTag: onTag)
+                }
+                field
+                if quickAdd.hasChip {
+                    QuickAddChipView(chip: quickAdd.chip, onDismiss: onDismissChip)
                 }
             }
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .padding(.horizontal, 12)
-            .background(Theme.color("bgSunken", scheme))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 6)
+        }
+    }
+
+    private var field: some View {
+        let prompt = quickAdd.landsLabel.isEmpty ? placeholder : quickAdd.landsLabel
+        return HStack(spacing: 8) {
+            // RUST SAYS WHEN THE BAR TAKES THE KEYBOARD: the Plus
+            // opened it, or Notes' "Send to Agenda" landed with words in it.
+            MachineTextField(
+                placeholder: prompt,
+                value: quickAdd.title,
+                focusOnAppear: quickAdd.focused,
+                onEdit: onChange,
+                onSubmit: { if quickAdd.canSubmit { onSubmit() } },
+                onFocusChange: { now in
+                    typing = now
+                    // THE TAG FIELD TAKES THE KEYBOARD from the title: that is not the keyboard
+                    // leaving, which would put an empty bar away.
+                    if now || quickAdd.openTool != "tag" { onFocusChange?(now) }
+                },
+                keepFocus: onTool != nil
+            )
+            .centraidType("body")
+            .submitLabel(.done)
+            .accessibilityLabel(prompt)
+            .accessibilityIdentifier(fieldIdentifier)
+            // ADD ONLY ONCE THERE ARE WORDS: a greyed verb read as a second
+            // placeholder.
+            if quickAdd.canSubmit {
+                KitLink(label: verb, identifier: verbIdentifier, action: onSubmit)
             }
         }
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+        .padding(.horizontal, 12)
+        .background(Theme.color("bgSunken", scheme))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 6)
+    }
+}
+
+/// THE DATE CHIP (#1173 Wave 3): what the typed words will save as, under the
+/// quick-add field before Add. A pill in Agenda's tint says the day and time (or
+/// the repeat) and the title that is left sits beside it; the × keeps the words as
+/// typed. Every word is Rust's. The pill reads as one phrase (`spoken`) and the ×
+/// is its own button.
+struct QuickAddChipView: View {
+    let chip: Centraid_Core_V1_QuickAddChip
+    let onDismiss: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let accent = AppAccent("agenda")
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                CentraidIconView(iconKey: chip.repeats ? "Repeat" : "Calendar", tint: accent.text, size: 14)
+                    .accessibilityHidden(true)
+                Text(chip.label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(accent.text)
+                    .lineLimit(1)
+                Button(action: onDismiss) {
+                    CentraidIconView(iconKey: "X", tint: accent.text, size: 14)
+                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(chip.dismissLabel)
+                .accessibilityIdentifier("tasks-quick-add-chip-dismiss")
+            }
+            .padding(.leading, 10)
+            .background(Capsule().fill(accent.wash(dark: scheme == .dark)))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(chip.spoken)
+            .accessibilityIdentifier("tasks-quick-add-chip")
+            Text(chip.title)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.bottom, 6)
     }
 }
 

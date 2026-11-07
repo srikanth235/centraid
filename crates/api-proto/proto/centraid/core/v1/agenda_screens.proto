@@ -734,6 +734,8 @@ message AgendaHomeEvent {
     QuickToolPicked quick_tool = 46;
     QuickDuePicked quick_due = 47;
     QuickTagAdded quick_tag = 48;
+    // The date chip's ×: keep the typed words as the title (#1173).
+    QuickAddChipDismissed quick_add_chip_dismissed = 49;
   }
 
   // A strip day, a month cell or a year's month: the anchor moves to `day`
@@ -1578,6 +1580,10 @@ message TodoQuickAdd {
   repeated TodoChoice due_choices = 11;
   // The tag field's placeholder, "Add a tag".
   string tag_placeholder = 12;
+  // THE DATE CHIP (#1173): what the typed words will save as, shown before the
+  // member taps Add. Absent when no phrase was read, or the member dismissed it
+  // for these words.
+  QuickAddChip chip = 13;
 }
 
 // One key of the quick add's keyboard toolbar.
@@ -1590,6 +1596,25 @@ message TodoQuickTool {
   // Something is staged (a due, a tag, the flag): drawn filled.
   bool on = 4;
 }
+
+// What a quick add will save, read from the typed words: the day (and time) and
+// the repeat as a pill under the field, and the title that is left.
+message QuickAddChip {
+  // "Tomorrow, 09:00" / "Every Monday, 09:00".
+  string label = 1;
+  // The title that will be saved, "Call mom".
+  string title = 2;
+  // The spoken label of the ×: "Keep as text".
+  string dismiss_label = 3;
+  // The whole chip for a screen reader: "Due Tomorrow, 09:00. Saves as Call mom."
+  string spoken = 4;
+  // The phrase repeats.
+  bool repeats = 5;
+}
+
+// The chip's ×, for either quick-add bar: the words stay the title, undated,
+// until the member types a different phrase.
+message QuickAddChipDismissed {}
 
 // One area's projects on To-do (`AgendaTodo.projects`).
 message TodoProjectGroup {
@@ -1760,6 +1785,8 @@ message TodoProjectEvent {
     QuickToolPicked quick_tool = 20;
     QuickDuePicked quick_due = 21;
     QuickTagAdded quick_tag = 22;
+    // The date chip's ×: keep the typed words as the title (#1173).
+    QuickAddChipDismissed quick_add_chip_dismissed = 23;
   }
 
   message QuickToolPicked {

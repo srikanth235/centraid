@@ -60,6 +60,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .with(proof::NAME, proof::build)
             .merge(shell::registry(&secrets))
             .merge(agenda::registry())
+            .merge(agenda::glance::registry())
             .merge(locker::registry())
             .merge(money::registry())
             .merge(docs::registry())
@@ -95,6 +96,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             custody::services(),
             vault::services(),
             agenda::notify::services(),
+            agenda::glance::services(),
         ]
         .concat(),
     );

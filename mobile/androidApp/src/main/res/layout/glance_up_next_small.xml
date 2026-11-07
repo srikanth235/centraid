@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Up next, 2x2 (#1173): the next item, or the one sentence the snapshot says. Only
+     RemoteViews-safe views; every word is set from the snapshot. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/glance_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/glance_card"
+    android:orientation="vertical"
+    android:padding="16dp">
+    <TextView android:id="@+id/glance_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/glance_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textSize="@dimen/centraid_text_section" android:textStyle="bold" android:textColor="@color/centraid_app_agenda_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <TextView android:id="@+id/glance_time_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textSize="@dimen/centraid_text_section" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <TextView android:id="@+id/glance_item" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="2" android:ellipsize="end" android:visibility="gone" />
+    <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <TextView android:id="@+id/glance_message" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="3" android:ellipsize="end" android:visibility="gone" />
+</LinearLayout>

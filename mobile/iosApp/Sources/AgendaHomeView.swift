@@ -112,6 +112,7 @@ struct AgendaHomeView: View {
                         verb: state.chrome.tasks.quickAddVerb,
                         onChange: { title in send(AgendaEvents.make { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(AgendaEvents.make { $0.quickAddSubmitted = .init() }) },
+                        onDismissChip: { send(AgendaEvents.make { $0.quickAddChipDismissed = .init() }) },
                         onFocusChange: { typing in
                             quickAddTyping = typing
                             // THE KEYBOARD LEFT: Rust puts an empty bar away.

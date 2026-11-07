@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -49,12 +51,14 @@ import centraid.core.v1.Route
 import centraid.core.v1.TodoCheck
 import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoChoice
+import centraid.core.v1.QuickAddChip
 import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoRow
 import centraid.core.v1.TodoRowGroup
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitRowAction
@@ -63,9 +67,11 @@ import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetRow
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -340,6 +346,7 @@ internal fun TodoQuickAddBar(
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onBlur: () -> Unit = {},
+    onDismissChip: () -> Unit = {},
     testTag: String = "tasks-quick-add",
     onTool: (String) -> Unit = {},
     onDue: (String) -> Unit = {},
@@ -411,6 +418,7 @@ internal fun TodoQuickAddBar(
                 OutlineButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
         }
+        quickAdd.chip?.let { QuickAddChipView(it, onDismissChip, "$testTag-chip") }
         // WHAT THE NEXT ADD CARRIES ("Tomorrow · #errand · Flagged"), under the field.
         if (quickAdd.staged_label.isNotEmpty()) {
             Text(
@@ -424,6 +432,62 @@ internal fun TodoQuickAddBar(
         if (held.value) {
             QuickAddToolbar(quickAdd, onTool = onTool, onDue = onDue, onTag = onTag, modifier = Modifier.padding(top = 6.dp))
         }
+    }
+}
+
+/**
+ * THE DATE CHIP (#1173 Wave 3): what the typed words will save as, under the field before Add.
+ * A pill in Agenda's tint says the day and time (or the repeat); the title that is left sits
+ * beside it. The × keeps the words as typed. Every word is Rust's: the pill reads as one phrase
+ * to a screen reader ([QuickAddChip.spoken]) and the × is its own button.
+ */
+@Composable
+private fun QuickAddChipView(chip: QuickAddChip, onDismiss: () -> Unit, testTag: String) {
+    val accent = appAccent("agenda")
+    val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            Modifier
+                .heightIn(min = 32.dp)
+                .clip(shape)
+                .background(accent.wash(centraidDark()), shape)
+                .padding(start = 10.dp)
+                .testTag(testTag)
+                .semantics { contentDescription = chip.spoken },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CentraidIcon(if (chip.repeats) "Repeat" else "Calendar", tint = accent.text, size = 14.dp, modifier = Modifier.clearAndSetSemantics { })
+            Text(
+                chip.label,
+                style = centraidType("smallStrong"),
+                color = accent.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+            Box(
+                Modifier
+                    .size(KitGeometry.ROW_MIN)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDismiss)
+                    .testTag("$testTag-dismiss")
+                    .semantics { contentDescription = chip.dismiss_label; role = Role.Button },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon("X", tint = accent.text, size = 14.dp) }
+        }
+        Text(
+            chip.title,
+            style = centraidType("small"),
+            color = centraidColor("textSoft"),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).clearAndSetSemantics { },
+        )
     }
 }
 

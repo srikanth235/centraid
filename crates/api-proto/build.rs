@@ -81,6 +81,8 @@ const PROTOS: [&str; 51] = [
     "proto/centraid/core/v1/route.proto",
     "proto/centraid/core/v1/kit_screens.proto",
     "proto/centraid/core/v1/agenda_screens.proto",
+    // Agenda outside the app (#1173): the widgets' snapshot and the platform's asks.
+    "proto/centraid/core/v1/agenda_glance_screens.proto",
     // Photos' screens (#1135, lane D): the vocabulary every Photos screen shares
     // (the cell, the selection bar, the album sheet), then one file per worker.
     "proto/centraid/core/v1/photos_screens.proto",

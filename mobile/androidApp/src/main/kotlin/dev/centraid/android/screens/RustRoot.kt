@@ -91,6 +91,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.core.Screens
 import dev.centraid.android.backup.MediaStoreDeleter
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.glance.AddReminderShortcut
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalShellLine
@@ -357,6 +358,12 @@ internal class RustRoot(
         }
         val pickers = rememberDocsPickers(docsFiles)
         HostScreenEffects(open, pickers, health, deleter, openRoute = ::push)
+        // THE LAUNCHER SHORTCUT'S REQUESTS, delivered from here and not from the session's
+        // producer: its `OpenRoute` answer needs the performer `HostScreenEffects` attaches when
+        // this composition is applied, and a LaunchedEffect starts after the effects declared
+        // above it. Sent from the producer, a cold start's fact could beat the performer and be
+        // answered cancelled, so the bar never opened.
+        LaunchedEffect(runtime) { AddReminderShortcut.deliver(runtime) }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->

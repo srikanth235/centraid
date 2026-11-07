@@ -19,6 +19,15 @@ catalog! {
     plain morning = ("Morning", "Morning");
     plain my_lists = ("My Lists", "My Lists");
     plain new_reminder = ("New Reminder", "New Reminder");
+    plain quick_chip_day_time = ("{day}, {time}", "{day}, {time}");
+    plain quick_chip_every_day = ("Every day", "Every day");
+    plain quick_chip_every_month = ("Every month", "Every month");
+    plain quick_chip_every_named = ("Every {weekday}", "Every {weekday}");
+    plain quick_chip_every_work_day = ("Every weekday", "Every weekday");
+    plain quick_chip_every_year = ("Every year", "Every year");
+    plain quick_chip_keep_text = ("Keep as text", "Keep as text");
+    plain quick_chip_spoken_due = ("Due {when}. Saves as {title}.", "Due {when}. Saves as {title}.");
+    plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain row_unflagged = ("Flag removed", "Flag removed");
     plain row_flagged = ("Flagged", "Flagged");
     plain scheduled_empty = ("Nothing is scheduled.", "Nothing is scheduled.");

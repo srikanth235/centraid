@@ -106,6 +106,10 @@ targets:
     sources:
       - path: Sources
       - path: Design
+      # THE WIDGETS' SNAPSHOT MODEL, compiled into the app AND the extension
+      # (#1173): the app's `ScreenStore` writes the file, the extension and Siri
+      # read it, and one decoder serves all three.
+      - path: Shared
       # THE FACES, AS A BUILD PHASE — AND `resources:` IS NOT AN XCODEGEN KEY.
       #
       # This target carried `resources: - path: Resources` for its whole life
@@ -160,6 +164,10 @@ targets:
           - $(SRCROOT)/.generated/protos.output.xcfilelist
     dependencies:
       - package: SwiftProtobuf
+      # THE WIDGET EXTENSION, EMBEDDED AND SIGNED WITH THE APP (#1173).
+      - target: CentraidWidgets
+        embed: true
+        codeSign: true
     # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
     #
     # `IosSecureStore` is where this device's endpoint secret lives, and every
@@ -194,6 +202,13 @@ targets:
         # (`HealthSeeder/project.yml`) and never part of this one.
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # THE APP GROUP THE WIDGETS READ THROUGH (#1173). The app writes Agenda's
+        # snapshot into this group's container and `CentraidWidgets` reads it; it is
+        # the only thing the two processes share. A DEVICE BUILD NEEDS A PROVISIONING
+        # PROFILE THAT CARRIES THE GROUP, on both bundle ids; a simulator build signed
+        # ad-hoc needs none.
+        com.apple.security.application-groups:
+          - group.dev.centraid
     # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
     #
     # The keys below are the source; `xcodegen generate` writes the plist from
@@ -302,6 +317,66 @@ targets:
         # iCloud is EXCLUDED from the replica directory in code; this is the
         # declaration that goes with it.
         ITSAppUsesNonExemptEncryption: false
+
+  # AGENDA'S WIDGETS (#1173, wave 3): a WidgetKit extension, embedded in the app.
+  #
+  # THE PRIVACY RULE: READ-ONLY, AND NEVER THE VAULT. The extension draws one JSON
+  # file the app keeps in the App Group container (`Shared/AgendaGlanceSnapshot`:
+  # titles, times and counts Rust chose to disclose, finished in the member's
+  # language). It does NOT link the Rust core (no `OTHER_LDFLAGS`, no `CoreBridge`),
+  # does NOT depend on SwiftProtobuf, holds no keychain group and no HealthKit, and
+  # compiles none of `Sources/`. A new dependency here is a new way for a widget on a
+  # locked phone to reach the vault, and is the owner's call.
+  #
+  # ONLY THE DESIGN FILES IT NEEDS, listed by name: the words the gallery reads
+  # before any code runs (`GlanceWords`), the colour-set names (`DesignScale`) and
+  # the faces (`Theme`, which imports SwiftUI alone).
+  # `Resources/Assets.xcassets` is a resource here too, so `Color(name)` resolves in
+  # the extension's own bundle, and the faces are copied in and declared in
+  # `Widgets/Info.plist` (`UIAppFonts`; an extension registers its own).
+  #
+  # `Widgets/Info.plist` and `Widgets/CentraidWidgets.entitlements` are XCODEGEN'S
+  # OUTPUT of the `info:` and `entitlements:` keys below, committed so a reader can
+  # see them, exactly as the app's are.
+  CentraidWidgets:
+    type: app-extension
+    platform: iOS
+    settings:
+      base:
+        # `dev.centraid.Centraid` is the app's id (`bundleIdPrefix` + target name); an
+        # extension's id must extend its host's.
+        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.Centraid.widgets
+        SWIFT_VERSION: "6.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    sources:
+      - path: Widgets
+        excludes:
+          - Info.plist
+          - CentraidWidgets.entitlements
+      - path: Shared
+      - path: Design
+        includes:
+          - GlanceWords.swift
+          - DesignScale.swift
+          - Theme.swift
+      - path: Resources/Fonts
+        buildPhase: resources
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+    entitlements:
+      path: Widgets/CentraidWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.centraid
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Centraid
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts:
+          - InstrumentSans_470Book.ttf
+          - InstrumentSans-SemiBold.ttf
 
   CentraidTests:
     type: bundle.unit-test

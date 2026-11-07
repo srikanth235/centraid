@@ -223,7 +223,8 @@ struct TodoProjectView: View {
                         // THE KEYBOARD TOOLBAR (#1173).
                         onTool: { key in send(event { $0.quickTool = .with { $0.key = key } }) },
                         onDue: { key in send(event { $0.quickDue = .with { $0.key = key } }) },
-                        onTag: { text in send(event { $0.quickTag = .with { $0.text = text } }) }
+                        onTag: { text in send(event { $0.quickTag = .with { $0.text = text } }) },
+                        onDismissChip: { send(event { $0.quickAddChipDismissed = .init() }) }
                     )
                 }
             }

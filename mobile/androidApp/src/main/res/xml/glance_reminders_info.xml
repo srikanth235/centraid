@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The reminders widget's provider (#1173). The app pushes every update (the glance
+  effect writes the snapshot and asks the provider to redraw), so the platform's periodic
+  update is off; the one timer is the inexact alarm `GlanceWidgets` sets for the snapshot's
+  `refresh_after`, which redraws the widget into its stale words. Sizes: 2x2 by default,
+  resizable to 4x2 (`maxResizeHeight` keeps it two cells tall). Name and description are the
+  generated strings, because the launcher reads them before any code runs.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/glance_widget_reminders_description"
+    android:initialLayout="@layout/glance_reminders_small"
+    android:maxResizeHeight="180dp"
+    android:maxResizeWidth="320dp"
+    android:minHeight="110dp"
+    android:minResizeHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minWidth="110dp"
+    android:previewLayout="@layout/glance_reminders_small"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
