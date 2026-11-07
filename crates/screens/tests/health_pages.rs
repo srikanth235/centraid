@@ -70,14 +70,35 @@ fn a_metric_is_the_weeks_bars_the_typical_line_and_its_facts() {
     assert_eq!(facts[1], ("Total", "47,412 steps"));
     assert_eq!(facts[2].0, "Days above typical");
     assert!(facts[2].1.ends_with(" of 6"), "{facts:?}");
-    assert_eq!(data.foot, "Each day is the total Apple Health keeps.");
+    assert_eq!(
+        data.foot,
+        "Your phone and watch count steps as you walk. Each day is the total Apple Health keeps. \
+         Centraid reads it and never writes back."
+    );
+    assert_eq!(data.about_heading, "About steps");
+    assert_eq!(data.average_label, "Daily average");
+    // Above the typical, and higher steps are better: the versus line wears the state's green.
+    assert!(data.versus_good);
+    // The usual range is the quartiles of the 30 days before, across the chart.
+    assert!(data.has_typical_range);
+    assert!(data.typical_low_bp <= data.typical_high_bp);
+    // What a finger on the best day's bar says: the weekday, the date and the figure.
+    let best = data
+        .bars
+        .iter()
+        .find(|bar| bar.callout.ends_with("· 11,200"));
+    assert!(best.is_some(), "{:?}", data.bars);
+    let empty_day = &data.bars[2];
+    assert_eq!(empty_day.callout, "");
     assert!(
         data.versus.ends_with("above your typical"),
         "{}",
         data.versus
     );
     let keys: Vec<&str> = state.segments.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, ["week", "month", "year"]);
+    assert_eq!(keys, ["week", "month", "six_months", "year"]);
+    let labels: Vec<&str> = state.segments.iter().map(|s| s.label.as_str()).collect();
+    assert_eq!(labels, ["Week", "Month", "6 months", "Year"]);
     // A range is a segment of the same page, and reads again.
     d.send(
         i,
@@ -176,4 +197,51 @@ fn a_workout_that_is_gone_says_so() {
         data.gone.as_ref().unwrap().headline,
         "This workout is no longer here."
     );
+}
+
+#[test]
+fn six_months_is_a_bar_a_week_with_dates_for_ticks_and_weeks_in_its_words() {
+    let mut d = driver();
+    let today = today(&d);
+    connect_store(&d);
+    // 26 weeks before at 4,000 a day and the last 26 at 8,000.
+    let days: Vec<(i64, &str, f64)> = (0..364)
+        .map(|back| (back, "steps", if back < 182 { 8_000.0 } else { 4_000.0 }))
+        .collect();
+    record(&d, &today, &days);
+    let i = push(&mut d, routes::metric("steps", "Summary"));
+    d.send(
+        i,
+        wire::screen_event::Kind::HealthMetric(wire::HealthMetricEvent {
+            kind: Some(me::Kind::Range(me::RangePicked {
+                key: "six_months".to_owned(),
+            })),
+        }),
+    );
+    assert_eq!(
+        metric_state(d.view(i)).range,
+        wire::HealthMetricRange::SixMonths as i32
+    );
+    let data = metric_data(d.view(i));
+    assert_eq!(data.caption, "Last 6 months");
+    assert_eq!(data.bars.len(), 26);
+    assert!(data.bars.iter().all(|bar| bar.has_value));
+    assert!(data.bars.last().unwrap().current);
+    assert!(
+        data.bars[0].callout.starts_with("Week of "),
+        "{}",
+        data.bars[0].callout
+    );
+    assert!(data.bars[0].callout.ends_with(" · 8,000"));
+    // Marked back from today every fifth week: six dates, the last the newest week's.
+    assert_eq!(data.ticks.len(), 6);
+    assert_eq!(data.average, "8,000");
+    assert_eq!(data.versus, "100% above the 6 months before");
+    assert!(data.versus_good);
+    // The typical is the period before's average: a line, no usual range.
+    assert!(data.has_typical);
+    assert!(!data.has_typical_range);
+    let labels: Vec<&str> = data.facts.iter().map(|fact| fact.label.as_str()).collect();
+    assert_eq!(labels, ["Best week", "Total", "Weeks above typical"]);
+    assert_eq!(data.facts[2].detail, "26 of 26");
 }

@@ -17,7 +17,7 @@ const WEEK_BACK: i64 = 6;
 pub const WORKOUT_ICON: &str = "Gym";
 
 /// Kotlin's `roundToLong`: ties toward positive infinity.
-fn round(value: f64) -> i64 {
+pub(crate) fn round(value: f64) -> i64 {
     #[allow(clippy::cast_possible_truncation)]
     {
         (value + 0.5).floor() as i64
@@ -249,6 +249,19 @@ pub fn scale_over(top: f64) -> f64 {
         unit *= 10.0;
     }
     (raw / unit).ceil() * unit
+}
+
+/// A metric's mark. Every one is drawn in the Health colour, never a state's.
+#[must_use]
+pub const fn metric_icon(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Steps => "MapPin",
+        Metric::Sleep => "Moon",
+        Metric::Energy => "Bolt",
+        Metric::Exercise => "Activity",
+        Metric::RestingHr => "Heart",
+        Metric::Weight => "Gauge",
+    }
 }
 
 /// A kind key's word: `Run`; one the seed does not name is a plain `Workout`.

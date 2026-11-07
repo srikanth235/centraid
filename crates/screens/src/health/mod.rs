@@ -1,12 +1,12 @@
-//! HEALTH'S SCREENS (#1135): Today · Trends · Workouts under one band with More
+//! HEALTH'S SCREENS (#1135, #1173): Summary · Trends · Workouts under one band with More
 //! as sheets, one metric over a week, a month or a year, one workout, and
 //! Connect. Every decision a person sees is made here; SwiftUI and Compose draw
 //! [`wire::ViewState`].
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Today · Trends · Workouts, with More | [`HOME`] | [`home`] |
-//! | One metric over a week, a month or a year | [`METRIC`] | [`metric`] |
+//! | Summary · Trends · Workouts, with More | [`HOME`] | [`home`] |
+//! | One metric over a week, a month, 6 months or a year | [`METRIC`] | [`metric`] |
 //! | One workout | [`WORKOUT`] | [`workout`] |
 //! | What Health may read, and Connect | [`CONNECT`] | [`connect`] |
 //!
@@ -38,6 +38,7 @@ use crate::strings::{Locale, health as words};
 pub mod connect;
 pub mod figures;
 pub mod follow;
+pub mod highlights;
 pub mod home;
 pub mod kinds;
 pub mod metric;
@@ -235,6 +236,13 @@ impl Metric {
         Self::ALL.into_iter().find(|metric| metric.key() == key)
     }
 
+    /// Higher is the better direction: the one place a card may wear the state's green. A
+    /// resting heart rate has no better side that a figure alone settles, and weight none.
+    #[must_use]
+    pub const fn higher_is_better(self) -> bool {
+        !matches!(self, Self::RestingHr | Self::Weight)
+    }
+
     /// A total of the day, not a reading.
     #[must_use]
     pub const fn sum(self) -> bool {
@@ -264,6 +272,13 @@ impl Metric {
     /// The key a chosen set names workouts by; not a daily metric.
     pub const WORKOUTS: &'static str = "workouts";
 }
+
+/// THE PINNED CARDS, in the order the Summary draws them: a fixed list today (a member's own
+/// pins would be a setting this phone keeps, an owner question), the first [`WIDE_CARDS`] wide
+/// with a sparkline and the rest two to a row.
+pub const PINNED: [Metric; 6] = Metric::ALL;
+/// How many of the pinned cards are wide.
+pub const WIDE_CARDS: usize = 2;
 
 /// The routes Health's own screens hand to a shell inside a view state.
 pub mod routes {

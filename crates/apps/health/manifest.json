@@ -776,7 +776,7 @@
         "total",
         "days_above_typical"
       ],
-      "description": "One metric over a week, a month or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.",
+      "description": "One metric over a week, a month, six months (26 weekly buckets) or a year: its buckets, the period's per-day average against the one before, the typical, the best day or month, the total for a count, and how many days were above typical.",
       "input": {
         "type": "object",
         "properties": {
@@ -791,7 +791,7 @@
             ]
           },
           "range": {
-            "enum": ["week", "month", "year"]
+            "enum": ["week", "month", "six_months", "year"]
           }
         },
         "additionalProperties": false,

@@ -45,7 +45,7 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     assert_eq!(empty.action_label, "Connect Apple Health");
     assert!(data.today_data.is_none());
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
-    assert_eq!(band, ["Today", "Trends", "Workouts", "More"]);
+    assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(more, ["reads", "choose"]);
     // The row that opens Connect carries the route, and the empty state's
@@ -91,17 +91,32 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
     let hero = today_data.hero.as_ref().unwrap();
     assert_eq!(hero.value, "8,412");
     assert_eq!(hero.when_label, "So far today");
-    assert_eq!(hero.typical, "7,550 typical");
-    let bar = hero.bar.as_ref().expect("a range bar");
-    assert_eq!(bar.middle_label, "your typical day");
-    assert!(bar.low_bp < bar.high_bp);
-    assert!(bar.has_value);
+    // Above the usual range (the quartiles of the 30 days before), and higher steps are better.
+    assert_eq!(hero.typical, "Above your typical 6,825–8,275");
+    assert!(hero.good && hero.wide);
+    // The seven days to today, as a share of the tallest; today's the tallest and last.
+    assert_eq!(hero.spark_bp.len(), 7);
+    assert_eq!(hero.spark_bp[6], 10_000);
+    assert_eq!(hero.spark_bp[0], 7_846);
+    assert_eq!(hero.spark_label, "Last 7 days");
+    assert_eq!(today_data.metrics_heading, "Pinned");
+    assert_eq!(today_data.metrics_note, "against your own typical");
+    // The 30 days to today average 7,530 steps against the one day (9,000) before them: -16%.
+    assert_eq!(today_data.highlights_heading, "Highlights");
+    assert_eq!(today_data.highlights.len(), 1);
+    let said = &today_data.highlights[0];
+    assert_eq!(said.emphasis, "16% less");
+    assert_eq!(said.lead, "Over the last 30 days you walked ");
+    assert_eq!(
+        data.day_label.split(" · ").nth(1),
+        Some("read from Apple Health")
+    );
     // The route a tap pushes is the metric's page, from this page's title.
     match &hero.route.as_ref().unwrap().args {
         Some(wire::route::Args::HealthMetric(args)) => {
             assert_eq!(
                 (args.metric.as_str(), args.parent.as_str()),
-                ("steps", "Health")
+                ("steps", "Summary")
             );
         }
         other => panic!("{other:?}"),
@@ -126,6 +141,45 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
         (sleep.value.as_str(), sleep.when_label.as_str()),
         ("7 h 12 m", "Last night")
     );
+    // Pinned order is fixed: the first two cards are wide (with a sparkline), the rest compact
+    // and without one.
+    let order: Vec<&str> = std::iter::once(hero)
+        .chain(&today_data.metrics)
+        .map(|line| line.metric.as_str())
+        .collect();
+    assert_eq!(
+        order,
+        [
+            "steps",
+            "sleep_min",
+            "active_energy_kcal",
+            "exercise_min",
+            "resting_hr_bpm",
+            "weight_kg"
+        ]
+    );
+    let wide: Vec<bool> = std::iter::once(hero)
+        .chain(&today_data.metrics)
+        .map(|line| line.wide)
+        .collect();
+    assert_eq!(wide, [true, true, false, false, false, false]);
+    let icons: Vec<&str> = std::iter::once(hero)
+        .chain(&today_data.metrics)
+        .map(|line| line.icon_key.as_str())
+        .collect();
+    assert_eq!(
+        icons,
+        ["MapPin", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
+    );
+    assert_eq!(sleep.spark_bp.len(), 7);
+    assert!(
+        today_data.metrics[1..]
+            .iter()
+            .all(|line| line.spark_bp.is_empty())
+    );
+    // A compact card says the typical alone: no range, no verdict.
+    assert_eq!(today_data.metrics[1].typical, "");
+    assert_eq!(today_data.metrics[3].typical, "Typical 58–60");
     assert_eq!(today_data.metrics[1].unit, "kcal");
     let exercise = &today_data.metrics[2];
     assert_eq!(exercise.value, "");
@@ -140,8 +194,8 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
     let line = &today_data.workouts[0];
     assert_eq!(line.title, "Morning run");
     assert_eq!(line.meta, "5.2 km · 31 min");
-    // R-1129-13: where the numbers come from, and no time.
-    assert_eq!(today_data.foot, "Read from Apple Health");
+    // R-1129-13: where the numbers come from (the header's subtitle), and no time.
+    assert!(!data.day_label.contains(':'));
 }
 
 #[test]
@@ -446,7 +500,7 @@ fn picking_a_kind_filters_lights_the_button_and_the_option_key_is_the_concept() 
     assert_eq!(filtered.sections[0].rows[0].title, "Morning run");
     // The row's route is the workout's page, from this page's title.
     match &filtered.sections[0].rows[0].route.as_ref().unwrap().args {
-        Some(wire::route::Args::HealthWorkout(args)) => assert_eq!(args.parent, "Health"),
+        Some(wire::route::Args::HealthWorkout(args)) => assert_eq!(args.parent, "Workouts"),
         other => panic!("{other:?}"),
     }
 }

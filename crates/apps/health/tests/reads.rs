@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use centraid_apps_health::civil::parse_day;
+use centraid_apps_health::civil::{format_day, parse_day};
 use centraid_apps_health::figures::Metric;
 use centraid_apps_health::queries::{self, Range};
 use centraid_apps_kit::page::PageRequest;
@@ -229,4 +229,124 @@ fn a_series_and_the_follow_view_read_the_days_and_the_latests() {
             .iter()
             .all(|day| parse_day(&day.day) >= Some(view.totals_from))
     );
+}
+
+/// `count` days of `metric` ending on `TODAY`, `value(n)` for the day `n` days before today.
+fn record_days(world: &World, metric: &str, count: i64, value: impl Fn(i64) -> f64) {
+    for chunk in (0..count).rev().collect::<Vec<_>>().chunks(100) {
+        let days: Vec<_> = chunk
+            .iter()
+            .map(|back| {
+                json!({
+                    "day": format_day(today() - back),
+                    "metric": metric,
+                    "value": value(*back),
+                })
+            })
+            .collect();
+        world.ok("measurement.record", json!({ "days": days }));
+    }
+}
+
+#[test]
+fn today_carries_the_last_seven_days_and_the_thirty_day_change_the_trends_would_say() {
+    let world = World::founded();
+    // 30 days at 5,000 steps, then 30 at 6,000: +20%. Sleep only the last three nights.
+    record_days(&world, "steps", 60, |back| {
+        if back < 30 { 6_000.0 } else { 5_000.0 }
+    });
+    record_days(&world, "sleep_min", 3, |_| 420.0);
+    let answer = world.read(|door| {
+        queries::today(
+            door,
+            today(),
+            "2026-10-20T00:00:00.000Z",
+            "2026-10-21T00:00:00.000Z",
+        )
+        .expect("today")
+    });
+    let steps = &answer.metrics[0];
+    assert_eq!(steps.metric, Metric::Steps);
+    assert_eq!(steps.week.len(), 7);
+    assert_eq!(steps.week[0].first, today() - 6);
+    assert_eq!(steps.week[6].last, today());
+    assert!(
+        steps
+            .week
+            .iter()
+            .all(|bucket| bucket.value == Some(6_000.0))
+    );
+    assert_eq!(steps.month_change_pct.map(f64::round), Some(20.0));
+    // The Trends' 30-day change for the same metric is the same figure.
+    let trends = world
+        .read(|door| queries::trends(door, queries::TrendRange::Days30, today()).expect("trends"));
+    let trend = trends
+        .trends
+        .iter()
+        .find(|trend| trend.metric == Metric::Steps)
+        .expect("steps trend");
+    assert_eq!(steps.month_change_pct, trend.change_pct);
+    // A night with no row is a gap in the week, and the month has nothing before to compare.
+    let sleep = &answer.metrics[1];
+    let values: Vec<Option<f64>> = sleep.week.iter().map(|bucket| bucket.value).collect();
+    assert_eq!(
+        values,
+        [
+            None,
+            None,
+            None,
+            None,
+            Some(420.0),
+            Some(420.0),
+            Some(420.0)
+        ]
+    );
+    assert_eq!(sleep.month_change_pct, None);
+}
+
+#[test]
+fn six_months_is_twenty_six_weeks_ending_today_against_the_twenty_six_before() {
+    let world = World::founded();
+    // The 26 weeks before at 4,000 a day, the last 26 at 8,000.
+    record_days(&world, "steps", 364, |back| {
+        if back < 182 { 8_000.0 } else { 4_000.0 }
+    });
+    let series = world.read(|door| {
+        queries::series(door, Metric::Steps, Range::SixMonths, today()).expect("series")
+    });
+    assert_eq!(series.buckets.len(), 26);
+    assert_eq!(series.buckets[0].first, today() - 181);
+    assert_eq!(series.buckets[25].last, today());
+    assert!(
+        series
+            .buckets
+            .iter()
+            .all(|bucket| bucket.last - bucket.first == 6 && bucket.days == 7)
+    );
+    // Contiguous: each week starts the day after the one before ended.
+    assert!(
+        series
+            .buckets
+            .windows(2)
+            .all(|pair| pair[1].first == pair[0].last + 1)
+    );
+    assert_eq!(series.average, Some(8_000.0));
+    assert_eq!(series.previous_average, Some(4_000.0));
+    // Like a year, the typical is the period before's average, with no range of its own.
+    assert_eq!(series.typical, Some(4_000.0));
+    assert_eq!((series.typical_low, series.typical_high), (None, None));
+    assert_eq!((series.above_typical, series.counted), (26, 26));
+    assert_eq!(series.total, Some(8_000.0 * 182.0));
+}
+
+#[test]
+fn a_weeks_typical_range_is_the_quartiles_of_the_thirty_days_before() {
+    let world = World::founded();
+    // The day n back is n × 1,000 steps, so the 30 whole days before today are 1,000 to 30,000.
+    record_days(&world, "steps", 31, |back| 1_000.0 * back as f64);
+    let series = world
+        .read(|door| queries::series(door, Metric::Steps, Range::Week, today()).expect("series"));
+    assert_eq!(series.typical, Some(15_500.0));
+    assert_eq!(series.typical_low, Some(8_250.0));
+    assert_eq!(series.typical_high, Some(22_750.0));
 }

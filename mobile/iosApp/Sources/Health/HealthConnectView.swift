@@ -14,6 +14,7 @@ struct HealthConnectView: View {
     let send: (Centraid_Core_V1_HealthConnectEvent) -> Void
     let onBack: () -> Void
 
+    private let accent = AppAccent("health")
     @Environment(\.colorScheme) private var scheme
 
     private func event(_ build: (inout Centraid_Core_V1_HealthConnectEvent) -> Void) -> Centraid_Core_V1_HealthConnectEvent {
@@ -28,29 +29,41 @@ struct HealthConnectView: View {
             EmptyView()
         } content: {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(state.headline)
-                            .centraidType("display")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .accessibilityAddTraits(.isHeader)
-                        Text(state.lede)
-                            .centraidType("body")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 14) {
+                        CentraidIconView(iconKey: "Heart", tint: accent.text, size: 22, solid: true)
+                            .frame(width: 44, height: 44)
+                            .background(accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(state.headline)
+                                .kitType(.row)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Surface.ink)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(state.lede)
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.body)
+                        }
                     }
-                    VStack(alignment: .leading, spacing: 4) {
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .kitCard()
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(state.choicesTitle)
-                            .centraidType("eyebrow")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .kitType(.group)
+                            .foregroundStyle(Surface.meta)
                             .accessibilityAddTraits(.isHeader)
-                        HealthCard(padding: 0) {
+                            .padding(.horizontal, 16)
+                        VStack(spacing: 0) {
                             ForEach(Array(state.choices.enumerated()), id: \.offset) { index, choice in
                                 if index > 0 { KitHairline() }
                                 choiceRow(choice, working: state.working)
                             }
                         }
+                        .kitCard()
                     }
-                    HealthNote(text: state.note)
+                    HealthNote(text: state.note).padding(.horizontal, 16)
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 8)
@@ -61,8 +74,8 @@ struct HealthConnectView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if !state.status.isEmpty {
                         Text(state.status)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
                             .accessibilityIdentifier("health-connect-status")
                     }
                     KitInkButton(label: state.connectLabel, identifier: "health-connect") {
@@ -73,37 +86,37 @@ struct HealthConnectView: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 8)
                 .padding(.bottom, 12)
-                .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+                .background(Surface.page.ignoresSafeArea(edges: .bottom))
             }
         }
+        .appAccent("health")
         // CONNECTED: Rust says the page is done.
         .onChange(of: state.finished) { _, finished in
             if finished { onBack() }
         }
     }
 
-    /// ONE TYPE: its name over what it is, and the check that says whether Health may read it.
+    /// ONE TYPE: its name over what it is, and the switch that says whether Health may read it.
     private func choiceRow(_ choice: Centraid_Core_V1_HealthChoice, working: Bool) -> some View {
         let key = choice.key
-        let toggle = { send(event { $0.toggled = .with { $0.key = key } }) }
-        return HStack(spacing: 8) {
+        let on = Binding(
+            get: { choice.on },
+            set: { _ in send(event { $0.toggled = .with { $0.key = key } }) }
+        )
+        return Toggle(isOn: on) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(choice.label)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
                 Text(choice.detail)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture(perform: toggle)
-            .accessibilityHidden(true)
-            KitCheckBox(checked: choice.on, label: choice.label, identifier: "health-choice-\(key)", action: toggle)
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 4)
-        .padding(.vertical, 4)
+        .tint(accent.fill)
+        .accessibilityIdentifier("health-choice-\(key)")
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .frame(minHeight: 52)
         .disabled(working)
     }

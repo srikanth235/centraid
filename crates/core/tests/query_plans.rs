@@ -483,6 +483,7 @@ fn requests(word: &str) -> Vec<Q> {
         for range in [
             wire::HealthRange::Week,
             wire::HealthRange::Month,
+            wire::HealthRange::SixMonths,
             wire::HealthRange::Year,
         ] {
             asked.push(Q::HealthSeries(wire::HealthSeriesRequest {

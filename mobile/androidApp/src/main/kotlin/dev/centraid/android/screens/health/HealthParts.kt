@@ -3,11 +3,14 @@ package dev.centraid.android.screens.health
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,164 +23,192 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import centraid.core.v1.HealthChartBar
 import centraid.core.v1.HealthFigure
+import centraid.core.v1.HealthHighlight
+import centraid.core.v1.HealthMetricData
 import centraid.core.v1.HealthMetricLine
-import centraid.core.v1.HealthRangeBar
 import centraid.core.v1.HealthTrendRow
 import centraid.core.v1.HealthWorkoutLine
-import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.SectionHeader
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.theme.LocalCentraidTokens
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 
 /*
- * HEALTH'S SHARED DRAWING PARTS (#1129, #1135). Every word, figure and position is the state's: Rust
- * (`crates/screens/src/health`) finished them, and a bar's length or a point's height
- * arrives in basis points of its own span. A part draws, and decides nothing — not a unit, not a
- * comparison, not which bar is today's. The identity hue (olive, R-1129-10) is drawn in exactly
- * one place here: the chart bar the state marks `current`.
+ * HEALTH'S SHARED DRAWING PARTS (#1129, #1135, #1173). Every word, figure and position is the
+ * state's: Rust (`crates/screens/src/health`) finished them, and a bar's length or a point's height
+ * arrives in basis points of its own span. A part draws, and decides nothing, not a unit, not a
+ * comparison, not which bar is today's. INSIDE HEALTH EVERY METRIC WEARS THE HEALTH COLOUR
+ * (`appAccent("health")`): a heart rate is not red and exercise is not green, because red and
+ * green mean a state. The one green line is the one the core marks `good`.
  */
 
 /** A quiet sentence in the gutter. Empty is nothing. */
 @Composable
-internal fun HealthNote(text: String, ink: String = "textSoft", style: String = "annotLabel") {
+internal fun HealthNote(text: String) {
     if (text.isEmpty()) return
-    Text(
+    KitText(
         text,
-        style = centraidType(style),
-        color = centraidColor(ink),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
+        KitType.Meta,
+        Surface.meta,
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
     )
 }
 
-/** A section label with the kit's header. Empty is nothing. */
+/** A section heading in the kit's section rung. Empty is nothing. */
 @Composable
-internal fun HealthSection(title: String) {
-    if (title.isNotEmpty()) SectionHeader(SectionHead(title = title))
+internal fun HealthSection(title: String, note: String = "") {
+    if (title.isEmpty()) return
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        KitText(title, KitType.Section, Surface.ink, Modifier.weight(1f))
+        if (note.isNotEmpty()) KitText(note, KitType.Meta, Surface.meta)
+    }
 }
 
-/** A value and its unit, baseline to baseline: "8,412" "steps". */
+/** A figure and its unit, baseline to baseline. */
 @Composable
-internal fun HealthValue(value: String, unit: String, style: String) {
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(value, style = centraidType(style), color = centraidColor("text"))
-        if (unit.isNotEmpty()) {
-            Text(unit, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(bottom = 2.dp))
+private fun HealthFigureText(value: String, unit: String, size: Int, unitColor: Color = Surface.meta) {
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(value, style = kitTextStyle(KitType.Row).copy(fontSize = size.sp, fontWeight = FontWeight.Bold), color = Surface.ink)
+        if (unit.isNotEmpty()) KitText(unit, KitType.Meta, unitColor, Modifier.padding(bottom = 2.dp))
+    }
+}
+
+/** Seven days as bars: today's the Health colour, the rest its pale tint; a gap (-1) draws no bar. */
+@Composable
+private fun HealthSparkBars(points: List<Int>, spoken: String) {
+    val accent = appAccent("health")
+    Row(
+        Modifier.height(40.dp).clearAndSetSemantics { contentDescription = spoken },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        points.forEachIndexed { index, point ->
+            if (point < 0) {
+                Spacer(Modifier.width(7.dp))
+            } else {
+                Box(
+                    Modifier
+                        .width(7.dp)
+                        .height((40 * fraction(point)).dp.coerceAtLeast(3.dp))
+                        .clip(CircleShape)
+                        .background(if (index == points.lastIndex) accent.fill else accent.fill.copy(alpha = 0.25f)),
+                )
+            }
         }
     }
 }
 
 /**
- * WHERE A DAY SITS IN THE MEMBER'S USUAL RANGE (R-1129-8): the track, the 25th–75th band, and the
- * day's dot when there is a figure. The hero's bar carries its three labels under it.
+ * ONE PINNED METRIC: its mark and name in the Health colour, the figure, and the typical under it.
+ * A wide card carries when and the sparkline; the rest sit two to a row. The whole card opens the
+ * metric's page.
  */
 @Composable
-internal fun HealthRangeBarView(bar: HealthRangeBar, thickness: Dp, dot: Dp) {
-    val radius = RoundedCornerShape(thickness / 2)
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().height(dot), contentAlignment = Alignment.CenterStart) {
-            val width = maxWidth
-            Box(Modifier.fillMaxWidth().height(thickness).clip(radius).background(centraidColor("bgSunken")))
-            val low = fraction(bar.low_bp)
-            val high = fraction(bar.high_bp)
-            Box(
-                Modifier
-                    .offset(x = width * low)
-                    .width(width * (high - low).coerceAtLeast(0f))
-                    .height(thickness)
-                    .clip(radius)
-                    .background(centraidColor("lineStrong")),
-            )
-            if (bar.has_value) {
-                Box(
-                    Modifier
-                        .offset(x = (width * fraction(bar.value_bp) - dot / 2).coerceIn(0.dp, width - dot))
-                        .size(dot)
-                        .clip(CircleShape)
-                        .background(centraidColor("text")),
-                )
-            }
+internal fun HealthPinnedCard(line: HealthMetricLine, tag: String, onTap: () -> Unit) {
+    val accent = appAccent("health")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .kitCard()
+            .clickable(onClick = onTap)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag(tag)
+            .clearAndSetSemantics {
+                contentDescription = line.accessibility_label
+                role = Role.Button
+            },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            CentraidIcon(iconKey = line.icon_key, tint = accent.text, size = if (line.wide) 16.dp else 14.dp)
+            KitText(line.label, KitType.Meta, accent.text, Modifier.weight(1f), maxLines = 1)
+            if (line.wide) KitText(line.when_label, KitType.Meta, Surface.meta)
         }
-        if (bar.start_label.isNotEmpty() || bar.middle_label.isNotEmpty() || bar.end_label.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf(bar.start_label, bar.middle_label, bar.end_label).forEach {
-                    Text(it, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+        if (line.wide) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    HealthFigureText(line.value_, line.unit, 28)
+                    if (line.typical.isNotEmpty()) {
+                        KitText(line.typical, KitType.Meta, if (line.good) StateColor.Green.text else Surface.meta)
+                    }
                 }
+                HealthSparkBars(line.spark_bp, line.spark_label)
             }
+        } else {
+            HealthFigureText(line.value_, line.unit, 22)
+            KitText(line.typical.ifEmpty { line.when_label }, KitType.Meta, Surface.meta)
         }
     }
 }
 
-/** TODAY'S HERO: the steps, large, with when they count from and the typical day's bar. */
+/** ONE HIGHLIGHT: the Health colour's mark in a pale chip and the sentence, its middle in bold. */
 @Composable
-internal fun HealthHero(line: HealthMetricLine, onTap: () -> Unit) {
-    Column(
+internal fun HealthHighlightCard(highlight: HealthHighlight, onTap: () -> Unit) {
+    val accent = appAccent("health")
+    val sentence = buildAnnotatedString {
+        append(highlight.lead)
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(highlight.emphasis) }
+        append(highlight.tail)
+    }
+    Row(
         Modifier
             .fillMaxWidth()
+            .kitCard()
             .clickable(onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("health-hero")
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag("health-highlight-${highlight.metric}")
             .clearAndSetSemantics {
-                contentDescription = line.accessibility_label
+                contentDescription = highlight.accessibility_label
                 role = Role.Button
             },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(line.label, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
-            Text(line.when_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+        Box(Modifier.size(32.dp).clip(CircleShape).background(accent.wash(false)), contentAlignment = Alignment.Center) {
+            CentraidIcon(iconKey = "BarChart2", tint = accent.text, size = 16.dp)
         }
-        HealthValue(line.value_, line.unit, "display")
-        if (line.typical.isNotEmpty()) Text(line.typical, style = centraidType("body"), color = centraidColor("textSoft"))
-        line.bar?.let { HealthRangeBarView(it, thickness = 8.dp, dot = 14.dp) }
+        Text(sentence, style = kitTextStyle(KitType.Row), color = Surface.ink, modifier = Modifier.weight(1f))
     }
 }
 
-/** ONE METRIC AGAINST ITS TYPICAL: name and figure, when and typical, and the range bar. */
-@Composable
-internal fun HealthMetricRow(line: HealthMetricLine, onTap: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .clickable(onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)
-            .testTag("health-metric-${line.metric}")
-            .clearAndSetSemantics {
-                contentDescription = line.accessibility_label
-                role = Role.Button
-            },
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text(line.label, style = centraidType("smallStrong"), color = centraidColor("text"), modifier = Modifier.weight(1f))
-            HealthValue(line.value_, line.unit, "smallStrong")
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(line.when_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-            Text(line.typical, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-        }
-        line.bar?.let { HealthRangeBarView(it, thickness = 4.dp, dot = 10.dp) }
-    }
-}
-
-/** ONE WORKOUT IN A LIST: its kind's glyph, title, figures, and when. */
+/** ONE WORKOUT IN A LIST: its kind's glyph in the Health colour, title, figures, and when. */
 @Composable
 internal fun HealthWorkoutRow(line: HealthWorkoutLine, onTap: () -> Unit) {
+    val accent = appAccent("health")
     Row(
         Modifier
             .fillMaxWidth()
@@ -192,26 +223,27 @@ internal fun HealthWorkoutRow(line: HealthWorkoutLine, onTap: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(centraidColor("bgSunken")), contentAlignment = Alignment.Center) {
-            if (line.icon_key.isNotEmpty()) CentraidIcon(iconKey = line.icon_key, tint = centraidColor("textSoft"), size = 18.dp)
+        Box(Modifier.size(40.dp).clip(CircleShape).background(accent.wash(false)), contentAlignment = Alignment.Center) {
+            if (line.icon_key.isNotEmpty()) CentraidIcon(iconKey = line.icon_key, tint = accent.text, size = 18.dp)
         }
         Column(Modifier.weight(1f)) {
-            Text(line.title, style = centraidType("smallStrong"), color = centraidColor("text"))
-            if (line.meta.isNotEmpty()) Text(line.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+            KitText(line.title, KitType.Row, Surface.ink, maxLines = 1)
+            if (line.meta.isNotEmpty()) KitText(line.meta, KitType.Meta, Surface.meta, maxLines = 1)
         }
-        Text(line.when_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+        KitText(line.when_label, KitType.Meta, Surface.meta)
     }
 }
 
 /** ONE TREND: name, the period's figure and its change, and the sparkline with its average. */
 @Composable
 internal fun HealthTrendRowView(row: HealthTrendRow, onTap: () -> Unit) {
+    val accent = appAccent("health")
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .kitCard()
             .clickable(onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
             .testTag("health-trend-${row.metric}")
             .clearAndSetSemantics {
                 contentDescription = row.accessibility_label
@@ -221,9 +253,9 @@ internal fun HealthTrendRowView(row: HealthTrendRow, onTap: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(row.label, style = centraidType("smallStrong"), color = centraidColor("text"))
-            HealthValue(row.value_, row.unit, "body")
-            if (row.delta.isNotEmpty()) Text(row.delta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+            KitText(row.label, KitType.Row, accent.text)
+            HealthFigureText(row.value_, row.unit, 22)
+            if (row.delta.isNotEmpty()) KitText(row.delta, KitType.Meta, Surface.meta)
         }
         Sparkline(row.points_bp, row.average_bp, Modifier.width(120.dp).height(44.dp))
     }
@@ -232,9 +264,8 @@ internal fun HealthTrendRowView(row: HealthTrendRow, onTap: () -> Unit) {
 /** Points oldest first in basis points of the row's span; -1 is a gap, never a zero. */
 @Composable
 private fun Sparkline(points: List<Int>, averageBp: Int, modifier: Modifier) {
-    val ink = centraidColor("textSoft")
-    val mark = centraidColor("text")
-    val rule = centraidColor("line")
+    val accent = appAccent("health")
+    val rule = Surface.border
     Canvas(modifier) {
         if (points.isEmpty()) return@Canvas
         val step = if (points.size > 1) size.width / (points.size - 1) else 0f
@@ -245,96 +276,149 @@ private fun Sparkline(points: List<Int>, averageBp: Int, modifier: Modifier) {
         }
         points.forEachIndexed { index, bp ->
             val next = points.getOrNull(index + 1)
-            if (bp >= 0 && next != null && next >= 0) drawLine(ink, at(index, bp), at(index + 1, next), strokeWidth = 1.5.dp.toPx())
+            if (bp >= 0 && next != null && next >= 0) drawLine(accent.text, at(index, bp), at(index + 1, next), strokeWidth = 2.dp.toPx())
         }
         val last = points.indexOfLast { it >= 0 }
-        if (last >= 0) drawCircle(mark, radius = 3.dp.toPx(), center = at(last, points[last]))
+        if (last >= 0) drawCircle(accent.fill, radius = 3.dp.toPx(), center = at(last, points[last]))
     }
 }
 
 /**
- * ONE METRIC'S CHART: a bar a bucket, the typical line across it, the ticks under it. The bucket
- * today falls in is the one mark in Health's hue; above-typical bars are the stronger ink.
+ * ONE METRIC'S CHART: a bar a bucket, the typical line (and the usual range as a pale band) across
+ * it, the ticks under it. THE CURRENT BUCKET, AND THE BAR UNDER A FINGER, WEAR THE HEALTH COLOUR;
+ * the rest are its pale tint. The finger's place is the chart's own state (a drag is never an event
+ * a frame); the bar under it shows the core's callout.
  */
 @Composable
-internal fun HealthChart(bars: List<HealthChartBar>, hasTypical: Boolean, typicalBp: Int, typicalLabel: String, ticks: List<String>, spoken: String) {
+internal fun HealthChart(data: HealthMetricData) {
+    val accent = appAccent("health")
+    val bars: List<HealthChartBar> = data.bars
+    var scrubbed by remember(bars.size) { mutableStateOf<Int?>(null) }
     val radius = RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp)
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("health-chart")
-            .clearAndSetSemantics { contentDescription = spoken },
+            .testTag("health-metric-chart")
+            .clearAndSetSemantics { contentDescription = data.chart_label },
     ) {
-        BoxWithConstraints(Modifier.fillMaxWidth().height(CHART_HEIGHT)) {
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(CHART_HEIGHT)
+                .pointerInput(bars.size) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val slot = size.width / bars.size.coerceAtLeast(1).toFloat()
+                        fun indexOf(x: Float) = (x / slot).toInt().coerceIn(0, (bars.size - 1).coerceAtLeast(0))
+                        scrubbed = indexOf(down.position.x)
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.firstOrNull()?.let { scrubbed = indexOf(it.position.x) }
+                        } while (event.changes.any { it.pressed })
+                        scrubbed = null
+                    }
+                },
+        ) {
             val height = maxHeight
-            Row(Modifier.fillMaxWidth().fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (bars.size > 14) 2.dp else 6.dp)) {
-                bars.forEach { bar ->
+            val width = maxWidth
+            if (data.has_typical_range) {
+                val top = height * (1f - fraction(data.typical_high_bp))
+                val bottom = height * (1f - fraction(data.typical_low_bp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .offset(y = top)
+                        .height((bottom - top).coerceAtLeast(2.dp))
+                        .background(accent.fill.copy(alpha = 0.08f)),
+                )
+            }
+            Row(Modifier.fillMaxWidth().fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (bars.size > 14) 3.dp else 8.dp)) {
+                bars.forEachIndexed { index, bar ->
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
                         if (bar.has_value) {
+                            val lit = bar.current || scrubbed == index
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(height * fraction(bar.height_bp))
+                                    .height((height * fraction(bar.height_bp)).coerceAtLeast(2.dp))
                                     .clip(radius)
-                                    .background(
-                                        centraidColor(
-                                            when {
-                                                bar.current -> "cOlive"
-                                                bar.above_typical -> "textFaint"
-                                                else -> "lineStrong"
-                                            },
-                                        ),
-                                    ),
+                                    .background(if (lit) accent.fill else accent.fill.copy(alpha = 0.28f)),
                             )
                         }
                     }
                 }
             }
-            if (hasTypical) {
-                val y = height * (1f - fraction(typicalBp))
-                Box(Modifier.fillMaxWidth().offset(y = y).height(1.dp).background(centraidColor("text")))
-                if (typicalLabel.isNotEmpty()) {
-                    Text(
-                        typicalLabel,
-                        style = centraidType("annotLabel"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.align(Alignment.TopEnd).offset(y = (y - 16.dp).coerceAtLeast(0.dp)),
+            if (data.has_typical) {
+                val y = height * (1f - fraction(data.typical_bp))
+                Box(Modifier.fillMaxWidth().offset(y = y).height(1.5.dp).background(accent.text))
+                if (data.typical_label.isNotEmpty()) {
+                    KitText(
+                        data.typical_label,
+                        KitType.Meta,
+                        accent.text,
+                        Modifier.align(Alignment.TopEnd).offset(y = (y - 18.dp).coerceAtLeast(0.dp)),
                     )
                 }
             }
+            val index = scrubbed
+            if (index != null && index in bars.indices && bars[index].callout.isNotEmpty()) {
+                val slot = width / bars.size
+                val barTop = height * (1f - fraction(bars[index].height_bp))
+                val centre = slot * (index + 0.5f)
+                Text(
+                    bars[index].callout,
+                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                    softWrap = false,
+                    modifier = Modifier
+                        .offset(x = (centre - 70.dp).coerceIn(0.dp, (width - 140.dp).coerceAtLeast(0.dp)), y = (barTop - 30.dp).coerceAtLeast(0.dp))
+                        .clip(CircleShape)
+                        .background(Surface.ink.copy(alpha = 0.92f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         }
-        if (ticks.isNotEmpty()) {
+        if (data.ticks.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                ticks.forEach { Text(it, style = centraidType("annotLabel"), color = centraidColor("textSoft")) }
+                data.ticks.forEach { KitText(it, KitType.Meta, Surface.meta, maxLines = 1) }
             }
         }
     }
 }
 
-/** A WORKOUT'S FIGURES, two to a row: the label over the value and its unit. */
+/** ONE FACT: a label and its figure on one line, in a bordered card's rows. */
 @Composable
-internal fun HealthFigures(figures: List<HealthFigure>) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        figures.chunked(2).forEach { pair ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                pair.forEach { figure ->
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .clearAndSetSemantics { contentDescription = listOf(figure.label, figure.value_, figure.unit).filter { it.isNotEmpty() }.joinToString(" ") },
-                    ) {
-                        Text(figure.label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-                        HealthValue(figure.value_, figure.unit, "title")
-                    }
-                }
-                if (pair.size == 1) Box(Modifier.weight(1f))
-            }
-        }
+internal fun HealthFactRow(label: String, detail: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clearAndSetSemantics { contentDescription = "$label, $detail" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KitText(label, KitType.Row, Surface.ink, Modifier.weight(1f))
+        KitText(detail, KitType.Row, Surface.meta)
+    }
+}
+
+/** A WORKOUT'S FIGURE: the label over the value and its unit, in a card. */
+@Composable
+internal fun HealthFigureCard(figure: HealthFigure) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .kitCard()
+            .padding(14.dp)
+            .clearAndSetSemantics { contentDescription = listOf(figure.label, figure.value_, figure.unit).filter { it.isNotEmpty() }.joinToString(" ") },
+    ) {
+        KitText(figure.label, KitType.Meta, Surface.meta)
+        HealthFigureText(figure.value_, figure.unit, 28)
     }
 }
 
 private fun fraction(bp: Int): Float = bp.coerceIn(0, BP) / BP.toFloat()
 
 private const val BP: Int = 10_000
-private val CHART_HEIGHT: Dp = 160.dp
+private val CHART_HEIGHT: Dp = 200.dp

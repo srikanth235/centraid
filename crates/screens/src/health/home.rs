@@ -29,7 +29,7 @@ use wire::screen_event::Kind as E;
 
 use super::figures;
 use super::follow::HealthFollow;
-use super::{Metric, Phase, Store, Units, denied, routes};
+use super::{Metric, PINNED, Phase, Store, Units, WIDE_CARDS, denied, highlights, routes};
 use crate::catalog::load;
 use crate::kit::civil;
 use crate::kit::menu;
@@ -269,15 +269,25 @@ impl Home {
         effects
     }
 
+    /// The page's title, and what a page pushed from it calls it ("Back to Summary").
+    fn title(&self, locale: Locale) -> String {
+        match self.destination {
+            wire::HealthDestination::Trends => words::band_trends(locale),
+            wire::HealthDestination::Workouts => words::band_workouts(locale),
+            _ => words::band_summary(locale),
+        }
+    }
+
     // --- Today -------------------------------------------------------------
 
     fn today_data(&self, ctx: &Ctx, loaded: &Loaded) -> wire::HealthTodayData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
         let day = &loaded.today.today;
-        let parent = words::app_title(locale);
-        let lines: Vec<wire::HealthMetricLine> = Metric::ALL
+        let parent = self.title(locale);
+        let lines: Vec<wire::HealthMetricLine> = PINNED
             .into_iter()
-            .map(|metric| {
+            .enumerate()
+            .map(|(index, metric)| {
                 let answer = loaded
                     .today
                     .metrics
@@ -289,7 +299,7 @@ impl Home {
                     answer,
                     day,
                     units,
-                    metric == Metric::Steps,
+                    index < WIDE_CARDS,
                     &parent,
                 )
             })
@@ -300,10 +310,12 @@ impl Home {
             .iter()
             .map(|row| figures::line(locale, row, day, units, &parent))
             .collect();
+        let highlights = highlights::lines(locale, &loaded.today.metrics, &parent);
         let mut lines = lines.into_iter();
         wire::HealthTodayData {
             hero: lines.next(),
             metrics_heading: words::today_metrics_heading(locale),
+            metrics_note: words::today_metrics_note(locale),
             metrics: lines.collect(),
             workouts_heading: if workouts.is_empty() {
                 String::new()
@@ -311,10 +323,12 @@ impl Home {
                 words::today_workouts_heading(locale)
             },
             workouts,
-            foot: fill(
-                &words::today_foot(locale),
-                &[("store", &Store::of(ctx).name(locale))],
-            ),
+            highlights_heading: if highlights.is_empty() {
+                String::new()
+            } else {
+                words::today_highlights_heading(locale)
+            },
+            highlights,
         }
     }
 
@@ -322,7 +336,7 @@ impl Home {
 
     fn trends_data(&self, ctx: &Ctx, answer: &wire::HealthTrends) -> wire::HealthTrendsData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
-        let parent = words::app_title(locale);
+        let parent = self.title(locale);
         let compare = match self.trend_range {
             TrendRange::Days90 => words::trends_compare_90(locale),
             TrendRange::Year => words::trends_compare_year(locale),
@@ -386,7 +400,7 @@ impl Home {
         today: &str,
     ) -> wire::HealthWorkoutsData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
-        let parent = words::app_title(locale);
+        let parent = self.title(locale);
         let week = civil::plus_days(today, -WEEK_BACK).unwrap_or_else(|| today.to_owned());
         let mut sections: Vec<wire::HealthWorkoutSection> = Vec::new();
         for row in &answer.workouts {
@@ -433,8 +447,22 @@ impl Home {
     fn data(&self, ctx: &Ctx, loaded: &Loaded) -> wire::HealthHomeData {
         let locale = ctx.locale();
         let day = loaded.today.today.clone();
+        let summary = !matches!(
+            self.destination,
+            wire::HealthDestination::Trends | wire::HealthDestination::Workouts
+        );
         let base = wire::HealthHomeData {
-            day_label: civil::day_month(locale, &day),
+            day_label: if summary && loaded.today.connected {
+                fill(
+                    &words::today_subtitle(locale),
+                    &[
+                        ("day", &civil::day_month(locale, &day)),
+                        ("store", &Store::of(ctx).name(locale)),
+                    ],
+                )
+            } else {
+                String::new()
+            },
             today: day.clone(),
             connect: Some(routes::connect(&words::app_title(locale))),
             ..Default::default()
@@ -625,7 +653,7 @@ impl Home {
         vec![
             tab(
                 BAND_TODAY,
-                words::band_today(locale),
+                words::band_summary(locale),
                 "Heart",
                 self.destination == wire::HealthDestination::Today,
             ),
@@ -660,15 +688,15 @@ pub(crate) fn per_unit(locale: Locale, metric: Metric, unit: &str) -> String {
     }
 }
 
-/// One metric against the member's own typical (R-1129-8). The bar is drawing,
-/// the figures the core's.
+/// One pinned card: the figure, when, and the typical (R-1129-8). A wide card also says where
+/// the figure sits against the member's usual range, and carries the last seven days.
 fn metric_line(
     locale: Locale,
     metric: Metric,
     answer: Option<&wire::HealthTodayMetric>,
     today: &str,
     units: Units,
-    hero: bool,
+    wide: bool,
     parent: &str,
 ) -> wire::HealthMetricLine {
     let value = answer.and_then(|answer| answer.value);
@@ -684,46 +712,7 @@ fn metric_line(
         _ if metric.sum() => words::when_so_far(locale),
         _ => words::when_today(locale),
     };
-    let typical = answer.and_then(|answer| answer.typical);
-    let low = answer.and_then(|answer| answer.low);
-    let high = answer.and_then(|answer| answer.high);
-    let typical_words = match (typical, low, high) {
-        (None, ..) => String::new(),
-        (Some(_), Some(low), Some(high)) if metric == Metric::RestingHr => fill(
-            &words::typical_range(locale),
-            &[
-                ("low", &figures::figure(locale, metric, low, units).0),
-                ("high", &figures::figure(locale, metric, high, units).0),
-            ],
-        ),
-        (Some(typical), ..) => fill(
-            &words::typical(locale),
-            &[("value", &figures::phrase(locale, metric, typical, units))],
-        ),
-    };
-    let bar = match (low, high) {
-        (Some(low), Some(high)) => {
-            let scale = figures::scale_over(value.unwrap_or(0.0).max(high));
-            Some(wire::HealthRangeBar {
-                low_bp: figures::bp(low, scale),
-                high_bp: figures::bp(high, scale),
-                has_value: value.is_some(),
-                value_bp: value.map_or(0, |value| figures::bp(value, scale)),
-                start_label: if hero { "0".to_owned() } else { String::new() },
-                middle_label: if hero {
-                    words::hero_scale_middle(locale)
-                } else {
-                    String::new()
-                },
-                end_label: if hero {
-                    figures::figure(locale, metric, scale, units).0
-                } else {
-                    String::new()
-                },
-            })
-        }
-        _ => None,
-    };
+    let (typical_words, good) = typical_words(locale, metric, answer, value, units, wide);
     let label = figures::label(locale, metric);
     let figure_words = [number.as_str(), unit.as_str()]
         .iter()
@@ -749,10 +738,92 @@ fn metric_line(
         unit,
         when_label: when,
         typical: typical_words,
-        bar,
         accessibility_label,
         route: Some(routes::metric(metric.key(), parent)),
+        wide,
+        spark_bp: if wide {
+            spark(answer.map_or(&[][..], |answer| &answer.week))
+        } else {
+            Vec::new()
+        },
+        icon_key: figures::metric_icon(metric).to_owned(),
+        spark_label: if metric == Metric::Sleep {
+            words::spark_nights(locale)
+        } else {
+            words::spark_days(locale)
+        },
+        good,
     }
+}
+
+/// The line under a card's figure, and whether the figure is above the usual range where higher
+/// is better. A wide card with a figure says where it sits ("Above your typical 6,900–8,100");
+/// the others say the typical alone ("Typical 520", "Typical 56–60" for a reading).
+fn typical_words(
+    locale: Locale,
+    metric: Metric,
+    answer: Option<&wire::HealthTodayMetric>,
+    value: Option<f64>,
+    units: Units,
+    wide: bool,
+) -> (String, bool) {
+    let typical = answer.and_then(|answer| answer.typical);
+    let low = answer.and_then(|answer| answer.low);
+    let high = answer.and_then(|answer| answer.high);
+    let number = |value: f64| figures::figure(locale, metric, value, units).0;
+    match (typical, low, high, value) {
+        (None, ..) => (String::new(), false),
+        (Some(_), Some(low), Some(high), Some(value)) if wide => {
+            let (low_words, high_words) = (number(low), number(high));
+            let dash = if low_words.contains(' ') || high_words.contains(' ') {
+                " – "
+            } else {
+                "–"
+            };
+            let range = format!("{low_words}{dash}{high_words}");
+            let (words_, above) = if value > high {
+                (words::typical_above(locale), true)
+            } else if value < low {
+                (words::typical_below(locale), false)
+            } else {
+                (words::typical_within(locale), false)
+            };
+            (
+                fill(&words_, &[("range", &range)]),
+                above && metric.higher_is_better(),
+            )
+        }
+        (Some(_), Some(low), Some(high), _) if wide || metric == Metric::RestingHr => (
+            fill(
+                &words::typical_range(locale),
+                &[("low", &number(low)), ("high", &number(high))],
+            ),
+            false,
+        ),
+        (Some(typical), ..) => (
+            fill(
+                &words::typical(locale),
+                &[("value", &figures::phrase(locale, metric, typical, units))],
+            ),
+            false,
+        ),
+    }
+}
+
+/// The seven days as basis points of the tallest, a day with no row `-1` (a gap, never a zero).
+/// A bar's height is drawing; the figures are the core's.
+pub(crate) fn spark(week: &[wire::HealthBucket]) -> Vec<i32> {
+    let top = week
+        .iter()
+        .filter_map(|bucket| bucket.value)
+        .fold(0.0_f64, f64::max);
+    week.iter()
+        .map(|bucket| {
+            bucket.value.map_or(-1, |value| {
+                i32::try_from(figures::bp(value, top)).unwrap_or(0)
+            })
+        })
+        .collect()
 }
 
 impl Screen for Home {
@@ -828,7 +899,7 @@ impl Screen for Home {
                         Vec::new()
                     },
                     chrome: Some(wire::HealthHomeChrome {
-                        title: words::app_title(locale),
+                        title: self.title(locale),
                         retry: words::retry(locale),
                         home: words::home(locale),
                         more_title: words::more_title(locale),

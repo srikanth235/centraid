@@ -111,14 +111,15 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-shown` | words.make / words.show | the recovery key's 24 cells, read as one grid (each cell is `words-word-<n>`) |
 | `words-save-copy` | words.make / words.show | "Save a copy" — the share sheet with the key as one line |
 | `words-make-primary` | words.make | the sheet's primary ("I've saved it", "Done") |
-| `health-band-<tab>` | Health | one band tab (`today`, `trends`, `workouts`, `more`, the label lowercased); `health-band` is the plate (#1129) |
+| `health-band-<tab>` | Health | one band tab (`today` (the Summary), `trends`, `workouts`, `more`); `health-band` is the plate (#1129) |
 | `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
-| `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | Today's steps card, a Today metric line and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
-| `health-today-foot` | Health | Today's foot: where the numbers were read from |
+| `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | The Summary's steps card, another pinned card and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
+| `health-highlight-<key>` | Health | one Highlights card on the Summary (`<key>` the metric), the tap to its page |
 | `health-workout-<activityId>` | Health | one workout row (Today and Workouts) |
-| `health-range`, `health-metric-range` | Health, a metric | the segmented range (Trends; Week · Month · Year) |
+| `health-range`, `health-metric-range` | Health, a metric | the segmented range (Trends: 30 days · 90 days · Year; a metric: Week · Month · 6 months · Year) |
 | `health-more-<key>`, `health-reads`, `health-reads-close` | Health | a More row (`reads`, `choose`, `stop`), the "What Health may read" sheet and its close |
 | `health-metric-page`, `health-workout-page` | a metric, a workout | the pushed page's scroll |
+| `health-metric-chart`, `health-metric-versus` | a metric | the bar chart (a finger on it scrubs) and the line against the typical |
 | `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect Apple Health"), the status line |
 | `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
