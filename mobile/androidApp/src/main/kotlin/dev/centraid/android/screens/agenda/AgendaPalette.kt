@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.centraid.design.CentraidScale
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -69,7 +70,7 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
         lists.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 pair.forEach { list ->
-                    val shape = RoundedCornerShape(18.dp)
+                    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
                     Column(
                         Modifier
                             .weight(1f)

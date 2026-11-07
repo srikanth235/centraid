@@ -76,7 +76,7 @@ struct DocsDriveView: View {
                     // trailing slot itself: the filter menu, then the Plus.
                     HStack(spacing: 0) {
                         if let slot = filter(state) { FilterMenuButton(app: "docs", slot: slot) }
-                        RoomTrailing(action: addAction(state, content))
+                        RoomTrailing(action: addAction(state, content), app: "docs")
                     }
                 } content: {
                     // With no band to hang the search key on, the key alone stands at its foot.

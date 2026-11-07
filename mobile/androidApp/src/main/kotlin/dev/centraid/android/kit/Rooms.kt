@@ -272,6 +272,7 @@ public fun PushedPage(
     meta: String = "",
     content: @Composable () -> Unit,
 ) {
+    CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
         Row(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
@@ -297,6 +298,7 @@ public fun PushedPage(
         StatusLine(status)
         statusLine?.invoke()
         LocalShellLine.current?.invoke()
+    }
     }
 }
 

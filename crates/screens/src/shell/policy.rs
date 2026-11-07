@@ -74,6 +74,11 @@ pub fn content_size(widget: &str) -> Size {
 /// the usual case does not move when it lands.
 #[must_use]
 pub fn size_of(widget: &str, status: Status) -> Size {
+    // HEALTH IS ALWAYS SMALL: its invitation is one word ("Connect"), so it never takes a
+    // medium slot and the row of four glances stays whole.
+    if widget == "health" {
+        return Size::Small;
+    }
     match status {
         Status::Empty | Status::Unknown => Size::Medium,
         _ => content_size(widget),
@@ -250,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn day_one_is_the_first_run_order_with_every_invitation_medium() {
+    fn day_one_is_the_first_run_order_with_every_invitation_medium_but_healths() {
         let folded = fold(of(&ORDER, Status::Empty));
         assert_eq!(folded.springboard, wire::HomeSpringboard::FirstRun);
         assert_eq!(order(&folded), FIRST_RUN_ORDER);
@@ -265,7 +270,12 @@ mod tests {
         );
         // The calendar and the photographs are tall mediums; the rest one row.
         for tile in &folded.tiles {
-            assert_eq!(tile.size(), Size::Medium, "{}", tile.widget);
+            let want = if tile.widget == "health" {
+                Size::Small
+            } else {
+                Size::Medium
+            };
+            assert_eq!(tile.size(), want, "{}", tile.widget);
         }
         let height = |widget: &str| {
             folded
@@ -289,6 +299,18 @@ mod tests {
         // Still reading: the usual shape, so the grid does not move on arrival.
         assert_eq!(size_of("money", Status::Loading), Size::Small);
         assert_eq!(size_of("notes", Status::Loading), Size::Medium);
+    }
+
+    #[test]
+    fn health_is_small_whatever_it_has_to_show() {
+        for status in [
+            Status::Content,
+            Status::Empty,
+            Status::Unknown,
+            Status::Loading,
+        ] {
+            assert_eq!(size_of("health", status), Size::Small, "{status:?}");
+        }
     }
 
     #[test]

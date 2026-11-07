@@ -86,9 +86,10 @@ struct KitAccentKey: View {
     let label: String
     var identifier: String = "room-action"
     var enabled: Bool = true
+    /// THE APP'S COLOUR, stated: a toolbar item is hosted by the navigation bar and does not
+    /// inherit the place's environment, so the place hands its accent in.
+    var accent: AppAccent = .shell
     let action: () -> Void
-
-    @Environment(\.appAccent) private var accent
 
     var body: some View {
         Button(action: action) {

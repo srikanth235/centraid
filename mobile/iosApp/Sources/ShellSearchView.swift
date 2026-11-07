@@ -51,40 +51,21 @@ struct ShellSearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // TOP-ALIGNED: the field can carry the corrected line under it, and
-            // Cancel stays beside the capsule and not beside the line.
-            HStack(alignment: .top, spacing: 4) {
-                VStack(alignment: .leading, spacing: 4) {
-                    CentraidSearchField(
-                        field: field,
-                        placeholder: state.chrome.placeholder,
-                        closeLabel: state.chrome.closeLabel,
-                        identifier: "home-search",
-                        scope: state.chrome.scopeLabel,
-                        closes: false,
-                        onSubmit: { send(event { $0.committed = .init() }) },
-                        onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
-                        onClose: {}
-                    )
-                    // THE LINE UNDER THE FIELD, finished by Rust.
-                    if case let .data(data)? = state.content, !data.corrected.isEmpty {
-                        Text(data.corrected)
-                            .kitType(.meta)
-                            .foregroundStyle(Surface.meta)
-                            .lineLimit(2)
-                            .padding(.leading, BandMetrics.searchGlyphLead)
-                            .accessibilityIdentifier("search-corrected")
-                    }
-                }
-                KitLink(label: state.chrome.cancel, identifier: "home-search-cancel") {
-                    send(event { $0.cleared = .init() })
-                    onCancel()
-                }
-                .frame(height: 40)
+            // THE BOARD'S PAGE: "Search" large with its scope ("All apps") under it, the answer
+            // grouped by app, and the field at the foot as a glass pill with a close key.
+            KitHeader(title: state.chrome.title, meta: state.chrome.scopeLabel)
+                .padding(.top, 8)
+            // THE LINE UNDER THE TITLE, finished by Rust.
+            if case let .data(data)? = state.content, !data.corrected.isEmpty {
+                Text(data.corrected)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                    .padding(.bottom, 4)
+                    .accessibilityIdentifier("search-corrected")
             }
-            .padding(.leading, CentraidGeometry.pageMargin)
-            .padding(.trailing, CentraidGeometry.pageMargin - 4)
-            .padding(.vertical, 8)
             ReadStateView(
                 content: content,
                 loadingLabel: state.chrome.loading,
@@ -111,6 +92,23 @@ struct ShellSearchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.plainPage.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        // THE FIELD IS AT THE FOOT, the glass pill and its close key, riding the keyboard; the
+        // close key clears the term and leaves, as Cancel did.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            BandSearchField(
+                field: field,
+                placeholder: state.chrome.placeholder,
+                closeLabel: state.chrome.closeLabel,
+                identifier: "home-search",
+                onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
+                onClose: {
+                    send(event { $0.cleared = .init() })
+                    onCancel()
+                },
+                onSubmit: { send(event { $0.committed = .init() }) }
+            )
+            .bandStrip()
+        }
     }
 
     /// THE ASK ROW closes the answer, matched or not; pressing it records the search.

@@ -21,6 +21,7 @@ use wire::screen_event::Kind as E;
 use wire::settings_event::Kind as S;
 
 use crate::backup::{self, key::KeyCustody, line, reading};
+use crate::catalog::load;
 use crate::custody::secrets::VaultSecrets;
 use crate::kit::read::Reading;
 use crate::screen::{Ctx, Screen};
@@ -82,6 +83,8 @@ struct Settings {
     appearance: Option<Appearance>,
     standing: Option<reading::Standing>,
     synced: Option<wire::SyncedSecretsStatus>,
+    /// The name of the vault in front, whose first letter is the vault row's avatar.
+    vault_name: Option<String>,
 }
 
 impl Settings {
@@ -91,6 +94,7 @@ impl Settings {
             appearance: None,
             standing: None,
             synced: None,
+            vault_name: None,
         }
     }
 
@@ -98,6 +102,16 @@ impl Settings {
         // A refresh that fails keeps what was read; the Backup row then says what it knew.
         if let Reading::Data(standing) = reading::load(ctx) {
             self.standing = Some(standing);
+        }
+        if let Ok(loaded) = ctx.load(load::shell::Holdings {}.into())
+            && let Some(wire::app_query_response::Answer::Holdings(held)) =
+                loaded.answer.and_then(|answer| answer.answer)
+        {
+            self.vault_name = held
+                .vaults
+                .iter()
+                .find(|vault| vault.foreground)
+                .map(|vault| vault.name.clone());
         }
     }
 
@@ -117,22 +131,28 @@ impl Settings {
         let locale = ctx.locale();
         let held = ctx.vaults().map_or(1, |vaults| vaults.held().len().max(1)) as u64;
         let custody = KeyCustody::read(locale, &self.secrets, ctx.platform(), self.synced.as_ref());
-        let row =
-            |id: &str, title: String, meta: String, icon: &str, route: Option<wire::Route>| {
-                let spoken = if meta.is_empty() {
-                    title.clone()
-                } else {
-                    format!("{title}, {meta}")
-                };
-                wire::SettingsRow {
-                    id: id.to_owned(),
-                    title,
-                    meta,
-                    icon_key: icon.to_owned(),
-                    route,
-                    accessibility_label: spoken,
-                }
+        let row = |id: &str,
+                   title: String,
+                   meta: String,
+                   icon: &str,
+                   route: Option<wire::Route>,
+                   tile: &str| {
+            let spoken = if meta.is_empty() {
+                title.clone()
+            } else {
+                format!("{title}, {meta}")
             };
+            wire::SettingsRow {
+                id: id.to_owned(),
+                title,
+                meta,
+                icon_key: icon.to_owned(),
+                route,
+                accessibility_label: spoken,
+                tile: tile.to_owned(),
+                initial: String::new(),
+            }
+        };
         wire::SettingsData {
             appearance: Some(wire::SettingsAppearance {
                 title: words::settings_appearance(locale),
@@ -154,13 +174,24 @@ impl Settings {
                 wire::SettingsSection {
                     key: "vault".to_owned(),
                     title: words::settings_vault(locale),
-                    rows: vec![row(
-                        "vaults",
-                        words::settings_vaults_row(locale),
-                        words::settings_vaults_held(locale, held),
-                        "Lock",
-                        None,
-                    )],
+                    rows: vec![{
+                        // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does.
+                        let mut vaults = row(
+                            "vaults",
+                            words::settings_vaults_row(locale),
+                            words::settings_vaults_held(locale, held),
+                            "Lock",
+                            None,
+                            "initial",
+                        );
+                        vaults.initial = self
+                            .vault_name
+                            .as_deref()
+                            .and_then(|name| name.trim().chars().next())
+                            .map(|first| first.to_uppercase().collect())
+                            .unwrap_or_else(|| "V".to_owned());
+                        vaults
+                    }],
                 },
                 wire::SettingsSection {
                     key: "backup".to_owned(),
@@ -171,6 +202,7 @@ impl Settings {
                         self.backup_meta(ctx),
                         "Cloud",
                         Some(backup::routes::home()),
+                        "",
                     )],
                 },
                 wire::SettingsSection {
@@ -182,6 +214,7 @@ impl Settings {
                         custody.sentence,
                         "Key",
                         Some(backup::routes::show_key()),
+                        "amber",
                     )],
                 },
             ],

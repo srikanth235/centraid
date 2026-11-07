@@ -186,7 +186,7 @@ struct BackupHomeView: View {
     private func appRows(_ rows: [Centraid_Core_V1_BackupAppRow]) -> some View {
         ForEach(Array(rows.enumerated()), id: \.element.appID) { index, row in
             HStack(spacing: 12) {
-                AppMark(appID: row.appID, size: 32)
+                AppTile(appID: row.appID, size: 32)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.name).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.detail.isEmpty { sentence(row.detail) }

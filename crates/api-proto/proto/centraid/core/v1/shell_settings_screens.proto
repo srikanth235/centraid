@@ -32,6 +32,11 @@ message SettingsRow {
   string icon_key = 4;
   optional Route route = 5;
   string accessibility_label = 6;
+  // How the row's leading tile is drawn: "" the page's colour (the shell's) under a white
+  // glyph, "amber" the state-amber fill (the recovery key), "initial" the vault's round
+  // avatar carrying `initial`.
+  string tile = 7;
+  string initial = 8;
 }
 
 message SettingsSection {

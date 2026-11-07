@@ -65,7 +65,7 @@ import centraid.core.v1.BackupHomeEvent
 import centraid.core.v1.BackupHomeState
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
-import dev.centraid.android.kit.AppMark
+import dev.centraid.android.kit.AppTile
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitSpinner
@@ -474,7 +474,7 @@ private fun Apps(rows: List<BackupAppRow>) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            AppMark(appId = row.app_id, size = 32.dp)
+            AppTile(appId = row.app_id, size = 32.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(row.name, style = centraidType("body"), color = Surface.ink)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)

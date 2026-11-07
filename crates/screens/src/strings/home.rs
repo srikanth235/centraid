@@ -98,7 +98,7 @@ catalog! {
     plain tile_people_count_many = ("people", "people");
     plain tile_empty_agenda = ("Put something on the calendar", "Put something on the calendar");
     plain tile_empty_docs = ("Add your first document", "Add your first document");
-    plain tile_empty_health = ("Connect your health app", "Connect your health app");
+    plain tile_empty_health = ("Connect", "Connect");
     plain tile_empty_locker = ("Unlock to see your items", "Unlock to see your items");
     plain tile_empty_money = ("Import your first statement", "Import your first statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");

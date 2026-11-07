@@ -144,7 +144,7 @@ struct AgendaEditorView: View {
                 .accessibilityIdentifier("agenda-editor-all-day")
                 whenRow(
                     key: editor.startFieldLabel,
-                    dayLabel: editor.startDayLabel,
+                    dayLabel: editor.startDayLabel.isEmpty ? editor.startLabel : editor.startDayLabel,
                     timeLabel: editor.startTimeLabel,
                     chrome: chrome,
                     day: draft.startDay,
@@ -157,7 +157,7 @@ struct AgendaEditorView: View {
                 if editor.showEventFields {
                     whenRow(
                         key: chrome.fieldEnds,
-                        dayLabel: editor.endDayLabel,
+                        dayLabel: editor.endDayLabel.isEmpty ? editor.endLabel : editor.endDayLabel,
                         timeLabel: editor.endTimeLabel,
                         chrome: chrome,
                         day: draft.endDay,

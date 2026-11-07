@@ -234,6 +234,20 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
 }
 
 #[test]
+fn each_row_names_its_tile_as_the_board_draws_it() {
+    let (mut d, _home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    let data = data(&d, i);
+    let row = |section: usize| data.sections[section].rows[0].clone();
+    // The vault row wears the vault's round initial, never a glyph tile.
+    assert_eq!(row(0).tile, "initial");
+    assert_eq!(row(0).initial.chars().count(), 1);
+    // Backup wears the page's own colour; the recovery key the state-amber fill.
+    assert_eq!(row(1).tile, "");
+    assert_eq!(row(2).tile, "amber");
+}
+
+#[test]
 fn the_platform_answer_changes_the_key_sentence() {
     let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored(""));

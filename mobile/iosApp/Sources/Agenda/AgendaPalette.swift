@@ -51,7 +51,7 @@ struct AgendaSmartListGrid: View {
                     .padding(14)
                     .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
                     .background(AgendaPalette.token(list.colorKey))
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(list.accessibilityLabel)

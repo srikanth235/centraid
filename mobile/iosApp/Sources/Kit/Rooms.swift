@@ -142,6 +142,8 @@ struct SearchOpener: View {
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
+    /// The place's app id: the toolbar does not carry the environment, so the accent is stated.
+    var app: String = ""
 
     var body: some View {
         if let action {
@@ -152,6 +154,7 @@ struct RoomTrailing: View {
                     label: action.label,
                     identifier: action.identifier,
                     enabled: action.enabled,
+                    accent: AppAccent(app),
                     action: action.action
                 )
             } else {
@@ -258,6 +261,9 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .environment(\.appAccent, AppAccent(app))
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // AN APP ROOT HAS NO BACK CHEVRON: it is reached from Home and returns by the band's
+        // Home key; a chevron appears only on a page drilled into (`PushedPage`).
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             ToolbarItemGroup(placement: .primaryAction) {
@@ -333,7 +339,7 @@ extension AppPlace where Trailing == RoomTrailing {
             filter: filter,
             subtitle: subtitle,
             showsBand: showsBand,
-            trailing: { RoomTrailing(action: trailing) },
+            trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
             content: content
         )

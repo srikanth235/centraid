@@ -242,11 +242,17 @@ private struct WidgetBody: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
+    /// THE MARK A WIDGET DRAWS: the app's own, except People's, which the board draws as the
+    /// person (the address book is the app's launcher glyph, not the widget's).
+    private func widgetIcon(_ appIcon: String) -> String {
+        tile.appID == "people" ? "User" : appIcon
+    }
+
     /// A GLANCE (small): the app's mark in its colour, a figure and a word.
     private func glance(figure: String, caption: String) -> some View {
         VStack(spacing: 2) {
             if let app = CentraidCatalog.byID[tile.appID] {
-                CentraidIconView(iconKey: app.iconKey, tint: accent, size: 22)
+                CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 22)
                     .accessibilityHidden(true)
             }
             if !figure.isEmpty {
@@ -293,7 +299,7 @@ private struct WidgetBody: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 if let app = CentraidCatalog.byID[tile.appID] {
-                    CentraidIconView(iconKey: app.iconKey, tint: accent, size: 16)
+                    CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 16)
                         .accessibilityHidden(true)
                 }
                 Text(tile.name)

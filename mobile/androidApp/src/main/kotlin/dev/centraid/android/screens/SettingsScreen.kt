@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -44,6 +47,7 @@ import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
+import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
@@ -159,7 +163,16 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp)
+            // THE ROW'S TILE, as Rust names it: the vault's round initial, the state-amber fill
+            // (the recovery key), or the shell's colour.
+            when (row.tile) {
+                "initial" -> Box(
+                    Modifier.padding(end = 12.dp).size(32.dp).clip(CircleShape).background(appAccent("").fill).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) { Text(row.initial, style = kitTextStyle(KitType.Row), color = Color.White, fontWeight = FontWeight.Bold) }
+                "amber" -> KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp, fill = StateColor.Amber.fill)
+                else -> if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp)
+            }
             Column(Modifier.weight(1f)) {
                 KitText(row.title, KitType.Row, Surface.ink)
                 if (row.meta.isNotEmpty()) Text(row.meta, style = kitTextStyle(KitType.Meta), color = Surface.meta)

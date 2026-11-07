@@ -85,9 +85,8 @@ private struct HomeRoot: View {
                 )
             } else if shell.tab == .backup {
                 // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat
-                // does, under the vault's lockup: the backup it describes is
-                // that vault's, and the band stays where it is.
-                VaultHeader(bar: home.bar, shell: shell, store: store)
+                // does, under its own title and with no vault lockup (the board has none
+                // on Backup); the band stays where it is.
                 if let backupRoot {
                     RustScreenView(shell: shell, store: store, instance: backupRoot, entry: nil)
                         .id(backupRoot)

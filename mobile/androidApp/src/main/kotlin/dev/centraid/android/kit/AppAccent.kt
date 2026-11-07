@@ -9,8 +9,11 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import dev.centraid.android.R
 import dev.centraid.android.theme.centraidDark
+import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 
 /**
@@ -86,4 +89,14 @@ private fun accentResources(appId: String): IntArray = when (appId) {
     "people" -> intArrayOf(R.color.centraid_app_people, R.color.centraid_app_people_text, R.color.centraid_app_people_tile)
     "photos" -> intArrayOf(R.color.centraid_app_photos, R.color.centraid_app_photos_text, R.color.centraid_app_photos_tile)
     else -> intArrayOf(R.color.centraid_shell, R.color.centraid_shell_text, R.color.centraid_shell)
+}
+
+/**
+ * AN APP'S TILE (#1173): its glyph in white on the app's own solid colour, the way the boards
+ * draw a row that names an app (Backup's "In this backup").
+ */
+@Composable
+public fun AppTile(appId: String, size: Dp = 32.dp) {
+    val app = CentraidCatalog.byId[appId] ?: return
+    KitTile(iconKey = app.iconKey, size = size, fill = appAccent(appId).tile)
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,11 +48,14 @@ import centraid.core.v1.Route
 import centraid.core.v1.SearchContainer
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
-import dev.centraid.android.kit.CentraidSearchField
+import dev.centraid.android.kit.BandSearchField
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.RoomTitle
+import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SearchAskRow
@@ -92,28 +96,12 @@ internal fun HomeSearchScreen(
             return Offset.Zero
         }
     }
-    Column(Modifier.fillMaxSize().background(centraidColor("bg"))) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CentraidSearchField(
-                field = SearchField(open_ = true, term = state.term),
-                placeholder = chrome?.placeholder.orEmpty(),
-                onTerm = { term -> onEvent(HomeSearchEvent(term = HomeSearchEvent.TermChanged(term = term))) },
-                onClose = {},
-                modifier = Modifier.weight(1f),
-                closeLabel = chrome?.close_label.orEmpty(),
-                testTag = "home-search",
-                scope = chrome?.scope_label.orEmpty(),
-                closes = false,
-                onSubmit = {
-                    keyboard?.hide()
-                    onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed()))
-                },
-            )
-            KitLink(
-                label = chrome?.cancel.orEmpty(),
-                onClick = onCancel,
-                modifier = Modifier.testTag("home-search-cancel").padding(end = 8.dp),
-            )
+    Column(Modifier.fillMaxSize().background(centraidColor("bg")).imePadding()) {
+        // THE BOARD'S PAGE: "Search" large with its scope ("All apps") under it, the answer
+        // grouped by app, and the field at the foot as a glass pill with a close key.
+        Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(top = 12.dp, bottom = 8.dp)) {
+            RoomTitle(chrome?.title.orEmpty())
+            if (!chrome?.scope_label.isNullOrEmpty()) KitText(chrome?.scope_label.orEmpty(), KitType.Meta, Surface.meta)
         }
         val resting = state.resting
         val content = screenContentOf(state.loading, state.failure, resting ?: state.data_, state.denied)
@@ -134,7 +122,7 @@ internal fun HomeSearchScreen(
             content = content,
             onRetry = { onEvent(HomeSearchEvent(refreshed = HomeSearchEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
-            modifier = Modifier.nestedScroll(dismiss),
+            modifier = Modifier.weight(1f).nestedScroll(dismiss),
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
         ) { found ->
             when (found) {
@@ -153,6 +141,20 @@ internal fun HomeSearchScreen(
                 }
             }
         }
+        // THE FIELD IS AT THE FOOT, the glass pill and its close key; the close key clears the
+        // term and leaves, as Cancel did.
+        BandSearchField(
+            field = SearchField(open_ = true, term = state.term),
+            placeholder = chrome?.placeholder.orEmpty(),
+            onTerm = { term -> onEvent(HomeSearchEvent(term = HomeSearchEvent.TermChanged(term = term))) },
+            onClose = {
+                onEvent(HomeSearchEvent(cleared = HomeSearchEvent.Cleared()))
+                onCancel()
+            },
+            closeLabel = chrome?.close_label.orEmpty(),
+            testTag = "home-search",
+            onSubmit = { onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed())) },
+        )
     }
 }
 

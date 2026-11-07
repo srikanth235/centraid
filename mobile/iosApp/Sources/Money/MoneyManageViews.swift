@@ -38,7 +38,7 @@ struct MoneyAccountsView: View {
                 label: addLabel,
                 identifier: "money-account-add",
                 action: { send(event { $0.add = .init() }) }
-            ))
+            ), app: "money")
         } content: {
             ReadStateView(
                 content: content,
@@ -174,7 +174,7 @@ struct MoneyRulesView: View {
                 label: addLabel,
                 identifier: "money-rule-add",
                 action: { send(event { $0.add = .init() }) }
-            ))
+            ), app: "money")
         } content: {
             ReadStateView(
                 content: content,
@@ -337,7 +337,7 @@ struct MoneyCategoriesView: View {
                 label: addLabel,
                 identifier: "money-category-add",
                 action: { send(event { $0.add = .init() }) }
-            ))
+            ), app: "money")
         } content: {
             ReadStateView(
                 content: content,

@@ -415,7 +415,8 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .filter(|tab| tab.current)
             .map(|tab| tab.key.as_str())
             .collect::<Vec<_>>(),
-        ["day"]
+        // The Calendar tab is lit on Day; Day is a view inside it (`calendar_views`).
+        ["calendar"]
     );
     assert_eq!(state.chrome.as_ref().unwrap().new_event, "New event");
     // THE HEADER PLUS says Add: its sheet adds an event or a task (R-1128-Z1), and

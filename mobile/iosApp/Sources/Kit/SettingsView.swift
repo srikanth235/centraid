@@ -124,9 +124,29 @@ private struct SettingsRowView: View {
     let row: Centraid_Core_V1_SettingsRow
     let open: (Centraid_Core_V1_Route) -> Void
 
+    /// THE ROW'S TILE, as Rust names it: the vault's round initial, the state-amber fill (the
+    /// recovery key), or the shell's colour.
+    @ViewBuilder
+    private var tile: some View {
+        switch row.tile {
+        case "initial":
+            Text(row.initial)
+                .kitType(.row)
+                .fontWeight(.bold)
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(AppAccent.shell.fill, in: Circle())
+                .accessibilityHidden(true)
+        case "amber":
+            KitTile(iconKey: row.iconKey, size: 32, fill: StateColor.amber.fill)
+        default:
+            if !row.iconKey.isEmpty { KitTile(iconKey: row.iconKey, size: 32) }
+        }
+    }
+
     var body: some View {
         let content = HStack(spacing: 12) {
-            if !row.iconKey.isEmpty { KitTile(iconKey: row.iconKey, size: 32) }
+            tile
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.title).kitType(.row).foregroundStyle(Surface.ink)
                 if !row.meta.isEmpty {

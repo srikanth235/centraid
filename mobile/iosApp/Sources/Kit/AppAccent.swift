@@ -74,3 +74,16 @@ extension View {
         environment(\.appAccent, AppAccent(appId))
     }
 }
+
+/// AN APP'S TILE (#1173): its glyph in white on the app's own solid colour, the way the boards
+/// draw a row that names an app (Backup's "In this backup").
+struct AppTile: View {
+    let appID: String
+    var size: CGFloat = 32
+
+    var body: some View {
+        if let app = CentraidCatalog.byID[appID] {
+            KitTile(iconKey: app.iconKey, size: size, fill: AppAccent(appID).tile)
+        }
+    }
+}

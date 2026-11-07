@@ -288,7 +288,7 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CentraidCatalog.byId[tile.app_id]?.let { app ->
-            CentraidIcon(iconKey = app.iconKey, tint = appAccent(tile.app_id).text, size = 22.dp)
+            CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 22.dp)
         }
         if (figure.isNotEmpty()) WText(figure, ink(), strong = true)
         WText(caption, meta(), maxLines = 2, align = TextAlign.Center)
@@ -311,7 +311,7 @@ private fun Invitation(tile: HomeTile, modifier: Modifier) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             CentraidCatalog.byId[tile.app_id]?.let { app ->
-                CentraidIcon(iconKey = app.iconKey, tint = appAccent(tile.app_id).text, size = 16.dp)
+                CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 16.dp)
             }
             WText(tile.name, appAccent(tile.app_id).text, strong = true)
         }
@@ -370,3 +370,6 @@ private fun PhotoWidget(tile: HomeTile) {
         }
     }
 }
+
+/** THE MARK A WIDGET DRAWS: the app's own, except People's, which the board draws as the person. */
+private fun widgetIcon(appId: String, appIcon: String): String = if (appId == "people") "User" else appIcon
