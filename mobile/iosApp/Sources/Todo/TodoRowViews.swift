@@ -35,6 +35,10 @@ struct TodoRowView: View {
     /// The non-drag reorder, for a screen reader and the long press: nil at the group's edge.
     var onMoveUp: (() -> Void)? = nil
     var onMoveDown: (() -> Void)? = nil
+    /// A DAY'S DATE COLUMN, when the row is a row of Agenda's Day or Schedule `List`: the row keeps
+    /// `gutter` points free on its leading side, and the day's first row draws its date there.
+    var gutter: CGFloat = 0
+    var gutterContent: AnyView? = nil
 
     @Environment(\.colorScheme) private var scheme
 
@@ -46,7 +50,7 @@ struct TodoRowView: View {
             ForEach(row.children, id: \.taskID) { child in
                 TodoRowView(
                     row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix,
-                    chrome: chrome, onFlag: onFlag, onDelete: onDelete
+                    chrome: chrome, onFlag: onFlag, onDelete: onDelete, gutter: gutter
                 )
                 .padding(.leading, 28)
             }
@@ -176,6 +180,10 @@ struct TodoRowView: View {
         // THE RULE STARTS WHERE THE WORDS DO, as the phone's own lists draw it.
         .overlay(alignment: .bottom) {
             if !embedded { KitHairline(inset: CentraidGeometry.pageMargin + 20 + Self.boxOverhang) }
+        }
+        .padding(.leading, gutter)
+        .overlay(alignment: .topLeading) {
+            if let gutterContent { gutterContent.padding(.top, 8) }
         }
         .kitRowActions(rowActions)
     }
