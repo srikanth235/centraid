@@ -20,6 +20,8 @@ pub struct Settled {
     pub output: Vec<u8>,
     /// What undoes it, when the core knows.
     pub inverse: Option<wire::ActInverse>,
+    /// The tables the commit wrote, sorted. Empty when nothing committed.
+    pub tables: Vec<String>,
 }
 
 impl Settled {
@@ -67,6 +69,7 @@ pub fn act(ctx: &Ctx, request: impl Into<wire::ActRequest>, invoke_key: &str) ->
             refusal: String::new(),
             output: response.output,
             inverse: response.inverse,
+            tables: response.tables,
         },
         Ok(response) => Settled {
             committed: false,
@@ -77,12 +80,14 @@ pub fn act(ctx: &Ctx, request: impl Into<wire::ActRequest>, invoke_key: &str) ->
             },
             output: Vec::new(),
             inverse: None,
+            tables: Vec::new(),
         },
         Err(_) => Settled {
             committed: false,
             refusal: shared::write_refused(ctx.locale()),
             output: Vec::new(),
             inverse: None,
+            tables: Vec::new(),
         },
     }
 }

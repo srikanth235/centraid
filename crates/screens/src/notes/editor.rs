@@ -28,9 +28,16 @@
 //! missing) filled by [`Editor::resolve`]: at most 32 `link-targets` reads (the
 //! parse caps distinct titles) plus ONE `trash` read per call, and none while
 //! typing adds no new title. A read that fails caches nothing (the chip shows
-//! MISSING and is retried on the next update). The cache is CLEARED on every
-//! reload event (`DataChanged`, `EnvironmentChanged`, `Refreshed`), since a note
-//! may have been renamed, trashed or restored. The view only consults it.
+//! MISSING and is retried on the next update). After each fill the cache is
+//! PRUNED to the titles the body holds now. The view only consults it.
+//!
+//! **What clears the cache.** A note may have been renamed, trashed or restored
+//! by something other than this editor, so `EnvironmentChanged`, `Refreshed`
+//! and every `DataChanged` this editor did not cause CLEAR it. The core sends a
+//! `DataChanged` after every local commit, this editor's own saves included, and
+//! re-reading up to 33 times per save would be waste: an own commit is told by
+//! its MARKS (see [`Editor::own`]) and keeps the cache, except for the entries
+//! the saved note itself can change (its id, its old and its new title).
 //!
 //! **Core edits.** A checklist tap, Return and the status line's Undo are
 //! edits the core makes to the body (`rich::toggle`, `rich::return_at`) and
@@ -57,7 +64,7 @@ use crate::kit::civil;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, notes as words};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 const BRACKETS: &str = "[[";
 
@@ -160,6 +167,15 @@ impl Draft for NoteDraft {
     }
 }
 
+/// The title a save gives the note: the field, else the body's first line.
+fn effective_title(draft: &NoteDraft) -> String {
+    if draft.title.trim().is_empty() {
+        fold::first_line(&draft.body)
+    } else {
+        draft.title.clone()
+    }
+}
+
 /// A DERIVED TITLE STAYS DERIVED. The vault stores the title a save derived
 /// from the body's first line, and the clean re-read after that save brings it
 /// back — which would fill the field, so a later first-line edit no longer
@@ -196,6 +212,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         selection: None,
         selection_seq: 0,
         resolutions: HashMap::new(),
+        own: BTreeSet::new(),
         link: None,
         started: false,
     }))
@@ -237,6 +254,25 @@ struct Editor {
     selection_seq: u64,
     /// Typed `[[title]]` to what it resolved to. Never holds a failed read.
     resolutions: HashMap<String, Resolution>,
+    /// THE MARKS OF THIS EDITOR'S OWN COMMITS: the tables its committed writes
+    /// (a save, a pin, a tag) wrote, from the act's `tables`.
+    ///
+    /// The core queues one `DataChanged` per table per commit, and a screen's
+    /// `act` runs under the runtime's lock, so the change for a commit is heard
+    /// only after the `act` returned and its marks were set. A `DataChanged`
+    /// whose every table has a mark consumes those marks and is our own: the
+    /// note is read again, the resolutions are kept. A table without a mark, an
+    /// event naming no table, `EnvironmentChanged` and `Refreshed` are foreign
+    /// (a rename or a trash from elsewhere) and clear the cache.
+    ///
+    /// OBLIGATION: a mark stands for ONE pending change per table, because the
+    /// queue coalesces same-table changes: marking twice is one mark. A foreign
+    /// commit coalesced into our own change on the same table is therefore
+    /// taken for ours, and a mark for a table this screen never read is never
+    /// consumed; either leaves the cache stale until the next foreign change,
+    /// `Refreshed` or reopen. Never widen what a mark covers (no marks for
+    /// tables the act did not write, none carried across `EnvironmentChanged`).
+    own: BTreeSet<String>,
     link: Option<LinkSheet>,
     /// `Appeared` has been seen.
     started: bool,
@@ -381,7 +417,8 @@ impl Editor {
         self.auto.draft().map(|draft| rich::parse(&draft.body))
     }
 
-    /// FILL THE RESOLUTION CACHE for the typed titles it lacks: one
+    /// FILL THE RESOLUTION CACHE for the typed titles it lacks (after dropping
+    /// those the body no longer holds): one
     /// `link-targets` read each (at most 32, the parse's cap), then ONE `trash`
     /// read for those no live note answered. A failed read caches nothing and
     /// stops the round: the chip shows MISSING and the next update retries.
@@ -389,6 +426,10 @@ impl Editor {
         let Some(rich) = self.parsed() else {
             return;
         };
+        // PRUNE to the titles the body holds now: a title typed and removed
+        // costs one read again if it comes back.
+        self.resolutions
+            .retain(|title, _| rich.wiki_titles.contains(title));
         let titles: Vec<String> = rich
             .wiki_titles
             .into_iter()
@@ -450,6 +491,52 @@ impl Editor {
                     Resolution::Missing
                 },
             );
+        }
+    }
+
+    /// RUN ONE AUTOSAVE STEP (the timer, a flush) AND ACCOUNT FOR WHAT IT
+    /// COMMITTED: its tables become marks, and the resolutions the saved note
+    /// can change are dropped and read again now (an entry that resolved to it,
+    /// one typed as its old or its new title). Returns what the step returned.
+    fn saved(
+        &mut self,
+        ctx: &Ctx,
+        step: impl FnOnce(&mut Autosave<NoteDraft>, &Ctx) -> bool,
+    ) -> bool {
+        let before = self.auto.baseline().map(effective_title);
+        let again = step(&mut self.auto, ctx);
+        let written = self.auto.take_written();
+        if written.is_empty() {
+            return again;
+        }
+        self.own.extend(written);
+        let after = self.auto.baseline().map(effective_title);
+        let id = self
+            .auto
+            .draft()
+            .and_then(|draft| draft.id.clone())
+            .or_else(|| self.note_id.clone());
+        let names: Vec<String> = [before, after]
+            .into_iter()
+            .flatten()
+            .map(|title| title.trim().to_lowercase())
+            .filter(|title| !title.is_empty())
+            .collect();
+        self.resolutions.retain(|key, found| {
+            let itself = match found {
+                Resolution::Resolved { id: target, .. } => id.as_ref() == Some(&*target),
+                _ => false,
+            };
+            !itself && !names.contains(&key.trim().to_lowercase())
+        });
+        self.resolve(ctx);
+        again
+    }
+
+    /// A write of this editor that is not a save (pin, tag) committed.
+    fn wrote(&mut self, settled: &kit_act::Settled) {
+        if settled.committed {
+            self.own.extend(settled.tables.iter().cloned());
         }
     }
 
@@ -597,6 +684,7 @@ impl Editor {
         };
         let key = kit_act::key(&[&request.action.clone(), id], kit_act::fresh());
         let settled = kit_act::act(ctx, request, &key);
+        self.wrote(&settled);
         self.status = (!settled.committed).then_some(settled.refusal);
         self.undo = None;
         self.said = false;
@@ -645,6 +733,7 @@ impl Editor {
         };
         let key = kit_act::key(&[&request.action.clone(), &id, label], kit_act::fresh());
         let settled = kit_act::act(ctx, request, &key);
+        self.wrote(&settled);
         self.status = (!settled.committed).then_some(settled.refusal);
         self.undo = None;
         self.said = false;
@@ -652,7 +741,7 @@ impl Editor {
     }
 
     fn save_now(&mut self, ctx: &Ctx) {
-        if self.auto.flush(ctx) {
+        if self.saved(ctx, |auto, ctx| auto.flush(ctx)) {
             self.reload(ctx);
         }
         self.after_save(ctx);
@@ -752,7 +841,10 @@ impl Editor {
             }
             Some(N::LinkPicked(picked)) => self.pick_link(ctx, &picked.id),
             Some(N::LinkDismissed(_)) => self.link = None,
-            Some(N::Refreshed(_)) => self.reload_all(ctx),
+            Some(N::Refreshed(_)) => {
+                self.own.clear();
+                self.reload_all(ctx);
+            }
             Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
             Some(N::StatusActed(_)) => self.undo(ctx),
             Some(N::LinkOpened(opened)) => return self.open_chip(ctx, opened.at),
@@ -765,8 +857,23 @@ impl Editor {
         Vec::new()
     }
 
-    /// A reload event: a note may have been renamed, trashed or restored, so
-    /// what the typed titles meant is forgotten and read again.
+    /// The vault changed under this screen. Our own commit (every table has a
+    /// mark, see [`Editor::own`]) reads the note again and keeps what the
+    /// typed titles meant; anything else is foreign and forgets it.
+    fn data_changed(&mut self, ctx: &Ctx, tables: &[String]) {
+        let mut foreign = tables.is_empty();
+        for table in tables {
+            foreign |= !self.own.remove(table);
+        }
+        if foreign {
+            self.reload_all(ctx);
+        } else if self.note_id.is_some() {
+            self.reload(ctx);
+        }
+    }
+
+    /// A reload event from elsewhere: a note may have been renamed, trashed or
+    /// restored, so what the typed titles meant is forgotten and read again.
     fn reload_all(&mut self, ctx: &Ctx) {
         if self.note_id.is_some() {
             self.resolutions.clear();
@@ -1003,9 +1110,13 @@ impl Screen for Editor {
             // A CHANGE NEVER TAKES A MEMBER'S TYPING: `loaded` keeps unsaved
             // words and notes that the vault moved. The core sends a change for
             // every local commit, this editor's own saves included.
-            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload_all(ctx),
+            Some(E::DataChanged(changed)) => self.data_changed(ctx, &changed.tables),
+            Some(E::EnvironmentChanged(_)) => {
+                self.own.clear();
+                self.reload_all(ctx);
+            }
             Some(E::TimerFired(fired)) => {
-                if self.auto.fired(ctx, &fired.timer) {
+                if self.saved(ctx, |auto, ctx| auto.fired(ctx, &fired.timer)) {
                     self.reload(ctx);
                 }
                 self.after_save(ctx);
@@ -1175,6 +1286,8 @@ mod tests {
         /// `link-targets` and `trash` reads made through this ctx.
         links: std::cell::Cell<usize>,
         trashes: std::cell::Cell<usize>,
+        /// The tables the acts made through this ctx wrote, in order.
+        written: std::cell::RefCell<Vec<String>>,
     }
 
     impl<'a> Flaky<'a> {
@@ -1185,6 +1298,7 @@ mod tests {
                 fail_writes: false.into(),
                 links: 0.into(),
                 trashes: 0.into(),
+                written: Vec::new().into(),
             }
         }
     }
@@ -1211,7 +1325,9 @@ mod tests {
                     reason: "test write failure".into(),
                 })
             } else {
-                self.core.act(request)
+                let response = self.core.act(request)?;
+                self.written.borrow_mut().extend(response.tables.clone());
+                Ok(response)
             }
         }
 
@@ -1826,6 +1942,198 @@ mod tests {
         );
         assert_eq!(core.links.get() - links, 32);
         assert_eq!(core.trashes.get() - trashes, 1);
+    }
+
+    /// What the core does after a commit: one `DataChanged` per table.
+    fn deliver(screen: &mut Box<dyn Screen>, ctx: &Ctx, tables: &[String]) {
+        for table in tables {
+            send(
+                screen,
+                ctx,
+                E::DataChanged(wire::DataChanged {
+                    tables: vec![table.clone()],
+                }),
+            );
+        }
+    }
+
+    fn act_now(driver: &Driver, request: impl Into<wire::ActRequest>) -> Vec<String> {
+        let mut request: wire::ActRequest = request.into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let response = driver.act(request);
+        assert_eq!(response.status, wire::ActStatus::Executed as i32);
+        assert!(!response.tables.is_empty());
+        response.tables
+    }
+
+    fn fire(screen: &mut Box<dyn Screen>, ctx: &Ctx) {
+        send(
+            screen,
+            ctx,
+            E::TimerFired(wire::TimerFired {
+                timer: crate::kit::autosave::TIMER.into(),
+            }),
+        );
+    }
+
+    fn resolutions(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, i32)> {
+        chips(&state(screen, ctx))
+            .into_iter()
+            .map(|chip| (chip.label, chip.resolution))
+            .collect()
+    }
+
+    #[test]
+    fn our_own_save_keeps_the_resolved_titles() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        make(&driver, "Alpha", "x");
+        let id = make(&driver, "Host", "[[Alpha]] [[Ghost]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert_eq!((core.links.get(), core.trashes.get()), (2, 1));
+        typed(&mut screen, &ctx, "[[Alpha]] [[Ghost]] more");
+        fire(&mut screen, &ctx);
+        let written = core.written.borrow().clone();
+        assert!(!written.is_empty(), "the save committed");
+        // The change the core sends for our own commit, one per table.
+        deliver(&mut screen, &ctx, &written);
+        assert_eq!((core.links.get(), core.trashes.get()), (2, 1));
+        assert_eq!(resolutions(&*screen, &ctx).len(), 2);
+        // The marks are spent: the same tables changing again is foreign.
+        deliver(&mut screen, &ctx, &written);
+        assert_eq!(core.links.get(), 2 + 2 * written.len());
+        assert_eq!(core.trashes.get(), 1 + written.len());
+    }
+
+    #[test]
+    fn our_own_pin_keeps_the_resolved_titles() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        make(&driver, "Alpha", "x");
+        let id = make(&driver, "Host", "[[Alpha]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert_eq!(core.links.get(), 1);
+        ev(
+            &mut screen,
+            &ctx,
+            N::Pin(wire::notes_editor_event::PinToggled {}),
+        );
+        let written = core.written.borrow().clone();
+        assert!(!written.is_empty());
+        deliver(&mut screen, &ctx, &written);
+        assert_eq!(core.links.get(), 1);
+    }
+
+    #[test]
+    fn a_rename_or_a_trash_from_elsewhere_resolves_again_and_a_restore_too() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let alpha = make(&driver, "Alpha", "x");
+        let id = make(&driver, "Host", "[[Alpha]] [[Ghost]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let live = wire::NotesLinkResolution::Resolved as i32;
+        assert_eq!(resolutions(&*screen, &ctx)[0], ("Alpha".into(), live));
+        // Renamed elsewhere.
+        let tables = act_now(
+            &driver,
+            act::notes::EditNote {
+                note_id: alpha.clone(),
+                title: Some("Alpha two".into()),
+                ..Default::default()
+            },
+        );
+        let (links, trashes) = (core.links.get(), core.trashes.get());
+        deliver(&mut screen, &ctx, &tables);
+        assert_eq!(core.links.get() - links, 2 * tables.len());
+        assert_eq!(core.trashes.get() - trashes, tables.len());
+        assert_eq!(
+            resolutions(&*screen, &ctx)[0].1,
+            wire::NotesLinkResolution::Missing as i32
+        );
+        // Renamed back, then trashed.
+        act_now(
+            &driver,
+            act::notes::EditNote {
+                note_id: alpha.clone(),
+                title: Some("Alpha".into()),
+                ..Default::default()
+            },
+        );
+        let tables = act_now(
+            &driver,
+            act::notes::DeleteNote {
+                note_id: alpha.clone(),
+            },
+        );
+        let (links, trashes) = (core.links.get(), core.trashes.get());
+        deliver(&mut screen, &ctx, &tables[..1]);
+        assert_eq!(core.links.get() - links, 2);
+        assert_eq!(core.trashes.get() - trashes, 1);
+        assert_eq!(
+            resolutions(&*screen, &ctx)[0].1,
+            wire::NotesLinkResolution::Trashed as i32
+        );
+        // Restored.
+        let tables = act_now(&driver, act::notes::RestoreNote { note_id: alpha });
+        deliver(&mut screen, &ctx, &tables[..1]);
+        assert_eq!(resolutions(&*screen, &ctx)[0].1, live);
+    }
+
+    #[test]
+    fn our_save_that_renames_the_note_drops_only_its_own_titles() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        make(&driver, "Alpha", "x");
+        let id = make(&driver, "Host", "[[Host]] [[Alpha]] [[Renamed]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert_eq!((core.links.get(), core.trashes.get()), (3, 1));
+        let live = wire::NotesLinkResolution::Resolved as i32;
+        let missing = wire::NotesLinkResolution::Missing as i32;
+        assert_eq!(
+            resolutions(&*screen, &ctx),
+            [
+                ("Host".to_owned(), live),
+                ("Alpha".to_owned(), live),
+                ("Renamed".to_owned(), missing)
+            ]
+        );
+        ev(
+            &mut screen,
+            &ctx,
+            N::Title(wire::notes_editor_event::TitleEdited {
+                title: "Renamed".into(),
+            }),
+        );
+        fire(&mut screen, &ctx);
+        // Only "Host" (old title, and its id) and "Renamed" (new title) read again.
+        assert_eq!((core.links.get(), core.trashes.get()), (5, 2));
+        assert_eq!(
+            resolutions(&*screen, &ctx),
+            [
+                ("Host".to_owned(), missing),
+                ("Alpha".to_owned(), live),
+                ("Renamed".to_owned(), live)
+            ]
+        );
+        let written = core.written.borrow().clone();
+        deliver(&mut screen, &ctx, &written);
+        assert_eq!((core.links.get(), core.trashes.get()), (5, 2));
+    }
+
+    #[test]
+    fn the_cache_holds_only_the_titles_the_body_has() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        make(&driver, "Alpha", "x");
+        let id = make(&driver, "Host", "[[Alpha]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert_eq!(core.links.get(), 1);
+        typed(&mut screen, &ctx, "[[Ghost]]");
+        assert_eq!(core.links.get(), 2);
+        typed(&mut screen, &ctx, "[[Alpha]]");
+        assert_eq!(core.links.get(), 3, "Alpha was pruned, so it reads again");
+        typed(&mut screen, &ctx, "[[Alpha]] x");
+        assert_eq!(core.links.get(), 3);
     }
 
     #[test]

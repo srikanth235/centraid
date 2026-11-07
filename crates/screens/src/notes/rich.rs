@@ -32,8 +32,10 @@
 //!   `[[b]]` is.
 //! - A markdown link's URL ends at the FIRST `)` (so `(a(b))` is cut short),
 //!   may not contain whitespace, and its label may not contain `[`.
-//! - A bare URL runs to whitespace, so `**http://x**` swallows the closing
-//!   `**` (that emphasis stays plain). `***x***` is not specially handled.
+//! - A bare URL runs to whitespace, minus trailing punctuation and trailing
+//!   emphasis marks (`*`, `_`, `~`), so `**http://x**` is a strong span over
+//!   the URL, whose link is `http://x`; a mark inside the URL (`a_b`) stays.
+//!   `***x***` is not specially handled.
 //! - Styled spans may contain links and code; emphasis closers are matched
 //!   once, so an emphasis whose closer sits inside a code span or link is plain.
 //! - [`toggle`] writes a lowercase `x`: `[X]` toggles to `[ ]` and back to `[x]`.
@@ -595,8 +597,9 @@ impl Inline<'_, '_> {
         Some(end + 1)
     }
 
-    /// A bare `http(s)://` URL up to whitespace, minus trailing punctuation
-    /// and an unbalanced `)`.
+    /// A bare `http(s)://` URL up to whitespace, minus trailing punctuation,
+    /// trailing emphasis marks (`*`, `_`, `~`: the closer of a styled URL) and
+    /// an unbalanced `)`.
     fn url(&mut self, p: usize) -> Option<usize> {
         let rest = self.line.u.get(p..self.line.hi)?;
         let scheme = ["https://", "http://"]
@@ -614,7 +617,7 @@ impl Inline<'_, '_> {
             end += 1;
         }
         self.out.work += end - p;
-        let trim = b".,;:!?'\"";
+        let trim = b".,;:!?'\"*_~";
         while end > p + scheme {
             let last = self.line.at(end - 1)?;
             if trim.iter().any(|&b| u16::from(b) == last) {
@@ -1169,6 +1172,47 @@ mod tests {
             assert_eq!(link.label, want, "{body}");
             assert_eq!(link.target, LinkTarget::Url(want.to_owned()));
             assert_eq!(slice(body, rich.spans[0].range), want);
+        }
+    }
+
+    #[test]
+    fn a_styled_bare_url_keeps_its_closer_out_of_the_link() {
+        for (body, style) in [
+            ("**http://x.com**", SpanStyle::Strong),
+            ("_http://x.com_", SpanStyle::Emphasis),
+            ("~~http://x.com~~", SpanStyle::Strike),
+        ] {
+            let rich = parse(body);
+            let styled = rich
+                .spans
+                .iter()
+                .find(|span| span.style == style)
+                .unwrap_or_else(|| panic!("{body}: no {style:?} span"));
+            assert_eq!(slice(body, styled.range), "http://x.com", "{body}");
+            let link = rich
+                .spans
+                .iter()
+                .find_map(|span| span.link.clone())
+                .expect("a link");
+            assert_eq!(
+                link.target,
+                LinkTarget::Url("http://x.com".into()),
+                "{body}"
+            );
+        }
+        // A mark inside the URL stays; a mark before punctuation still goes.
+        for (body, want) in [
+            ("http://x.com/a_b", "http://x.com/a_b"),
+            ("http://x.com*.", "http://x.com"),
+        ] {
+            let rich = parse(body);
+            assert_eq!(rich.spans.len(), 1, "{body}");
+            assert_eq!(slice(body, rich.spans[0].range), want, "{body}");
+            assert_eq!(
+                rich.spans[0].link.clone().expect("link").target,
+                LinkTarget::Url(want.into()),
+                "{body}"
+            );
         }
     }
 
