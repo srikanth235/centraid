@@ -134,6 +134,13 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
+        "ScheduleNotifications.channel_name",
+        platform(
+            Shell::Android,
+            "a notification channel is Android; iOS's notification centre has no channel to name",
+        ),
+    ),
+    (
         "RollAsset.changed_in_place",
         platform(Shell::Android, EDITED_IN_PLACE),
     ),
