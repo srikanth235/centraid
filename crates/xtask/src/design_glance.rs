@@ -302,6 +302,29 @@ mod tests {
     }
 
     #[test]
+    fn the_intent_titles_are_the_catalogues_words() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let words = resolve(&std::fs::read_to_string(root.join(GLANCE_SOURCE)).expect("reads"))
+            .expect("resolves");
+        let intents = std::fs::read_to_string(
+            root.join("mobile/iosApp/Sources/Agenda/Glance/AgendaIntents.swift"),
+        )
+        .expect("the intents file");
+        for name in [
+            "INTENT_ADD_TITLE",
+            "INTENT_ADD_TITLE_PARAMETER",
+            "INTENT_NEXT_TITLE",
+        ] {
+            let literal = quote(words.constant(name));
+            assert!(
+                intents.contains(&format!("= {literal}"))
+                    || intents.contains(&format!("title: {literal}")),
+                "{name} is not the intents' literal {literal}"
+            );
+        }
+    }
+
+    #[test]
     fn android_strings_are_escaped_for_aapt_and_xml() {
         assert_eq!(
             android_text("What's <new> & \"more\""),

@@ -4,27 +4,27 @@ import Foundation
 /// AGENDA FROM SIRI, SHORTCUTS AND THE WIDGETS' GALLERY (#1173, wave 3).
 ///
 /// Both intents are named by the generated `Design/AgendaShortcuts.swift`
-/// (`AddReminderIntent`, `WhatsNextIntent`); the words come from the generated
-/// `GlanceWords`, finished by Rust, and none is typed here.
+/// (`AddReminderIntent`, `WhatsNextIntent`); the words are the catalogue's, finished by Rust (the titles
+/// repeat it as literals, see below); the spoken answer is read from `GlanceWords`.
 ///
 /// `static let` and not `static var`: the protocol asks for a getter, and a
 /// mutable static is not concurrency-safe under Swift 6.
 ///
-/// NOTE FOR A MAC RUN: AppIntents' metadata extraction prefers literal titles. A
-/// title read from `GlanceWords` is a constant string at run time; if Xcode warns
-/// that the metadata could not be extracted, or Shortcuts does not list the
-/// intent, that is the cause and the owner decides how the catalogue should emit
-/// the title (the same question the shortcut phrases already answered by being
-/// generated as literals).
+/// THE TITLES ARE STRING LITERALS, because AppIntents' metadata extraction
+/// refuses `LocalizedStringResource(stringLiteral: <constant>)` (a compile error
+/// in the `appintentsmetadataprocessor` step). They repeat the catalogue's
+/// `intent_add_title`, `intent_add_title_parameter` and `intent_next_title`, and
+/// the xtask test `the_intent_titles_are_the_catalogues_words` fails if they
+/// drift from `GlanceWords`.
 
 /// "Add a reminder": opens the app on Agenda's Reminders with the quick-add bar
 /// holding what the member said. NOTHING IS WRITTEN HERE: the core answers the
 /// fact with a route, and the member taps Add.
 struct AddReminderIntent: AppIntent {
-    static let title = LocalizedStringResource(stringLiteral: GlanceWords.INTENT_ADD_TITLE)
+    static let title: LocalizedStringResource = "Add a reminder"
     static let openAppWhenRun: Bool = true
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: GlanceWords.INTENT_ADD_TITLE_PARAMETER))
+    @Parameter(title: "Reminder")
     var reminder: String?
 
     init() {}
@@ -46,7 +46,7 @@ struct AddReminderIntent: AppIntent {
 /// "What's next": Siri speaks the sentence Rust wrote into the snapshot. It reads
 /// the App Group file only; the app is not opened and the vault is never touched.
 struct WhatsNextIntent: AppIntent {
-    static let title = LocalizedStringResource(stringLiteral: GlanceWords.INTENT_NEXT_TITLE)
+    static let title: LocalizedStringResource = "What's next"
     static let openAppWhenRun: Bool = false
 
     init() {}
