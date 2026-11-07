@@ -1978,6 +1978,42 @@
           }
         }
       }
+    },
+    {
+      "name": "due-rows",
+      "kind": "task",
+      "figures": ["tasks"],
+      "description": "The open tasks due soonest, read in due order over every open task in the vault and never over a board's window of the newest, so the rows are the earliest at any vault size: window `now` is overdue first and then due today (each by due, then the member's order), window `timed_ahead` is the tasks with a time due today or tomorrow. At most `limit` rows (1 to 12, default 6), the open top-level tasks the board draws, each placed as the board places it (a repeating task by its next period). Rows are single tasks: no families.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "enum": ["now", "timed_ahead"],
+            "description": "Which dues are read."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array"
+          },
+          "today_day": {
+            "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [

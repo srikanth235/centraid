@@ -47,7 +47,7 @@ use centraid_api_proto::core_v1 as wire;
 use serde_json::{Map, Value, json};
 
 use crate::agenda::todo::rows;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda, agenda_glance as words, fill, shared, task as task_words};
 
 /// The document's schema version.
@@ -77,9 +77,13 @@ pub struct Inputs<'a> {
     /// The events covering today and tomorrow, padded (see `held.rs`): a row is
     /// kept for the days its `local_days` names.
     pub upcoming: &'a wire::AgendaUpcoming,
-    /// The `all` board's window: the open tasks the rows are drawn from, dated
-    /// first. Its size says nothing about how many tasks there are.
-    pub tasks: &'a wire::AgendaTaskBoard,
+    /// The open tasks the rows are drawn from: the earliest due (overdue and
+    /// today) and the timed ones due today or tomorrow, each read in due order
+    /// over every open task (`agenda.task.due-rows`), never a window of the
+    /// newest. Their number says nothing about how many tasks there are.
+    pub tasks: &'a [wire::AgendaTask],
+    /// How the phone words a time of day.
+    pub cycle: HourCycle,
     /// The true Today, Overdue and Flagged counts, over the whole vault.
     pub counts: &'a wire::AgendaTaskSmartCounts,
 }
@@ -156,7 +160,8 @@ pub fn unavailable(locale: Locale, zone: &str) -> Vec<u8> {
         today: "",
         now_local: "",
         upcoming: &wire::AgendaUpcoming::default(),
-        tasks: &wire::AgendaTaskBoard::default(),
+        tasks: &[],
+        cycle: HourCycle::default(),
         counts: &wire::AgendaTaskSmartCounts::default(),
     };
     document(
@@ -325,13 +330,8 @@ pub(super) fn tint_of(task: &wire::AgendaTask) -> &'static str {
     if task.overdue { TINT_RED } else { TINT_AGENDA }
 }
 
-fn open_roots(board: &wire::AgendaTaskBoard) -> Vec<&wire::AgendaTask> {
-    board
-        .groups
-        .iter()
-        .flat_map(|group| &group.tasks)
-        .filter(|task| rows::is_open(task))
-        .collect()
+fn open_roots(tasks: &[wire::AgendaTask]) -> Vec<&wire::AgendaTask> {
+    tasks.iter().filter(|task| rows::is_open(task)).collect()
 }
 
 /// An event has not ended while its end (its start, with no length) is still
@@ -382,7 +382,7 @@ fn up_next(inputs: &Inputs, tomorrow: &str) -> Vec<Item> {
                 (shared::all_day(locale), midnight(day), String::new())
             } else if starts_here {
                 (
-                    civil::clock(&event.local_start),
+                    civil::clock_for(locale, &event.local_start, inputs.cycle),
                     event.local_start.clone(),
                     event.local_end.clone(),
                 )
@@ -417,7 +417,7 @@ fn up_next(inputs: &Inputs, tomorrow: &str) -> Vec<Item> {
                 id: id_of(&task.task_id),
                 kind: "task",
                 title: task_title(locale, task),
-                time_label: task.due_time.clone(),
+                time_label: civil::time_for(locale, &task.due_time, inputs.cycle),
                 day_label: day_label(locale, is_tomorrow),
                 starts_local: task.due_local.clone(),
                 ends_local: String::new(),
@@ -450,11 +450,12 @@ fn day_label(locale: Locale, tomorrow: bool) -> String {
 }
 
 /// Overdue first, then today's, each by due then sort order. The rows are the
-/// window's; the counts are the vault's ([`Inputs::counts`]).
+/// earliest due the read answered; the counts are the vault's ([`Inputs::counts`]).
 fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
     let locale = inputs.locale;
     let context = rows::Context {
         today: inputs.today,
+        cycle: inputs.cycle,
         ..rows::Context::default()
     };
     let mut due: Vec<&wire::AgendaTask> = open

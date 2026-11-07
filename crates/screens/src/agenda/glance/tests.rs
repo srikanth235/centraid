@@ -9,6 +9,7 @@ use super::snapshot::{
     self, Inputs, MAX_BYTES, MAX_ID, MAX_ROWS, MAX_TITLE, clip, ready, refresh_after_of,
     seconds_between, unavailable,
 };
+use crate::kit::civil::HourCycle;
 use crate::strings::Locale;
 
 const TODAY: &str = "2026-11-07";
@@ -66,16 +67,6 @@ fn task(id: &str, title: &str, due_day: &str, due_time: &str) -> wire::AgendaTas
     }
 }
 
-fn board(tasks: Vec<wire::AgendaTask>) -> wire::AgendaTaskBoard {
-    wire::AgendaTaskBoard {
-        groups: vec![wire::AgendaTaskGroup {
-            tasks,
-            ..Default::default()
-        }],
-        ..Default::default()
-    }
-}
-
 /// What the core's count read would say about `tasks` if they were every open
 /// task there is (the fixtures below that are small enough to be).
 fn counted(tasks: &[wire::AgendaTask]) -> wire::AgendaTaskSmartCounts {
@@ -96,17 +87,26 @@ fn bytes(events: Vec<wire::AgendaEvent>, tasks: Vec<wire::AgendaTask>) -> Vec<u8
     bytes_counting(events, tasks, &counts)
 }
 
-/// The document when the counts are the vault's and the rows are only the window.
+/// The document when the counts are the vault's and the rows are only the few read.
 fn bytes_counting(
     events: Vec<wire::AgendaEvent>,
     tasks: Vec<wire::AgendaTask>,
     counts: &wire::AgendaTaskSmartCounts,
 ) -> Vec<u8> {
+    bytes_worded(events, tasks, counts, HourCycle::default())
+}
+
+/// The same, on a phone that words its times as `cycle`.
+fn bytes_worded(
+    events: Vec<wire::AgendaEvent>,
+    tasks: Vec<wire::AgendaTask>,
+    counts: &wire::AgendaTaskSmartCounts,
+    cycle: HourCycle,
+) -> Vec<u8> {
     let upcoming = wire::AgendaUpcoming {
         events,
         ..Default::default()
     };
-    let tasks = board(tasks);
     ready(&Inputs {
         locale: Locale::En,
         zone: ZONE,
@@ -114,6 +114,7 @@ fn bytes_counting(
         now_local: NOW,
         upcoming: &upcoming,
         tasks: &tasks,
+        cycle,
         counts,
     })
 }
@@ -432,14 +433,14 @@ fn refresh_after_is_the_next_midnight_or_the_nearest_boundary() {
     assert_eq!(midnight["refresh_after"], "2026-11-08T00:00");
     // A year's end rolls the year.
     let upcoming = wire::AgendaUpcoming::default();
-    let tasks = wire::AgendaTaskBoard::default();
     let year_end = ready(&Inputs {
         locale: Locale::En,
         zone: ZONE,
         today: "2026-12-31",
         now_local: "2026-12-31T23:10",
         upcoming: &upcoming,
-        tasks: &tasks,
+        tasks: &[],
+        cycle: HourCycle::default(),
         counts: &wire::AgendaTaskSmartCounts::default(),
     });
     assert_eq!(
@@ -649,4 +650,36 @@ fn control_characters_cannot_push_the_document_past_its_bound() {
 #[test]
 fn the_module_documents_its_version() {
     assert_eq!(snapshot::VERSION, 1);
+}
+
+/// THE PHONE'S 12 OR 24 HOUR SETTING: the rows' labels and the sentence Siri
+/// speaks are worded as the phone words a time; the default stays 24-hour; the
+/// machine strings a widget compares (`starts_local`) never change.
+#[test]
+fn times_follow_the_phones_hour_cycle() {
+    let events = || {
+        vec![event(
+            "d",
+            "Dentist",
+            "2026-11-07T15:00",
+            "2026-11-07T16:00",
+            false,
+            &[TODAY],
+        )]
+    };
+    let tasks = || vec![task("t", "Send invoice", TODAY, "17:30")];
+    let counts = counted(&tasks());
+    let twelve: Value =
+        serde_json::from_slice(&bytes_worded(events(), tasks(), &counts, HourCycle::H12))
+            .expect("JSON");
+    assert_eq!(twelve["up_next"][0]["time_label"], "3:00 PM");
+    assert_eq!(twelve["up_next"][1]["time_label"], "5:30 PM");
+    assert_eq!(twelve["up_next"][0]["starts_local"], "2026-11-07T15:00");
+    assert_eq!(
+        twelve["siri"]["next_sentence"],
+        "Next is Dentist at 3:00 PM."
+    );
+    let plain = build(events(), tasks());
+    assert_eq!(plain["up_next"][0]["time_label"], "15:00");
+    assert_eq!(plain["up_next"][1]["time_label"], "17:30");
 }

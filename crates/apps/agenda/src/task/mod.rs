@@ -55,6 +55,7 @@ pub use board::{
     is_open_board_root, is_open_status, nest_task_families,
 };
 pub use queries::{
-    BoardData, RepeatingDue, SearchData, TaskDetailData, TaskRow, TrashData, TrashRow, load_board,
-    load_repeating_due, load_search, load_search_term, load_task, load_trash,
+    BoardData, DUE_ROWS_MAX, DueWindow, RepeatingDue, SearchData, TaskDetailData, TaskRow,
+    TrashData, TrashRow, load_board, load_due_rows, load_repeating_due, load_search,
+    load_search_term, load_task, load_trash,
 };

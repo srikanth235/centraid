@@ -33,7 +33,6 @@ use wire::screen_event::Kind as E;
 
 use super::snapshot::{self, Inputs};
 use crate::agenda::routes;
-use crate::agenda::todo::rows;
 use crate::catalog::load::agenda as query;
 use crate::kit::civil;
 use crate::kit::read::{Reading, read};
@@ -44,6 +43,10 @@ pub const NAME: &str = "agenda.glance";
 
 /// The timer that rebuilds the document when it goes stale.
 const ROLLOVER: &str = "glance.rollover";
+/// How many rows each due-ordered read asks for: the reminders draw six, and up
+/// next draws what is timed today and tomorrow of twelve.
+const DUE_ROWS: u32 = 6;
+const AHEAD_ROWS: u32 = 12;
 /// The rollover's floor and ceiling.
 const MIN_ROLLOVER: Duration = Duration::from_secs(60);
 const MAX_ROLLOVER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -227,20 +230,40 @@ fn document(ctx: &Ctx) -> Vec<u8> {
     ) else {
         return unavailable();
     };
-    let Reading::Data(tasks) = read(
-        ctx,
-        query::Board {
-            limit: rows::MAX_WINDOW,
-            view: Some(query::BoardView::All),
-            project_id: None,
-        },
-        |answer| match answer {
-            Answer::AgendaTaskBoard(board) => Some(board),
-            _ => None,
-        },
-    ) else {
+    // THE ROWS ARE THE EARLIEST DUE, read in due order over every open task (a
+    // board's window is the newest, which a vault with more open work than the
+    // window holds would not make the earliest): overdue then today for the
+    // reminders, and the timed tasks of today and tomorrow for up next.
+    let due_rows = |window: query::DueRowsWindow, limit: u32| {
+        read(
+            ctx,
+            query::DueRows {
+                limit,
+                window: Some(window),
+            },
+            |answer| match answer {
+                Answer::AgendaTaskDueRows(rows) => Some(rows),
+                _ => None,
+            },
+        )
+    };
+    let Reading::Data(now_rows) = due_rows(query::DueRowsWindow::Now, DUE_ROWS) else {
         return unavailable();
     };
+    let Reading::Data(ahead_rows) = due_rows(query::DueRowsWindow::TimedAhead, AHEAD_ROWS) else {
+        return unavailable();
+    };
+    // A read for another day than the one the rest was read on (the clock crossed
+    // midnight between the reads) is not a set of rows for this document.
+    if now_rows.today_day != context.today || ahead_rows.today_day != context.today {
+        return unavailable();
+    }
+    let mut tasks = now_rows.tasks;
+    for task in ahead_rows.tasks {
+        if !tasks.iter().any(|held| held.task_id == task.task_id) {
+            tasks.push(task);
+        }
+    }
     // THE TRUE COUNTS are their own read: the board above is a window of the
     // newest open tasks, so counting it would undercount a vault with more
     // open work than the window holds. A count for another day than the one
@@ -262,6 +285,7 @@ fn document(ctx: &Ctx) -> Vec<u8> {
         now_local: &context.now_local,
         upcoming: &upcoming,
         tasks: &tasks,
+        cycle: ctx.hour_cycle(),
         counts: &counts,
     })
 }

@@ -462,6 +462,24 @@ message AgendaTaskSmartCountsRequest {
   string tz = 1;
 }
 
+// `agenda.task.due-rows`: the earliest-due open tasks of one window, at any vault size.
+message AgendaTaskDueRowsRequest {
+  // The zone the days are read in (the file header's rule).
+  string tz = 1;
+  // How many rows at most: 1...12; zero is 6.
+  uint32 limit = 2;
+  AgendaTaskDueWindow window = 3;
+}
+
+// Which tasks `agenda.task.due-rows` reads.
+enum AgendaTaskDueWindow {
+  AGENDA_TASK_DUE_WINDOW_UNSPECIFIED = 0;
+  // Overdue first, then due today: each by due, then the member's order.
+  AGENDA_TASK_DUE_WINDOW_NOW = 1;
+  // Tasks with a time due today or tomorrow (none overdue), by due.
+  AGENDA_TASK_DUE_WINDOW_TIMED_AHEAD = 2;
+}
+
 // `agenda.task.trash`: the trashed tasks, most recently trashed first.
 message AgendaTaskTrashRequest {
   // The zone the rows' days are read in: the stated IANA name, else the vault's;
@@ -700,6 +718,16 @@ message AgendaTaskSmartCounts {
   uint32 flagged = 3;
   // The day `today` and `overdue` are counted against, `YYYY-MM-DD`: the vault clock's day in `tz`.
   string today_day = 4;
+}
+
+// THE EARLIEST-DUE ROWS (#1173): a bounded read in due order over every open task, never a board's
+// window of the newest, so the widget's rows are the ones due soonest at any vault size. They are
+// the open roots the board draws, each placed as the board places it (a repeating task by its next
+// period). `tasks` are single rows: no families.
+message AgendaTaskDueRows {
+  // The day the rows were placed against, `YYYY-MM-DD`: the vault clock's day in `tz`.
+  string today_day = 1;
+  repeated AgendaTask tasks = 2;
 }
 
 message AgendaTaskDetail {

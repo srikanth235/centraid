@@ -164,6 +164,75 @@ fn the_counts_say_every_open_task_when_the_rows_are_only_a_window() {
     );
 }
 
+/// THE SIX ROWS ARE THE EARLIEST DUE (#1173): with more open tasks than the
+/// board's window holds, the first row is the earliest due, whichever was made
+/// first or last, and the rest follow in due order.
+#[test]
+fn the_rows_are_the_earliest_due_in_a_vault_bigger_than_the_boards_window() {
+    let mut d = Driver::with_runtime(runtime());
+    d.start();
+    answer_glance(&mut d, done());
+    let add = |title: String, due: &str| {
+        arrange(
+            &d,
+            centraid_screens::catalog::act::agenda::AddTask {
+                title,
+                due: Field::Is(due.to_owned()),
+                ..Default::default()
+            },
+        );
+    };
+    add("Zq earliest, made first".to_owned(), "1999-12-30");
+    for n in 0..centraid_screens::agenda::todo::rows::MAX_WINDOW as usize + 20 {
+        add(format!("Zq later {n}"), "2000-01-01");
+    }
+    add("Zq second, made last".to_owned(), "1999-12-31");
+    d.send(SERVICE, changed());
+    let asked = documents(&d);
+    assert_eq!(asked.len(), 1);
+    let rows = asked[0]["reminders"]["rows"].as_array().expect("rows");
+    assert_eq!(rows.len(), 6);
+    assert_eq!(rows[0]["title"], "Zq earliest, made first");
+    assert_eq!(rows[1]["title"], "Zq second, made last");
+    assert!(rows.iter().all(|row| row["overdue"] == true), "{rows:?}");
+}
+
+/// THE PHONE'S HOUR SETTING reaches the snapshot: the service rebuilds when the
+/// environment changes, and the words are the phone's.
+#[test]
+fn a_change_of_hour_cycle_rebuilds_the_snapshot_in_the_phones_words() {
+    let mut d = Driver::with_runtime(runtime());
+    d.start();
+    answer_glance(&mut d, done());
+    let today = todo_support::today(&d);
+    arrange(
+        &d,
+        centraid_screens::catalog::act::agenda::AddTask {
+            title: "Zq timed".to_owned(),
+            due: Field::Is(format!("{today}T23:30")),
+            ..Default::default()
+        },
+    );
+    d.send(SERVICE, changed());
+    let first = documents(&d);
+    answer_glance(&mut d, done());
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        zone: "UTC".to_owned(),
+        hour_cycle_12: true,
+        ..Default::default()
+    }));
+    let second = documents(&d);
+    assert_eq!(second.len(), 1, "a changed word is a new snapshot");
+    let label = |docs: &[Value]| {
+        docs[0]["reminders"]["rows"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["title"] == "Zq timed"))
+            .map(|row| row["due_label"].clone())
+    };
+    assert_ne!(label(&first), label(&second), "{first:?} {second:?}");
+}
+
 #[test]
 fn the_runtime_relays_a_commit_to_the_service_once() {
     let mut d = Driver::with_runtime(runtime());

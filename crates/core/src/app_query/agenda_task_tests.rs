@@ -157,6 +157,20 @@ impl Scratch {
         }
     }
 
+    fn due_rows(&self, window: wire::AgendaTaskDueWindow, limit: u32) -> wire::AgendaTaskDueRows {
+        match self
+            .ask(Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+                tz: TZ.to_owned(),
+                limit,
+                window: window as i32,
+            }))
+            .expect("the due rows answer")
+        {
+            A::AgendaTaskDueRows(rows) => rows,
+            other => panic!("the due rows answered as {other:?}"),
+        }
+    }
+
     fn flag(&self, id: &str) {
         self.run(
             "flag.set",
@@ -1051,4 +1065,197 @@ fn the_counts_refuse_an_unknown_zone() {
         },
     ));
     assert!(refused.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// The earliest-due rows (#1173): the widget's rows at any vault size.
+// ---------------------------------------------------------------------------
+
+fn titles_of(rows: &wire::AgendaTaskDueRows) -> Vec<&str> {
+    rows.tasks.iter().map(|task| task.title.as_str()).collect()
+}
+
+/// THE EARLIEST DUE IS ROW ONE, WHEN IT IS THE OLDEST CREATED: with 561 open tasks
+/// the board's window of the newest 500 does not hold it at all, and the due-ordered
+/// read puts it first.
+#[test]
+fn the_earliest_due_is_the_first_row_in_a_vault_larger_than_the_boards_window() {
+    use wire::AgendaTaskDueWindow as W;
+    // 10:00 on 1 June in New York: the minutes the test spends stay on the day.
+    let scratch = Scratch::founded_at("2099-06-01T14:00:00.000Z");
+    // Created first, so the oldest by creation, and due before everything else.
+    scratch.titled("Earliest due, oldest made", Some("2099-04-01"));
+    for n in 0..558 {
+        scratch.advance_minutes(1);
+        scratch.titled(&format!("Filler {n}"), None);
+    }
+    scratch.advance_minutes(1);
+    scratch.titled("Later overdue", Some("2099-05-20"));
+    scratch.advance_minutes(1);
+    scratch.titled("Today", Some("2099-06-01"));
+    scratch.advance_minutes(1);
+    let board = scratch.board(wire::AgendaTaskView::All);
+    assert!(board.truncated, "561 open tasks do not fit a 500 window");
+    assert!(
+        !board
+            .groups
+            .iter()
+            .flat_map(|group| &group.tasks)
+            .any(|task| task.title == "Earliest due, oldest made"),
+        "the board's window of the newest does not hold the oldest"
+    );
+
+    let rows = scratch.due_rows(W::Now, 6);
+    assert_eq!(rows.today_day, "2099-06-01");
+    assert_eq!(
+        titles_of(&rows),
+        ["Earliest due, oldest made", "Later overdue", "Today"],
+        "overdue first by due, then today"
+    );
+    assert!(rows.tasks[0].overdue && !rows.tasks[2].overdue);
+}
+
+/// ORDER AND BOUNDS: overdue first by due, then today's by day, time and the
+/// member's order; a limit is clamped to 12 and zero is 6; closed, trashed and
+/// nested work and the future are no row; a flag is carried.
+#[test]
+fn the_due_rows_are_ordered_bounded_and_the_boards_roots() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    // 2099-06-01 is today (22:00 in New York).
+    scratch.titled("Today, timed", Some("2099-06-01T09:00"));
+    scratch.titled("Today, by date", Some("2099-06-01"));
+    scratch.titled("Today, by instant", Some("2099-06-01T14:00:00.000Z"));
+    let late = scratch.titled("Late 2", Some("2099-05-30"));
+    scratch.flag(&late);
+    scratch.titled("Late 1", Some("2099-05-29"));
+    // 03:00Z on the 30th is 23:00 on the 29th in New York: overdue, after the date-only 29th.
+    scratch.titled("Late 1.5", Some("2099-05-30T03:00:00.000Z"));
+    // 03:30Z on the 2nd is 23:30 tonight; 04:30Z is tomorrow.
+    scratch.titled("Tonight, by instant", Some("2099-06-02T03:30:00.000Z"));
+    scratch.titled("Tomorrow, by instant", Some("2099-06-02T04:30:00.000Z"));
+    scratch.titled("Tomorrow", Some("2099-06-02"));
+    scratch.titled("Someday", None);
+    let done = scratch.titled("Done", Some("2099-05-01"));
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    let trashed = scratch.titled("Trashed", Some("2099-05-01"));
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    let parent = scratch.titled("Parent", Some("2099-06-01T20:00"));
+    scratch.add(serde_json::json!({
+        "title": "Nested, very late", "parent_id": parent, "due": "2099-04-01",
+    }));
+
+    let rows = scratch.due_rows(W::Now, 0);
+    assert_eq!(
+        titles_of(&rows),
+        [
+            // Overdue by due.
+            "Late 1",
+            "Late 1.5",
+            "Late 2",
+            // Today: the date-only first, then by time.
+            "Today, by date",
+            "Today, timed",
+            "Today, by instant",
+        ],
+        "the default is six rows"
+    );
+    assert!(rows.tasks[2].flagged && !rows.tasks[0].flagged);
+    assert_eq!(rows.tasks[2].task_id, late);
+
+    let twelve = scratch.due_rows(W::Now, 99);
+    assert_eq!(
+        titles_of(&twelve),
+        [
+            "Late 1",
+            "Late 1.5",
+            "Late 2",
+            "Today, by date",
+            "Today, timed",
+            "Today, by instant",
+            "Parent",
+            "Tonight, by instant",
+        ],
+        "every wanted row, never the future, the closed, the trashed or the nested"
+    );
+    assert_eq!(scratch.due_rows(W::Now, 2).tasks.len(), 2);
+}
+
+/// THE TIMED WINDOW: tasks with a time due today or tomorrow, by due; never an
+/// overdue one, a date-only one or the day after.
+#[test]
+fn the_timed_window_is_todays_and_tomorrows_timed_tasks() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    scratch.titled("Overdue, timed", Some("2099-05-31T09:00"));
+    scratch.titled("Today, date only", Some("2099-06-01"));
+    scratch.titled("Today evening", Some("2099-06-01T20:00"));
+    scratch.titled("Tonight, by instant", Some("2099-06-02T03:30:00.000Z"));
+    scratch.titled("Tomorrow, by instant", Some("2099-06-02T04:30:00.000Z"));
+    scratch.titled("Tomorrow morning", Some("2099-06-02T08:00"));
+    scratch.titled("Tomorrow, date only", Some("2099-06-02"));
+    scratch.titled("The day after", Some("2099-06-03T08:00"));
+    scratch.titled("Undated", None);
+    let rows = scratch.due_rows(W::TimedAhead, 12);
+    assert_eq!(
+        titles_of(&rows),
+        [
+            "Today evening",
+            "Tonight, by instant",
+            "Tomorrow, by instant",
+            "Tomorrow morning",
+        ]
+    );
+}
+
+/// A REPEATING TASK IS DATED BY ITS NEXT PERIOD and merged with the one-offs by
+/// due: a daily one is today's and one whose first period is ahead is no row.
+#[test]
+fn a_repeating_task_is_placed_by_its_next_period() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    scratch.titled("One-off, late", Some("2099-05-25"));
+    scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Starts next month", "due": "2099-07-01", "rule": "FREQ=DAILY",
+    }));
+    let rows = scratch.due_rows(W::Now, 6);
+    assert_eq!(titles_of(&rows), ["One-off, late", "Water the plants"]);
+    assert!(rows.tasks[1].repeats && rows.tasks[1].lands_today);
+    assert_eq!(
+        rows.tasks[1].next_due.as_deref().map(|due| &due[..10]),
+        Some("2099-06-01")
+    );
+}
+
+/// A BAD ZONE is the read's own refusal, as for every agenda query.
+#[test]
+fn the_due_rows_refuse_an_unknown_zone() {
+    let scratch = Scratch::founded();
+    let refused = scratch.ask(Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+        tz: "Not/AZone".to_owned(),
+        limit: 6,
+        window: 1,
+    }));
+    assert!(refused.is_err());
+}
+
+/// THE INDEX'S ORDER IS NOT THE ZONE'S DAY: an instant on the 30th at 03:00Z is the
+/// 29th, 23:00 in New York, so it is due before every date-only 30th the index lists
+/// ahead of it. The walk reads past a page of them to find it.
+#[test]
+fn an_instant_the_index_lists_late_is_still_the_earliest_by_the_local_day() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    for n in 0..30 {
+        scratch.titled(&format!("Date only {n}"), Some("2099-05-30"));
+    }
+    scratch.titled(
+        "Local evening of the 29th",
+        Some("2099-05-30T03:00:00.000Z"),
+    );
+    let rows = scratch.due_rows(W::Now, 1);
+    assert_eq!(titles_of(&rows), ["Local evening of the 29th"]);
 }

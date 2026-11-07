@@ -248,6 +248,44 @@ pub(crate) fn smart_counts(
     )
 }
 
+/// `agenda.task.due-rows`: the earliest-due open tasks of one window (#1173).
+///
+/// The widget's rows. Read in due order over every open task by
+/// [`task::load_due_rows`], never from the board's window of the newest, so the
+/// answer is the same at any vault size.
+pub(crate) fn due_rows(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaTaskDueRowsRequest,
+) -> Result<Answer> {
+    use wire::AgendaTaskDueWindow as W;
+    let zone = zone_of(vault, &asked.tz)?;
+    let today = today_in(&zone, now)?;
+    let window = match W::try_from(asked.window).unwrap_or(W::Unspecified) {
+        W::Unspecified | W::Now => task::DueWindow::Now,
+        W::TimedAhead => task::DueWindow::TimedAhead,
+    };
+    let limit = if asked.limit == 0 {
+        6
+    } else {
+        usize::try_from(asked.limit).unwrap_or(task::DUE_ROWS_MAX)
+    };
+    door.tables
+        .borrow_mut()
+        .extend(["edge", "entity", "task"].map(str::to_owned));
+    settle(
+        door,
+        task::load_due_rows(door, now, &zone, &today, window, limit).map(|rows| (rows, None)),
+        |rows| {
+            Answer::AgendaTaskDueRows(wire::AgendaTaskDueRows {
+                today_day: today.day_text(),
+                tasks: rows.iter().map(task_to_wire).collect(),
+            })
+        },
+    )
+}
+
 /// `agenda.task.trash`: the trashed tasks, each day read in the request's zone (none
 /// when no zone resolved).
 pub(crate) fn trash(
