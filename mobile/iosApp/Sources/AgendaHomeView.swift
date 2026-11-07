@@ -504,7 +504,7 @@ private struct AgendaTodoList: View {
                 }
                 if !todo.myListsTitle.isEmpty, !todo.projects.isEmpty {
                     Text(todo.myListsTitle)
-                        .centraidType("section")
+                        .kitType(.section)
                         .foregroundStyle(Theme.color("text", scheme))
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 12)

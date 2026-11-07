@@ -28,7 +28,9 @@ import centraid.core.v1.AgendaTodo
 import centraid.core.v1.Route
 import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoNotice
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -141,7 +143,7 @@ internal fun AgendaTodoPlace(
             item(key = "my-lists") {
                 Text(
                     todo.my_lists_title,
-                    style = centraidType("section"),
+                    style = kitTextStyle(KitType.Section),
                     color = centraidColor("text"),
                     modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 12.dp),
                 )
