@@ -122,10 +122,9 @@ message AgendaHomeState {
   }
 }
 
-// One entry of the Calendar's view menu: Day or List today (Week, Month and
-// Year follow).
+// One entry of the Calendar's view menu: Day, Week, Month, List or Year.
 message AgendaCalendarView {
-  // `day`, `list`.
+  // `day`, `week`, `month`, `list`, `year`.
   string key = 1;
   string label = 2;
   string icon_key = 3;
