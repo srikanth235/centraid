@@ -31,6 +31,8 @@ People is five queries, twenty-five actions and thirty-three scopes. It stores n
 
 **The circle is the people you keep**: every live person but the owner and a pet. The roster, the dashboard, the sheet, the search and Home's person hits answer for that one set.
 
+**My card** (#1173) is the owner's own person: the circle leaves them out of every list, but `people` names them (`owner`) and `person` answers their sheet (`is_me`), so the member can open and edit their own card. **In your vault** (#1173) is the sheet's `vault`: the events (a guest's `attendee` edge, or an `about` edge; not a yearly date, a cancelled event or one in the trash), tasks (`about`) and notes (`links`) that end at the person, read from the incoming edges (`edge_to`, one `to_id`), events then tasks then notes, newest first, at most three of a kind, the rest counted in `vault_more`. A note written about the person in People is one of their `notes`, not a link from Notes. Money has no edge to a person, so none shows.
+
 ## What this crate is allowed to contain
 
 SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read is a `PageQuery` over one table, and the paged door pages one table (a join is refused at the vault's door), so every read is a window and then, per table, the rows its ids name. `Read::among` names a set of ids only while it is small, and otherwise takes the table under the read's own predicate: a keyset page re-binds the whole `IN` list on every page, and the first cut took 19 s for a 5,000-person roster where the table scans take 0.56 s. A write from a query is not expressible. A denial is a value (`Denial`), never an error.

@@ -417,12 +417,14 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .appAccent("people")
         case .peopleEditor(let state)?:
             PeopleEditorView(
                 state: state,
                 send: { store.send(instance, .peopleEditor($0)) },
                 onClose: pop
             )
+            .appAccent("people")
         case .trash(let state)?:
             CoreTrashView(
                 state: state,
