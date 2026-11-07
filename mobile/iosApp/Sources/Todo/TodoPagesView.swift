@@ -197,7 +197,8 @@ struct TodoProjectView: View {
                         placeholder: state.chrome.newReminder,
                         verb: state.chrome.quickAddVerb,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
-                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
+                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
+                        onDismissChip: { send(event { $0.quickAddChipDismissed = .init() }) }
                     )
                 }
             }

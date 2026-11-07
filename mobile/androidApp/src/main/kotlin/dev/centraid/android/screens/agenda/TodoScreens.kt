@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import centraid.core.v1.QuickAddChipDismissed
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCatchUpEvent
 import centraid.core.v1.TodoCatchUpState
@@ -206,6 +207,7 @@ internal fun TodoProjectScreen(
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TodoProjectEvent(quick_add_changed = TodoProjectEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TodoProjectEvent(quick_add_submitted = TodoProjectEvent.QuickAddSubmitted())) },
+                onDismissChip = { onEvent(TodoProjectEvent(quick_add_chip_dismissed = QuickAddChipDismissed())) },
             )
         }
     }

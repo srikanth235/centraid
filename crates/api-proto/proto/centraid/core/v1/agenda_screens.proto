@@ -485,6 +485,8 @@ message AgendaHomeEvent {
     ImportRequested import_requested = 37;
     // The swipe on a task row (#1173).
     TaskFlagged task_flagged = 38;
+    // The date chip's ×: keep the typed words as the title (#1173 Wave 3).
+    QuickAddChipDismissed quick_add_chip_dismissed = 39;
   }
   // 13 was `due_toggled`; 17, 18 and 33-36 were the intents (`new_event`,
   // `event_picked`, `task_picked`, `project_picked`, `group_verb`,
@@ -1205,7 +1207,30 @@ message TodoQuickAdd {
   // to Agenda") opened it, until the keyboard leaves an empty field
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
+  // THE DATE CHIP (#1173 Wave 3): what the typed words will save as, shown
+  // before the member taps Add. Absent when no phrase was read, or the member
+  // dismissed it for these words.
+  QuickAddChip chip = 8;
 }
+
+// What a quick add will save, read from the typed words: the day (and time) and
+// the repeat as a pill under the field, and the title that is left.
+message QuickAddChip {
+  // "Tomorrow, 09:00" / "Every Monday, 09:00".
+  string label = 1;
+  // The title that will be saved, "Call mom".
+  string title = 2;
+  // The spoken label of the ×: "Keep as text".
+  string dismiss_label = 3;
+  // The whole chip for a screen reader: "Due Tomorrow, 09:00. Saves as Call mom."
+  string spoken = 4;
+  // The phrase repeats.
+  bool repeats = 5;
+}
+
+// The chip's ×, for either quick-add bar: the words stay the title, undated,
+// until the member types a different phrase.
+message QuickAddChipDismissed {}
 
 // One area's projects on To-do (`AgendaTodo.projects`).
 message TodoProjectGroup {
@@ -1372,6 +1397,8 @@ message TodoProjectEvent {
     RowMoved row_moved = 17;
     CompletedToggled completed_toggled = 18;
     CompletedCleared completed_cleared = 19;
+    // The date chip's ×: keep the typed words as the title (#1173 Wave 3).
+    QuickAddChipDismissed quick_add_chip_dismissed = 20;
   }
 
   message RowFlagged {

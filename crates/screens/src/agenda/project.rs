@@ -11,6 +11,7 @@ use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
+use super::todo::natural::Chipper;
 use super::todo::ops::Ops;
 use super::todo::order;
 use super::todo::rows::{self, Context};
@@ -33,6 +34,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         ops: Ops::default(),
         quick_title: String::new(),
+        chip: Chipper::default(),
         target_section_id: String::new(),
         sheet: Sheet::None,
         new_section_name: String::new(),
@@ -49,6 +51,8 @@ struct Project {
     phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
     quick_title: String,
+    /// The core's clock and the date chip's dismissal (#1173 Wave 3).
+    chip: Chipper,
     /// The section a quick add lands in; empty is the project's unsectioned work.
     target_section_id: String,
     sheet: Sheet,
@@ -250,6 +254,10 @@ impl Project {
             },
             shown: found,
             focused: false,
+            chip: self
+                .chip
+                .reading(locale, &self.quick_title)
+                .map(|reading| reading.chip()),
             // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.
             add_label: String::new(),
             drawn: found,
@@ -263,15 +271,17 @@ impl Project {
         }
         let section = (!self.target_section_id.is_empty()).then(|| self.target_section_id.clone());
         let lands_in = self.lands_in();
-        if self.ops.add(
+        // THE CORE'S CLOCK, read just now, never the device's.
+        let fields = self.chip.fields(ctx, &title);
+        if self.ops.add_fields(
             ctx,
-            &title,
-            "",
+            &fields,
             &lands_in,
             Some(&self.project_id),
             section.as_deref(),
         ) {
             self.quick_title.clear();
+            self.chip.clear();
         }
         self.reload(ctx);
     }
@@ -335,6 +345,10 @@ impl Project {
                 self.reload(ctx);
             }
             Some(P::QuickAddChanged(changed)) => self.quick_title = changed.title,
+            Some(P::QuickAddChipDismissed(_)) => {
+                let words = self.quick_title.clone();
+                self.chip.dismiss(&words);
+            }
             Some(P::QuickAddSubmitted(_)) => self.submit_quick_add(ctx),
             // `add:<section_id>` points the quick add at a section; `add:` at
             // the project's unsectioned work.
@@ -396,7 +410,11 @@ impl Project {
 impl Screen for Project {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Appeared(_)) => {
+                self.chip.hold(ctx);
+                self.reload(ctx);
+            }
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::TodoProject(project)) => self.event(project, ctx),
             _ => {}
         }

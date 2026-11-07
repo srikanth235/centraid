@@ -40,6 +40,7 @@ pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
+use super::todo::natural::Chipper;
 use super::todo::ops::Ops;
 use super::todo::rows;
 use crate::catalog::act;
@@ -65,6 +66,8 @@ struct QuickAdd {
     /// The bar is drawn: the Plus (or Notes' "Send to Agenda") opened it.
     drawn: bool,
     focused: bool,
+    /// The core's clock and the chip's dismissal (#1173 Wave 3).
+    chip: Chipper,
 }
 
 pub(super) struct Home {
@@ -126,6 +129,7 @@ impl Home {
                 drawn: !seed.is_empty(),
                 focused: !seed.is_empty(),
                 title: seed,
+                chip: Chipper::default(),
             },
             limit: rows::PAGE,
             ops: Ops::default(),
@@ -285,12 +289,17 @@ impl Home {
             }
             H::FileChosen(chosen) => self.file(&chosen.key, ctx),
             H::QuickAddChanged(typed) => self.quick.title = typed.title,
+            H::QuickAddChipDismissed(_) => {
+                let words = self.quick.title.clone();
+                self.quick.chip.dismiss(&words);
+            }
             H::QuickAddSubmitted(_) => self.add(ctx),
             // THE PLUS OPENS THE BAR on the keyboard (R-CHROME-1), on To-do only.
             H::QuickAddOpened(_) => {
                 if self.destination == Dest::Todo {
                     self.quick.drawn = true;
                     self.quick.focused = true;
+                    self.quick.chip.hold(ctx);
                 }
             }
             // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep it
@@ -357,16 +366,20 @@ impl Home {
         self.refresh(ctx);
     }
 
-    /// To-do's quick add: a bare title, landing in the Inbox. The bar keeps its
-    /// words when the vault refuses.
+    /// To-do's quick add, landing in the Inbox: the words as typed, or, while
+    /// the date chip shows, the title and day it names. The bar keeps its words
+    /// when the vault refuses.
     fn add(&mut self, ctx: &Ctx) {
         let title = self.quick.title.trim().to_owned();
         if title.is_empty() || self.denied() || self.destination != Dest::Todo {
             return;
         }
         let inbox = task::inbox(ctx.locale());
-        if self.ops.add(ctx, &title, "", &inbox, None, None) {
+        // THE CORE'S CLOCK, read just now, never the device's.
+        let fields = self.quick.chip.fields(ctx, &title);
+        if self.ops.add_fields(ctx, &fields, &inbox, None, None) {
             self.quick.title.clear();
+            self.quick.chip.clear();
         }
         self.refresh(ctx);
     }
@@ -421,6 +434,10 @@ impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_)) => {
+                // SEEDED WORDS wait in the bar: read them against the core's clock.
+                if self.quick.drawn {
+                    self.quick.chip.hold(ctx);
+                }
                 self.refresh(ctx);
                 return self.calendar.attach();
             }
@@ -566,6 +583,11 @@ impl Screen for Home {
                         focused: drawn && self.quick.focused,
                         add_label: task::add_task(locale),
                         drawn,
+                        chip: self
+                            .quick
+                            .chip
+                            .reading(locale, &self.quick.title)
+                            .map(|reading| reading.chip()),
                     }),
                     file_choices: if self.sheet == Sheet::File {
                         place::file_choices(locale, &self.held, &self.filing_task_id)

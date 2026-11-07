@@ -12,6 +12,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
+use super::natural::Fields;
 use super::rows;
 use crate::catalog::act;
 use crate::kit::act::{self as kit_act, Settled};
@@ -158,13 +159,41 @@ impl Ops {
         project_id: Option<&str>,
         section_id: Option<&str>,
     ) -> bool {
-        let locale = ctx.locale();
-        let request = act::agenda::AddTask {
+        let fields = Fields {
             title: title.to_owned(),
-            due: if due_day.is_empty() {
-                Default::default()
+            due: due_day.to_owned(),
+            ..Fields::default()
+        };
+        self.add_fields(ctx, &fields, lands_in, project_id, section_id)
+    }
+
+    /// [`Self::add`] with what the date chip read: a due, a repeat rule, and the
+    /// device's zone beside a wall-clock due. A repeat with no due is never sent.
+    pub fn add_fields(
+        &mut self,
+        ctx: &Ctx,
+        fields: &Fields,
+        lands_in: &str,
+        project_id: Option<&str>,
+        section_id: Option<&str>,
+    ) -> bool {
+        let locale = ctx.locale();
+        let dated = !fields.due.is_empty();
+        let request = act::agenda::AddTask {
+            title: fields.title.clone(),
+            due: if dated {
+                crate::field::Field::Is(fields.due.clone())
             } else {
-                crate::field::Field::Is(due_day.to_owned())
+                Default::default()
+            },
+            rule: match &fields.rule {
+                Some(rule) if dated => crate::field::Field::Is(rule.clone()),
+                _ => Default::default(),
+            },
+            zone: if dated && fields.timed {
+                crate::field::Field::Is(ctx.zone().to_owned())
+            } else {
+                Default::default()
             },
             project_id: project_id.map_or(Default::default(), |id| {
                 crate::field::Field::Is(id.to_owned())
@@ -174,7 +203,7 @@ impl Ops {
             }),
             ..Default::default()
         };
-        let key = kit_act::key(&["add-task", title], self.next_seq());
+        let key = kit_act::key(&["add-task", &fields.title], self.next_seq());
         let settled = kit_act::act(ctx, request, &key);
         self.undo = None;
         if settled.committed {
