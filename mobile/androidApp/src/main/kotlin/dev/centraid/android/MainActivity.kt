@@ -1,5 +1,6 @@
 package dev.centraid.android
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
@@ -20,6 +21,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import dev.centraid.android.backup.MediaStoreDeleter
+import dev.centraid.android.glance.AddReminderShortcut
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.screens.RustRoot
@@ -64,6 +66,12 @@ public class MainActivity : FragmentActivity() {
         open.scope.launch { open.screens.memoryWarning() }
     }
 
+    /** The shortcut or widget button reached an activity that was already running (#1173). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        AddReminderShortcut.accept(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A secret copied before the app was killed is cleared once its deadline has passed.
@@ -72,6 +80,9 @@ public class MainActivity : FragmentActivity() {
         // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
         placeDemoVaults()
+        // THE LAUNCHER SHORTCUT'S AND THE WIDGET'S "ADD A REMINDER" (#1173), queued until the session
+        // reports it. A recreated activity (a rotation) is handed the same intent again: not twice.
+        if (savedInstanceState == null) AddReminderShortcut.accept(intent)
         // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2):
         // `mobile/scripts/demo-vault.sh android` starts the activity with the public all-`abandon`
         // words' seed as an extra, and the shelf stores it where a real seed lives. A build that is
@@ -95,6 +106,8 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
+                        // The shortcut's requests, reported for as long as this session is held.
+                        launch { AddReminderShortcut.deliver(opened.screens) }
                         awaitCancellation()
                     } finally {
                         rust.detach()

@@ -133,7 +133,44 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- "ADD A REMINDER" (#1173): the launcher's long-press shortcut. Its intent is
+                 `dev.centraid.action.ADD_REMINDER` aimed at this activity, which hands it to the
+                 core (`glance/AddReminderShortcut.kt`); the widget's New Reminder button sends the
+                 same intent. No filter for it: both are explicit, so no other app can send it. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- AGENDA'S TWO HOME-SCREEN WIDGETS (#1173). Framework providers over RemoteViews
+             (`glance/`): they draw the one snapshot file Rust's `agenda.glance` service keeps
+             (`filesDir/agenda-glance.json`) and never open the vault. Exported because the launcher
+             binds a widget's provider; the only broadcasts they act on are the platform's update and
+             the app's own redraw request, and both only redraw what is already on disk. The label
+             and the description come from the generated strings, which the launcher reads before any
+             code runs. -->
+        <receiver
+            android:name="dev.centraid.android.glance.UpNextWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_up_next_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_up_next_info" />
+        </receiver>
+        <receiver
+            android:name="dev.centraid.android.glance.RemindersWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_reminders_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_reminders_info" />
+        </receiver>
 
         <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
              shows an app's permissions only when it declares where its
