@@ -50,7 +50,7 @@ internal const val AGENDA_TASK_ROW: String = "agenda-task-row"
 /**
  * WHAT A TASK ROW ON AGENDA DOES (#1128, R-1128-2): its box checks it off in
  * place (an event), a tap opens it (the row's own route, pushed by the shell),
- * a long press offers "Move to project" (an event), and a group's quiet verb
+ * a swipe reveals Details, Flag and Delete (events; "Move to project" is a screen-reader action), and a group's quiet verb
  * (Overdue's "Reschedule") opens Catch up: the verb's key names the page and
  * the home's `catch_up` route is where it goes. [fileVerb] is the machine's
  * word for the long press (`TodoChrome.file_verb`); a row offers filing only
@@ -81,6 +81,7 @@ internal fun agendaTaskActions(
         menu = TodoRowMenu(
             words,
             onFlag = { id, on -> onEvent(AgendaHomeEvent(task_flagged = AgendaHomeEvent.TaskFlagged(task_id = id, flagged = on))) },
+            onDelete = { id -> onEvent(AgendaHomeEvent(task_deleted = AgendaHomeEvent.TaskDeleted(task_id = id))) },
         ),
     )
 
