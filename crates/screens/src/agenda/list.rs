@@ -16,6 +16,7 @@ use super::todo::buckets;
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
 use crate::catalog::load;
+use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, fill, task as words};
@@ -199,8 +200,16 @@ impl List {
         }
     }
 
-    fn data(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoListData {
-        let row_ctx = Context::of(&board.today, &board.projects, &board.sections);
+    fn data(
+        &self,
+        locale: Locale,
+        cycle: HourCycle,
+        board: &wire::AgendaTaskBoard,
+    ) -> wire::TodoListData {
+        let row_ctx = Context {
+            cycle,
+            ..Context::of(&board.today, &board.projects, &board.sections)
+        };
         let groups = match self.view {
             wire::TodoView::Today => buckets::today(locale, board, &row_ctx),
             wire::TodoView::Scheduled => buckets::scheduled(locale, board, &row_ctx),
@@ -302,7 +311,9 @@ impl Screen for List {
             }
             Phase::Failed => wire::todo_list_state::Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => wire::todo_list_state::Content::Denied(denied(locale, denial)),
-            Phase::Ready(board) => wire::todo_list_state::Content::Data(self.data(locale, board)),
+            Phase::Ready(board) => {
+                wire::todo_list_state::Content::Data(self.data(locale, ctx.hour_cycle(), board))
+            }
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoList(wire::TodoListState {

@@ -9,7 +9,7 @@
 //! when the roster of held vaults moves, when a tab's roots open again (a vault
 //! switch closes and reopens them, and the service is told of each opening),
 //! and when its rollover timer fires. Reads are synchronous and bounded: the
-//! day, two days of events, and the open tasks.
+//! day, two days of events, the open tasks' window and their true counts.
 //!
 //! **When it emits**: only when the bytes differ from the last it emitted, and
 //! at most once per update. A refused effect forgets those bytes, so the next
@@ -21,8 +21,14 @@
 //! `refresh_after`, never a device clock.
 //!
 //! **What the platform asks**: `ShellFact.agenda_intent` `add` opens Agenda's
-//! home on Reminders with the quick-add bar holding the title. Nothing is
-//! written until the member taps Add.
+//! home on Reminders with the quick-add bar open, holding the title when there
+//! is one. `open` is a widget tap: its key is one the last document offered
+//! (the service keeps them with the routes they name), and it opens that event,
+//! that task, Agenda's Day, Reminders, or Reminders with the quick-add bar open.
+//! **A key it did not offer, or offered in an older document, opens Agenda's
+//! home on its default place**: never an error and never a route the document
+//! did not name, so nothing outside the app can push Agenda anywhere else.
+//! Nothing is written by any of them until the member taps Add.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -33,7 +39,6 @@ use wire::screen_event::Kind as E;
 
 use super::snapshot::{self, Inputs};
 use crate::agenda::routes;
-use crate::agenda::todo::rows;
 use crate::catalog::load::agenda as query;
 use crate::kit::civil;
 use crate::kit::read::{Reading, read};
@@ -44,6 +49,10 @@ pub const NAME: &str = "agenda.glance";
 
 /// The timer that rebuilds the document when it goes stale.
 const ROLLOVER: &str = "glance.rollover";
+/// How many rows each due-ordered read asks for: the reminders draw six, and up
+/// next draws what is timed today and tomorrow of twelve.
+const DUE_ROWS: u32 = 6;
+const AHEAD_ROWS: u32 = 12;
 /// The rollover's floor and ceiling.
 const MIN_ROLLOVER: Duration = Duration::from_secs(60);
 const MAX_ROLLOVER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -81,6 +90,8 @@ struct Service {
     outstanding: VecDeque<Asked>,
     /// The vault in front when the document was last built.
     front: Option<String>,
+    /// The keys the last document offered, and what each opens.
+    opens: snapshot::Opens,
 }
 
 impl Screen for Service {
@@ -139,7 +150,8 @@ fn front_of(ctx: &Ctx) -> Option<String> {
 impl Service {
     fn refresh(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.front = front_of(ctx);
-        let document = document(ctx);
+        let (document, opens) = document(ctx);
+        self.opens = opens;
         self.arm(ctx, &document);
         if self.last.as_deref() == Some(document.as_slice()) {
             return Vec::new();
@@ -172,19 +184,35 @@ impl Service {
     }
 
     fn intent(&mut self, intent: wire::AgendaIntent) -> Vec<wire::Effect> {
-        match intent.kind {
-            Some(wire::agenda_intent::Kind::Add(add)) => {
-                self.outstanding.push_back(Asked::Route);
-                vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
-                        route: Some(routes::home(
-                            wire::AgendaDestination::Todo,
-                            add.title.trim(),
-                        )),
-                    })),
-                }]
-            }
-            None => Vec::new(),
+        let route = match intent.kind {
+            Some(wire::agenda_intent::Kind::Add(add)) => routes::home_adding(add.title.trim()),
+            Some(wire::agenda_intent::Kind::Open(open)) => self.route_for(&open.key),
+            None => return Vec::new(),
+        };
+        self.outstanding.push_back(Asked::Route);
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                route: Some(route),
+            })),
+        }]
+    }
+
+    /// The page a tap's key opens: what the last document offered under it, else
+    /// Agenda's home on its default place.
+    fn route_for(&self, key: &str) -> wire::Route {
+        use snapshot::Open;
+        match self.opens.get(key) {
+            Some(Open::Event {
+                event_id,
+                instance_key,
+                original_start_local,
+                day,
+            }) => routes::event(event_id, instance_key, original_start_local.as_deref(), day),
+            Some(Open::Task { task_id }) => routes::task(task_id),
+            Some(Open::UpNext) => routes::home(wire::AgendaDestination::Day, ""),
+            Some(Open::Reminders) => routes::home(wire::AgendaDestination::Todo, ""),
+            Some(Open::Add) => routes::home_adding(""),
+            None => routes::home(wire::AgendaDestination::Unspecified, ""),
         }
     }
 }
@@ -197,8 +225,8 @@ fn pick_context(answer: Answer) -> Option<wire::AgendaDayContext> {
 }
 
 /// The document for what the vault in front holds now.
-fn document(ctx: &Ctx) -> Vec<u8> {
-    let unavailable = || snapshot::unavailable(ctx.locale(), ctx.zone());
+fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
+    let unavailable = || snapshot::unavailable_with_opens(ctx.locale(), ctx.zone());
     let Reading::Data(context) = read(ctx, query::DayContext::default(), pick_context) else {
         return unavailable();
     };
@@ -227,26 +255,62 @@ fn document(ctx: &Ctx) -> Vec<u8> {
     ) else {
         return unavailable();
     };
-    let Reading::Data(tasks) = read(
-        ctx,
-        query::Board {
-            limit: rows::MAX_WINDOW,
-            view: Some(query::BoardView::All),
-            project_id: None,
-        },
-        |answer| match answer {
-            Answer::AgendaTaskBoard(board) => Some(board),
-            _ => None,
-        },
-    ) else {
+    // THE ROWS ARE THE EARLIEST DUE, read in due order over every open task (a
+    // board's window is the newest, which a vault with more open work than the
+    // window holds would not make the earliest): overdue then today for the
+    // reminders, and the timed tasks of today and tomorrow for up next.
+    let due_rows = |window: query::DueRowsWindow, limit: u32| {
+        read(
+            ctx,
+            query::DueRows {
+                limit,
+                window: Some(window),
+            },
+            |answer| match answer {
+                Answer::AgendaTaskDueRows(rows) => Some(rows),
+                _ => None,
+            },
+        )
+    };
+    let Reading::Data(now_rows) = due_rows(query::DueRowsWindow::Now, DUE_ROWS) else {
         return unavailable();
     };
-    snapshot::ready(&Inputs {
+    let Reading::Data(ahead_rows) = due_rows(query::DueRowsWindow::TimedAhead, AHEAD_ROWS) else {
+        return unavailable();
+    };
+    // A read for another day than the one the rest was read on (the clock crossed
+    // midnight between the reads) is not a set of rows for this document.
+    if now_rows.today_day != context.today || ahead_rows.today_day != context.today {
+        return unavailable();
+    }
+    let mut tasks = now_rows.tasks;
+    for task in ahead_rows.tasks {
+        if !tasks.iter().any(|held| held.task_id == task.task_id) {
+            tasks.push(task);
+        }
+    }
+    // THE TRUE COUNTS are their own read: the board above is a window of the
+    // newest open tasks, so counting it would undercount a vault with more
+    // open work than the window holds. A count for another day than the one
+    // the rest was read on (the clock crossed midnight between the reads) is
+    // not a figure for this document.
+    let Reading::Data(counts) = read(ctx, query::SmartCounts::default(), |answer| match answer {
+        Answer::AgendaTaskSmartCounts(counts) => Some(counts),
+        _ => None,
+    }) else {
+        return unavailable();
+    };
+    if counts.today_day != context.today {
+        return unavailable();
+    }
+    snapshot::ready_with_opens(&Inputs {
         locale: ctx.locale(),
         zone: ctx.zone(),
         today: &context.today,
         now_local: &context.now_local,
         upcoming: &upcoming,
         tasks: &tasks,
+        cycle: ctx.hour_cycle(),
+        counts: &counts,
     })
 }

@@ -2,8 +2,9 @@ import SwiftUI
 import WidgetKit
 
 /// "Up next": the next item of the day (small), or the next four (medium).
-/// Tapping opens the app; a tap to a screen would need a route the core names
-/// (owner follow-up), so no `widgetURL` is set.
+/// A tap opens the page the core names: the body opens Agenda's Day, and on the
+/// medium widget a row opens its event or task. The widget holds only the opaque
+/// keys the snapshot carries (`AgendaGlanceSnapshot.openURL`), never a screen.
 struct UpNextWidget: Widget {
     static let kind = "dev.centraid.widget.upnext"
 
@@ -57,6 +58,9 @@ struct UpNextView: View {
             if entry.snapshot == nil || family == .systemSmall { Spacer(minLength: 0) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // THE BODY'S TAP (a row's own Link, on the medium widget, wins over it). No
+        // snapshot or no key sets none, and the tap opens the app as it always did.
+        .widgetURL(AgendaGlanceSnapshot.openURL(entry.snapshot?.openUpNext))
     }
 }
 
@@ -72,6 +76,7 @@ private struct UpNextSmall: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .padding(.top, 4)
+                .privacySensitive()
             Text(item.title)
                 .font(WidgetType.body)
                 .foregroundStyle(WidgetPalette.ink)
@@ -82,6 +87,7 @@ private struct UpNextSmall: View {
                     .font(WidgetType.meta)
                     .foregroundStyle(WidgetPalette.meta)
                     .lineLimit(1)
+                    .privacySensitive()
             }
         }
         .accessibilityElement(children: .combine)
@@ -102,8 +108,13 @@ private struct UpNextRows: View {
                         .foregroundStyle(WidgetPalette.meta)
                         .lineLimit(1)
                         .padding(.top, 2)
+                        .privacySensitive()
                 }
-                row(item)
+                if let url = AgendaGlanceSnapshot.openURL(item.open) {
+                    Link(destination: url) { row(item) }
+                } else {
+                    row(item)
+                }
             }
         }
     }
@@ -117,6 +128,7 @@ private struct UpNextRows: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(width: timeWidth, alignment: .leading)
+                .privacySensitive()
             RoundedRectangle(cornerRadius: 2)
                 .fill(tint)
                 .frame(width: 3, height: 16)

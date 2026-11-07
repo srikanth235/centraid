@@ -42,7 +42,7 @@ use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
 
 const CANCELLED: &str = "cancelled";
@@ -55,6 +55,8 @@ pub(super) const NO_CALENDAR_HUE: &str = "cSlate";
 /// What a fold reads besides the held answers.
 pub struct Fold<'a> {
     pub locale: Locale,
+    /// The phone's 12 or 24 hour clock.
+    pub cycle: HourCycle,
     pub destination: Dest,
     pub anchor: &'a str,
     /// The trimmed term search is answering, when it is.
@@ -197,6 +199,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
     let mut task_ctx = rows::Context::of(today, projects, sections);
     // THE DAY'S HEAD NAMES THE DAY, so a row says its time only.
     task_ctx.day_in_head = true;
+    task_ctx.cycle = fold.cycle;
     let due_on = if dated {
         tasks_by_day(held, &in_range)
     } else {
@@ -527,7 +530,13 @@ fn items(
         .map(|slot| wire::AgendaRowItem {
             kind: Some(match slot {
                 Slot::Event(event, _) => wire::agenda_row_item::Kind::Event(event_row(
-                    locale, day, event, today, now, hues,
+                    locale,
+                    task_ctx.cycle,
+                    day,
+                    event,
+                    today,
+                    now,
+                    hues,
                 )),
                 Slot::Task(task, _) => {
                     wire::agenda_row_item::Kind::Task(rows::row(locale, task, task_ctx, false))
@@ -549,7 +558,7 @@ fn items(
             }
         })
         .unwrap_or(ordered.len());
-    let clock = civil::clock(now);
+    let clock = civil::clock_for(locale, now, task_ctx.cycle);
     out.insert(
         at,
         wire::AgendaRowItem {
@@ -653,6 +662,7 @@ fn notice_of(locale: Locale, held: &Held) -> Option<wire::TodoNotice> {
 
 fn event_row(
     locale: Locale,
+    cycle: HourCycle,
     day: &str,
     event: &wire::AgendaEvent,
     today: &str,
@@ -665,7 +675,7 @@ fn event_row(
         .filter(|summary| !summary.trim().is_empty())
         .cloned()
         .unwrap_or_else(|| words::untitled(locale));
-    let (time_label, spoken) = time_of(locale, event, day);
+    let (time_label, spoken) = time_of(locale, cycle, event, day);
     let meta = meta_of(locale, event);
     let (status, status_label) = if waits_on_you(event) {
         (
@@ -707,18 +717,23 @@ fn event_row(
 /// An all-day row is "All day": a day has no 00:00 (#1046, a v0 defect not
 /// carried). A timed run's end is EXCLUSIVE, so one ending at the next local
 /// midnight still ends on `day`.
-pub(super) fn time_of(locale: Locale, event: &wire::AgendaEvent, day: &str) -> (String, String) {
+pub(super) fn time_of(
+    locale: Locale,
+    cycle: HourCycle,
+    event: &wire::AgendaEvent,
+    day: &str,
+) -> (String, String) {
     if event.all_day {
         return (words::all_day(locale), words::all_day(locale));
     }
-    let start = civil::clock(&event.local_start);
+    let start = civil::clock_for(locale, &event.local_start, cycle);
     let starts_here = start_day(event) >= day;
     let end = event.local_end.as_str();
     let end_day = end.get(..10).unwrap_or_default();
-    let end_clock = civil::clock(end);
+    let end_clock = civil::clock_for(locale, end, cycle);
     let ends_here = end.is_empty()
         || end_day <= day
-        || (civil::plus_days(day, 1).as_deref() == Some(end_day) && end_clock == MIDNIGHT);
+        || (civil::plus_days(day, 1).as_deref() == Some(end_day) && civil::clock(end) == MIDNIGHT);
     if starts_here && (end.is_empty() || end == event.local_start) {
         (start.clone(), start)
     } else if starts_here && ends_here {
@@ -909,6 +924,7 @@ mod tests {
     fn fold_of(held: &Held, destination: Dest, hidden: &[String]) -> wire::AgendaHomeData {
         events(&Fold {
             locale: Locale::En,
+            cycle: HourCycle::default(),
             destination,
             anchor: TODAY,
             term: None,
@@ -1107,6 +1123,7 @@ mod tests {
         });
         let data = events(&Fold {
             locale: Locale::En,
+            cycle: HourCycle::default(),
             destination: Dest::Schedule,
             anchor: TODAY,
             term: Some("survey"),

@@ -2,7 +2,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::people::fold;
 use crate::strings::{Locale, fill, people as words};
 
@@ -144,7 +144,12 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
 /// up), in the core's order: events, tasks, notes. An item of a kind this build does not know
 /// is not shown.
 #[must_use]
-pub fn vault(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> Vec<wire::PeopleVaultRow> {
+pub fn vault(
+    locale: Locale,
+    cycle: HourCycle,
+    sheet: &wire::PeopleSheet,
+    today: &str,
+) -> Vec<wire::PeopleVaultRow> {
     sheet
         .vault
         .iter()
@@ -156,7 +161,7 @@ pub fn vault(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> Vec<wire
                 _ => ("notes", words::vault_kind_note(locale)),
             };
             let when = if item.kind == "event" {
-                event_when(locale, item)
+                event_when(locale, cycle, item)
             } else {
                 fold::when_logged(locale, &item.created_local_day, today)
             };
@@ -188,7 +193,7 @@ pub fn vault(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> Vec<wire
 }
 
 /// "Sat 7 Nov, 12:30", "Sat 7 Nov · all day", or empty for a recurring event.
-fn event_when(locale: Locale, item: &wire::PeopleVaultItem) -> String {
+fn event_when(locale: Locale, cycle: HourCycle, item: &wire::PeopleVaultItem) -> String {
     let Some(day) = item.local_start.get(..10) else {
         return String::new();
     };
@@ -196,7 +201,7 @@ fn event_when(locale: Locale, item: &wire::PeopleVaultItem) -> String {
     if item.all_day {
         return fill(&words::vault_all_day(locale), &[("day", &day)]);
     }
-    let time = civil::clock(&item.local_start);
+    let time = civil::clock_for(locale, &item.local_start, cycle);
     if time.is_empty() {
         day
     } else {
@@ -204,7 +209,12 @@ fn event_when(locale: Locale, item: &wire::PeopleVaultItem) -> String {
     }
 }
 
-pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::PeoplePersonData {
+pub fn person(
+    locale: Locale,
+    cycle: HourCycle,
+    sheet: &wire::PeopleSheet,
+    today: &str,
+) -> wire::PeoplePersonData {
     let person = sheet.person.clone().unwrap_or_default();
     let last_touch = fold::last_touch(
         locale,
@@ -371,7 +381,7 @@ pub fn person(locale: Locale, sheet: &wire::PeopleSheet, today: &str) -> wire::P
             }
         })
         .collect();
-    let vault = vault(locale, sheet, today);
+    let vault = vault(locale, cycle, sheet, today);
     wire::PeoplePersonData {
         party_id: person.party_id.clone(),
         name: person.name.clone(),
@@ -549,7 +559,7 @@ mod tests {
         let mut mine = sheet(vec![channel("p", "phone", "1", false)]);
         mine.is_me = true;
         assert!(hero(EN, &mine).is_empty());
-        let data = person(EN, &mine, "2026-11-07");
+        let data = person(EN, HourCycle::default(), &mine, "2026-11-07");
         assert!(data.is_me && data.hero.is_empty());
         assert_eq!(data.my_card_label, "My card");
         assert!(
@@ -599,7 +609,7 @@ mod tests {
             item("diary", "xx", "A kind this build does not know"),
         ];
         sheet.vault_more = 3;
-        let data = person(EN, &sheet, "2026-11-07");
+        let data = person(EN, HourCycle::default(), &sheet, "2026-11-07");
         let head = data.vault_head.unwrap();
         assert_eq!(head.title, "In your vault");
         assert_eq!(
@@ -656,7 +666,7 @@ mod tests {
             item("task", "tk", "Send"),
             item("note", "nt", "Chess"),
         ];
-        let rows = person(EN, &sheet, "2026-11-09").vault;
+        let rows = person(EN, HourCycle::default(), &sheet, "2026-11-09").vault;
         let routed: Vec<(&str, String)> = rows
             .iter()
             .map(|row| {
@@ -684,7 +694,7 @@ mod tests {
 
     #[test]
     fn nothing_else_in_the_vault_draws_no_rows_and_no_more_line() {
-        let data = person(EN, &sheet(Vec::new()), "2026-11-07");
+        let data = person(EN, HourCycle::default(), &sheet(Vec::new()), "2026-11-07");
         assert!(data.vault.is_empty() && data.vault_more.is_empty());
         assert_eq!(data.vault_head.unwrap().count, 0);
     }

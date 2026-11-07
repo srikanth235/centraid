@@ -30,6 +30,12 @@ struct AgendaGlanceSnapshot: Codable, Equatable, Sendable {
     var zone: String
     /// After this local wall clock the document is stale.
     var refreshAfter: String
+    /// THE OPEN KEYS (additive; absent in a document an older core wrote): opaque
+    /// strings the core named for a tap on the widget's body. A widget hands one
+    /// back through `AgendaOpenURL` and names no screen itself.
+    var openUpNext: String?
+    var openReminders: String?
+    var openAdd: String?
     var words: Words
     var upNext: [UpNext]
     var reminders: Reminders
@@ -61,6 +67,8 @@ struct AgendaGlanceSnapshot: Codable, Equatable, Sendable {
         var allDay: Bool
         /// A colour key (`"agenda"`, `"red"`), never a colour.
         var tint: String
+        /// The key the core names for a tap on the row (opaque).
+        var open: String?
     }
 
     struct Reminders: Codable, Equatable, Sendable {
@@ -75,12 +83,49 @@ struct AgendaGlanceSnapshot: Codable, Equatable, Sendable {
             var dueLabel: String
             var overdue: Bool
             var flagged: Bool
+            /// The key the core names for a tap on the row (opaque).
+            var open: String?
         }
     }
 
     struct Siri: Codable, Equatable, Sendable {
         var nextSentence: String
     }
+
+    // MARK: Opening
+
+    /// The URL a widget's tap opens the app with: `centraid://agenda?open=<key>`.
+    /// The URL names no screen: the key is the core's, handed back untouched (the
+    /// app reports it as `AgendaIntentOpen` and the core answers with a page).
+    /// Nil for a missing or empty key, so a widget with no key sets no link.
+    static func openURL(_ key: String?) -> URL? {
+        guard let key, !key.isEmpty else { return nil }
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        guard let encoded = key.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: "\(openScheme)://\(openHost)?\(openQueryName)=\(encoded)")
+    }
+
+    /// The key out of a URL `openURL` made; nil for a URL of any other shape (another
+    /// scheme or host, a path, more or other query items, an empty or oversize key).
+    static func openKey(from url: URL) -> String? {
+        guard url.scheme == openScheme, url.host == openHost,
+            url.path.isEmpty || url.path == "/",
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let items = components.queryItems, items.count == 1,
+            items[0].name == openQueryName,
+            let key = items[0].value, !key.isEmpty, key.count <= maxOpenKeyLength
+        else { return nil }
+        return key
+    }
+
+    /// The URL scheme the app registers (`project.yml`'s `CFBundleURLTypes`).
+    static let openScheme = "centraid"
+    /// Names the app (the one that owns the key), never a screen.
+    static let openHost = "agenda"
+    static let openQueryName = "open"
+    /// A key longer than this is not one the core wrote.
+    static let maxOpenKeyLength = 256
 
     // MARK: Reading
 

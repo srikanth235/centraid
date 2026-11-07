@@ -1984,6 +1984,73 @@
           }
         }
       }
+    },
+    {
+      "name": "smart-counts",
+      "kind": "task",
+      "figures": ["today", "overdue", "flagged"],
+      "description": "How many open tasks are due today, overdue and flagged, counted over every open task in the vault and never over a board's window, so the figure is true at any vault size. It counts the open top-level tasks the board draws (an unfinished subtask of a closed or trashed task counts as its own) and reads each due as the board does, in the request's zone against the vault clock. Returns three numbers and the `today_day` they were counted against; no rows.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "number"
+          },
+          "overdue": {
+            "type": "number"
+          },
+          "flagged": {
+            "type": "number"
+          },
+          "today_day": {
+            "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "due-rows",
+      "kind": "task",
+      "figures": ["tasks"],
+      "description": "The open tasks due soonest, read in due order over every open task in the vault and never over a board's window of the newest, so the rows are the earliest at any vault size: window `now` is overdue first and then due today (each by due, then the member's order), window `timed_ahead` is the tasks with a time due today or tomorrow. At most `limit` rows (1 to 12, default 6), the open top-level tasks the board draws, each placed as the board places it (a repeating task by its next period). Rows are single tasks: no families.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "enum": ["now", "timed_ahead"],
+            "description": "Which dues are read."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array"
+          },
+          "today_day": {
+            "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [

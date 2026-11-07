@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import dev.centraid.android.backup.MediaStoreDeleter
-import dev.centraid.android.glance.AddReminderShortcut
+import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.notify.NotifyTaps
@@ -75,7 +75,7 @@ public class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         NotifyTaps.note(intent)
-        AddReminderShortcut.accept(intent)
+        AgendaIntents.accept(intent)
         val open = AppSession.current.value ?: return
         open.scope.launch { NotifyTaps.flush(open.screens) }
     }
@@ -90,9 +90,9 @@ public class MainActivity : FragmentActivity() {
         // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
         placeDemoVaults()
-        // THE LAUNCHER SHORTCUT'S AND THE WIDGET'S "ADD A REMINDER" (#1173), queued until the session
+        // THE LAUNCHER SHORTCUT'S "ADD A REMINDER" AND A WIDGET'S TAPS (#1173), queued until the session
         // reports it. A recreated activity (a rotation) is handed the same intent again: not twice.
-        if (savedInstanceState == null) AddReminderShortcut.accept(intent)
+        if (savedInstanceState == null) AgendaIntents.accept(intent)
         // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2):
         // `mobile/scripts/demo-vault.sh android` starts the activity with the public all-`abandon`
         // words' seed as an extra, and the shelf stores it where a real seed lives. A build that is

@@ -693,9 +693,12 @@ impl Screen for Person {
             Phase::Failed => C::Failure(read::failure(locale)),
             Phase::Denied(denial) => C::Denied(denied(locale, denial)),
             Phase::Ready(None) => C::Gone(data::gone(locale)),
-            Phase::Ready(Some((sheet, today))) => {
-                C::Data(Box::new(data::person(locale, sheet, today)))
-            }
+            Phase::Ready(Some((sheet, today))) => C::Data(Box::new(data::person(
+                locale,
+                ctx.hour_cycle(),
+                sheet,
+                today,
+            ))),
         };
         let state = wire::PeoplePersonState {
             party_id: self.party_id.clone(),

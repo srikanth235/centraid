@@ -176,7 +176,28 @@ pub fn ordinal(n: u32) -> String {
     format!("{n}{suffix}")
 }
 
-/// `08:15` out of `YYYY-MM-DDTHH:MM…`, or empty.
+/// How the phone words a time of day: its own 12 or 24 hour setting
+/// (`Environment.hour_cycle_12`), decided once here and nowhere else.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HourCycle {
+    /// `09:00`, `21:05`: the default, and what a shell that never says gets.
+    #[default]
+    H24,
+    /// `9:00 AM`, `9:05 PM`, `12:00 AM` at midnight, `12:00 PM` at noon.
+    H12,
+}
+
+impl HourCycle {
+    /// The cycle the phone's `hour_cycle_12` flag names.
+    #[must_use]
+    pub fn of(twelve: bool) -> Self {
+        if twelve { Self::H12 } else { Self::H24 }
+    }
+}
+
+/// `08:15` out of `YYYY-MM-DDTHH:MM…`, or empty. Always 24-hour: this is the
+/// machine reading the screens compare and parse (midnight, minutes of the day).
+/// What a member reads goes through [`clock_for`].
 #[must_use]
 pub fn clock(local_iso: &str) -> String {
     if local_iso.len() >= 16 && local_iso.as_bytes()[10] == b'T' {
@@ -186,13 +207,52 @@ pub fn clock(local_iso: &str) -> String {
     }
 }
 
-/// `08:15 – 09:45`, `08:15` with no end, or `All day`.
+/// The time of day in `YYYY-MM-DDTHH:MM…` as the phone words it: `08:15`, or
+/// `8:15 AM` on a 12-hour phone. Empty when `local_iso` has no time.
 #[must_use]
-pub fn span(locale: Locale, start: &str, end: &str, all_day: bool) -> String {
+pub fn clock_for(locale: Locale, local_iso: &str, cycle: HourCycle) -> String {
+    let hhmm = clock(local_iso);
+    time_for(locale, &hhmm, cycle)
+}
+
+/// A bare `HH:MM` (a task's due time) as the phone words it; anything that is
+/// not one comes back as it was, never a guess.
+#[must_use]
+pub fn time_for(locale: Locale, hhmm: &str, cycle: HourCycle) -> String {
+    if cycle == HourCycle::H24 {
+        return hhmm.to_owned();
+    }
+    let (Some(hour), Some(minute)) = (
+        hhmm.get(0..2).and_then(|h| h.parse::<u32>().ok()),
+        hhmm.get(3..5),
+    ) else {
+        return hhmm.to_owned();
+    };
+    if hhmm.len() != 5 || hhmm.as_bytes()[2] != b':' || hour > 23 {
+        return hhmm.to_owned();
+    }
+    let marker = if hour < 12 {
+        shared::clock_am(locale)
+    } else {
+        shared::clock_pm(locale)
+    };
+    let shown = match hour % 12 {
+        0 => 12,
+        other => other,
+    };
+    format!("{shown}:{minute} {marker}")
+}
+
+/// `08:15 – 09:45`, `08:15` with no end, or `All day` (12-hour on a 12-hour phone).
+#[must_use]
+pub fn span(locale: Locale, start: &str, end: &str, all_day: bool, cycle: HourCycle) -> String {
     if all_day {
         return shared::all_day(locale);
     }
-    let (from, to) = (clock(start), clock(end));
+    let (from, to) = (
+        clock_for(locale, start, cycle),
+        clock_for(locale, end, cycle),
+    );
     if to.is_empty() {
         from
     } else {
@@ -255,11 +315,66 @@ mod tests {
     #[test]
     fn a_span_is_a_clock_range_a_clock_or_all_day() {
         assert_eq!(
-            span(EN, "2026-03-11T08:15", "2026-03-11T09:45", false),
+            span(
+                EN,
+                "2026-03-11T08:15",
+                "2026-03-11T09:45",
+                false,
+                HourCycle::H24
+            ),
             "08:15 – 09:45"
         );
-        assert_eq!(span(EN, "2026-03-11T08:15", "", false), "08:15");
-        assert_eq!(span(EN, "", "", true), "All day");
+        assert_eq!(
+            span(EN, "2026-03-11T08:15", "", false, HourCycle::H24),
+            "08:15"
+        );
+        assert_eq!(span(EN, "", "", true, HourCycle::H24), "All day");
         assert_eq!(clock("2026-03-11"), "");
+    }
+
+    #[test]
+    fn a_time_is_worded_in_the_cycle_the_phone_keeps() {
+        let day = |hhmm: &str| format!("2026-03-11T{hhmm}");
+        let said = |hhmm: &str, cycle| clock_for(EN, &day(hhmm), cycle);
+        let h24 = [
+            "00:00", "00:05", "01:00", "09:00", "11:59", "12:00", "13:00", "23:59",
+        ];
+        assert_eq!(h24.map(|t| said(t, HourCycle::H24)), h24);
+        assert_eq!(
+            h24.map(|t| said(t, HourCycle::H12)),
+            [
+                "12:00 AM", "12:05 AM", "1:00 AM", "9:00 AM", "11:59 AM", "12:00 PM", "1:00 PM",
+                "11:59 PM"
+            ]
+        );
+        assert_eq!(said("21:05", HourCycle::H12), "9:05 PM");
+    }
+
+    #[test]
+    fn a_time_that_is_not_one_comes_back_as_it_was() {
+        assert_eq!(clock_for(EN, "2026-03-11", HourCycle::H12), "");
+        assert_eq!(time_for(EN, "", HourCycle::H12), "");
+        assert_eq!(time_for(EN, "soon", HourCycle::H12), "soon");
+        assert_eq!(time_for(EN, "24:00", HourCycle::H12), "24:00");
+        assert_eq!(time_for(EN, "09:00", HourCycle::H12), "9:00 AM");
+        assert_eq!(time_for(EN, "09:00", HourCycle::H24), "09:00");
+    }
+
+    #[test]
+    fn a_span_follows_the_cycle_too() {
+        assert_eq!(
+            span(
+                EN,
+                "2026-03-11T09:00",
+                "2026-03-11T13:30",
+                false,
+                HourCycle::H12
+            ),
+            "9:00 AM – 1:30 PM"
+        );
+        assert_eq!(
+            span(EN, "2026-03-11T09:00", "", false, HourCycle::H12),
+            "9:00 AM"
+        );
     }
 }

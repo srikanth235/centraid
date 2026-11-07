@@ -35,7 +35,7 @@ use super::routes;
 use super::todo::rows::hue_role;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda as words, agenda_event as event_words, fill};
@@ -303,9 +303,12 @@ impl Screen for EventPage {
             }
             Content::Data(detail) => match self.event() {
                 None => wire::agenda_event_state::Content::Gone(gone(locale)),
-                Some(event) => wire::agenda_event_state::Content::Data(Box::new(
-                    self.data(locale, event, detail),
-                )),
+                Some(event) => wire::agenda_event_state::Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.hour_cycle(),
+                    event,
+                    detail,
+                ))),
             },
         };
         let series_sheet = self.sheet == Sheet::CancelScope;
@@ -339,6 +342,7 @@ impl EventPage {
     fn data(
         &self,
         locale: Locale,
+        cycle: HourCycle,
         event: &wire::AgendaEvent,
         detail: &wire::AgendaEventDetail,
     ) -> wire::AgendaEventData {
@@ -359,7 +363,7 @@ impl EventPage {
                 .map_or_else(|| words::calendar_unnamed(locale), str::to_owned),
         };
         let date = date_label(locale, event);
-        let (when, spoken) = when_of(locale, event);
+        let (when, spoken) = when_of(locale, cycle, event);
         let reminder = event
             .reminders
             .first()
@@ -652,17 +656,17 @@ fn last_day(event: &wire::AgendaEvent) -> String {
 }
 
 /// "08:15 – 09:45" and "08:15 to 09:45"; "All day".
-fn when_of(locale: Locale, event: &wire::AgendaEvent) -> (String, String) {
+fn when_of(locale: Locale, cycle: HourCycle, event: &wire::AgendaEvent) -> (String, String) {
     if event.all_day {
         return (words::all_day(locale), words::all_day(locale));
     }
-    let from = civil::clock(&event.local_start);
-    let to = civil::clock(&event.local_end);
+    let from = civil::clock_for(locale, &event.local_start, cycle);
+    let to = civil::clock_for(locale, &event.local_end, cycle);
     if to.is_empty() || event.local_end == event.local_start {
         (from.clone(), from)
     } else {
         (
-            civil::span(locale, &event.local_start, &event.local_end, false),
+            civil::span(locale, &event.local_start, &event.local_end, false, cycle),
             fill(
                 &event_words::spoken_range(locale),
                 &[("from", &from), ("to", &to)],

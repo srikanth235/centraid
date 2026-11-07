@@ -47,6 +47,8 @@ pub struct Environment {
     pub platform: String,
     /// The platform deletes from its photo library behind its own confirmation.
     pub library_deletes: bool,
+    /// The phone keeps 12-hour time (`Environment.hour_cycle_12`); false is 24-hour.
+    pub hour_cycle_12: bool,
 }
 
 impl Default for Environment {
@@ -57,6 +59,7 @@ impl Default for Environment {
             region: String::new(),
             platform: String::new(),
             library_deletes: false,
+            hour_cycle_12: false,
         }
     }
 }
@@ -275,6 +278,13 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn library_deletes(&self) -> bool {
         self.env.library_deletes
+    }
+
+    /// How the phone words a time of day (`Environment.hour_cycle_12`): every
+    /// clock a screen shows goes through [`civil::clock_for`] with this.
+    #[must_use]
+    pub fn hour_cycle(&self) -> crate::kit::civil::HourCycle {
+        crate::kit::civil::HourCycle::of(self.env.hour_cycle_12)
     }
 
     /// Start (or restart) the named timer. When it elapses the screen gets

@@ -9,6 +9,7 @@ use super::snapshot::{
     self, Inputs, MAX_BYTES, MAX_ID, MAX_ROWS, MAX_TITLE, clip, ready, refresh_after_of,
     seconds_between, unavailable,
 };
+use crate::kit::civil::HourCycle;
 use crate::strings::Locale;
 
 const TODAY: &str = "2026-11-07";
@@ -66,22 +67,46 @@ fn task(id: &str, title: &str, due_day: &str, due_time: &str) -> wire::AgendaTas
     }
 }
 
-fn board(tasks: Vec<wire::AgendaTask>) -> wire::AgendaTaskBoard {
-    wire::AgendaTaskBoard {
-        groups: vec![wire::AgendaTaskGroup {
-            tasks,
-            ..Default::default()
-        }],
-        ..Default::default()
+/// What the core's count read would say about `tasks` if they were every open
+/// task there is (the fixtures below that are small enough to be).
+fn counted(tasks: &[wire::AgendaTask]) -> wire::AgendaTaskSmartCounts {
+    let open = || tasks.iter().filter(|task| task.status == "open");
+    let count = |keep: &dyn Fn(&wire::AgendaTask) -> bool| {
+        u32::try_from(open().filter(|task| keep(task)).count()).expect("a small count")
+    };
+    wire::AgendaTaskSmartCounts {
+        today: count(&|task| task.lands_today && !task.overdue),
+        overdue: count(&|task| task.overdue),
+        flagged: count(&|task| task.flagged),
+        today_day: TODAY.to_owned(),
     }
 }
 
 fn bytes(events: Vec<wire::AgendaEvent>, tasks: Vec<wire::AgendaTask>) -> Vec<u8> {
+    let counts = counted(&tasks);
+    bytes_counting(events, tasks, &counts)
+}
+
+/// The document when the counts are the vault's and the rows are only the few read.
+fn bytes_counting(
+    events: Vec<wire::AgendaEvent>,
+    tasks: Vec<wire::AgendaTask>,
+    counts: &wire::AgendaTaskSmartCounts,
+) -> Vec<u8> {
+    bytes_worded(events, tasks, counts, HourCycle::default())
+}
+
+/// The same, on a phone that words its times as `cycle`.
+fn bytes_worded(
+    events: Vec<wire::AgendaEvent>,
+    tasks: Vec<wire::AgendaTask>,
+    counts: &wire::AgendaTaskSmartCounts,
+    cycle: HourCycle,
+) -> Vec<u8> {
     let upcoming = wire::AgendaUpcoming {
         events,
         ..Default::default()
     };
-    let tasks = board(tasks);
     ready(&Inputs {
         locale: Locale::En,
         zone: ZONE,
@@ -89,6 +114,8 @@ fn bytes(events: Vec<wire::AgendaEvent>, tasks: Vec<wire::AgendaTask>) -> Vec<u8
         now_local: NOW,
         upcoming: &upcoming,
         tasks: &tasks,
+        cycle,
+        counts,
     })
 }
 
@@ -142,6 +169,9 @@ fn a_ready_document_has_the_schema_and_the_pinned_clock() {
         keys,
         [
             "now_local",
+            "open_add",
+            "open_reminders",
+            "open_up_next",
             "refresh_after",
             "reminders",
             "siri",
@@ -167,6 +197,7 @@ fn a_ready_document_has_the_schema_and_the_pinned_clock() {
     assert_eq!(first["ends_local"], "2026-11-07T16:00");
     assert_eq!(first["all_day"], false);
     assert_eq!(first["tint"], "agenda");
+    assert_eq!(first["open"], "e:e1:2026-11-07T15:00");
     assert_eq!(doc["siri"]["next_sentence"], "Next is Dentist at 15:00.");
     // The example a reader of this schema is written against.
     println!("{}", serde_json::to_string_pretty(&doc).expect("pretty"));
@@ -406,14 +437,15 @@ fn refresh_after_is_the_next_midnight_or_the_nearest_boundary() {
     assert_eq!(midnight["refresh_after"], "2026-11-08T00:00");
     // A year's end rolls the year.
     let upcoming = wire::AgendaUpcoming::default();
-    let tasks = wire::AgendaTaskBoard::default();
     let year_end = ready(&Inputs {
         locale: Locale::En,
         zone: ZONE,
         today: "2026-12-31",
         now_local: "2026-12-31T23:10",
         upcoming: &upcoming,
-        tasks: &tasks,
+        tasks: &[],
+        cycle: HourCycle::default(),
+        counts: &wire::AgendaTaskSmartCounts::default(),
     });
     assert_eq!(
         refresh_after_of(&year_end).as_deref(),
@@ -554,6 +586,44 @@ fn a_thousand_long_rows_stay_in_bounds_with_true_counts() {
     assert_eq!(doc["reminders"]["flagged_count"], 100);
 }
 
+/// THE COUNTS ARE THE VAULT'S, NOT THE WINDOW'S (#1173): the rows come from a
+/// window that holds a few tasks, and the count read says the vault holds far
+/// more. The document says the vault's numbers and draws at most six rows.
+#[test]
+fn counts_are_independent_of_the_rows_the_window_held() {
+    let tasks: Vec<wire::AgendaTask> = (0..20)
+        .map(|n| {
+            if n % 2 == 0 {
+                task(&format!("today-{n}"), "Due", TODAY, "")
+            } else {
+                task(&format!("late-{n}"), "Late", "2026-11-01", "")
+            }
+        })
+        .collect();
+    let counts = wire::AgendaTaskSmartCounts {
+        today: 1_200,
+        overdue: 1_500,
+        flagged: 90,
+        today_day: TODAY.to_owned(),
+    };
+    let doc: Value = serde_json::from_slice(&bytes_counting(vec![], tasks, &counts)).expect("JSON");
+    assert_eq!(doc["reminders"]["today_count"], 1_200);
+    assert_eq!(doc["reminders"]["overdue_count"], 1_500);
+    assert_eq!(doc["reminders"]["flagged_count"], 90);
+    assert_eq!(doc["words"]["overdue_label"], "1500 overdue");
+    assert_eq!(doc["words"]["today_label"], "1200 today");
+    let rows = doc["reminders"]["rows"].as_array().expect("rows");
+    assert_eq!(
+        rows.len(),
+        MAX_ROWS,
+        "the rows are capped, the counts are not"
+    );
+    assert!(
+        rows.iter().all(|row| row["overdue"] == true),
+        "overdue fills the rows first"
+    );
+}
+
 #[test]
 fn control_characters_cannot_push_the_document_past_its_bound() {
     // A control character escapes to six bytes; the rows are dropped from the
@@ -584,4 +654,105 @@ fn control_characters_cannot_push_the_document_past_its_bound() {
 #[test]
 fn the_module_documents_its_version() {
     assert_eq!(snapshot::VERSION, 1);
+}
+
+/// THE PHONE'S 12 OR 24 HOUR SETTING: the rows' labels and the sentence Siri
+/// speaks are worded as the phone words a time; the default stays 24-hour; the
+/// machine strings a widget compares (`starts_local`) never change.
+#[test]
+fn times_follow_the_phones_hour_cycle() {
+    let events = || {
+        vec![event(
+            "d",
+            "Dentist",
+            "2026-11-07T15:00",
+            "2026-11-07T16:00",
+            false,
+            &[TODAY],
+        )]
+    };
+    let tasks = || vec![task("t", "Send invoice", TODAY, "17:30")];
+    let counts = counted(&tasks());
+    let twelve: Value =
+        serde_json::from_slice(&bytes_worded(events(), tasks(), &counts, HourCycle::H12))
+            .expect("JSON");
+    assert_eq!(twelve["up_next"][0]["time_label"], "3:00 PM");
+    assert_eq!(twelve["up_next"][1]["time_label"], "5:30 PM");
+    assert_eq!(twelve["up_next"][0]["starts_local"], "2026-11-07T15:00");
+    assert_eq!(
+        twelve["siri"]["next_sentence"],
+        "Next is Dentist at 3:00 PM."
+    );
+    let plain = build(events(), tasks());
+    assert_eq!(plain["up_next"][0]["time_label"], "15:00");
+    assert_eq!(plain["up_next"][1]["time_label"], "17:30");
+}
+
+/// THE OPEN KEYS: opaque, short, one per row and one per place, and every key a
+/// document carries is one the table the service answers from holds.
+#[test]
+fn rows_carry_open_keys_and_the_table_names_each() {
+    use super::snapshot::{Open, ready_with_opens, unavailable_with_opens};
+    let upcoming = wire::AgendaUpcoming {
+        events: vec![event(
+            "series",
+            "Dentist",
+            "2026-11-07T15:00",
+            "2026-11-07T16:00",
+            false,
+            &[TODAY],
+        )],
+        ..Default::default()
+    };
+    let tasks = vec![
+        task("t1", "Send invoice", TODAY, "17:30"),
+        task("t2", "Water plants", TODAY, ""),
+    ];
+    let counts = counted(&tasks);
+    let (raw, opens) = ready_with_opens(&Inputs {
+        locale: Locale::En,
+        zone: ZONE,
+        today: TODAY,
+        now_local: NOW,
+        upcoming: &upcoming,
+        tasks: &tasks,
+        cycle: HourCycle::default(),
+        counts: &counts,
+    });
+    let doc: Value = serde_json::from_slice(&raw).expect("JSON");
+    assert_eq!(doc["version"], 1);
+    assert_eq!(doc["open_up_next"], "up_next");
+    assert_eq!(doc["open_reminders"], "reminders");
+    assert_eq!(doc["open_add"], "add");
+    assert_eq!(doc["up_next"][0]["open"], "e:series:2026-11-07T15:00");
+    assert_eq!(doc["up_next"][1]["open"], "t:t1");
+    // A date-only due is listed before a timed one.
+    assert_eq!(doc["reminders"]["rows"][0]["open"], "t:t2");
+    assert_eq!(doc["reminders"]["rows"][1]["open"], "t:t1");
+    assert_eq!(
+        opens.get("t:t2"),
+        Some(&Open::Task {
+            task_id: "t2".to_owned()
+        })
+    );
+    assert!(matches!(
+        opens.get("e:series:2026-11-07T15:00"),
+        Some(Open::Event { event_id, day, .. }) if event_id == "series" && day == TODAY
+    ));
+    assert_eq!(opens.get("add"), Some(&Open::Add));
+    // Nothing the document names is missing from the table.
+    for key in doc["up_next"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(doc["reminders"]["rows"].as_array().into_iter().flatten())
+        .filter_map(|row| row["open"].as_str())
+    {
+        assert!(opens.contains_key(key), "{key}");
+    }
+    // The unavailable document still opens the app's places, and only those.
+    let (raw, opens) = unavailable_with_opens(Locale::En, ZONE);
+    let doc: Value = serde_json::from_slice(&raw).expect("JSON");
+    assert_eq!(doc["open_add"], "add");
+    assert_eq!(opens.len(), 3);
 }

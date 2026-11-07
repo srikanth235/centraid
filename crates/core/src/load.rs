@@ -388,6 +388,27 @@ fn read(
                 limit: p.limit(0),
             },
         )?,
+        ("agenda", "smart-counts") => app_query::agenda_task::smart_counts(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskSmartCountsRequest { tz },
+        )?,
+        ("agenda", "due-rows") => app_query::agenda_task::due_rows(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskDueRowsRequest {
+                tz,
+                limit: p.limit(0),
+                window: en!(
+                    p,
+                    "window",
+                    "AGENDA_TASK_DUE_WINDOW_",
+                    wire::AgendaTaskDueWindow
+                ),
+            },
+        )?,
         ("agenda", "trash") => {
             app_query::agenda_task::trash(vault, door, &wire::AgendaTaskTrashRequest { tz })?
         }

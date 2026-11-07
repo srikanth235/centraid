@@ -116,7 +116,7 @@ impl Screen for Versions {
                     versions: document
                         .versions
                         .iter()
-                        .map(|version| fold::version(locale, version, trashed))
+                        .map(|version| fold::version(locale, ctx.hour_cycle(), version, trashed))
                         .collect(),
                     empty: (document.document.is_none() || document.versions.is_empty()).then(
                         || wire::EmptyState {

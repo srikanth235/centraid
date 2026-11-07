@@ -84,17 +84,19 @@ public class Screens(
 
     /**
      * Report the device's locale and zone (Rust formats from them), the platform, and whether it
-     * deletes from its photo library behind its own confirmation (Free up space is offered only then).
+     * deletes from its photo library behind its own confirmation (Free up space is offered only then),
+     * and whether it keeps 12-hour time (`hourCycle12`; Rust words every time by it).
      */
     public suspend fun environment(
         locale: String,
         zone: String,
         platform: String = "android",
         libraryDeletes: Boolean = false,
+        hourCycle12: Boolean = false,
     ): CoreOutcome<Unit> =
         request(
             ScreenRequest(
-                environment = Environment(locale = locale, zone = zone, platform = platform, library_deletes = libraryDeletes),
+                environment = Environment(locale = locale, zone = zone, platform = platform, library_deletes = libraryDeletes, hour_cycle_12 = hourCycle12),
             ),
         )
 

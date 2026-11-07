@@ -5057,6 +5057,60 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// How many open tasks are due today, overdue and flagged, counted over every open task in the vault and never over a board's window, so the figure is true at any vault size. It counts the open top-level tasks the board draws (an unfinished subtask of a closed or trashed task counts as its own) and reads each due as the board does, in the request's zone against the vault clock. Returns three numbers and the `today_day` they were counted against; no rows.
+        #[derive(Clone, Debug, Default)]
+        pub struct SmartCounts {
+        }
+        impl SmartCounts {
+            pub const NAME: &str = "smart-counts";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<SmartCounts> for wire::LoadRequest {
+            fn from(value: SmartCounts) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum DueRowsWindow {
+            #[default]
+            Now,
+            TimedAhead,
+        }
+        impl DueRowsWindow {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Now => "now",
+                    Self::TimedAhead => "timed_ahead",
+                }
+            }
+        }
+
+        /// The open tasks due soonest, read in due order over every open task in the vault and never over a board's window of the newest, so the rows are the earliest at any vault size: window `now` is overdue first and then due today (each by due, then the member's order), window `timed_ahead` is the tasks with a time due today or tomorrow. At most `limit` rows (1 to 12, default 6), the open top-level tasks the board draws, each placed as the board places it (a repeating task by its next period). Rows are single tasks: no families.
+        #[derive(Clone, Debug, Default)]
+        pub struct DueRows {
+            pub limit: u32,
+            pub window: Option<DueRowsWindow>,
+        }
+        impl DueRows {
+            pub const NAME: &str = "due-rows";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.window { map.insert("window".to_owned(), text(it.wire())); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<DueRows> for wire::LoadRequest {
+            fn from(value: DueRows) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {

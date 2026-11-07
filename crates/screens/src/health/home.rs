@@ -308,7 +308,7 @@ impl Home {
             .today
             .workouts
             .iter()
-            .map(|row| figures::line(locale, row, day, units, &parent))
+            .map(|row| figures::line(locale, ctx.hour_cycle(), row, day, units, &parent))
             .collect();
         let highlights = highlights::lines(locale, &loaded.today.metrics, &parent);
         let mut lines = lines.into_iter();
@@ -410,7 +410,7 @@ impl Home {
             } else {
                 figures::month_heading(locale, day, today)
             };
-            let line = figures::line(locale, row, today, units, &parent);
+            let line = figures::line(locale, ctx.hour_cycle(), row, today, units, &parent);
             match sections
                 .iter_mut()
                 .find(|section| section.heading == heading)

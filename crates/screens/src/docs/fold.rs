@@ -10,7 +10,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::{folders, routes};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, docs as words, shared};
 
 /// The `design/icons.toml` key of a trash glyph.
@@ -53,9 +53,9 @@ pub fn dated(locale: Locale, verb: &str, local: &str, today: &str) -> String {
 
 /// "Wed 11 March 09:12", or `None` for no reading.
 #[must_use]
-pub fn stamp(locale: Locale, local: &str) -> Option<String> {
+pub fn stamp(locale: Locale, cycle: HourCycle, local: &str) -> Option<String> {
     let day = local.get(..10)?;
-    let clock = civil::clock(local);
+    let clock = civil::clock_for(locale, local, cycle);
     let day = civil::day_month(locale, day);
     Some(if clock.is_empty() {
         day
@@ -362,6 +362,7 @@ pub fn labels_sheet(
 #[must_use]
 pub fn document(
     locale: Locale,
+    cycle: HourCycle,
     answer: &wire::DocsDocument,
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
@@ -390,7 +391,7 @@ pub fn document(
         .unwrap_or_default();
     wire::DocsDocumentData {
         surface: Some(surface),
-        facts: facts(locale, found, answer, &view),
+        facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
         actions: head_actions(locale, found),
@@ -518,6 +519,7 @@ fn stage(
 
 fn facts(
     locale: Locale,
+    cycle: HourCycle,
     row: &wire::DocsDocumentRow,
     answer: &wire::DocsDocument,
     view: &wire::DocsRowView,
@@ -539,10 +541,10 @@ fn facts(
             .filter(|name| !name.trim().is_empty())
             .unwrap_or_else(|| words::move_top(locale)),
     ));
-    if let Some(added) = stamp(locale, &row.created_local) {
+    if let Some(added) = stamp(locale, cycle, &row.created_local) {
         facts.push(fact(words::fact_added(locale), added));
     }
-    if let Some(changed) = stamp(locale, &row.updated_local) {
+    if let Some(changed) = stamp(locale, cycle, &row.updated_local) {
         facts.push(fact(words::fact_changed(locale), changed));
     }
     if !row.labels.is_empty() {
@@ -566,11 +568,16 @@ fn facts(
 
 /// One version of the history page.
 #[must_use]
-pub fn version(locale: Locale, version: &wire::DocsVersion, trashed: bool) -> wire::DocsVersionRow {
+pub fn version(
+    locale: Locale,
+    cycle: HourCycle,
+    version: &wire::DocsVersion,
+    trashed: bool,
+) -> wire::DocsVersionRow {
     let meta = [
         version.current.then(|| words::current(locale)),
         Some(version.size.clone()).filter(|size| !size.is_empty()),
-        stamp(locale, &version.asserted_local),
+        stamp(locale, cycle, &version.asserted_local),
     ]
     .into_iter()
     .flatten()

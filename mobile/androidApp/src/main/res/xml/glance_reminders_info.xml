@@ -6,6 +6,8 @@
   `refresh_after`, which redraws the widget into its stale words. Sizes: 2x2 by default,
   resizable to 4x2 (`maxResizeHeight` keeps it two cells tall). Name and description are the
   generated strings, because the launcher reads them before any code runs.
+  Privacy ruling (#1173): event and reminder titles never show on a locked phone, so the
+  widget is `home_screen` only, never `keyguard`.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/glance_widget_reminders_description"

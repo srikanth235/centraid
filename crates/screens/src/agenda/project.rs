@@ -17,6 +17,7 @@ use super::todo::order;
 use super::todo::quick::Quick;
 use super::todo::rows::{self, Context};
 use crate::catalog::{act, load};
+use crate::kit::civil::HourCycle;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, task as words};
@@ -129,10 +130,12 @@ impl Project {
     fn completed_state(
         &self,
         locale: Locale,
+        cycle: HourCycle,
         board: &wire::AgendaTaskBoard,
     ) -> wire::TodoCompleted {
         let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
         row_ctx.show_project = false;
+        row_ctx.cycle = cycle;
         wire::TodoCompleted {
             count: self.completed.len() as u32,
             count_label: reminders::completed_count(locale, self.completed.len() as u64),
@@ -217,7 +220,12 @@ impl Project {
         }
     }
 
-    fn data(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoProjectData {
+    fn data(
+        &self,
+        locale: Locale,
+        cycle: HourCycle,
+        board: &wire::AgendaTaskBoard,
+    ) -> wire::TodoProjectData {
         let rename = |data: wire::TodoProjectData| wire::TodoProjectData {
             rename_label: agenda_todo::rename(locale),
             rename_title: agenda_todo::rename_title(locale),
@@ -238,6 +246,7 @@ impl Project {
         }
         let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
         row_ctx.show_project = false;
+        row_ctx.cycle = cycle;
         let groups = rows::groups(locale, &board.groups, &row_ctx);
         rename(wire::TodoProjectData {
             today: board.today.clone(),
@@ -250,12 +259,12 @@ impl Project {
             add_section_label: words::add_section(locale),
             found: true,
             list_color_key: self.color_key(board),
-            completed: Some(self.completed_state(locale, board)),
+            completed: Some(self.completed_state(locale, cycle, board)),
             ..wire::TodoProjectData::default()
         })
     }
 
-    fn quick_add(&self, locale: Locale) -> wire::TodoQuickAdd {
+    fn quick_add(&self, locale: Locale, cycle: HourCycle) -> wire::TodoQuickAdd {
         let found = self.found();
         let mut bar = wire::TodoQuickAdd {
             title: self.quick_title.clone(),
@@ -272,7 +281,7 @@ impl Project {
             // A day the toolbar staged is the date: no second reading.
             chip: if self.quick.due_day(&self.today()).is_empty() {
                 self.chip
-                    .reading(locale, &self.quick_title)
+                    .reading(locale, cycle, &self.quick_title)
                     .map(|reading| reading.chip())
             } else {
                 None
@@ -477,7 +486,9 @@ impl Screen for Project {
             Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
             Phase::Failed => Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            Phase::Ready(board) => Content::Data(Box::new(self.data(locale, board))),
+            Phase::Ready(board) => {
+                Content::Data(Box::new(self.data(locale, ctx.hour_cycle(), board)))
+            }
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoProject(
@@ -486,7 +497,7 @@ impl Screen for Project {
                     content: Some(content),
                     chrome: Some(rows::chrome(locale)),
                     status: self.ops.status.clone(),
-                    quick_add: Some(self.quick_add(locale)),
+                    quick_add: Some(self.quick_add(locale, ctx.hour_cycle())),
                     sheet: self.sheet as i32,
                     new_section_name: self.new_section_name.clone(),
                     new_section_can_submit: !self.new_section_name.trim().is_empty(),

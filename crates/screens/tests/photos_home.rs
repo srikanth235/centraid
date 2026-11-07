@@ -1436,6 +1436,7 @@ fn environment(r: &mut Rig, deletes: bool) {
         zone: "UTC".to_owned(),
         platform: "ios".to_owned(),
         library_deletes: deletes,
+        hour_cycle_12: false,
     }));
 }
 

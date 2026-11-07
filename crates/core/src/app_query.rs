@@ -147,6 +147,8 @@ pub(crate) fn answer_recording(
         Q::AgendaTaskCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
         Q::AgendaTaskReminders(asked) => agenda_task::reminders(vault, &door, &now, asked)?,
         Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
+        Q::AgendaTaskSmartCounts(asked) => agenda_task::smart_counts(vault, &door, &now, asked)?,
+        Q::AgendaTaskDueRows(asked) => agenda_task::due_rows(vault, &door, &now, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,

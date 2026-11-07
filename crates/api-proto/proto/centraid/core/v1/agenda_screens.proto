@@ -1230,7 +1230,8 @@ message AgendaEditorData {
   // The scope sheet's Save is armed (a scope is picked).
   bool scope_armed = 23;
   // The day and the time apart, for a row that draws two pickers:
-  // "Wednesday 11 March" and "08:15". The times are empty all-day.
+  // "Wednesday 11 March" and "08:15" ("8:15 AM" on a 12-hour phone). The times
+  // are empty all-day.
   string start_day_label = 24;
   string start_time_label = 25;
   string end_day_label = 26;

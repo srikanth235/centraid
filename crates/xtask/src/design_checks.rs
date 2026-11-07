@@ -261,6 +261,8 @@ fn shell_sources() -> Vec<PathBuf> {
     let mut out = Vec::new();
     for dir in [
         "mobile/iosApp/Sources",
+        "mobile/iosApp/Widgets",
+        "mobile/iosApp/Shared",
         "mobile/iosApp/Design",
         "mobile/androidApp/src",
     ] {

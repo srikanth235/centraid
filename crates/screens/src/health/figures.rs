@@ -5,7 +5,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::{Metric, Units, kinds};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, fill, health as words};
 
 pub const BP: u32 = 10_000;
@@ -364,6 +364,7 @@ pub fn kind_icon(key: &str) -> &'static str {
 #[must_use]
 pub fn line(
     locale: Locale,
+    cycle: HourCycle,
     row: &wire::HealthWorkoutRow,
     today: &str,
     units: Units,
@@ -371,7 +372,7 @@ pub fn line(
 ) -> wire::HealthWorkoutLine {
     let local = &row.local_start;
     let day = local.get(..10).unwrap_or_default();
-    let clock = civil::clock(local);
+    let clock = civil::clock_for(locale, local, cycle);
     let meta = [
         row.distance_m.filter(|metres| *metres > 0.0).map(|metres| {
             let (n, u) = distance(locale, metres, units);
@@ -553,7 +554,14 @@ mod tests {
             length_sec: 1_864,
             ..Default::default()
         };
-        let today = line(EN, &row, "2026-10-20", Units::Metric, "Health");
+        let today = line(
+            EN,
+            HourCycle::default(),
+            &row,
+            "2026-10-20",
+            Units::Metric,
+            "Health",
+        );
         assert_eq!(today.title, "Morning run");
         assert_eq!(today.meta, "5.2 km · 31 min");
         assert_eq!(today.when_label, "07:10");
@@ -562,7 +570,15 @@ mod tests {
             ..row.clone()
         };
         assert_eq!(
-            line(EN, &week, "2026-10-20", Units::Metric, "").when_label,
+            line(
+                EN,
+                HourCycle::default(),
+                &week,
+                "2026-10-20",
+                Units::Metric,
+                ""
+            )
+            .when_label,
             "Sun"
         );
         let old = wire::HealthWorkoutRow {
@@ -570,7 +586,15 @@ mod tests {
             ..row
         };
         assert_eq!(
-            line(EN, &old, "2026-10-20", Units::Metric, "").when_label,
+            line(
+                EN,
+                HourCycle::default(),
+                &old,
+                "2026-10-20",
+                Units::Metric,
+                ""
+            )
+            .when_label,
             "30 Sep"
         );
     }

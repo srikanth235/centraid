@@ -24,6 +24,8 @@ message AgendaGlance {
 message AgendaIntent {
   oneof kind {
     AgendaIntentAdd add = 1;
+    // A widget's tap (added in wave 3, additive).
+    AgendaIntentOpen open = 2;
   }
 }
 
@@ -31,4 +33,12 @@ message AgendaIntent {
 // be empty). Nothing is written until the member taps Add.
 message AgendaIntentAdd {
   string title = 1;
+}
+
+// A widget row or body was tapped: `key` is the opaque `open` string of the
+// snapshot's row (or its `open_up_next`, `open_reminders` or `open_add`), handed
+// back untouched. The core chooses the page: a shell never names a screen, and
+// a key the core did not offer in its last snapshot opens Agenda's home.
+message AgendaIntentOpen {
+  string key = 1;
 }

@@ -45,6 +45,7 @@ pub mod page;
 pub mod plans;
 pub mod roster;
 pub mod snapshot;
+pub mod task_counts;
 pub mod testdoor;
 pub mod tidy;
 pub mod time;

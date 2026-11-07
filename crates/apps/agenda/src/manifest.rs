@@ -44,9 +44,9 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eleven_queries_and_twenty_six_actions() {
+    fn it_declares_thirteen_queries_and_twenty_six_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 11);
+        assert_eq!(manifest.queries.len(), 13);
         assert_eq!(manifest.actions.len(), 26);
         for name in [
             "upcoming",
@@ -60,6 +60,8 @@ mod tests {
             "catch-up",
             "reminders",
             "trash",
+            "smart-counts",
+            "due-rows",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }

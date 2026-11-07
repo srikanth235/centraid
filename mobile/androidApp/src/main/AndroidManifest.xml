@@ -147,10 +147,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "ADD A REMINDER" (#1173): the launcher's long-press shortcut. Its intent is
-                 `dev.centraid.action.ADD_REMINDER` aimed at this activity, which hands it to the
-                 core (`glance/AddReminderShortcut.kt`); the widget's New Reminder button sends the
-                 same intent. No filter for it: both are explicit, so no other app can send it. -->
+            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcut
+                 sends `dev.centraid.action.ADD_REMINDER` and a widget's rows, body and button send
+                 `dev.centraid.action.AGENDA_OPEN` with one opaque key, both aimed at this activity,
+                 which hands them to the core (`glance/AgendaIntents.kt`). There is no filter for
+                 them, but the activity is exported, so ANY app may send either: nothing here is
+                 trusted. The core opens only a page the snapshot's own table names for that key,
+                 and Agenda's home for any other, and an add writes nothing until the member taps
+                 Add. -->
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
@@ -162,7 +166,8 @@
              binds a widget's provider; the only broadcasts they act on are the platform's update and
              the app's own redraw request, and both only redraw what is already on disk. The label
              and the description come from the generated strings, which the launcher reads before any
-             code runs. -->
+             code runs. Privacy ruling: titles never show on a locked phone, so both providers are
+             `home_screen` only (never `keyguard`) and the app adds no lock-screen surface. -->
         <receiver
             android:name="dev.centraid.android.glance.UpNextWidget"
             android:exported="true"

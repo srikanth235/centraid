@@ -44,7 +44,7 @@ use centraid_vault::time::recurrence::{
     CollapseInput, RecurrenceAnchor, collapse_missed, is_all_day_anchor,
 };
 use centraid_vault::time::rrule;
-use centraid_vault::time::zone::FireZone;
+use centraid_vault::time::zone::{FireZone, add_wall_days, parse_wall_iso, wall_iso};
 
 pub use centraid_apps_kit::attached::Attachment;
 
@@ -52,6 +52,8 @@ use crate::task::board::{
     BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, FamilyRow, LOGBOOK_ROWS, by_urgency, is_open_status,
     nest_task_families,
 };
+use crate::task::local::Civil;
+use crate::task::views::Placed;
 use crate::{Denial, denial_of};
 
 /// A join per windowed task: the kit's default, 500 x 8 = 4,000 rows.
@@ -381,6 +383,303 @@ fn open_window(door: &dyn PageDoor, window: usize) -> KitResult<(Vec<TaskRow>, b
         query: "agenda.task.board.open".to_owned(),
         cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
     })
+}
+
+/// The names of the two id-keyed reads a roots walk makes (entities, then parents).
+type RootReads = (&'static str, &'static str);
+
+const COUNT_READS: RootReads = (
+    "agenda.task.smart-counts.entities",
+    "agenda.task.smart-counts.parents",
+);
+const DUE_READS: RootReads = (
+    "agenda.task.due-rows.entities",
+    "agenda.task.due-rows.parents",
+);
+
+/// The open ROOTS among a page of `task` rows, as the board draws them: live (not
+/// trashed), with their words, and not the subtask of an open, live parent (that task
+/// belongs to its parent).
+fn open_roots(door: &dyn PageDoor, rows: &[Row], names: RootReads) -> KitResult<Vec<TaskRow>> {
+    let ids = ids_of(rows, "id");
+    let entities = live_entities(door, names.0, &ids)?;
+    let tasks = tasks_of(&entities, rows);
+    let parent_ids: Vec<String> = tasks
+        .iter()
+        .filter_map(|task| task.parent_task_id.clone())
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect();
+    let open_parents: BTreeSet<String> = live_tasks(door, names.1, "id", &parent_ids)?
+        .into_iter()
+        .filter(|parent| is_open_status(&parent.status))
+        .map(|parent| parent.task_id)
+        .collect();
+    Ok(tasks
+        .into_iter()
+        .filter(|task| {
+            !task
+                .parent_task_id
+                .as_ref()
+                .is_some_and(|parent| open_parents.contains(parent))
+        })
+        .collect())
+}
+
+/// How many open REPEATING roots are overdue and how many are due today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RepeatingDue {
+    pub overdue: usize,
+    pub today: usize,
+}
+
+/// The repeating open roots' share of the true counts (#1173): a repeating task's
+/// due is its next open period, which only the recurrence engine computes, so
+/// SQL leaves these tasks to this read. They are walked a page at a time by the
+/// index's own order (`task_by_due`), so the cost is the repeating tasks the member
+/// keeps, and a vault with more than [`OPEN_WALK_PAGES`] pages of them refuses
+/// ([`KitError::FanOutExceeded`]) rather than answering a short count.
+///
+/// A task counts as the board draws it: live, open, and a root (a subtask of an
+/// open, live parent is its parent's).
+///
+/// # Errors
+///
+/// A door refusal or the walk's bound.
+pub fn load_repeating_due(
+    door: &dyn PageDoor,
+    now: &str,
+    zone: &FireZone,
+    today: &Civil,
+) -> KitResult<RepeatingDue> {
+    let query = PageQuery::new(
+        "agenda.task.smart-counts.repeating",
+        TASK_COLUMNS,
+        "task",
+        PageOrder::asc("due", "id"),
+    )
+    .filter("status = ? AND rule IS NOT NULL", vec![text("open")]);
+    let mut counted = RepeatingDue::default();
+    let mut after = None;
+    for _ in 0..OPEN_WALK_PAGES {
+        let page = door.page(
+            &query,
+            &PageRequest {
+                limit: MAX_PAGE_ROWS,
+                after: after.take(),
+            },
+        )?;
+        for mut task in open_roots(door, &page.rows, COUNT_READS)? {
+            task.recurrence = recurrence_of(&task, now, zone);
+            let placed = crate::task::views::place(&task, zone, today);
+            counted.overdue += usize::from(placed.due.overdue);
+            counted.today += usize::from(placed.due.lands_today && !placed.due.overdue);
+        }
+        match page.next {
+            None => return Ok(counted),
+            Some(next) => after = Some(next),
+        }
+    }
+    Err(KitError::FanOutExceeded {
+        query: "agenda.task.smart-counts.repeating".to_owned(),
+        cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
+    })
+}
+
+/// Which tasks [`load_due_rows`] reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DueWindow {
+    /// Overdue first, then due today: each by due, then the member's order.
+    Now,
+    /// Tasks with a time due today or tomorrow (none overdue), by due.
+    TimedAhead,
+}
+
+/// The most rows the due-ordered read answers.
+pub const DUE_ROWS_MAX: usize = 12;
+
+/// A page of the due-ordered walk: small, because the walk usually ends on the first.
+const DUE_PAGE_ROWS: usize = 24;
+
+/// The most pages one due-ordered walk reads: 32 x 24 = 768 rows, which a day with
+/// hundreds of tasks due on it can fill and a vault of thousands never gets past.
+const DUE_WALK_PAGES: usize = 32;
+
+/// THE EARLIEST-DUE ROWS (#1173): the open roots due soonest, read by `task_by_due`'s
+/// own order and never from a board's window of the newest, so the answer is the same
+/// at any vault size. At most `limit` (clamped to [`DUE_ROWS_MAX`]) placed rows, in the
+/// order the widget draws: overdue first, then by due day, due time and the member's
+/// own order.
+///
+/// **The index orders by the stored due, which is not the due's day in the member's
+/// zone** (a stored due has three spellings, see `Vault::open_task_counts`: a civil
+/// date, a wall clock, an instant). The walk therefore reads in the index's order,
+/// places each row exactly as the board does, and stops only once it holds `limit`
+/// rows and the index has moved a whole day past the last one it kept; a UTC instant
+/// is at most a day from its local day, so no row it left behind can be earlier.
+/// Bounded by [`DUE_WALK_PAGES`]: a day holding more tasks than that fills the walk
+/// and the answer is the member's order among those it read.
+///
+/// **A repeating task's due is its next open period**, which only the recurrence
+/// engine computes, so the repeating roots are read apart ([`load_repeating_due`]'s
+/// walk) and merged. Their stored due is the first period's, never later than the
+/// next, so the same bound holds for them.
+///
+/// # Errors
+///
+/// A door refusal, or the repeating walk's bound.
+pub fn load_due_rows(
+    door: &dyn PageDoor,
+    now: &str,
+    zone: &FireZone,
+    today: &Civil,
+    window: DueWindow,
+    limit: usize,
+) -> KitResult<Vec<Placed>> {
+    let limit = limit.clamp(1, DUE_ROWS_MAX);
+    let day = |offset: i64| wall_iso(add_wall_days(today.day, offset), false);
+    // The stored due's index range. An instant is at most a day from its local day, so
+    // the bounds are a day wider than the days asked for.
+    let (low, high, timed_only) = match window {
+        DueWindow::Now => (None, day(2), false),
+        DueWindow::TimedAhead => (Some(day(-1)), day(3), true),
+    };
+    let wanted = |placed: &Placed| match window {
+        DueWindow::Now => placed.due.lands_today,
+        DueWindow::TimedAhead => {
+            !placed.due.due_time.is_empty()
+                && !placed.due.overdue
+                && placed.due.days_from_today.is_some_and(|days| days <= 1)
+        }
+    };
+    let mut kept: Vec<Placed> = Vec::new();
+
+    // The one-off tasks, in the index's order.
+    let mut clauses = String::from("status = ? AND rule IS NULL AND due < ?");
+    let mut binds = vec![text("open"), text(&high)];
+    if let Some(low) = &low {
+        clauses.push_str(" AND due >= ?");
+        binds.push(text(low));
+    }
+    if timed_only {
+        clauses.push_str(" AND length(due) > 10");
+    }
+    let query = PageQuery::new(
+        "agenda.task.due-rows",
+        TASK_COLUMNS,
+        "task",
+        PageOrder::asc("due", "id"),
+    )
+    .filter(&clauses, binds);
+    let mut after = None;
+    for _ in 0..DUE_WALK_PAGES {
+        let page = door.page(
+            &query,
+            &PageRequest {
+                limit: DUE_PAGE_ROWS,
+                after: after.take(),
+            },
+        )?;
+        let frontier = page
+            .rows
+            .last()
+            .and_then(|row| text_of(row, "due"))
+            .and_then(|due| due.get(..10).map(str::to_owned));
+        for task in open_roots(door, &page.rows, DUE_READS)? {
+            let placed = crate::task::views::place(&task, zone, today);
+            if wanted(&placed) {
+                kept.push(placed);
+            }
+        }
+        kept.sort_by(due_order);
+        let Some(next) = page.next else { break };
+        // Enough rows, and the index is a whole day past the last one wanted.
+        if kept.len() >= limit
+            && let (Some(frontier), Some(cut)) = (&frontier, kept.get(limit - 1))
+            && day_after(&cut.due.due_day, 1).is_some_and(|stop| frontier.as_str() > stop.as_str())
+        {
+            break;
+        }
+        after = Some(next);
+    }
+
+    // The repeating tasks, each dated by its next period.
+    let repeating = PageQuery::new(
+        "agenda.task.due-rows.repeating",
+        TASK_COLUMNS,
+        "task",
+        PageOrder::asc("due", "id"),
+    )
+    .filter(
+        "status = ? AND rule IS NOT NULL AND due < ?",
+        vec![text("open"), text(&high)],
+    );
+    let mut after = None;
+    let mut finished = false;
+    for _ in 0..OPEN_WALK_PAGES {
+        let page = door.page(
+            &repeating,
+            &PageRequest {
+                limit: MAX_PAGE_ROWS,
+                after: after.take(),
+            },
+        )?;
+        for mut task in open_roots(door, &page.rows, DUE_READS)? {
+            task.recurrence = recurrence_of(&task, now, zone);
+            let placed = crate::task::views::place(&task, zone, today);
+            if wanted(&placed) {
+                kept.push(placed);
+            }
+        }
+        match page.next {
+            None => {
+                finished = true;
+                break;
+            }
+            Some(next) => after = Some(next),
+        }
+    }
+    if !finished {
+        return Err(KitError::FanOutExceeded {
+            query: "agenda.task.due-rows.repeating".to_owned(),
+            cap: OPEN_WALK_PAGES * MAX_PAGE_ROWS,
+        });
+    }
+
+    kept.sort_by(due_order);
+    kept.dedup_by(|a, b| a.task.task_id == b.task.task_id);
+    kept.truncate(limit);
+    // THE ROWS' DECORATIONS, for the few that are kept: the flag, and the rest the
+    // board's rows carry.
+    let ids: Vec<String> = kept
+        .iter()
+        .map(|placed| placed.task.task_id.clone())
+        .collect();
+    let decorations = read_decorations(door, &ids, true)?;
+    for placed in &mut kept {
+        placed.task = decorate(&placed.task, &decorations, now, zone);
+    }
+    Ok(kept)
+}
+
+/// Overdue first, then by due day, due time and the member's order; the id last so the
+/// order never depends on the read's.
+fn due_order(left: &Placed, right: &Placed) -> std::cmp::Ordering {
+    let key = |placed: &Placed| {
+        (
+            !placed.due.overdue,
+            placed.due.due_day.clone(),
+            placed.due.due_time.clone(),
+            placed.task.sort_order,
+            placed.task.task_id.clone(),
+        )
+    };
+    key(left).cmp(&key(right))
+}
+
+/// `YYYY-MM-DD` plus `days`, or `None` when it does not read.
+fn day_after(day: &str, days: i64) -> Option<String> {
+    parse_wall_iso(day).map(|wall| wall_iso(add_wall_days(wall, days), false))
 }
 
 /// `agenda.task.board.logbook`: the most recently closed, live.

@@ -13,7 +13,7 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, fold};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words};
@@ -64,7 +64,11 @@ impl History {
     /// The core's versions, as rows. The day and the time are the member's
     /// (`asserted_local_day`, `asserted_local`), read in the request's zone; an
     /// answer with no zone resolved says neither.
-    fn rows(locale: Locale, history: &wire::NotesHistory) -> Vec<wire::NotesVersionRow> {
+    fn rows(
+        locale: Locale,
+        cycle: HourCycle,
+        history: &wire::NotesHistory,
+    ) -> Vec<wire::NotesVersionRow> {
         history
             .versions
             .iter()
@@ -80,7 +84,7 @@ impl History {
                     } else {
                         civil::day_month(locale, day)
                     },
-                    civil::clock(&version.asserted_local),
+                    civil::clock_for(locale, &version.asserted_local, cycle),
                 ]
                 .into_iter()
                 .filter(|part| !part.is_empty())
@@ -175,7 +179,7 @@ impl Screen for History {
                 wire::notes_history_state::Content::Denied(denied(locale, denial))
             }
             Phase::Ready(history) => {
-                let rows = Self::rows(locale, history);
+                let rows = Self::rows(locale, ctx.hour_cycle(), history);
                 // One version is the note as it is: there is nothing earlier.
                 let empty = (rows.len() <= 1).then(|| wire::EmptyState {
                     headline: words::history_empty_headline(locale),

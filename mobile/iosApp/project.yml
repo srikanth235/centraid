@@ -232,6 +232,14 @@ targets:
         # whole declaration: the launch screen is the app's own background, and
         # nothing else belongs on it.
         UILaunchScreen: {}
+        # A WIDGET'S TAP OPENS `centraid://agenda?open=<key>` (#1173). The scheme is the
+        # app's, and the URL names no screen: the key is the core's, opaque, and the
+        # core answers with the page (`AgendaIntentOpen`). The handler ignores any
+        # other shape (`ShellModel.handleOpenURL`).
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.centraid.Centraid.open
+            CFBundleURLSchemes:
+              - centraid
         # THE FACE, DECLARED. Copying a .ttf into the bundle registers NOTHING:
         # iOS only loads an app-supplied font whose filename is listed here, and
         # `UIFont(name:size:)` for an unlisted face returns nil — silently. That

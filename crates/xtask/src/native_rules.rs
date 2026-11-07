@@ -62,13 +62,17 @@ fn files(root: &Path, dir: &str, extensions: &[&str]) -> Vec<PathBuf> {
     out
 }
 
-/// The SwiftUI shell's hand-written sources: `iosApp/Sources` without
-/// protoc's `Generated/`.
+/// The iOS app's hand-written Swift: the shell (`Sources`, without protoc's
+/// `Generated/`), the widget extension (`Widgets`) and the code both targets
+/// share (`Shared`).
 fn swift_sources(root: &Path) -> Vec<PathBuf> {
-    files(root, "mobile/iosApp/Sources", &["swift"])
-        .into_iter()
+    let mut out: Vec<PathBuf> = ["Sources", "Widgets", "Shared"]
+        .iter()
+        .flat_map(|dir| files(root, &format!("mobile/iosApp/{dir}"), &["swift"]))
         .filter(|path| !relative(root, path).contains("/Sources/Generated/"))
-        .collect()
+        .collect();
+    out.sort();
+    out
 }
 
 /// The Compose shell's production Kotlin.

@@ -3,6 +3,7 @@ package dev.centraid.android.session
 import android.content.Context
 import android.os.Build
 import android.os.Looper
+import android.text.format.DateFormat
 import android.util.Log
 import dev.centraid.android.backup.LinkFacts
 import dev.centraid.core.CentraidCore
@@ -53,16 +54,17 @@ internal object AppSession {
         val scope: CoroutineScope,
         val effects: ShellEffects,
         val imports: ImportsRelay,
+        private val context: Context,
     ) {
         /**
          * The app came forward or left (the activity's start and stop). The runtime tells every open
          * screen and service (the Locker relocks on leaving; the pass service decides whether coming
          * back is worth a pass, the imports whether to walk and follow); coming forward also reports
-         * the locale and zone again and tells every phone-store watch, and MediaStore is watched
-         * while the app is in view.
+         * the locale, zone and 12 or 24 hour clock again and tells every phone-store watch, and
+         * MediaStore is watched while the app is in view.
          */
         suspend fun foreground(on: Boolean) {
-            if (on) AppSession.environment(screens)
+            if (on) AppSession.environment(context, screens)
             screens.lifecycle(foreground = on)
             imports.foreground(on)
             if (on) effects.watchers.foregrounded()
@@ -122,14 +124,16 @@ internal object AppSession {
     }
 
     /**
-     * The locale, the zone and the platform, and whether MediaStore deletes behind the system's own
-     * confirmation (`createDeleteRequest`, API 30 and up): Rust offers Free up space only then.
+     * The locale, the zone and the platform, whether MediaStore deletes behind the system's own
+     * confirmation (`createDeleteRequest`, API 30 and up): Rust offers Free up space only then; and
+     * the phone's 12 or 24 hour setting, which Rust words every time by.
      */
-    suspend fun environment(screens: Screens) {
+    suspend fun environment(context: Context, screens: Screens) {
         screens.environment(
             Locale.getDefault().toLanguageTag(),
             TimeZone.getDefault().id,
             libraryDeletes = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+            hourCycle12 = !DateFormat.is24HourFormat(context),
         )
     }
 
@@ -155,12 +159,12 @@ internal object AppSession {
         screens.attach()
         val effects = ShellEffects(context, core, screens, scope)
         val imports = ImportsRelay(context, screens, scope)
-        val open = Open(core, screens, scope, effects, imports)
+        val open = Open(core, screens, scope, effects, imports, context.applicationContext)
         // THE PERFORMER FIRST: the roots' first effects (the secrets the shelf reads at launch)
         // must find it collecting.
         effects.start()
         imports.start()
-        environment(screens)
+        environment(context, screens)
         screens.start()
         LinkFacts.start(context, screens)
         return open

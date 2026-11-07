@@ -12,7 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{
     Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,
 };
@@ -48,6 +48,8 @@ pub struct Context<'a> {
     pub day_in_head: bool,
     /// Name the project in the meta line (not inside the project itself).
     pub show_project: bool,
+    /// How the phone words a time of day; 24-hour until the shell says.
+    pub cycle: HourCycle,
 }
 
 impl<'a> Context<'a> {
@@ -70,6 +72,7 @@ impl<'a> Context<'a> {
                 .collect(),
             day_in_head: false,
             show_project: true,
+            cycle: HourCycle::default(),
         }
     }
 }
@@ -173,16 +176,17 @@ pub fn due_label(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> Stri
             format!("{} {}", -days, words::days_ago(locale))
         };
     }
+    let time = civil::time_for(locale, &task.due_time, ctx.cycle);
     if ctx.day_in_head {
-        return task.due_time.clone();
+        return time;
     }
     let day = civil::relative_day(locale, &task.due_day, ctx.today);
     if task.due_time.is_empty() {
         day
     } else if task.lands_today {
-        task.due_time.clone()
+        time
     } else {
-        format!("{day} {}", task.due_time)
+        format!("{day} {time}")
     }
 }
 
@@ -223,7 +227,7 @@ pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
             civil::relative_day(locale, &task.due_day, ctx.today)
         ));
     }
-    parts.extend(reminder_part(locale, task, ctx.today));
+    parts.extend(reminder_part(locale, task, ctx.today, ctx.cycle));
     if let Some(minutes) = task.effort_min {
         parts.push(effort_label(locale, minutes));
     }
@@ -258,7 +262,12 @@ pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
 /// core supplies one (`remind_at_local`); a date has no moment to count back
 /// from, so it says "on the day" and never invents 09:00.
 #[must_use]
-pub fn reminder_part(locale: Locale, task: &wire::AgendaTask, today: &str) -> Option<String> {
+pub fn reminder_part(
+    locale: Locale,
+    task: &wire::AgendaTask,
+    today: &str,
+    cycle: HourCycle,
+) -> Option<String> {
     if !task.remind_at_local.is_empty() {
         let day = civil::relative_day(
             locale,
@@ -268,7 +277,7 @@ pub fn reminder_part(locale: Locale, task: &wire::AgendaTask, today: &str) -> Op
         return Some(format!(
             "{} {day} {}",
             words::reminder(locale),
-            civil::clock(&task.remind_at_local)
+            civil::clock_for(locale, &task.remind_at_local, cycle)
         ));
     }
     if task.remind_before_min.is_some() && !task.due_day.is_empty() {
@@ -541,5 +550,30 @@ pub fn chrome(locale: Locale) -> wire::TodoChrome {
         clear_completed_verb: reminders::clear_completed(locale),
         move_up_verb: reminders::move_up(locale),
         move_down_verb: reminders::move_down(locale),
+    }
+}
+
+#[cfg(test)]
+mod cycle_tests {
+    use super::*;
+
+    #[test]
+    fn a_due_time_is_worded_in_the_cycle_of_the_context() {
+        let task = wire::AgendaTask {
+            due_day: "2026-03-11".to_owned(),
+            due_time: "09:00".to_owned(),
+            lands_today: true,
+            ..wire::AgendaTask::default()
+        };
+        let said = |cycle| {
+            let ctx = Context {
+                today: "2026-03-11",
+                cycle,
+                ..Context::default()
+            };
+            due_label(Locale::En, &task, &ctx)
+        };
+        assert_eq!(said(HourCycle::H24), "09:00");
+        assert_eq!(said(HourCycle::H12), "9:00 AM");
     }
 }

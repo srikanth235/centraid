@@ -53,6 +53,7 @@ use super::{editor, fetch, media, routes};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
@@ -713,7 +714,12 @@ impl Lightbox {
         tile
     }
 
-    fn photo(&self, detail: &Detail, locale: Locale) -> wire::PhotosLightboxPhoto {
+    fn photo(
+        &self,
+        detail: &Detail,
+        locale: Locale,
+        cycle: HourCycle,
+    ) -> wire::PhotosLightboxPhoto {
         let cell = &detail.cell;
         let tile = self.tile(cell, locale);
         let held = Held::try_from(tile.held).unwrap_or(Held::Unspecified);
@@ -743,7 +749,7 @@ impl Lightbox {
         let clock = cell
             .taken_at
             .as_deref()
-            .map(|at| cells::capture_clock(at, offset))
+            .map(|at| cells::capture_clock(locale, at, offset, cycle))
             .unwrap_or_default();
         let stamp_line = [clock.clone(), place_name.clone()]
             .into_iter()
@@ -1279,7 +1285,9 @@ impl Screen for Lightbox {
                 body: own::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
             }),
-            Content::Data(detail) => C::Photo(Box::new(self.photo(detail, locale))),
+            Content::Data(detail) => {
+                C::Photo(Box::new(self.photo(detail, locale, ctx.hour_cycle())))
+            }
         };
         let refusal = self.refusal(locale);
         let edit = self

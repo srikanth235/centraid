@@ -461,7 +461,12 @@ impl Screen for Document {
             Phase::Failed => (Content::Failure(read::failure(locale)), None),
             Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
             Phase::Ready(answered) => {
-                let mut data = fold::document(locale, &answered.document, answered.drive.as_ref());
+                let mut data = fold::document(
+                    locale,
+                    ctx.hour_cycle(),
+                    &answered.document,
+                    answered.drive.as_ref(),
+                );
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id

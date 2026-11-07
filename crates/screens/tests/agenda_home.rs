@@ -198,6 +198,17 @@ impl Rig {
             }));
     }
 
+    /// The phone keeps 12-hour time (`true`) or 24-hour time (`false`).
+    fn hour_cycle_12(&mut self, twelve: bool) {
+        self.driver
+            .call(wire::screen_request::Kind::Environment(wire::Environment {
+                locale: "en".to_owned(),
+                zone: self.zone.clone(),
+                hour_cycle_12: twelve,
+                ..Default::default()
+            }));
+    }
+
     fn event(&mut self, id: &str, title: &str, starts: &str, ends: Option<&str>) {
         let zone = self.zone.clone();
         self.write(act::agenda::Propose {
@@ -2395,4 +2406,55 @@ fn the_home_asks_whether_this_device_follows_and_the_import_tap_asks_the_shell_t
         "{:?}",
         asked(&rig.driver)
     );
+}
+
+#[test]
+fn a_row_s_time_follows_the_phones_12_or_24_hour_setting() {
+    let mut r = rig(Dest::Schedule);
+    let day = r.day(4);
+    r.event(
+        "zq-cycle",
+        "Zq Cycle",
+        &format!("{day}T09:00"),
+        Some(&format!("{day}T13:30")),
+    );
+    r.settle();
+    let label = |r: &Rig| {
+        events_of(section(r.data(), &day).expect("the day is drawn"))
+            .iter()
+            .find(|row| row.title == "Zq Cycle")
+            .expect("the event is drawn")
+            .time_label
+            .clone()
+    };
+    // A shell that never says reports 24-hour.
+    assert_eq!(label(&r), "09:00 – 13:30");
+    r.hour_cycle_12(true);
+    r.settle();
+    assert_eq!(label(&r), "9:00 AM – 1:30 PM");
+    r.hour_cycle_12(false);
+    r.settle();
+    assert_eq!(label(&r), "09:00 – 13:30");
+}
+
+/// A WIDGET'S "NEW REMINDER" opens To-do with the quick-add bar drawn and focused and
+/// EMPTY, and writes nothing (#1173): the seeded-title path opens it only with words.
+#[test]
+fn the_new_reminder_route_opens_an_empty_bar_on_todo() {
+    let mut driver = Driver::with_runtime(Runtime::new(
+        agenda::registry(),
+        vec![(agenda::TAB.to_owned(), agenda::routes::home_adding(""))],
+    ));
+    driver.start();
+    let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let mut r = Rig {
+        driver,
+        id,
+        zone: "UTC".to_owned(),
+        seq: 0,
+    };
+    r.settle();
+    assert_eq!(r.state().destination, Dest::Todo as i32);
+    assert!(r.quick().drawn && r.quick().focused, "{:?}", r.quick());
+    assert!(r.quick().title.is_empty() && !r.quick().can_submit);
 }

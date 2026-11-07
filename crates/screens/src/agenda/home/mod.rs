@@ -119,9 +119,10 @@ impl Home {
         // SEEDED WORDS (Notes' "Send to Agenda") wait in To-do's bar, focused,
         // and they name To-do as the place.
         let seed = args.quick_add_title.trim().to_owned();
+        let bar = !seed.is_empty() || args.open_quick_add;
         let named = Dest::try_from(args.destination).unwrap_or(Dest::Unspecified);
         let destination = match named {
-            Dest::Unspecified if !seed.is_empty() => Dest::Todo,
+            Dest::Unspecified if bar => Dest::Todo,
             Dest::Unspecified => Dest::Day,
             other => other,
         };
@@ -143,8 +144,8 @@ impl Home {
             filing_task_id: String::new(),
             new_project_name: String::new(),
             quick: QuickAdd {
-                drawn: !seed.is_empty(),
-                focused: !seed.is_empty(),
+                drawn: bar,
+                focused: bar,
                 title: seed,
                 staged: Quick::default(),
                 chip: Chipper::default(),
@@ -495,11 +496,12 @@ impl Home {
     fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
         let locale = ctx.locale();
         if self.destination == Dest::Todo && self.active_term().is_none() {
-            return place::fold(locale, &self.held, self.limit);
+            return place::fold(locale, ctx.hour_cycle(), &self.held, self.limit);
         }
         let term = self.active_term();
         fold::events(&fold::Fold {
             locale,
+            cycle: ctx.hour_cycle(),
             destination: self.destination,
             anchor: &self.anchor,
             term: term.as_deref(),
@@ -694,7 +696,7 @@ impl Screen for Home {
                             chip: if self.quick.staged.due_day(&self.held.today()).is_empty() {
                                 self.quick
                                     .chip
-                                    .reading(locale, &self.quick.title)
+                                    .reading(locale, ctx.hour_cycle(), &self.quick.title)
                                     .map(|reading| reading.chip())
                             } else {
                                 None

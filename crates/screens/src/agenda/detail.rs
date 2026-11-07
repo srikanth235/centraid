@@ -27,7 +27,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_tasks as card_words, task as words};
@@ -681,6 +681,7 @@ impl Detail {
     fn data(
         &self,
         locale: Locale,
+        cycle: HourCycle,
         answer: &Answered,
         task: &wire::AgendaTask,
     ) -> wire::TodoDetailData {
@@ -688,6 +689,7 @@ impl Detail {
         let (projects, sections) = answer.lists();
         let row_ctx = Context {
             show_project: false,
+            cycle,
             ..Context::of(today, &projects, &sections)
         };
         let check = rows::check_of(&task.status);
@@ -722,7 +724,7 @@ impl Detail {
                 wire::TodoCheck::InProcess => words::started(locale),
                 _ => String::new(),
             },
-            fields: fields(locale, task, today, &projects, &sections),
+            fields: fields(locale, cycle, task, today, &projects, &sections),
             subtasks_label: if task.children.is_empty() {
                 words::field_subtasks(locale)
             } else {
@@ -799,7 +801,9 @@ impl Screen for Detail {
             Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
             // GONE is drawn, not failed: never made, deleted, or in the trash.
             Phase::Ready(answer) => match answer.task() {
-                Some(task) => Content::Data(Box::new(self.data(locale, answer, task))),
+                Some(task) => {
+                    Content::Data(Box::new(self.data(locale, ctx.hour_cycle(), answer, task)))
+                }
                 None => Content::Gone(wire::EmptyState {
                     headline: words::task_gone(locale),
                     ..wire::EmptyState::default()
@@ -894,7 +898,12 @@ fn lead_label(locale: Locale, lead: u32) -> String {
 }
 
 /// The owner's ruling: a moment only when the core supplies one, else "On the day".
-fn reminder_value(locale: Locale, task: &wire::AgendaTask, today: &str) -> String {
+fn reminder_value(
+    locale: Locale,
+    cycle: HourCycle,
+    task: &wire::AgendaTask,
+    today: &str,
+) -> String {
     if task.remind_before_min.is_none() {
         words::remind_none(locale)
     } else if !task.remind_at_local.is_empty() {
@@ -905,7 +914,7 @@ fn reminder_value(locale: Locale, task: &wire::AgendaTask, today: &str) -> Strin
                 task.remind_at_local.get(..10).unwrap_or_default(),
                 today
             ),
-            civil::clock(&task.remind_at_local)
+            civil::clock_for(locale, &task.remind_at_local, cycle)
         )
     } else {
         words::reminder_on_the_day(locale)
@@ -914,6 +923,7 @@ fn reminder_value(locale: Locale, task: &wire::AgendaTask, today: &str) -> Strin
 
 fn fields(
     locale: Locale,
+    cycle: HourCycle,
     task: &wire::AgendaTask,
     today: &str,
     projects: &[wire::AgendaTaskProject],
@@ -969,7 +979,7 @@ fn fields(
         value: if task.due_time.is_empty() {
             words::time_none(locale)
         } else {
-            task.due_time.clone()
+            civil::time_for(locale, &task.due_time, cycle)
         },
         choices: vec![chip(
             NONE,
@@ -1009,7 +1019,7 @@ fn fields(
     out.push(wire::TodoField {
         key: REMINDER.to_owned(),
         label: words::field_reminder(locale),
-        value: reminder_value(locale, task, today),
+        value: reminder_value(locale, cycle, task, today),
         note: if dated {
             words::reminder_note_a(locale)
         } else {

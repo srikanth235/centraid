@@ -12,6 +12,8 @@ catalog! {
     plain autosave_saved = ("Saved", "Saved");
     plain autosave_saving = ("Saving…", "Saving…");
     plain back = ("Back", "Back");
+    plain clock_am = ("AM", "AM");
+    plain clock_pm = ("PM", "PM");
     plain back_to = ("Back to {parent}", "Back to {parent}");
     plain kit_band_home = ("Home", "Home");
     plain kit_band_more = ("More", "More");

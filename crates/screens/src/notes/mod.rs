@@ -122,6 +122,7 @@ pub mod routes {
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: wire::AgendaDestination::Todo as i32,
                 quick_add_title: title.to_owned(),
+                open_quick_add: false,
             }),
         )
     }

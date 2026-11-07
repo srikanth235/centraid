@@ -280,6 +280,31 @@ fn a_shell_that_spells_a_screen_id_is_caught() {
 }
 
 #[test]
+fn the_widget_and_shared_swift_folders_are_scanned_and_generated_code_is_not() {
+    let root = fixture_dir("native-screen-id-widgets");
+    registry(&root);
+    write(
+        &root,
+        "mobile/iosApp/Widgets/W.swift",
+        "let screen = \"agenda.home\"\n",
+    );
+    write(
+        &root,
+        "mobile/iosApp/Shared/S.swift",
+        "let screen = \"backup.home\"\n",
+    );
+    write(
+        &root,
+        "mobile/iosApp/Sources/Generated/G.swift",
+        "let screen = \"agenda.home\"\n",
+    );
+    let report = native_spells_no_screen_id(&root);
+    let text = findings(&report);
+    assert_eq!(report.findings.len(), 2, "{text}");
+    assert!(text.contains("Widgets/W.swift:1") && text.contains("Shared/S.swift:1"));
+}
+
+#[test]
 fn a_shell_that_draws_the_route_it_was_given_is_clean() {
     let root = fixture_dir("native-screen-id-green");
     registry(&root);

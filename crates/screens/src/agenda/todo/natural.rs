@@ -7,14 +7,14 @@
 //! the chip still showing, and the chip's × keeps the typed words as the title.
 //!
 //! The chip's words reuse the rows' day wording (`civil::relative_day`: Today,
-//! Tomorrow, then `Fri 4 December`) and the clock's `HH:MM`, so a chip reads
-//! exactly as the row it becomes will.
+//! Tomorrow, then `Fri 4 December`) and the phone's clock (`civil::time_for`,
+//! 12 or 24 hour), so a chip reads exactly as the row it becomes will.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::nl_date::{self, Parsed, Repeat, Weekday};
 
 use crate::catalog::load::agenda as query;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{Reading as Answered, read};
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda as words, agenda_reminders as reminders, fill};
@@ -93,7 +93,12 @@ pub fn core_now(ctx: &Ctx) -> Option<String> {
 /// What `text` says, read against `now_local`; `None` when no phrase was read
 /// (or no clock is held).
 #[must_use]
-pub fn read_words(locale: Locale, text: &str, now_local: &str) -> Option<Reading> {
+pub fn read_words(
+    locale: Locale,
+    cycle: HourCycle,
+    text: &str,
+    now_local: &str,
+) -> Option<Reading> {
     let now = nl_date::Now::parse(now_local)?;
     let parsed = nl_date::parse(text, &now);
     let title = parsed.title.trim().to_owned();
@@ -105,7 +110,7 @@ pub fn read_words(locale: Locale, text: &str, now_local: &str) -> Option<Reading
         return None;
     }
     let today = now_local.get(..10).unwrap_or_default();
-    let label = label_of(locale, &parsed, today);
+    let label = label_of(locale, cycle, &parsed, today);
     let spoken = if parsed.repeat.is_some() {
         fill(
             &reminders::quick_chip_spoken_repeats(locale),
@@ -128,12 +133,12 @@ pub fn read_words(locale: Locale, text: &str, now_local: &str) -> Option<Reading
 }
 
 /// `Tomorrow, 09:00`, `Fri 4 December`, `Every Monday, 09:00`, `Every day`.
-fn label_of(locale: Locale, parsed: &Parsed, today: &str) -> String {
+fn label_of(locale: Locale, cycle: HourCycle, parsed: &Parsed, today: &str) -> String {
     let time = parsed
         .when
         .as_ref()
         .and_then(|when| when.time)
-        .map(|(hour, minute)| format!("{hour:02}:{minute:02}"));
+        .map(|(hour, minute)| civil::time_for(locale, &format!("{hour:02}:{minute:02}"), cycle));
     let head = match (&parsed.repeat, &parsed.when) {
         (Some(repeat), _) => repeat_words(locale, repeat),
         (None, Some(when)) => civil::relative_day(locale, &when.day, today),
@@ -202,17 +207,39 @@ impl Chipper {
 
     /// The reading of `words`, unless the chip was dismissed for exactly them.
     #[must_use]
-    pub fn reading(&self, locale: Locale, words: &str) -> Option<Reading> {
+    pub fn reading(&self, locale: Locale, cycle: HourCycle, words: &str) -> Option<Reading> {
         if self.now.is_empty() || words.trim() == self.dismissed {
             return None;
         }
-        read_words(locale, words, &self.now)
+        read_words(locale, cycle, words, &self.now)
     }
 
     /// What an add sends for `words`, on a clock read just now.
     pub fn fields(&mut self, ctx: &Ctx, words: &str) -> Fields {
         self.hold(ctx);
-        self.reading(ctx.locale(), words)
+        self.reading(ctx.locale(), ctx.hour_cycle(), words)
             .map_or_else(|| Fields::bare(words.trim()), |reading| reading.fields())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chip(cycle: HourCycle) -> String {
+        read_words(
+            Locale::En,
+            cycle,
+            "Call Mum tomorrow at 15:30",
+            "2026-03-11T08:00",
+        )
+        .map(|reading| reading.chip().label)
+        .unwrap_or_default()
+    }
+
+    #[test]
+    fn the_chip_words_its_time_as_the_phone_does() {
+        assert_eq!(chip(HourCycle::H24), "Tomorrow, 15:30");
+        assert_eq!(chip(HourCycle::H12), "Tomorrow, 3:30 PM");
     }
 }
