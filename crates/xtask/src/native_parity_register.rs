@@ -211,12 +211,6 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.repeat_key", rust_only(AGENDA_DRAFT)),
     (
-        "AgendaEventRow.instance_key",
-        rust_only(
-            "the Agenda fold reads its own wire rows back to count the distinct occurrences it drew (agenda/home/fold.rs); the shells open a row by its route",
-        ),
-    ),
-    (
         "Autosave.remote_changed",
         rust_only(
             "the Docs editor reads it back to compose `remote_note` (docs/editor.rs), which the shells draw",
