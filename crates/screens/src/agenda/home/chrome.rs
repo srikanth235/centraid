@@ -12,7 +12,7 @@ use crate::agenda::todo::rows;
 use crate::kit::civil;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
-    agenda_reminders as reminders, fill, task,
+    agenda_lists as lists, agenda_reminders as reminders, fill, task,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
@@ -24,6 +24,8 @@ pub const BAND_MORE: &str = "more";
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
 pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
+/// The row that opens the new-calendar sheet (#1173).
+pub const MORE_NEW_CALENDAR: &str = "new-calendar";
 pub const MORE_ANYTIME: &str = "anytime";
 pub const MORE_LOGBOOK: &str = "logbook";
 pub const MORE_REMINDERS: &str = "reminders";
@@ -176,6 +178,7 @@ fn day_label(locale: Locale, destination: Dest, anchor: &str, today: &str) -> St
 pub fn more_rows(
     locale: Locale,
     calendars: &[wire::AgendaCalendarChoice],
+    can_add_calendar: bool,
 ) -> Vec<wire::AgendaMoreRow> {
     let mut out: Vec<wire::AgendaMoreRow> = calendars
         .iter()
@@ -193,9 +196,29 @@ pub fn more_rows(
                 String::new()
             },
             spoken: format!("{}, {}", calendar.name, calendar.state_label),
+            icon_key: calendar.icon_key.clone(),
+            color_key: calendar.color_key.clone(),
+            edit_label: fill(
+                &lists::edit_calendar(locale),
+                &[("name", calendar.name.as_str())],
+            ),
             ..wire::AgendaMoreRow::default()
         })
         .collect();
+    if can_add_calendar {
+        out.push(wire::AgendaMoreRow {
+            key: MORE_NEW_CALENDAR.to_owned(),
+            label: lists::new_calendar_title(locale),
+            spoken: lists::new_calendar_title(locale),
+            icon_key: "CalendarPlus".to_owned(),
+            section: if calendars.is_empty() {
+                words::rail_calendars(locale)
+            } else {
+                String::new()
+            },
+            ..wire::AgendaMoreRow::default()
+        });
+    }
     let place = |key: &str, label: String, meta: String, icon: &str, route: wire::Route| {
         wire::AgendaMoreRow {
             key: key.to_owned(),

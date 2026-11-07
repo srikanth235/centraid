@@ -68,6 +68,7 @@ pub mod act {
             pub rule: Field<String>,
             pub status: Option<ProposeStatus>,
             pub timing: Option<ProposeTiming>,
+            pub travel_min: Field<i64>,
             pub url: Field<String>,
             pub zone: Field<String>,
         }
@@ -89,6 +90,7 @@ pub mod act {
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 if let Some(it) = self.status { map.insert("status".to_owned(), text(it.wire())); }
                 if let Some(it) = self.timing { map.insert("timing".to_owned(), text(it.wire())); }
+                put_field(&mut map, "travel_min", self.travel_min, |it| whole(it));
                 put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
@@ -191,6 +193,7 @@ pub mod act {
             pub status: Option<EditEventStatus>,
             pub timing: Option<EditEventTiming>,
             pub title: Option<String>,
+            pub travel_min: Field<i64>,
             pub url: Field<String>,
             pub zone: Field<String>,
         }
@@ -212,6 +215,7 @@ pub mod act {
                 if let Some(it) = self.status { map.insert("status".to_owned(), text(it.wire())); }
                 if let Some(it) = self.timing { map.insert("timing".to_owned(), text(it.wire())); }
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                put_field(&mut map, "travel_min", self.travel_min, |it| whole(it));
                 put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
@@ -433,12 +437,13 @@ pub mod act {
             }
         }
 
-        /// Add a task through task.add: dated, prioritized, estimated, repeating, reminded, filed in a project and section, or as a subtask of an open top-level task.
+        /// Add a task through task.add: dated, prioritized, estimated, repeating, reminded, linked, filed in a project and section, or as a subtask of an open top-level task; or founded already done (`done_at`), which is how a completed imported item lands.
         #[derive(Clone, Debug, Default)]
         pub struct AddTask {
             pub title: String,
             pub anchor: Option<AddTaskAnchor>,
             pub description: Field<String>,
+            pub done_at: Field<String>,
             pub due: Field<String>,
             pub effort_min: Field<i64>,
             pub id: Option<String>,
@@ -449,6 +454,7 @@ pub mod act {
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
             pub section_id: Field<String>,
+            pub url: Field<String>,
             pub zone: Field<String>,
         }
         impl AddTask {
@@ -459,6 +465,7 @@ pub mod act {
                 map.insert("title".to_owned(), text(self.title));
                 if let Some(it) = self.anchor { map.insert("anchor".to_owned(), text(it.wire())); }
                 put_field(&mut map, "description", self.description, |it| text(it));
+                put_field(&mut map, "done_at", self.done_at, |it| text(it));
                 put_field(&mut map, "due", self.due, |it| text(it));
                 put_field(&mut map, "effort_min", self.effort_min, |it| whole(it));
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
@@ -469,6 +476,7 @@ pub mod act {
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 put_field(&mut map, "section_id", self.section_id, |it| text(it));
+                put_field(&mut map, "url", self.url, |it| text(it));
                 put_field(&mut map, "zone", self.zone, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -479,7 +487,7 @@ pub mod act {
             }
         }
 
-        /// Edit a task's title, note, due date, priority, effort, reminder lead time or repeat rule through task.edit. A key that is present is set (null clears it); a key that is absent is left alone.
+        /// Edit a task's title, note, link, due date, priority, effort, reminder lead time or repeat rule through task.edit. A key that is present is set (null clears it); a key that is absent is left alone.
         #[derive(Clone, Debug, Default)]
         pub struct EditTask {
             pub task_id: String,
@@ -490,6 +498,7 @@ pub mod act {
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
             pub title: Option<String>,
+            pub url: Field<String>,
         }
         impl EditTask {
             pub const NAME: &str = "edit-task";
@@ -504,6 +513,7 @@ pub mod act {
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                put_field(&mut map, "url", self.url, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -699,6 +709,7 @@ pub mod act {
             pub kind: CreateProjectKind,
             pub title: String,
             pub color: Field<String>,
+            pub icon: Field<String>,
             pub id: Option<String>,
             pub parent: Field<String>,
             pub position: Field<f64>,
@@ -711,6 +722,7 @@ pub mod act {
                 map.insert("kind".to_owned(), text(self.kind.wire()));
                 map.insert("title".to_owned(), text(self.title));
                 put_field(&mut map, "color", self.color, |it| text(it));
+                put_field(&mut map, "icon", self.icon, |it| text(it));
                 if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "parent", self.parent, |it| text(it));
                 put_field(&mut map, "position", self.position, |it| real(it));
@@ -723,7 +735,7 @@ pub mod act {
             }
         }
 
-        /// Retitle a project or an area through entity.retitle.
+        /// Retitle a project, an area or a calendar through entity.retitle.
         #[derive(Clone, Debug, Default)]
         pub struct RenameList {
             pub list_id: String,
@@ -880,6 +892,133 @@ pub mod act {
         }
         impl From<UnstarTask> for wire::ActRequest {
             fn from(value: UnstarTask) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum CreateCalendarColor {
+            #[default]
+            Blue,
+            Mustard,
+            Violet,
+            Petrol,
+            Indigo,
+            Graphite,
+            Raspberry,
+            Orchid,
+        }
+        impl CreateCalendarColor {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Blue => "blue",
+                    Self::Mustard => "mustard",
+                    Self::Violet => "violet",
+                    Self::Petrol => "petrol",
+                    Self::Indigo => "indigo",
+                    Self::Graphite => "graphite",
+                    Self::Raspberry => "raspberry",
+                    Self::Orchid => "orchid",
+                }
+            }
+        }
+
+        /// Create a calendar of the vault's own through container.create, with one of the eight list colours and an icon. A calendar is renamed through entity.retitle.
+        #[derive(Clone, Debug, Default)]
+        pub struct CreateCalendar {
+            pub title: String,
+            pub color: Field<CreateCalendarColor>,
+            pub icon: Field<String>,
+            pub list_id: Option<String>,
+            pub position: Field<f64>,
+        }
+        impl CreateCalendar {
+            pub const NAME: &str = "create-calendar";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("kind".to_owned(), text("calendar"));
+                map.insert("title".to_owned(), text(self.title));
+                put_field(&mut map, "color", self.color, |it| text(it.wire()));
+                put_field(&mut map, "icon", self.icon, |it| text(it));
+                if let Some(it) = self.list_id { map.insert("id".to_owned(), text(it)); }
+                put_field(&mut map, "position", self.position, |it| real(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<CreateCalendar> for wire::ActRequest {
+            fn from(value: CreateCalendar) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum StyleContainerColor {
+            #[default]
+            Blue,
+            Mustard,
+            Violet,
+            Petrol,
+            Indigo,
+            Graphite,
+            Raspberry,
+            Orchid,
+        }
+        impl StyleContainerColor {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Blue => "blue",
+                    Self::Mustard => "mustard",
+                    Self::Violet => "violet",
+                    Self::Petrol => "petrol",
+                    Self::Indigo => "indigo",
+                    Self::Graphite => "graphite",
+                    Self::Raspberry => "raspberry",
+                    Self::Orchid => "orchid",
+                }
+            }
+        }
+
+        /// Set or clear the colour (one of the eight list colours) and the icon of a list or a calendar through container.style. A key that is present is set (null clears it); a key that is absent is left alone.
+        #[derive(Clone, Debug, Default)]
+        pub struct StyleContainer {
+            pub list_id: String,
+            pub color: Field<StyleContainerColor>,
+            pub icon: Field<String>,
+        }
+        impl StyleContainer {
+            pub const NAME: &str = "style-container";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.list_id));
+                put_field(&mut map, "color", self.color, |it| text(it.wire()));
+                put_field(&mut map, "icon", self.icon, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StyleContainer> for wire::ActRequest {
+            fn from(value: StyleContainer) -> Self {
+                value.request()
+            }
+        }
+
+        /// Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.
+        #[derive(Clone, Debug, Default)]
+        pub struct RecordCalendarPush {
+            pub items: String,
+        }
+        impl RecordCalendarPush {
+            pub const NAME: &str = "record-calendar-push";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("items".to_owned(), text(self.items));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RecordCalendarPush> for wire::ActRequest {
+            fn from(value: RecordCalendarPush) -> Self {
                 value.request()
             }
         }
@@ -5038,6 +5177,28 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// What is attached to one event or task, a page at a time: each attachment's id, kind (document or photo), title, media type, byte size and where its bytes are served, in the order of the attached file's id. Pass the page's `next` cursor as `after` for the next page. An id that is no live event or task answers an empty page, and an attached file in the trash is left out until it is restored.
+        #[derive(Clone, Debug, Default)]
+        pub struct Attachments {
+            pub item_id: String,
+            pub after: Option<String>,
+            pub limit: u32,
+        }
+        impl Attachments {
+            pub const NAME: &str = "attachments";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("item_id".to_owned(), text(self.item_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, after: self.after.unwrap_or_default(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Attachments> for wire::LoadRequest {
+            fn from(value: Attachments) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {
@@ -6245,6 +6406,29 @@ pub mod load {
         }
         impl From<FilesFollowed> for wire::LoadRequest {
             fn from(value: FilesFollowed) -> Self {
+                value.request()
+            }
+        }
+
+        /// (imports, two-way calendar sync) What the phone's writable calendars are owed, derived at read time from the rows the follower keeps: events made or edited here and not yet written to the phone, and trashed ones the phone still holds. One page, in event-id order; `origins` is a JSON array of the origin refs (`calendar:<key>`) the shell reported writable.
+        #[derive(Clone, Debug, Default)]
+        pub struct CalendarOwed {
+            pub after_event: Option<String>,
+            pub limit: u32,
+            pub origins: Option<String>,
+        }
+        impl CalendarOwed {
+            pub const NAME: &str = "calendar-owed";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.after_event { map.insert("after_event".to_owned(), text(it)); }
+                if let Some(it) = self.origins { map.insert("origins".to_owned(), text(it)); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<CalendarOwed> for wire::LoadRequest {
+            fn from(value: CalendarOwed) -> Self {
                 value.request()
             }
         }

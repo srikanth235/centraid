@@ -263,6 +263,8 @@ message AgendaCalendar {
   string calendar_id = 1;
   optional string name = 3;
   optional string color = 4;
+  // A key of `design/icons.toml`, when the member chose one (#1173).
+  optional string icon = 7;
 }
 
 // One birthday inside the range.
@@ -594,6 +596,8 @@ message AgendaTaskProject {
   int64 sort_order = 5;
   // Open ROOTS filed here, in the board window read.
   uint32 open_count = 6;
+  // A key of `design/icons.toml`, when the member chose one (#1173).
+  optional string icon = 7;
 }
 
 message AgendaTaskSection {

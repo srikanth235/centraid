@@ -27,6 +27,7 @@ use centraid_api_proto::core_v1 as wire;
 use crate::Registry;
 
 pub mod calendar;
+pub mod calendar_push;
 pub mod catch_up;
 pub mod detail;
 pub mod editor;
@@ -34,6 +35,7 @@ pub mod event;
 pub mod home;
 pub mod list;
 pub mod project;
+mod style;
 pub mod todo;
 pub mod trash;
 

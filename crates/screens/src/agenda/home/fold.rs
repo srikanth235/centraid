@@ -41,6 +41,7 @@ use super::grid::{self, WeekStart};
 use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
+use crate::agenda::style;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
@@ -89,7 +90,11 @@ impl<'a> Hues<'a> {
             return NO_CALENDAR_HUE.to_owned();
         };
         let stored = self.stored.get(id).copied().flatten();
-        let key = centraid_design::party_hue_key(id, stored)
+        // A colour the member chose is a list key; events are still drawn on
+        // the wheel, so it lands on the nearest wheel hue.
+        let key = stored
+            .and_then(|stored| style::wheel_of_list_color(stored.trim()))
+            .or_else(|| centraid_design::party_hue_key(id, stored))
             .unwrap_or_else(|| centraid_design::identity_hue_key(id));
         rows::hue_role(key)
     }
@@ -438,6 +443,12 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                         .cloned()
                         .unwrap_or_else(|| words::calendar_unnamed(locale)),
                     hue_key: hues.hue(Some(&calendar.calendar_id)),
+                    color_key: centraid_design::list_color_key(
+                        &calendar.calendar_id,
+                        calendar.color.as_deref(),
+                    )
+                    .to_owned(),
+                    icon_key: style::icon_of(calendar.icon.as_deref()),
                     hidden,
                     state_label: if hidden {
                         words::calendar_hidden(locale)
@@ -887,11 +898,13 @@ mod tests {
                         calendar_id: "cal-1".to_owned(),
                         name: Some("Personal".to_owned()),
                         color: Some("var(--c-teal)".to_owned()),
+                        icon: None,
                     },
                     wire::AgendaCalendar {
                         calendar_id: "cal-2".to_owned(),
                         name: Some("Work".to_owned()),
                         color: Some("steelblue".to_owned()),
+                        icon: None,
                     },
                 ],
                 today: TODAY.to_owned(),

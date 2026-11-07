@@ -31,6 +31,22 @@
 //! repeat rule and the project, then one `add-task-tag` per tag. A task has no
 //! place: the vault's task has no such field, so the sheet does not draw one.
 //!
+//! ## Custom repeat and the event's own fields (#1173 wave 2)
+//!
+//! Repeat offers the presets and Custom. Custom opens a sheet over a WORKING
+//! rule ([`custom`], [`repeat`]): frequency, every N, weekdays, the monthly
+//! mode (days of the month, or "the second Tuesday") and the end, over a live
+//! sentence. Done writes a whole rule to the draft (`repeat_rule`); a rule the
+//! vault's editor seam cannot show opens read-only, with a choice to replace
+//! it. A task takes the same sheet. A new rule belongs to the whole series, so
+//! on a series occurrence only that scope is offered.
+//!
+//! An event also edits its place (chosen from the vault's places), a second
+//! reminder (drawn once the first is set), availability, time zone and travel
+//! time, all columns the vault already holds ([`fields`]). The zone is the
+//! wall clock's: an event in another zone opens in ITS clock, and a zone picked
+//! keeps the clock and moves the instant. A task has an address instead.
+//!
 //! ## The add sheet is Event | Task (#1128)
 //!
 //! A CREATE carries a switch at its top; an edit has none. ONE DRAFT SERVES
@@ -48,8 +64,11 @@
 //! ignores everything after it: the core remembers no key, and a second Save
 //! would file the event again.
 
+mod custom;
 mod draft;
-mod write;
+mod fields;
+pub mod repeat;
+pub mod write;
 
 use centraid_api_proto::core_v1 as wire;
 use wire::agenda_editor_event::Kind as K;
@@ -58,8 +77,8 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
 use self::draft::{
-    Draft, LIST_INBOX, PRIORITY_MAX, REMINDER_NONE, REMINDERS, REPEAT_BIWEEKLY, REPEAT_CUSTOM,
-    REPEAT_DAILY, REPEAT_MONTHLY, REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
+    Draft, LIST_INBOX, PRIORITY_MAX, REMINDER_NONE, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY,
+    REPEAT_MONTHLY, REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use super::event::{
     calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
@@ -72,8 +91,8 @@ use crate::kit::civil;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, agenda as words, agenda_editor as editor_words, agenda_tasks as task_words, fill,
-    task as task_strings,
+    Locale, agenda as words, agenda_editor as editor_words, agenda_repeat as repeat_words,
+    agenda_tasks as task_words, fill, task as task_strings,
 };
 
 /// The keychain key of the kind the member last added on this device.
@@ -118,6 +137,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         draft: None,
         sheet: Sheet::None,
         more_open: false,
+        custom: None,
+        place_query: String::new(),
+        zone_query: String::new(),
         asking: Asking::None,
         scope: None,
         save_tried: false,
@@ -143,6 +165,9 @@ struct Loaded {
     /// The projects a task can be filed in; empty when the read did not land,
     /// and then the Inbox is the one list.
     projects: Vec<wire::AgendaTaskProject>,
+    /// The vault's places an event can be at; empty when the read did not land,
+    /// and then an event has no place to choose.
+    places: Vec<fields::Place>,
 }
 
 struct Editor {
@@ -161,6 +186,11 @@ struct Editor {
     sheet: Sheet,
     /// The More details row is open (a new task).
     more_open: bool,
+    /// The Custom repeat sheet's working rule, while it is open.
+    custom: Option<custom::Custom>,
+    /// What the place and zone searches hold.
+    place_query: String,
+    zone_query: String,
     asking: Asking,
     /// The save scope picked.
     scope: Option<wire::AgendaScope>,
@@ -205,25 +235,7 @@ impl Editor {
         );
         // AN EDIT READS ITS EVENT BY ID: a search hit on a repeating event is the
         // series row, which no window lists. Absent there is gone.
-        let detail = (self.mode == Mode::Edit).then(|| {
-            kit_read::read(
-                ctx,
-                load::agenda::Event {
-                    event_id: self.route.event_id.clone(),
-                    instance_key: Some(self.route.instance_key.clone())
-                        .filter(|key| !key.is_empty()),
-                    original_start_local: self
-                        .route
-                        .original_start_local
-                        .clone()
-                        .filter(|key| !key.is_empty()),
-                },
-                |answer| match answer {
-                    Answer::AgendaEvent(detail) => Some(*detail),
-                    _ => None,
-                },
-            )
-        });
+        let detail = (self.mode == Mode::Edit).then(|| self.read_event(ctx));
         // THE LISTS A TASK CAN LAND IN: a refused or missing read leaves the Inbox.
         let projects = if self.is_task() || self.mode == Mode::Create {
             match kit_read::read(
@@ -268,11 +280,13 @@ impl Editor {
             }
             return;
         };
+        let places = fields::read_places(ctx);
         self.loaded = Some(Loaded {
             upcoming,
             parties,
             detail,
             projects,
+            places,
         });
         self.phase = Phase::Ready;
         if self.draft.is_none() {
@@ -281,7 +295,10 @@ impl Editor {
                 _ => self.loaded.as_ref().map(|loaded| {
                     let named = draft::new_draft(&self.route.day, &loaded.upcoming);
                     // A SLOT PRESSED ON THE GRID names the start; the end follows by an hour.
-                    let fresh = draft::starting_at(&named, &self.route.start_time);
+                    let fresh = Draft {
+                        zone: ctx.zone().to_owned(),
+                        ..draft::starting_at(&named, &self.route.start_time)
+                    };
                     if self.is_task() {
                         draft::shaped(&fresh, self.kind)
                     } else {
@@ -290,6 +307,44 @@ impl Editor {
                 }),
             };
             self.draft.clone_from(&self.baseline);
+        }
+    }
+
+    /// The event being edited, read by id. A zoned event whose own zone is not
+    /// the phone's is read again in ITS zone, so the wall clock the member
+    /// edits is the one the event was made in, and a zone picked later keeps it.
+    fn read_event(&self, ctx: &Ctx) -> Reading<wire::AgendaEventDetail> {
+        let request = |zone: Option<&str>| {
+            let mut request: wire::LoadRequest = load::agenda::Event {
+                event_id: self.route.event_id.clone(),
+                instance_key: Some(self.route.instance_key.clone()).filter(|key| !key.is_empty()),
+                original_start_local: self
+                    .route
+                    .original_start_local
+                    .clone()
+                    .filter(|key| !key.is_empty()),
+            }
+            .into();
+            if let Some(zone) = zone {
+                zone.clone_into(&mut request.zone);
+            }
+            request
+        };
+        let pick = |answer| match answer {
+            Answer::AgendaEvent(detail) => Some(*detail),
+            _ => None,
+        };
+        let first = kit_read::read(ctx, request(None), pick);
+        let own_zone = first.data().and_then(|detail| {
+            let event = detail.event.as_ref()?;
+            (event.recurrence_semantics.as_deref() == Some("zoned"))
+                .then(|| event.start_tz.clone())
+                .flatten()
+                .filter(|zone| !zone.is_empty() && zone != ctx.zone())
+        });
+        match own_zone {
+            Some(zone) => kit_read::read(ctx, request(Some(&zone)), pick),
+            None => first,
         }
     }
 
@@ -318,6 +373,9 @@ impl Editor {
     fn close_sheet(&mut self) {
         self.sheet = Sheet::None;
         self.scope = None;
+        self.custom = None;
+        self.place_query.clear();
+        self.zone_query.clear();
     }
 
     fn set_kind(&mut self, kind: wire::AgendaEditorKind) {
@@ -359,8 +417,13 @@ impl Editor {
         if draft.title.trim().is_empty() {
             words::block_title(locale)
         } else if self.is_task() {
-            // A TASK NEEDS A TITLE AND A DAY, and the pickers only give days.
-            String::new()
+            // A TASK NEEDS A TITLE AND A DAY, and the pickers only give days; an
+            // address, when typed, must be one.
+            if Self::url_refused(draft) {
+                editor_words::block_url(locale)
+            } else {
+                String::new()
+            }
         } else if draft.calendar_id.is_empty() && self.mode == Mode::Create {
             words::block_calendar(locale)
         } else if !draft::range_is_whole(draft) {
@@ -412,9 +475,8 @@ impl Editor {
             .map(|a| a.party_id.clone())
             .collect();
         let occurrence = event.original_start_local.clone().unwrap_or_default();
-        let zone = ctx.zone().to_owned();
         if !self.is_series_edit() {
-            let request = write::edit_event(&event_id, &draft, &base, &zone, &owner_ids);
+            let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
             let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
             return self.committed(ctx, request, &key);
         }
@@ -430,7 +492,7 @@ impl Editor {
         self.close_sheet();
         match scope {
             wire::AgendaScope::Series => {
-                let request = write::edit_event(&event_id, &draft, &base, &zone, &owner_ids);
+                let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
                 let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
                 self.committed(ctx, request, &key)
             }
@@ -441,14 +503,8 @@ impl Editor {
                 } else {
                     act::agenda::EditOccurrenceScope::Occurrence
                 };
-                let request = write::override_occurrence(
-                    &event_id,
-                    &occurrence,
-                    wire_scope,
-                    &draft,
-                    &base,
-                    &zone,
-                );
+                let request =
+                    write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base);
                 let key = kit_act::key(
                     &["edit-occurrence", &event_id, &occurrence, word, "override"],
                     kit_act::fresh(),
@@ -460,7 +516,7 @@ impl Editor {
     }
 
     fn save_event(&mut self, ctx: &Ctx, draft: &Draft) -> Vec<wire::Effect> {
-        let request = write::propose(draft, ctx.zone());
+        let request = write::propose(draft);
         let key = kit_act::key(&["propose", "new"], kit_act::fresh());
         self.committed(ctx, request, &key)
     }
@@ -478,6 +534,8 @@ impl Editor {
         self.status = None;
         let due = draft::due_of(draft);
         let notes = draft.notes.trim();
+        let rule = draft::rule_for(draft);
+        let url = draft::normalize_url(&draft.url).filter(|url| !url.is_empty());
         let project = self
             .project_of(&draft.list_key)
             .map(|project| project.project_id.clone());
@@ -486,7 +544,8 @@ impl Editor {
             notes,
             due: &due,
             priority: i64::from(draft.priority.clamp(0, PRIORITY_MAX)),
-            rule: draft::rule_of(&draft.repeat_key),
+            rule: rule.as_deref(),
+            url: url.as_deref(),
             project_id: project.as_deref(),
             tags: &draft.tags,
             ..NewTask::default()
@@ -574,16 +633,21 @@ impl Editor {
         // List and Repeat sheets (#1173); an event has none of the task's.
         let task_event = matches!(
             event,
-            K::List(_) | K::Priority(_) | K::TagAdded(_) | K::TagRemoved(_) | K::MoreDetails(_)
+            K::List(_)
+                | K::Priority(_)
+                | K::TagAdded(_)
+                | K::TagRemoved(_)
+                | K::MoreDetails(_)
+                | K::Url(_)
         );
-        if task_event != self.is_task() && task_event {
+        if task_event && !self.is_task() {
             return Vec::new();
         }
         if self.is_task() {
             let sheet_of_a_task = |opened: &wire::agenda_editor_event::SheetOpened| {
                 matches!(
                     Sheet::try_from(opened.sheet),
-                    Ok(Sheet::List | Sheet::Repeat)
+                    Ok(Sheet::List | Sheet::Repeat | Sheet::CustomRepeat)
                 )
             };
             let stray = match &event {
@@ -592,7 +656,15 @@ impl Editor {
                 | K::Guest(_)
                 | K::Reminder(_)
                 | K::Link(_)
-                | K::Skip(_) => true,
+                | K::Skip(_)
+                | K::PlaceSearch(_)
+                | K::Place(_)
+                | K::PlaceCleared(_)
+                | K::SecondReminder(_)
+                | K::Availability(_)
+                | K::ZoneSearch(_)
+                | K::Zone(_)
+                | K::Travel(_) => true,
                 K::SheetOpened(opened) => !sheet_of_a_task(opened),
                 _ => false,
             };
@@ -625,7 +697,12 @@ impl Editor {
                     ..d.clone()
                 })
             }),
-            K::AllDay(change) => self.edit(|d| Some(draft::all_day(d, change.on))),
+            K::AllDay(change) => {
+                self.edit(|d| Some(draft::all_day(d, change.on)));
+                if !change.on {
+                    self.settle_zone(ctx);
+                }
+            }
             K::Start(change) => self.edit(|d| draft::move_start(d, &change.day, &change.time)),
             K::End(change) => self.edit(|d| draft::set_end(d, &change.day, &change.time)),
             K::Calendar(picked) => {
@@ -666,11 +743,15 @@ impl Editor {
                 }
             }
             K::Repeat(picked) => {
-                if self.repeat_keys().contains(&picked.key) {
+                if picked.key == REPEAT_CUSTOM {
+                    // Custom opens its own sheet over the working rule.
+                    self.open_custom();
+                } else if self.repeat_keys().contains(&picked.key) {
                     self.close_sheet();
                     self.edit(|d| {
                         Some(Draft {
                             repeat_key: picked.key,
+                            repeat_rule: String::new(),
                             ..d.clone()
                         })
                     });
@@ -680,8 +761,16 @@ impl Editor {
                 if self.reminder_keys().contains(&picked.key) {
                     self.close_sheet();
                     self.edit(|d| {
+                        // A second alert needs the first, and is never the same lead.
+                        let second =
+                            if picked.key == REMINDER_NONE || d.second_reminder_key == picked.key {
+                                REMINDER_NONE.to_owned()
+                            } else {
+                                d.second_reminder_key.clone()
+                            };
                         Some(Draft {
                             reminder_key: picked.key,
+                            second_reminder_key: second,
                             ..d.clone()
                         })
                     });
@@ -690,7 +779,7 @@ impl Editor {
             K::SheetOpened(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
                 if !matches!(sheet, Sheet::Unspecified | Sheet::Scope) && self.draft.is_some() {
-                    self.sheet = sheet;
+                    self.open_sheet(sheet);
                 }
             }
             K::SheetClosed(_) => self.close_sheet(),
@@ -754,6 +843,34 @@ impl Editor {
             K::TagAdded(added) => self.edit(|d| draft::tag_added(d, &added.text)),
             K::TagRemoved(removed) => self.edit(|d| draft::tag_removed(d, &removed.text)),
             K::MoreDetails(_) => self.more_open = !self.more_open,
+            // WAVE 2 (#1173): the event's place, second alert, availability,
+            // zone and travel, and a task's address.
+            K::PlaceSearch(search) => self.place_query = search.text,
+            K::Place(picked) => self.pick_place(&picked.key),
+            K::PlaceCleared(_) => self.clear_place(),
+            K::SecondReminder(picked) => self.pick_second_reminder(&picked.key),
+            K::Availability(picked) => self.pick_availability(&picked.key),
+            K::ZoneSearch(search) => self.zone_query = search.text,
+            K::Zone(picked) => self.pick_zone(&picked.key, ctx.zone()),
+            K::Travel(picked) => self.pick_travel(&picked.key),
+            K::Url(change) => self.edit(|d| {
+                Some(Draft {
+                    url: change.text,
+                    ..d.clone()
+                })
+            }),
+            K::CustomFreq(picked) => self.custom_freq(&picked.key),
+            K::CustomInterval(changed) => self.custom_interval(changed.interval),
+            K::CustomWeekday(toggled) => self.custom_weekday(&toggled.key),
+            K::CustomMonthMode(picked) => self.custom_month_mode(&picked.key),
+            K::CustomMonthDay(toggled) => self.custom_month_day(&toggled.key),
+            K::CustomOrdinal(picked) => self.custom_ordinal(&picked.key),
+            K::CustomNthWeekday(picked) => self.custom_nth_weekday(&picked.key),
+            K::CustomEnd(picked) => self.custom_end(&picked.key),
+            K::CustomUntil(changed) => self.custom_until(&changed.day),
+            K::CustomCount(changed) => self.custom_count(changed.count),
+            K::CustomApplied(_) => self.apply_custom(),
+            K::CustomReplace(_) => self.replace_custom(),
         }
         Vec::new()
     }
@@ -900,22 +1017,12 @@ impl Editor {
     fn repeat_keys(&self) -> Vec<String> {
         let mut keys = vec![REPEAT_NONE.to_owned()];
         keys.extend(RULES.iter().map(|(key, _)| (*key).to_owned()));
-        if self
-            .baseline
-            .as_ref()
-            .is_some_and(|base| base.repeat_key == REPEAT_CUSTOM)
-        {
-            keys.push(REPEAT_CUSTOM.to_owned());
-        }
+        keys.push(REPEAT_CUSTOM.to_owned());
         keys
     }
 
     fn reminder_keys(&self) -> Vec<String> {
-        let stored = self
-            .baseline
-            .as_ref()
-            .and_then(|base| base.reminder_key.parse::<i64>().ok());
-        let mut minutes: Vec<i64> = REMINDERS.iter().copied().chain(stored).collect();
+        let mut minutes: Vec<i64> = self.stored_leads();
         minutes.sort_unstable();
         minutes.dedup();
         std::iter::once(REMINDER_NONE.to_owned())
@@ -931,7 +1038,7 @@ impl Editor {
         else {
             return Vec::new();
         };
-        let rule_changed = draft.repeat_key != base.repeat_key;
+        let rule_changed = !draft::same_repeat(draft, base);
         let whole_event_only = draft::series_only(draft, base);
         let moves_series = draft::times_changed(draft, base) && event.is_recurrence_instance;
         scopes(locale, self.scope)
@@ -1030,9 +1137,11 @@ impl Screen for Editor {
                 receipt: denial.code.clone().unwrap_or_default(),
             }),
             Phase::Ready => match &self.draft {
-                Some(draft) => {
-                    wire::agenda_editor_state::Content::Data(Box::new(self.data(locale, draft)))
-                }
+                Some(draft) => wire::agenda_editor_state::Content::Data(Box::new(self.data(
+                    locale,
+                    ctx.zone(),
+                    draft,
+                ))),
                 None => wire::agenda_editor_state::Content::Gone(wire::AgendaGone {
                     title: words::gone_title(locale),
                     body: words::gone_body(locale),
@@ -1083,7 +1192,7 @@ impl Editor {
         }
     }
 
-    fn data(&self, locale: Locale, draft: &Draft) -> wire::AgendaEditorData {
+    fn data(&self, locale: Locale, device_zone: &str, draft: &Draft) -> wire::AgendaEditorData {
         let Some(loaded) = &self.loaded else {
             return wire::AgendaEditorData::default();
         };
@@ -1116,7 +1225,7 @@ impl Editor {
             .repeat_keys()
             .into_iter()
             .map(|key| {
-                let label = self.repeat_label(locale, &key, &draft.start_day);
+                let label = self.repeat_label(locale, &key, draft);
                 wire::AgendaChoice {
                     selected: key == draft.repeat_key,
                     accessibility_label: label.clone(),
@@ -1143,6 +1252,8 @@ impl Editor {
                 }
             })
             .collect();
+        let show_event = !task;
+        let timed = show_event && !draft.all_day;
         let repeat_label = repeats.iter().find(|choice| choice.selected).map_or_else(
             || words::repeat_never(locale),
             |choice| choice.label.clone(),
@@ -1289,6 +1400,77 @@ impl Editor {
             } else {
                 String::new()
             },
+            location_label: if show_event {
+                self.location_label(locale, draft)
+            } else {
+                String::new()
+            },
+            places: if show_event && self.sheet == Sheet::Location {
+                self.place_choices(locale, draft)
+            } else {
+                Vec::new()
+            },
+            place_query: self.place_query.clone(),
+            show_clear_location: show_event && !draft.place_id.is_empty(),
+            show_second_reminder: show_event && draft.reminder_key != REMINDER_NONE,
+            second_reminder_label: if show_event {
+                self.second_reminder_choices(locale, draft)
+                    .iter()
+                    .find(|choice| choice.selected)
+                    .map_or_else(|| words::reminder_none(locale), |c| c.label.clone())
+            } else {
+                String::new()
+            },
+            second_reminders: if show_event && draft.reminder_key != REMINDER_NONE {
+                self.second_reminder_choices(locale, draft)
+            } else {
+                Vec::new()
+            },
+            availability_label: if !show_event {
+                String::new()
+            } else if draft.free {
+                editor_words::free(locale)
+            } else {
+                editor_words::busy(locale)
+            },
+            availabilities: if show_event {
+                Self::availability_choices(locale, draft)
+            } else {
+                Vec::new()
+            },
+            show_zone: timed,
+            zone_label: if timed {
+                self.zone_label(locale, draft)
+            } else {
+                String::new()
+            },
+            zones: if timed && self.sheet == Sheet::Zone {
+                self.zone_choices(locale, device_zone, draft)
+            } else {
+                Vec::new()
+            },
+            zone_query: self.zone_query.clone(),
+            travel_label: if show_event {
+                Self::travel_label(locale, draft.travel_min)
+            } else {
+                String::new()
+            },
+            travels: if show_event {
+                self.travel_choices(locale, draft)
+            } else {
+                Vec::new()
+            },
+            custom_repeat: if self.sheet == Sheet::CustomRepeat {
+                self.custom_sheet(locale, draft)
+            } else {
+                None
+            },
+            show_url: task,
+            url_saved_as: if task {
+                Self::url_saved_as(draft)
+            } else {
+                String::new()
+            },
             priority_label: if task {
                 priorities
                     .iter()
@@ -1319,7 +1501,8 @@ impl Editor {
     }
 
     /// A repeat preset named for the day the event starts on.
-    fn repeat_label(&self, locale: Locale, key: &str, day: &str) -> String {
+    fn repeat_label(&self, locale: Locale, key: &str, draft: &Draft) -> String {
+        let day = draft.start_day.as_str();
         let long = long_day(locale, day);
         let (weekday, day_month) = long
             .split_once(' ')
@@ -1345,10 +1528,29 @@ impl Editor {
                 &editor_words::repeat_yearly_on(locale),
                 &[("day_month", day_month)],
             ),
-            REPEAT_CUSTOM => self
-                .event()
-                .and_then(|event| event.recurrence_summary.clone())
-                .unwrap_or_else(|| words::field_repeat(locale)),
+            // A rule as stored says what the vault says of it (the one
+            // summariser); one the member just built says what the sheet says.
+            REPEAT_CUSTOM if draft.repeat_key != REPEAT_CUSTOM => {
+                editor_words::repeat_custom(locale)
+            }
+            REPEAT_CUSTOM => {
+                let stored = self
+                    .baseline
+                    .as_ref()
+                    .is_some_and(|base| draft::same_repeat(draft, base))
+                    .then(|| {
+                        self.event()
+                            .and_then(|event| event.recurrence_summary.clone())
+                    })
+                    .flatten();
+                stored
+                    .or_else(|| {
+                        draft::rule_for(draft)
+                            .and_then(|rule| repeat::from_rrule(&rule, day))
+                            .map(|spec| custom::summary(locale, &spec))
+                    })
+                    .unwrap_or_else(|| editor_words::repeat_custom(locale))
+            }
             _ => words::repeat_never(locale),
         }
     }
@@ -1384,5 +1586,17 @@ fn chrome(locale: Locale) -> wire::AgendaEditorChrome {
         field_priority: task_strings::field_priority(locale),
         field_tags: task_strings::field_tags(locale),
         tag_placeholder: task_strings::tags_add(locale),
+        field_location: editor_words::field_location(locale),
+        field_second_alert: editor_words::field_second_alert(locale),
+        field_availability: editor_words::field_availability(locale),
+        field_zone: editor_words::field_zone(locale),
+        field_travel: editor_words::field_travel(locale),
+        field_url: editor_words::field_url(locale),
+        url_placeholder: editor_words::placeholder_url(locale),
+        place_search_placeholder: editor_words::placeholder_place_search(locale),
+        zone_search_placeholder: editor_words::placeholder_zone_search(locale),
+        clear_location: editor_words::location_none(locale),
+        custom_repeat_title: repeat_words::title(locale),
+        field_first_alert: editor_words::field_first_alert(locale),
     }
 }

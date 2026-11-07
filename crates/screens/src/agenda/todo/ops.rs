@@ -38,10 +38,36 @@ pub struct NewTask<'a> {
     pub priority: i64,
     /// A repeat rule.
     pub rule: Option<&'a str>,
+    /// A web address, already normalised.
+    pub url: Option<&'a str>,
     pub project_id: Option<&'a str>,
     pub section_id: Option<&'a str>,
     pub tags: &'a [String],
     pub flagged: bool,
+}
+
+/// The `add-task` command a staged task writes. Empty text is absent, and a
+/// priority of 0 is none.
+#[must_use]
+pub fn add_request(task: &NewTask) -> act::agenda::AddTask {
+    let text = |value: &str| {
+        if value.is_empty() {
+            Default::default()
+        } else {
+            crate::field::Field::Is(value.to_owned())
+        }
+    };
+    act::agenda::AddTask {
+        title: task.title.to_owned(),
+        description: text(task.notes),
+        due: text(task.due),
+        priority: (task.priority > 0).then_some(task.priority),
+        rule: text(task.rule.unwrap_or_default()),
+        project_id: text(task.project_id.unwrap_or_default()),
+        section_id: text(task.section_id.unwrap_or_default()),
+        url: text(task.url.unwrap_or_default()),
+        ..Default::default()
+    }
 }
 
 /// What a to-do surface holds beside its answers: the one status line, what
@@ -191,23 +217,7 @@ impl Ops {
     /// says the refusal, so a screen never files the same task twice.
     pub fn add_full(&mut self, ctx: &Ctx, task: &NewTask, lands_in: &str) -> Option<String> {
         let locale = ctx.locale();
-        let text = |value: &str| {
-            if value.is_empty() {
-                Default::default()
-            } else {
-                crate::field::Field::Is(value.to_owned())
-            }
-        };
-        let request = act::agenda::AddTask {
-            title: task.title.to_owned(),
-            description: text(task.notes),
-            due: text(task.due),
-            priority: (task.priority > 0).then_some(task.priority),
-            rule: text(task.rule.unwrap_or_default()),
-            project_id: text(task.project_id.unwrap_or_default()),
-            section_id: text(task.section_id.unwrap_or_default()),
-            ..Default::default()
-        };
+        let request = add_request(task);
         let key = kit_act::key(&["add-task", task.title], self.next_seq());
         let settled = kit_act::act(ctx, request, &key);
         self.undo = None;

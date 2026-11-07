@@ -35,6 +35,13 @@ pub const RULES: [(&str, &str); 5] = [
 /// The reminder leads offered, in minutes.
 pub const REMINDERS: [i64; 5] = [0, 10, 30, 60, 1440];
 
+/// The travel times offered, in minutes, after "None" (0).
+pub const TRAVELS: [i32; 7] = [0, 5, 15, 30, 60, 90, 120];
+
+/// The zone key that means "no zone": a floating event keeps its wall clock
+/// wherever the phone goes.
+pub const ZONE_FLOATING: &str = "floating";
+
 const DAY: usize = 10;
 const MINUTES_PER_DAY: i64 = 1440;
 const HOUR: i64 = 60;
@@ -50,6 +57,101 @@ pub fn rule_of(key: &str) -> Option<&'static str> {
         .iter()
         .find(|(preset, _)| *preset == key)
         .map(|(_, rule)| *rule)
+}
+
+/// THE RULE A DRAFT WRITES: a preset's, or the custom rule the sheet applied
+/// (or the stored one the editor keeps as it is). `None` is "does not repeat".
+#[must_use]
+pub fn rule_for(draft: &Draft) -> Option<String> {
+    if draft.repeat_key == REPEAT_CUSTOM {
+        return Some(draft.repeat_rule.trim().to_owned()).filter(|rule| !rule.is_empty());
+    }
+    rule_of(&draft.repeat_key).map(str::to_owned)
+}
+
+/// A rule, as one comparable set of its parts.
+fn rule_parts(rule: &str) -> std::collections::BTreeSet<String> {
+    rule.to_uppercase()
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Whether the two drafts repeat the same way: the same preset, or the same
+/// custom rule.
+#[must_use]
+pub fn same_repeat(draft: &Draft, base: &Draft) -> bool {
+    draft.repeat_key == base.repeat_key
+        && (draft.repeat_key != REPEAT_CUSTOM
+            || rule_parts(&draft.repeat_rule) == rule_parts(&base.repeat_rule))
+}
+
+/// The alerts a draft sets, first then second. The second needs the first and
+/// is never the same lead twice.
+#[must_use]
+pub fn alerts_of(draft: &Draft) -> Vec<i64> {
+    let first = draft
+        .reminder_key
+        .parse::<i64>()
+        .ok()
+        .filter(|_| draft.reminder_key != REMINDER_NONE);
+    let second = draft
+        .second_reminder_key
+        .parse::<i64>()
+        .ok()
+        .filter(|_| draft.second_reminder_key != REMINDER_NONE)
+        .filter(|second| Some(*second) != first);
+    first.into_iter().chain(first.and(second)).collect()
+}
+
+/// A task's address as it will be saved: a full `http` or `https` address
+/// stays, a bare domain gets `https://`, and anything else is refused (`None`).
+/// A blank is no address, which is `Some("")`.
+#[must_use]
+pub fn normalize_url(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Some(String::new());
+    }
+    if text.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let (scheme, body) = if lower.starts_with("https://") {
+        ("https://", text.get(8..)?)
+    } else if lower.starts_with("http://") {
+        ("http://", text.get(7..)?)
+    } else {
+        // No scheme: a bare domain. A colon before the path is only a port;
+        // `mailto:`, `javascript:` and `ftp://` are not web addresses.
+        let head = text.split(['/', '?', '#']).next().unwrap_or_default();
+        if let Some((_, after)) = head.rsplit_once(':')
+            && (after.is_empty() || !after.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return None;
+        }
+        ("https://", text)
+    };
+    let authority = body.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority.rsplit('@').next().unwrap_or_default();
+    let host = host
+        .rsplit_once(':')
+        .filter(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(host, |(name, _)| name);
+    let labels: Vec<&str> = host.split('.').collect();
+    let valid = host.eq_ignore_ascii_case("localhost")
+        || (labels.len() >= 2
+            && labels.iter().all(|label| {
+                !label.is_empty()
+                    && !label.starts_with('-')
+                    && !label.ends_with('-')
+                    && label
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            }));
+    valid.then(|| format!("{scheme}{body}"))
 }
 
 /// Minutes since 1970-01-01T00:00 on the wall clock, or `None` for a malformed pair.
@@ -227,6 +329,7 @@ pub fn new_draft(day: &str, upcoming: &wire::AgendaUpcoming) -> Draft {
             .unwrap_or_default(),
         repeat_key: REPEAT_NONE.to_owned(),
         reminder_key: REMINDER_NONE.to_owned(),
+        second_reminder_key: REMINDER_NONE.to_owned(),
         list_key: LIST_INBOX.to_owned(),
         ..Draft::default()
     }
@@ -317,11 +420,27 @@ pub fn draft_of(event: &wire::AgendaEvent) -> Draft {
             .map(|a| a.party_id.clone())
             .collect(),
         repeat_key: repeat_key_of(event.rrule.as_deref()),
+        repeat_rule: if repeat_key_of(event.rrule.as_deref()) == REPEAT_CUSTOM {
+            event.rrule.clone().unwrap_or_default().trim().to_owned()
+        } else {
+            String::new()
+        },
         reminder_key: event.reminders.first().map_or_else(
             || REMINDER_NONE.to_owned(),
             |reminder| reminder.minutes_before.to_string(),
         ),
+        second_reminder_key: event.reminders.get(1).map_or_else(
+            || REMINDER_NONE.to_owned(),
+            |reminder| reminder.minutes_before.to_string(),
+        ),
         link: event.conferencing_uri.clone().unwrap_or_default(),
+        place_id: event.location_place_id.clone().unwrap_or_default(),
+        // A zoned event keeps its zone; a floating or all-day one has none.
+        zone: if event.recurrence_semantics.as_deref() == Some("zoned") {
+            event.start_tz.clone().unwrap_or_default()
+        } else {
+            String::new()
+        },
         ..Draft::default()
     }
 }
@@ -369,7 +488,9 @@ pub fn times_changed(draft: &Draft, base: &Draft) -> bool {
         || draft.start_day != base.start_day
         || draft.end_day != base.end_day
         || (!draft.all_day
-            && (draft.start_time != base.start_time || draft.end_time != base.end_time))
+            && (draft.start_time != base.start_time
+                || draft.end_time != base.end_time
+                || draft.zone != base.zone))
 }
 
 fn same_guests(draft: &Draft, base: &Draft) -> bool {
@@ -391,6 +512,10 @@ pub fn series_only(draft: &Draft, base: &Draft) -> bool {
     (draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty())
         || draft.link.trim() != base.link.trim()
         || draft.reminder_key != base.reminder_key
+        || draft.second_reminder_key != base.second_reminder_key
+        || draft.place_id != base.place_id
+        || draft.free != base.free
+        || draft.travel_min != base.travel_min
         || guests_changed(draft, base)
 }
 
@@ -402,12 +527,17 @@ pub fn dirty(draft: &Draft, base: &Draft) -> bool {
         || times_changed(draft, base)
         || draft.calendar_id != base.calendar_id
         || guests_changed(draft, base)
-        || draft.repeat_key != base.repeat_key
+        || !same_repeat(draft, base)
         || draft.reminder_key != base.reminder_key
+        || draft.second_reminder_key != base.second_reminder_key
         || draft.link.trim() != base.link.trim()
         || draft.list_key != base.list_key
         || draft.priority != base.priority
         || draft.tags != base.tags
+        || draft.place_id != base.place_id
+        || draft.free != base.free
+        || draft.travel_min != base.travel_min
+        || draft.url.trim() != base.url.trim()
 }
 
 #[cfg(test)]

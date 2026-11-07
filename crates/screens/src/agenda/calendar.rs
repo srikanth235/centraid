@@ -38,6 +38,21 @@
 //! only if the OS already allows it. **A pass never asks the OS for permission
 //! and never runs before this device imported.**
 //!
+//! ## Writing back (two-way sync, #1173)
+//!
+//! The shell reports each calendar's `writable` / `allows_modifications` in the snapshot; the
+//! writable ones are remembered for the pass. After every pass, and after any commit
+//! ([`wire::DataChanged`]) while some calendar is writable, the core reads what those calendars
+//! are OWED ([`super::calendar_push`]: derived at read time, nothing queued) and asks the shell to
+//! write it with ONE [`wire::CalendarWrite`]; the shell answers [`wire::CalendarWritten`] and the
+//! core records it with `follow.pushed`. **One write in flight, one queued**, like the reads: a
+//! write and a read never overlap, a trigger during either waits for it. A write that fails or is
+//! not answered in [`READ_TIMEOUT`] changes nothing (C11): it is owed again at the next pass. A
+//! write is never asked for before this device imported, never after the OS refused the
+//! calendar, and never for a calendar the shell did not report writable (C8) or one that has no
+//! phone origin at all (C9). The status line speaks only for a failure and for a deleted event the
+//! phone kept (C7).
+//!
 //! "This device imported" is a per-device habit kept in the keychain
 //! ([`IMPORTED_KEY`]), not a fact read back from the vault: the OS permission a
 //! pass needs is per device too, and a vault restored onto a new phone must be
@@ -49,6 +64,7 @@ use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 use wire::screen_event::Kind as E;
 
+use super::calendar_push::{self as push, Prepared};
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
@@ -76,6 +92,7 @@ pub const SETTLE: Duration = Duration::from_secs(2);
 pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
 const SETTLE_TIMER: &str = "calendar-settle";
 const READ_TIMER: &str = "calendar-read";
+const WRITE_TIMER: &str = "calendar-write";
 
 pub type PhoneEvent = wire::PhoneCalendarEvent;
 
@@ -469,6 +486,42 @@ fn fields(
         },
     );
     fields.insert("busy".into(), json!(!event.free));
+    // The alerts, minutes before the start, each once, in the order the phone has them; none is
+    // null, so a phone that dropped them is followed.
+    let mut alerts: Vec<u32> = Vec::new();
+    for minutes in &event.alerts {
+        if !alerts.contains(minutes) {
+            alerts.push(*minutes);
+        }
+    }
+    fields.insert(
+        "reminders".into(),
+        if alerts.is_empty() {
+            Value::Null
+        } else {
+            json!(alerts)
+        },
+    );
+    // The guests the phone holds, when it holds any. Never written back.
+    let guests: Vec<Value> = event
+        .attendees
+        .iter()
+        .filter(|guest| !guest.name.trim().is_empty() || !guest.email.trim().is_empty())
+        .map(|guest| {
+            let mut one = serde_json::Map::new();
+            if !guest.name.trim().is_empty() {
+                one.insert("name".into(), json!(guest.name.trim()));
+            }
+            if !guest.email.trim().is_empty() {
+                one.insert("email".into(), json!(guest.email.trim()));
+            }
+            one.insert("state".into(), json!(guest.status.trim()));
+            Value::Object(one)
+        })
+        .collect();
+    if !guests.is_empty() {
+        fields.insert("attendees".into(), Value::Array(guests));
+    }
     if let Some(series) = series {
         fields.insert("overrides".into(), overrides(series, now_ms, device_zone));
     }
@@ -653,6 +706,8 @@ enum Waiting {
     /// The keychain's answer to "did this device import?".
     Flag,
     Read(Purpose),
+    /// A `CalendarWrite` is out.
+    Write,
 }
 
 /// When a following pass runs. Pure: the timers are the runtime's.
@@ -680,6 +735,18 @@ pub struct CalendarFollow {
     import_queued: bool,
     status: Option<wire::StatusLine>,
     outcome: Option<Outcome>,
+    /// The origins (`calendar:<key>`) the shell last reported writable.
+    writable: Vec<String>,
+    /// This install's id, as the last snapshot said.
+    device_id: String,
+    /// Something may be owed: write when nothing else is running.
+    want_push: bool,
+    /// Where the round of writes goes on after the one in flight (empty: it is the last page).
+    cursor: String,
+    /// What the write in flight asked for.
+    writing: Vec<Prepared>,
+    /// The status line is a sync sentence (a later clean write clears it).
+    sync_status: bool,
 }
 
 impl Default for CalendarFollow {
@@ -699,6 +766,12 @@ impl CalendarFollow {
             import_queued: false,
             status: None,
             outcome: None,
+            writable: Vec::new(),
+            device_id: String::new(),
+            want_push: false,
+            cursor: String::new(),
+            writing: Vec::new(),
+            sync_status: false,
         }
     }
 
@@ -767,6 +840,10 @@ impl CalendarFollow {
         match event {
             E::TimerFired(fired) if fired.timer == SETTLE_TIMER => Some(self.settled(ctx)),
             E::TimerFired(fired) if fired.timer == READ_TIMER => Some(self.read_ended(ctx, None)),
+            // A write that was never answered is a failed one (C11).
+            E::TimerFired(fired) if fired.timer == WRITE_TIMER => Some(self.written(ctx, None)),
+            // The vault moved: something may be owed to the phone.
+            E::DataChanged(_) => Some(self.committed(ctx)),
             E::EffectResult(result) => self.on_result(result, ctx),
             _ => None,
         }
@@ -797,6 +874,10 @@ impl CalendarFollow {
                 let denied = failed.denied;
                 Some(self.read_failed(ctx, denied))
             }
+            (Waiting::Write, Some(O::CalendarWritten(written))) => {
+                Some(self.written(ctx, Some(written)))
+            }
+            (Waiting::Write, Some(O::Failed(_))) => Some(self.written(ctx, None)),
             _ => None,
         }
     }
@@ -834,6 +915,7 @@ impl CalendarFollow {
         match purpose {
             Purpose::Import => {
                 self.outcome = None;
+                self.sync_status = false;
                 self.status = Some(plain(calendar_words::import_calendar_running(ctx.locale())));
             }
             // Only a read with no dialog can go unanswered.
@@ -852,6 +934,11 @@ impl CalendarFollow {
         let Waiting::Read(purpose) = self.waiting else {
             return Vec::new();
         };
+        if denied {
+            // The OS refused the calendar: nothing is written to it until a read is allowed again.
+            self.writable.clear();
+            self.want_push = false;
+        }
         if purpose == Purpose::Import {
             let locale = ctx.locale();
             self.status = Some(plain(if denied {
@@ -876,6 +963,9 @@ impl CalendarFollow {
             return self.read_failed(ctx, false);
         };
         let (outcome, told) = self.run(ctx, snapshot);
+        self.writable = writable_origins(ctx.locale(), snapshot);
+        self.device_id.clone_from(&snapshot.device_id);
+        self.want_push = true;
         let mut effects = Vec::new();
         if purpose == Purpose::Import {
             self.status = Some(plain(sentence(ctx.locale(), &outcome)));
@@ -938,7 +1028,7 @@ impl CalendarFollow {
             self.import_queued = false;
             return self.start_read(ctx, Purpose::Import);
         }
-        match self.gate {
+        let reads = match self.gate {
             // Triggers arrived during the pass: one more, at once.
             Gate::Running { queued: true } => {
                 self.gate = Gate::Running { queued: false };
@@ -949,7 +1039,111 @@ impl CalendarFollow {
                 Vec::new()
             }
             _ => Vec::new(),
+        };
+        if reads.is_empty() {
+            self.begin_push(ctx)
+        } else {
+            reads
         }
+    }
+
+    /// The vault committed something. When a calendar is writable something may be owed to it.
+    fn committed(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if !self.followed || self.writable.is_empty() {
+            return Vec::new();
+        }
+        self.want_push = true;
+        self.begin_push(ctx)
+    }
+
+    /// WRITE WHAT THE PHONE IS OWED, when something may be and nothing else is running: ONE
+    /// `CalendarWrite` for a page of it. Never before this device imported, never without a
+    /// calendar the shell reported writable.
+    fn begin_push(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if !self.want_push || !self.followed || self.writable.is_empty() {
+            return Vec::new();
+        }
+        if self.waiting != Waiting::Nothing {
+            // One in flight, one queued: `want_push` stays set and the next `finish` writes.
+            return Vec::new();
+        }
+        self.want_push = false;
+        let mut after = std::mem::take(&mut self.cursor);
+        for _ in 0..push::MAX_PAGES {
+            let Some(page) = push::read(ctx, &self.writable, &after) else {
+                return Vec::new();
+            };
+            let prepared: Vec<Prepared> = page
+                .items
+                .iter()
+                .filter_map(|owed| push::prepare(owed, &self.device_id))
+                .collect();
+            if prepared.is_empty() {
+                if page.next.is_empty() {
+                    return Vec::new();
+                }
+                after = page.next;
+                continue;
+            }
+            self.cursor = page.next;
+            let items: Vec<wire::CalendarWriteItem> = prepared
+                .iter()
+                .flat_map(|one| one.items.iter().cloned())
+                .collect();
+            self.writing = prepared;
+            self.waiting = Waiting::Write;
+            ctx.start_timer(WRITE_TIMER, READ_TIMEOUT);
+            return vec![wire::Effect {
+                kind: Some(wire::effect::Kind::CalendarWrite(wire::CalendarWrite { items })),
+            }];
+        }
+        Vec::new()
+    }
+
+    /// The shell answered the write (`Some`), or it failed or was never answered (`None`).
+    /// Record what went through; what did not is owed again.
+    fn written(&mut self, ctx: &Ctx, answered: Option<&wire::CalendarWritten>) -> Vec<wire::Effect> {
+        if self.waiting != Waiting::Write {
+            return Vec::new();
+        }
+        ctx.cancel_timer(WRITE_TIMER);
+        let asked = std::mem::take(&mut self.writing);
+        let verdicts = push::verdicts(&asked, answered);
+        let failed = verdicts.iter().any(|verdict| !verdict.ok);
+        let mut kept = 0_u32;
+        if verdicts.iter().any(|verdict| verdict.ok) {
+            let request = act::agenda::RecordCalendarPush {
+                items: push::pushed_items(&verdicts).to_string(),
+            };
+            let key = kit_act::key(
+                &["record-calendar-push", &asked.first().map_or("", |one| &one.event_id)],
+                kit_act::fresh(),
+            );
+            let settled = kit_act::act(ctx, request, &key);
+            if settled.committed {
+                let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+                kept = count(&output, "unlinked");
+            }
+        }
+        let locale = ctx.locale();
+        if failed {
+            self.status = Some(plain(calendar_words::sync_failed(locale)));
+            self.sync_status = true;
+        } else if kept > 0 {
+            self.status = Some(plain(calendar_words::sync_kept(locale, u64::from(kept))));
+            self.sync_status = true;
+        } else if self.sync_status {
+            self.status = None;
+            self.sync_status = false;
+        }
+        // A failed write ends this round (the next pass or commit asks again); a good one goes on
+        // to the next page, if the round has one.
+        if failed {
+            self.cursor.clear();
+        } else if !self.cursor.is_empty() {
+            self.want_push = true;
+        }
+        self.finish(ctx)
     }
 }
 
@@ -978,4 +1172,14 @@ fn watch(on: bool) -> wire::Effect {
             on,
         })),
     }
+}
+
+/// The origins the shell reported writable (both ways): the only calendars ever written.
+fn writable_origins(locale: Locale, snapshot: &wire::CalendarSnapshot) -> Vec<String> {
+    snapshot
+        .calendars
+        .iter()
+        .filter(|calendar| calendar.writable && calendar.allows_modifications)
+        .map(|calendar| origin_of(locale, calendar).id)
+        .collect()
 }

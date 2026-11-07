@@ -106,6 +106,10 @@ message AgendaHomeState {
   repeated AgendaCalendarView calendar_views = 31;
   // The menu key's accessibility label, "View".
   string calendar_view_label = 32;
+  // THE STYLE SHEET (#1173 wave 2), set while `sheet` is SHEET_NEW_PROJECT,
+  // SHEET_NEW_CALENDAR or SHEET_EDIT_CALENDAR: name, colour and icon of the
+  // list or calendar being made or edited.
+  AgendaStyleSheet style = 33;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -117,8 +121,12 @@ message AgendaHomeState {
     SHEET_READS = 3;
     // The filing sheet: Inbox, projects and their sections.
     SHEET_FILE = 4;
-    // The new-project name sheet.
+    // The new-list sheet: name, colour and icon (`style`).
     SHEET_NEW_PROJECT = 5;
+    // The new-calendar sheet (`style`), opened from More's "New calendar".
+    SHEET_NEW_CALENDAR = 6;
+    // Rename or restyle one calendar (`style`), opened from its More row.
+    SHEET_EDIT_CALENDAR = 7;
   }
 }
 
@@ -635,6 +643,10 @@ message AgendaCalendarChoice {
   bool hidden = 4;
   // "Shown" / "Hidden".
   string state_label = 5;
+  // The calendar's colour on the one list palette (`blue`, `mustard` ...).
+  string color_key = 6;
+  // A `design/icons.toml` key the member chose; empty for none.
+  string icon_key = 7;
 }
 
 // ONE ROW OF AGENDA'S MORE SHEET. A view draws `label` (with the `hue_key` dot
@@ -667,6 +679,13 @@ message AgendaMoreRow {
   // (`agenda.todo_list`) and Trash (`agenda.trash`). Absent on a calendar and
   // on `reads`, which are the sheet's own.
   Route route = 10;
+  // A calendar's colour on the one list palette (`blue` ...); empty elsewhere.
+  // The dot is drawn in it; `hue_key` stays the events' own role.
+  string color_key = 11;
+  // A calendar row's edit control (rename, colour, icon): its accessibility
+  // label ("Edit Work"). The control sends `CalendarEditRequested`. Empty
+  // where the row has none. `icon_key` (9) is now also a calendar's own icon.
+  string edit_label = 12;
 }
 
 enum AgendaEmpty {
@@ -734,6 +753,35 @@ message AgendaHomeEvent {
     QuickToolPicked quick_tool = 46;
     QuickDuePicked quick_due = 47;
     QuickTagAdded quick_tag = 48;
+    // THE STYLE SHEET (#1173 wave 2), shared by the new list and the new and
+    // edited calendar.
+    StyleNameChanged style_name = 49;
+    StyleColorPicked style_color = 50;
+    StyleIconPicked style_icon = 51;
+    StyleSubmitted style_submitted = 52;
+    CalendarEditRequested calendar_edit = 53;
+  }
+
+  message StyleNameChanged {
+    string name = 1;
+  }
+
+  // `AgendaStyleSwatch.key`.
+  message StyleColorPicked {
+    string key = 1;
+  }
+
+  // `AgendaStyleIcon.key`; EMPTY clears the icon.
+  message StyleIconPicked {
+    string key = 1;
+  }
+
+  // The sheet's Create or Save.
+  message StyleSubmitted {}
+
+  // A calendar row's edit control: opens SHEET_EDIT_CALENDAR on it.
+  message CalendarEditRequested {
+    string calendar_id = 1;
   }
 
   // A strip day, a month cell or a year's month: the anchor moves to `day`
@@ -1112,6 +1160,19 @@ message AgendaEditorState {
     SHEET_SCOPE = 6;
     // A task's list (#1173).
     SHEET_LIST = 7;
+    // THE CUSTOM REPEAT SHEET (#1173 wave 2): frequency, every N, weekdays,
+    // the monthly mode and the end, over a live sentence.
+    SHEET_CUSTOM_REPEAT = 8;
+    // The event's place, chosen from the vault's places.
+    SHEET_LOCATION = 9;
+    // The second alert; drawn only once the first is set.
+    SHEET_SECOND_REMINDER = 10;
+    // Busy or free.
+    SHEET_AVAILABILITY = 11;
+    // The event's time zone, from a curated searchable list.
+    SHEET_ZONE = 12;
+    // Travel time before the event.
+    SHEET_TRAVEL = 13;
   }
 
   enum Asking {
@@ -1158,6 +1219,23 @@ message AgendaEditorChrome {
   string field_priority = 27;
   string field_tags = 28;
   string tag_placeholder = 29;
+  // WAVE 2 (#1173): the rows and sheets the event editor gained, and the
+  // task's address field.
+  string field_location = 30;
+  string field_second_alert = 31;
+  string field_availability = 32;
+  string field_zone = 33;
+  string field_travel = 34;
+  string field_url = 35;
+  string url_placeholder = 36;
+  // The search fields of the place and zone pickers.
+  string place_search_placeholder = 37;
+  string zone_search_placeholder = 38;
+  // "No location": the row that clears a chosen place.
+  string clear_location = 39;
+  string custom_repeat_title = 40;
+  // The first alert's row, named apart from the second.
+  string field_first_alert = 41;
 }
 
 // THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,
@@ -1185,6 +1263,22 @@ message AgendaDraft {
   int32 priority = 14;
   // A task's tags, as typed, in order.
   repeated string tags = 15;
+  // WAVE 2 (#1173).
+  // The event's place: a `place` entity id, empty for none.
+  string place_id = 16;
+  // `AgendaChoice.key` of the second alert list; `none` until the first is set.
+  string second_reminder_key = 17;
+  // Availability: false is busy (the vault's default), true is free.
+  bool free = 18;
+  // The IANA zone a timed event's wall clock is in. Empty for a floating
+  // event; an all-day event has none.
+  string zone = 19;
+  // Travel time before the event, in minutes; 0 is none.
+  int32 travel_min = 20;
+  // A task's address, as typed.
+  string url = 21;
+  // The rule the `custom` repeat key writes (an RRULE the member never reads).
+  string repeat_rule = 22;
 }
 
 message AgendaChoice {
@@ -1259,6 +1353,90 @@ message AgendaEditorData {
   // None, !, !!, !!!.
   repeated AgendaChoice priorities = 37;
   string priority_label = 38;
+  // WAVE 2 (#1173). Event fields; empty on a task.
+  // The place row: its name, or "None".
+  string location_label = 39;
+  // The vault's places that match `place_query`, the chosen one marked.
+  repeated AgendaChoice places = 40;
+  // What the place search holds.
+  string place_query = 41;
+  // A place is chosen: the sheet draws its clear row.
+  bool show_clear_location = 42;
+  // The first and second alert. The second is drawn only once the first is set.
+  bool show_second_reminder = 43;
+  string second_reminder_label = 44;
+  repeated AgendaChoice second_reminders = 45;
+  string availability_label = 46;
+  // Busy, Free.
+  repeated AgendaChoice availabilities = 47;
+  // The zone row is drawn: a timed event only (an all-day event has none).
+  bool show_zone = 48;
+  string zone_label = 49;
+  // The zones that match `zone_query`, the chosen one marked.
+  repeated AgendaChoice zones = 50;
+  string zone_query = 51;
+  string travel_label = 52;
+  // None, 5 minutes … 2 hours.
+  repeated AgendaChoice travels = 53;
+  // The Custom repeat sheet, while it is open.
+  optional AgendaCustomRepeatSheet custom_repeat = 54;
+  // A TASK's address row is drawn.
+  bool show_url = 55;
+  // What Save will write for the address ("https://example.com"), empty when
+  // none or when it is refused.
+  string url_saved_as = 56;
+}
+
+// THE CUSTOM REPEAT SHEET. Every choice list marks what is picked; the shell
+// draws the controls the `show_*` flags name and decides nothing. Each change
+// re-derives `summary`.
+message AgendaCustomRepeatSheet {
+  string title = 1;
+  // An existing rule this sheet cannot represent: `summary` says it, nothing is
+  // editable, and `replace_label` starts a fresh rule over it.
+  bool read_only = 2;
+  string replace_label = 3;
+  // "Every 2 weeks on Monday and Friday, until 31 December 2026".
+  string summary = 4;
+  // A sentence when the rule is not whole ("Pick at least one day."); empty
+  // when it is.
+  string error = 5;
+  // Done is armed.
+  bool can_apply = 6;
+  string done_label = 7;
+  // daily, weekly, monthly, yearly.
+  repeated AgendaChoice frequencies = 8;
+  string frequency_label = 9;
+  // "Every" / "week" / "weeks": the stepper's words and its value.
+  string interval_label = 10;
+  int32 interval = 11;
+  string unit_label = 12;
+  // Weekly: MO..SU, any number picked.
+  bool show_weekdays = 13;
+  string weekdays_label = 14;
+  repeated AgendaChoice weekdays = 15;
+  // Monthly: "On day(s) of the month" or "On the".
+  bool show_month_modes = 16;
+  repeated AgendaChoice month_modes = 17;
+  // Monthly by date: 1..31 and "Last day" (key `-1`), any number picked.
+  bool show_month_days = 18;
+  string month_days_label = 19;
+  repeated AgendaChoice month_days = 20;
+  // Monthly "On the": first..fifth, last, then a weekday.
+  bool show_nth = 21;
+  repeated AgendaChoice ordinals = 22;
+  repeated AgendaChoice nth_weekdays = 23;
+  // Never, On a date, After N times.
+  string ends_label = 24;
+  repeated AgendaChoice end_modes = 25;
+  bool show_until = 26;
+  // `YYYY-MM-DD`, and the day spoken.
+  string until_day = 27;
+  string until_day_label = 28;
+  bool show_count = 29;
+  int32 count = 30;
+  // "times" after the count stepper.
+  string count_label = 31;
 }
 
 // One side of the Event | Task switch (#1128).
@@ -1300,7 +1478,124 @@ message AgendaEditorEvent {
     TagAdded tag_added = 28;
     TagRemoved tag_removed = 29;
     MoreDetailsToggled more_details = 30;
+    // WAVE 2 (#1173): the event's place, second alert, availability, zone,
+    // travel and a task's address.
+    PlaceSearched place_search = 31;
+    PlacePicked place = 32;
+    PlaceCleared place_cleared = 33;
+    SecondReminderPicked second_reminder = 34;
+    AvailabilityPicked availability = 35;
+    ZoneSearched zone_search = 36;
+    ZonePicked zone = 37;
+    TravelPicked travel = 38;
+    UrlChanged url = 39;
+    // THE CUSTOM REPEAT SHEET. Picking the `custom` repeat opens it; each of
+    // these changes its working rule and Applied writes it to the draft.
+    CustomFreqPicked custom_freq = 40;
+    CustomIntervalChanged custom_interval = 41;
+    CustomWeekdayToggled custom_weekday = 42;
+    CustomMonthModePicked custom_month_mode = 43;
+    CustomMonthDayToggled custom_month_day = 44;
+    CustomOrdinalPicked custom_ordinal = 45;
+    CustomNthWeekdayPicked custom_nth_weekday = 46;
+    CustomEndPicked custom_end = 47;
+    CustomUntilChanged custom_until = 48;
+    CustomCountChanged custom_count = 49;
+    CustomApplied custom_applied = 50;
+    CustomReplaceTapped custom_replace = 51;
   }
+
+  // The place search field changed: the list narrows.
+  message PlaceSearched {
+    string text = 1;
+  }
+
+  // `AgendaChoice.key` of `places` (a place id).
+  message PlacePicked {
+    string key = 1;
+  }
+
+  message PlaceCleared {}
+
+  message SecondReminderPicked {
+    string key = 1;
+  }
+
+  // `busy` or `free`.
+  message AvailabilityPicked {
+    string key = 1;
+  }
+
+  message ZoneSearched {
+    string text = 1;
+  }
+
+  // `AgendaChoice.key` of `zones`: an IANA zone id, or `floating`.
+  message ZonePicked {
+    string key = 1;
+  }
+
+  // Minutes as text: `0` is none.
+  message TravelPicked {
+    string key = 1;
+  }
+
+  message UrlChanged {
+    string text = 1;
+  }
+
+  // `daily`, `weekly`, `monthly` or `yearly`.
+  message CustomFreqPicked {
+    string key = 1;
+  }
+
+  message CustomIntervalChanged {
+    int32 interval = 1;
+  }
+
+  // `MO`..`SU`.
+  message CustomWeekdayToggled {
+    string key = 1;
+  }
+
+  // `date` or `nth`.
+  message CustomMonthModePicked {
+    string key = 1;
+  }
+
+  // `1`..`31`, or `-1` for the last day.
+  message CustomMonthDayToggled {
+    string key = 1;
+  }
+
+  // `1`..`5`, or `-1` for the last.
+  message CustomOrdinalPicked {
+    string key = 1;
+  }
+
+  // `MO`..`SU`.
+  message CustomNthWeekdayPicked {
+    string key = 1;
+  }
+
+  // `never`, `on` or `after`.
+  message CustomEndPicked {
+    string key = 1;
+  }
+
+  message CustomUntilChanged {
+    string day = 1;
+  }
+
+  message CustomCountChanged {
+    int32 count = 1;
+  }
+
+  // Done: the working rule goes to the draft when it is whole.
+  message CustomApplied {}
+
+  // "Replace this rule": a rule the sheet cannot show becomes an editable one.
+  message CustomReplaceTapped {}
 
   message ListPicked {
     string key = 1;
@@ -1591,6 +1886,53 @@ message TodoQuickTool {
   bool on = 4;
 }
 
+// THE STYLE SHEET (#1173 wave 2): one sheet for making or editing a list or a
+// calendar. The core holds the draft; a shell draws the name field, the colour
+// swatches and the icon grid, and sends the member's picks. Colours are the
+// `[list]` palette KEYS (a shell looks up the colour), icons are
+// `design/icons.toml` KEYS.
+message AgendaStyleSheet {
+  // "New list", "Edit list", "New calendar", "Edit calendar".
+  string title = 1;
+  // What the name field holds.
+  string name = 2;
+  string name_placeholder = 3;
+  // Create or Save is armed: the name is not empty and, when editing, something changed.
+  bool can_submit = 4;
+  // "Create" or "Save".
+  string submit_label = 5;
+  string color_label = 6;
+  // The eight palette colours, in the palette's order, one selected.
+  repeated AgendaStyleSwatch colors = 7;
+  string icon_label = 8;
+  // The curated icons, in order; none is selected when the list wears none.
+  repeated AgendaStyleIcon icons = 9;
+  // "No icon": the row that clears the icon; `no_icon_selected` while none is chosen.
+  string no_icon_label = 10;
+  bool no_icon_selected = 11;
+  // The preview: the chosen colour key and icon key (empty for none).
+  string color_key = 12;
+  string icon_key = 13;
+  // The sheet's close verb, "Cancel".
+  string cancel_label = 14;
+}
+
+message AgendaStyleSwatch {
+  // `blue`, `mustard` ... — the `[list]` names.
+  string key = 1;
+  // The spoken name, "Blue".
+  string label = 2;
+  bool selected = 3;
+}
+
+message AgendaStyleIcon {
+  // A `design/icons.toml` key.
+  string key = 1;
+  // The spoken name, "Calendar".
+  string label = 2;
+  bool selected = 3;
+}
+
 // One area's projects on To-do (`AgendaTodo.projects`).
 message TodoProjectGroup {
   string key = 1;
@@ -1608,6 +1950,8 @@ message TodoProjectRow {
   string list_color_key = 3;
   // The open count as digits.
   string count = 4;
+  // A `design/icons.toml` key the member chose; empty for none.
+  string icon_key = 5;
 }
 
 // `agenda.todo_list`: Anytime, All, Logbook or Reminders. The route names the
@@ -1702,12 +2046,16 @@ message TodoProjectState {
   // The words typed in the Rename sheet, from the project's own name.
   string rename_name = 15;
   bool rename_can_submit = 16;
+  // THE STYLE SHEET (#1173 wave 2), set while `sheet` is SHEET_STYLE.
+  AgendaStyleSheet style = 17;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
     SHEET_ADD_SECTION = 2;
     SHEET_RENAME = 3;
+    // Name, colour and icon of this list.
+    SHEET_STYLE = 4;
   }
 }
 
@@ -1733,6 +2081,10 @@ message TodoProjectData {
   string list_color_key = 11;
   // Completed work in this list; `count` 0 draws nothing.
   TodoCompleted completed = 12;
+  // The list's own icon, drawn beside the title; empty for none.
+  string icon_key = 13;
+  // The header verb that opens the style sheet: "Edit list".
+  string style_label = 14;
 }
 
 message TodoProjectEvent {
@@ -1760,7 +2112,32 @@ message TodoProjectEvent {
     QuickToolPicked quick_tool = 20;
     QuickDuePicked quick_due = 21;
     QuickTagAdded quick_tag = 22;
+    // THE STYLE SHEET (#1173 wave 2): "Edit list".
+    StyleRequested style_requested = 23;
+    StyleNameChanged style_name = 24;
+    StyleColorPicked style_color = 25;
+    StyleIconPicked style_icon = 26;
+    StyleSubmitted style_submitted = 27;
   }
+
+  message StyleRequested {}
+
+  message StyleNameChanged {
+    string name = 1;
+  }
+
+  // `AgendaStyleSwatch.key`.
+  message StyleColorPicked {
+    string key = 1;
+  }
+
+  // `AgendaStyleIcon.key`; EMPTY clears the icon.
+  message StyleIconPicked {
+    string key = 1;
+  }
+
+  // Save.
+  message StyleSubmitted {}
 
   message QuickToolPicked {
     string key = 1;

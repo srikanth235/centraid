@@ -15,6 +15,11 @@ catalog! {
     plain open_app = ("Open {name}", "Open {name}");
     plain photo_unreadable = ("Couldn't read that photo.", "Couldn't read that photo.");
     plain photo_refused = ("Couldn't add that photo.", "Couldn't add that photo.");
+    plain completed_toggle = ("Include completed reminders", "Include completed reminders");
+    plain reminders_import = ("Import reminders", "Import reminders");
+    counted reminders_lists_created = ("{n} list created", "{n} lists created");
+    counted reminders_refused = ("{n} reminder could not be imported", "{n} reminders could not be imported");
+    counted reminders_rules_dropped = ("{n} repeat was not imported", "{n} repeats were not imported");
     plain reminders_denied = (
         "Reminders access is off. Turn it on in Settings.",
         "Reminders access is off. Turn it on in Settings."

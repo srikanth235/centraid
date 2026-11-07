@@ -149,6 +149,28 @@ message ImportsHeldFile {
   string stat = 2;
 }
 
+// What the phone's writable calendars are owed: the shell query `calendar-owed`, derived in the
+// vault at read time (`centraid_vault::commands::calendar_push::owed_pushes`), one page.
+message ImportsCalendarOwed {
+  repeated ImportsOwedPush items = 1;
+  // Pass as `after_event` to read the next page; empty when nothing is left.
+  string next = 2;
+}
+
+message ImportsOwedPush {
+  // `create`, `update` or `delete`.
+  string op = 1;
+  string event_id = 2;
+  string origin_ref = 3;
+  string external_id = 4;
+  string device_id = 5;
+  repeated string changed = 6;
+  // JSON: what the phone last stated (`null` for a create), and the followed fields as the
+  // vault holds them (`null` for a delete).
+  string stated_json = 7;
+  string fields_json = 8;
+}
+
 // ---------------------------------------------------------------------------
 // A made vault's imports
 // ---------------------------------------------------------------------------
@@ -158,10 +180,20 @@ message ImportsMadeEvent {
     // The vault was just made: ask for photo access once, then run the imports in
     // turn. `reminders` is false where the phone has no reminders source (Android).
     Made made = 1;
+    // THE MEMBER'S Import reminders TAP (iOS), at any time after the vault is made: ask the OS for
+    // reminders access and import. Allowed only after `Made`'s imports are over.
+    RemindersRequested reminders_requested = 2;
   }
 
   message Made {
     bool reminders = 1;
+    // The member's option "Include completed reminders" (default off).
+    bool include_completed = 2;
+  }
+
+  message RemindersRequested {
+    // The toggle's value on the import screen.
+    bool include_completed = 1;
   }
 }
 
@@ -177,6 +209,10 @@ message ImportsMadeState {
   bool running = 4;
   // Every import has run: the shell closes the service.
   bool finished = 5;
+  // The words of the import screen's reminders rows: the toggle ("Include completed reminders")
+  // and the action ("Import reminders").
+  string completed_label = 6;
+  string reminders_label = 7;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,20 +402,55 @@ message FolderFileStaged {
   uint64 byte_size = 3;
 }
 
-// Read the open reminders (iOS EventKit) and answer `RemindersSnapshot`. `ask_permission`
-// is the made vault's own prompt.
+// Read the reminders (iOS EventKit) and answer `RemindersSnapshot`. `ask_permission`
+// is the made vault's own prompt or the member's Import tap. `include_completed` is the member's
+// option on the import screen (default off): only then are COMPLETED reminders handed over.
 message RemindersRead {
   bool ask_permission = 1;
+  bool include_completed = 2;
 }
 
 message RemindersSnapshot {
   repeated PhoneReminder reminders = 1;
 }
 
-// One OPEN reminder: a completed one is never handed over.
+// One reminder. A completed one is handed over only when the read asked for it
+// (`RemindersRead.include_completed`).
+//
+// THE MAPPINGS (the shell sends what EventKit holds; Rust decides what it means):
+// - `priority` is EventKit's raw 0..9 (`EKReminder.priority`): 0 none, 1..4 high, 5 medium, 6..9
+//   low. It becomes the app's `!`/`!!`/`!!!` levels: 1..4 -> 3 (`!!!`), 5 -> 2 (`!!`), 6..9 -> 1 (`!`).
+// - `alarm_minutes_before` is the FIRST alarm only: a relative alarm is its offset in minutes
+//   before the due time; an absolute alarm is `due - alarm date` in minutes when there is a due
+//   time (else it is dropped). Only the first alarm is kept (`remind_before_min` is one value).
+// - `rrule` is built by the shell from the first `EKRecurrenceRule` (RFC 5545 text); a rule the
+//   vault cannot expand imports the task without it and is counted in the outcome.
 message PhoneReminder {
   string title = 1;
   string notes = 2;
   // `YYYY-MM-DD` or empty.
   string due = 3;
+  // The due time, `HH:MM` or `HH:MM:SS`, or empty for a date-only reminder.
+  string due_time = 4;
+  // The IANA zone of the due time; empty with a `due_time` is a floating time.
+  string tz = 5;
+  // EventKit's raw priority, 0..9.
+  int32 priority = 6;
+  bool flagged = 7;
+  // RFC 5545 rule text (`FREQ=WEEKLY;BYDAY=MO`, with or without `RRULE:`), or empty.
+  string rrule = 8;
+  // Minutes before the due time of the first alarm, or absent.
+  optional uint32 alarm_minutes_before = 9;
+  // The list (EventKit calendar) the reminder belongs to, as the member knows it. Empty is no list.
+  string list_title = 10;
+  // The list's colour, `#RRGGBB`, or empty. It becomes the nearest of the app's list colours.
+  string list_color = 11;
+  // The reminder's own stable id (`calendarItemIdentifier`), and its parent's when it is a
+  // subtask (`parent_id`: empty for a top-level one). A parent not in the read is ignored.
+  string external_id = 12;
+  string parent_id = 13;
+  string url = 14;
+  bool completed = 15;
+  // When it was completed, `YYYY-MM-DDTHH:MM:SSZ` (UTC), or empty.
+  string completed_at = 16;
 }
