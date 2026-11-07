@@ -414,7 +414,7 @@ message AgendaGridBlock {
   bool is_task = 12;
   string task_id = 13;
   // A drag moves it and a drag on its foot resizes it. False on a task, on
-  // a run over midnight, and on an event the member is a guest at.
+  // a run over midnight, and on an event with other guests.
   bool movable = 14;
   // "Team standup, 09:30 to 10:15, Call".
   string accessibility_label = 15;
@@ -1412,7 +1412,7 @@ message TodoRow {
   // One clamped line: "Home · Daily · missed 2 · next is Fri 14 March ·
   // reminder Tomorrow 08:30 · ~25 min · #errand · 2 of 5 · sitting since March".
   string meta = 5;
-  // "Now", "Next", "Soon", or empty: no room is reserved for a priority.
+  // "!!!", "!!", "!", or empty: no room is reserved for a priority.
   string priority_label = 6;
   // The project's hue key for the 6px dot; empty when unfiled.
   string project_hue_key = 7;

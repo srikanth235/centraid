@@ -203,12 +203,16 @@ pub fn snap_end(minute: i32) -> i32 {
 }
 
 /// Whether a block can be dragged: a timed event that is not cancelled and
-/// starts and ends on one day. A run over midnight, an all-day event and one
-/// the grid cannot place are not (the member is a guest at none the model can
-/// tell from the owner's own, so every other event is the member's to move).
+/// starts and ends on one day, with no guest but the member. A run over
+/// midnight, an all-day event, one the grid cannot place and one with other
+/// guests are not: moving an invitation only moves the member's own copy, which
+/// reads as moving the meeting.
 #[must_use]
 pub fn draggable(event: &wire::AgendaEvent) -> bool {
-    if event.all_day || event.status.as_deref() == Some("cancelled") {
+    if event.all_day
+        || event.status.as_deref() == Some("cancelled")
+        || event.attendees.iter().any(|guest| !guest.is_you)
+    {
         return false;
     }
     let day = event.local_start.get(..10).unwrap_or_default();
@@ -1240,6 +1244,22 @@ mod tests {
         assert_eq!((run.start_minute, run.end_minute), (0, 120));
         assert_eq!(run.time_label, "Until 02:00");
         assert!(!run.movable);
+    }
+
+    #[test]
+    fn an_event_with_another_guest_is_not_draggable() {
+        let mut solo = event("a", "c1", "2026-11-10T10:00", "2026-11-10T11:00");
+        solo.attendees.push(wire::AgendaAttendee {
+            is_you: true,
+            ..wire::AgendaAttendee::default()
+        });
+        assert!(draggable(&solo));
+        let mut guests = solo.clone();
+        guests.attendees.push(wire::AgendaAttendee {
+            party_id: "p2".to_owned(),
+            ..wire::AgendaAttendee::default()
+        });
+        assert!(!draggable(&guests));
     }
 
     #[test]
