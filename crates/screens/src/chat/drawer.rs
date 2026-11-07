@@ -230,6 +230,8 @@ impl Chat {
             self.thread_id.clone_from(&row.thread_id);
             self.thread_title.clone_from(&row.title);
         }
+        // A reopened thread is live too: the chips above the composer are offered again.
+        self.suggest(ctx);
         Vec::new()
     }
 

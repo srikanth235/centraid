@@ -181,6 +181,14 @@ message WordsEnterState {
   string photo_label = 24;
   // The flow is over; the shell pops the screen.
   bool finished = 25;
+  // ENTERING a held-seed restore: the card that says the key is already here
+  // ("Recovery key found") and where it came from ("In iCloud Keychain"; empty
+  // where the platform has no place to name).
+  string held_found = 26;
+  string held_place = 27;
+  // What the pairing-code field says while it is empty ("Pairing code"); the
+  // longer `endpoint_label` sits above it.
+  string endpoint_placeholder = 28;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

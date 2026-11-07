@@ -277,6 +277,10 @@ impl Chat {
             return Vec::new();
         }
         let saved = sent.as_ref().is_some_and(|sent| !sent.thread_id.is_empty());
+        let answered = matches!(
+            sent.as_ref().and_then(|sent| sent.outcome.as_ref()),
+            Some(wire::assist_sent::Outcome::Answered(_))
+        );
         if let Some(sent) = sent.as_ref().filter(|sent| !sent.thread_id.is_empty()) {
             self.thread_id.clone_from(&sent.thread_id);
             if !sent.thread_title.is_empty() {
@@ -295,6 +299,12 @@ impl Chat {
         }
         if saved {
             self.read_threads(ctx);
+        }
+        // THE THREAD IS LIVE (#1173): offer the next questions above the composer. Asked here,
+        // once per turn, and not where the answer lands: the stream's terminal event can settle
+        // the turn first, and this response always comes.
+        if answered && !self.running {
+            self.suggest(ctx);
         }
         effects
     }
@@ -635,6 +645,8 @@ impl Msg {
                     summary: step.summary.clone(),
                     destructive: step.destructive,
                     app: super::model::app_of_kind(&step.kind),
+                    verb: super::confirm::verb_of(&step.verb),
+                    noun: super::confirm::noun_of(&step.kind),
                 })
                 .collect(),
             more: parked.more,

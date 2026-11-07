@@ -36,6 +36,7 @@ import centraid.core.v1.WordsSecondary
 import centraid.core.v1.WordsShowEvent
 import centraid.core.v1.WordsShowState
 import dev.centraid.android.kit.ChoiceStack
+import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.NoAutofill
@@ -74,26 +75,33 @@ internal fun WordsShowScreen(
     if (state.check_now) return
     SecureWindow(state.secure)
     NoAutofill()
-    WordsPage(testTag = "words-show", description = state.accessibility_label) {
+    WordsPage(
+        testTag = "words-show",
+        description = state.accessibility_label,
+        closeLabel = state.secondary_label,
+        closeTag = "words-show-secondary",
+        onClose = { onEvent(WordsShowEvent(secondary = WordsSecondary())) },
+        footer = {
+            if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
+                WordsTonalButton(state.save_label, testTag = "words-save-copy", iconKey = "Share") {
+                    onEvent(WordsShowEvent(save_copy = WordsSaveCopy()))
+                }
+            }
+            if (state.primary_label.isNotEmpty()) {
+                InkButton(label = state.primary_label, testTag = "words-show-primary") {
+                    onEvent(WordsShowEvent(primary = WordsPrimary()))
+                }
+            }
+        },
+    ) {
         WordsHead(state.title, state.body)
         if (state.words.isNotEmpty()) ShownWords(state.words)
-        if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
-            SaveCopyButton(state.save_label) { onEvent(WordsShowEvent(save_copy = WordsSaveCopy())) }
-        }
         WordsNotice(state.notice)
         if (state.phase == WordsShowState.Phase.PHASE_LOADING) {
             Box(Modifier.fillMaxWidth().testTag("words-show-loading"), contentAlignment = Alignment.Center) {
                 RowSkeleton(rows = 2, meta = false)
             }
         }
-        WordsControls(
-            primary = state.primary_label,
-            primaryEnabled = state.primary_label.isNotEmpty(),
-            secondary = state.secondary_label,
-            prefix = "words-show",
-            onPrimary = { onEvent(WordsShowEvent(primary = WordsPrimary())) },
-            onSecondary = { onEvent(WordsShowEvent(secondary = WordsSecondary())) },
-        )
     }
 }
 
