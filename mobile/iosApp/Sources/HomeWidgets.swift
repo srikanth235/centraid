@@ -219,7 +219,7 @@ private struct WidgetBody: View {
                     .centraidType("annotLabelOn")
                     .foregroundStyle(accent)
                 Spacer(minLength: 0)
-                Text("\(tile.count.value)")
+                Text(tile.count.capped ? "\(tile.count.value)+" : "\(tile.count.value)")
                     .centraidType("title")
                     .foregroundStyle(accent)
             }
@@ -315,7 +315,7 @@ private struct WidgetBody: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach([0.8, 0.55], id: \.self) { fraction in
                 GeometryReader { proxy in
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
                         .fill(Surface.line)
                         .frame(width: proxy.size.width * fraction, height: 10)
                 }

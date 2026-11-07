@@ -382,6 +382,20 @@ impl Backup {
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::Retry(_)) => self.open(ctx),
+            // RESTORE IS HOME'S: the same door the vault sheet opens, asked from here.
+            Some(B::RestorePressed(_)) => {
+                ctx.post(
+                    crate::shell::HOME,
+                    wire::ScreenEvent {
+                        kind: Some(E::Home(wire::HomeEvent {
+                            kind: Some(wire::home_event::Kind::Restore(
+                                wire::home_event::RestorePressed {},
+                            )),
+                        })),
+                    },
+                );
+                Vec::new()
+            }
             None => Vec::new(),
         }
     }
@@ -528,6 +542,25 @@ impl Backup {
         }
     }
 
+    /// Where the backup stands, for the status card.
+    fn condition(&self) -> wire::BackupCondition {
+        use wire::BackupCondition as C;
+        if self.frozen() {
+            C::Moved
+        } else if self.destinations().is_empty() {
+            C::Unpaired
+        } else if self.backing_up_now {
+            C::Running
+        } else if self
+            .reading()
+            .is_some_and(|reading| line::unreached(reading, self.now_ms()))
+        {
+            C::NotReached
+        } else {
+            C::UpToDate
+        }
+    }
+
     fn data(&self, ctx: &Ctx) -> wire::BackupHomeData {
         let locale = ctx.locale();
         let frozen = self.frozen();
@@ -597,10 +630,66 @@ impl Backup {
         } else {
             wire::BackupInk::None
         };
-        let app_rows = self
+        let mut app_rows = self
             .reading()
             .map(|reading| apps::rows(locale, reading))
             .unwrap_or_default();
+        // WHEN NO BACKUP DEVICE ANSWERS, what waits is its own list (the board's "Not backed
+        // up yet"), and "In this backup" is what the device already holds.
+        let condition = self.condition();
+        let (waiting_apps, waiting_heading) = if condition == wire::BackupCondition::NotReached {
+            let (waiting, held): (Vec<_>, Vec<_>) =
+                app_rows.into_iter().partition(|row| row.waiting);
+            app_rows = held;
+            let heading = if waiting.is_empty() {
+                String::new()
+            } else {
+                words::backup_not_backed_up_heading(locale)
+            };
+            (waiting, heading)
+        } else {
+            (Vec::new(), String::new())
+        };
+        let (last_good, reason) = match (condition, self.reading()) {
+            (wire::BackupCondition::NotReached, Some(reading)) => {
+                let name = reading
+                    .destinations
+                    .iter()
+                    .max_by_key(|d| d.last_seen_ms)
+                    .map_or_else(
+                        || words::backup_unnamed(locale),
+                        |d| {
+                            if d.label.trim().is_empty() {
+                                words::backup_unnamed(locale)
+                            } else {
+                                d.label.clone()
+                            }
+                        },
+                    );
+                (
+                    reading.last_ack_ms.map_or_else(String::new, |at| {
+                        fill(
+                            &words::backup_last_good(locale),
+                            &[("when", &line::ago(locale, at, now))],
+                        )
+                    }),
+                    fill(&words::backup_unreachable(locale), &[("name", &name)]),
+                )
+            }
+            _ => (String::new(), String::new()),
+        };
+        let key_summary = if key_heading.is_empty() {
+            String::new()
+        } else if key.synced {
+            fill(
+                &words::backup_key_summary_synced(locale),
+                &[("place", &key.place)],
+            )
+        } else if key.saved {
+            words::backup_key_summary_saved(locale)
+        } else {
+            words::backup_key_summary_phone(locale)
+        };
         wire::BackupHomeData {
             title: words::backup_title(locale),
             apps_heading: if app_rows.is_empty() {
@@ -628,7 +717,6 @@ impl Backup {
             } else {
                 words::backup_forget(locale)
             },
-            rule_label: words::backup_rule_heading(locale),
             rule_choices: self.rule_choices(locale),
             include_videos: self.include_videos,
             include_videos_label: words::backup_include_videos(locale),
@@ -664,6 +752,20 @@ impl Backup {
             key_synced: key.synced,
             key_sync_label,
             ink: ink as i32,
+            condition: condition as i32,
+            last_good,
+            reason,
+            waiting_heading,
+            apps_waiting: waiting_apps,
+            travel_heading: words::backup_travel_heading(locale),
+            over_label: words::backup_over(locale),
+            over_value: self.rule.short(locale),
+            key_summary,
+            restore_label: if frozen {
+                String::new()
+            } else {
+                crate::strings::home::restore_first_action(locale)
+            },
         }
     }
 }

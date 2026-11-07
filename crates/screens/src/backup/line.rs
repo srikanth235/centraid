@@ -40,6 +40,16 @@ const REASONS: [wire::WaitReason; 10] = [
     wire::WaitReason::PairAgain,
 ];
 
+/// No paired backup device has answered within [`STALE_MS`] (or none ever has). One predicate for
+/// the line's attention and the page's "not reached".
+#[must_use]
+pub fn unreached(reading: &Reading, now_ms: i64) -> bool {
+    !reading
+        .destinations
+        .iter()
+        .any(|d| d.last_seen_ms.is_some_and(|at| now_ms - at <= STALE_MS))
+}
+
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a
 /// resting vault): the line is empty and the view draws nothing. `now_ms` is
 /// this phone's clock, for "2 minutes ago" only.
@@ -101,11 +111,7 @@ pub fn line(
     };
     let whole = reading.unconfirmed() == 0;
     let when = ago(locale, acked, now_ms);
-    let stale = now_ms - acked > STALE_MS
-        || !reading
-            .destinations
-            .iter()
-            .any(|d| d.last_seen_ms.is_some_and(|at| now_ms - at <= STALE_MS));
+    let stale = now_ms - acked > STALE_MS || unreached(reading, now_ms);
     // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the
     // member is owed a look, however recent the ack.
     let attention = stale

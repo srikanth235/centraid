@@ -86,6 +86,16 @@ impl TransferRule {
         }
     }
 
+    /// The short word the "Back up over" row shows.
+    #[must_use]
+    pub fn short(self, locale: Locale) -> String {
+        match self {
+            Self::WifiOnly => words::rule_short_wifi_only(locale),
+            Self::WifiAndCellularPhotos => words::rule_short_wifi_and_cellular_photos(locale),
+            Self::Manual => words::rule_short_manual(locale),
+        }
+    }
+
     /// The value a pass carries. One conversion, here, so the enum and the proto
     /// cannot become two vocabularies.
     #[must_use]

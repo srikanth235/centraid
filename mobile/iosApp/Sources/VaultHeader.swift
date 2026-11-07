@@ -165,7 +165,7 @@ struct VaultHeader: View {
                         iconKey: "Settings",
                         label: bar.settingsLabel,
                         glass: true,
-                        identifier: "home-settings"
+                        identifier: "home-settings-open"
                     ) {
                         shell.open(bar.settingsRoute)
                     }

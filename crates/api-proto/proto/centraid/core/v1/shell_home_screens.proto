@@ -176,7 +176,9 @@ message HomeTile {
   optional HomeTileCount count = 4;
   string count_label = 5;
   HomeTileSize size = 6;
-  bool wide = 7;
+  // 7 was `wide`: a widget's width is its `size` on four columns (#1173).
+  reserved 7;
+  reserved "wide";
   // What an empty tile says to do ("Add your first document").
   string empty_copy = 8;
   optional HomeTileBody body = 9;

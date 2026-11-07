@@ -93,7 +93,7 @@ pub fn height_of(widget: &str) -> u32 {
 /// What the fold made of the widgets.
 pub struct Folded {
     pub springboard: wire::HomeSpringboard,
-    /// In the order they sit, each with its size, height and `wide` set.
+    /// In the order they sit, each with its size and height set.
     pub tiles: Vec<wire::HomeTile>,
     pub rows: Vec<wire::HomeTileRow>,
 }
@@ -119,7 +119,6 @@ pub fn fold(tiles: Vec<wire::HomeTile>) -> Folded {
     for tile in &mut tiles {
         let size = size_of(&tile.widget, tile.status());
         tile.size = size as i32;
-        tile.wide = size != Size::Small;
         tile.height = height_of(&tile.widget);
     }
     let rows = rows(&tiles);
@@ -238,16 +237,16 @@ mod tests {
         let folded = fold(of(&CONTENT_ORDER, Status::Content));
         let shape = |widget: &str| {
             let tile = folded.tiles.iter().find(|t| t.widget == widget).unwrap();
-            (tile.size(), tile.height, tile.wide)
+            (tile.size(), tile.height)
         };
-        assert_eq!(shape("agenda"), (Size::Medium, 2, true));
-        assert_eq!(shape("reminders"), (Size::Medium, 2, true));
-        assert_eq!(shape("photos"), (Size::Large, 2, true));
+        assert_eq!(shape("agenda"), (Size::Medium, 2));
+        assert_eq!(shape("reminders"), (Size::Medium, 2));
+        assert_eq!(shape("photos"), (Size::Large, 2));
         for small in ["money", "health", "people", "locker"] {
-            assert_eq!(shape(small), (Size::Small, 1, false), "{small}");
+            assert_eq!(shape(small), (Size::Small, 1), "{small}");
         }
-        assert_eq!(shape("notes"), (Size::Medium, 1, true));
-        assert_eq!(shape("docs"), (Size::Medium, 1, true));
+        assert_eq!(shape("notes"), (Size::Medium, 1));
+        assert_eq!(shape("docs"), (Size::Medium, 1));
     }
 
     #[test]

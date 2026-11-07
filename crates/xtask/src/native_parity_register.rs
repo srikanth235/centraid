@@ -288,6 +288,12 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     ("HomeEvent.backup_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeEvent.appearance_chosen",
+        rust_only(
+            "Settings tells Home the appearance by name (`Ctx::post`, shell/settings.rs to shell/home.rs); no shell sends it",
+        ),
+    ),
     ("HomeEvent.outcome_told", rust_only(VAULT_TELLS_HOME)),
     ("HomeEvent.vaults_told", rust_only(VAULT_TELLS_HOME)),
     (

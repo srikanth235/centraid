@@ -9,10 +9,14 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-day-one` | Home | the first-run page |
 | `home-first-moves` | Home | the first-moves band |
 | `home-failure` | Home | the failed-read sentence (no grid) |
-| `home-tile-<appId>` | Home | one springboard tile, keyed on the app id — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
+| `home-tile-<appId>` | Home | one springboard widget, keyed on the widget id (the app id, except Agenda's second, `reminders`) — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
-| `home-appearance` | Home | the framed appearance key right of search — flips light and dark (R-CHROME-7) |
+| `home-settings-open` | Home | the framed settings key right of search: opens Settings, where the appearance is chosen (#1173; the appearance key retired into it) |
+| `home-tile-reminders` | Home | the Reminders widget, Agenda's second: what is owed today; `home-tile-agenda` is the day (#1173) |
+| `backup-over` | Backup | the "Back up over" row: the rule's short word, opening its three sentences |
+| `backup-last-good` | Backup | "Last good backup …", drawn while the backup device has not answered |
+| `backup-restore` | Backup | "Restore my vaults": Home's own restore |
 | `home-search-field` | Home search | the field (it takes focus on open) |
 | `home-search-cancel` | Home search | Cancel: back to Home, the field cleared |
 | `home-search-recent-<term>` | Home search | one of this session's recent searches, while the field is empty |

@@ -47,6 +47,7 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.tokenSp
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.design.CentraidCatalog
 
 // HOME AS WIDGETS (#1173; boards `AndroidHome`, `FirstHome`). Rust folds every
@@ -261,7 +262,7 @@ private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             WText(tile.name, appAccent(tile.app_id).text, strong = true, modifier = Modifier.weight(1f))
             Text(
-                (tile.count?.value_ ?: 0).toString(),
+                (tile.count?.let { if (it.capped) "${it.value_}+" else "${it.value_}" } ?: "0"),
                 color = appAccent(tile.app_id).text,
                 fontSize = tokenSp(R.dimen.centraid_text_section),
                 fontWeight = FontWeight.Bold,
@@ -331,7 +332,7 @@ private fun Skeleton(loading: String, modifier: Modifier) {
                 Modifier
                     .fillMaxWidth(fraction)
                     .height(10.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
                     .background(Surface.line),
             )
         }

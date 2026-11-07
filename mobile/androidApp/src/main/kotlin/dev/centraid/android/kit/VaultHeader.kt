@@ -213,7 +213,7 @@ public fun VaultHeader(
                 IconKey(iconKey = "Search", label = bar.search_label, testTag = "home-search-open", onPress = onSearch)
             }
             if (onSettings != null) {
-                IconKey(iconKey = "Settings", label = bar.settings_label, testTag = "home-settings", onPress = onSettings)
+                IconKey(iconKey = "Settings", label = bar.settings_label, testTag = "home-settings-open", onPress = onSettings)
             }
         }
     }
