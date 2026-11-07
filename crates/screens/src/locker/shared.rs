@@ -217,6 +217,13 @@ pub(super) fn row(locale: Locale, item: &wire::LockerItemRow, parent: &str) -> w
             tone: wire::status_chip::Tone::Net as i32,
         });
     }
+    // A login that makes verification codes says so: the row's one quiet mark.
+    if item.has_code {
+        chips.push(wire::StatusChip {
+            label: words::chip_code(locale),
+            tone: wire::status_chip::Tone::Neutral as i32,
+        });
+    }
     if item.archived {
         chips.push(wire::StatusChip {
             label: words::chip_archived(locale),

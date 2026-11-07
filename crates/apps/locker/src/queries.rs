@@ -102,6 +102,9 @@ pub struct ItemRow {
     /// When the core last opened one of the item's sealed cells (#1146); a
     /// stamp, not an edit, so `updated_at` does not move with it.
     pub last_used_at: Option<String>,
+    /// Whether a verification-code seed is stored: its PRESENCE only, read as
+    /// `otp_seed IS NOT NULL`. The seed is never in a row.
+    pub has_code: bool,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     /// When it was archived: the day the `flag:archived` edge was put on it.
@@ -134,6 +137,7 @@ impl ItemRow {
             starred: truthy(row, "starred"),
             memo: text_of(row, "memo").filter(|memo| !memo.is_empty()),
             last_used_at: text_of(row, "last_used_at"),
+            has_code: truthy(row, "has_otp_seed"),
             created_at: text_of(row, "created_at"),
             updated_at: text_of(row, "updated_at"),
             archived_at: text_of(row, "archived_at"),

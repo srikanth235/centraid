@@ -79,6 +79,7 @@ fn row(listed: Listed, zone: &FireZone) -> wire::LockerItemRow {
         tags: listed.tags,
         compromised: item.compromised,
         archived,
+        has_code: item.has_code,
     }
 }
 
@@ -116,6 +117,7 @@ pub(crate) fn items(
                 trashed_count: data.trashed_count.map(count),
                 tags: data.tags,
                 today,
+                recent_ids: data.recent,
             })
         },
     )
