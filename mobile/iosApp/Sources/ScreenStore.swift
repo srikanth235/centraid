@@ -502,6 +502,15 @@ final class ScreenStore: ObservableObject {
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
             answer(request, done)
+        // AGENDA'S WIDGET SNAPSHOT (#1173): kept in the App Group container for the widgets
+        // and Siri, then the widgets reload. A missing container or a failed write is a failure.
+        case .agendaGlance(let glance)?:
+            do {
+                try AgendaGlanceWriter.keep(glance)
+                answer(request, done)
+            } catch {
+                answer(request, .failed(Self.failure(String(describing: error))))
+            }
         case .vaultCommand(let command)?:
             // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
             // notification grant or a low disk).
