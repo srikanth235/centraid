@@ -89,6 +89,16 @@ fn choices(d: &Driver) -> Vec<wire::AgendaCalendarChoice> {
     }
 }
 
+/// A palette colour other than `not`: a list's derived colour is its id's, so a
+/// test cannot name one.
+fn other_than(not: &str) -> &'static str {
+    LIST_COLORS
+        .iter()
+        .copied()
+        .find(|key| *key != not)
+        .expect("eight colours")
+}
+
 fn open_more(d: &mut Driver) {
     send_home(
         d,
@@ -379,6 +389,7 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
     );
 
     // Name, colour and clearing the icon, in one Save.
+    let other = other_than(&derived);
     send_project(&mut d, i, pe::Kind::StyleRequested(pe::StyleRequested {}));
     send_project(
         &mut d,
@@ -390,9 +401,7 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
     send_project(
         &mut d,
         i,
-        pe::Kind::StyleColor(pe::StyleColorPicked {
-            key: "orchid".into(),
-        }),
+        pe::Kind::StyleColor(pe::StyleColorPicked { key: other.into() }),
     );
     send_project(
         &mut d,
@@ -403,13 +412,13 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
     let state = project_state(d.view(i));
     assert_eq!(state.title, "Plot 7");
     let data = project_data(d.view(i));
-    assert_eq!(data.list_color_key, "orchid");
+    assert_eq!(data.list_color_key, other);
     assert_eq!(data.icon_key, "");
     let stored = projects(&d)
         .into_iter()
         .find(|p| p.project_id == id)
         .expect("the list");
-    assert_eq!(stored.color.as_deref(), Some("orchid"));
+    assert_eq!(stored.color.as_deref(), Some(other));
     assert_eq!(stored.icon, None);
 }
 
@@ -432,6 +441,12 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
     d.pump(std::time::Duration::from_millis(400));
     let i = d.push(agenda::TAB, routes::project(&id, "Doomed"));
     send_project(&mut d, i, pe::Kind::StyleRequested(pe::StyleRequested {}));
+    let sheet_color = project_state(d.view(i))
+        .style
+        .as_ref()
+        .unwrap()
+        .color_key
+        .clone();
     // The list is trashed elsewhere while the sheet is up.
     arrange(
         &d,
@@ -440,16 +455,13 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
         },
     );
     d.pump(std::time::Duration::from_millis(400));
+    let other = other_than(&sheet_color).to_owned();
     send_project(
         &mut d,
         i,
-        pe::Kind::StyleColor(pe::StyleColorPicked {
-            key: "mustard".into(),
-        }),
+        pe::Kind::StyleColor(pe::StyleColorPicked { key: other }),
     );
-    eprintln!("DBG before submit: {:?}", project_state(d.view(i)).style.as_ref().map(|s| (s.can_submit, s.color_key.clone())));
-    let up = d.send(i, wire::screen_event::Kind::TodoProject(wire::TodoProjectEvent { kind: Some(pe::Kind::StyleSubmitted(pe::StyleSubmitted {})) }));
-    eprintln!("DBG update views: {:?} closed {:?}", up.views.len(), up.closed);
+    send_project(&mut d, i, pe::Kind::StyleSubmitted(pe::StyleSubmitted {}));
     let state = project_state(d.view(i));
     let status = state
         .status
