@@ -1,11 +1,12 @@
-# Agenda's five places and a dated task checked off in place (#1128, R-1128-1,
-# R-1128-2): Day · Schedule · Waiting · To-do · More on the band, and a task due
-# on a day is a row of that day whose round box finishes it where it stands,
-# with the status line's Undo to take it back.
+# Agenda's band and the Calendar's views (#1128, #1173): Calendar · Reminders ·
+# Invites · More on the band; Calendar opens on Day, an hour grid under the week
+# strip, and its view menu reaches Week, Month, List and Year. A task due on a
+# day is checked off where it stands, with the status line's Undo to take it
+# back.
 #
 # A VAULT-HOLDING INSTALL, as `home.yaml`. Re-runnable: the check is undone
 # before the flow ends, so the vault is left as it was. The check-off steps
-# run only when Day holds a task (the starters put the first one there; a
+# run only when a task row is drawn (the starters put the first one there; a
 # vault whose tasks are all undated shows none, and the places are still
 # asserted).
 appId: dev.centraid.Centraid
@@ -15,20 +16,18 @@ name: agenda-day
 - tapOn:
     id: "home-tile-agenda"
 - assertVisible:
-    id: "agenda-band-day"
+    id: "agenda-band-calendar"
 - assertVisible:
-    id: "agenda-band-schedule"
+    id: "agenda-band-reminders"
 - assertVisible:
-    id: "agenda-band-waiting"
-- assertVisible:
-    id: "agenda-band-todo"
+    id: "agenda-band-invites"
 - assertVisible:
     id: "agenda-band-more"
-# Day is where the app opens; its list draws the day's events and tasks.
-# A day with rows draws the list; a fresh vault's empty day draws the kit's empty
-# state in its place (Maestro matches an id as a regular expression).
+# Day is where the app opens: the week strip over the hour grid.
 - assertVisible:
-    id: "agenda-list|kit-empty"
+    id: "agenda-week-strip"
+- assertVisible:
+    id: "agenda-time-grid"
 # A dated task is checked off in place: the row stays on Day, the status line
 # says so and offers Undo, and Undo puts it back.
 - runFlow:
@@ -45,13 +44,30 @@ name: agenda-day
       - assertVisible: "Task done"
       - tapOn:
           id: "agenda-status-action"
-# Schedule draws the same rows over the coming days.
+# The view menu: Month is a grid of whole weeks, Year twelve months, and
+# List draws the same rows over the coming days.
 - tapOn:
-    id: "agenda-band-schedule"
+    id: "agenda-view-menu"
+- tapOn:
+    id: "agenda-view-month"
+- assertVisible:
+    id: "agenda-month-grid"
+- tapOn:
+    id: "agenda-view-menu"
+- tapOn:
+    id: "agenda-view-year"
+- assertVisible:
+    id: "agenda-year-grid"
+- tapOn:
+    id: "agenda-view-menu"
+- tapOn:
+    id: "agenda-view-list"
 - assertVisible:
     id: "agenda-list|kit-empty"
 # The Plus differs per place: here it is a new event.
 - assertVisible:
     id: "agenda-new-event"
 - tapOn:
-    id: "agenda-band-day"
+    id: "agenda-view-menu"
+- tapOn:
+    id: "agenda-view-day"
