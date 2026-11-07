@@ -39,6 +39,10 @@ struct RemindersView: View {
                 } else {
                     RemindersRows(rows: Array(snapshot.reminders.rows.prefix(4)))
                 }
+            } else {
+                // No snapshot yet (the app has not run): say so, never an empty healthy list.
+                Spacer(minLength: 0)
+                sentence(GlanceWords.WIDGET_UNAVAILABLE)
             }
             if entry.snapshot == nil || family == .systemSmall { Spacer(minLength: 0) }
         }

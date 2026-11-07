@@ -120,15 +120,17 @@ public class UpNextWidget : AppWidgetProvider() {
             }
         }
 
-        /** No snapshot yet: the widget's own name and nothing that looks like a day. */
+        /** No snapshot yet: the widget's own name and the catalogue's "open Centraid" sentence, never an empty day. */
         private fun bare(context: Context, views: RemoteViews): RemoteViews {
             val name = context.getString(R.string.glance_widget_up_next_name)
+            val unavailable = context.getString(R.string.glance_widget_unavailable)
             views.setTextViewText(R.id.glance_title, name)
-            views.show(R.id.glance_message, false)
+            views.setTextViewText(R.id.glance_message, unavailable)
+            views.show(R.id.glance_message, true)
             views.show(R.id.glance_time, false)
             views.show(R.id.glance_time_red, false)
             views.show(R.id.glance_item, false)
-            views.describe(R.id.glance_root, name)
+            views.describe(R.id.glance_root, name, unavailable)
             return views
         }
     }

@@ -29,10 +29,13 @@ pub const GLANCE_SOURCE: &str = "crates/screens/src/strings/agenda_glance.rs";
 /// Member name to the Rust key, for every static word that is not a Siri
 /// phrase. Exactly what a platform file names; a word nothing names stays
 /// Rust's alone.
-const CONSTANTS: [(&str, &str); 9] = [
+const CONSTANTS: [(&str, &str); 11] = [
     ("INTENT_ADD_TITLE", "intent_add_title"),
     ("INTENT_ADD_TITLE_PARAMETER", "intent_add_title_parameter"),
     ("INTENT_NEXT_TITLE", "intent_next_title"),
+    // The snapshot's own sentence for "nothing to read yet", exported as the
+    // spoken answer before the app has ever run.
+    ("INTENT_NEXT_UNAVAILABLE", "siri_unavailable"),
     ("SHORTCUT_ADD_LONG", "shortcut_add_long"),
     ("SHORTCUT_ADD_SHORT", "shortcut_add_short"),
     (
@@ -42,6 +45,9 @@ const CONSTANTS: [(&str, &str); 9] = [
     ("WIDGET_REMINDERS_NAME", "widget_reminders_name"),
     ("WIDGET_UP_NEXT_DESCRIPTION", "widget_up_next_description"),
     ("WIDGET_UP_NEXT_NAME", "widget_up_next_name"),
+    // The same row the snapshot's `unavailable` word is: a widget with no
+    // snapshot file at all says it, never an empty healthy list.
+    ("WIDGET_UNAVAILABLE", "unavailable"),
 ];
 
 /// The two Siri phrases, each with the one slot the platform fills.
@@ -311,6 +317,13 @@ mod tests {
         let words = resolve(&text).expect("resolves");
         assert_eq!(words.constants.len(), CONSTANTS.len());
         let xml = android_xml(&words);
+        assert!(xml.contains(
+            "<string name=\"glance_widget_unavailable\">Open Centraid to see your day</string>"
+        ));
+        assert!(
+            swift_words(&words)
+                .contains("INTENT_NEXT_UNAVAILABLE = \"Open Centraid to see your day.\"")
+        );
         assert!(xml.contains("<string name=\"glance_widget_up_next_name\">Up next</string>"));
         assert!(xml.contains("What\\'s next today"));
         assert!(swift_words(&words).contains("WIDGET_UP_NEXT_NAME = \"Up next\""));

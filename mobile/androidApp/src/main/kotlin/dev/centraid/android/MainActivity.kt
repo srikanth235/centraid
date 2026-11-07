@@ -106,8 +106,6 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
-                        // The shortcut's requests, reported for as long as this session is held.
-                        launch { AddReminderShortcut.deliver(opened.screens) }
                         awaitCancellation()
                     } finally {
                         rust.detach()

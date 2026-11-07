@@ -46,6 +46,13 @@ struct UpNextView: View {
                 } else {
                     UpNextRows(items: Array(snapshot.upNext.prefix(4)))
                 }
+            } else {
+                // No snapshot yet (the app has not run): say so, never an empty healthy list.
+                Spacer(minLength: 0)
+                Text(GlanceWords.WIDGET_UNAVAILABLE)
+                    .font(WidgetType.body)
+                    .foregroundStyle(WidgetPalette.ink)
+                    .minimumScaleFactor(0.8)
             }
             if entry.snapshot == nil || family == .systemSmall { Spacer(minLength: 0) }
         }

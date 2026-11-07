@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
  * "ADD A REMINDER", FROM THE LAUNCHER'S SHORTCUT OR A WIDGET'S BUTTON (#1173).
  *
  * The activity [accept]s the intent as it arrives (`onCreate`, `onNewIntent`), possibly before the
- * screen runtime is up; the session [deliver]s each one once, as `ShellFact.agenda_intent.add`.
+ * screen runtime is up; the root composition [deliver]s each one once, after the effect performer is attached, as `ShellFact.agenda_intent.add`.
  * Nothing is decided or written here: the core opens Agenda's Reminders with the quick-add bar
  * holding the title, and the member taps Add.
  */

@@ -52,16 +52,13 @@ struct WhatsNextIntent: AppIntent {
     init() {}
 
     /// No snapshot at all (the app has not written one, or the file is not a
-    /// version-1 document): there is no sentence of Rust's to speak, and this file
-    /// holds no words, so the intent fails and the system says its own.
-    enum Unavailable: Error {
-        case noSnapshot
-    }
-
+    /// version-1 document): the answer is the catalogue's own "open Centraid"
+    /// sentence, spoken as a dialog and not thrown as a generic error.
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        guard let snapshot = AgendaGlanceSnapshot.load() else { throw Unavailable.noSnapshot }
-        let sentence = snapshot.notice(now: Date()) ?? snapshot.siri.nextSentence
-        guard !sentence.isEmpty else { throw Unavailable.noSnapshot }
-        return .result(dialog: IntentDialog(stringLiteral: sentence))
+        let spoken = AgendaGlanceSnapshot.load().flatMap { snapshot -> String? in
+            let sentence = snapshot.notice(now: Date()) ?? snapshot.siri.nextSentence
+            return sentence.isEmpty ? nil : sentence
+        } ?? GlanceWords.INTENT_NEXT_UNAVAILABLE
+        return .result(dialog: IntentDialog(stringLiteral: spoken))
     }
 }

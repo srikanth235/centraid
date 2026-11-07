@@ -12,10 +12,12 @@ public enum GlanceWords {
     public static let INTENT_ADD_TITLE = "Add a reminder"
     public static let INTENT_ADD_TITLE_PARAMETER = "Reminder"
     public static let INTENT_NEXT_TITLE = "What's next"
+    public static let INTENT_NEXT_UNAVAILABLE = "Open Centraid to see your day."
     public static let SHORTCUT_ADD_LONG = "Add a reminder"
     public static let SHORTCUT_ADD_SHORT = "New reminder"
     public static let WIDGET_REMINDERS_DESCRIPTION = "Today's and overdue reminders."
     public static let WIDGET_REMINDERS_NAME = "Reminders"
     public static let WIDGET_UP_NEXT_DESCRIPTION = "What's next today, from your Agenda."
     public static let WIDGET_UP_NEXT_NAME = "Up next"
+    public static let WIDGET_UNAVAILABLE = "Open Centraid to see your day"
 }

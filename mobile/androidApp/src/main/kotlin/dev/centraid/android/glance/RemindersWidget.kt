@@ -36,10 +36,13 @@ public class RemindersWidget : AppWidgetProvider() {
             if (snapshot == null) {
                 val name = context.getString(R.string.glance_widget_reminders_name)
                 views.setTextViewText(R.id.glance_title, name)
-                for (id in intArrayOf(R.id.glance_count, R.id.glance_count_label, R.id.glance_overdue, R.id.glance_flagged, R.id.glance_message)) {
+                val unavailable = context.getString(R.string.glance_widget_unavailable)
+                for (id in intArrayOf(R.id.glance_count, R.id.glance_count_label, R.id.glance_overdue, R.id.glance_flagged)) {
                     views.show(id, false)
                 }
-                views.describe(R.id.glance_root, name)
+                views.setTextViewText(R.id.glance_message, unavailable)
+                views.show(R.id.glance_message, true)
+                views.describe(R.id.glance_root, name, unavailable)
                 return views
             }
             val words = snapshot.words
@@ -78,9 +81,11 @@ public class RemindersWidget : AppWidgetProvider() {
                 views.setTextViewText(R.id.glance_title, name)
                 views.setTextViewText(R.id.glance_add, add)
                 views.setTextViewText(R.id.glance_today, "")
-                views.show(R.id.glance_message, false)
+                val unavailable = context.getString(R.string.glance_widget_unavailable)
+                views.setTextViewText(R.id.glance_message, unavailable)
+                views.show(R.id.glance_message, true)
                 for (slot in ROWS.indices) views.show(ROWS[slot], false)
-                views.describe(R.id.glance_root, name)
+                views.describe(R.id.glance_root, name, unavailable)
                 views.describe(R.id.glance_add, add)
                 return views
             }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The widgets' card: the surface token at the card radius token (#1173). -->
+<!-- The widgets' card: the surface fill token at the card radius token (the mockup's Android card is larger still: no such radius token exists yet, so none is invented) (#1173). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/centraid_surface_card" />
+    <solid android:color="@color/centraid_surface_fill" />
     <corners android:radius="@dimen/centraid_radius_card" />
 </shape>
