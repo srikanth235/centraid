@@ -169,6 +169,9 @@ message PeopleRoster {
   uint32 count_all = 6;
   uint32 count_starred = 7;
   uint32 count_due = 8;
+  // MY CARD (#1173): the vault owner's own card, which the circle leaves out. ABSENT when the
+  // vault names no owner.
+  optional PeopleCard owner = 9;
 }
 
 // One person as a dashboard rail draws them.
@@ -262,6 +265,30 @@ message PeopleSheet {
   repeated PeopleTouchEntry touches = 8;
   // Who this person is related to, both directions, by name (#1146 D8).
   repeated PeopleRelation relations = 10;
+  // IN YOUR VAULT (#1173): what else in the vault is about this person, newest first within
+  // each kind, at most `VAULT_PER_KIND` of a kind (the Rust cap) and the kinds in the order
+  // events, tasks, notes. Yearly dates are not here (they are `dates`), and neither are the
+  // notes written about the person in People (they are `notes`): these are the notes that
+  // link to them from Notes.
+  repeated PeopleVaultItem vault = 11;
+  // Items beyond the cap, over every kind: "and 3 more".
+  uint32 vault_more = 12;
+  // THIS IS THE OWNER'S OWN CARD (My card): no star, merge, trash or touch log.
+  bool is_me = 13;
+}
+
+// One thing in the vault that is about a person, from another app.
+message PeopleVaultItem {
+  string id = 1;
+  // `event`, `task` or `note`.
+  string kind = 2;
+  string title = 3;
+  // An event's start in the request's zone (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), and whether it
+  // is an all-day one. Empty on a recurring event, a task and a note.
+  string local_start = 4;
+  bool all_day = 5;
+  // The row's creation civil day (`YYYY-MM-DD`) in the request's zone.
+  string created_local_day = 6;
 }
 
 // One `related` edge, read from the sheet's person. The edge is labelled by what its target is

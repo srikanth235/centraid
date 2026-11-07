@@ -207,4 +207,33 @@ catalog! {
     plain unstar_verb = ("Remove star", "Remove star");
     plain upcoming_a11y = ("{name}, {label}, {when}", "{name}, {label}, {when}");
     plain write_failed = ("Couldn’t save. Try again.", "Couldn’t save. Try again.");
+    plain hero_call = ("call", "call");
+    plain hero_call_a11y = ("Call {name}", "Call {name}");
+    plain hero_log = ("log touch", "log touch");
+    plain hero_log_a11y = ("Log a touch with {name}", "Log a touch with {name}");
+    plain hero_mail = ("mail", "mail");
+    plain hero_mail_a11y = ("Email {name}", "Email {name}");
+    plain hero_message = ("message", "message");
+    plain hero_message_a11y = ("Message {name}", "Message {name}");
+    plain index_a11y = ("Jump to {letter}", "Jump to {letter}");
+    plain index_other = ("#", "#");
+    plain index_other_a11y = ("Jump to other names", "Jump to other names");
+    plain my_card = ("My card", "My card");
+    plain my_card_a11y = ("My card, {name}", "My card, {name}");
+    plain my_card_unnamed = ("Me", "Me");
+    plain reconnect_a11y = ("{text}. Open Touch", "{text}. Open Touch");
+    plain reconnect_line = ("{n} to reconnect", "{n} to reconnect");
+    plain reconnect_line_who = (
+        "{n} to reconnect · {name} is {over}",
+        "{n} to reconnect · {name} is {over}"
+    );
+    plain vault_a11y = ("{kind}: {title}, {when}", "{kind}: {title}, {when}");
+    plain vault_a11y_undated = ("{kind}: {title}", "{kind}: {title}");
+    plain vault_all_day = ("{day} · all day", "{day} · all day");
+    plain vault_at = ("{day}, {time}", "{day}, {time}");
+    plain vault_head = ("In your vault", "In your vault");
+    plain vault_kind_event = ("Event", "Event");
+    plain vault_kind_note = ("Note", "Note");
+    plain vault_kind_task = ("Task", "Task");
+    plain vault_more = ("and {n} more", "and {n} more");
 }

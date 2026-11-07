@@ -273,8 +273,10 @@ fn a_sheet_has_the_contact_points_dates_notes_and_touches_of_one_person() {
             .collect::<Vec<_>>(),
         [("call", "Call", "long call")]
     );
-    // No live person: an unknown id, the owner and a pet are not sheets.
-    for id in ["nobody", owner.as_str(), pet.as_str()] {
+    // No live person: an unknown id and a pet are not sheets. (The owner's own card is one,
+    // below: My card.)
+    let _ = &owner;
+    for id in ["nobody", pet.as_str()] {
         assert!(
             w.read(|door| load_person(door, id).expect("reads"))
                 .0
@@ -348,4 +350,191 @@ fn an_empty_vault_answers_every_read_empty() {
             .people
             .is_empty()
     );
+}
+
+#[test]
+fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_order_capped_by_kind()
+{
+    use centraid_apps_people::queries::VAULT_PER_KIND;
+    let w = World::new();
+    let ada = w.person("Ada", json!({}));
+    let bob = w.person("Bob", json!({}));
+    let event = |title: &str, extra: serde_json::Value| -> String {
+        let mut input = json!({
+            "title": title,
+            "starts": "2026-11-07T12:30:00",
+            "timing": "floating",
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        w.ok("event.propose", input)["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    // Nothing yet: no links, and no "more".
+    let links = |id: &str| {
+        let (data, denial) = w.read(|door| load_person(door, id).expect("reads"));
+        assert!(denial.is_none());
+        data.person.expect("a sheet").vault
+    };
+    assert!(links(&ada).items.is_empty() && links(&ada).more == 0);
+
+    // A guest of the event, and an event about them (the edge says so): both are theirs.
+    w.clock.advance_days(1);
+    let lunch = event("Lunch with Ada", json!({ "attendees": [ada] }));
+    w.clock.advance_days(1);
+    let about = event("Ada's talk", json!({}));
+    w.ok(
+        "edge.add",
+        json!({ "from": about, "rel": "about", "to": ada }),
+    );
+    // Not theirs: a repeating event shows no start, a yearly date is a date, a cancelled
+    // one is off the calendar, one in the trash is gone, and another person's is theirs.
+    w.clock.advance_days(1);
+    let standing = event(
+        "Standing call",
+        json!({ "attendees": [ada], "rule": "FREQ=WEEKLY" }),
+    );
+    w.ok(
+        "person.add_date",
+        json!({ "id": ada, "label": "Anniversary", "month_day": "06-01", "reminder_on": true }),
+    );
+    event(
+        "Cancelled lunch",
+        json!({ "attendees": [ada], "status": "cancelled" }),
+    );
+    let trashed = event("Old lunch", json!({ "attendees": [ada] }));
+    w.ok("entity.trash", json!({ "id": trashed }));
+    event("Bob's party", json!({ "attendees": [bob] }));
+
+    // A task about them, a note that links to them; a note written about them is theirs in
+    // People (`notes`), not a link from another app.
+    w.clock.advance_days(1);
+    let task = w.ok(
+        "person.add_task",
+        json!({ "id": ada, "text": "Send Ada the book" }),
+    )["task_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    w.clock.advance_days(1);
+    let note = w.ok(
+        "note.create",
+        json!({ "title": "Chess night", "body": "with Ada" }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    w.ok(
+        "edge.add",
+        json!({ "from": note, "rel": "links", "to": ada }),
+    );
+    w.ok(
+        "person.add_note",
+        json!({ "id": ada, "text": "likes engines" }),
+    );
+
+    let seen = links(&ada);
+    assert_eq!(seen.more, 0);
+    assert_eq!(
+        seen.items
+            .iter()
+            .map(|item| (item.kind.key(), item.title.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("event", "Standing call"),
+            ("event", "Ada's talk"),
+            ("event", "Lunch with Ada"),
+            ("task", "Send Ada the book"),
+            ("note", "Chess night"),
+        ],
+        "events, tasks, notes; newest first within a kind"
+    );
+    let by_id = |id: &str| seen.items.iter().find(|item| item.id == id).unwrap();
+    assert_eq!(
+        by_id(&lunch).starts.as_deref(),
+        Some("2026-11-07T12:30:00"),
+        "an event carries its start"
+    );
+    assert_eq!(by_id(&lunch).timing.as_deref(), Some("floating"));
+    assert_eq!(
+        by_id(&standing).starts,
+        None,
+        "a repeating event has no one start"
+    );
+    assert_eq!(
+        (by_id(&task).starts.clone(), by_id(&note).starts.clone()),
+        (None, None)
+    );
+    // Bob has his own: only his party.
+    assert_eq!(
+        links(&bob)
+            .items
+            .iter()
+            .map(|i| i.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Bob's party"]
+    );
+
+    // The cap is by kind: five more tasks, three shown, and the rest counted.
+    for n in 0..5 {
+        w.clock.advance_days(1);
+        w.ok(
+            "person.add_task",
+            json!({ "id": ada, "text": format!("Task {n}") }),
+        );
+    }
+    let capped = links(&ada);
+    let tasks: Vec<&str> = capped
+        .items
+        .iter()
+        .filter(|item| item.kind.key() == "task")
+        .map(|item| item.title.as_str())
+        .collect();
+    assert_eq!(
+        tasks,
+        ["Task 4", "Task 3", "Task 2"],
+        "newest first, {VAULT_PER_KIND} of them"
+    );
+    assert_eq!(capped.more, 3, "6 tasks - 3 shown");
+    assert_eq!(capped.items.len(), 3 + 3 + 1, "3 events, 3 tasks, 1 note");
+    assert_eq!(
+        capped
+            .items
+            .iter()
+            .map(|i| i.kind.key())
+            .collect::<Vec<_>>(),
+        ["event", "event", "event", "task", "task", "task", "note"],
+        "the kinds stay in order after the cap"
+    );
+}
+
+#[test]
+fn the_owner_s_own_card_is_a_sheet_and_the_roster_names_the_owner_apart() {
+    let w = World::new();
+    let ada = w.person("Ada", json!({}));
+    let owner = w.vault.self_id().unwrap().unwrap();
+    let (mine, denial) = w.read(|door| load_person(door, &owner).expect("reads"));
+    assert!(denial.is_none());
+    let mine = mine.person.expect("My card is a sheet");
+    assert!(mine.is_me);
+    assert_eq!(mine.profile.party_id, owner);
+    let (hers, _) = w.read(|door| load_person(door, &ada).expect("reads"));
+    assert!(!hers.person.expect("a sheet").is_me);
+    // The circle still leaves the owner out; the roster says who they are.
+    let (roster, _) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert_eq!(
+        roster
+            .people
+            .iter()
+            .map(|p| p.party_id.as_str())
+            .collect::<Vec<_>>(),
+        [ada.as_str()]
+    );
+    let card = roster.owner.expect("an owner card");
+    assert_eq!(card.party_id, owner);
+    assert_eq!(card.name, mine.profile.name);
 }

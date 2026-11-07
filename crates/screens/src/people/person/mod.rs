@@ -17,7 +17,13 @@
 //!
 //! Calling, mailing and opening a map are Rust's to ask for as effects
 //! (`ChannelTapped`): `OpenUrl` for `tel:` and `mailto:`, `OpenMap`, or the
-//! clipboard for a handle.
+//! clipboard for a handle. The hero's Message, Call and Mail are the same asks of the
+//! person's preferred phone or email (`HeroTapped`; Message is `sms:`), and its Log a touch
+//! opens the Log a touch sheet.
+//!
+//! **MY CARD** (#1173) is the owner's own person: a sheet like any other, but with no star,
+//! merge, trash or touch to log (the page does not offer them and an event that asks anyway
+//! is nothing).
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -36,7 +42,7 @@ mod sheets;
 
 pub(crate) use data::gone;
 
-use data::BIRTHDAY_PREFIX;
+use data::{BIRTHDAY_PREFIX, HERO_CALL, HERO_LOG, HERO_MAIL, HERO_MESSAGE, channel_of};
 use sheets::{Form, Merge, Sheet};
 
 #[must_use]
@@ -127,6 +133,11 @@ impl Person {
             .unwrap_or_default()
     }
 
+    /// The owner's own card: the writes that are about someone else are not made on it.
+    fn is_me(&self) -> bool {
+        self.loaded().is_some_and(|(sheet, _)| sheet.is_me)
+    }
+
     fn starred(&self) -> bool {
         self.loaded()
             .and_then(|(sheet, _)| sheet.person.as_ref())
@@ -138,6 +149,9 @@ impl Person {
     fn sheet_opened(&mut self, ctx: &Ctx, which: wire::people_person_event::sheet_opened::Which) {
         use wire::people_person_event::sheet_opened::Which as W;
         if self.loaded().is_none() {
+            return;
+        }
+        if self.is_me() && matches!(which, W::LogTouch | W::Merge) {
             return;
         }
         let locale = ctx.locale();
@@ -286,7 +300,7 @@ impl Person {
     }
 
     fn star(&mut self, ctx: &Ctx) {
-        if self.loaded().is_none() {
+        if self.loaded().is_none() || self.is_me() {
             return;
         }
         let locale = ctx.locale();
@@ -468,7 +482,6 @@ impl Person {
     /// A channel tapped: the OS is asked to call, mail, map or copy the value. The
     /// value is the member's own words; the URL is only its envelope.
     fn channel_tapped(&self, channel_id: &str) -> Vec<wire::Effect> {
-        use wire::effect::Kind as K;
         let Some(channel) = self.loaded().and_then(|(sheet, _)| {
             sheet
                 .channels
@@ -477,33 +490,35 @@ impl Person {
         }) else {
             return Vec::new();
         };
-        let value = channel.value.trim();
-        if value.is_empty() {
+        open(channel, fold::channel_intent(&channel.kind))
+    }
+
+    /// A hero action: Message, Call and Mail reach the preferred phone or email, Log a touch
+    /// opens its sheet. One the person's data does not offer (no phone, no email, or the
+    /// owner's own card) is nothing.
+    fn hero_tapped(&mut self, ctx: &Ctx, key: &str) -> Vec<wire::Effect> {
+        if key == HERO_LOG {
+            self.sheet_opened(
+                ctx,
+                wire::people_person_event::sheet_opened::Which::LogTouch,
+            );
             return Vec::new();
         }
-        let kind = match fold::channel_intent(&channel.kind) {
-            wire::PeopleChannelIntent::Call => {
-                let dialable: String = value
-                    .chars()
-                    .filter(|c| c.is_ascii_digit() || matches!(c, '+' | '*' | '#'))
-                    .collect();
-                K::OpenUrl(wire::OpenUrl {
-                    url: format!("tel:{}", percent_encode(&dialable)),
-                })
-            }
-            wire::PeopleChannelIntent::Mail => K::OpenUrl(wire::OpenUrl {
-                url: format!("mailto:{}", percent_encode(value)),
-            }),
-            wire::PeopleChannelIntent::Map => K::OpenMap(wire::OpenMap {
-                query: value.to_owned(),
-            }),
-            _ => K::ClipboardSet(wire::ClipboardSet {
-                text: value.to_owned(),
-                sensitive: false,
-                clear_after_ms: 0,
-            }),
+        let Some((sheet, _)) = self.loaded() else {
+            return Vec::new();
         };
-        vec![wire::Effect { kind: Some(kind) }]
+        if sheet.is_me {
+            return Vec::new();
+        }
+        let (kind, intent) = match key {
+            HERO_MESSAGE => ("phone", HeroIntent::Message),
+            HERO_CALL => ("phone", HeroIntent::Plain(wire::PeopleChannelIntent::Call)),
+            HERO_MAIL => ("email", HeroIntent::Plain(wire::PeopleChannelIntent::Mail)),
+            _ => return Vec::new(),
+        };
+        channel_of(sheet, kind)
+            .map(|channel| open(channel, intent))
+            .unwrap_or_default()
     }
 
     fn event(&mut self, event: wire::PeoplePersonEvent, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -542,15 +557,20 @@ impl Person {
             P::Submitted(_) => self.submitted(ctx),
             P::Reminder(toggled) => self.reminder(ctx, &toggled.date_id),
             P::RemoveChannel(tapped) => self.ask_remove_channel(&tapped.channel_id),
-            P::MergePicked(picked) => self.ask_merge(&picked.party_id),
+            P::MergePicked(picked) => {
+                if !self.is_me() {
+                    self.ask_merge(&picked.party_id);
+                }
+            }
             P::TrashTapped(_) => {
-                if self.loaded().is_some() {
+                if self.loaded().is_some() && !self.is_me() {
                     self.asking = Asking::Trash;
                 }
             }
             P::Confirmed(_) => self.confirmed(ctx),
             P::Dismissed(_) => self.asking = Asking::Nothing,
             P::Channel(tapped) => return self.channel_tapped(&tapped.channel_id),
+            P::Hero(tapped) => return self.hero_tapped(ctx, &tapped.key),
         }
         Vec::new()
     }
@@ -558,17 +578,64 @@ impl Person {
     fn chrome(locale: Locale) -> wire::PeoplePersonChrome {
         wire::PeoplePersonChrome {
             edit: words::edit(locale),
-            log_touch: words::log_touch(locale),
-            add_note: words::add_note(locale),
-            add_date: words::add_date(locale),
-            add_channel: words::add_channel(locale),
             merge: words::merge(locale),
             move_to_trash: words::move_to_trash(locale),
             retry: words::retry(locale),
             loading: words::loading(locale),
             back: words::app_title(locale),
+            more: words::more_title(locale),
         }
     }
+}
+
+/// What the OS is asked to do with a person's phone or email.
+#[derive(Clone, Copy)]
+enum HeroIntent {
+    /// The channel's own verb: call, mail, map or copy.
+    Plain(wire::PeopleChannelIntent),
+    /// A text to the phone.
+    Message,
+}
+
+impl From<wire::PeopleChannelIntent> for HeroIntent {
+    fn from(intent: wire::PeopleChannelIntent) -> Self {
+        Self::Plain(intent)
+    }
+}
+
+/// The effect that opens `channel` for `intent`; none for a blank value.
+fn open(channel: &wire::PeopleChannel, intent: impl Into<HeroIntent>) -> Vec<wire::Effect> {
+    use wire::effect::Kind as K;
+    let value = channel.value.trim();
+    if value.is_empty() {
+        return Vec::new();
+    }
+    let dialable = || -> String {
+        value
+            .chars()
+            .filter(|c| c.is_ascii_digit() || matches!(c, '+' | '*' | '#'))
+            .collect()
+    };
+    let kind = match intent.into() {
+        HeroIntent::Message => K::OpenUrl(wire::OpenUrl {
+            url: format!("sms:{}", percent_encode(&dialable())),
+        }),
+        HeroIntent::Plain(wire::PeopleChannelIntent::Call) => K::OpenUrl(wire::OpenUrl {
+            url: format!("tel:{}", percent_encode(&dialable())),
+        }),
+        HeroIntent::Plain(wire::PeopleChannelIntent::Mail) => K::OpenUrl(wire::OpenUrl {
+            url: format!("mailto:{}", percent_encode(value)),
+        }),
+        HeroIntent::Plain(wire::PeopleChannelIntent::Map) => K::OpenMap(wire::OpenMap {
+            query: value.to_owned(),
+        }),
+        HeroIntent::Plain(_) => K::ClipboardSet(wire::ClipboardSet {
+            text: value.to_owned(),
+            sensitive: false,
+            clear_after_ms: 0,
+        }),
+    };
+    vec![wire::Effect { kind: Some(kind) }]
 }
 
 /// The URL-safe spelling of a value: anything but letters, digits and a few marks

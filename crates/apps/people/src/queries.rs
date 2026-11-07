@@ -146,7 +146,7 @@ impl PersonCard {
 }
 
 /// The owner's own person: the one the circle leaves out.
-fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
+pub(crate) fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
     let page = door.page(
         &PageQuery::new(
             "people.owner",
@@ -159,9 +159,22 @@ fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
     Ok(page.rows.first().and_then(|row| text_of(row, "self_id")))
 }
 
+/// MY CARD (#1173): the owner's own person, as a card; none when the vault names no owner or
+/// the owner has no person row to read. The circle never holds it.
+pub(crate) fn owner_card(door: &dyn PageDoor) -> KitResult<Option<PersonCard>> {
+    let Some(id) = owner(door)? else {
+        return Ok(None);
+    };
+    Ok(
+        people_among_with(door, std::slice::from_ref(&id), true, true)?
+            .get(&id)
+            .map(PersonCard::of),
+    )
+}
+
 /// The people the `entity` rows are, in their order: the kind row's columns
 /// joined on, the owner and the pets left out.
-fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
+fn members(door: &dyn PageDoor, entities: &[Row], with_owner: bool) -> KitResult<Vec<PersonRow>> {
     let ids: Vec<String> = entities
         .iter()
         .filter_map(|row| text_of(row, "id"))
@@ -185,7 +198,7 @@ fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
             let id = text_of(entity, "id")?;
             let kind = by_id.get(&id)?;
             let form = text_of(kind, "form").unwrap_or_default();
-            if form == "pet" || owner.as_deref() == Some(id.as_str()) {
+            if form == "pet" || (!with_owner && owner.as_deref() == Some(id.as_str())) {
                 return None;
             }
             Some(PersonRow {
@@ -218,6 +231,17 @@ pub(crate) fn people_among(
     ids: &[String],
     live: bool,
 ) -> KitResult<BTreeMap<String, PersonRow>> {
+    people_among_with(door, ids, live, false)
+}
+
+/// As [`people_among`], and the owner's own person too when `with_owner`: My card's sheet and
+/// editor read it, while the circle, the search and merge never do (#1173).
+pub(crate) fn people_among_with(
+    door: &dyn PageDoor,
+    ids: &[String],
+    live: bool,
+    with_owner: bool,
+) -> KitResult<BTreeMap<String, PersonRow>> {
     let entities = Read {
         name: "people.rows.entity",
         table: "entity",
@@ -238,7 +262,7 @@ pub(crate) fn people_among(
             vec![text("person")],
         )),
     )?;
-    Ok(members(door, &entities)?
+    Ok(members(door, &entities, with_owner)?
         .into_iter()
         .map(|person| (person.id.clone(), person))
         .collect())
@@ -269,7 +293,7 @@ pub fn read_circle(door: &dyn PageDoor, window: usize) -> KitResult<Circle> {
     .filter("kind = ? AND deleted_at IS NULL", vec![text("person")]);
     let read = read_window(door, &query, window)?;
     Ok(Circle {
-        members: members(door, &read.rows)?,
+        members: members(door, &read.rows, false)?,
         filled: read.filled,
     })
 }
@@ -285,7 +309,7 @@ pub fn read_trashed(door: &dyn PageDoor) -> KitResult<Circle> {
     .filter("kind = ? AND deleted_at IS NOT NULL", vec![text("person")]);
     let read = read_window(door, &query, TRASH_ROWS)?;
     Ok(Circle {
-        members: members(door, &read.rows)?,
+        members: members(door, &read.rows, false)?,
         filled: read.filled,
     })
 }
@@ -741,6 +765,191 @@ impl DateRow {
             month_day: self.month_day.clone(),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// In your vault (#1173)
+// ---------------------------------------------------------------------------
+
+/// The most of one kind "In your vault" shows: the rest is counted, not listed.
+pub const VAULT_PER_KIND: usize = 3;
+
+/// What kind of thing in the vault is about a person.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VaultKind {
+    /// An event the person is a guest of, or that is about them (not a yearly date).
+    Event,
+    Task,
+    /// A note that links to them (a note written about them is one of their `notes`).
+    Note,
+}
+
+impl VaultKind {
+    #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Event => "event",
+            Self::Task => "task",
+            Self::Note => "note",
+        }
+    }
+}
+
+/// One thing in the vault that is about a person, from another app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaultItem {
+    pub id: String,
+    pub kind: VaultKind,
+    pub title: String,
+    pub created_at: String,
+    /// An event's first start, its timing and zone; none on a recurring event (its first start
+    /// is not when it is next).
+    pub starts: Option<String>,
+    pub timing: Option<String>,
+    pub zone: Option<String>,
+}
+
+/// What else in the vault is about one person: the items shown (events, then tasks, then
+/// notes; newest first within a kind; at most [`VAULT_PER_KIND`] of each) and how many more
+/// there are than shown.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VaultLinks {
+    pub items: Vec<VaultItem>,
+    pub more: usize,
+}
+
+/// The things in the vault about one person, read from the edges that END at them
+/// (`edge_to`, one `to_id`): an event's `attendee` or `about` edge, a task's `about`, a note's
+/// `links`. A yearly all-day event is one of their dates, a cancelled event is not on the
+/// calendar, and a row in the trash is no row. A note's `about` edge is People's own note.
+pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks> {
+    let ids = [id.to_owned()];
+    let incoming = Read {
+        name: "people.vault.in",
+        table: "edge",
+        select: "from_id, to_id, rel",
+        order: ("to_id", "from_id"),
+        column: "to_id",
+    }
+    .within(
+        WIDE,
+        door,
+        &ids,
+        Some((
+            "rel IN (?, ?, ?)",
+            vec![text("about"), text("attendee"), text("links")],
+        )),
+    )?;
+    let mut sources: Vec<(String, String)> = incoming
+        .iter()
+        .filter_map(|row| Some((text_of(row, "from_id")?, text_of(row, "rel")?)))
+        .collect();
+    sources.sort();
+    sources.dedup();
+    let from: Vec<String> = sources.iter().map(|(id, _)| id.clone()).collect();
+    let entities = Read {
+        name: "people.vault.entity",
+        table: "entity",
+        select: "id, kind, title, created_at",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .within(
+        WIDE,
+        door,
+        &from,
+        Some((
+            "kind IN (?, ?, ?) AND deleted_at IS NULL",
+            vec![text("event"), text("task"), text("note")],
+        )),
+    )?;
+    let event_ids: Vec<String> = entities
+        .iter()
+        .filter(|row| text_of(row, "kind").as_deref() == Some("event"))
+        .filter_map(|row| text_of(row, "id"))
+        .collect();
+    let events: BTreeMap<String, Row> = Read {
+        name: "people.vault.event",
+        table: "event",
+        select: "id, starts, timing, zone, rule, status",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .within(WIDE, door, &event_ids, None)?
+    .into_iter()
+    .filter_map(|row| Some((text_of(&row, "id")?, row)))
+    .collect();
+    let mut items: Vec<VaultItem> = Vec::new();
+    for row in &entities {
+        let (Some(item_id), Some(kind), Some(title), Some(created_at)) = (
+            text_of(row, "id"),
+            text_of(row, "kind"),
+            text_of(row, "title"),
+            text_of(row, "created_at"),
+        ) else {
+            continue;
+        };
+        let rels = |wanted: &[&str]| {
+            sources
+                .iter()
+                .any(|(from, rel)| *from == item_id && wanted.contains(&rel.as_str()))
+        };
+        let (kind, starts, timing, zone) = match kind.as_str() {
+            "event" => {
+                let Some(event) = events.get(&item_id) else {
+                    continue;
+                };
+                let rule = text_of(event, "rule");
+                let timing = text_of(event, "timing");
+                let yearly_date = timing.as_deref() == Some("all-day")
+                    && rule
+                        .as_deref()
+                        .is_some_and(|rule| rule.starts_with("FREQ=YEARLY"));
+                if text_of(event, "status").as_deref() == Some("cancelled")
+                    || yearly_date
+                    || !rels(&["about", "attendee"])
+                {
+                    continue;
+                }
+                let recurring = rule.is_some();
+                (
+                    VaultKind::Event,
+                    text_of(event, "starts").filter(|_| !recurring),
+                    timing.filter(|_| !recurring),
+                    text_of(event, "zone"),
+                )
+            }
+            "task" if rels(&["about"]) => (VaultKind::Task, None, None, None),
+            "note" if rels(&["links"]) => (VaultKind::Note, None, None, None),
+            _ => continue,
+        };
+        items.push(VaultItem {
+            id: item_id,
+            kind,
+            title,
+            created_at,
+            starts,
+            timing,
+            zone,
+        });
+    }
+    items.sort_by(|left, right| {
+        left.kind
+            .cmp(&right.kind)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let total = items.len();
+    let mut shown_of: BTreeMap<VaultKind, usize> = BTreeMap::new();
+    items.retain(|item| {
+        let shown = shown_of.entry(item.kind).or_default();
+        *shown += 1;
+        *shown <= VAULT_PER_KIND
+    });
+    Ok(VaultLinks {
+        more: total - items.len(),
+        items,
+    })
 }
 
 /// The important dates of these people: the birthday column, and the yearly

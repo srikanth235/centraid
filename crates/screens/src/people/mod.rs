@@ -42,6 +42,7 @@ pub mod editor;
 pub mod fold;
 pub mod home;
 pub mod person;
+pub mod sections;
 pub mod trash;
 
 pub const HOME: &str = "people.home";

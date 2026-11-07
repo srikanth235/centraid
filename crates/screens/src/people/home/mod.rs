@@ -1,7 +1,8 @@
 //! PEOPLE'S HOME (`people.home`): People and Touch under ONE band, with Search a
 //! field on the current destination and More a sheet.
 //!
-//! - **People** is the roster: the filter (All, Starred, Overdue) and the order
+//! - **People** is the roster, A to Z by default (the Name order; Recently added is the flat
+//!   list): the filter (All, Starred, Overdue) and the order
 //!   (Recently added, Name) are PARAMETERS of the core's read, so a pick reads
 //!   again and the counts stay the whole window's. Both are the header's one
 //!   filter menu.
@@ -86,7 +87,7 @@ impl Home {
         Self {
             destination,
             chip: wire::PeopleChipKey::All,
-            order: wire::PeopleOrder::Recent,
+            order: wire::PeopleOrder::Name,
             roster: Phase::Loading,
             touch: Phase::Loading,
             search: Search::default(),
@@ -467,9 +468,9 @@ impl Screen for Home {
                 Phase::Loading => C::Loading(wire::Loading { first_load: true }),
                 Phase::Failed => failure(),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => {
-                    C::Roster(Box::new(rows::roster(locale, answer, self.chip)))
-                }
+                Phase::Ready(answer) => C::Roster(Box::new(rows::roster(
+                    locale, answer, self.chip, self.order,
+                ))),
             },
         });
         let denied_now = self.denied();
