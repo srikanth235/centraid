@@ -166,7 +166,8 @@ private struct SettingsRowView: View {
             if !row.value.isEmpty {
                 Text(row.value).kitType(.row).foregroundStyle(Surface.meta)
             }
-            if row.hasRoute {
+            // A row that MAKES something draws no chevron (the board's Make a vault).
+            if row.hasRoute && row.tile != "add" {
                 CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
             }
         }

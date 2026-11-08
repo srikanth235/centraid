@@ -573,3 +573,25 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
         wire::effect::Kind::ClipboardSet(set) if set.sensitive && set.clear_after_ms == 30_000
     )));
 }
+
+/// THE HEADER'S LOCK KEY (#1173): a tap covers the Locker at once, through the same wall as More's
+/// Lock row, and the chrome says the key's words.
+#[test]
+fn the_header_lock_key_covers_the_locker_and_says_its_words() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(passed(wire::Biometry::Face));
+    assert!(home(&d, id).wall.is_none());
+    assert_eq!(home(&d, id).chrome.unwrap().lock_label, "Lock now");
+    d.send(
+        id,
+        E::LockerHome(wire::LockerHomeEvent {
+            kind: Some(H::LockRequested(wire::locker_home_event::LockRequested {})),
+        }),
+    );
+    let state = home(&d, id);
+    assert!(state.wall.is_some(), "the wall is back");
+    assert!(!state.secure, "nothing is shown under the wall");
+    assert!(state.content.is_none());
+}

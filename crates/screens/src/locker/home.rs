@@ -223,6 +223,20 @@ impl Home {
         effects
     }
 
+    /// THE MEMBER LOCKED BY HAND (the header's key, More's Lock row): the wall closes and the
+    /// page wipes what it held.
+    fn lock_now(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let step = self.wall.event(
+            ctx,
+            wire::LockerWallEvent {
+                kind: Some(wire::locker_wall_event::Kind::Lock(
+                    wire::locker_wall_event::LockTapped {},
+                )),
+            },
+        );
+        self.walled(ctx, step)
+    }
+
     /// Apply what the wall did to the page under it.
     fn walled(&mut self, ctx: &Ctx, step: super::wall::Step) -> Vec<wire::Effect> {
         let mut effects = step.effects;
@@ -342,20 +356,12 @@ impl Home {
             }
             Some(H::More(more)) => match more.key.as_str() {
                 "facts" => self.sheet = wire::locker_home_state::Sheet::Facts,
-                "lock" => {
-                    let step = self.wall.event(
-                        ctx,
-                        wire::LockerWallEvent {
-                            kind: Some(wire::locker_wall_event::Kind::Lock(
-                                wire::locker_wall_event::LockTapped {},
-                            )),
-                        },
-                    );
-                    effects.extend(self.walled(ctx, step));
-                }
+                "lock" => effects.extend(self.lock_now(ctx)),
                 // A page the shell pushes: the sheet closes behind the tap.
                 _ => self.sheet = wire::locker_home_state::Sheet::None,
             },
+            // THE HEADER'S LOCK KEY: the same lock as More's row.
+            Some(H::LockRequested(_)) => effects.extend(self.lock_now(ctx)),
             Some(H::Refreshed(_)) => self.reload(ctx),
             Some(H::GeneratorKind(picked)) => self.generator.pick_kind(&picked.key),
             Some(H::GeneratorLength(length)) => self.generator.set_length(length.length),
@@ -781,6 +787,7 @@ impl Home {
             title: parent.clone(),
             add_label: words::add_item(locale),
             add_route: Some(routes::add("", false)),
+            lock_label: words::lock_key(locale),
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has

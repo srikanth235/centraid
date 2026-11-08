@@ -208,7 +208,7 @@ struct NotesEditorView: View {
     /// events; the tag key reaches the tag field; the last hides the keyboard.
     private func toolbar(_ chrome: Centraid_Core_V1_NotesEditorChrome) -> some View {
         HStack(spacing: 0) {
-            NotesToolKey(iconKey: "Todo", label: chrome.checklistLabel, identifier: "notes-tool-checklist") {
+            NotesToolKey(iconKey: "ListChecks", label: chrome.checklistLabel, identifier: "notes-tool-checklist") {
                 dispatch(event { $0.checklistRequested = .init() })
             }
             NotesToolKey(iconKey: "Link", label: chrome.linkLabel, identifier: "notes-tool-link") {

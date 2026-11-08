@@ -264,6 +264,10 @@ internal fun LockerHomeScreen(
             trailing = chrome?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
                 RoomAction("Plus", label, "locker-add") { chrome.add_route?.let(onOpen) }
             },
+            // THE LOCK KEY (#1173): cover every item now, Rust's own event.
+            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.denied == null }?.let { label ->
+                RoomAction("Lock", label, "locker-lock") { onEvent(LockerHomeEvent(lock_requested = LockerHomeEvent.LockRequested())) }
+            },
             // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab.
             search = if (state.denied == null) {
                 RoomSearch(

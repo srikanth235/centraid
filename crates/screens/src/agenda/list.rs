@@ -110,6 +110,19 @@ fn window_label(locale: Locale, board: &wire::AgendaTaskBoard) -> String {
     }
 }
 
+/// The colour token of a smart list, one place for the home's card and the page's title.
+#[must_use]
+pub(super) fn smart_color(view: wire::TodoView) -> &'static str {
+    match view {
+        wire::TodoView::Today => "listBlue",
+        wire::TodoView::Scheduled => "listRaspberry",
+        wire::TodoView::All => "appLocker",
+        wire::TodoView::Flagged => "stateAmber",
+        wire::TodoView::Logbook => "listGraphite",
+        _ => "",
+    }
+}
+
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::TodoList(args)) = &route.args else {
@@ -186,6 +199,11 @@ impl List {
             wire::TodoView::Reminders => words::view_reminders(locale),
             _ => words::view_anytime(locale),
         }
+    }
+
+    /// The page's own colour: the smart list's card colour on the Reminders home.
+    fn color_key(&self) -> &'static str {
+        smart_color(self.view)
     }
 
     fn empty(&self, locale: Locale) -> String {
@@ -305,6 +323,7 @@ impl Screen for List {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
+        let ready = self.phase.data().is_some();
         let content = match &self.phase {
             Phase::Loading => {
                 wire::todo_list_state::Content::Loading(wire::Loading { first_load: true })
@@ -322,6 +341,21 @@ impl Screen for List {
                 content: Some(content),
                 chrome: Some(rows::chrome(locale)),
                 status: self.ops.status.clone(),
+                color_key: self.color_key().to_owned(),
+                add_label: if ready {
+                    words::add_task(locale)
+                } else {
+                    String::new()
+                },
+                add_route: self.phase.data().map(|board| {
+                    super::routes::editor(
+                        "",
+                        "",
+                        None,
+                        &board.today,
+                        wire::AgendaEditorKind::Unspecified,
+                    )
+                }),
             })),
             ..wire::ViewState::default()
         }

@@ -63,6 +63,12 @@ struct LockerHomeView: View {
                 onTerm: { term in send(LockerHomeEvents.make { $0.searchTyped = .with { $0.term = term } }) },
                 onClose: { send(LockerHomeEvents.make { $0.searchClosed = .init() }) }
             ),
+            // THE LOCK KEY (#1173): cover every item now, Rust's own event.
+            lead: covered || content.isDenied || state.chrome.lockLabel.isEmpty
+                ? nil
+                : RoomAction(iconKey: "Lock", label: state.chrome.lockLabel, identifier: "locker-lock") {
+                    send(LockerHomeEvents.make { $0.lockRequested = .init() })
+                },
             filter: covered ? nil : filterSlot(content),
             showsBand: !content.isDenied
         ) {

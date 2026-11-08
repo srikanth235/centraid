@@ -231,6 +231,8 @@ message LockerHomeChrome {
   string search_placeholder = 9;
   string search_note = 10;
   string close_label = 11;
+  // The header's lock key: what a screen reader says for it ("Lock now").
+  string lock_label = 12;
 }
 
 message LockerMoreRow {
@@ -368,6 +370,8 @@ message LockerHomeEvent {
     // A category card tapped (a key of `LockerCategory`), and the list's back.
     CategoryPicked category_picked = 18;
     CategoryClosed category_closed = 19;
+    // THE HEADER'S LOCK KEY (#1173): cover every item now, the same lock as More's row.
+    LockRequested lock_requested = 20;
   }
   reserved 2;
   reserved "filter";
@@ -381,6 +385,8 @@ message LockerHomeEvent {
   }
 
   message SheetClosed {}
+
+  message LockRequested {}
 
   message SearchOpened {}
 

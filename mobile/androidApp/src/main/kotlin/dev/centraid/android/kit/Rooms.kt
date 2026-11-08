@@ -172,6 +172,8 @@ public fun AppPlace(
     meta: String = "",
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
+    /** A KEY BEFORE THE FILTER (#1173): the tonal lock key of Locker's header; null elsewhere. */
+    lead: RoomAction? = null,
     /**
      * THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
      * app's one trailing action. Null where the app has nothing to filter or sort.
@@ -194,6 +196,7 @@ public fun AppPlace(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (lead != null) HeaderVerb(lead)
             if (filter != null) FilterMenuButton(app, filter)
             if (trailing != null) HeaderVerb(trailing)
         }

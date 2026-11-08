@@ -2132,6 +2132,13 @@ message TodoListState {
   }
   TodoChrome chrome = 8;
   StatusLine status = 9;
+  // THE SMART LIST'S COLOUR (#1173): a token name (`listBlue`) the page's large title is drawn
+  // in, the same colour as the list's card on the Reminders home; empty for a view with none.
+  string color_key = 10;
+  // THE HEADER PLUS: its accessibility label ("Add task") and the add sheet it pushes, on
+  // the core's today. Empty while the page has no data to add against.
+  string add_label = 11;
+  optional Route add_route = 12;
 }
 
 message TodoListData {

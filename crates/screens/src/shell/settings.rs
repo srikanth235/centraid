@@ -229,7 +229,7 @@ impl Settings {
                             "backup",
                             words::settings_backup(locale),
                             self.backup_meta(ctx),
-                            "Cloud",
+                            "Backup",
                             Some(backup::routes::home()),
                             "",
                             String::new(),

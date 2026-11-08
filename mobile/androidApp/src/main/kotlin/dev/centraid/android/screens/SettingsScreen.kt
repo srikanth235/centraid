@@ -193,7 +193,8 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
             if (row.value_.isNotEmpty()) {
                 KitText(row.value_, KitType.Row, Surface.meta, Modifier.padding(start = 8.dp))
             }
-            if (route != null) {
+            // A row that MAKES something draws no chevron (the board's Make a vault).
+            if (route != null && row.tile != "add") {
                 CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp, modifier = Modifier.padding(start = 8.dp))
             }
         }

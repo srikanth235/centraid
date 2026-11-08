@@ -206,6 +206,7 @@ catalog! {
     plain lock_failed_passcode = ("That did not unlock Locker. Try again.", "That did not unlock Locker. Try again.");
     plain lock_locked_out = ("Too many tries. Unlock the phone with its passcode, then try again.", "Too many tries. Unlock the phone with its passcode, then try again.");
     plain lock_now = ("Lock", "Lock");
+    plain lock_key = ("Lock now", "Lock now");
     plain lock_no_words_action = ("Enter your recovery key", "Enter your recovery key");
     plain lock_no_words_body = ("This phone doesn't hold the recovery key for this vault.", "This phone doesn't hold the recovery key for this vault.");
     plain lock_no_words_notice = ("Secrets open once you enter it.", "Secrets open once you enter it.");

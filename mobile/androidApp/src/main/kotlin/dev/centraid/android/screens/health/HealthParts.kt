@@ -125,7 +125,7 @@ private fun HealthSparkBars(points: List<Int>, spoken: String) {
                         .width(7.dp)
                         .height((40 * fraction(point)).dp.coerceAtLeast(3.dp))
                         .clip(CircleShape)
-                        .background(if (index == points.lastIndex) accent.fill else accent.fill.copy(alpha = 0.25f)),
+                        .background(if (index == points.lastIndex) accent.fill else Surface.border),
                 )
             }
         }

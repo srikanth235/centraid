@@ -96,7 +96,7 @@ struct HealthSparkBars: View {
         HStack(alignment: .bottom, spacing: 4) {
             ForEach(Array(points.enumerated()), id: \.offset) { index, point in
                 Capsule()
-                    .fill(index == points.count - 1 ? accent.fill : accent.fill.opacity(0.25))
+                    .fill(index == points.count - 1 ? accent.fill : Surface.border)
                     .frame(width: 7, height: point < 0 ? 0 : max(40 * healthFraction(point), 3))
             }
         }

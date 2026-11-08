@@ -209,6 +209,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
     var search: SearchSlot? = nil
+    /// A KEY BEFORE THE FILTER (#1173): the glass lock key of Locker's header. Nil in every other app.
+    var lead: RoomAction? = nil
     /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
     /// app's one trailing action. Nil where the app has nothing to filter or sort.
     var filter: FilterSlot? = nil
@@ -229,6 +231,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         app: String,
         title: String,
         search: SearchSlot? = nil,
+        lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
         showsBand: Bool = true,
@@ -239,6 +242,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.app = app
         self.title = title
         self.search = search
+        self.lead = lead
         self.filter = filter
         self.subtitle = subtitle
         self.showsBand = showsBand
@@ -267,6 +271,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             ToolbarItemGroup(placement: .primaryAction) {
+                if let lead { RoomTrailing(action: lead, app: app) }
                 if let filter { FilterMenuButton(app: app, slot: filter) }
                 // THE BAR IS HOSTED OUTSIDE THE PAGE'S ENVIRONMENT, so the filled `+` takes the
                 // app's accent from here and not the shell's teal.
@@ -328,6 +333,7 @@ extension AppPlace where Trailing == RoomTrailing {
         title: String,
         trailing: RoomAction?,
         search: SearchSlot? = nil,
+        lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
         showsBand: Bool = true,
@@ -338,6 +344,7 @@ extension AppPlace where Trailing == RoomTrailing {
             app: app,
             title: title,
             search: search,
+            lead: lead,
             filter: filter,
             subtitle: subtitle,
             showsBand: showsBand,

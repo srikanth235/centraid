@@ -136,6 +136,41 @@ fn today_holds_what_is_due_today_or_before_and_scheduled_what_has_a_date() {
 }
 
 #[test]
+fn a_smart_list_page_names_its_colour_and_the_add_sheet_its_plus_opens() {
+    let mut d = driver();
+    clear_tasks(&d);
+    let _ = task(&d, "Anything");
+    // The colour is the card's on the Reminders home, so the page's large title matches it.
+    for (view, color) in [
+        (wire::TodoView::Today, "listBlue"),
+        (wire::TodoView::Scheduled, "listRaspberry"),
+        (wire::TodoView::All, "appLocker"),
+        (wire::TodoView::Flagged, "stateAmber"),
+        (wire::TodoView::Logbook, "listGraphite"),
+    ] {
+        let t = d.push(agenda::TAB, routes::todo_list(view));
+        let state = list(d.view(t));
+        assert_eq!(state.color_key, color, "{view:?}");
+        assert_eq!(state.add_label, "Add task");
+        let route = state.add_route.as_ref().expect("the plus has a sheet");
+        assert_eq!(
+            route.screen,
+            routes::editor(
+                "",
+                "",
+                None,
+                &today(&d),
+                wire::AgendaEditorKind::Unspecified
+            )
+            .screen
+        );
+    }
+    // A view with no colour of its own draws a plain title.
+    let t = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Anytime));
+    assert_eq!(list(d.view(t)).color_key, "");
+}
+
+#[test]
 fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colour() {
     use wire::agenda_home_state::Content;
     let mut d = driver();

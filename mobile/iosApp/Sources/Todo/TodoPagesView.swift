@@ -20,6 +20,11 @@ struct TodoListView: View {
         return event
     }
 
+    /// The large title's colour: the smart list's own, as Rust names it; nil for a view with none.
+    private var heading: Color? {
+        state.colorKey.isEmpty ? nil : AgendaPalette.token(state.colorKey)
+    }
+
     private var content: ScreenContent<Centraid_Core_V1_TodoListData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
@@ -31,8 +36,17 @@ struct TodoListView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
-            EmptyView()
+        // THE TITLE IS THE PAGE'S OWN, LARGE, IN THE SMART LIST'S COLOUR (#1173): the bar
+        // carries the back chevron and the plus, and no small title.
+        PushedPage(title: heading == nil ? state.title : "", parentTitle: state.chrome.back, onBack: onBack) {
+            if state.hasAddRoute, !state.addLabel.isEmpty {
+                RoomTrailing(
+                    action: RoomAction(iconKey: "Plus", label: state.addLabel, identifier: "tasks-list-add") {
+                        open(state.addRoute)
+                    },
+                    app: "agenda"
+                )
+            }
         } content: {
             VStack(spacing: 0) {
                 ReadStateView(
@@ -42,6 +56,15 @@ struct TodoListView: View {
                 ) { list in
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
+                            if let color = heading {
+                                Text(state.title)
+                                    .centraidType("title")
+                                    .foregroundStyle(color)
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .accessibilityIdentifier("tasks-list-title")
+                                    .todoPlainRow()
+                            }
                             if !list.subtitle.isEmpty {
                                 Text(list.subtitle)
                                     .centraidType("small")

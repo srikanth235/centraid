@@ -105,10 +105,8 @@ public enum CentraidCatalog {
             CentraidIconPath(d: "M5 12h14M12 5l7 7-7 7", filled: false, evenOdd: false),
         ],
         "Backup": [
-            CentraidIconPath(d: "M21 12a9 9 0 1 1-2.64-6.36L21 8", filled: false, evenOdd: false),
-            CentraidIconPath(d: "M21 3v5h-5", filled: false, evenOdd: false),
-            CentraidIconPath(d: "M9 11.5h6V16H9z", filled: false, evenOdd: false),
-            CentraidIconPath(d: "M10.5 11.5V10a1.5 1.5 0 0 1 3 0v1.5", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M20 12a8 8 0 1 0-3 6.2", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M20 6v6h-6", filled: false, evenOdd: false),
         ],
         "BarChart2": [
             CentraidIconPath(d: "M4 20V10M10 20V4M16 20v-7M22 20H2", filled: false, evenOdd: false),
@@ -344,6 +342,11 @@ public enum CentraidCatalog {
         ],
         "List": [
             CentraidIconPath(d: "M4 6h16M4 12h16M4 18h16", filled: false, evenOdd: false),
+        ],
+        "ListChecks": [
+            CentraidIconPath(d: "M8.5 7a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M8.5 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M5 17l1 1 1.6-2M11 7h10M11 17h10", filled: false, evenOdd: false),
         ],
         "Loader": [
             CentraidIconPath(d: "M21 12a9 9 0 1 1-6.219-8.56", filled: false, evenOdd: false),

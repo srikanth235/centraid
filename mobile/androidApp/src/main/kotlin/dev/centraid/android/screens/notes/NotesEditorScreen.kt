@@ -206,7 +206,7 @@ public fun NotesEditorScreen(
                         Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        IconKey("Todo", chrome.checklist_label, "notes-tool-checklist") {
+                        IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
                             send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
                         }
                         IconKey("Link", chrome.link_label, "notes-tool-link") {

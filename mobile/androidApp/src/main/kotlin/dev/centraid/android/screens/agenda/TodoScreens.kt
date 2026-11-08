@@ -50,7 +50,18 @@ internal fun TodoListScreen(
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = state.title, parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
+    val heading = if (state.color_key.isEmpty()) null else agendaTokenColor(state.color_key)
+    val addRoute = state.add_route
+    PushedPage(
+        title = if (heading == null) state.title else "",
+        parentTitle = chrome?.back.orEmpty(),
+        onBack = onBack,
+        trailing = if (addRoute != null && state.add_label.isNotEmpty()) {
+            RoomAction("Plus", state.add_label, "tasks-list-add") { onOpen(addRoute) }
+        } else {
+            null
+        },
+    ) {
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -63,6 +74,22 @@ internal fun TodoListScreen(
                     EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-list")) {
+                        // THE LARGE TITLE IN THE SMART LIST'S COLOUR (#1173), its date line under it.
+                        heading?.let { color ->
+                            item(key = "title") {
+                                Text(
+                                    state.title,
+                                    style = centraidType("title"),
+                                    color = color,
+                                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("tasks-list-title"),
+                                )
+                            }
+                        }
+                        if (list.subtitle.isNotEmpty()) {
+                            item(key = "subtitle") {
+                                Text(list.subtitle, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.padding(KitGeometry.GUTTER))
+                            }
+                        }
                         todoGroups(
                             list.groups,
                             onCheck = { onEvent(TodoListEvent(row_checked = TodoListEvent.RowChecked(task_id = it))) },
@@ -78,9 +105,6 @@ internal fun TodoListScreen(
                         )
                         item(key = "foot") {
                             Column {
-                                if (list.subtitle.isNotEmpty()) {
-                                    Text(list.subtitle, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.padding(KitGeometry.GUTTER))
-                                }
                                 if (list.window_label.isNotEmpty()) {
                                     Text(list.window_label, style = centraidType("annotLabel"), color = centraidColor("textFaint"), modifier = Modifier.padding(KitGeometry.GUTTER))
                                 }
