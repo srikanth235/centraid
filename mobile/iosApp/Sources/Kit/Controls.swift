@@ -184,16 +184,27 @@ struct KitChip: View {
 /// MoneySpending, Settings' appearance): a pale track, the lit segment a white card on it in the
 /// `row` rung's semibold, the others `meta`. The two weights share a size, so a tap never reflows
 /// the track. The caller places it (centre, margin); `fills` stretches the segments to equal
-/// widths across the whole line (Health's four ranges), else it hugs its words.
+/// widths across the whole line (Health's four ranges), else it hugs its words. A filling track
+/// stacks its segments once the text reflows (`Theme.reflowSize`), so no word is cut.
+///
+/// THE ONE SEGMENTED CONTROL (#1173): every page draws it through this view, Settings' appearance
+/// choice included. Only the band's own plate (Photos' zoom) is a different control.
 struct KitSegmented<Key: Hashable>: View {
     let options: [(key: Key, label: String)]
     let selected: Key
     var identifier: String = ""
     var fills = false
+    /// The id a segment carries after the track's own: the label, lower-cased, unless the caller
+    /// has a stabler word (a machine key).
+    var segmentID: (Key, String) -> String = { _, label in label.lowercased() }
     let onSelect: (Key) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: 2) {
+        let stacked = fills && dynamicTypeSize >= Theme.reflowSize
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
+        layout {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 segment(option.key, option.label)
             }
@@ -221,7 +232,7 @@ struct KitSegmented<Key: Hashable>: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
-        .accessibilityIdentifier(identifier.isEmpty ? "" : "\(identifier)-\(label.lowercased())")
+        .accessibilityIdentifier(identifier.isEmpty ? "" : "\(identifier)-\(segmentID(key, label))")
     }
 }
 

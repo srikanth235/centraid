@@ -95,36 +95,20 @@ private struct GroupHead: View {
     }
 }
 
-/// SYSTEM · LIGHT · DARK. At the largest text the three stack, so no word is cut.
+/// SYSTEM · LIGHT · DARK, on the kit's one segmented track.
 private struct SettingsSegmented: View {
     let choices: [Centraid_Core_V1_SettingsChoice]
     let onPick: (String) -> Void
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
     var body: some View {
-        let stacked = dynamicTypeSize >= Theme.reflowSize
-        let layout = stacked ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
-        layout {
-            ForEach(choices, id: \.id) { choice in
-                Button { onPick(choice.id) } label: {
-                    Text(choice.label)
-                        .kitType(.row)
-                        .fontWeight(choice.selected ? .semibold : .regular)
-                        .foregroundStyle(choice.selected ? Surface.ink : Surface.meta)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                        .background(choice.selected ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(choice.selected ? [.isButton, .isSelected] : .isButton)
-                .accessibilityIdentifier("settings-appearance-\(choice.id)")
-            }
-        }
-        .padding(3)
-        .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityIdentifier("settings-appearance")
+        KitSegmented(
+            options: choices.map { (key: $0.id, label: $0.label) },
+            selected: choices.first(where: { $0.selected })?.id ?? "",
+            identifier: "settings-appearance",
+            fills: true,
+            segmentID: { key, _ in key },
+            onSelect: onPick
+        )
     }
 }
 
