@@ -194,6 +194,7 @@ struct AppBand: View {
                 iconKey: "Home",
                 spoken: KitWords.BAND_HOME,
                 identifier: "\(app)-band-home",
+                flat: !folded && tabs.isEmpty && onMore == nil && searchKey == nil,
                 action: onHome
             )
 
@@ -330,6 +331,10 @@ struct BandKey: View {
     let iconKey: String
     let spoken: String
     let identifier: String
+    /// A key standing ALONE (a locked Locker has no plate and no search): glass has nothing to
+    /// sit beside and over a flat page reads as a heavy ring, so it is the board's soft card
+    /// disc with a faint hairline and a soft shadow.
+    var flat: Bool = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -337,7 +342,7 @@ struct BandKey: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        let liquid = BandMetrics.usesLiquidGlass(reduceTransparency: reduceTransparency, contrast: contrast)
+        let liquid = !flat && BandMetrics.usesLiquidGlass(reduceTransparency: reduceTransparency, contrast: contrast)
         Button(action: action) {
             CentraidIconView(
                 iconKey: iconKey,
@@ -349,9 +354,26 @@ struct BandKey: View {
             .contentShape(Circle())
         }
         .buttonStyle(BandPress(inset: 0, paints: !liquid))
-        .bandGround(Circle(), solid: "bg", interactive: true)
+        .modifier(BandKeyGround(flat: flat))
         .accessibilityLabel(spoken)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A round key's ground: the band's glass, or (alone) the flat card disc.
+private struct BandKeyGround: ViewModifier {
+    let flat: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        if flat {
+            content
+                .background(Circle().fill(Surface.card))
+                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.08), radius: 10, y: 6)
+        } else {
+            content.bandGround(Circle(), solid: "bg", interactive: true)
+        }
     }
 }
 

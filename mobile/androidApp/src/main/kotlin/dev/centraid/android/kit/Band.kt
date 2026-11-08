@@ -355,6 +355,7 @@ public fun AppBand(
             spoken = KitWords.BAND_HOME,
             testTag = "$app-band-home",
             onPress = onHome,
+            alone = !folded && tabs.isEmpty() && onMore == null && searchKey == null,
         )
         val count = tabs.size + if (onMore != null) 1 else 0
         val plate = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
@@ -486,11 +487,13 @@ internal fun BandSegmented(
  * `bgPress` while held like every other press on the band.
  */
 @Composable
-internal fun BandKey(iconKey: String, spoken: String, testTag: String, onPress: () -> Unit) {
+internal fun BandKey(iconKey: String, spoken: String, testTag: String, onPress: () -> Unit, alone: Boolean = false) {
     Box(
         Modifier
             .size(BandPolicy.BAND_HEIGHT.dp)
             .bandGround(CircleShape)
+            // A key standing alone (a locked Locker) wears the board's faint hairline too.
+            .then(if (alone) Modifier.border(CentraidGeometry.HAIRLINE.dp, Surface.border, CircleShape) else Modifier)
             .bandPress(onPress)
             .testTag(testTag)
             .semantics {
