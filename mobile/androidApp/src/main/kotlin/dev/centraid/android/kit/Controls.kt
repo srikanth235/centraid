@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,10 +124,10 @@ public fun KitChip(
 }
 
 /**
- * A SEGMENTED CONTROL: one of two to four views, in the band plate's grammar
- * (Band.kt) so a view switch and a place switch read as the same family. A
- * `bgElev` plate on a `lineStrong` edge, the held `band` -> `control` pair for
- * the label, and a rule under the lit one. [options] are (key, label) pairs.
+ * A SEGMENTED CONTROL, as the boards draw it (the iOS `KitSegmented`'s twin): a pale track
+ * (`Surface.fill`), the lit segment a card on it in the `row` rung's semibold and the ink, the
+ * others the meta ink in the regular weight. The two weights share a size, so a tap never
+ * reflows the track. [options] are (key, label) pairs; the segments share the whole line.
  */
 @Composable
 public fun KitSegmented(
@@ -135,47 +136,41 @@ public fun KitSegmented(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
+    val track = RoundedCornerShape(12.dp)
+    val chip = RoundedCornerShape(10.dp)
     Row(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(centraidColor("bgElev"))
-            .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), shape)
-            .padding(BandPolicy.BAND_PLATE_PAD.dp)
+            .clip(track)
+            .background(Surface.fill)
+            .padding(3.dp)
             .semantics { role = Role.Tab },
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         options.forEach { (key, label) ->
             val lit = key == selected
-            Column(
+            Box(
                 Modifier
                     .weight(1f)
-                    .heightIn(min = 36.dp)
-                    .bandPress({ onSelect(key) })
-                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                    .heightIn(min = 40.dp)
+                    .clip(chip)
+                    .background(if (lit) Surface.card else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable(onClick = { onSelect(key) })
+                    .padding(horizontal = 6.dp)
                     .testTag("kit-segment-$key")
                     .semantics {
                         role = Role.Tab
                         this.selected = lit
                     },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     label,
-                    // THE HELD PAIR: one rung, two weights, no reflow.
-                    style = centraidType(if (lit) "control" else "band", scales = false),
-                    color = centraidColor(if (lit) "text" else "textSoft"),
+                    style = kitTextStyle(KitType.Row).copy(fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (lit) Surface.ink else Surface.meta,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                )
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .size(width = 20.dp, height = 2.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(if (lit) centraidColor("text") else androidx.compose.ui.graphics.Color.Transparent),
                 )
             }
         }

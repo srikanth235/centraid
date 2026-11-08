@@ -108,14 +108,12 @@ struct PhotosEditorView: View {
                 barButton(state.words.cancel, identifier: "photos.editor.cancel", live: isEditing) {
                     send(.cancel(.init()))
                 }
-                VStack(spacing: 2) {
-                    Text(state.title).centraidType("control")
-                        .foregroundStyle(Surface.ink)
-                    Text(data.meta).centraidType("small")
-                        .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
+                Text(state.title)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
                 commit
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -125,10 +123,16 @@ struct PhotosEditorView: View {
                 stage(in: geometry.size)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .padding(8)
-            .background(Theme.color("stage", scheme), in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 8)
+            .padding(.top, 8)
+
+            // THE BOARD'S LINE UNDER THE STAGE: how the crop is moved and resized.
+            Text(state.words.cropHint)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
 
             editBar
         }
@@ -279,43 +283,62 @@ struct PhotosEditorView: View {
 
     private var editBar: some View {
         let editing = isEditing
-        return VStack(alignment: .leading, spacing: 8) {
-            // TWO ORDERLY ROWS, every tool the same width: what to do, then what shape.
-            HStack(spacing: 6) {
-                // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in,
-                // and pressing it returns the crop to the whole frame.
-                tool(state.words.crop, selected: true, enabled: editing) {
-                    send(.ratio(.with {
-                        $0.ratio = .original
-                        $0.frameRatio = 0
-                    }))
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            // THE SHAPE, as the board draws it: one segmented control (Original, Square, 3 : 2),
+            // the chosen one raised, and the sentence saying what the photograph is now.
+            KitSegmented(
+                options: state.ratios.map { (key: $0.ratio, label: $0.label) },
+                selected: state.ratios.first(where: \.selected)?.ratio ?? .original,
+                identifier: "photos.editor.ratio",
+                fills: true
+            ) { ratio in
+                guard editing else { return }
+                send(.ratio(.with {
+                    $0.ratio = ratio
+                    $0.frameRatio = frameRatio
+                }))
+            }
+            .disabled(!editing)
+            if !state.statusLine.isEmpty {
+                Text(state.statusLine)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityIdentifier("photos.editor.status")
+            }
+            // STRAIGHTEN is one degree a press (the core's step), on a card of its own.
+            Button {
+                guard editing else { return }
+                send(.straighten(.init()))
+            } label: {
+                Text(state.straightenLabel)
+                    .kitType(.row)
+                    .foregroundStyle(editing ? Surface.ink : Surface.meta)
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!editing)
+            .accessibilityIdentifier("photos.editor.straighten")
+            // THE THREE KEYS, equal and white: turn, mirror, start over.
+            HStack(spacing: 8) {
                 tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
-                tool(state.straightenLabel, enabled: editing) { send(.straighten(.init())) }
                 tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
                     send(.flip(.init()))
-                }
-            }
-            HStack(spacing: 6) {
-                ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
-                    // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the
-                    // absence of a ratio.
-                    tool(
-                        ratio.label,
-                        selected: ratio.selected && ratio.ratio != .original,
-                        enabled: editing
-                    ) {
-                        send(.ratio(.with {
-                            $0.ratio = ratio.ratio
-                            $0.frameRatio = frameRatio
-                        }))
-                    }
                 }
                 tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
             }
             Text(state.words.saveExplanation)
-                .centraidType("small")
+                .kitType(.meta)
                 .foregroundStyle(Surface.meta)
+            // WHERE IT CAME FROM, the board's last line.
+            if case let .data(data)? = state.content, !data.meta.isEmpty {
+                Text(data.meta)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
             // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and
             // a save that did not land says so in the same place.
             if let refusal = refusalLine {
@@ -323,13 +346,6 @@ struct PhotosEditorView: View {
                     .centraidType("small")
                     .foregroundStyle(Surface.ink)
                     .accessibilityIdentifier("photos.editor.refusal")
-            }
-            // THE ONE STATUS LINE, drawn when there is something to say.
-            if !state.statusLine.isEmpty {
-                Text(state.statusLine)
-                    .centraidType("small")
-                    .foregroundStyle(Surface.meta)
-                    .accessibilityIdentifier("photos.editor.status")
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
