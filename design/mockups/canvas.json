@@ -1394,22 +1394,6 @@
       "x": 0,
       "y": 1160
     },
-    "RestoreDone.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Restore done, one vault stayed",
-      "w": 390,
-      "x": 1410,
-      "y": 1160
-    },
-    "RestoreDoneDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "4 · Restore done, one vault stayed · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 1160
-    },
     "RestoreHeld.dc.html": {
       "h": 844,
       "page": "light",
@@ -2045,7 +2029,6 @@
     "RecoveryKey.dc.html",
     "RestoreWords.dc.html",
     "RestoreHeld.dc.html",
-    "RestoreDone.dc.html",
     "FirstImports.dc.html",
     "BackupSettingsEnd.dc.html",
     "PairDevice.dc.html",
@@ -2140,7 +2123,6 @@
     "RecoveryKeyDark.dc.html",
     "RestoreWordsDark.dc.html",
     "RestoreHeldDark.dc.html",
-    "RestoreDoneDark.dc.html",
     "FirstImportsDark.dc.html",
     "BackupSettingsEndDark.dc.html",
     "PairDeviceDark.dc.html",

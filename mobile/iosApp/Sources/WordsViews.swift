@@ -26,7 +26,7 @@ import UIKit
 //    keyboard and carries no `textContentType`, so the words do not land in a
 //    keyboard's dictionary or AutoFill.
 //
-// THE LOOK (#1173, the RecoveryKey, RestoreWords, RestoreHeld and RestoreDone boards): a page
+// THE LOOK (#1173, the RecoveryKey, RestoreWords and RestoreHeld boards): a page
 // of cards in the shell's teal. The words are white chips in three columns, a notice is a
 // tinted callout, the leave control is a round X, and the answers sit at the foot in one
 // stack: a tonal verb, then the ink one.
@@ -147,7 +147,6 @@ struct WordsEntryView: View {
     @State private var photo: PhotosPickerItem?
 
     private var held: Bool { !state.heldFound.isEmpty }
-    private var done: Bool { state.phase == .done }
 
     var body: some View {
         let working = state.phase == .working
@@ -162,16 +161,7 @@ struct WordsEntryView: View {
                 identifier: "words-enter",
                 dismissesKeyboard: true
             ) {
-                // THE RESULT OF A RESTORE has its own head: a round mark over a centred title.
-                if done, !state.restored.isEmpty || !state.stayed.isEmpty {
-                    WordsResultHead(
-                        iconKey: state.stayed.isEmpty ? "Check" : "Refresh",
-                        title: state.title,
-                        lead: state.body
-                    )
-                } else {
-                    WordsHead(title: state.title, lead: state.body)
-                }
+                WordsHead(title: state.title, lead: state.body)
 
                 // A HELD KEY IS ALREADY HERE: say so, and where it came from.
                 if held {
@@ -276,11 +266,6 @@ struct WordsEntryView: View {
                     KitSpinner(label: state.progress)
                         .accessibilityIdentifier("words-progress")
                 }
-
-                // WHAT CAME BACK AND WHAT STAYED, one card.
-                if !state.restored.isEmpty || !state.stayed.isEmpty {
-                    WordsResultCard(restored: state.restored, stayed: state.stayed)
-                }
             } footer: {
                 // LEAVE THE HELD SEED for the grid: a link, then the scan, then the verb.
                 if !state.wordsLabel.isEmpty {
@@ -295,11 +280,6 @@ struct WordsEntryView: View {
                         startScan()
                     }
                     .disabled(working)
-                }
-                if !state.retryLabel.isEmpty {
-                    WordsTonalButton(label: state.retryLabel, identifier: "words-retry") {
-                        send(Self.event { $0.retry = .init() })
-                    }
                 }
                 if !state.primaryLabel.isEmpty {
                     KitInkButton(label: state.primaryLabel) {
@@ -477,120 +457,6 @@ private struct WordsHeldKeys: View {
             }
         }
         .kitCard()
-    }
-}
-
-/// The result of a restore: a round mark over a centred title. A restore with a vault that
-/// stayed wears the refresh mark, one that brought everything back the check.
-private struct WordsResultHead: View {
-    let iconKey: String
-    let title: String
-    let lead: String
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let accent = AppAccent.shell
-        VStack(spacing: 12) {
-            CentraidIconView(iconKey: iconKey, tint: accent.text, size: 26)
-                .frame(width: 60, height: 60)
-                .background(accent.wash(dark: scheme == .dark), in: Circle())
-                .accessibilityHidden(true)
-            Text(title)
-                .kitType(.title)
-                .foregroundStyle(Surface.ink)
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("words-title")
-            if !lead.isEmpty {
-                Text(lead)
-                    .kitType(.row)
-                    .foregroundStyle(Surface.body)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-/// WHAT CAME BACK AND WHAT STAYED (`restored`, `stayed`): one white card. Each restored vault
-/// is a check, its line, and its safety number large and grouped so it can be read against the
-/// backup device's; each vault that stayed with the other phone is the machine's sentence behind
-/// an amber mark — "not yet, and not wrong", since the vault is safe where it is
-/// (product-intuition/references/design-behaviour.md § Colour).
-private struct WordsResultCard: View {
-    let restored: [Centraid_Core_V1_RestoredVaultLine]
-    let stayed: [String]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(restored.enumerated()), id: \.offset) { at, line in
-                row(at: at) {
-                    WordsResultMark(state: .green, iconKey: "Check")
-                } content: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(line.line)
-                            .kitType(.row)
-                            .foregroundStyle(Surface.ink)
-                        if !line.safetyNumber.isEmpty {
-                            Text(line.safetyNumber)
-                                .centraidType("display")
-                                .foregroundStyle(Surface.ink)
-                                .accessibilityIdentifier("words-safety-number")
-                            Text(line.safetyLabel)
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .accessibilityElement(children: .combine)
-            }
-            ForEach(Array(stayed.enumerated()), id: \.offset) { at, line in
-                row(at: restored.count + at) {
-                    WordsResultMark(state: .amber, iconKey: "AlertCircle")
-                } content: {
-                    Text(line)
-                        .kitType(.row)
-                        .foregroundStyle(Surface.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("words-stayed-\(at)")
-            }
-        }
-        .kitCard()
-    }
-
-    private func row<Mark: View, Content: View>(
-        at: Int,
-        @ViewBuilder mark: () -> Mark,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(spacing: 0) {
-            if at > 0 {
-                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
-            }
-            HStack(alignment: .top, spacing: 12) {
-                mark()
-                content().frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(12)
-        }
-    }
-}
-
-/// A round state mark on a pale ground: a check for a vault that is back, a bang for one that
-/// stayed.
-private struct WordsResultMark: View {
-    let state: StateColor
-    let iconKey: String
-
-    var body: some View {
-        CentraidIconView(iconKey: iconKey, tint: state.text, size: 14)
-            .frame(width: 28, height: 28)
-            .background(state.tint, in: Circle())
-            .accessibilityHidden(true)
     }
 }
 

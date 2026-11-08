@@ -42,16 +42,6 @@ catalog! {
     plain rekey_pair_body = ("Type your recovery key's 24 words, then pair with your backup device.", "Type your recovery key's 24 words, then pair with your backup device.");
     plain rekey_primary = ("Use this key", "Use this key");
     plain rekey_title = ("Enter your recovery key", "Enter your recovery key");
-    plain restored_line_many = ("Vault {index}: {rows} rows.", "Vault {index}: {rows} rows.");
-    plain restored_line_none = ("Vault {index}.", "Vault {index}.");
-    plain restored_line_one = ("Vault {index}: 1 row.", "Vault {index}: 1 row.");
-    plain restored_missing = ("Your backup device has no backup of {name}.", "Your backup device has no backup of {name}.");
-    plain restored_safety = ("Check this number matches the one your backup device shows for this vault.", "Check this number matches the one your backup device shows for this vault.");
-    plain restored_some_title = ("Some of your vaults are back", "Some of your vaults are back");
-    plain restored_stayed = ("Vault {index} stayed on your other phone. Your backup device wouldn't hand it over.", "Vault {index} stayed on your other phone. Your backup device wouldn't hand it over.");
-    plain restored_stayed_body = ("Keep your other phone for now. Try again to bring those vaults here.", "Keep your other phone for now. Try again to bring those vaults here.");
-    plain restored_stayed_retry = ("Try again", "Try again");
-    plain restored_title = ("Your vaults are back", "Your vaults are back");
     plain restore_body = ("Type your recovery key and paste a pairing code from your backup device.", "Type your recovery key and paste a pairing code from your backup device.");
     plain restore_did_not_check = ("The restore failed a check, so nothing changed. Try again.", "The restore failed a check, so nothing changed. Try again.");
     plain restore_first_action = ("Restore my vaults", "Restore my vaults");
@@ -67,7 +57,6 @@ catalog! {
     plain restore_nothing_held = ("Your backup device has no backup for that recovery key. Check it's the right one.", "Your backup device has no backup for that recovery key. Check it's the right one.");
     plain restore_not_taken = ("Your backup device refused the restore. Try again, and check it's the one you paired.", "Your backup device refused the restore. Try again, and check it's the one you paired.");
     plain restore_primary = ("Restore", "Restore");
-    plain restore_stayed_still = ("Your backup device still won't hand it over. It stays on your other phone.", "Your backup device still won't hand it over. It stays on your other phone.");
     plain restore_title = ("Restore with your recovery key", "Restore with your recovery key");
     plain restore_unreachable = ("Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.", "Couldn't reach your backup device. Check “centraid-gateway serve” is running, or paste a new pairing code.");
     plain restoring = ("Looking for your backup device…", "Looking for your backup device…");

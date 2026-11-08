@@ -24,9 +24,6 @@
 //!   Q-1047-18): a seed that arrived through the synchronised keychain restores
 //!   exactly what its words would. Nothing new is stored; the seed is settled
 //!   once the gateway brought something back.
-//! * **Asking again for what stayed** ([`Job::stayed`], R-1047-R6): the vaults
-//!   a restore named as staying with the old phone, by index, from the seed
-//!   that restore stored. The vaults already here are never laid down again.
 //! * **A vault on its own words** ([`Job::keep_own`], then [`Job::make`] with
 //!   its entry, R-1047-E18): the seed is kept under an entry of its own, never
 //!   the member's slot, before the vault is founded on it at index 0.
@@ -42,7 +39,7 @@ use std::fmt;
 
 use centraid_api_proto::core_v1 as wire;
 
-use super::door::{self, RestoreAnswer, RestoreRefusal, Source, UnclaimedVaultAt};
+use super::door::{self, RestoreAnswer, RestoreRefusal, Source};
 use super::keeper::{Found, Keeper, Restored as HeldAt};
 use super::secrets::{self, OwnSeedWrite, SeedWrite, VaultSecrets, WORDS};
 use crate::screen::Ctx;
@@ -413,7 +410,6 @@ enum Flow {
     Make(Make),
     Restore(Box<RestoreJob>),
     Held(Held),
-    Stayed(Stayed),
     Rekey(RekeyJob),
     Reload(bool),
     Write(Option<Vec<wire::SecretOp>>),
@@ -497,30 +493,6 @@ impl Job {
         }))
     }
 
-    /// Ask again for the vaults a restore named as staying.
-    #[must_use]
-    pub fn stayed(stayed: &[UnclaimedVaultAt], payload: &str) -> Self {
-        // ONE ASK PER SEED: the member's indices under the member's seed, a
-        // vault on its own words under its entry's (R-1047-E18). In the order
-        // each first appeared.
-        let mut groups: Vec<(Option<String>, Vec<u32>)> = Vec::new();
-        for vault in stayed {
-            match groups.iter_mut().find(|(own, _)| *own == vault.own) {
-                Some((_, indices)) => indices.push(vault.index),
-                None => groups.push((vault.own.clone(), vec![vault.index])),
-            }
-        }
-        Self(Flow::Stayed(Stayed {
-            payload: payload.trim().to_owned(),
-            stage: StayedStage::Start,
-            groups,
-            at: 0,
-            answers: Vec::new(),
-            refusal: None,
-            added: 0,
-        }))
-    }
-
     /// Hand the words back to this phone's vaults.
     #[must_use]
     pub fn rekey(words: Vec<String>) -> Self {
@@ -551,7 +523,6 @@ impl Job {
             Flow::Make(job) => job.step(env, reply),
             Flow::Restore(job) => job.step(env, reply),
             Flow::Held(job) => job.step(env, reply),
-            Flow::Stayed(job) => job.step(env, reply),
             Flow::Rekey(job) => job.step(env, reply),
             Flow::Reload(asked) => {
                 if *asked {
@@ -940,92 +911,6 @@ impl Held {
             answer: RestoreAnswer::merged(std::mem::take(&mut self.answers)),
             added: self.added,
             missing: std::mem::take(&mut self.missing),
-        })
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum StayedStage {
-    Start,
-    Loaded,
-    Asked,
-}
-
-struct Stayed {
-    payload: String,
-    stage: StayedStage,
-    groups: Vec<(Option<String>, Vec<u32>)>,
-    at: usize,
-    answers: Vec<RestoreAnswer>,
-    refusal: Option<Restored>,
-    added: usize,
-}
-
-impl Stayed {
-    fn step(&mut self, env: &Env, reply: Option<Reply>) -> Step<Out> {
-        let mut reply = reply;
-        loop {
-            match self.stage {
-                StayedStage::Start => {
-                    self.stage = StayedStage::Loaded;
-                    return Step::Ask(Ask::Secrets(VaultSecrets::load_ops()));
-                }
-                StayedStage::Loaded => {
-                    let Some((own, indices)) = self.groups.get(self.at).cloned() else {
-                        return self.finish();
-                    };
-                    let seed = match &own {
-                        Some(id) => env.secrets.own_seed(id),
-                        None => env.secrets.seed(),
-                    };
-                    let request = seed.and_then(|seed| {
-                        door::restore_request(&Source::Stayed(seed, indices), &self.payload)
-                    });
-                    let Some(request) = request else {
-                        self.refusal
-                            .get_or_insert(Restored::Refused(Refusal::NotAPhrase));
-                        self.at += 1;
-                        continue;
-                    };
-                    self.stage = StayedStage::Asked;
-                    return Step::Ask(Ask::Restore(request));
-                }
-                StayedStage::Asked => {
-                    let result = match reply.take() {
-                        Some(Reply::Restored(result)) => result,
-                        _ => Err(RestoreRefusal::Unreachable),
-                    };
-                    let own = self.groups[self.at].0.clone();
-                    self.at += 1;
-                    self.stage = StayedStage::Loaded;
-                    match result {
-                        Ok(answer) if !answer.vaults.is_empty() => {
-                            let tagged = match &own {
-                                Some(id) => answer.tagged_own(id),
-                                None => answer,
-                            };
-                            let ask = adopt(env, &tagged, &mut self.added);
-                            self.answers.push(tagged);
-                            return Step::Ask(ask);
-                        }
-                        Ok(_) => {}
-                        Err(why) => {
-                            self.refusal.get_or_insert(stopped(why));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn finish(&mut self) -> Step<Out> {
-        if self.answers.is_empty() {
-            return done(self.refusal.take().unwrap_or(Restored::NothingHeld));
-        }
-        done(Restored::Done {
-            answer: RestoreAnswer::merged(std::mem::take(&mut self.answers)),
-            added: self.added,
-            missing: Vec::new(),
         })
     }
 }
