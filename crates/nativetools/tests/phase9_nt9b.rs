@@ -736,7 +736,7 @@ fn an_unknown_field_another_kind_has_names_those_kinds() {
         "find",
         json!({"kind": "task", "where": "colour = red"}),
     );
-    assert!(says(&none).ends_with("description."), "{none}");
+    assert!(says(&none).ends_with("description, starred."), "{none}");
 }
 
 #[test]

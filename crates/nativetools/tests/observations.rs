@@ -6,7 +6,7 @@ mod common;
 use common::{call, seeded, text};
 use serde_json::json;
 
-const CARD: &str = "[task: date (due), status, effort, priority, completed, description]";
+const CARD: &str = "[task: date (due), status, effort, priority, completed, description, starred]";
 
 #[test]
 fn the_observations_read_exactly_as_specified() {

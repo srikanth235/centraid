@@ -932,6 +932,7 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     if let Some(rule) = text(input, "rule") {
         row.extra.insert("rrule", rule.to_owned());
     }
+    row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
     if let Some(parent) = text(input, "parent_id") {
         edge(

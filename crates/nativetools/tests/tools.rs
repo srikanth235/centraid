@@ -418,7 +418,7 @@ fn recovery_observations_name_what_exists() {
     );
     assert_eq!(
         error,
-        "error: tasks have no field \"due_on\". task fields: date, status, effort, priority, completed, description. For that use date."
+        "error: tasks have no field \"due_on\". task fields: date, status, effort, priority, completed, description, starred. For that use date."
     );
 }
 

@@ -2439,6 +2439,11 @@
           "name": "description",
           "type": "text",
           "source": ["task", "description"]
+        },
+        {
+          "name": "starred",
+          "type": "bool",
+          "source": ["edge", "to_id"]
         }
       ],
       "links": [

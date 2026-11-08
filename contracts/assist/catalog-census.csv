@@ -23,6 +23,11 @@ agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/op
 agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
+agenda,star-task,star,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
+agenda,unstar-task,unstar,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
+agenda,create-calendar,create:kind,list,direct,no,no
+agenda,style-container,edit:color,list,direct,no,no
+agenda,record-calendar-push,import:items,event,card,yes: crates/screens/src/agenda/calendar.rs,no
 docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
 docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
 docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
@@ -35,6 +40,7 @@ docs,star,star,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates
 docs,unstar,unstar,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
 docs,tag,tag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
 docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,recolor-label,edit,document,card,no,no
 docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
 docs,replace,edit:content,document,card,no,no
 docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions.rs,no

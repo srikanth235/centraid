@@ -386,7 +386,7 @@ impl World {
         let flags = Flags::load(door)?;
         world.load_people(door, &flags)?;
         world.load_events(door, at)?;
-        world.load_tasks(door)?;
+        world.load_tasks(door, &flags)?;
         world.load_photos(door, &flags)?;
         world.load_notes(door, &flags)?;
         world.load_containers(door)?;
@@ -637,7 +637,7 @@ impl World {
         }
     }
 
-    fn load_tasks(&mut self, door: &dyn Door) -> Result<(), String> {
+    fn load_tasks(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
         let entities = entities(door, "task")?;
         let tasks = door.table(
             "task",
@@ -678,6 +678,7 @@ impl World {
                 "description",
                 nonempty(text(task, "description")),
             );
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let mut row = Row::of(Kind::Task, &id, entity, fields);
             row.date = stamp(text(task, "due"));
             if let Some(rule) = text(task, "rule") {

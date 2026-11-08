@@ -247,6 +247,48 @@
       "verb": "untag"
     },
     {
+      "action": "star-task",
+      "app": "agenda",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unstar-task",
+      "app": "agenda",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "create-calendar",
+      "app": "agenda",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "name"
+      ],
+      "qualifier": "kind",
+      "verb": "create"
+    },
+    {
+      "action": "style-container",
+      "app": "agenda",
+      "command": "container.style",
+      "id_param": "id",
+      "kind": "list",
+      "names": [],
+      "qualifier": "color",
+      "verb": "edit"
+    },
+    {
       "action": "create-text",
       "app": "docs",
       "command": "document.create_text",
@@ -1583,6 +1625,96 @@
         "verb": "import"
       },
       {
+        "action": "star-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unstar-task",
+        "kind": "task",
+        "phrasings": [
+          "star the plumber task",
+          "flag the taxes",
+          "mark buy milk as flagged"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unstar-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "star-task",
+        "kind": "task",
+        "phrasings": [
+          "unstar the plumber task",
+          "take the flag off the taxes",
+          "unflag buy milk"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "create-calendar",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": "delete-task",
+        "kind": "list",
+        "phrasings": [
+          "make a calendar called Family",
+          "create a calendar named Work",
+          "start a new calendar for the kids' school"
+        ],
+        "qualifier": "kind",
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "style-container",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "container.style",
+        "inverse": "style-container",
+        "kind": "list",
+        "phrasings": [
+          "make the Errands list blue",
+          "give the Family calendar a heart icon",
+          "change the colour of my Work calendar"
+        ],
+        "qualifier": "color",
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "record-calendar-push",
+        "also": [],
+        "app": "agenda",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.pushed",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "record what was written back to my phone's calendar",
+          "mark these events as pushed to the phone",
+          "note which events the phone's calendar now holds"
+        ],
+        "qualifier": "items",
+        "sealed": [],
+        "verb": "import"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "docs",
@@ -1799,6 +1931,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "untag"
+      },
+      {
+        "action": "recolor-label",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "tag.color",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "make the taxes label blue",
+          "change the colour of the travel label to orchid",
+          "give the receipts label a raspberry colour"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
       },
       {
         "action": "edit",
@@ -4142,10 +4292,44 @@
       {
         "app": "agenda",
         "figures": [
+          "groups"
+        ],
+        "kind": "task",
+        "query": "reminders"
+      },
+      {
+        "app": "agenda",
+        "figures": [
           "tasks"
         ],
         "kind": "task",
         "query": "trash"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "today",
+          "overdue",
+          "flagged"
+        ],
+        "kind": "task",
+        "query": "smart-counts"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "tasks"
+        ],
+        "kind": "task",
+        "query": "due-rows"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "attachments"
+        ],
+        "kind": "event",
+        "query": "attachments"
       },
       {
         "app": "docs",
@@ -4858,7 +5042,7 @@
       ]
     },
     {
-      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag",
+      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "due",
@@ -4931,6 +5115,16 @@
           "type": "text",
           "unit": null,
           "values": []
+        },
+        {
+          "name": "starred",
+          "source": {
+            "column": "to_id",
+            "table": "edge"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
         }
       ],
       "kind": "task",
@@ -4969,6 +5163,8 @@
         "cancel",
         "delete",
         "restore",
+        "star",
+        "unstar",
         "add_to",
         "remove_from",
         "tag",
@@ -4979,7 +5175,8 @@
         "effort",
         "priority",
         "completed",
-        "description"
+        "description",
+        "starred"
       ]
     },
     {
@@ -6065,6 +6262,7 @@
     "account.edit",
     "category.add",
     "container.create",
+    "container.style",
     "document.create_text",
     "document.move",
     "edge.add",
@@ -6473,6 +6671,10 @@
           "flag.set"
         ],
         [
+          "task",
+          "flag.set"
+        ],
+        [
           "note",
           "flag.set"
         ],
@@ -6499,6 +6701,10 @@
       "commands": [
         [
           "person",
+          "flag.clear"
+        ],
+        [
+          "task",
           "flag.clear"
         ],
         [
