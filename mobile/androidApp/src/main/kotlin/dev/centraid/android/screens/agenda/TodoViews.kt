@@ -100,6 +100,9 @@ internal fun TodoRowView(
     idPrefix: String = "tasks-row",
     indent: Dp = 0.dp,
     menu: TodoRowMenu? = null,
+    /** False where the long press lifts the row to reorder it, not to open the menu. */
+    menuOnLongPress: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     // THE SWIPE (#1173): Details, Flag and Delete sit behind the row, and the kit's long press opens
     // them plus the menu-only Move up, Move down and Move to project; a row with no `menu` (a subtask, a completed row) is the plain row.
@@ -204,7 +207,9 @@ internal fun TodoRowView(
             }
         }
     }
-    if (swipes) KitSwipeRow(actions = actions, onTap = { row.route?.let(onOpen) }, content = body) else body()
+    Box(modifier) {
+        if (swipes) KitSwipeRow(actions = actions, onTap = { row.route?.let(onOpen) }, menuOnLongPress = menuOnLongPress, content = body) else body()
+    }
     row.children.forEach { child ->
         TodoRowView(child, onCheck, onOpen, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent)
     }
@@ -303,6 +308,8 @@ internal fun LazyListScope.todoGroups(
     fileVerb: String = "",
     idPrefix: String = "tasks-row",
     menu: TodoRowMenu? = null,
+    /** Where rows reorder by dragging (the project page); the menu's Move up and down stay for a screen reader. */
+    reorder: TodoReorderState? = null,
 ) {
     groups.forEach { group ->
         item(key = "group-${group.key}") {
@@ -322,11 +329,16 @@ internal fun LazyListScope.todoGroups(
                 )
             }
         }
+        val ids = group.rows.map { r -> r.task_id }
+        val rowKey = { id: String -> "row-${group.key}-$id" }
         group.rows.forEach { row ->
-            item(key = "row-${group.key}-${row.task_id}") {
+            item(key = rowKey(row.task_id)) {
+                val drag = reorder?.takeIf { menu?.onMove != null && !row.subtask }
                 TodoRowView(
                     row, onCheck, onOpen, onFile, fileVerb, idPrefix = idPrefix,
-                    menu = menu?.let { TodoRowMenu(it.chrome, it.onFlag, it.onDelete, it.onMove, group.rows.map { r -> r.task_id }) },
+                    menu = menu?.let { TodoRowMenu(it.chrome, it.onFlag, it.onDelete, it.onMove, ids) },
+                    menuOnLongPress = drag == null,
+                    modifier = if (drag != null) Modifier.todoReorderable(drag, rowKey(row.task_id), row.task_id, ids, rowKey) else Modifier,
                 )
             }
         }
