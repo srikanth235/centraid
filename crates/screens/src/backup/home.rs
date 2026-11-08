@@ -36,6 +36,7 @@ use super::rule::{self, TransferRule};
 use super::{apps, line, routes};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Reading, failure};
+use crate::pairing::discovery::Rediscovery;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, backup as words, backup_home, fill};
 
@@ -101,6 +102,14 @@ struct Backup {
     /// The platform's reading of its synchronised store; `None` before it says.
     synced: Option<wire::SyncedSecretsStatus>,
     backing_up_now: bool,
+    /// The browse for a gateway that moved to another address (#1080): on while the core says
+    /// items wait for a backup device that does not answer, and only while this page is in front.
+    rediscovery: Rediscovery,
+    /// The app is in front. A browse is foreground work.
+    foreground: bool,
+    /// A browse found the gateway and the core kept its new address: it is not browsed for again
+    /// until this page opens anew (the next pass is what reaches it).
+    found: bool,
     notice: Notice,
     /// Secret batches wait their turn: one in flight at a time, so an answer
     /// finds its job.
@@ -120,6 +129,9 @@ impl Backup {
             registered: None,
             synced: None,
             backing_up_now: false,
+            rediscovery: Rediscovery::default(),
+            foreground: true,
+            found: false,
             notice: Notice::None,
             in_flight: None,
             waiting: VecDeque::new(),
@@ -301,8 +313,11 @@ impl Backup {
 
     fn open(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.notice = Notice::None;
+        self.foreground = true;
+        self.found = false;
         self.read(ctx);
         let mut effects = self.run(Job::Load);
+        effects.extend(self.rediscover());
         effects.push(wire::Effect {
             kind: Some(wire::effect::Kind::SyncedProbe(wire::SyncedSecretsProbe {})),
         });
@@ -312,6 +327,26 @@ impl Backup {
             )),
         });
         effects
+    }
+
+    /// A PAIRED GATEWAY THAT DOES NOT ANSWER AT THE ADDRESS THE LEDGER KEPT is looked for on the
+    /// local network. The core says so itself: items wait for `WaitReason::Gateway` (the last pass
+    /// reached no paired gateway). The browse is on for exactly as long as that is true, this page
+    /// is in front and the app is in the foreground; the matching, and the core's check that the
+    /// machine at a new address is that gateway, are `pairing::discovery`'s.
+    fn rediscover(&mut self) -> Vec<wire::Effect> {
+        let lost = self.foreground
+            && !self.found
+            && !self.frozen()
+            && !self.destinations().is_empty()
+            && self
+                .reading()
+                .is_some_and(|reading| reading.waiting_for(wire::WaitReason::Gateway) > 0);
+        if lost {
+            self.rediscovery.start()
+        } else {
+            self.rediscovery.stop()
+        }
     }
 
     fn back_up_now(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -452,6 +487,13 @@ impl Backup {
             }
             Some(O::BackgroundStatus(status)) => {
                 self.registered = Some(status.registered);
+                Vec::new()
+            }
+            // A WINDOW OF THE BROWSE: what the local network advertised. Each sighting that is a
+            // recorded gateway (by its id, not its address) is offered to the core, which dials
+            // it with the pinned certificate and keeps only an address that answers as that gateway.
+            Some(O::GatewaysSighted(sighted)) => {
+                self.rediscovery.sighted(ctx, &sighted);
                 Vec::new()
             }
             // A SHELL THAT COULD NOT GIVE THE PHONE'S SETTINGS gives the defaults, which
@@ -805,7 +847,7 @@ impl Screen for Backup {
             // another look: read again.
             Some(E::DataChanged(_)) => {
                 self.read(ctx);
-                Vec::new()
+                self.rediscover()
             }
             Some(E::TimerFired(fired)) if fired.timer == PROGRESS_TIMER => {
                 if self.backing_up_now {
@@ -818,8 +860,24 @@ impl Screen for Backup {
             // have been turned off meanwhile, and the key is read from the stores
             // each time.
             Some(E::Lifecycle(lifecycle)) if lifecycle.foreground => self.open(ctx),
+            // A BROWSE IS FOREGROUND WORK: it ends with the app's front, and with this page.
+            Some(E::Lifecycle(_)) => {
+                self.foreground = false;
+                self.rediscovery.stop()
+            }
+            Some(E::Left(_)) => self.rediscovery.stop(),
             Some(E::EffectResult(result)) => self.on_result(result, ctx),
             Some(E::OffThreadDone(done)) => {
+                // THE CORE'S ANSWER TO AN OFFERED ADDRESS: a kept one ends the browse (the next
+                // pass dials it); a refused one leaves the browse on for the next window.
+                if self.rediscovery.heard(&done) {
+                    if self.rediscovery.refreshed() > 0 && self.rediscovery.pending() == 0 {
+                        self.found = true;
+                        self.read(ctx);
+                        return self.rediscover();
+                    }
+                    return Vec::new();
+                }
                 self.job_done(&done, ctx);
                 Vec::new()
             }
