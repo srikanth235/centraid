@@ -132,13 +132,15 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
         val masterId = row.originalId ?: row.eventId
         val own = series[masterId]
         val moved = own != null && row.originalId != null
+        val (notes, url) = CalendarLink.split(row.notes)
         if (row.allDay) {
             // ALL-DAY INSTANCES ARE UTC MIDNIGHTS in `CalendarContract`, END
             // exclusive: the first day is BEGIN's UTC date and the last day,
             // inclusive as `PhoneCalendarEvent` keeps it, is the millisecond before END's.
             PhoneCalendarEvent(
                 title = row.title,
-                notes = row.notes,
+                notes = notes,
+                url = url,
                 all_day = true,
                 start = utcDay(row.begin),
                 end = utcDay(maxOf(row.begin, row.end - 1)),
@@ -160,7 +162,8 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
             val zone = zoneOf(row.zone, device)
             PhoneCalendarEvent(
                 title = row.title,
-                notes = row.notes,
+                notes = notes,
+                url = url,
                 start = wallClock(row.begin, zone),
                 end = wallClock(row.end, zone),
                 tz = zone.id,

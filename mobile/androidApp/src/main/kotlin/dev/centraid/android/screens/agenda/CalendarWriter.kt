@@ -36,7 +36,9 @@ import java.util.TimeZone
  * - **A create** answers the new `Events._ID` in the id form the read uses (`PhoneOrigins.eventId`).
  * - **A delete** compares the phone's copy with what the core last saw and, when the member changed
  *   it since, deletes nothing and answers `ok: true, phone_kept: true`.
- * - `CalendarContract` has no address column, so an event's `url` is not written on this platform.
+ * - `CalendarContract` has no address column, so an event's `url` is the last paragraph of its
+ *   description ([CalendarLink]); the reader splits it out again, so a pass that only reads what it
+ *   wrote changes nothing.
  */
 internal fun performCalendarWrite(context: Context, write: CalendarWrite): CalendarWritten {
     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
@@ -77,7 +79,7 @@ private fun create(resolver: ContentResolver, item: CalendarWriteItem): Calendar
     val values = ContentValues().apply {
         put(CalendarContract.Events.CALENDAR_ID, calendarId)
         put(CalendarContract.Events.TITLE, fields.title)
-        put(CalendarContract.Events.DESCRIPTION, fields.notes)
+        put(CalendarContract.Events.DESCRIPTION, CalendarLink.join(fields.notes, fields.url))
         put(CalendarContract.Events.AVAILABILITY, availability(fields.busy))
         putWhen(whenOf(fields), recurring)
         if (recurring) put(CalendarContract.Events.RRULE, fields.rrule)
@@ -102,7 +104,7 @@ private fun update(resolver: ContentResolver, item: CalendarWriteItem): Calendar
     }
     val values = ContentValues()
     if (fields.states_title) values.put(CalendarContract.Events.TITLE, fields.title)
-    if (fields.states_notes) values.put(CalendarContract.Events.DESCRIPTION, fields.notes)
+    describe(fields, current.notes)?.let { values.put(CalendarContract.Events.DESCRIPTION, it) }
     if (fields.states_busy) values.put(CalendarContract.Events.AVAILABILITY, availability(fields.busy))
     if (fields.states_when || fields.states_rrule) {
         val moment = if (fields.states_when) whenOf(fields) else current.moment()
@@ -116,6 +118,16 @@ private fun update(resolver: ContentResolver, item: CalendarWriteItem): Calendar
     return done
 }
 
+/**
+ * THE DESCRIPTION AN UPDATE WRITES: the notes and the link, each from [fields] where it states it and
+ * from the phone's [stored] description where it does not. Null when it states neither.
+ */
+private fun describe(fields: CalendarWriteFields, stored: String): String? {
+    if (!fields.states_notes && !fields.states_url) return null
+    val (notes, url) = CalendarLink.split(stored)
+    return CalendarLink.join(if (fields.states_notes) fields.notes else notes, if (fields.states_url) fields.url else url)
+}
+
 /** ONE DAY OF A SERIES: its exception row, found or made, changed or cancelled. */
 private fun updateDay(resolver: ContentResolver, item: CalendarWriteItem, fields: CalendarWriteFields, masterId: Long, master: Current) {
     val zone = TimeZone.getTimeZone(master.zone)
@@ -126,7 +138,7 @@ private fun updateDay(resolver: ContentResolver, item: CalendarWriteItem, fields
         values.put(CalendarContract.Events.STATUS, CalendarContract.Events.STATUS_CANCELED)
     } else {
         if (fields.states_title) values.put(CalendarContract.Events.TITLE, fields.title)
-        if (fields.states_notes) values.put(CalendarContract.Events.DESCRIPTION, fields.notes)
+        describe(fields, master.notes)?.let { values.put(CalendarContract.Events.DESCRIPTION, it) }
         if (fields.states_busy) values.put(CalendarContract.Events.AVAILABILITY, availability(fields.busy))
         // AN EXCEPTION NEEDS ITS OWN TIMES: the moved ones, else the day's own at the series' length.
         val moment = if (fields.states_when) {
@@ -156,7 +168,7 @@ private fun delete(resolver: ContentResolver, item: CalendarWriteItem): Calendar
     val current = readCurrent(resolver, id) ?: return CalendarWrittenItem(event_id = item.event_id, ok = true)
     // THE MEMBER CHANGED IT ON THE PHONE SINCE THE CORE LAST SAW IT: leave it alone, and say so.
     val expected = item.expected
-    if (expected != null && current.differsFrom(expected.title, expected.notes, expected.start, expected.end)) {
+    if (expected != null && current.differsFrom(expected.title, expected.notes, expected.url, expected.start, expected.end)) {
         return CalendarWrittenItem(event_id = item.event_id, ok = true, phone_kept = true)
     }
     resolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), null, null)
@@ -183,13 +195,15 @@ private class Current(
     }
 
     /** True when a stated field of the core's last read differs from this row; an empty one is not stated. */
-    fun differsFrom(expectedTitle: String, expectedNotes: String, expectedStart: String, expectedEnd: String): Boolean {
+    fun differsFrom(expectedTitle: String, expectedNotes: String, expectedUrl: String, expectedStart: String, expectedEnd: String): Boolean {
+        val (phoneNotes, phoneUrl) = CalendarLink.split(notes)
         val tz = TimeZone.getTimeZone(zone)
         val moment = moment()
         val startText = if (allDay) utcDay(moment.start) else wallClock(moment.start, tz)
         val endText = if (allDay) utcDay(maxOf(moment.start, moment.end - DAY_MS)) else wallClock(moment.end, tz)
         return (expectedTitle.isNotEmpty() && expectedTitle != title) ||
-            (expectedNotes.isNotEmpty() && expectedNotes != notes) ||
+            (expectedNotes.isNotEmpty() && expectedNotes != phoneNotes) ||
+            (expectedUrl.isNotEmpty() && expectedUrl != phoneUrl) ||
             (expectedStart.isNotEmpty() && expectedStart != startText) ||
             (expectedEnd.isNotEmpty() && expectedEnd != endText)
     }
