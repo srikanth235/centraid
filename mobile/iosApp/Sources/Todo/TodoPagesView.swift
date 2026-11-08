@@ -58,7 +58,7 @@ struct TodoListView: View {
                     List {
                             if let color = heading {
                                 Text(state.title)
-                                    .centraidType("title")
+                                    .kitType(.title)
                                     .foregroundStyle(color)
                                     .padding(.horizontal, CentraidGeometry.pageMargin)
                                     .accessibilityAddTraits(.isHeader)

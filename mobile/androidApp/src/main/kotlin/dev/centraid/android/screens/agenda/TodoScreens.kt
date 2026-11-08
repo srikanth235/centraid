@@ -28,6 +28,8 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -77,11 +79,11 @@ internal fun TodoListScreen(
                         // THE LARGE TITLE IN THE SMART LIST'S COLOUR (#1173), its date line under it.
                         heading?.let { color ->
                             item(key = "title") {
-                                Text(
+                                KitText(
                                     state.title,
-                                    style = centraidType("title"),
-                                    color = color,
-                                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("tasks-list-title"),
+                                    KitType.Title,
+                                    color,
+                                    Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("tasks-list-title"),
                                 )
                             }
                         }

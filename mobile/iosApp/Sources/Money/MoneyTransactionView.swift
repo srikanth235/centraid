@@ -29,7 +29,9 @@ struct MoneyTransactionView: View {
         let confirmBinding = moneySheetBinding(state.hasConfirm) {
             send(event { $0.confirmDismissed = .init() })
         }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        // THE PAGE HEADS ITSELF with the merchant's name, so the bar carries only the back chevron
+        // (the board draws no small title over it).
+        PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
