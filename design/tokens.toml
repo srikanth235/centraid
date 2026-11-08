@@ -175,8 +175,9 @@ pink = "#F83F6E"
 # these and `[brand]` (design/icon/, the iOS AppIcon set, the Android adaptive
 # icon). `light_edge` is the hairline round the white tile, drawn in the master
 # SVG only (iOS and Android mask their own edge). `tinted_*` is iOS's tinted
-# appearance, which the system recolours: neutral greys only, one step per
-# quarter so the quarters stay apart. `themed_*` is Android's themed icon: one
+# appearance, which the system recolours: ONE neutral grey for the mark (the system
+# maps luminance to its tint, so a second step would only be recoloured oddly); the
+# cuts between the quarters keep them apart. `themed_*` is Android's themed icon: one
 # flat glyph colour, which the system repaints from the wallpaper; the board's
 # colours stand in for the preview.
 [icon]
@@ -184,10 +185,7 @@ light_tile = "#FFFFFF"
 light_edge = "#E4E0D8"
 dark_tile = "#1C1B19"
 tinted_tile = "#1B1B1B"
-tinted_teal = "#C9C9C9"
-tinted_orange = "#D9D9D9"
-tinted_blue = "#BDBDBD"
-tinted_pink = "#A3A3A3"
+tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
 

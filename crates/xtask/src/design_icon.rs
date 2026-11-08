@@ -157,11 +157,12 @@ pub fn palette(tokens: &Tokens, variant: Variant) -> Result<Palette> {
         },
         Variant::Tinted => Palette {
             tile: icon.tinted_tile.clone(),
+            // ONE GREY: the system recolours by luminance, and the cuts keep the quarters apart.
             quarters: [
-                icon.tinted_orange.clone(),
-                icon.tinted_blue.clone(),
-                icon.tinted_pink.clone(),
-                icon.tinted_teal.clone(),
+                icon.tinted_mark.clone(),
+                icon.tinted_mark.clone(),
+                icon.tinted_mark.clone(),
+                icon.tinted_mark.clone(),
             ],
         },
     })
@@ -294,10 +295,14 @@ fn fill_path(colour: &str, data: &str) -> String {
     )
 }
 
-/// The adaptive icon: a 108dp canvas whose visible 72dp is the board's 120 grid,
-/// so the mark keeps the board's proportions inside the 66dp safe circle.
-const ADAPTIVE_SCALE: f64 = 0.6;
-const ADAPTIVE_OFFSET: f64 = 18.0;
+/// The adaptive icon: a 108dp canvas, the mark sized to the 66dp SAFE ZONE at its centre. The
+/// system masks the outer 18dp on every side as it likes (a circle, a squircle), and never clips
+/// the 66dp circle, so the mark's disc (a circle of radius [`RADIUS`] on the board's grid) is
+/// drawn exactly that wide, centred on (54, 54).
+const ADAPTIVE_SAFE_DP: f64 = 66.0;
+const ADAPTIVE_CANVAS_DP: f64 = 108.0;
+const ADAPTIVE_SCALE: f64 = ADAPTIVE_SAFE_DP / (2.0 * RADIUS);
+const ADAPTIVE_OFFSET: f64 = ADAPTIVE_CANVAS_DP / 2.0 - CENTRE * ADAPTIVE_SCALE;
 
 fn adaptive_xml() -> String {
     format!(
@@ -663,16 +668,25 @@ mod tests {
                 .all(|rgb| rgb[0] == rgb[1] && rgb[1] == rgb[2]),
             "a tinted pixel is not neutral"
         );
-        // The four quarters stay apart in it.
-        let greys: std::collections::BTreeSet<_> = [
-            &tokens.icon.tinted_teal,
-            &tokens.icon.tinted_orange,
-            &tokens.icon.tinted_blue,
-            &tokens.icon.tinted_pink,
-        ]
-        .into_iter()
-        .collect();
-        assert_eq!(greys.len(), 4);
+        // IT IS ONE GREY, as iOS expects: the mark's pixels are the tile or the mark and no third
+        // value (the cuts between the quarters, not four greys, keep them apart).
+        let (tile, mark) = (
+            rgb(&tokens.icon.tinted_tile).unwrap_or_default(),
+            rgb(&tokens.icon.tinted_mark).unwrap_or_default(),
+        );
+        let distinct: std::collections::BTreeSet<[u8; 3]> = pixels
+            .chunks(3)
+            .map(|rgb| [rgb[0], rgb[1], rgb[2]])
+            .collect();
+        assert!(distinct.contains(&mark) && distinct.contains(&tile));
+        let flat = pixels
+            .chunks(3)
+            .filter(|rgb| [rgb[0], rgb[1], rgb[2]] == mark || [rgb[0], rgb[1], rgb[2]] == tile)
+            .count();
+        assert!(
+            flat * 100 >= pixels.len() / 3 * 95,
+            "the tinted icon is two flat greys; only edge pixels blend"
+        );
         // Android monochrome: one fill colour on every path.
         let layer = String::from_utf8(
             files[&format!("{ANDROID_RES}/drawable/ic_launcher_monochrome.xml")].clone(),
@@ -689,6 +703,39 @@ mod tests {
         for hex in tokens.brand.values() {
             assert!(!layer.contains(hex.as_str()));
         }
+    }
+
+    #[test]
+    fn the_android_mark_fills_the_adaptive_safe_zone_and_no_more() {
+        // The mark's disc is 66dp across, centred on the 108dp canvas's centre.
+        assert!((2.0 * RADIUS * ADAPTIVE_SCALE - 66.0).abs() < 1e-9);
+        assert!((CENTRE * ADAPTIVE_SCALE + ADAPTIVE_OFFSET - 54.0).abs() < 1e-9);
+        // Every coordinate of the foreground sits inside the safe circle's bounding box
+        // (21..87), and its arcs have the safe circle's radius, 33dp.
+        let layer = String::from_utf8(
+            emitted()[&format!("{ANDROID_RES}/drawable/ic_launcher_foreground.xml")].clone(),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let numbers: Vec<f64> = layer
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("android:pathData=\""))
+            .flat_map(|data| {
+                data.trim_end_matches(['"', ' ', '/', '>'])
+                    .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+                    .filter_map(|n| n.parse::<f64>().ok())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(
+            numbers.contains(&33.0),
+            "no arc has the safe circle's radius"
+        );
+        assert!(
+            numbers
+                .iter()
+                .all(|n| (20.9..=87.1).contains(n) || [0.0, 1.0, 33.0].contains(n)),
+            "the mark leaves the 66dp safe zone: {numbers:?}"
+        );
     }
 
     #[test]
