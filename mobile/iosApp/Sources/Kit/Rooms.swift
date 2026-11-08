@@ -611,7 +611,7 @@ struct SheetRoom<Content: View>: View {
                             // THE APP'S BLUE, as the board's Cancel: a word, no outline.
                             Button(action: outline.action) {
                                 Text(outline.label)
-                                    .centraidType("smallStrong")
+                                    .centraidType("sheetKey")
                                     .foregroundStyle(outline.ink ? Surface.ink : accent.text)
                                     .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                                     .contentShape(Rectangle())
@@ -680,9 +680,9 @@ struct KitInkButton: View {
 
     var body: some View {
         Button(action: action) {
-            // `smallStrong` IS THE SEMIBOLD FACE: `.fontWeight` does not reach a custom face.
+            // `sheetKey` IS THE BOARD'S 16/600: `.fontWeight` does not reach a custom face.
             Text(label)
-                .centraidType("smallStrong")
+                .centraidType("sheetKey")
                 .foregroundStyle(ink)
                 .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {

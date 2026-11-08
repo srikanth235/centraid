@@ -380,6 +380,9 @@ public fun EditorRoom(
     }
 }
 
+/** A sheet's full-width keys (the ink button and the text key under it): the boards draw them 50 tall. */
+private val SHEET_KEY_HEIGHT = 50.dp
+
 /** The one ink button a [SheetRoom] may carry. */
 public data class SheetPrimary(
     val label: String,
@@ -401,6 +404,8 @@ public data class SheetOutline(
     val ink: String = "text",
     /** Drawn as a centred text key in the link ink, no outline (the style sheets' Cancel). */
     val link: Boolean = false,
+    /** With [link]: the word is the page's ink, not the app's (the confirm's Cancel). */
+    val pageInk: Boolean = false,
     val onPress: () -> Unit,
 )
 
@@ -491,12 +496,16 @@ public fun SheetRoom(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .heightIn(min = SHEET_KEY_HEIGHT)
                                     .clickable(onClick = outline.onPress)
                                     .testTag(outline.testTag),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(outline.label, style = centraidType("smallStrong"), color = appAccent().text)
+                                Text(
+                                    outline.label,
+                                    style = centraidType("sheetKey"),
+                                    color = if (outline.pageInk) Surface.ink else appAccent().text,
+                                )
                             }
                         } else {
                             OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
@@ -536,7 +545,7 @@ public fun InkButton(
     Box(
         modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = SHEET_KEY_HEIGHT)
             .clip(shape)
             .then(
                 when {
@@ -556,7 +565,7 @@ public fun InkButton(
     ) {
         Text(
             label,
-            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+            style = centraidType("sheetKey"),
             color = when {
                 !enabled -> meta
                 destructive -> red
