@@ -1,17 +1,12 @@
-//! THE TWO DOORS THAT WAIT ON A GATEWAY, as this screen asks them: forgetting a
-//! gateway (it revokes this phone's token there before it answers) and a pass.
-//! Neither is called inside `update`, which holds the runtime's lock: each runs
-//! off-thread (`Ctx::vault_async`) and its answer comes back as an
-//! `OffThreadDone` carrying the tag below.
+//! THE DOOR THAT WAITS ON A GATEWAY, as this screen asks it: forgetting a gateway (it revokes
+//! this phone's token there before it answers). It is not called inside `update`, which holds the
+//! runtime's lock: it runs off-thread (`Ctx::vault_async`) and its answer comes back as an
+//! `OffThreadDone` carrying the tag below. **A pass is not this screen's door**: "Back up now" is
+//! asked of the pass conductor (`crate::passes`), which runs every pass.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::screens::VaultRequest;
 use prost::Message;
-
-use super::rule::TransferRule;
-
-/// The tag of a pass this screen asked for.
-pub(super) const PASS: &str = "backup.pass";
 
 const FORGET: &str = "backup.forget:";
 
@@ -30,8 +25,6 @@ pub(super) enum Done {
         forgotten: bool,
         revoked: bool,
     },
-    /// The pass ended, however it ended: the ledger says how it went.
-    Pass,
 }
 
 /// The request that forgets `gateway_id`.
@@ -41,31 +34,10 @@ pub(super) fn forget_request(gateway_id: &str) -> VaultRequest {
     })
 }
 
-/// THE MEMBER TAPPED "BACK UP NOW": a snapshot now (`wants_snapshot`) and the
-/// member's own tap (`asked`, the only thing that sets it: under MANUAL it is
-/// what lets originals be sealed). The rule and the videos bit are the ones the
-/// screen shows. **The link is not this screen's to know**: it sends what a shell
-/// that cannot tell sends (metered, not charging), the conservative reading, and
-/// the pass service refines it from the platform's own answer.
-pub(super) fn pass_request(rule: TransferRule, include_videos: bool) -> VaultRequest {
-    VaultRequest::Drain(wire::DrainRequest {
-        deadline_ms: 0,
-        rule: rule.to_wire() as i32,
-        metered: true,
-        charging: false,
-        wants_snapshot: true,
-        exclude_videos: !include_videos,
-        asked: true,
-    })
-}
-
 /// What a finished job means: the tag it was asked under and the bytes it came
 /// back with (an encoded `VaultCalled`). `None` for a tag this screen did not
 /// ask.
 pub(super) fn done(tag: &str, bytes: &[u8]) -> Option<Done> {
-    if tag == PASS {
-        return Some(Done::Pass);
-    }
     let gateway_id = tag.strip_prefix(FORGET)?;
     let answer = wire::VaultCalled::decode(bytes)
         .ok()

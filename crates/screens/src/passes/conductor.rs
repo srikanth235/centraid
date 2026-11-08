@@ -609,6 +609,18 @@ impl Conductor {
 
     // ---- what the screens read -------------------------------------------------
 
+    /// Whether a "Back up now" is going: asked and not yet taken by the service, or running. The
+    /// Backup screen draws "Backing up" from this, and stops drawing it when it turns false.
+    #[must_use]
+    pub fn back_up_now_going(&self) -> bool {
+        let inner = self.lock();
+        inner.inbox.contains(&wire::pass_asked::Ask::BackUpNow)
+            || inner
+                .runs
+                .values()
+                .any(|run| run.reason == Reason::BackUpNow)
+    }
+
     #[must_use]
     pub fn facts(&self) -> Facts {
         let inner = self.lock();
