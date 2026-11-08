@@ -419,9 +419,10 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
     }
     val data2 = state.data_
     when (state.sheet) {
-        MoneyTransactionState.Sheet.SHEET_CATEGORY -> OptionSheet(
+        MoneyTransactionState.Sheet.SHEET_CATEGORY -> MoneyChoiceSheet(
             title = data2?.category_sheet_title.orEmpty(),
-            options = data2?.category_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            choices = data2?.category_options.orEmpty(),
+            tagPrefix = "money-category-option",
             onPick = { key -> onEvent(MoneyTransactionEvent(category = MoneyTransactionEvent.CategoryPicked(category_id = key))) },
             onDismiss = { onEvent(MoneyTransactionEvent(sheet_closed = MoneyTransactionEvent.SheetClosed())) },
         )

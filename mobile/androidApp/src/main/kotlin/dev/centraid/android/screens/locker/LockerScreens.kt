@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1085,24 +1087,38 @@ internal fun LockerEditorScreen(
                             }
                         }
                     }
-                    items(editor.inputs, key = { "in-" + state.item_id + "-" + it.key }) { input -> LockerInputView(input, onEvent) }
-                    item(key = "tags-" + state.item_id) {
-                        val text = rememberSentText(editor.tags_text)
-                        LockerTextField(
-                            text = text.first,
-                            label = editor.tags_label,
-                            placeholder = editor.tags_hint,
-                            testTag = "locker-editor-tags",
-                            onEdit = {
-                                text.second(it)
-                                onEvent(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = it)))
-                            },
-                        )
-                    }
-                    if (editor.compromised_label.isNotEmpty()) {
-                        item(key = "compromised") {
-                            LockerCompromisedRow(editor.compromised_label, editor.compromised, editor.compromised_note) { on ->
-                                onEvent(LockerEditorEvent(compromised = LockerEditorEvent.CompromisedToggled(on = on)))
+                    // THE FIELDS ARE ONE WHITE CARD, as on iOS: each input, the tags, the compromised
+                    // flag, a hairline under each.
+                    item(key = "fields-" + state.item_id) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = KitGeometry.GUTTER)
+                                .padding(top = 8.dp)
+                                .kitCard(),
+                        ) {
+                            editor.inputs.forEach { input ->
+                                key("in-" + state.item_id + "-" + input.key) {
+                                    LockerInputView(input, onEvent)
+                                    LockerHairline()
+                                }
+                            }
+                            val text = rememberSentText(editor.tags_text)
+                            LockerTextField(
+                                text = text.first,
+                                label = editor.tags_label,
+                                placeholder = editor.tags_hint,
+                                testTag = "locker-editor-tags",
+                                onEdit = {
+                                    text.second(it)
+                                    onEvent(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = it)))
+                                },
+                            )
+                            if (editor.compromised_label.isNotEmpty()) {
+                                LockerHairline()
+                                LockerCompromisedRow(editor.compromised_label, editor.compromised, editor.compromised_note) { on ->
+                                    onEvent(LockerEditorEvent(compromised = LockerEditorEvent.CompromisedToggled(on = on)))
+                                }
                             }
                         }
                     }
@@ -1117,6 +1133,14 @@ internal fun LockerEditorScreen(
             )
         }
     }
+}
+
+/** The hairline between the rows of a card. */
+@Composable
+internal fun LockerHairline() {
+    androidx.compose.foundation.layout.Spacer(
+        Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line),
+    )
 }
 
 /** ONE INPUT. A secret is a masked entry on the password keyboard, which the IME neither autocorrects, suggests from nor learns. */

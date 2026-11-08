@@ -21,6 +21,12 @@ import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -105,7 +111,15 @@ internal fun MoneyImportScreen(
                                             .testTag("money-import-choose")
                                             .semantics { role = Role.Button },
                                         contentAlignment = Alignment.Center,
-                                    ) { KitText(plan.choose_label, KitType.Meta, appAccent().text) }
+                                    ) {
+                                        androidx.compose.material3.Text(
+                                            plan.choose_label,
+                                            style = dev.centraid.android.kit.kitTextStyle(KitType.Meta),
+                                            color = appAccent("money").text,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                        )
+                                    }
                                 }
                             }
                             if (plan.needs_account) {
@@ -128,7 +142,15 @@ internal fun MoneyImportScreen(
                             MoneyPageCard {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        KitText(statement.title, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 1)
+                                        androidx.compose.material3.Text(
+                                            statement.title,
+                                            style = dev.centraid.android.kit.kitTextStyle(KitType.Row),
+                                            color = Surface.ink,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
                                         KitText(statement.span, KitType.Meta, Surface.meta, maxLines = 1)
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -195,7 +217,25 @@ internal fun MoneyImportScreen(
                                 }
                             }
                         }
-                        items(statement.rows, key = { "${statement.key}-${it.key}" }) { line ->
+                        // THE LINES ARE ONE CARD, as on iOS: the first row rounds the top, the
+                        // last the bottom, and a hairline stands between; each is its own lazy item.
+                        itemsIndexed(statement.rows, key = { _, it -> "${statement.key}-${it.key}" }) { index, line ->
+                            val radius = CentraidScale.cardRadius.dp
+                            val shape = RoundedCornerShape(
+                                topStart = if (index == 0) radius else 0.dp,
+                                topEnd = if (index == 0) radius else 0.dp,
+                                bottomStart = if (index == statement.rows.lastIndex) radius else 0.dp,
+                                bottomEnd = if (index == statement.rows.lastIndex) radius else 0.dp,
+                            )
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = KitGeometry.GUTTER)
+                                    .padding(top = if (index == 0) 6.dp else 0.dp, bottom = if (index == statement.rows.lastIndex) 6.dp else 0.dp)
+                                    .clip(shape)
+                                    .background(Surface.card),
+                            ) {
+                            if (index > 0) MoneyHairline()
                             CentraidRow(
                                 title = line.title.ifEmpty { line.line_label },
                                 meta = listOf(line.line_label.takeIf { line.title.isNotEmpty() }.orEmpty(), line.meta, line.reason)
@@ -205,6 +245,7 @@ internal fun MoneyImportScreen(
                                 a11y = spoken(line.accessibility_label, if (line.has_amount) line.amount else null),
                                 testTag = "money-import-${statement.key}-${line.key}",
                             )
+                            }
                         }
                         statement.more.forEach { more -> item(key = "${statement.key}-more-$more") { MoneyNote(more) } }
                     }
@@ -250,9 +291,10 @@ internal fun MoneyImportScreen(
     }
     if (state.sheet == MoneyImportState.Sheet.SHEET_ACCOUNT) {
         val plan = state.data_
-        OptionSheet(
+        MoneyChoiceSheet(
             title = plan?.account_sheet_title.orEmpty(),
-            options = plan?.account_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            choices = plan?.account_options.orEmpty(),
+            tagPrefix = "money-import-account-option",
             onPick = { key -> onEvent(MoneyImportEvent(account_picked = MoneyImportEvent.AccountPicked(account_id = key))) },
             onDismiss = { onEvent(MoneyImportEvent(sheet_closed = MoneyImportEvent.SheetClosed())) },
         )
@@ -483,16 +525,18 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
     val editor = state.editor
     if (editor != null && state.sheet != MoneyRulesState.Sheet.SHEET_NONE) {
         if (state.sheet == MoneyRulesState.Sheet.SHEET_CATEGORY) {
-            OptionSheet(
+            MoneyChoiceSheet(
                 title = data?.category_sheet_title.orEmpty(),
-                options = data?.category_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+                choices = data?.category_options.orEmpty(),
+                tagPrefix = "money-rule-category-option",
                 onPick = { key -> onEvent(MoneyRulesEvent(category = MoneyRulesEvent.CategoryPicked(category_id = key))) },
                 onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
             )
         } else if (state.sheet == MoneyRulesState.Sheet.SHEET_ACCOUNT) {
-            OptionSheet(
+            MoneyChoiceSheet(
                 title = data?.account_sheet_title.orEmpty(),
-                options = data?.account_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+                choices = data?.account_options.orEmpty(),
+                tagPrefix = "money-rule-account-option",
                 onPick = { key -> onEvent(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = key))) },
                 onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
             )
