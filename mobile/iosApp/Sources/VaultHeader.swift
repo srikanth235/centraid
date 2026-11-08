@@ -282,13 +282,15 @@ private extension Color {
 /// the next window, and what the OS already holds is cancelled in Rust.
 struct TransferRulesSheet: View {
     let sheet: Centraid_Core_V1_HomeTransferSheet
-    @ObservedObject var store: ScreenStore
+    /// A choice's stored word: Home's and Settings' own events carry it.
+    let onPick: (String) -> Void
+    let onClose: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         SheetRoom(
             title: sheet.title,
-            primary: SheetPrimary(label: KitWords.DONE) { store.sendHome(.transferRulesClosed(.init())) }
+            primary: SheetPrimary(label: KitWords.DONE, action: onClose)
         ) {
             Text(sheet.subtitle)
                 .centraidType("small")
@@ -301,7 +303,7 @@ struct TransferRulesSheet: View {
                         selected: choice.picked,
                         identifier: "transfer-rule-\(choice.stored)"
                     ) {
-                        store.sendHome(.transferRuleChosen(.with { $0.stored = choice.stored }))
+                        onPick(choice.stored)
                     }
                 }
             }

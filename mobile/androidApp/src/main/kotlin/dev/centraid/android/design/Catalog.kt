@@ -278,6 +278,17 @@ public object CentraidCatalog {
         "Filter" to listOf(
             NativeIconPath(d = "M22 3H2l8 9.46V19l4 2v-8.54z", filled = false, evenOdd = false),
         ),
+        "Fingerprint" to listOf(
+            NativeIconPath(d = "M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4", filled = false, evenOdd = false),
+            NativeIconPath(d = "M14 13.12c0 2.38 0 6.38-1 8.88", filled = false, evenOdd = false),
+            NativeIconPath(d = "M17.29 21.02c.12-.6.43-2.3.5-3.02", filled = false, evenOdd = false),
+            NativeIconPath(d = "M2 12a10 10 0 0 1 18-6", filled = false, evenOdd = false),
+            NativeIconPath(d = "M2 16h.01", filled = false, evenOdd = false),
+            NativeIconPath(d = "M21.8 16c.2-2 .131-5.354 0-6", filled = false, evenOdd = false),
+            NativeIconPath(d = "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2", filled = false, evenOdd = false),
+            NativeIconPath(d = "M8.65 22c.21-.66.45-1.32.57-2", filled = false, evenOdd = false),
+            NativeIconPath(d = "M9 6.8a6 6 0 0 1 9 5.2v2", filled = false, evenOdd = false),
+        ),
         "Flag" to listOf(
             NativeIconPath(d = "M5 21V4", filled = false, evenOdd = false),
             NativeIconPath(d = "M5 4h12l-2.5 4L17 12H5", filled = false, evenOdd = false),
@@ -494,6 +505,10 @@ public object CentraidCatalog {
         "Save" to listOf(
             NativeIconPath(d = "M5 4h11l4 4v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", filled = false, evenOdd = false),
             NativeIconPath(d = "M8 4v5h7V4M8 14h8v7H8z", filled = false, evenOdd = false),
+        ),
+        "ScanFace" to listOf(
+            NativeIconPath(d = "M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2", filled = false, evenOdd = false),
+            NativeIconPath(d = "M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16a4 4 0 0 0 5 0", filled = false, evenOdd = false),
         ),
         "Search" to listOf(
             NativeIconPath(d = "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", filled = false, evenOdd = false),

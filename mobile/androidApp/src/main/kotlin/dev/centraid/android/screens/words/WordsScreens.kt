@@ -90,7 +90,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.WordsEndpointTyped
-import centraid.core.v1.RestoredVaultLine
 import centraid.core.v1.WordsSuggestionPicked
 import centraid.core.v1.WordCell
 import centraid.core.v1.WordEntry
@@ -103,7 +102,6 @@ import centraid.core.v1.WordsNameTyped
 import centraid.core.v1.WordsOwnToggled
 import centraid.core.v1.WordsPrimary
 import centraid.core.v1.WordsRestoreTapped
-import centraid.core.v1.WordsRetry
 import centraid.core.v1.WordsSaveCopy
 import centraid.core.v1.WordsSecondary
 import centraid.core.v1.WordsUseWords
@@ -351,11 +349,6 @@ internal fun WordsEntryScreen(
             if (state.scan_label.isNotEmpty() && held) {
                 WordsTonalButton(state.scan_label, testTag = "words-scan", iconKey = "Maximize", enabled = !working, onPress = scan)
             }
-            if (state.retry_label.isNotEmpty()) {
-                WordsTonalButton(state.retry_label, testTag = "words-retry") {
-                    onEvent(WordsEnterEvent(retry = WordsRetry()))
-                }
-            }
             if (state.primary_label.isNotEmpty()) {
                 InkButton(
                     label = state.primary_label,
@@ -368,13 +361,7 @@ internal fun WordsEntryScreen(
             }
         },
     ) {
-        // THE RESULT OF A RESTORE has its own head: a round mark over a centred title.
-        val done = state.phase == WordsEnterState.Phase.PHASE_DONE
-        if (done && (state.restored.isNotEmpty() || state.stayed.isNotEmpty())) {
-            WordsResultHead(if (state.stayed.isEmpty()) "Check" else "Refresh", state.title, state.body)
-        } else {
-            WordsHead(state.title, state.body)
-        }
+        WordsHead(state.title, state.body)
         // A HELD KEY IS ALREADY HERE: say so, and where it came from.
         if (held) WordsHeldCard(state.held_found, state.held_place)
         if (state.cells.isNotEmpty()) {
@@ -482,10 +469,6 @@ internal fun WordsEntryScreen(
                 KitSpinner(state.progress)
             }
         }
-        // WHAT CAME BACK AND WHAT STAYED, one card.
-        if (state.restored.isNotEmpty() || state.stayed.isNotEmpty()) {
-            WordsResultCard(state.restored, state.stayed)
-        }
     }
 }
 
@@ -568,103 +551,6 @@ private fun WordsHeldKeys(names: List<String>) {
             }
             if (at < names.size - 1) Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
         }
-    }
-}
-
-/**
- * The result of a restore: a round mark over a centred title. A restore with a vault that stayed
- * wears the refresh mark, one that brought everything back the check.
- */
-@Composable
-private fun WordsResultHead(iconKey: String, title: String, lead: String) {
-    val accent = appAccent()
-    Column(
-        Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            Modifier.size(60.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
-            contentAlignment = Alignment.Center,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = accent.text, size = 26.dp)
-        }
-        Text(
-            title,
-            style = kitTextStyle(KitType.Title),
-            color = Surface.ink,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("words-title").semantics { heading() },
-        )
-        if (lead.isNotEmpty()) {
-            Text(lead, style = kitTextStyle(KitType.Row), color = Surface.body, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
-/**
- * WHAT CAME BACK AND WHAT STAYED (`restored`, `stayed`): one white card. Each restored vault is a
- * check, its line, and its safety number large and grouped so it can be read against the backup
- * device's; each vault that stayed with the other phone is the machine's sentence behind an amber
- * mark — "not yet, and not wrong", since the vault is safe where it is
- * (product-intuition/references/design-behaviour.md § Colour).
- */
-@Composable
-private fun WordsResultCard(restored: List<RestoredVaultLine>, stayed: List<String>) {
-    Column(Modifier.fillMaxWidth().kitCard()) {
-        for ((index, line) in restored.withIndex()) {
-            ResultRow(first = index == 0, mark = { WordsResultMark(StateColor.Green, "Check") }) {
-                Column(
-                    Modifier.testTag("words-restored-$index").semantics(mergeDescendants = true) { },
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    KitText(line.line, KitType.Row, Surface.ink)
-                    if (line.safety_number.isNotEmpty()) {
-                        Text(
-                            line.safety_number,
-                            style = centraidType("display"),
-                            color = Surface.ink,
-                            modifier = Modifier.testTag("words-safety-number"),
-                        )
-                        KitText(line.safety_label, KitType.Meta, Surface.meta)
-                    }
-                }
-            }
-        }
-        for ((index, line) in stayed.withIndex()) {
-            ResultRow(first = restored.isEmpty() && index == 0, mark = { WordsResultMark(StateColor.Amber, "AlertCircle") }) {
-                Text(
-                    line,
-                    style = kitTextStyle(KitType.Row),
-                    color = Surface.ink,
-                    modifier = Modifier.testTag("words-stayed-$index").semantics(mergeDescendants = true) { },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResultRow(first: Boolean, mark: @Composable () -> Unit, content: @Composable () -> Unit) {
-    if (!first) Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
-    Row(
-        Modifier.fillMaxWidth().padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        mark()
-        Box(Modifier.weight(1f)) { content() }
-    }
-}
-
-/** A round state mark on a pale ground: a check for a vault that is back, a bang for one that stayed. */
-@Composable
-private fun WordsResultMark(state: StateColor, iconKey: String) {
-    Box(
-        Modifier.size(28.dp).clip(CircleShape).background(state.tint).clearAndSetSemantics { },
-        contentAlignment = Alignment.Center,
-    ) {
-        CentraidIcon(iconKey = iconKey, tint = state.text, size = 14.dp)
     }
 }
 

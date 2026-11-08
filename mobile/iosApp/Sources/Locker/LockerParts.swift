@@ -55,7 +55,7 @@ struct LockerWallView: View {
                 if !wall.unlockLabel.isEmpty || !wall.wordsLabel.isEmpty {
                     KitChoiceStack {
                         if !wall.unlockLabel.isEmpty {
-                            KitInkButton(label: wall.unlockLabel) {
+                            KitInkButton(label: wall.unlockLabel, iconKey: wall.unlockIcon) {
                                 send(LockerWallEvents.make { $0.unlock = .init() })
                             }
                             .accessibilityIdentifier("locker-unlock")
@@ -213,11 +213,12 @@ struct LockerTypeChip: View {
     let letters: String
 
     @Environment(\.appAccent) private var accent
-    private let side: CGFloat = 32
+    /// 32 in a row; the item's hero draws it at 64.
+    var side: CGFloat = 32
 
     var body: some View {
         Text(letters)
-            .kitType(.badge)
+            .kitType(side > 40 ? .title : .badge)
             .foregroundStyle(Color.white)
             .frame(width: side, height: side)
             .background(accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))

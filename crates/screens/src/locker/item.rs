@@ -62,6 +62,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Loaded {
     item: Option<wire::LockerItem>,
+    /// The core's today, for "last used today".
+    today: String,
 }
 
 /// Which confirm is up.
@@ -146,12 +148,12 @@ impl Item {
                 item_id: self.route.item_id.clone(),
             },
             |answer| match answer {
-                Answer::LockerItem(detail) => Some(detail.item),
+                Answer::LockerItem(detail) => Some((detail.item, detail.today)),
                 _ => None,
             },
         );
         self.loaded = match item {
-            Reading::Data(item) => Phase::Ready(Loaded { item }),
+            Reading::Data((item, today)) => Phase::Ready(Loaded { item, today }),
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
@@ -219,7 +221,7 @@ impl Item {
 
     /// A session step answered LOCKED: idle ended it under this page.
     fn locked(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        match self.wall.expired(ctx) {
+        match self.wall.expired() {
             Change::Closed => self.wipe(ctx),
             _ => Vec::new(),
         }
@@ -943,9 +945,14 @@ impl Item {
         };
         wire::LockerItemData {
             title: item.title.clone(),
-            type_label: (kind.label)(locale),
             type_chip: kind.chip(locale),
+            subtitle: subtitle(locale, &(kind.label)(locale), item, &loaded.today),
             starred: item.starred,
+            star_label: if item.starred {
+                words::item_starred(locale)
+            } else {
+                String::new()
+            },
             chips,
             status_line: if item.secrets.iter().any(|secret| secret.present) {
                 words::item_status(locale)
@@ -1333,6 +1340,8 @@ fn verb(key: &str, label: String) -> wire::LockerVerb {
     wire::LockerVerb {
         key: key.to_owned(),
         label,
+        // THE VERIFICATION CODE'S COPY is the card's one pill, as the board draws it.
+        pill: key == "copy_code",
     }
 }
 
@@ -1360,6 +1369,28 @@ fn plain_row(
         verbs,
         accessibility_label: format!("{label}, {value}"),
         ..wire::LockerFieldRow::default()
+    }
+}
+
+/// THE HERO'S SECOND LINE: the type's word, then when a secret was last opened
+/// ("Login · last used today"), or that none ever was.
+fn subtitle(locale: Locale, kind: &str, item: &wire::LockerItem, today: &str) -> String {
+    if item.trashed {
+        return kind.to_owned();
+    }
+    if item.last_used_local_day.len() >= 10 {
+        let day = &item.last_used_local_day[..10];
+        let when = if day == today {
+            words::used_today(locale)
+        } else {
+            civil::day_month(locale, day)
+        };
+        fill(
+            &words::item_last_used(locale),
+            &[("type", kind), ("when", &when)],
+        )
+    } else {
+        fill(&words::item_never_used(locale), &[("type", kind)])
     }
 }
 
@@ -1718,6 +1749,7 @@ impl Screen for Item {
                             .filter(|item| !item.trashed)
                             .map(|item| routes::edit(&item.item_id)),
                         retry: words::retry(locale),
+                        menu_label: words::more_actions(locale),
                     }),
                     memo: self.memo_sheet(locale),
                     field_sheet: self.field_sheet(locale),

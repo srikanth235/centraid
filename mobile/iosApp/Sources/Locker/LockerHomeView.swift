@@ -13,7 +13,7 @@ enum LockerHomeEvents {
 /// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
 /// the Items filter is the header's menu (R-CHROME-3).
 ///
-/// **THE VIEW DECIDES NOTHING.** The band (empty while locked), the filter
+/// **THE VIEW DECIDES NOTHING.** The band (kept while locked, dimmed: `band_locked`), the filter
 /// menu, the rows, the review verdicts, the generator, the search note, every
 /// empty and every word are `LockerHomeState`'s (Rust); the wall is its `wall`.
 /// A row, the add control and a More row carry the `Route` to push.
@@ -74,7 +74,7 @@ struct LockerHomeView: View {
         ) {
             AppBand(
                 app: "locker",
-                tabs: covered ? [] : state.band.map { tab in
+                tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
                         event: Data(tab.key.utf8),
@@ -87,6 +87,7 @@ struct LockerHomeView: View {
                     let key = String(decoding: picked, as: UTF8.self)
                     send(LockerHomeEvents.make { $0.band = .with { $0.key = key } })
                 },
+                locked: state.bandLocked,
                 onHome: onHome
             )
         } content: {

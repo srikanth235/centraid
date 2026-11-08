@@ -983,6 +983,8 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     assert!(!data.back_up_now_enabled);
     // BYTES TO GO, while bytes are to move (#1144).
     assert_eq!(data.progress, "Backing up — 380 MB to go");
+    // NO BYTE TOTAL, NO BAR: the spinner stands in, never a bar stuck at zero.
+    assert!(!data.progress_known);
     // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
     running.say(tap.clone());
     assert_eq!(running.jobs.len(), 1);
@@ -990,6 +992,34 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
     let mut whole = Page::open(both());
     whole.say(tap);
     assert_eq!(whole.data().progress, words::backup_now_running(EN));
+}
+
+#[test]
+fn a_run_with_a_byte_total_draws_a_bar_of_what_a_gateway_has_acknowledged() {
+    let tap = wire::backup_home_event::Kind::BackUpNow(wire::backup_home_event::BackUpNow {});
+    let mut running = Page::open(wire::BackupStatusResponse {
+        total_bytes: 5_000_000_000,
+        confirmed_bytes: 4_600_000_000,
+        pending_bytes: 412_000_000,
+        ..both()
+    });
+    // NOT RUNNING: no bar, whatever the bytes say.
+    let idle = running.data();
+    assert!(!idle.progress_known && idle.progress_fraction == 0.0);
+    running.say(tap.clone());
+    let data = running.data();
+    assert_eq!(data.progress, "Backing up — 412 MB to go");
+    assert!(data.progress_known);
+    assert!((data.progress_fraction - 0.92).abs() < 1e-6);
+
+    // MORE ACKNOWLEDGED THAN COUNTED never overshoots the bar.
+    let mut over = Page::open(wire::BackupStatusResponse {
+        total_bytes: 1_000,
+        confirmed_bytes: 2_000,
+        ..both()
+    });
+    over.say(tap);
+    assert_eq!(over.data().progress_fraction, 1.0);
 }
 
 #[test]

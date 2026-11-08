@@ -14,6 +14,7 @@
 //! again and draws the scheme it names. There is no second copy to drift.
 //!
 //! The pages the rows open are Backup's (`backup.home`, `words.show`); the words are theirs too.
+//! "Download settings" opens its own sheet, the transfer rule Home's gear draws, from the same store.
 //! Home's entry point to this page is [`super::routes::settings`].
 
 use centraid_api_proto::core_v1 as wire;
@@ -22,13 +23,17 @@ use wire::settings_event::Kind as S;
 
 use crate::backup::{self, key::KeyCustody, line, reading};
 use crate::catalog::load;
-use crate::custody::secrets::VaultSecrets;
+use crate::custody::secrets::{self as secrets, VaultSecrets};
 use crate::kit::read::Reading;
+use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{home as home_words, settings as words};
 
 /// The id of the row that shows the vaults.
 const VAULTS_ROW: &str = "vaults";
+
+/// The id of the row that opens the download settings sheet.
+const DOWNLOAD_ROW: &str = "download-settings";
 
 /// The Keychain key the appearance is kept under: Home's, the same three values.
 const APPEARANCE_KEY: &str = "appearance";
@@ -90,6 +95,10 @@ struct Settings {
     vault_name: Option<String>,
     /// The vault row was pressed: Home draws the switcher, so this page is done.
     finished: bool,
+    /// THE DOWNLOAD SETTINGS SHEET is open.
+    transfer_open: bool,
+    /// The rule's write is out: its answer is what tells the pass service.
+    keeping: Option<Vec<wire::SecretOp>>,
 }
 
 impl Settings {
@@ -101,6 +110,8 @@ impl Settings {
             synced: None,
             vault_name: None,
             finished: false,
+            transfer_open: false,
+            keeping: None,
         }
     }
 
@@ -119,6 +130,42 @@ impl Settings {
                 .find(|vault| vault.foreground)
                 .map(|vault| vault.name.clone());
         }
+    }
+
+    /// The device store answered the rule's write. THE PASS SERVICE READS THE SAME CACHE, so the
+    /// answer is folded in before it is told: a rule that stuck is a new constraint on every window
+    /// the OS holds (Home's gear and the Backup page do the same).
+    fn rule_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
+        let Some(ops) = self.keeping.take() else {
+            return;
+        };
+        self.secrets.absorb(&ops, &batched.answers);
+        if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
+            self.secrets
+                .conductor()
+                .ask(ctx, wire::pass_asked::Ask::RuleChanged);
+        }
+    }
+
+    /// The sheet behind the Download settings row, while it is open: the rule as the device store
+    /// holds it, in the order the Backup page lists the choices.
+    fn transfer_sheet(&self, locale: crate::strings::Locale) -> Option<wire::HomeTransferSheet> {
+        if !self.transfer_open {
+            return None;
+        }
+        let kept = Rules::read(&self.secrets).rule;
+        Some(wire::HomeTransferSheet {
+            title: rule::title(locale),
+            subtitle: rule::subtitle(locale),
+            choices: TransferRule::ALL
+                .iter()
+                .map(|choice| wire::BackupRuleChoice {
+                    stored: choice.stored().to_owned(),
+                    sentence: choice.sentence(locale),
+                    picked: *choice == kept,
+                })
+                .collect(),
+        })
     }
 
     fn backup_meta(&self, ctx: &Ctx) -> String {
@@ -245,16 +292,22 @@ impl Settings {
                             String::new(),
                         ),
                         // THE ONE TRANSFER RULE, read from the store the Backup page and Home's
-                        // gear write; it is changed on the Backup page this row opens.
-                        row(
-                            "download-settings",
-                            words::settings_download_settings(locale),
-                            String::new(),
-                            "Download",
-                            Some(backup::routes::home()),
-                            "neutral",
-                            rule.short(locale),
-                        ),
+                        // gear write; the sheet this row opens changes it.
+                        {
+                            // A SHEET OF ITS OWN: the row asks Rust to open it, and the chevron says
+                            // it is a row that goes somewhere.
+                            let mut download = row(
+                                DOWNLOAD_ROW,
+                                words::settings_download_settings(locale),
+                                String::new(),
+                                "Download",
+                                None,
+                                "neutral",
+                                rule.short(locale),
+                            );
+                            download.pressable = true;
+                            download
+                        },
                     ],
                 },
                 wire::SettingsSection {
@@ -311,12 +364,19 @@ impl Screen for Settings {
                 Some(wire::effect_result::Outcome::SyncedStatus(status)) => {
                     self.synced = Some(status);
                 }
+                Some(wire::effect_result::Outcome::Secrets(batched)) => {
+                    self.rule_kept(&batched, ctx);
+                }
                 _ => {}
             },
             Some(E::Settings(settings)) => {
                 // THE VAULT ROW: Home's switcher is the one list of vaults, so Home is asked to
                 // open it, and this page, which sits over Home, steps aside.
                 if let Some(S::RowPressed(pressed)) = &settings.kind {
+                    if pressed.id == DOWNLOAD_ROW {
+                        self.transfer_open = true;
+                        return Vec::new();
+                    }
                     if pressed.id == VAULTS_ROW && !self.finished {
                         self.finished = true;
                         ctx.post(
@@ -331,6 +391,22 @@ impl Screen for Settings {
                         );
                     }
                     return Vec::new();
+                }
+                match &settings.kind {
+                    Some(S::TransferRulesClosed(_)) => {
+                        self.transfer_open = false;
+                        return Vec::new();
+                    }
+                    Some(S::TransferRuleChosen(chosen)) => {
+                        // THE BACKUP PAGE'S WRITE, not a second one: the rule goes to the phone's
+                        // device store as a `SecretBatch`, and its answer is what tells the pass
+                        // service (`rule_kept`).
+                        self.transfer_open = false;
+                        let ops = vec![Rules::write_rule(TransferRule::of(Some(&chosen.stored)))];
+                        self.keeping = Some(ops.clone());
+                        return vec![secrets::effect(ops)];
+                    }
+                    _ => {}
                 }
                 if let Some(S::AppearancePicked(picked)) = settings.kind
                     && let Some(chosen) = Appearance::of_id(&picked.id)
@@ -370,6 +446,7 @@ impl Screen for Settings {
                 back_label: home_words::band_home(locale),
                 content: Some(content),
                 finished: self.finished,
+                transfer_sheet: self.transfer_sheet(locale),
             })),
             ..wire::ViewState::default()
         }

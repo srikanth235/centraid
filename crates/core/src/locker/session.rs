@@ -76,6 +76,12 @@ impl Session {
         self
     }
 
+    /// How long an unlocked session may sit idle before it ends.
+    #[must_use]
+    pub fn timeout_ms(&self) -> i64 {
+        self.timeout_ms
+    }
+
     #[must_use]
     pub fn vault_id(&self) -> &str {
         &self.vault_id

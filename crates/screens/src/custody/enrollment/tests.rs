@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use super::door::UnclaimedVaultAt;
 use super::*;
 use crate::custody::keeper::FakeKeeper;
 use crate::testing::{Driver, FakeShell};
@@ -358,49 +359,6 @@ fn a_restore_that_left_a_vault_with_the_old_phone_holds_only_what_it_claimed() {
             .collect::<Vec<_>>(),
         vec![1]
     );
-}
-
-#[test]
-fn a_vault_that_stayed_is_asked_for_again_by_index_from_the_seed_already_stored() {
-    let mut phone = Phone::new();
-    phone.answer = Some(RestoreAnswer {
-        vaults: vec![at("/v/a/vault.db", 0, 0)],
-        unclaimed: vec![unclaimed(1)],
-        ..RestoreAnswer::default()
-    });
-    assert!(matches!(
-        phone.restore(words_a(), "code"),
-        Restored::Done { .. }
-    ));
-    phone.answer = Some(answer(vec![at("/v/c/vault.db", 1, 0)]));
-    let prefix = phone.seed_of(&words_a())[..4].to_owned();
-    let again = phone.run(Job::stayed(&[unclaimed(1)], "ab"));
-    let Out::Restored(Restored::Done { added, .. }) = again else {
-        panic!("the retry came back")
-    };
-    assert_eq!(added, 1);
-    assert_eq!(
-        phone.log[1],
-        format!("restore-stayed {prefix} payload=\"ab\" indices=[1]")
-    );
-    assert_eq!(
-        phone.keeper.log().last().map(String::as_str),
-        Some("adopt [1] seed=true")
-    );
-    // STILL REFUSED, NOTHING HELD: the vaults already here are untouched.
-    phone.answer = None;
-    phone.refusal = RestoreRefusal::NotTaken;
-    assert_eq!(
-        phone.run(Job::stayed(&[unclaimed(1)], "")),
-        Out::Restored(Restored::NotTaken)
-    );
-    // NO SEED HERE, NO RETRY: nothing is dialled.
-    let mut bare = Phone::new();
-    assert_eq!(
-        bare.run(Job::stayed(&[unclaimed(1)], "")),
-        Out::Restored(Restored::Refused(Refusal::NotAPhrase))
-    );
-    assert!(bare.log.is_empty());
 }
 
 #[test]

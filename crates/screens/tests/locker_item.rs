@@ -42,6 +42,38 @@ fn an_item_shows_metadata_plainly_and_a_secret_as_a_sealed_row_with_a_verb() {
 }
 
 #[test]
+fn the_hero_names_the_type_and_when_it_was_last_used_and_the_menu_holds_the_verbs() {
+    let (mut d, id) = opened_item();
+    let data = item_data(&d, id);
+    // NEVER OPENED: the hero says so under the title.
+    assert_eq!(data.subtitle, "Login · never used");
+    assert!(!data.starred && data.star_label.is_empty());
+    assert_eq!(item(&d, id).chrome.unwrap().menu_label, "More actions");
+    let keys: Vec<&str> = data.actions.iter().map(|a| a.key.as_str()).collect();
+    assert_eq!(keys, ["add_field", "star", "archive", "trash"]);
+
+    // A star is spoken, and it shows once the change lands.
+    d.send(
+        id,
+        E::LockerItem(wire::LockerItemEvent {
+            kind: Some(I::Action(wire::locker_item_event::ActionTapped {
+                key: "star".into(),
+            })),
+        }),
+    );
+    d.pump(Duration::from_millis(300));
+    let data = item_data(&d, id);
+    assert!(data.starred);
+    assert_eq!(data.star_label, "Starred");
+
+    // OPENING A SECRET STAMPS IT: the hero says it was last used today.
+    verb(&mut d, id, "password", "reveal");
+    d.pump(Duration::from_millis(300));
+    let data = item_data(&d, id);
+    assert_eq!(data.subtitle, "Login · last used today");
+}
+
+#[test]
 fn a_reveal_lives_its_window_stamps_the_item_and_is_gone_at_the_end() {
     let (mut d, id) = opened_item();
     // An item nobody has opened says so, in the Details it already has (#1146).

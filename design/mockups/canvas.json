@@ -1394,22 +1394,6 @@
       "x": 0,
       "y": 1160
     },
-    "RestoreDone.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Restore done, one vault stayed",
-      "w": 390,
-      "x": 1410,
-      "y": 1160
-    },
-    "RestoreDoneDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "4 · Restore done, one vault stayed · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 1160
-    },
     "RestoreHeld.dc.html": {
       "h": 844,
       "page": "light",
@@ -1464,6 +1448,22 @@
       "title": "6 · Settings",
       "w": 390,
       "x": 2350,
+      "y": 17400
+    },
+    "SettingsDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Download settings",
+      "w": 390,
+      "x": 2820,
+      "y": 17400
+    },
+    "SettingsDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Download settings · dark",
+      "w": 390,
+      "x": 2820,
       "y": 17400
     },
     "SettingsDark.dc.html": {
@@ -2045,7 +2045,6 @@
     "RecoveryKey.dc.html",
     "RestoreWords.dc.html",
     "RestoreHeld.dc.html",
-    "RestoreDone.dc.html",
     "FirstImports.dc.html",
     "BackupSettingsEnd.dc.html",
     "PairDevice.dc.html",
@@ -2112,6 +2111,7 @@
     "Trash.dc.html",
     "LockScreen.dc.html",
     "Settings.dc.html",
+    "SettingsDownload.dc.html",
     "EmptyReminders.dc.html",
     "FirstHome.dc.html",
     "PermissionPhotos.dc.html",
@@ -2140,7 +2140,6 @@
     "RecoveryKeyDark.dc.html",
     "RestoreWordsDark.dc.html",
     "RestoreHeldDark.dc.html",
-    "RestoreDoneDark.dc.html",
     "FirstImportsDark.dc.html",
     "BackupSettingsEndDark.dc.html",
     "PairDeviceDark.dc.html",
@@ -2207,6 +2206,7 @@
     "TrashDark.dc.html",
     "LockScreenDark.dc.html",
     "SettingsDark.dc.html",
+    "SettingsDownloadDark.dc.html",
     "EmptyRemindersDark.dc.html",
     "FirstHomeDark.dc.html",
     "PermissionPhotosDark.dc.html",

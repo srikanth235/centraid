@@ -777,7 +777,7 @@ impl Import {
         use wire::MoneyImportVerdict as V;
         let verdict = V::try_from(row.verdict).unwrap_or_default();
         let (label, tone) = match verdict {
-            V::New => (words::chip_new(locale), Tone::Neutral),
+            V::New => (words::chip_new(locale), Tone::Accent),
             V::AlreadyIn => (words::chip_already_in(locale), Tone::Seam),
             V::ProposedDuplicate => (words::chip_check(locale), Tone::Warning),
             V::RepeatInFile => (words::chip_in_file(locale), Tone::Seam),

@@ -287,6 +287,8 @@ public fun PushedPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
+    /** A second key before the trailing one: the "…" that opens a page's verbs (a Locker item). */
+    more: RoomAction? = null,
     /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
     filter: RoomFilter? = null,
     /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
@@ -314,6 +316,7 @@ public fun PushedPage(
             )
             Spacer(Modifier.weight(1f))
             if (filter != null) FilterMenuButton(app, filter)
+            if (more != null) HeaderVerb(more)
             if (trailing != null) HeaderVerb(trailing)
         }
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
@@ -523,6 +526,8 @@ public fun InkButton(
     destructive: Boolean = false,
     testTag: String = "kit-ink-button",
     enabled: Boolean = true,
+    /** A glyph before the label (the lock wall's face or fingerprint); empty for none. */
+    iconKey: String = "",
     onPress: () -> Unit,
 ) {
     // THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label; a
@@ -554,15 +559,21 @@ public fun InkButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-            color = when {
-                !enabled -> meta
-                destructive -> red
-                else -> Color.White
-            },
-        )
+        val ink = when {
+            !enabled -> meta
+            destructive -> red
+            else -> Color.White
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (iconKey.isNotEmpty()) {
+                Box(Modifier.clearAndSetSemantics { }) { CentraidIcon(iconKey = iconKey, tint = ink, size = 20.dp) }
+            }
+            Text(
+                label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = ink,
+            )
+        }
     }
 }
 

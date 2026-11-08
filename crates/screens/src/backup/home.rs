@@ -542,6 +542,22 @@ impl Backup {
         }
     }
 
+    /// How much of the backup a gateway has acknowledged, while a run is going and the
+    /// phone can say what the whole is: `None` draws the spinner, never a bar stuck at zero.
+    fn progress_fraction(&self) -> Option<f32> {
+        if !self.backing_up_now {
+            return None;
+        }
+        let reading = self.reading()?;
+        if reading.total_bytes == 0 {
+            return None;
+        }
+        let done = reading.confirmed_bytes.min(reading.total_bytes);
+        // Whole thousandths, so the figure is the same on every phone.
+        let thousandths = u128::from(done) * 1000 / u128::from(reading.total_bytes);
+        Some(u16::try_from(thousandths).map_or(1.0, |t| f32::from(t) / 1000.0))
+    }
+
     /// Where the backup stands, for the status card.
     fn condition(&self) -> wire::BackupCondition {
         use wire::BackupCondition as C;
@@ -723,6 +739,8 @@ impl Backup {
             back_up_now_label,
             back_up_now_enabled: self.can_back_up_now(),
             progress: self.progress(locale),
+            progress_known: self.progress_fraction().is_some(),
+            progress_fraction: self.progress_fraction().unwrap_or_default(),
             battery_sentence: if stood {
                 words::backup_battery(locale)
             } else {

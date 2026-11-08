@@ -168,7 +168,7 @@ private struct WidgetBody: View {
             case let .health(health): glance(figure: health.figure, caption: health.caption)
             case let .people(people): glance(figure: people.figure, caption: people.caption)
             case let .locker(locker): glance(figure: locker.stateLabel, caption: tile.name)
-            case let .notes(notes): line(title: notes.title, meta: notes.edited)
+            case let .notes(notes): line(title: notes.title, next: notes.nextTitle, meta: notes.edited)
             case let .docs(docs): line(title: docs.rows.first?.name ?? "", meta: docs.rows.first?.size ?? "")
             case .photos, .none: EmptyView()
             }
@@ -275,7 +275,7 @@ private struct WidgetBody: View {
 
     /// A LINE (medium, one row): the app's name in its colour, then what is
     /// newest in it and a word about it.
-    private func line(title: String, meta line2: String) -> some View {
+    private func line(title: String, next: String = "", meta line2: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(tile.name)
                 .centraidType("annotLabelOn")
@@ -284,6 +284,13 @@ private struct WidgetBody: View {
                 .centraidType("annotLabel")
                 .foregroundStyle(ink)
                 .lineLimit(1)
+            // THE NOTE AFTER IT (Notes): a new vault's two starter notes both show.
+            if !next.isEmpty {
+                Text(next)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(ink)
+                    .lineLimit(1)
+            }
             if !line2.isEmpty {
                 Text(line2)
                     .centraidType("annotLabel")

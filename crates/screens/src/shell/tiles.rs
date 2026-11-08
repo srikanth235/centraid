@@ -580,7 +580,7 @@ fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
     }
 }
 
-/// THE NEWEST NOTE, and when it was last edited.
+/// THE NEWEST NOTE, when it was last edited, and the title of the one after it.
 fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>) -> Made {
     let (one, many) = (
         words::tile_notes_count_one(locale),
@@ -599,6 +599,11 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>)
             note_id: newest.note_id.clone(),
             title: note_title(locale, newest),
             edited: edited_line(locale, &newest.updated_local_day, today),
+            next_title: library
+                .notes
+                .get(1)
+                .map(|next| note_title(locale, next))
+                .unwrap_or_default(),
         }),
     )
 }
@@ -1243,6 +1248,10 @@ mod tests {
         );
         // No edit day on the row: no line, and never a made-up one.
         assert_eq!(body.edited, "");
+        // THE NOTE AFTER IT rides along, so a new vault's two starter notes both show.
+        assert_eq!(body.next_title, "Older");
+        let alone = notes_of(vec![note("n1", Some("Grocery run"), "milk")], false, None);
+        assert_eq!(notes_body(&alone).next_title, "");
     }
 
     #[test]

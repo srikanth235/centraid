@@ -118,6 +118,8 @@ struct Home {
     hits: Phase<wire::LockerSearch>,
     generator: Generator,
     status: Option<wire::StatusLine>,
+    /// THE PLACE A LOCKED BAND WAS TAPPED ON: the unlock it started lands there.
+    pending: Option<String>,
 }
 
 impl Home {
@@ -136,6 +138,7 @@ impl Home {
             hits: Phase::Loading,
             generator: Generator::new(entropy),
             status: None,
+            pending: None,
         }
     }
 
@@ -244,8 +247,20 @@ impl Home {
             Change::Opened => {
                 self.generator.regenerate();
                 self.reload(ctx);
+                // THE PLACE THE MEMBER TAPPED while locked is where this unlock lands.
+                if let Some(key) = self.pending.take() {
+                    effects.extend(self.event(
+                        wire::LockerHomeEvent {
+                            kind: Some(H::Band(wire::locker_home_event::BandPicked { key })),
+                        },
+                        ctx,
+                    ));
+                }
             }
-            Change::Closed => effects.extend(self.wipe(ctx)),
+            Change::Closed => {
+                self.pending = None;
+                effects.extend(self.wipe(ctx));
+            }
             Change::None => {}
         }
         effects
@@ -482,7 +497,7 @@ impl Home {
         if self.browsing.is_none() {
             // THE LANDING: category cards, then Starred and Recently used.
             return wire::LockerHomeData {
-                status_line: words::unlocked_status(locale),
+                status_line: self.wall.unlocked_line(locale),
                 filter_menu,
                 categories: if day_one {
                     Vec::new()
@@ -739,14 +754,16 @@ impl Home {
             (self.destination, &self.items, &self.review),
             (D::Items, Phase::Denied(_), _) | (D::Review, _, Phase::Denied(_))
         );
-        if !self.wall.is_open() || denied {
+        if denied {
             return Vec::new();
         }
+        // A LOCKED BAND LIGHTS NO PLACE: the member is not in one yet.
+        let open = self.wall.is_open();
         let tab = |key: &str, label: String, icon: &str, current: bool| wire::LockerBandTab {
             key: key.to_owned(),
             label,
             icon_key: icon.to_owned(),
-            current,
+            current: open && current,
         };
         vec![
             tab(
@@ -880,6 +897,8 @@ impl Screen for Home {
                 }
             }
             Some(E::LockerWall(wall)) => {
+                // THE UNLOCK BUTTON LANDS ON THE LANDING, not on a place tapped before.
+                self.pending = None;
                 let step = self.wall.event(ctx, wall);
                 self.walled(ctx, step)
             }
@@ -889,7 +908,23 @@ impl Screen for Home {
             }
             Some(E::LockerHome(home)) => {
                 if !self.wall.is_open() {
-                    // Any tap on a screen the session ended under finds out.
+                    // A PLACE TAPPED ON THE LOCKED BAND STARTS THE UNLOCK (as the button does)
+                    // and lands there once it opens.
+                    if let Some(H::Band(band)) = &home.kind
+                        && matches!(band.key.as_str(), "items" | "review" | "generate" | "more")
+                    {
+                        self.pending = Some(band.key.clone());
+                        let step = self.wall.event(
+                            ctx,
+                            wire::LockerWallEvent {
+                                kind: Some(wire::locker_wall_event::Kind::Unlock(
+                                    wire::locker_wall_event::UnlockTapped {},
+                                )),
+                            },
+                        );
+                        return self.walled(ctx, step);
+                    }
+                    // Any other tap on a screen the session ended under finds out.
                     let step = self.wall.recheck(ctx);
                     return self.walled(ctx, step);
                 }
@@ -898,6 +933,10 @@ impl Screen for Home {
             Some(E::EffectResult(result)) => {
                 self.secrets.answered(ctx, &result);
                 let step = self.wall.answered(ctx, &result);
+                // A CANCELLED OR REFUSED CHECK forgets the place that asked for it.
+                if !self.wall.is_unlocking() && !self.wall.is_open() {
+                    self.pending = None;
+                }
                 self.walled(ctx, step)
             }
             Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
@@ -930,6 +969,7 @@ impl Screen for Home {
                 content,
                 sheet: self.sheet as i32,
                 band: self.band(locale),
+                band_locked: !open,
                 chrome: Some(Self::chrome(locale)),
                 search: Some(wire::LockerSearchField {
                     open: searched,

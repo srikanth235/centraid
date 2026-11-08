@@ -195,10 +195,7 @@ pub struct Icon {
     pub light_edge: String,
     pub dark_tile: String,
     pub tinted_tile: String,
-    pub tinted_teal: String,
-    pub tinted_orange: String,
-    pub tinted_blue: String,
-    pub tinted_pink: String,
+    pub tinted_mark: String,
     pub themed_tile: String,
     pub themed_glyph: String,
 }
@@ -206,16 +203,13 @@ pub struct Icon {
 impl Icon {
     /// Every colour by field name, for the well-formed-hex check.
     #[must_use]
-    pub fn colours(&self) -> [(&'static str, &str); 10] {
+    pub fn colours(&self) -> [(&'static str, &str); 7] {
         [
             ("light_tile", &self.light_tile),
             ("light_edge", &self.light_edge),
             ("dark_tile", &self.dark_tile),
             ("tinted_tile", &self.tinted_tile),
-            ("tinted_teal", &self.tinted_teal),
-            ("tinted_orange", &self.tinted_orange),
-            ("tinted_blue", &self.tinted_blue),
-            ("tinted_pink", &self.tinted_pink),
+            ("tinted_mark", &self.tinted_mark),
             ("themed_tile", &self.themed_tile),
             ("themed_glyph", &self.themed_glyph),
         ]
@@ -895,7 +889,7 @@ mod tests {
         assert_eq!(tokens.brand["teal"], "#00AA98");
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
-        assert_eq!(tokens.icons.len(), 148);
+        assert_eq!(tokens.icons.len(), 150);
         assert_eq!(tokens.native.app.len(), 8);
     }
 

@@ -1,6 +1,7 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -193,6 +194,20 @@ public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
     when (chip.tone) {
         StatusChip.Tone.TONE_SEAM, StatusChip.Tone.TONE_WARNING -> KitBadge(chip.label, StateColor.Amber, tagged)
         StatusChip.Tone.TONE_NET -> KitBadge(chip.label, StateColor.Red, tagged)
+        // THE APP'S OWN GOOD NEWS: a wash of the accent under the accent's text.
+        StatusChip.Tone.TONE_ACCENT -> {
+            val accent = appAccent()
+            KitText(
+                chip.label,
+                KitType.Badge,
+                accent.text,
+                tagged
+                    .clip(RoundedCornerShape(KitBadgeRadius))
+                    .background(accent.wash(centraidDark()))
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                maxLines = 1,
+            )
+        }
         else -> KitText(
             chip.label,
             KitType.Badge,

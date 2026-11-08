@@ -392,6 +392,35 @@ fn the_first_vault_gets_the_starter_rows_and_the_second_does_not() {
 }
 
 #[test]
+fn the_first_vaults_starter_notes_read_newest_first_for_the_day_one_tile() {
+    let mut phone = Phone::new();
+    phone.launch();
+    phone.shelf.found(None, "First");
+    let core = phone.shelf.foreground_core().expect("a core in front");
+    let mut request = centraid_screens::catalog::load::notes::Library::default().request();
+    request.zone = "UTC".to_owned();
+    let answer = core.load(&request).expect("the library reads");
+    let Some(wire::app_query_response::Answer::NotesLibrary(library)) =
+        answer.answer.and_then(|a| a.answer)
+    else {
+        panic!("no library answered");
+    };
+    // THE HOME TILE SHOWS THESE TWO IN THIS ORDER (FirstHome board): the one written last is the
+    // newest, and the tie between two notes made in the same instant is broken the same way
+    // every time.
+    let titles: Vec<&str> = library
+        .notes
+        .iter()
+        .filter_map(|row| row.title.as_deref())
+        .collect();
+    assert_eq!(
+        titles.get(..2),
+        Some(&["Link with [[", "This note is yours"][..]),
+        "{titles:?}"
+    );
+}
+
+#[test]
 fn a_found_the_core_refuses_deletes_its_directory_and_gives_its_index_back() {
     let dir = scratch();
     // The core is sabotaged as it is prepared, so the found has nothing to
