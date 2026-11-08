@@ -466,6 +466,10 @@ public enum CentraidCatalog {
             CentraidIconPath(d: "M3 12a9 9 0 1 0 3-6.7L3 8", filled: false, evenOdd: false),
             CentraidIconPath(d: "M3 3v5h5", filled: false, evenOdd: false),
         ],
+        "Rows": [
+            CentraidIconPath(d: "M5 4h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M5 13h14a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2z", filled: false, evenOdd: false),
+        ],
         "Save": [
             CentraidIconPath(d: "M5 4h11l4 4v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z", filled: false, evenOdd: false),
             CentraidIconPath(d: "M8 4v5h7V4M8 14h8v7H8z", filled: false, evenOdd: false),

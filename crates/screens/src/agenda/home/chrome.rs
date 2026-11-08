@@ -6,7 +6,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::fold::long_day;
-use super::grid::{self, WeekStart};
+use super::grid;
 use crate::agenda::routes;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
@@ -82,6 +82,7 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
 /// that order. Empty off the Calendar tab, where there is nothing to switch.
 #[must_use]
 pub fn calendar_views(locale: Locale, destination: Dest) -> Vec<wire::AgendaCalendarView> {
+    // Day and Week carry their layouts on the Calendar's header instead.
     if !grid::is_calendar_view(destination) {
         return Vec::new();
     }
@@ -106,37 +107,91 @@ pub fn calendar_views(locale: Locale, destination: Dest) -> Vec<wire::AgendaCale
     ]
 }
 
-/// The day bar. Shown only with an anchor and a today, outside the gate, off
-/// To-do (no window) and with no term answering (search results are not a window).
+/// Whether the Calendar's own header ([`calendar_header`]) stands in for the
+/// app's title, the view menu and the day bar: Day and Week only. Month, Year
+/// and List keep theirs.
+#[must_use]
+pub fn has_calendar_header(destination: Dest) -> bool {
+    matches!(destination, Dest::Day | Dest::Week)
+}
+
+/// THE CALENDAR'S HEADER (#1173, `Calendar.dc.html`): the month chip, the layout
+/// key, Day's all-day lane and the Today key's visibility. `data` is the
+/// answer the view draws; the lane is TAKEN from its Day column so it is drawn
+/// once. Not `shown` while denied or while a search term is answering.
+pub fn calendar_header(
+    locale: Locale,
+    destination: Dest,
+    anchor: &str,
+    today: &str,
+    shown: bool,
+    data: Option<&mut wire::AgendaHomeData>,
+) -> wire::AgendaCalendarHeader {
+    if !shown || !has_calendar_header(destination) {
+        return wire::AgendaCalendarHeader::default();
+    }
+    let month = if anchor.is_empty() {
+        String::new()
+    } else {
+        civil::month_of(locale, anchor)
+    };
+    let all_day = match (destination, data) {
+        (Dest::Day, Some(data)) => data
+            .time_grid
+            .as_mut()
+            .and_then(|grid| grid.days.first_mut())
+            .map(|day| std::mem::take(&mut day.all_day))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    wire::AgendaCalendarHeader {
+        shown: true,
+        month_accessibility: if month.is_empty() {
+            String::new()
+        } else {
+            fill(&sayings::month_chip_spoken(locale), &[("month", &month)])
+        },
+        month_label: month,
+        layout: destination as i32,
+        layout_label: reminders::view_menu(locale),
+        layouts: calendar_views(locale, destination),
+        all_day_label: sayings::grid_all_day(locale),
+        all_day,
+        today_shown: !anchor.is_empty() && !today.is_empty() && anchor != today,
+        today_label: words::today(locale),
+        month_icon_key: "ChevronLeft".to_owned(),
+        layout_icon_key: "Rows".to_owned(),
+    }
+}
+
+/// The day bar of Month, Year and the lists. Shown only with an anchor and a today, outside the gate, off
+/// To-do (no window), and off Day and Week (the Calendar's header) and with no term answering (search results are not a window).
 #[must_use]
 pub fn toolbar(
     locale: Locale,
     destination: Dest,
     anchor: &str,
     today: &str,
-    start: WeekStart,
     shown: bool,
 ) -> wire::AgendaToolbar {
-    if !shown || anchor.is_empty() || today.is_empty() || destination == Dest::Todo {
+    if !shown
+        || anchor.is_empty()
+        || today.is_empty()
+        || destination == Dest::Todo
+        || has_calendar_header(destination)
+    {
         return wire::AgendaToolbar::default();
     }
-    // THE PERIOD'S OWN WORDS: a week, a month or a year, and today is in it
-    // when the Today button has nowhere to go.
+    // THE PERIOD'S OWN WORDS: a month or a year, and today is in it when the
+    // Today button has nowhere to go. Day and Week have the Calendar's header.
     let year = anchor.get(..4).unwrap_or_default();
     let (range_label, at_today) = match destination {
-        Dest::Week => (
-            grid::week_label(locale, anchor, start),
-            grid::week_first(anchor, start) == grid::week_first(today, start),
-        ),
         Dest::Month => (
             rows::month_year(locale, anchor),
             anchor.get(..7) == today.get(..7),
         ),
         Dest::Year => (year.to_owned(), anchor.get(..4) == today.get(..4)),
-        _ => (
-            day_label(locale, destination, anchor, today),
-            anchor == today,
-        ),
+        _ => (day_label(locale, anchor, today), anchor == today),
     };
     wire::AgendaToolbar {
         shown: true,
@@ -150,19 +205,9 @@ pub fn toolbar(
     }
 }
 
-/// Day's and the lists' range label.
-fn day_label(locale: Locale, destination: Dest, anchor: &str, today: &str) -> String {
-    if destination == Dest::Day {
-        if anchor == today {
-            words::today(locale)
-        } else if civil::plus_days(today, 1).as_deref() == Some(anchor) {
-            words::tomorrow(locale)
-        } else if civil::plus_days(today, -1).as_deref() == Some(anchor) {
-            words::yesterday(locale)
-        } else {
-            long_day(locale, anchor)
-        }
-    } else if anchor == today {
+/// The lists' range label: "From today", "From Wednesday 11 March".
+fn day_label(locale: Locale, anchor: &str, today: &str) -> String {
+    if anchor == today {
         words::from_today(locale)
     } else {
         fill(

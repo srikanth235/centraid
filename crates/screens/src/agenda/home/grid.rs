@@ -28,7 +28,7 @@ use crate::agenda::routes;
 use crate::agenda::todo::rows;
 use crate::kit::civil;
 use crate::strings::{
-    Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences, fill, task,
+    Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences, task,
 };
 
 /// What a drop or a long press snaps to, in minutes.
@@ -471,13 +471,13 @@ fn week_strip(input: &Input) -> Option<wire::AgendaWeekStrip> {
             is_weekend: is_weekend(&day),
             dot_hue_keys: input.dots(&day),
             accessibility_label: input.spoken(&day),
-            opens: Dest::Day as i32,
+            // A day picked stays in the layout it was picked in.
+            opens: input.destination as i32,
             day,
         })
         .collect();
     Some(wire::AgendaWeekStrip {
         days,
-        step_days: 7,
         previous_label: sayings::previous_week(input.locale),
         next_label: sayings::next_week(input.locale),
     })
@@ -914,14 +914,6 @@ fn year(input: &Input) -> Option<wire::AgendaYearGrid> {
     })
 }
 
-/// The Week toolbar's range: "Week of 2 November".
-#[must_use]
-pub fn week_label(locale: Locale, anchor: &str, start: WeekStart) -> String {
-    let first = week_first(anchor, start).unwrap_or_else(|| anchor.to_owned());
-    let day = format!("{} {}", day_number(&first), civil::month_of(locale, &first));
-    fill(&sayings::week_of(locale), &[("day", &day)])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1143,7 +1135,6 @@ mod tests {
             wednesday.accessibility_label,
             "Wednesday 4 November, 5 events"
         );
-        assert_eq!(strip.step_days, 7);
 
         let strip =
             week_strip(&parts.view(Dest::Day, "2026-11-04", WeekStart::Sunday)).expect("a strip");

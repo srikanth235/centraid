@@ -116,6 +116,10 @@ message AgendaHomeState {
   // reminders" and the one verb. The More row that opens it (`import-reminders`)
   // is drawn only where the platform has a reminders source.
   AgendaImportRemindersSheet import_reminders = 34;
+  // THE CALENDAR'S HEADER (#1173), on Day and Week: the back-to-month chip, the
+  // layout key, the all-day lane and the Today key's visibility. Not `shown`
+  // on every other place, which keeps its own title and day bar.
+  AgendaCalendarHeader calendar_header = 35;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -159,6 +163,44 @@ message AgendaCalendarView {
   string icon_key = 3;
   AgendaDestination destination = 4;
   bool current = 5;
+}
+
+// THE CALENDAR'S HEADER (#1173, `design/mockups/Calendar.dc.html`): over the
+// hour grid of Day and Week, in place of the app's title, the Day menu, the
+// date line and the ‹ › stepper. The week strip it sits over is
+// `AgendaHomeData.week_strip`; a swipe on the strip or the grid pages a week
+// (`WeekPaged`) and a tap on a day is `DayPicked`.
+message AgendaCalendarHeader {
+  // False on every place but Day and Week, while denied, and while a search
+  // term is answering. A shell draws its own title and day bar then.
+  bool shown = 1;
+  // The chip's words, the anchor's month alone: "November". Empty until the
+  // first answer names the anchor. A tap sends `MonthChipTapped`.
+  string month_label = 2;
+  // "Month view, November".
+  string month_accessibility = 3;
+  // 4 was never drawn: the strip's own `is_selected` says the day.
+  reserved 4;
+  reserved "selected_day";
+  // The layout in use: Day or Week.
+  AgendaDestination layout = 5;
+  // The layout key's accessibility label, "View".
+  string layout_label = 6;
+  // The layout key's choices, Day and Week first (the toggle) and then Month,
+  // List and Year. Each names the layout `LayoutToggled` carries.
+  repeated AgendaCalendarView layouts = 7;
+  // "all-day".
+  string all_day_label = 8;
+  // THE ALL-DAY LANE of Day: the anchor's all-day events, birthdays and
+  // untimed tasks, drawn in one row under the strip. Empty on Week, whose
+  // columns carry their own (`AgendaGridDay.all_day`), and on a day with none.
+  repeated AgendaGridChip all_day = 9;
+  // The floating Today key is drawn: the anchor is not today.
+  bool today_shown = 10;
+  string today_label = 11;
+  // Catalogue icons for the chip's chevron and the layout key.
+  string month_icon_key = 12;
+  string layout_icon_key = 13;
 }
 
 message AgendaToolbar {
@@ -322,12 +364,12 @@ message AgendaTodo {
 
 // THE WEEK STRIP (#1173): the seven days of the anchor's week, from the
 // region's first weekday, each with a dot per calendar it has events on. A tap
-// sends `DayPicked` with the day's `opens`; a swipe sends `DayStepped` with
-// `step_days` (minus it for the week before).
+// sends `DayPicked` with the day's `opens`; a swipe sends `WeekPaged`.
 message AgendaWeekStrip {
   repeated AgendaStripDay days = 1;
-  // 7.
-  int32 step_days = 2;
+  // 2 was `step_days` (7): `WeekPaged` counts weeks.
+  reserved 2;
+  reserved "step_days";
   // The swipe's spoken names: "Previous week", "Next week".
   string previous_label = 3;
   string next_label = 4;
@@ -349,7 +391,7 @@ message AgendaStripDay {
   repeated string dot_hue_keys = 7;
   // "Wednesday 4 November, 3 events".
   string accessibility_label = 8;
-  // What a tap opens: Day (from the Week strip) — sent back in `DayPicked`.
+  // What a tap opens: the layout the strip is in, Day or Week — sent back in `DayPicked`.
   AgendaDestination opens = 9;
 }
 
@@ -791,6 +833,24 @@ message AgendaHomeEvent {
     // `imports.made` to read the phone's Reminders with the switch's option.
     ImportRemindersCompletedToggled import_reminders_completed = 55;
     ImportRemindersSubmitted import_reminders_submitted = 56;
+    // THE CALENDAR'S HEADER (#1173): the month chip, a layout choice and a week
+    // page.
+    MonthChipTapped month_chip = 57;
+    LayoutToggled layout_toggled = 58;
+    WeekPaged week_paged = 59;
+  }
+
+  // The "‹ November" chip: back to the month the anchor is in.
+  message MonthChipTapped {}
+
+  // A layout key choice (`AgendaCalendarHeader.layouts`), keeping the anchor.
+  message LayoutToggled {
+    AgendaDestination layout = 1;
+  }
+
+  // A swipe on the week strip or the Week grid: whole weeks, -1 the one before.
+  message WeekPaged {
+    int32 weeks = 1;
   }
 
   // The sheet's "Include completed reminders" switch was flipped.

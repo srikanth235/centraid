@@ -394,6 +394,29 @@ impl Home {
                     self.read(ctx);
                 }
             }
+            // THE CALENDAR'S HEADER (#1173). The chip goes back to the month the anchor is in.
+            H::MonthChip(_) => {
+                if chrome::has_calendar_header(self.destination) && !self.anchor.is_empty() {
+                    self.move_to(Dest::Month, ctx);
+                }
+            }
+            // A layout choice keeps the anchor; only a Calendar view is one.
+            H::LayoutToggled(chosen) => {
+                let layout = Dest::try_from(chosen.layout).unwrap_or(Dest::Unspecified);
+                if grid::is_calendar_view(layout) && layout != self.destination {
+                    self.move_to(layout, ctx);
+                }
+            }
+            // A swipe on the strip or the Week grid: whole weeks, the weekday kept.
+            H::WeekPaged(paged) => {
+                if self.anchor.is_empty() || paged.weeks == 0 {
+                    return;
+                }
+                if let Some(moved) = civil::plus_days(&self.anchor, 7 * i64::from(paged.weeks)) {
+                    self.anchor = moved;
+                    self.read(ctx);
+                }
+            }
             H::MonthStyle(chosen) => match wire::AgendaMonthStyle::try_from(chosen.style) {
                 Ok(style) if style != wire::AgendaMonthStyle::Unspecified => {
                     self.month_style = style;
@@ -685,10 +708,24 @@ impl Screen for Home {
         let locale = ctx.locale();
         let todo = self.destination == Dest::Todo;
         let denied = self.denied();
-        let data = match self.phase {
+        let mut data = match self.phase {
             Phase::Ready => self.data(ctx),
             _ => None,
         };
+        let searching = self.active_term().is_some();
+        let today_now = data
+            .as_ref()
+            .map(|data| data.today.clone())
+            .unwrap_or_else(|| self.held.today());
+        // THE HEADER TAKES DAY'S ALL-DAY LANE out of the answer, so it is drawn once.
+        let calendar_header = chrome::calendar_header(
+            locale,
+            self.destination,
+            &self.anchor,
+            &today_now,
+            !denied && !searching,
+            data.as_mut(),
+        );
         let content = match &self.phase {
             Phase::Loading => Some(wire::agenda_home_state::Content::Loading(wire::Loading {
                 first_load: true,
@@ -760,7 +797,8 @@ impl Screen for Home {
                     } else {
                         chrome::band(locale, self.destination, sheet_up)
                     },
-                    calendar_views: if denied {
+                    calendar_header: Some(calendar_header),
+                    calendar_views: if denied || chrome::has_calendar_header(self.destination) {
                         Vec::new()
                     } else {
                         chrome::calendar_views(locale, self.destination)
@@ -771,7 +809,6 @@ impl Screen for Home {
                         self.destination,
                         &self.anchor,
                         &today,
-                        grid::week_start_of(ctx.region()),
                         !denied && term.is_none(),
                     )),
                     chrome: Some(chrome::words_of(locale)),

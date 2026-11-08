@@ -14,6 +14,7 @@ catalog! {
     plain initial_thu = ("T", "T");
     plain initial_tue = ("T", "T");
     plain initial_wed = ("W", "W");
+    plain month_chip_spoken = ("Month view, {month}", "Month view, {month}");
     plain move_label = ("Move", "Move");
     plain next_month = ("Next month", "Next month");
     plain next_week = ("Next week", "Next week");
@@ -28,19 +29,4 @@ catalog! {
     plain view_month = ("Month", "Month");
     plain view_week = ("Week", "Week");
     plain view_year = ("Year", "Year");
-    plain week_of = ("Week of {day}", "Week of {day}");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::strings::{Locale, fill};
-
-    #[test]
-    fn the_week_label_takes_its_day() {
-        assert_eq!(
-            fill(&week_of(Locale::En), &[("day", "2 November")]),
-            "Week of 2 November"
-        );
-    }
 }

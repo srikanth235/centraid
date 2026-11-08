@@ -109,6 +109,28 @@ impl Rig {
         }));
     }
 
+    fn header(&self) -> &wire::AgendaCalendarHeader {
+        self.state().calendar_header.as_ref().expect("the header")
+    }
+
+    fn chip(&mut self) {
+        self.send(H::MonthChip(wire::agenda_home_event::MonthChipTapped {}));
+    }
+
+    fn layout(&mut self, layout: Dest) {
+        self.send(H::LayoutToggled(wire::agenda_home_event::LayoutToggled {
+            layout: layout as i32,
+        }));
+    }
+
+    fn weeks(&mut self, weeks: i32) {
+        self.send(H::WeekPaged(wire::agenda_home_event::WeekPaged { weeks }));
+    }
+
+    fn today_tapped(&mut self) {
+        self.send(H::Today(wire::agenda_home_event::TodayRequested {}));
+    }
+
     fn band(&mut self, key: &str) {
         self.send(H::Band(wire::agenda_home_event::BandPicked {
             key: key.to_owned(),
@@ -203,16 +225,18 @@ fn minutes(clock: &str) -> i32 {
 fn the_view_menu_is_day_week_month_list_year_and_lights_the_calendar_tab() {
     let mut r = rig(Dest::Day);
     r.settle();
+    // Day and Week carry the menu on the Calendar's header, the rest on the state.
+    assert!(r.state().calendar_views.is_empty());
     let keys: Vec<&str> = r
-        .state()
-        .calendar_views
+        .header()
+        .layouts
         .iter()
         .map(|view| view.key.as_str())
         .collect();
     assert_eq!(keys, ["day", "week", "month", "list", "year"]);
     let places: Vec<i32> = r
-        .state()
-        .calendar_views
+        .header()
+        .layouts
         .iter()
         .map(|view| view.destination)
         .collect();
@@ -236,8 +260,12 @@ fn the_view_menu_is_day_week_month_list_year_and_lights_the_calendar_tab() {
         r.destination(place);
         let state = r.state();
         assert!(state.band[0].current, "Calendar is lit on {key}");
-        let current: Vec<&str> = state
-            .calendar_views
+        let views = if state.calendar_views.is_empty() {
+            &state.calendar_header.as_ref().expect("header").layouts
+        } else {
+            &state.calendar_views
+        };
+        let current: Vec<&str> = views
             .iter()
             .filter(|view| view.current)
             .map(|view| view.key.as_str())
@@ -303,7 +331,6 @@ fn week_reads_the_whole_week_from_the_regions_first_weekday() {
             .iter()
             .all(|b| !b.instance_key.starts_with("zq-"))
     );
-    assert_eq!(strip.step_days, 7);
     assert_eq!(r.data().today.len(), 10);
 
     // A UNITED STATES LOCALE: Sunday first. The week is 6 to 12 June, and
@@ -362,9 +389,10 @@ fn day_draws_one_column_and_the_strip_of_its_week() {
     r.period(1);
     assert_eq!(r.state().anchor_day, "2027-06-10");
     assert!(r.grid().days[0].blocks.is_empty());
-    let toolbar = r.state().toolbar.as_ref().expect("the toolbar");
-    assert_eq!(toolbar.month_label, "June 2027");
-    assert!(!toolbar.at_today);
+    // Day has no day bar: the header says the month and offers Today.
+    assert!(!r.state().toolbar.as_ref().expect("the toolbar").shown);
+    assert_eq!(r.header().month_label, "June");
+    assert!(r.header().today_shown);
 }
 
 #[test]
@@ -500,9 +528,8 @@ fn year_is_twelve_months_of_whole_weeks_and_a_month_opens_the_month() {
 fn toolbar_words_follow_the_view() {
     let mut r = rig(Dest::Week);
     r.pick(WED, Dest::Week);
-    let toolbar = r.state().toolbar.as_ref().expect("the toolbar");
-    assert_eq!(toolbar.range_label, "Week of 7 June");
-    assert_eq!(toolbar.month_label, "June 2027");
+    // Week has the Calendar's header and no day bar.
+    assert!(!r.state().toolbar.as_ref().expect("the toolbar").shown);
     r.destination(Dest::Month);
     assert_eq!(
         r.state().toolbar.as_ref().expect("bar").range_label,
@@ -510,11 +537,9 @@ fn toolbar_words_follow_the_view() {
     );
     r.destination(Dest::Year);
     assert_eq!(r.state().toolbar.as_ref().expect("bar").range_label, "2027");
-    // Today is in the period: Week, Month and Year on today hide the button.
+    // Today is in the period: Month and Year on today hide the button.
     let today = r.data().today.clone();
-    r.pick(&today, Dest::Week);
-    assert!(r.state().toolbar.as_ref().expect("bar").at_today);
-    r.destination(Dest::Month);
+    r.pick(&today, Dest::Month);
     assert!(r.state().toolbar.as_ref().expect("bar").at_today);
     r.destination(Dest::Year);
     assert!(r.state().toolbar.as_ref().expect("bar").at_today);
@@ -919,4 +944,194 @@ fn a_search_term_draws_no_grid() {
     let data = r.data();
     assert!(data.time_grid.is_none() && data.week_strip.is_none());
     assert!(data.month.is_none() && data.year.is_none());
+}
+
+// ---- THE CALENDAR'S HEADER (#1173) -----------------------------------------
+
+#[test]
+fn day_and_week_carry_the_header_and_nothing_else_keeps_it() {
+    let mut r = rig(Dest::Day);
+    r.pick(WED, Dest::Day);
+    let header = r.header();
+    assert!(header.shown);
+    assert_eq!(header.month_label, "June");
+    assert_eq!(header.month_accessibility, "Month view, June");
+    assert_eq!(header.layout, Dest::Day as i32);
+    assert_eq!(header.layout_label, "View");
+    assert_eq!(header.all_day_label, "all-day");
+    assert_eq!(header.today_label, "Today");
+    assert!(header.today_shown, "a past day offers Today");
+    let strip = r.data().week_strip.as_ref().expect("strip");
+    let selected: Vec<&str> = strip
+        .days
+        .iter()
+        .filter(|day| day.is_selected)
+        .map(|day| day.day.as_str())
+        .collect();
+    assert_eq!(selected, [WED]);
+    r.destination(Dest::Week);
+    assert!(r.header().shown);
+    assert_eq!(r.header().layout, Dest::Week as i32);
+    for place in [Dest::Month, Dest::Year, Dest::Schedule, Dest::Todo] {
+        r.destination(place);
+        assert!(!r.header().shown, "{place:?} keeps its own header");
+        assert!(r.header().all_day.is_empty());
+    }
+    r.destination(Dest::Month);
+    assert!(
+        !r.state().calendar_views.is_empty(),
+        "Month keeps its view menu"
+    );
+}
+
+#[test]
+fn the_today_key_shows_off_today_and_the_tap_brings_the_day_back() {
+    let mut r = rig(Dest::Day);
+    r.settle();
+    let today = r.data().today.clone();
+    assert!(!r.header().today_shown, "on today there is nowhere to go");
+    r.pick(&plus(&today, 3), Dest::Day);
+    assert!(r.header().today_shown);
+    r.today_tapped();
+    assert_eq!(r.state().anchor_day, today);
+    assert!(!r.header().today_shown);
+    r.destination(Dest::Week);
+    r.weeks(2);
+    assert!(r.header().today_shown);
+    r.today_tapped();
+    assert!(!r.header().today_shown);
+}
+
+#[test]
+fn the_all_day_lane_holds_days_chips_once_and_week_keeps_its_columns() {
+    let mut r = rig(Dest::Day);
+    r.write(act::agenda::Propose {
+        id: Some("zq-all".to_owned()),
+        title: "Zq Retreat".to_owned(),
+        starts: WED.to_owned(),
+        timing: Some(act::agenda::ProposeTiming::AllDay),
+        ..Default::default()
+    });
+    r.event(
+        "zq-timed",
+        "Zq Timed",
+        "2027-06-09T09:00",
+        Some("2027-06-09T10:00"),
+    );
+    r.pick(WED, Dest::Day);
+    let lane: Vec<&str> = r
+        .header()
+        .all_day
+        .iter()
+        .map(|chip| chip.title.as_str())
+        .collect();
+    assert_eq!(lane, ["Zq Retreat"]);
+    assert!(
+        r.grid().days[0].all_day.is_empty(),
+        "drawn once: the column does not repeat the lane"
+    );
+    assert_eq!(r.grid().days[0].blocks.len(), 1);
+    r.pick(&plus(WED, 1), Dest::Day);
+    assert!(r.header().all_day.is_empty());
+    r.pick(WED, Dest::Day);
+    r.layout(Dest::Week);
+    assert!(r.header().all_day.is_empty());
+    let column = r
+        .grid()
+        .days
+        .iter()
+        .find(|day| day.day == WED)
+        .expect("column");
+    assert_eq!(column.all_day.len(), 1);
+}
+
+#[test]
+fn the_chip_goes_back_to_the_month_of_the_anchor() {
+    let mut r = rig(Dest::Day);
+    r.pick("2027-03-31", Dest::Day);
+    r.chip();
+    assert_eq!(r.state().destination, Dest::Month as i32);
+    assert_eq!(r.state().anchor_day, "2027-03-31");
+    assert!(!r.header().shown);
+    assert!(r.data().month.is_some());
+    r.pick("2027-03-31", Dest::Week);
+    r.chip();
+    assert_eq!(r.state().destination, Dest::Month as i32);
+    // Month has no chip: a stray tap changes nothing.
+    r.chip();
+    assert_eq!(r.state().destination, Dest::Month as i32);
+    r.band("reminders");
+    r.band("calendar");
+    assert_eq!(r.state().destination, Dest::Month as i32);
+}
+
+#[test]
+fn a_layout_choice_keeps_the_day_and_only_a_calendar_view_is_one() {
+    let mut r = rig(Dest::Day);
+    r.pick(WED, Dest::Day);
+    r.layout(Dest::Week);
+    assert_eq!(r.state().destination, Dest::Week as i32);
+    assert_eq!(r.state().anchor_day, WED);
+    assert_eq!(r.header().layout, Dest::Week as i32);
+    assert_eq!(r.grid().days.len(), 7);
+    r.layout(Dest::Day);
+    assert_eq!(r.state().destination, Dest::Day as i32);
+    assert_eq!(r.grid().days.len(), 1);
+    r.layout(Dest::Schedule);
+    assert_eq!(r.state().destination, Dest::Schedule as i32);
+    assert_eq!(r.state().anchor_day, WED);
+    r.layout(Dest::Todo);
+    r.layout(Dest::Unspecified);
+    assert_eq!(r.state().destination, Dest::Schedule as i32);
+}
+
+#[test]
+fn a_week_page_moves_whole_weeks_and_keeps_the_weekday() {
+    let mut r = rig(Dest::Day);
+    r.pick(WED, Dest::Day);
+    r.weeks(1);
+    assert_eq!(r.state().anchor_day, "2027-06-16");
+    let strip = r.data().week_strip.as_ref().expect("strip");
+    assert_eq!(strip.days[0].day, "2027-06-14");
+    r.weeks(-2);
+    assert_eq!(r.state().anchor_day, "2027-06-02");
+    r.layout(Dest::Week);
+    r.weeks(1);
+    assert_eq!(r.state().anchor_day, "2027-06-09");
+    assert_eq!(r.grid().days[0].day, "2027-06-07");
+    r.weeks(0);
+    assert_eq!(r.state().anchor_day, "2027-06-09");
+}
+
+#[test]
+fn a_strip_day_is_chosen_in_the_layout_it_was_picked_in() {
+    let mut r = rig(Dest::Day);
+    r.pick(WED, Dest::Day);
+    let strip = r.data().week_strip.as_ref().expect("strip").clone();
+    assert!(strip.days.iter().all(|day| day.opens == Dest::Day as i32));
+    r.layout(Dest::Week);
+    let strip = r.data().week_strip.as_ref().expect("strip").clone();
+    assert!(strip.days.iter().all(|day| day.opens == Dest::Week as i32));
+    let friday = strip.days[4].clone();
+    r.pick(&friday.day, Dest::try_from(friday.opens).expect("a place"));
+    assert_eq!(r.state().destination, Dest::Week as i32);
+    assert_eq!(r.state().anchor_day, "2027-06-11");
+    let strip = r.data().week_strip.as_ref().expect("strip");
+    assert!(strip.days[4].is_selected);
+}
+
+#[test]
+fn a_search_term_puts_the_header_away() {
+    let mut r = rig(Dest::Day);
+    r.pick(WED, Dest::Day);
+    assert!(r.header().shown);
+    r.send(H::SearchOpened(wire::agenda_home_event::SearchOpened {}));
+    assert!(
+        r.header().shown,
+        "an open field with no term is still the grid"
+    );
+    r.send(H::SearchTerm(wire::agenda_home_event::SearchTermChanged {
+        term: "zq".to_owned(),
+    }));
+    assert!(!r.header().shown);
 }
