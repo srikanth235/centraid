@@ -1252,17 +1252,18 @@ fn night_call_in(tz: &str) -> (String, String) {
 fn an_event_question_in_another_zone_is_answered_on_that_zones_days() {
     let (day, in_utc) = night_call_in("Etc/UTC");
     let (_, in_auckland) = night_call_in("Pacific/Auckland");
-    // UTC: that evening, 22:30
-    assert!(in_utc.ends_with(" · 22:30"), "{in_utc}");
+    // The card reads "<day> · <start> – <end>", as the Chat board draws it.
+    // UTC: that evening, 22:30 to 23:30
+    assert!(in_utc.ends_with(" · 22:30 – 23:30"), "{in_utc}");
     // Auckland (UTC+13 in October): the next morning, 11:30 on the NEXT local day
     assert!(
-        in_auckland.ends_with(" · 11:30"),
+        in_auckland.ends_with(" · 11:30 – 12:30"),
         "{in_auckland} (day {day})"
     );
     // the cards name the day in words, so the zone's day shows as a different one
     assert_ne!(
-        in_utc.trim_end_matches(" · 22:30"),
-        in_auckland.trim_end_matches(" · 11:30"),
+        in_utc.trim_end_matches(" · 22:30 – 23:30"),
+        in_auckland.trim_end_matches(" · 11:30 – 12:30"),
         "{in_utc} vs {in_auckland}"
     );
 }
