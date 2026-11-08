@@ -206,14 +206,14 @@ struct StatusChipView: View {
         case .seam, .warning: KitBadge(label: chip.label, state: .amber)
         case .net: KitBadge(label: chip.label, state: .red)
         case .accent:
-            // THE APP'S OWN GOOD NEWS: a wash of the accent under the accent's text.
+            // THE APP'S OWN GOOD NEWS: the accent's chip ground under the accent's text.
             Text(chip.label)
                 .kitType(.badge)
                 .foregroundStyle(accent.text)
                 .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(accent.tint ?? accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         case .neutral, .unspecified, .UNRECOGNIZED:
             Text(chip.label)
                 .kitType(.badge)

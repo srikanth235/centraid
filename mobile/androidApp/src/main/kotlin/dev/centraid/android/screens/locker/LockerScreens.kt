@@ -583,6 +583,22 @@ private fun TypeChip(letters: String, modifier: Modifier = Modifier, size: andro
     }
 }
 
+/** THE ITEM'S HERO TILE: the first letter of the title (Rust's `hero_initial`) in white on ink; the ink stays ink in dark. */
+@Composable
+private fun HeroTile(letter: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 64.dp) {
+    if (letter.isEmpty()) return
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape((size.value * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+            .background(Surface.tile)
+            .clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        KitText(letter, KitType.Title, androidx.compose.ui.graphics.Color.White)
+    }
+}
+
 /** A quiet sentence under a list or a field: Rust's, drawn only when present. */
 @Composable
 internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String = "textSoft") {
@@ -780,14 +796,14 @@ internal fun LockerItemScreen(
                 }
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
-                        // THE CENTRED HERO (the Locker item board): the type's chip large, the title with
+                        // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with
                         // its star beside it, and the type with when it was last used under that.
                         Column(
                             Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("locker-item-head"),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            TypeChip(item.type_chip, size = 64.dp)
+                            HeroTile(item.hero_initial)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     item.title,

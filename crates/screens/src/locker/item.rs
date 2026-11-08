@@ -946,6 +946,7 @@ impl Item {
         wire::LockerItemData {
             title: item.title.clone(),
             type_chip: kind.chip(locale),
+            hero_initial: types::initial(&item.title),
             subtitle: subtitle(locale, &(kind.label)(locale), item, &loaded.today),
             starred: item.starred,
             star_label: if item.starred {

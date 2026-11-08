@@ -23,26 +23,30 @@ struct AppAccent: Equatable {
     let fill: Color
     let text: Color
     let tile: Color
+    /// The pale ground of the app's own chip (`TONE_ACCENT`), under `text`. The shell has none and
+    /// wears [wash].
+    let tint: Color?
 
     init(_ appId: String) {
         switch appId {
-        case "agenda": self.init(appId, CentraidAsset.appAgenda, CentraidAsset.appAgendaText, CentraidAsset.appAgendaTile)
-        case "docs": self.init(appId, CentraidAsset.appDocs, CentraidAsset.appDocsText, CentraidAsset.appDocsTile)
-        case "health": self.init(appId, CentraidAsset.appHealth, CentraidAsset.appHealthText, CentraidAsset.appHealthTile)
-        case "locker": self.init(appId, CentraidAsset.appLocker, CentraidAsset.appLockerText, CentraidAsset.appLockerTile)
-        case "money": self.init(appId, CentraidAsset.appMoney, CentraidAsset.appMoneyText, CentraidAsset.appMoneyTile)
-        case "notes": self.init(appId, CentraidAsset.appNotes, CentraidAsset.appNotesText, CentraidAsset.appNotesTile)
-        case "people": self.init(appId, CentraidAsset.appPeople, CentraidAsset.appPeopleText, CentraidAsset.appPeopleTile)
-        case "photos": self.init(appId, CentraidAsset.appPhotos, CentraidAsset.appPhotosText, CentraidAsset.appPhotosTile)
-        default: self.init("", CentraidAsset.shell, CentraidAsset.shellText, CentraidAsset.shell)
+        case "agenda": self.init(appId, CentraidAsset.appAgenda, CentraidAsset.appAgendaText, CentraidAsset.appAgendaTile, CentraidAsset.appAgendaTint)
+        case "docs": self.init(appId, CentraidAsset.appDocs, CentraidAsset.appDocsText, CentraidAsset.appDocsTile, CentraidAsset.appDocsTint)
+        case "health": self.init(appId, CentraidAsset.appHealth, CentraidAsset.appHealthText, CentraidAsset.appHealthTile, CentraidAsset.appHealthTint)
+        case "locker": self.init(appId, CentraidAsset.appLocker, CentraidAsset.appLockerText, CentraidAsset.appLockerTile, CentraidAsset.appLockerTint)
+        case "money": self.init(appId, CentraidAsset.appMoney, CentraidAsset.appMoneyText, CentraidAsset.appMoneyTile, CentraidAsset.appMoneyTint)
+        case "notes": self.init(appId, CentraidAsset.appNotes, CentraidAsset.appNotesText, CentraidAsset.appNotesTile, CentraidAsset.appNotesTint)
+        case "people": self.init(appId, CentraidAsset.appPeople, CentraidAsset.appPeopleText, CentraidAsset.appPeopleTile, CentraidAsset.appPeopleTint)
+        case "photos": self.init(appId, CentraidAsset.appPhotos, CentraidAsset.appPhotosText, CentraidAsset.appPhotosTile, CentraidAsset.appPhotosTint)
+        default: self.init("", CentraidAsset.shell, CentraidAsset.shellText, CentraidAsset.shell, nil)
         }
     }
 
-    private init(_ appId: String, _ fill: String, _ text: String, _ tile: String) {
+    private init(_ appId: String, _ fill: String, _ text: String, _ tile: String, _ tint: String?) {
         self.appId = appId
         self.fill = Color(fill)
         self.text = Color(text)
         self.tile = Color(tile)
+        self.tint = tint.map { Color($0) }
     }
 
     /// The tint behind an app's glyph: the fill at the icon chip's own strength.

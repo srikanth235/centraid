@@ -171,3 +171,39 @@ mod tests {
         assert_eq!(of("nonsense").id, "note");
     }
 }
+
+/// THE HERO TILE'S LETTER (the LockerItem board): the first letter of the item's title, in
+/// capitals ("GitHub" gives "G", "ßeta" gives "S"). Leading space is skipped; a base character
+/// keeps the combining marks that follow it, so "é" written as e plus an accent stays one letter.
+/// An empty title gives an empty string and the shell draws no tile letter.
+#[must_use]
+pub fn initial(title: &str) -> String {
+    let mut chars = title.trim_start().chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let mut out: String = first.to_uppercase().take(1).collect();
+    for mark in chars {
+        if matches!(mark, '\u{0300}'..='\u{036F}' | '\u{FE0E}' | '\u{FE0F}') {
+            out.push(mark);
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod initial_tests {
+    use super::initial;
+
+    #[test]
+    fn the_hero_letter_is_the_first_letter_in_capitals() {
+        assert_eq!(initial("GitHub"), "G");
+        assert_eq!(initial("  lisbon wifi"), "L");
+        assert_eq!(initial("ßeta"), "S");
+        assert_eq!(initial("e\u{0301}cole"), "E\u{0301}");
+        assert_eq!(initial("   "), "");
+        assert_eq!(initial(""), "");
+    }
+}

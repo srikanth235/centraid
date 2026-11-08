@@ -47,6 +47,17 @@ fn the_hero_names_the_type_and_when_it_was_last_used_and_the_menu_holds_the_verb
     let data = item_data(&d, id);
     // NEVER OPENED: the hero says so under the title.
     assert_eq!(data.subtitle, "Login · never used");
+    // THE HERO TILE draws the title's first letter, not the type's two-letter chip.
+    assert_eq!(
+        data.hero_initial,
+        data.title
+            .chars()
+            .next()
+            .unwrap()
+            .to_uppercase()
+            .to_string()
+    );
+    assert!(!data.type_chip.is_empty());
     assert!(!data.starred && data.star_label.is_empty());
     assert_eq!(item(&d, id).chrome.unwrap().menu_label, "More actions");
     let keys: Vec<&str> = data.actions.iter().map(|a| a.key.as_str()).collect();

@@ -51,10 +51,13 @@ private fun Context.inScheme(dark: Boolean): Context {
  * - [tile] is the bright colour on a tile or an icon where the accent is not that (Notes'
  *   yellow). It does not change in dark.
  *
+ * - [tint] is the pale ground of the app's own chip (`TONE_ACCENT`) under [text]; the shell has none
+ *   and wears [wash].
+ *
  * Stars use [text], never amber: amber only means a state.
  */
 @Immutable
-public data class AppAccent(val appId: String, val fill: Color, val text: Color, val tile: Color) {
+public data class AppAccent(val appId: String, val fill: Color, val text: Color, val tile: Color, val tint: Color? = null) {
     /** The tint behind an app's glyph: the fill at the icon chip's own strength. */
     public fun wash(dark: Boolean): Color =
         fill.copy(alpha = (if (dark) CentraidGeometry.ICON_CHIP_TINT_DARK else CentraidGeometry.ICON_CHIP_TINT_LIGHT).toFloat())
@@ -68,6 +71,7 @@ public fun appAccent(appId: String): AppAccent {
         fill = centraidResource(ids[0]),
         text = centraidResource(ids[1]),
         tile = centraidResource(ids[2]),
+        tint = ids.getOrNull(3)?.let { centraidResource(it) },
     )
 }
 
@@ -80,14 +84,14 @@ public fun appAccent(): AppAccent = appAccent(LocalAppAccentId.current)
 
 /** The fill, text and tile resources for an app id (fill, text, tile). */
 private fun accentResources(appId: String): IntArray = when (appId) {
-    "agenda" -> intArrayOf(R.color.centraid_app_agenda, R.color.centraid_app_agenda_text, R.color.centraid_app_agenda_tile)
-    "docs" -> intArrayOf(R.color.centraid_app_docs, R.color.centraid_app_docs_text, R.color.centraid_app_docs_tile)
-    "health" -> intArrayOf(R.color.centraid_app_health, R.color.centraid_app_health_text, R.color.centraid_app_health_tile)
-    "locker" -> intArrayOf(R.color.centraid_app_locker, R.color.centraid_app_locker_text, R.color.centraid_app_locker_tile)
-    "money" -> intArrayOf(R.color.centraid_app_money, R.color.centraid_app_money_text, R.color.centraid_app_money_tile)
-    "notes" -> intArrayOf(R.color.centraid_app_notes, R.color.centraid_app_notes_text, R.color.centraid_app_notes_tile)
-    "people" -> intArrayOf(R.color.centraid_app_people, R.color.centraid_app_people_text, R.color.centraid_app_people_tile)
-    "photos" -> intArrayOf(R.color.centraid_app_photos, R.color.centraid_app_photos_text, R.color.centraid_app_photos_tile)
+    "agenda" -> intArrayOf(R.color.centraid_app_agenda, R.color.centraid_app_agenda_text, R.color.centraid_app_agenda_tile, R.color.centraid_app_agenda_tint)
+    "docs" -> intArrayOf(R.color.centraid_app_docs, R.color.centraid_app_docs_text, R.color.centraid_app_docs_tile, R.color.centraid_app_docs_tint)
+    "health" -> intArrayOf(R.color.centraid_app_health, R.color.centraid_app_health_text, R.color.centraid_app_health_tile, R.color.centraid_app_health_tint)
+    "locker" -> intArrayOf(R.color.centraid_app_locker, R.color.centraid_app_locker_text, R.color.centraid_app_locker_tile, R.color.centraid_app_locker_tint)
+    "money" -> intArrayOf(R.color.centraid_app_money, R.color.centraid_app_money_text, R.color.centraid_app_money_tile, R.color.centraid_app_money_tint)
+    "notes" -> intArrayOf(R.color.centraid_app_notes, R.color.centraid_app_notes_text, R.color.centraid_app_notes_tile, R.color.centraid_app_notes_tint)
+    "people" -> intArrayOf(R.color.centraid_app_people, R.color.centraid_app_people_text, R.color.centraid_app_people_tile, R.color.centraid_app_people_tint)
+    "photos" -> intArrayOf(R.color.centraid_app_photos, R.color.centraid_app_photos_text, R.color.centraid_app_photos_tile, R.color.centraid_app_photos_tint)
     else -> intArrayOf(R.color.centraid_shell, R.color.centraid_shell_text, R.color.centraid_shell)
 }
 

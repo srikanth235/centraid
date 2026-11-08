@@ -45,6 +45,8 @@ sheet_card = "#FFFFFF"
 fill = "#F2EFEA"
 line = "#EEEBE5"
 border = "#E4E0D8"
+# A tile of ink under a white letter or glyph (the Locker item's hero): it keeps its ink in dark.
+tile = "#1C1B19"
 
 # Dark is designed, not inverted: sheets sit one level up (sheet, sheet_card).
 [surface.dark]
@@ -56,6 +58,7 @@ sheet_card = "#2B2927"
 fill = "#2A2826"
 line = "#2C2A27"
 border = "#3A3733"
+tile = "#1C1B19"
 
 # Text. The light values are the ones the Design rules board draws with.
 [text.light]
@@ -80,49 +83,67 @@ light = "#1F4A45"
 dark_fill = "#2E7268"
 dark_text = "#7FC4B8"
 
-# The eight apps. `tile` is the bright colour on tiles and icons where it is
+# The eight apps. `tint` and `dark_tint` are the accent chip's ground (a status chip in the app's
+# own good news: `TONE_ACCENT`), read off the Money boards (`#ECEAF6` under `#27388B`) and made
+# the same way for the others. `tile` is the bright colour on tiles and icons where it is
 # not the accent (Notes: Apple Notes yellow, content, so it does not change in
 # dark).
 [app.agenda]
 light = "#266FC4"
 dark_fill = "#3077CD"
 dark_text = "#569EF7"
+tint = "#EEF3FA"
+dark_tint = "#202F41"
 
 [app.notes]
 light = "#8C6802"
 dark_fill = "#967002"
 dark_text = "#BF9738"
+tint = "#F6F3EB"
+dark_tint = "#372E14"
 tile = "#F5C431"
 
 [app.people]
 light = "#7638AD"
 dark_fill = "#935BCB"
 dark_text = "#BA82F5"
+tint = "#F4EFF8"
+dark_tint = "#362940"
 
 [app.docs]
 light = "#087990"
 dark_fill = "#01819B"
 dark_text = "#30A9C6"
+tint = "#EBF4F6"
+dark_tint = "#163136"
 
 [app.money]
 light = "#27388B"
 dark_fill = "#536EDC"
 dark_text = "#7C97F4"
+tint = "#ECEAF6"
+dark_tint = "#241D44"
 
 [app.locker]
 light = "#454E58"
 dark_fill = "#6A7888"
 dark_text = "#939DA8"
+tint = "#F0F1F2"
+dark_tint = "#2D2F31"
 
 [app.health]
 light = "#BB365C"
 dark_fill = "#CB4669"
 dark_text = "#F76E8E"
+tint = "#FAEFF2"
+dark_tint = "#42242B"
 
 [app.photos]
 light = "#A8398A"
 dark_fill = "#BB4C9C"
 dark_text = "#E573C3"
+tint = "#F8EFF6"
+dark_tint = "#3F2636"
 
 # States. In words and badges red, amber and green only ever mean a state.
 [state.red]

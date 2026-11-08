@@ -229,8 +229,8 @@ pub struct Accent {
     /// The bright colour on tiles and icons, when it is not the accent.
     #[serde(default)]
     pub tile: Option<String>,
-    /// The pale ground of a badge in this colour, on the light page. Only the
-    /// states have one (a badge says a state).
+    /// The pale ground of a badge in this colour, on the light page. The states
+    /// have one (a badge says a state), and each app (its accent chip).
     #[serde(default)]
     pub tint: Option<String>,
     /// The badge ground in dark: a deep wash under the `dark_text` value.
@@ -252,6 +252,8 @@ pub struct LightSurfaces {
     pub fill: String,
     pub line: String,
     pub border: String,
+    /// An ink tile under a white letter or glyph; it keeps its ink in dark.
+    pub tile: String,
 }
 
 /// Dark surfaces.
@@ -267,6 +269,8 @@ pub struct DarkSurfaces {
     pub fill: String,
     pub line: String,
     pub border: String,
+    /// An ink tile under a white letter or glyph; it keeps its ink in dark.
+    pub tile: String,
 }
 
 /// Surfaces in both schemes.
@@ -615,6 +619,7 @@ impl Tokens {
             ("surface.light.fill", &light.fill),
             ("surface.light.line", &light.line),
             ("surface.light.border", &light.border),
+            ("surface.light.tile", &light.tile),
             ("surface.dark.page", &dark.page),
             ("surface.dark.plain_page", &dark.plain_page),
             ("surface.dark.card", &dark.card),
@@ -623,6 +628,7 @@ impl Tokens {
             ("surface.dark.fill", &dark.fill),
             ("surface.dark.line", &dark.line),
             ("surface.dark.border", &dark.border),
+            ("surface.dark.tile", &dark.tile),
             ("text.light.ink", &self.text.light.ink),
             ("text.light.body", &self.text.light.body),
             ("text.light.meta", &self.text.light.meta),

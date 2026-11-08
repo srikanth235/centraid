@@ -512,6 +512,9 @@ message LockerItemData {
   // The star beside the title is spoken as this ("Starred"); empty when the
   // item is not starred and no star is drawn.
   string star_label = 19;
+  // The hero tile's letter (the LockerItem board): the first letter of `title` in capitals, empty
+  // for an empty title. The list rows keep drawing `type_chip`.
+  string hero_initial = 20;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a

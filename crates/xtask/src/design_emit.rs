@@ -930,6 +930,7 @@ fn color_assets(tokens: &Tokens) -> Vec<ColorAsset> {
         ("fill", &ls.fill, &ds.fill),
         ("line", &ls.line, &ds.line),
         ("border", &ls.border, &ds.border),
+        ("tile", &ls.tile, &ds.tile),
     ] {
         out.push(ColorAsset {
             snake: format!("surface_{name}"),

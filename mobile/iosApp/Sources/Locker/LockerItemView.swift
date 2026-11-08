@@ -156,10 +156,10 @@ struct LockerItemView: View {
 
     @ViewBuilder
     private func page(_ item: Centraid_Core_V1_LockerItemData) -> some View {
-        // THE CENTRED HERO (the Locker item board): the type's chip large, the title with its star
+        // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with its star
         // beside it, and the type with when it was last used under that.
         VStack(spacing: 8) {
-            LockerTypeChip(letters: item.typeChip, side: 64)
+            LockerHeroTile(letter: item.heroInitial)
             HStack(spacing: 6) {
                 Text(item.title)
                     .kitType(.title)

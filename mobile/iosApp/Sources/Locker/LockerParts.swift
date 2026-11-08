@@ -366,3 +366,20 @@ struct LockerCategoryCard: View {
 extension Centraid_Core_V1_LockerCategory: Identifiable {
     public var id: String { key }
 }
+
+/// THE ITEM'S HERO TILE (the LockerItem board): the first letter of the title in white on ink,
+/// which Rust supplies (`hero_initial`). The ink stays ink in dark; the list rows keep the
+/// type's two-letter chip.
+struct LockerHeroTile: View {
+    let letter: String
+    var side: CGFloat = 64
+
+    var body: some View {
+        Text(letter)
+            .kitType(.title)
+            .foregroundStyle(Color.white)
+            .frame(width: side, height: side)
+            .background(Surface.tile, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}

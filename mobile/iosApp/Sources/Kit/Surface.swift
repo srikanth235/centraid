@@ -18,6 +18,8 @@ enum Surface {
     static let fill = Color(CentraidAsset.surfaceFill)
     static let line = Color(CentraidAsset.surfaceLine)
     static let border = Color(CentraidAsset.surfaceBorder)
+    /// Ink under a white letter or glyph; it keeps its ink in dark.
+    static let tile = Color(CentraidAsset.surfaceTile)
 
     static let ink = Color(CentraidAsset.textInk)
     static let body = Color(CentraidAsset.textBody)

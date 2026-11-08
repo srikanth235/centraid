@@ -53,6 +53,9 @@ public object Surface {
     public val fill: Color @Composable get() = centraidResource(R.color.centraid_surface_fill)
     public val line: Color @Composable get() = centraidResource(R.color.centraid_surface_line)
     public val border: Color @Composable get() = centraidResource(R.color.centraid_surface_border)
+
+    /** Ink under a white letter or glyph; it keeps its ink in dark. */
+    public val tile: Color @Composable get() = centraidResource(R.color.centraid_surface_tile)
     public val ink: Color @Composable get() = centraidResource(R.color.centraid_text_ink)
     public val body: Color @Composable get() = centraidResource(R.color.centraid_text_body)
     public val meta: Color @Composable get() = centraidResource(R.color.centraid_text_meta)
