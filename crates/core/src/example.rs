@@ -1758,10 +1758,34 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, circle: &people::Circle, rich: boo
             input["attendees"] = json!([maya]);
         }
         let id = Seeder::id(seeder.run("event.propose", input).as_ref(), "id");
-        if dinner && let (Some(id), Some(maya)) = (id, circle.get("Maya")) {
+        if dinner && let (Some(id), Some(maya)) = (id.clone(), circle.get("Maya")) {
             seeder.run(
                 "event.respond",
                 json!({ "id": id, "person_id": maya, "state": "accepted" }),
+            );
+        }
+        // ATTACHMENTS (#1173): the dinner carries a document, so the event page draws its
+        // attachments section with a row and not only the Add keys.
+        if rich
+            && dinner
+            && let Some(event) = id
+            && let Some(menu) = Seeder::id(
+                seeder
+                    .run(
+                        "document.create_text",
+                        json!({
+                            "title": "Thai menu (sample)",
+                            "body_text": "# Thai menu (sample)\n\nThis is sample demo data, not a real menu.\n\n- Green curry\n- Pad see ew\n- Mango sticky rice\n",
+                            "media_type": "text/markdown",
+                        }),
+                    )
+                    .as_ref(),
+                "id",
+            )
+        {
+            seeder.run(
+                "edge.add",
+                json!({ "from": event, "rel": "attached", "to": menu }),
             );
         }
     }

@@ -114,9 +114,9 @@ private struct TrashRowView: View {
     @Environment(\.appAccent) private var accent
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             if !row.iconKey.isEmpty {
-                KitTile(iconKey: row.iconKey, size: 34)
+                KitTile(iconKey: row.iconKey, size: 30)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.title)
@@ -135,8 +135,7 @@ private struct TrashRowView: View {
             .accessibilityIdentifier("trash-row-\(row.id)")
             Button(action: onRestore) {
                 Text(row.restoreLabel)
-                    .kitType(.row)
-                    .fontWeight(.semibold)
+                    .centraidType("smallStrong")
                     .foregroundStyle(accent.text)
                     .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
                     .contentShape(Rectangle())
@@ -154,11 +153,12 @@ private struct TrashRowView: View {
                 .accessibilityIdentifier("trash-purge-\(row.id)")
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 2)
-        .padding(.vertical, 4)
+        // THE BOARD'S ROW: 10 above and below, 14 before the tile, 6 after the bin.
+        .padding(.leading, 14)
+        .padding(.trailing, 6)
+        .padding(.vertical, 10)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
+            Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
         }
     }
 }

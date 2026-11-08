@@ -213,9 +213,15 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
         [15]
     );
 
-    // DOCS: six documents in three folders, one of them with three versions, a PDF and an
-    // image beside the text, and labels that wear colours.
-    assert_eq!(scenario.count("document", "id", "", vec![]), 6);
+    // DOCS: seven documents in three folders (one is Dinner with Maya's attached menu, filed
+    // nowhere), one of them with three versions, a PDF and an image beside the text, and labels
+    // that wear colours.
+    assert_eq!(scenario.count("document", "id", "", vec![]), 7);
+    assert_eq!(
+        scenario.count("edge", "from_id", "rel = 'attached'", vec![]),
+        1,
+        "one event carries one attachment"
+    );
     assert_eq!(
         scenario.count("document", "id", "media_type = 'application/pdf'", vec![]),
         1

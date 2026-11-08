@@ -385,7 +385,7 @@ private struct AgendaStripDayView: View {
         Button {
             send(AgendaCalendarEvents.dayPicked(day.day, day.opens))
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 0) {
                 Text(day.weekdayInitial)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color(day.isWeekend ? "textFaint" : "textSoft", scheme))
@@ -398,6 +398,9 @@ private struct AgendaStripDayView: View {
                             Circle().fill(accent.fill)
                         }
                     }
+                    .padding(.top, 3)
+                // THE DOTS' OWN SLOT: the same height and the same distance under the number on
+                // every day, so the selected day's filled circle never reaches them.
                 HStack(spacing: 3) {
                     ForEach(Array(day.dotHueKeys.prefix(3).enumerated()), id: \.offset) { _, key in
                         Circle()
@@ -406,6 +409,7 @@ private struct AgendaStripDayView: View {
                     }
                 }
                 .frame(height: AgendaGridMetrics.dot)
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
             .contentShape(Rectangle())
@@ -488,7 +492,7 @@ struct AgendaTimeGridView: View {
                 ForEach(grid.days, id: \.day) { day in
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(day.allDay, id: \.key) { chip in
-                            AgendaChipView(chip: chip, send: send, open: open)
+                            AgendaChipView(chip: chip, narrow: columnWidth < AgendaGridMetrics.detailFromWidth, send: send, open: open)
                         }
                     }
                     .padding(.horizontal, 2)
@@ -625,7 +629,9 @@ struct AgendaTimeGridView: View {
         perMinute: CGFloat
     ) -> some View {
         let index = days.firstIndex(of: now.day) ?? 0
-        return ZStack(alignment: .topLeading) {
+        // ONE CENTRE LINE: the pill, the dot and the rule are centred on a zero-height row, so
+        // they share the minute's y whatever the pill's text is tall.
+        return ZStack(alignment: .leading) {
             Text(now.label)
                 .centraidType("annotLabelOn")
                 .foregroundStyle(Color.white)
@@ -634,16 +640,16 @@ struct AgendaTimeGridView: View {
                 .background(accent.fill, in: Capsule())
                 .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
                 .padding(.trailing, 2)
-                .offset(y: -9)
             Circle()
                 .fill(accent.fill)
                 .frame(width: AgendaGridMetrics.nowDot, height: AgendaGridMetrics.nowDot)
-                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth - AgendaGridMetrics.nowDot / 2, y: -AgendaGridMetrics.nowDot / 2)
+                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth - AgendaGridMetrics.nowDot / 2)
             Rectangle()
                 .fill(accent.fill)
                 .frame(width: max(columnWidth, 0), height: 2)
-                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth, y: -1)
+                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth)
         }
+        .frame(height: 0)
         .offset(y: CGFloat(now.minute) * perMinute)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
@@ -656,12 +662,14 @@ struct AgendaTimeGridView: View {
 /// round box checks it off; a chip with a route pushes it.
 private struct AgendaChipView: View {
     let chip: Centraid_Core_V1_AgendaGridChip
+    /// A Week column: less air round the words, so a name keeps more than two letters.
+    var narrow = false
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: narrow ? 2 : 4) {
             if chip.isTask {
                 AgendaCheckCircle(
                     hueKey: chip.hueKey,
@@ -685,7 +693,7 @@ private struct AgendaChipView: View {
                     .accessibilityIdentifier("agenda-grid-chip-\(chip.key)")
             }
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, narrow ? 3 : 6)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(agendaWash(chip.hueKey, scheme))
@@ -697,6 +705,7 @@ private struct AgendaChipView: View {
             .centraidType("annotLabel")
             .foregroundStyle(Theme.color("text", scheme))
             .lineLimit(1)
+            .minimumScaleFactor(narrow ? 0.7 : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -752,8 +761,10 @@ private struct AgendaBlockView: View {
                         label: block.accessibilityLabel,
                         identifier: "agenda-grid-block-check-\(block.taskID)"
                     ) { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
-                    .padding(.leading, 6)
-                    .padding(.top, 4)
+                    // CENTRED ON THE TITLE'S LINE (the title is centred in the block too).
+                    .frame(height: height)
+                    .padding(.leading, laneWidth >= AgendaGridMetrics.detailFromWidth ? 6 : 3)
+                    .allowsHitTesting(true)
                 }
             }
             if block.movable {

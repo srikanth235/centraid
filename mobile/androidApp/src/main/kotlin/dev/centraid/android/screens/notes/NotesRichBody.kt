@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
@@ -15,9 +16,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
@@ -176,7 +180,27 @@ internal fun NotesRichBody(
                 .testTag("notes-body")
                 .semantics { contentDescription = placeholder },
             decorationBox = { inner ->
-                Box {
+                Box(
+                    Modifier.drawBehind {
+                        // THE PLATES OF THE LIVE CHIPS, rounded, behind the text.
+                        val result = layout ?: return@drawBehind
+                        if (drawn == null || result.layoutInput.text.length != field.text.length) return@drawBehind
+                        drawn.spans.take(MARK_LIMIT).forEach { span ->
+                            val chip = span.chip ?: return@forEach
+                            if (span.style != NotesRichStyle.NOTES_RICH_STYLE_LINK) return@forEach
+                            if (chip.kind != NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE) return@forEach
+                            if (chip.resolution != NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED) return@forEach
+                            val range = span.range ?: return@forEach
+                            val box = result.span(range.start, range.end) ?: return@forEach
+                            drawRoundRect(
+                                color = palette.chipGround,
+                                topLeft = Offset(box.topLeft.x, box.top),
+                                size = Size(box.width, box.height),
+                                cornerRadius = CornerRadius(8.dp.toPx()),
+                            )
+                        }
+                    },
+                ) {
                     if (field.text.isEmpty() && placeholder.isNotEmpty()) {
                         KitText(placeholder, KitType.Row, Surface.meta)
                     }
@@ -232,7 +256,9 @@ internal fun NotesRichBody(
                                 else -> palette.accentText
                             },
                             size = CHIP_ICON.dp,
-                            modifier = Modifier.align(Alignment.CenterStart),
+                            modifier = Modifier.align(Alignment.CenterStart).padding(
+                                start = if (chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED) CHIP_PAD.dp else 0.dp,
+                            ),
                         )
                     }
                 }
@@ -244,6 +270,7 @@ internal fun NotesRichBody(
 /** A chip's icon and the space after it, in sp: the second hidden bracket carries both. */
 private const val CHIP_ICON = 13f
 private const val CHIP_ICON_GAP = 4f
+private const val CHIP_PAD = 6f
 
 /** The most marks laid over a very large note: past them the words are drawn as text. */
 private const val MARK_LIMIT = 400
@@ -369,10 +396,7 @@ private fun styleSpan(
                     style(SpanStyle(color = palette.faint, textDecoration = TextDecoration.LineThrough), at)
                 chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_MISSING ->
                     style(SpanStyle(color = palette.missing), at)
-                else -> style(
-                    SpanStyle(color = palette.accentText, background = palette.chipGround, fontWeight = FontWeight.SemiBold),
-                    at,
-                )
+                else -> style(SpanStyle(color = palette.accentText, fontWeight = FontWeight.SemiBold), at)
             }
             // THE BRACKETS ARE HIDDEN, NEVER DELETED (#1173): `[[` and `]]` stay in the text so every
             // offset the core holds is still the text's; they are drawn clear at a hair's size, and
@@ -381,6 +405,12 @@ private fun styleSpan(
                 val hair = SpanStyle(color = Color.Transparent, fontSize = 1.sp)
                 style(hair, at.first..at.first + 1)
                 style(hair, at.last - 1..at.last)
+                // THE LIVE CHIP'S PLATE (drawn behind the text) has air each side, carried by the
+                // hidden brackets, so the words never move.
+                if (chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED) {
+                    style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.first..at.first)
+                    style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.last - 1..at.last - 1)
+                }
                 style(SpanStyle(letterSpacing = (CHIP_ICON + CHIP_ICON_GAP).sp), at.first + 1..at.first + 1)
             }
         }

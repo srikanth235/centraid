@@ -511,6 +511,9 @@ struct EditorRoom<Trailing: View, Content: View>: View {
     private var statusInBar: Bool { Trailing.self == EmptyView.self }
 }
 
+/// A sheet's full-width keys (the ink button and the text key under it): the boards draw them 50 tall.
+private let sheetButtonHeight: CGFloat = 50
+
 /// THE ONE INK BUTTON a sheet may carry.
 struct SheetPrimary {
     let label: String
@@ -530,6 +533,9 @@ struct SheetOutline {
     var tone: String = "text"
     /// Drawn as a text key in the link ink, centred, with no outline (the style sheets' Cancel).
     var link: Bool = false
+    /// With `link`: the word is the page's ink, not the app's (the confirm's Cancel, as the Trash
+    /// and Cancel-event boards draw it).
+    var ink: Bool = false
     var identifier: String = ""
     let action: () -> Void
 }
@@ -604,8 +610,8 @@ struct SheetRoom<Content: View>: View {
                             Button(action: outline.action) {
                                 Text(outline.label)
                                     .centraidType("smallStrong")
-                                    .foregroundStyle(accent.text)
-                                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                    .foregroundStyle(outline.ink ? Surface.ink : accent.text)
+                                    .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -672,11 +678,11 @@ struct KitInkButton: View {
 
     var body: some View {
         Button(action: action) {
+            // `smallStrong` IS THE SEMIBOLD FACE: `.fontWeight` does not reach a custom face.
             Text(label)
-                .kitType(.row)
-                .fontWeight(.semibold)
+                .centraidType("smallStrong")
                 .foregroundStyle(ink)
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {
                     if !destructive {
                         Capsule().fill(enabled ? accent.fill : Surface.fill)

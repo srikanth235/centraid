@@ -403,7 +403,8 @@ private fun StripDay(day: AgendaStripDay, modifier: Modifier, onEvent: (AgendaHo
                 },
             )
         }
-        Row(Modifier.height(8.dp).padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        // THE DOTS' OWN SLOT: the same on every day, clear of the selected day's circle.
+        Row(Modifier.height(10.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             day.dot_hue_keys.take(3).forEach { key -> Dot(gridHue(key)) }
         }
     }
@@ -466,7 +467,7 @@ private fun AllDayStrip(
                 Modifier.weight(1f).padding(horizontal = 1.dp, vertical = 2.dp).testTag("agenda-grid-allday-${day.day}"),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                day.all_day.forEach { chip -> AllDayChip(chip, onOpen, onCheck) }
+                day.all_day.forEach { chip -> AllDayChip(chip, onOpen, onCheck, narrow = grid.days.size > 1) }
             }
         }
     }
@@ -478,6 +479,8 @@ private fun AllDayChip(
     onOpen: (Route) -> Unit,
     onCheck: (String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    /** A Week column: less air round the words, so a name keeps more than two letters. */
+    narrow: Boolean = false,
 ) {
     val hue = gridHue(chip.hue_key)
     val shape = RoundedCornerShape(radius("sm"))
@@ -504,16 +507,16 @@ private fun AllDayChip(
             color = Surface.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp),
+            modifier = Modifier.padding(horizontal = if (narrow) 2.dp else 4.dp),
         )
     }
 }
 
 /** A task's hollow check circle: a tap checks it off (`TaskChecked`). */
 @Composable
-private fun CheckCircle(hue: Color, tag: String, label: String, onPress: () -> Unit) {
+private fun CheckCircle(hue: Color, tag: String, label: String, modifier: Modifier = Modifier, onPress: () -> Unit) {
     Box(
-        Modifier
+        modifier
             .padding(start = 2.dp)
             .size(CHECK_SIZE)
             .clip(CircleShape)
@@ -798,7 +801,10 @@ private fun GridBlock(
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(start = if (block.is_task) CHECK_SIZE + 4.dp else 4.dp, end = 2.dp, top = 1.dp),
+                    .then(if (block.is_task) Modifier.fillMaxHeight() else Modifier)
+                    .padding(start = if (block.is_task) CHECK_SIZE + 8.dp else 4.dp, end = 2.dp, top = if (block.is_task) 0.dp else 1.dp),
+                // A TASK'S TITLE IS CENTRED, ON THE RING'S LINE.
+                verticalArrangement = if (block.is_task) Arrangement.Center else Arrangement.Top,
             ) {
                 Text(
                     block.title,
@@ -820,7 +826,12 @@ private fun GridBlock(
         }
         if (block.is_task) {
             // THE TASK'S CHECK sits over the block's own tap, a sibling so each speaks for itself.
-            CheckCircle(hue, "agenda-grid-block-check-${block.task_id}", block.accessibility_label) { onCheck(block.task_id) }
+            CheckCircle(
+                hue,
+                "agenda-grid-block-check-${block.task_id}",
+                block.accessibility_label,
+                Modifier.align(Alignment.CenterStart),
+            ) { onCheck(block.task_id) }
         }
         if (block.movable) {
             // THE FOOT: a drag on it sets the end, snapped to the grid.

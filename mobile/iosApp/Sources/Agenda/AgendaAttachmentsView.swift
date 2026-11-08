@@ -19,6 +19,7 @@ struct AgendaAttachmentsView: View {
     let send: (Centraid_Core_V1_AgendaAttachmentEvent) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     private func event(_ build: (inout Centraid_Core_V1_AgendaAttachmentEvent) -> Void) {
         var event = Centraid_Core_V1_AgendaAttachmentEvent()
@@ -126,7 +127,8 @@ struct AgendaAttachmentsView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .padding(.vertical, 8)
+                .frame(minHeight: 60)
                 .contentShape(Rectangle())
             }
             .buttonStyle(KitRowPress())
@@ -144,32 +146,28 @@ struct AgendaAttachmentsView: View {
             .accessibilityLabel(tile.removeAccessibilityLabel.isEmpty ? tile.removeLabel : tile.removeAccessibilityLabel)
             .accessibilityIdentifier("\(idPrefix)-remove-\(tile.attachmentID)")
         }
-        .padding(.leading, 12)
+        .padding(.leading, 14)
         .overlay(alignment: .bottom) { if !last { KitHairline() } }
     }
 
-    /// The photo's own thumbnail when this phone holds one, else the kind's icon tile; a
-    /// document's kind badge ("PDF") sits on its tile.
+    /// The photo's own thumbnail when this phone holds one, else the kind's glyph on a neutral
+    /// tile, in the app's ink as the board draws it. The kind is in the words under the title,
+    /// so the tile carries no badge of its own.
     @ViewBuilder
     private func thumbnail(_ tile: Centraid_Core_V1_AgendaAttachmentTile) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius / 2, style: .continuous)
+        Group {
             if !tile.thumbnailPath.isEmpty {
                 ContentImage(path: tile.thumbnailPath)
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous))
+                    .frame(width: 44, height: 44)
+                    .clipShape(shape)
             } else {
-                KitTile(iconKey: tile.iconKey, size: 40)
-            }
-            if !tile.badge.isEmpty {
-                Text(tile.badge)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .padding(.horizontal, 3)
-                    .background(Theme.color("bg", scheme), in: Capsule())
-                    .offset(x: 4, y: 4)
+                CentraidIconView(iconKey: tile.iconKey, tint: accent.text, size: 22)
+                    .frame(width: 44, height: 44)
+                    .background(Surface.fill, in: shape)
             }
         }
-        .frame(width: 40, height: 40)
+        .frame(width: 44, height: 44)
         .accessibilityHidden(true)
     }
 

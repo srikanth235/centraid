@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.TrashEvent
 import centraid.core.v1.TrashView
+import dev.centraid.android.theme.centraidType
 
 /**
  * EVERY APP'S TRASH, DRAWN ONCE, FROM THE SCREEN RUNTIME (#1135): `<app>.trash`,
@@ -96,10 +97,11 @@ private fun TrashRow(row: centraid.core.v1.TrashRow, onEvent: (TrashEvent) -> Un
     val accent = appAccent()
     Column {
         Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
+            // THE BOARD'S ROW: 10 above and below, 14 before the tile, 6 after the bin.
+            Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 10.dp), size = 34.dp)
+            if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 30.dp)
             Column(
                 Modifier.weight(1f).testTag("trash-row-${row.id}").semantics(mergeDescendants = true) { },
             ) {
@@ -108,7 +110,7 @@ private fun TrashRow(row: centraid.core.v1.TrashRow, onEvent: (TrashEvent) -> Un
             }
             Text(
                 row.restore_label,
-                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                style = centraidType("smallStrong"),
                 color = accent.text,
                 modifier = Modifier
                     .heightIn(min = KitGeometry.ROW_MIN)
@@ -131,6 +133,6 @@ private fun TrashRow(row: centraid.core.v1.TrashRow, onEvent: (TrashEvent) -> Un
                 ) { CentraidIcon("Trash", StateColor.Red.text, size = 16.dp) }
             }
         }
-        Spacer(Modifier.padding(start = 56.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+        Spacer(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
     }
 }

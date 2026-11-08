@@ -225,7 +225,7 @@ struct NotesRichBody: UIViewRepresentable {
                     storage.addAttribute(.foregroundColor, value: palette.missing, range: at)
                 default:
                     storage.addAttributes(
-                        [.foregroundColor: palette.accentText, .backgroundColor: palette.chipGround, .font: palette.strong],
+                        [.foregroundColor: palette.accentText, .font: palette.strong],
                         range: at
                     )
                 }
@@ -234,6 +234,7 @@ struct NotesRichBody: UIViewRepresentable {
                 // size, and the second `[` carries the width of the chip's icon, which the mark
                 // draws there.
                 var iconed = false
+                var ground: UIColor?
                 if chip.kind == .note, at.length > 4 {
                     let text = storage.string as NSString
                     let open = NSRange(location: at.location, length: 2)
@@ -242,16 +243,24 @@ struct NotesRichBody: UIViewRepresentable {
                         for bracket in [open, close] {
                             storage.addAttributes([.font: palette.bracketFace, .foregroundColor: UIColor.clear], range: bracket)
                         }
+                        let live = chip.resolution == .resolved
+                        // THE LIVE CHIP IS A ROUNDED PLATE with a little air each side (the board's
+                        // 8-point pad): the hidden brackets carry it, so the text never moves.
+                        if live {
+                            storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: open.location, length: 1))
+                            storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: close.location, length: 1))
+                        }
                         storage.addAttribute(
                             .kern,
                             value: palette.chipIcon + palette.chipIconGap,
                             range: NSRange(location: open.location + 1, length: 1)
                         )
                         iconed = true
+                        ground = live ? palette.chipGround : nil
                     }
                 }
                 let tint = chip.resolution == .trashed ? palette.faint : (chip.resolution == .missing ? palette.missing : palette.accentText)
-                chips.append(.init(range: at, chip: chip, iconed: iconed, tint: tint))
+                chips.append(.init(range: at, chip: chip, iconed: iconed, tint: tint, ground: ground, pad: ground == nil ? 0 : palette.chipPad))
             default:
                 break
             }
@@ -329,6 +338,8 @@ struct NotesRichPalette {
     /// A chip's icon, and the space between it and the words.
     let chipIcon: CGFloat
     let chipIconGap: CGFloat = 4
+    /// The air each side of a live chip's plate.
+    let chipPad: CGFloat = 6
     let slant: CGFloat = 0.2
 
     init(scheme: ColorScheme, size: DynamicTypeSize, accent: AppAccent) {
@@ -372,6 +383,9 @@ final class NotesRichTextView: UITextView {
         /// The brackets are hidden and the icon is drawn where the first one stood.
         var iconed = false
         var tint = UIColor.clear
+        /// The plate's colour behind a live chip, and the air its text keeps from the plate's edge.
+        var ground: UIColor?
+        var pad: CGFloat = 0
     }
 
     enum Hit {
@@ -390,6 +404,7 @@ final class NotesRichTextView: UITextView {
     private var chips: [Chip] = []
     private var circles: [NotesCheckMark] = []
     private var chipMarks: [NotesChipMark] = []
+    private var chipGrounds: [UIView] = []
 
     func setMarks(checks: [Check], chips: [Chip]) {
         self.checks = Array(checks.prefix(Self.markLimit))
@@ -446,15 +461,31 @@ final class NotesRichTextView: UITextView {
             addSubview(mark)
             chipMarks.append(mark)
         }
+        while chipGrounds.count > chips.count { chipGrounds.removeLast().removeFromSuperview() }
+        while chipGrounds.count < chips.count {
+            let plate = UIView()
+            plate.isUserInteractionEnabled = false
+            plate.layer.cornerRadius = 8
+            plate.layer.cornerCurve = .continuous
+            // BEHIND THE TEXT: the plate is the first subview, under the text's own layer.
+            insertSubview(plate, at: 0)
+            chipGrounds.append(plate)
+        }
         for (at, item) in chips.enumerated() {
             let mark = chipMarks[at]
+            let plate = chipGrounds[at]
             guard let range = textRange(item.range) else {
                 mark.isHidden = true
+                plate.isHidden = true
                 continue
             }
             let rect = firstRect(for: range)
             mark.isHidden = rect.isNull || rect.isInfinite || rect.isEmpty
             mark.frame = rect
+            plate.isHidden = mark.isHidden || item.ground == nil
+            plate.backgroundColor = item.ground
+            plate.frame = rect.insetBy(dx: 0, dy: -1)
+            mark.iconInset = item.pad
             mark.iconSize = item.iconed ? chipIconSize : 0
             mark.iconTint = item.tint
             mark.setNeedsDisplay()
@@ -582,13 +613,15 @@ private final class NotesChipMark: UIView {
     var onActivate: () -> Void = {}
     /// The icon drawn at the chip's leading edge, where the hidden `[[` stood; zero for none.
     var iconSize: CGFloat = 0
+    /// The air before the icon, where a live chip's plate begins.
+    var iconInset: CGFloat = 0
     var iconTint = UIColor.clear
 
     override func draw(_ rect: CGRect) {
         guard iconSize > 0, let context = UIGraphicsGetCurrentContext() else { return }
         let factor = iconSize / CentraidGeometry.appMarkViewBox
         context.saveGState()
-        context.translateBy(x: 0, y: (bounds.height - iconSize) / 2)
+        context.translateBy(x: iconInset, y: (bounds.height - iconSize) / 2)
         context.scaleBy(x: factor, y: factor)
         iconTint.setStroke()
         iconTint.setFill()

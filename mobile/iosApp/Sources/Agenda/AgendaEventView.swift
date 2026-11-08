@@ -143,8 +143,8 @@ struct AgendaEventView: View {
                 if !detail.guests.isEmpty {
                     SectionHeader(title: detail.guestHeading)
                     AgendaGroupCard {
-                        ForEach(detail.guests, id: \.partyID) { guest in
-                            guestRow(guest)
+                        ForEach(Array(detail.guests.enumerated()), id: \.element.partyID) { index, guest in
+                            guestRow(guest, last: index == detail.guests.count - 1)
                         }
                     }
                     .padding(.top, 0)
@@ -305,7 +305,7 @@ struct AgendaEventView: View {
         .accessibilityIdentifier("agenda-event-followed-guest-\(index)")
     }
 
-    private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow) -> some View {
+    private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow, last: Bool) -> some View {
         HStack(spacing: 10) {
             Text(guest.initial)
                 .centraidType("smallStrong")
@@ -323,7 +323,8 @@ struct AgendaEventView: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
-        .overlay(alignment: .bottom) { KitHairline() }
+        // A HAIRLINE BETWEEN GUESTS, NONE UNDER THE LAST: it would draw along the card's rounded foot.
+        .overlay(alignment: .bottom) { if !last { KitHairline() } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(guest.accessibilityLabel)
         .accessibilityIdentifier("agenda-guest-\(guest.partyID)")

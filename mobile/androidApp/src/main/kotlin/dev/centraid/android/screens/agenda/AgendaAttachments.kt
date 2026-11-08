@@ -38,6 +38,7 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidScale
@@ -144,15 +145,15 @@ private fun AttachmentTile(
     onOpen: (Route) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(start = 12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             Modifier
                 .weight(1f)
-                .heightIn(min = KitGeometry.ROW_MIN)
+                .heightIn(min = 60.dp)
                 .clickable { tile.route?.let(onOpen) }
-                .padding(vertical = 6.dp)
+                .padding(vertical = 8.dp)
                 .testTag("$prefix-attachment-${tile.attachment_id}")
                 .clearAndSetSemantics {
                     contentDescription = tile.accessibility_label.ifEmpty { tile.title }
@@ -167,15 +168,12 @@ private fun AttachmentTile(
                 if (tile.thumbnail_path.isNotEmpty()) {
                     ContentImage(tile.thumbnail_path)
                 } else {
-                    CentraidIcon(tile.icon_key, tint = centraidColor("textSoft"), size = 22.dp)
+                    CentraidIcon(tile.icon_key, tint = appAccent().text, size = 22.dp)
                 }
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(tile.title, style = centraidType("body"), color = centraidColor("text"), maxLines = 1)
                 if (tile.meta.isNotEmpty()) Text(tile.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
-            }
-            if (tile.badge.isNotEmpty()) {
-                Text(tile.badge, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = 8.dp))
             }
         }
         // THE BOARD'S ×: a quiet glyph; the word stays the spoken label.

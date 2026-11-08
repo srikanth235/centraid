@@ -33,7 +33,7 @@ struct ConfirmSheet: View {
             title: confirm.title,
             primary: SheetPrimary(label: confirm.confirmLabel, destructive: confirm.destructive, action: onConfirm),
             // THE WAY OUT IS A TEXT KEY (the Trash and Cancel-event boards): bold, no outline.
-            outlines: [SheetOutline(label: cancelLabel, link: true, identifier: "kit-confirm-cancel", action: onDismiss)],
+            outlines: [SheetOutline(label: cancelLabel, link: true, ink: true, identifier: "kit-confirm-cancel", action: onDismiss)],
             titleIdentifier: "kit-confirm"
         ) {
             if !confirm.body.isEmpty {

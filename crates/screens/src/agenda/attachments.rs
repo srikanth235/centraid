@@ -47,6 +47,8 @@ const PHOTO: &str = "photo";
 /// The icon keys of `design/icons.toml` this section draws.
 const ICON_PHOTO: &str = "Image";
 const ICON_FILE: &str = "FileText";
+/// The paperclip on the Add file key, which the board draws beside Add photo.
+const ICON_ADD_FILE: &str = "Paperclip";
 
 /// What an add asks the shell for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -355,7 +357,7 @@ impl Attachments {
             }),
             status: self.status.clone(),
             add_photo_icon_key: ICON_PHOTO.to_owned(),
-            add_file_icon_key: ICON_FILE.to_owned(),
+            add_file_icon_key: ICON_ADD_FILE.to_owned(),
         }
     }
 }
