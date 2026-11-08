@@ -32,12 +32,15 @@ struct RustEntry: Hashable, Identifiable {
     let token: Int
     var id: Int { token }
     let route: Centraid_Core_V1_Route
+    /// The tab whose stack holds it: Home's for a page, the place the member was in for a sheet
+    /// (a sheet opened from Chat must not select Home under itself).
+    var tab: String = RustScreens.homeTab
 
     @MainActor private static var last = 0
 
-    @MainActor static func make(_ route: Centraid_Core_V1_Route) -> RustEntry {
+    @MainActor static func make(_ route: Centraid_Core_V1_Route, tab: String = RustScreens.homeTab) -> RustEntry {
         last += 1
-        return RustEntry(token: last, route: route)
+        return RustEntry(token: last, route: route, tab: tab)
     }
 }
 

@@ -250,7 +250,14 @@ final class ShellModel: ObservableObject {
     /// Push a route Rust built onto the shell's stack (a row's `route`).
     func open(_ route: Centraid_Core_V1_Route) {
         if route.sheet {
-            sheet = RustEntry.make(route)
+            // ON THE STACK OF THE PLACE THE MEMBER IS IN, so Chat stays under its sheet.
+            let place: String
+            switch tab {
+            case .chat: place = RustScreens.chatTab
+            case .backup: place = RustScreens.backupTab
+            case .home: place = RustScreens.homeTab
+            }
+            sheet = RustEntry.make(route, tab: place)
             return
         }
         if path.isEmpty { returnsToChat = tab == .chat }
@@ -262,10 +269,10 @@ final class ShellModel: ObservableObject {
         guard let screens, rustInstances[entry.token] == nil, !rustOpening.contains(entry.token) else { return }
         rustOpening.insert(entry.token)
         defer { rustOpening.remove(entry.token) }
-        guard let instance = await screens.open(tab: RustScreens.homeTab, route: entry.route) else { return }
+        guard let instance = await screens.open(tab: entry.tab, route: entry.route) else { return }
         // Popped while the push was in flight: Rust is told at once.
         guard path.contains(.rust(entry)) || sheet == entry else {
-            screens.popped(tab: RustScreens.homeTab, instance: instance)
+            screens.popped(tab: entry.tab, instance: instance)
             return
         }
         rustInstances[entry.token] = instance
@@ -326,7 +333,7 @@ final class ShellModel: ObservableObject {
         rustOpening.remove(old.token)
         guard let instance = rustInstances[old.token] else { return }
         rustInstances[old.token] = nil
-        screens?.popped(tab: RustScreens.homeTab, instance: instance)
+        screens?.popped(tab: old.tab, instance: instance)
     }
 
     /// Tell a route it is on screen: the chat's scope follows the app last open.
