@@ -20,12 +20,14 @@ struct NotesEditorView: View {
 
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE RUST HEARS IT.
     ///
-    /// Filled from the draft ONCE, when the draft first arrives — and again
-    /// only when the powerbox closes, because a pick changed the body under
-    /// the field.
+    /// Filled from the draft ONCE, when the draft first arrives. The body's own typing lives in
+    /// `NotesRichBody`, which takes the core's body back only when the core made it (a checklist
+    /// tap, Return, Undo, a pick), never an echo of the typing.
     @State private var typedTitle = ""
-    @State private var typedBody = ""
     @State private var seeded = false
+    /// A core edit is on its way back, so the body field may take the core's body while focused.
+    @State private var coreEdit = false
+    @State private var bodyEmpty = true
 
     @Environment(\.colorScheme) private var scheme
 
@@ -49,13 +51,39 @@ struct NotesEditorView: View {
     }
 
     @FocusState private var tagFocused: Bool
-    @FocusState private var bodyFocused: Bool
+    @State private var bodyFocused = false
+
+    /// Send an event; the ones that make the core rewrite the body say so first, so the field
+    /// follows the answer.
+    private func dispatch(_ event: Centraid_Core_V1_NotesEditorEvent) {
+        switch event.kind {
+        case .checklistRequested?, .checklistToggled?, .returnPressed?, .statusActed?, .linkPicked?:
+            coreEdit = true
+        default:
+            break
+        }
+        send(event)
+    }
+
+    /// A tap on a link chip: a resolved note opens as History does, its route the core's; a URL, a
+    /// missing note and a trashed one are the core's to answer (`link_opened`).
+    private func openChip(_ chip: Centraid_Core_V1_NotesLinkChip, at: UInt32) {
+        if chip.kind == .note, chip.resolution == .resolved, chip.hasRoute {
+            open(chip.route)
+        } else {
+            dispatch(event { $0.linkOpened = .with { $0.at = at } })
+        }
+    }
 
     var body: some View {
         let chrome = state.chrome
         NotesEditorRoom(
             title: chrome.title,
-            status: state.autosave,
+            // THE ONE STATUS LINE: its sentence is the core's (the save, or an editing sentence);
+            // while a verb rides it (Undo) the sentence sits in the pill over the keys and the
+            // header keeps the save.
+            status: chrome.statusAction.isEmpty ? chrome.status : state.autosave.label,
+            refused: state.autosave.refused,
             closeLabel: chrome.close,
             onClose: onClose
         ) {
@@ -97,25 +125,30 @@ struct NotesEditorView: View {
                                 }
                             NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, focused: $tagFocused, send: send)
                             ZStack(alignment: .topLeading) {
-                                if typedBody.isEmpty {
+                                if bodyEmpty {
                                     Text(chrome.bodyPlaceholder)
                                         .kitType(.row)
                                         .foregroundStyle(Surface.meta)
-                                        .padding(.top, 8)
-                                        .padding(.leading, 5)
                                         .allowsHitTesting(false)
                                 }
-                                TextEditor(text: $typedBody)
-                                    .kitType(.row)
-                                    .foregroundStyle(Surface.ink)
-                                    .scrollContentBackground(.hidden)
-                                    .frame(minHeight: 280)
-                                    .focused($bodyFocused)
-                                    .accessibilityIdentifier("note-body-field")
-                                    .onChange(of: typedBody) { _, typed in
-                                        guard typed != draft.body else { return }
+                                NotesRichBody(
+                                    value: draft.body,
+                                    rich: state.hasRich ? state.rich : nil,
+                                    selection: state.hasSelection ? state.selection : nil,
+                                    follows: !bodyFocused || coreEdit || state.hasLink,
+                                    focused: $bodyFocused,
+                                    label: chrome.bodyPlaceholder,
+                                    onEdit: { typed in
+                                        coreEdit = false
                                         send(event { $0.body = .with { $0.body = typed } })
-                                    }
+                                    },
+                                    onEmpty: { bodyEmpty = $0 },
+                                    onAdopted: { coreEdit = false },
+                                    onReturn: { caret in dispatch(event { $0.returnPressed = .with { $0.caret = caret } }) },
+                                    onToggle: { at in dispatch(event { $0.checklistToggled = .with { $0.at = at } }) },
+                                    onLink: openChip
+                                )
+                                .frame(minHeight: 280)
                             }
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -123,12 +156,22 @@ struct NotesEditorView: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                 }
-                .overlay(alignment: .bottom) { toolbar(chrome) }
+                .overlay(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        // THE EDITING SENTENCE with its one verb ("Item checked", Undo).
+                        ProgressStatusLine(
+                            sentence: chrome.statusAction.isEmpty ? "" : chrome.status,
+                            actionLabel: chrome.statusAction,
+                            onAct: { dispatch(event { $0.statusActed = .init() }) },
+                            identifier: "notes-editor-status"
+                        )
+                        toolbar(chrome)
+                    }
+                }
                 .onAppear {
                     // ONCE. See `seeded`.
                     if !seeded {
                         typedTitle = draft.title
-                        typedBody = draft.body
                         seeded = true
                     }
                 }
@@ -141,16 +184,7 @@ struct NotesEditorView: View {
                 send(event { $0.linkDismissed = .init() })
             }
         )) {
-            NotesLinkSheet(sheet: state.link, send: send)
-        }
-        .onChange(of: state.hasLink) { _, shown in
-            // THE POWERBOX CLOSED: a pick spliced `[[title]]` into the body
-            // Rust holds, so the field takes it.
-            if !shown, let draft { typedBody = draft.body }
-        }
-        // THE CHECKLIST KEY is Rust's edit to the body; the field takes it back.
-        .onChange(of: draft?.body ?? "") { _, body in
-            if body != typedBody, !bodyFocused { typedBody = body }
+            NotesLinkSheet(sheet: state.link, send: dispatch)
         }
         .appAccent("notes")
     }
@@ -175,7 +209,7 @@ struct NotesEditorView: View {
     private func toolbar(_ chrome: Centraid_Core_V1_NotesEditorChrome) -> some View {
         HStack(spacing: 0) {
             NotesToolKey(iconKey: "Todo", label: chrome.checklistLabel, identifier: "notes-tool-checklist") {
-                send(event { $0.checklistRequested = .init() })
+                dispatch(event { $0.checklistRequested = .init() })
             }
             NotesToolKey(iconKey: "Link", label: chrome.linkLabel, identifier: "notes-tool-link") {
                 send(event { $0.linkRequested = .init() })
@@ -246,7 +280,8 @@ private struct NotesPinMark: View {
 /// list page under it (#1173). Close is Done; the status is the autosave's word, centred.
 private struct NotesEditorRoom<Trailing: View, Content: View>: View {
     let title: String
-    let status: Centraid_Core_V1_Autosave
+    let status: String
+    let refused: Bool
     let closeLabel: String
     let onClose: () -> Void
     @ViewBuilder let trailing: () -> Trailing
@@ -278,9 +313,10 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                     .accessibilityIdentifier("kit-editor-close")
                 }
                 ToolbarItem(placement: .principal) {
-                    Text(status.label)
+                    Text(status)
                         .kitType(.meta)
-                        .foregroundStyle(status.refused ? StateColor.red.text : Surface.meta)
+                        .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
+                        .lineLimit(1)
                         .accessibilityIdentifier("kit-autosave-status")
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
