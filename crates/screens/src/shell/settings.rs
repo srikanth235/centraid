@@ -181,43 +181,45 @@ impl Settings {
                 wire::SettingsSection {
                     key: "vault".to_owned(),
                     title: words::settings_vault(locale),
-                    rows: vec![{
-                        // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does,
-                        // and is called by the vault's name.
-                        let mut vaults = row(
-                            "vaults",
-                            self.vault_name
+                    rows: vec![
+                        {
+                            // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does,
+                            // and is called by the vault's name.
+                            let mut vaults = row(
+                                "vaults",
+                                self.vault_name
+                                    .as_deref()
+                                    .map(str::trim)
+                                    .filter(|name| !name.is_empty())
+                                    .map_or_else(
+                                        || words::settings_vaults_row(locale),
+                                        str::to_owned,
+                                    ),
+                                words::settings_vaults_held(locale, held),
+                                "Lock",
+                                None,
+                                "initial",
+                                String::new(),
+                            );
+                            vaults.initial = self
+                                .vault_name
                                 .as_deref()
-                                .map(str::trim)
-                                .filter(|name| !name.is_empty())
-                                .map_or_else(
-                                    || words::settings_vaults_row(locale),
-                                    str::to_owned,
-                                ),
-                            words::settings_vaults_held(locale, held),
-                            "Lock",
-                            None,
-                            "initial",
+                                .and_then(|name| name.trim().chars().next())
+                                .map(|first| first.to_uppercase().collect())
+                                .unwrap_or_else(|| "V".to_owned());
+                            vaults
+                        },
+                        // MAKE A VAULT is the pushed page Home's switcher and the welcome open.
+                        row(
+                            "make-vault",
+                            words::settings_make_vault(locale),
                             String::new(),
-                        );
-                        vaults.initial = self
-                            .vault_name
-                            .as_deref()
-                            .and_then(|name| name.trim().chars().next())
-                            .map(|first| first.to_uppercase().collect())
-                            .unwrap_or_else(|| "V".to_owned());
-                        vaults
-                    },
-                    // MAKE A VAULT is the pushed page Home's switcher and the welcome open.
-                    row(
-                        "make-vault",
-                        words::settings_make_vault(locale),
-                        String::new(),
-                        "Plus",
-                        Some(crate::custody::routes::make()),
-                        "add",
-                        String::new(),
-                    )],
+                            "Plus",
+                            Some(crate::custody::routes::make()),
+                            "add",
+                            String::new(),
+                        ),
+                    ],
                 },
                 wire::SettingsSection {
                     key: "backup".to_owned(),
