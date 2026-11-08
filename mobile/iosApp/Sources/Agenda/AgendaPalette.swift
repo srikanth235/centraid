@@ -11,13 +11,13 @@ enum AgendaPalette {
     /// The colour of a list key (`raspberry`); nil for an empty key.
     static func list(_ key: String) -> Color? {
         guard let first = key.first else { return nil }
-        return Color("CentraidList" + first.uppercased() + key.dropFirst())
+        return Color("CentraidList" + String(first).uppercased() + String(key.dropFirst()))
     }
 
     /// The colour of a token name (`listBlue`, `stateAmber`, `textInk`).
     static func token(_ key: String) -> Color {
         guard let first = key.first else { return Color("CentraidTextInk") }
-        return Color("Centraid" + first.uppercased() + key.dropFirst())
+        return Color("Centraid" + String(first).uppercased() + String(key.dropFirst()))
     }
 }
 

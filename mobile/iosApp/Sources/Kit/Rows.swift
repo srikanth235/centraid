@@ -402,7 +402,7 @@ enum KitHue {
     static func role(_ key: String) -> String? {
         guard !key.isEmpty else { return nil }
         if centraidColorRoles.contains(key) { return key }
-        let wheel = "c" + key.prefix(1).uppercased() + key.dropFirst()
+        let wheel = "c" + String(key.prefix(1)).uppercased() + String(key.dropFirst())
         return centraidColorRoles.contains(wheel) ? wheel : nil
     }
 }
