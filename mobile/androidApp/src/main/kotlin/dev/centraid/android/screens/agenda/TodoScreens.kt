@@ -357,6 +357,7 @@ internal fun TodoCatchUpScreen(
                                 Column {
                                     SectionHeader(
                                         SectionHead(title = pile.title, verb_label = pile.verb_label),
+                                        sentenceCase = true,
                                         onVerb = { onEvent(TodoCatchUpEvent(complete_all = TodoCatchUpEvent.CompleteAllTapped(pile = pile.key))) },
                                     )
                                     if (pile.meta.isNotEmpty()) {

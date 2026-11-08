@@ -1,7 +1,11 @@
 package dev.centraid.android.screens.agenda
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -192,7 +196,8 @@ internal fun CustomRepeatSheetView(
         title = custom.title.ifEmpty { fallbackTitle },
         onDismiss = onDismiss,
         expanded = true,
-        primary = if (custom.read_only) {
+        // THE BOARD'S LARGE SHEET: Done shares the title row, armed by `can_apply`.
+        headerAction = if (custom.read_only) {
             null
         } else {
             SheetPrimary(custom.done_label, testTag = "agenda-editor-custom-done", enabled = custom.can_apply) {
@@ -285,36 +290,84 @@ internal fun CustomRepeatSheetView(
                 }
             }
             Eyebrow(custom.ends_label)
-            KitSegmented(
-                segments = custom.end_modes.map { KitSegment(id = it.key, label = it.label, selected = it.selected) },
-                testTag = "agenda-editor-custom-end",
-                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
-                onPick = { onEvent(AgendaEditorEvent(custom_end = AgendaEditorEvent.CustomEndPicked(key = it))) },
-            )
-            if (custom.show_until) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = KitGeometry.ROW_MIN)
-                        .clickable { pickingUntil = true }
-                        .padding(horizontal = KitGeometry.GUTTER)
-                        .testTag("agenda-editor-custom-until")
-                        .clearAndSetSemantics {
-                            contentDescription = listOf(custom.until_day_label, custom.until_day).filter { it.isNotEmpty() }.joinToString(", ")
-                            role = Role.Button
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(custom.until_day_label, style = centraidType("body"), color = centraidColor("text"))
+            // THE BOARD'S ENDS CARD: radio rows, the date and the count inline on their own row.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+                    .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                    .background(Surface.sheetCard),
+            ) {
+                custom.end_modes.forEachIndexed { index, mode ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clickable { onEvent(AgendaEditorEvent(custom_end = AgendaEditorEvent.CustomEndPicked(key = mode.key))) }
+                                .testTag("agenda-editor-custom-end-${mode.key}")
+                                .clearAndSetSemantics {
+                                    contentDescription = mode.accessibility_label.ifEmpty { mode.label }
+                                    role = Role.RadioButton
+                                    selected = mode.selected
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val fill = appAccent().fill
+                            Box(
+                                Modifier
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .then(
+                                        if (mode.selected) Modifier.background(fill) else Modifier.border(1.5.dp, Surface.border, CircleShape),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (mode.selected) CentraidIcon(iconKey = "Check", tint = Color.White, size = 12.dp)
+                            }
+                            Text(
+                                mode.label,
+                                style = centraidType("body"),
+                                color = centraidColor("text"),
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
+                        }
+                        if (mode.key == "on" && custom.show_until) {
+                            Text(
+                                custom.until_day_label,
+                                style = centraidType("body"),
+                                color = appAccent().text,
+                                modifier = Modifier
+                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .clickable { pickingUntil = true }
+                                    .padding(horizontal = 8.dp, vertical = 12.dp)
+                                    .testTag("agenda-editor-custom-until")
+                                    .clearAndSetSemantics {
+                                        contentDescription = listOf(custom.until_day_label, custom.until_day).filter { it.isNotEmpty() }.joinToString(", ")
+                                        role = Role.Button
+                                    },
+                            )
+                        }
+                        if (mode.key == "after" && custom.show_count) {
+                            NumberRow(
+                                before = "",
+                                value = custom.count,
+                                after = custom.count_label,
+                                testTag = "agenda-editor-custom-count",
+                                modifier = Modifier.heightIn(min = KitGeometry.ROW_MIN),
+                            ) { onEvent(AgendaEditorEvent(custom_count = AgendaEditorEvent.CustomCountChanged(count = it))) }
+                        }
+                    }
+                    if (index < custom.end_modes.lastIndex) {
+                        Box(Modifier.fillMaxWidth().padding(start = 16.dp).heightIn(min = KitGeometry.HAIRLINE).background(Surface.line))
+                    }
                 }
-            }
-            if (custom.show_count) {
-                NumberRow(
-                    before = "",
-                    value = custom.count,
-                    after = custom.count_label,
-                    testTag = "agenda-editor-custom-count",
-                ) { onEvent(AgendaEditorEvent(custom_count = AgendaEditorEvent.CustomCountChanged(count = it))) }
             }
             // THE BOARD'S ORDER: the rule's sentence after its controls.
             if (custom.summary.isNotEmpty()) {
@@ -388,10 +441,17 @@ private fun Chips(choices: List<AgendaChoice>, tagPrefix: String, onTap: (String
  * field is not being typed in.
  */
 @Composable
-private fun NumberRow(before: String, value: Int, after: String, testTag: String, onChange: (Int) -> Unit) {
+private fun NumberRow(
+    before: String,
+    value: Int,
+    after: String,
+    testTag: String,
+    modifier: Modifier = Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = KitGeometry.GUTTER),
+    onChange: (Int) -> Unit,
+) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = KitGeometry.GUTTER),
+        modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

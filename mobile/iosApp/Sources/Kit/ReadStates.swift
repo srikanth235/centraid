@@ -356,6 +356,8 @@ struct KitOutlineButton: View {
     @Environment(\.isEnabled) private var enabled
     /// Set by the nearest `KitChoiceStack`: the stack's width, not the label's.
     @Environment(\.inChoiceStack) private var stacked
+    /// Set by a `KitChoiceRow`: the keys share one line, so the label gets the room.
+    @Environment(\.inChoiceRow) private var inRow
 
     var body: some View {
         let ink = enabled ? tone : "textDisabled"
@@ -368,8 +370,10 @@ struct KitOutlineButton: View {
                     .kitType(.row)
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.color(ink, scheme))
+                    .lineLimit(inRow ? 1 : nil)
+                    .minimumScaleFactor(inRow ? 0.8 : 1)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, inRow ? 8 : 16)
             .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
             .overlay(
                 Capsule()
@@ -395,6 +399,34 @@ extension EnvironmentValues {
     var inChoiceStack: Bool {
         get { self[InChoiceStackKey.self] }
         set { self[InChoiceStackKey.self] = newValue }
+    }
+}
+
+private struct InChoiceRowKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True inside a `KitChoiceRow`, where the outline buttons share one line.
+    var inChoiceRow: Bool {
+        get { self[InChoiceRowKey.self] }
+        set { self[InChoiceRowKey.self] = newValue }
+    }
+}
+
+/// A SHORT SET OF ACTIONS ON ONE LINE (#1173): the event page's Open in Maps, Edit and Cancel.
+/// Every button takes an equal share of the width, in the stack's full-width look, with 10
+/// between them.
+struct KitChoiceRow<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 10) {
+            content()
+        }
+        .frame(maxWidth: .infinity)
+        .environment(\.inChoiceStack, true)
+        .environment(\.inChoiceRow, true)
     }
 }
 

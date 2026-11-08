@@ -896,7 +896,7 @@ private struct AgendaEventRowView: View {
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Theme.color(KitHue.role(row.calendarHueKey) ?? "cSlate", scheme))
+                    .fill(agendaHue(row.calendarHueKey, scheme))
                     .frame(width: 2)
                     .padding(.vertical, 6)
             }
@@ -966,7 +966,7 @@ private struct AgendaMoreSheet: View {
                                     .padding(.leading, 12)
                             } else if !row.hueKey.isEmpty {
                                 Circle()
-                                    .fill(Theme.color(KitHue.role(row.hueKey) ?? "cSlate", scheme))
+                                    .fill(agendaHue(row.hueKey, scheme))
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(

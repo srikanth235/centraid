@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -269,6 +271,7 @@ public fun OutlineButton(
     onPress: () -> Unit,
 ) {
     val stacked = LocalChoiceStack.current
+    val inRow = LocalChoiceRow.current
     val edge = when {
         !enabled -> Surface.fill
         ink == "text" -> Surface.border
@@ -280,6 +283,7 @@ public fun OutlineButton(
         style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
         color = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text,
         textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
+        maxLines = if (inRow) 1 else Int.MAX_VALUE,
         modifier = modifier
             .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
             .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
@@ -289,7 +293,7 @@ public fun OutlineButton(
             .clickable(enabled = enabled, onClick = onPress)
             // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
             // the hugging button's 36.
-            .padding(horizontal = 12.dp, vertical = if (stacked) 13.dp else 9.dp)
+            .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
             .testTag(testTag)
             .semantics {
                 role = Role.Button
@@ -320,6 +324,28 @@ public fun ChoiceStack(
         Column(
             modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(KitGeometry.STACK_GAP),
+            content = content,
+        )
+    }
+}
+
+/** True inside a [ChoiceRow]: the outline buttons share one line, so the label gets the room. */
+public val LocalChoiceRow: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
+
+/**
+ * A SHORT SET OF ACTIONS ON ONE LINE (#1173): the event page's Open in Maps, Edit and Cancel. Each
+ * button takes an equal share of the width (pass `Modifier.weight(1f)`), in the stack's full-width
+ * look, with 10dp between them.
+ */
+@Composable
+public fun ChoiceRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    CompositionLocalProvider(LocalChoiceStack provides true, LocalChoiceRow provides true) {
+        Row(
+            modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             content = content,
         )
     }

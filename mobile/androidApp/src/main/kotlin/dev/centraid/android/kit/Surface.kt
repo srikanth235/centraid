@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -200,18 +201,32 @@ public fun KitTile(iconKey: String, modifier: Modifier = Modifier, size: Dp = 32
  * a permission's "Allow". The full-width one is [InkButton].
  */
 @Composable
-public fun KitPillButton(label: String, onPress: () -> Unit, modifier: Modifier = Modifier, testTag: String = "kit-pill") {
+public fun KitPillButton(
+    label: String,
+    onPress: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String = "kit-pill",
+    enabled: Boolean = true,
+) {
     Box(
         modifier
             .heightIn(min = KitGeometry.ROW_MIN)
             .clip(RoundedCornerShape(percent = 50))
-            .background(appAccent().fill)
-            .clickable(onClick = onPress)
+            .background(if (enabled) appAccent().fill else Surface.fill)
+            .clickable(enabled = enabled, onClick = onPress)
             .padding(horizontal = 20.dp)
             .testTag(testTag)
-            .semantics { role = Role.Button },
+            .semantics {
+                role = Role.Button
+                if (!enabled) disabled()
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
+        Text(
+            label,
+            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+            color = if (enabled) Color.White else Surface.meta,
+            maxLines = 1,
+        )
     }
 }

@@ -26,7 +26,8 @@ struct AgendaEventView: View {
 
     var body: some View {
         let chrome = state.chrome
-        PushedPage(title: chrome.title, parentTitle: chrome.back, onBack: onBack) {
+        // THE EVENT'S OWN NAME IS THE LARGE TITLE (#1173): the bar carries only the chevron.
+        PushedPage(title: "", parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             if case let .gone(gone)? = state.content {
@@ -109,8 +110,14 @@ struct AgendaEventView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header(detail)
-                ForEach(Array(detail.facts.enumerated()), id: \.offset) { _, fact in
-                    FieldRow(key: fact.label, value: fact.detail)
+                // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
+                if !detail.facts.isEmpty {
+                    AgendaGroupCard {
+                        ForEach(Array(detail.facts.enumerated()), id: \.offset) { index, fact in
+                            AgendaFactRow(label: fact.label, value: fact.detail, divider: index < detail.facts.count - 1)
+                        }
+                    }
+                    .accessibilityIdentifier("agenda-event-facts")
                 }
                 // THE JOINING LINK, OPENED BY THE OS under Rust's verb
                 // ("Join call"); empty with no link.
@@ -135,9 +142,12 @@ struct AgendaEventView: View {
                 }
                 if !detail.guests.isEmpty {
                     SectionHeader(title: detail.guestHeading)
-                    ForEach(detail.guests, id: \.partyID) { guest in
-                        guestRow(guest)
+                    AgendaGroupCard {
+                        ForEach(detail.guests, id: \.partyID) { guest in
+                            guestRow(guest)
+                        }
                     }
+                    .padding(.top, 0)
                 }
                 // GUESTS THE PHONE'S CALENDAR HOLDS, read only: a name (else the address), the address
                 // under a name, and the guest's answer.
@@ -166,7 +176,9 @@ struct AgendaEventView: View {
                         .padding(.top, 12)
                         .accessibilityIdentifier("agenda-event-status")
                 }
-                KitChoiceStack {
+                // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share
+                // the width, Cancel in the red outline.
+                KitChoiceRow {
                     ForEach(detail.actions, id: \.key) { action in
                         KitOutlineButton(label: action.label, tone: action.destructive ? "net" : "text") {
                             // `edit` opens the editor on this occurrence (a route the shell
@@ -192,8 +204,8 @@ struct AgendaEventView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(detail.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
+                    .kitType(.title)
+                    .foregroundStyle(detail.isPast ? Surface.meta : Surface.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
             }
@@ -206,7 +218,7 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color(detail.isPast ? "textFaint" : "textSoft", scheme))
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
+                    .fill(agendaHue(detail.calendarHueKey, scheme))
                     .frame(width: 8, height: 8)
                 Text(detail.calendarName)
                     .centraidType("annotLabel")
@@ -215,12 +227,6 @@ struct AgendaEventView: View {
         }
         .padding(CentraidGeometry.pageMargin)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
-                .frame(width: 2)
-                .padding(.vertical, 12)
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(detail.accessibilityLabel)
         .accessibilityIdentifier("agenda-event-head")

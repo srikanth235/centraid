@@ -1441,6 +1441,20 @@ message AgendaEditorChrome {
   string custom_repeat_title = 40;
   // The first alert's row, named apart from the second.
   string field_first_alert = 41;
+  // THE COLOUR TILES (#1173): the glyph and colour each event row wears on the
+  // board, by the row's `key` (`start`, `end`, `repeat`, `calendar`, `guests`,
+  // `location`, `reminder`, `second_reminder`, `availability`, `zone`,
+  // `travel`, `link`). A row with no tile here is drawn without one.
+  repeated AgendaRowTile tiles = 42;
+}
+
+// One editor row's colour tile: a catalogue glyph in white on a solid token.
+message AgendaRowTile {
+  string key = 1;
+  // A catalogue icon key (`Calendar`, `Clock`, `MapPin`).
+  string icon_key = 2;
+  // A colour token name (`appAgenda`, `stateRed`, `listBlue`, `textMeta`).
+  string color_key = 3;
 }
 
 // THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,

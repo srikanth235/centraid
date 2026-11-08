@@ -40,6 +40,7 @@ use wire::agenda_home_event::Kind as H;
 use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
+pub(in crate::agenda) use self::fold::Hues;
 pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;

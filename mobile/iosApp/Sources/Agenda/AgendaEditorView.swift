@@ -51,10 +51,14 @@ struct AgendaEditorView: View {
             onBack: { send(event { $0.leave = .init() }) }
         ) {
             if let editorData {
-                ToolbarVerb(label: chrome.save, identifier: "agenda-editor-save") {
+                // THE SAVE PILL (#1173): Agenda's blue under a white word, as on the board. The bar
+                // hosts it outside the page's environment, so the accent is stated here.
+                KitPillButton(label: chrome.save) {
                     send(event { $0.save = .init() })
                 }
+                .environment(\.appAccent, AppAccent("agenda"))
                 .disabled(!editorData.canSave)
+                .accessibilityIdentifier("agenda-editor-save")
             }
         } content: {
             if case let .gone(gone)? = state.content {
@@ -146,91 +150,148 @@ struct AgendaEditorView: View {
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .overlay(alignment: .bottom) { KitHairline() }
                 .accessibilityIdentifier("agenda-editor-all-day")
-                whenRow(
-                    key: editor.startFieldLabel,
-                    dayLabel: editor.startDayLabel.isEmpty ? editor.startLabel : editor.startDayLabel,
-                    timeLabel: editor.startTimeLabel,
-                    chrome: chrome,
-                    day: draft.startDay,
-                    time: draft.startTime,
-                    allDay: draft.allDay,
-                    identifier: "agenda-editor-start"
-                ) { day, time in
-                    send(event { $0.start = .with { $0.day = day; $0.time = time } })
-                }
                 if editor.showEventFields {
-                    whenRow(
-                        key: chrome.fieldEnds,
-                        dayLabel: editor.endDayLabel.isEmpty ? editor.endLabel : editor.endDayLabel,
-                        timeLabel: editor.endTimeLabel,
-                        chrome: chrome,
-                        day: draft.endDay,
-                        time: draft.endTime,
-                        allDay: draft.allDay,
-                        identifier: "agenda-editor-end"
-                    ) { day, time in
-                        send(event { $0.end = .with { $0.day = day; $0.time = time } })
-                    }
-                }
-                if !editor.blockedReason.isEmpty {
-                    Text(editor.blockedReason)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("net", scheme))
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.vertical, 6)
-                        .accessibilityIdentifier("agenda-editor-blocked")
-                }
-                // A TASK IS A TITLE AND A DUE DAY: the event's fields are not drawn.
-                if editor.showEventFields {
-                    ChoiceFieldRow(key: chrome.fieldCalendar, value: editor.calendarLabel, identifier: "agenda-editor-calendar") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .calendar } })
-                    }
-                    ChoiceFieldRow(key: chrome.fieldGuests, value: editor.guestsLabel, identifier: "agenda-editor-guests") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .guests } })
-                    }
-                    ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
+                    // THE BOARD'S TWO CARDS (#1173): the times and the repeat, then the details,
+                    // each row a colour tile Rust names.
+                    AgendaGroupCard {
+                        whenRow(
+                            key: editor.startFieldLabel,
+                            dayLabel: editor.startDayLabel.isEmpty ? editor.startLabel : editor.startDayLabel,
+                            timeLabel: editor.startTimeLabel,
+                            chrome: chrome,
+                            day: draft.startDay,
+                            time: draft.startTime,
+                            allDay: draft.allDay,
+                            identifier: "agenda-editor-start",
+                            tile: tile("start", chrome)
+                        ) { day, time in
+                            send(event { $0.start = .with { $0.day = day; $0.time = time } })
+                        }
+                        whenRow(
+                            key: chrome.fieldEnds,
+                            dayLabel: editor.endDayLabel.isEmpty ? editor.endLabel : editor.endDayLabel,
+                            timeLabel: editor.endTimeLabel,
+                            chrome: chrome,
+                            day: draft.endDay,
+                            time: draft.endTime,
+                            allDay: draft.allDay,
+                            identifier: "agenda-editor-end",
+                            tile: tile("end", chrome)
+                        ) { day, time in
+                            send(event { $0.end = .with { $0.day = day; $0.time = time } })
+                        }
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldRepeat,
+                            value: editor.repeatLabel,
+                            tile: tile("repeat", chrome),
+                            identifier: "agenda-editor-repeat",
+                            divider: false
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
+                        }
                     }
                     if !editor.repeatNote.isEmpty {
                         note(editor.repeatNote)
                     }
-                    ChoiceFieldRow(key: chrome.fieldFirstAlert, value: editor.reminderLabel, identifier: "agenda-editor-reminder") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
-                    }
-                    // THE SECOND ALERT waits for the first: Rust says when it is drawn.
-                    if editor.showSecondReminder {
-                        ChoiceFieldRow(
-                            key: chrome.fieldSecondAlert,
-                            value: editor.secondReminderLabel,
-                            identifier: "agenda-editor-second-reminder"
+                    blockedNote(editor)
+                    AgendaGroupCard {
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldCalendar,
+                            value: editor.calendarLabel,
+                            tile: tile("calendar", chrome),
+                            identifier: "agenda-editor-calendar"
                         ) {
-                            send(event { $0.sheetOpened = .with { $0.sheet = .secondReminder } })
+                            send(event { $0.sheetOpened = .with { $0.sheet = .calendar } })
                         }
-                    }
-                    ChoiceFieldRow(key: chrome.fieldLocation, value: editor.locationLabel, identifier: "agenda-editor-location") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .location } })
-                    }
-                    ChoiceFieldRow(key: chrome.fieldAvailability, value: editor.availabilityLabel, identifier: "agenda-editor-availability") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .availability } })
-                    }
-                    if editor.showZone {
-                        ChoiceFieldRow(key: chrome.fieldZone, value: editor.zoneLabel, identifier: "agenda-editor-zone") {
-                            send(event { $0.sheetOpened = .with { $0.sheet = .zone } })
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldGuests,
+                            value: editor.guestsLabel,
+                            tile: tile("guests", chrome),
+                            identifier: "agenda-editor-guests"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .guests } })
                         }
-                    }
-                    ChoiceFieldRow(key: chrome.fieldTravel, value: editor.travelLabel, identifier: "agenda-editor-travel") {
-                        send(event { $0.sheetOpened = .with { $0.sheet = .travel } })
-                    }
-                    EditableFieldRow(
-                        key: chrome.fieldLink,
-                        text: $typedLink,
-                        placeholder: chrome.linkPlaceholder,
-                        identifier: "agenda-editor-link"
-                    ) { typed in
-                        guard seeded, typed != draft.link else { return }
-                        send(event { $0.link = .with { $0.text = typed } })
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldLocation,
+                            value: editor.locationLabel,
+                            tile: tile("location", chrome),
+                            identifier: "agenda-editor-location"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .location } })
+                        }
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldFirstAlert,
+                            value: editor.reminderLabel,
+                            tile: tile("reminder", chrome),
+                            identifier: "agenda-editor-reminder"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
+                        }
+                        // THE SECOND ALERT waits for the first: Rust says when it is drawn.
+                        if editor.showSecondReminder {
+                            AgendaTileChoiceRow(
+                                key: chrome.fieldSecondAlert,
+                                value: editor.secondReminderLabel,
+                                tile: tile("second_reminder", chrome),
+                                identifier: "agenda-editor-second-reminder"
+                            ) {
+                                send(event { $0.sheetOpened = .with { $0.sheet = .secondReminder } })
+                            }
+                        }
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldAvailability,
+                            value: editor.availabilityLabel,
+                            tile: tile("availability", chrome),
+                            identifier: "agenda-editor-availability"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .availability } })
+                        }
+                        if editor.showZone {
+                            AgendaTileChoiceRow(
+                                key: chrome.fieldZone,
+                                value: editor.zoneLabel,
+                                tile: tile("zone", chrome),
+                                identifier: "agenda-editor-zone"
+                            ) {
+                                send(event { $0.sheetOpened = .with { $0.sheet = .zone } })
+                            }
+                        }
+                        AgendaTileChoiceRow(
+                            key: chrome.fieldTravel,
+                            value: editor.travelLabel,
+                            tile: tile("travel", chrome),
+                            identifier: "agenda-editor-travel"
+                        ) {
+                            send(event { $0.sheetOpened = .with { $0.sheet = .travel } })
+                        }
+                        AgendaTileFieldRow(
+                            key: chrome.fieldLink,
+                            text: $typedLink,
+                            placeholder: chrome.linkPlaceholder,
+                            tile: tile("link", chrome),
+                            identifier: "agenda-editor-link",
+                            divider: false
+                        ) { typed in
+                            guard seeded, typed != draft.link else { return }
+                            send(event { $0.link = .with { $0.text = typed } })
+                        }
                     }
                     notesField(draft, chrome: chrome)
+                } else {
+                    // A TASK IS A TITLE AND A DUE DAY: the event's fields are not drawn.
+                    whenRow(
+                        key: editor.startFieldLabel,
+                        dayLabel: editor.startDayLabel.isEmpty ? editor.startLabel : editor.startDayLabel,
+                        timeLabel: editor.startTimeLabel,
+                        chrome: chrome,
+                        day: draft.startDay,
+                        time: draft.startTime,
+                        allDay: draft.allDay,
+                        identifier: "agenda-editor-start"
+                    ) { day, time in
+                        send(event { $0.start = .with { $0.day = day; $0.time = time } })
+                    }
+                    blockedNote(editor)
                 }
                 // THE NEW TASK SHEET (#1173): Notes, the list, and a More details row that opens
                 // priority, repeat and tags.
@@ -391,6 +452,7 @@ struct AgendaEditorView: View {
     /// Starts / Ends: Rust's day and time words, each its own tap that
     /// opens the platform's picker over the draft's civil strings (no time
     /// all-day), titled with Rust's "Pick a date" / "Pick a time".
+    @ViewBuilder
     private func whenRow(
         key: String,
         dayLabel: String,
@@ -400,30 +462,57 @@ struct AgendaEditorView: View {
         time: String,
         allDay: Bool,
         identifier: String,
+        tile: Centraid_Core_V1_AgendaRowTile? = nil,
         onPick: @escaping (String, String) -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(key)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            HStack(spacing: 16) {
-                pickerFace(dayLabel, hint: chrome.pickDate, identifier: "\(identifier)-day") {
-                    picking = CivilPick(id: "\(identifier)-day", title: chrome.pickDate, time: false, day: day, clock: time) { d, _ in onPick(d, time) }
+        let faces = HStack(spacing: 12) {
+            pickerFace(dayLabel, hint: chrome.pickDate, identifier: "\(identifier)-day") {
+                picking = CivilPick(id: "\(identifier)-day", title: chrome.pickDate, time: false, day: day, clock: time) { d, _ in onPick(d, time) }
+            }
+            if !allDay, !timeLabel.isEmpty {
+                pickerFace(timeLabel, hint: chrome.pickTime, identifier: "\(identifier)-time") {
+                    picking = CivilPick(id: "\(identifier)-time", title: chrome.pickTime, time: true, day: day, clock: time) { _, t in onPick(day, t) }
                 }
-                if !allDay, !timeLabel.isEmpty {
-                    pickerFace(timeLabel, hint: chrome.pickTime, identifier: "\(identifier)-time") {
-                        picking = CivilPick(id: "\(identifier)-time", title: chrome.pickTime, time: true, day: day, clock: time) { _, t in onPick(day, t) }
-                    }
-                }
-                Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-        .overlay(alignment: .bottom) { KitHairline() }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(identifier)
+        if tile != nil {
+            // ON THE BOARD'S CARD: the tile, the label, the two taps at the trailing end.
+            AgendaTileWhenRow(key: key, tile: tile, identifier: identifier) { faces }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(key)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                HStack(spacing: 16) {
+                    faces
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+            .overlay(alignment: .bottom) { KitHairline() }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(identifier)
+        }
+    }
+
+    /// The tile Rust names for an event row (`AgendaEditorChrome.tiles`, by key); nil draws none.
+    private func tile(_ key: String, _ chrome: Centraid_Core_V1_AgendaEditorChrome) -> Centraid_Core_V1_AgendaRowTile? {
+        chrome.tiles.first { $0.key == key }
+    }
+
+    /// Why Save is held back, said under the times.
+    @ViewBuilder
+    private func blockedNote(_ editor: Centraid_Core_V1_AgendaEditorData) -> some View {
+        if !editor.blockedReason.isEmpty {
+            Text(editor.blockedReason)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("net", scheme))
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 6)
+                .accessibilityIdentifier("agenda-editor-blocked")
+        }
     }
 
     /// Rust's words as the tap that opens a picker.
@@ -541,7 +630,7 @@ struct AgendaEditorView: View {
                         HStack(spacing: 8) {
                             if !choice.hueKey.isEmpty {
                                 Circle()
-                                    .fill(Theme.color(KitHue.role(choice.hueKey) ?? "cSlate", scheme))
+                                    .fill(agendaHue(choice.hueKey, scheme))
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(label: choice.label, selected: choice.selected || (!chosen.isEmpty && choice.key == chosen), identifier: "\(idPrefix)-\(choice.key)") {

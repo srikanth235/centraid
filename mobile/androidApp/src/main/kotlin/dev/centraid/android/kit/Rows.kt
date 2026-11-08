@@ -205,7 +205,13 @@ public fun toneInk(tone: StatusChip.Tone, neutral: String): Color = when (tone) 
 
 /** THE SECTION HEAD: a title, its count, and one text verb. */
 @Composable
-public fun SectionHeader(head: SectionHead, modifier: Modifier = Modifier, onVerb: (() -> Unit)? = null) {
+public fun SectionHeader(
+    head: SectionHead,
+    modifier: Modifier = Modifier,
+    /** The board's sentence-case head (Catch up's piles): the row rung in semibold, not 12pt capitals. */
+    sentenceCase: Boolean = false,
+    onVerb: (() -> Unit)? = null,
+) {
     Row(
         modifier
             .fillMaxWidth()
@@ -214,12 +220,17 @@ public fun SectionHeader(head: SectionHead, modifier: Modifier = Modifier, onVer
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val count = head.count
-        KitText(
-            if (count != null) "${head.title} · $count" else head.title,
-            KitType.Group,
-            Surface.meta,
-            Modifier.weight(1f).semantics { heading() },
-        )
+        val title = if (count != null) "${head.title} · $count" else head.title
+        if (sentenceCase) {
+            Text(
+                title,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = Surface.meta,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+        } else {
+            KitText(title, KitType.Group, Surface.meta, Modifier.weight(1f).semantics { heading() })
+        }
         if (head.verb_label.isNotEmpty() && onVerb != null) {
             Text(
                 head.verb_label,
