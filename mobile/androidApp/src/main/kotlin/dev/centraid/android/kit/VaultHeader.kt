@@ -167,8 +167,6 @@ public fun VaultHeader(
                             status,
                             style = centraidType("mono"),
                             color = centraidColor(if (loud) "text" else "textFaint"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 } else if (line.isNotEmpty()) {
@@ -176,8 +174,6 @@ public fun VaultHeader(
                         line,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (waiting.isNotEmpty()) {
@@ -185,8 +181,6 @@ public fun VaultHeader(
                         waiting,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("home-originals-waiting"),
                     )
                 }
