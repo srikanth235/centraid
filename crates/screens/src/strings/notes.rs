@@ -89,6 +89,8 @@ catalog! {
     plain link_kind_task = ("Task", "Task");
     plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
     plain link_label = ("Add link", "Add link");
+    plain link_create = ("Create note", "Create note");
+    plain link_restore = ("Restore", "Restore");
     plain link_missing = ("No note called {title}", "No note called {title}");
     plain link_missing_spoken = ("Missing note {title}", "Missing note {title}");
     plain link_note_spoken = ("Note {title}", "Note {title}");
