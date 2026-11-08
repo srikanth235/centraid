@@ -20,7 +20,8 @@ use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
 use super::attachments::Attachments;
-use super::editor::draft::normalize_url;
+use super::editor::custom::{Custom, Done};
+use super::editor::draft::{REPEAT_CUSTOM, normalize_url};
 use super::list::{self, Phase};
 use super::routes;
 use super::rule_words;
@@ -34,7 +35,8 @@ use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, agenda_event as link_words, agenda_tasks as card_words, task as words,
+    Locale, agenda_editor as editor_words, agenda_event as link_words,
+    agenda_repeat as repeat_words, agenda_tasks as card_words, task as words,
 };
 
 /// `TodoField.key`s.
@@ -168,6 +170,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         ops: Ops::default(),
         finished: false,
         attachments: Attachments::of(&args.task_id),
+        custom: None,
     }))
 }
 
@@ -184,6 +187,9 @@ struct Detail {
     finished: bool,
     /// The photos and files on the task (#1173).
     attachments: Attachments,
+    /// The Custom repeat sheet's working rule, while it is open: the editor's own
+    /// model (#1173), saved to this task on Done.
+    custom: Option<Custom>,
 }
 
 impl Detail {
@@ -361,7 +367,15 @@ impl Detail {
                 }
             }
             REPEATS => {
-                if key == NONE {
+                if key == REPEAT_CUSTOM {
+                    // Custom opens the editor's sheet over the stored rule.
+                    if !task.due_day.is_empty() {
+                        self.custom = Some(Custom::open(
+                            task.rrule.as_deref().filter(|_| task.repeats),
+                            &task.due_day,
+                        ));
+                    }
+                } else if key == NONE {
                     if task.repeats {
                         self.edit(
                             ctx,
@@ -631,7 +645,11 @@ impl Detail {
                 }
             }
             Some(D::FieldOpened(opened)) => self.open_field = opened.field,
-            Some(D::FieldClosed(_)) => self.open_field.clear(),
+            Some(D::FieldClosed(_)) => {
+                self.open_field.clear();
+                self.custom = None;
+            }
+            Some(D::CustomRepeat(editor)) => self.custom_event(ctx, editor),
             Some(D::TagAdded(added)) => {
                 let label = added.label.trim().to_owned();
                 if let Some(task) = self.task().filter(|_| !label.is_empty()) {
@@ -694,6 +712,45 @@ impl Detail {
             // The page's asks of the shell are `event`'s.
             Some(D::OpenLink(_) | D::Attachment(_)) | None => {}
         }
+    }
+
+    /// One event of the Custom repeat sheet. Done writes the rule to the task
+    /// (when it is a new one) and closes the sheet; a read-only sheet only closes.
+    fn custom_event(&mut self, ctx: &Ctx, event: wire::AgendaEditorEvent) {
+        let (Some(task), Some(kind)) = (self.task(), event.kind) else {
+            return;
+        };
+        let Some(custom) = &mut self.custom else {
+            return;
+        };
+        if custom.on_event(&kind, &task.due_day) != Done::Applied {
+            return;
+        }
+        let rule = custom.rule(&task.due_day);
+        self.custom = None;
+        if let Some(rule) = rule.filter(|rule| task.rrule.as_deref() != Some(rule.as_str())) {
+            let edit = act::agenda::EditTask {
+                task_id: task.task_id.clone(),
+                rule: Field::Is(rule),
+                ..Default::default()
+            };
+            self.edit(ctx, &task, REPEATS, REPEAT_CUSTOM, edit);
+        }
+    }
+
+    /// The Custom repeat sheet, while it is open.
+    fn custom_sheet(
+        &self,
+        locale: Locale,
+        task: &wire::AgendaTask,
+    ) -> Option<wire::AgendaCustomRepeatSheet> {
+        let custom = self.custom.as_ref()?;
+        Some(custom.sheet(locale, &task.due_day, || {
+            task.rrule
+                .as_deref()
+                .and_then(|rule| rule_words::of_rule(locale, rule))
+                .unwrap_or_else(|| repeat_words::unrepresentable(locale))
+        }))
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
@@ -799,6 +856,7 @@ impl Detail {
             today: today.to_owned(),
             link: link_of(locale, task),
             attachments: Some(self.attachments.view(locale)),
+            custom_repeat: self.custom_sheet(locale, task),
         }
     }
 }
@@ -1108,6 +1166,18 @@ fn fields(
             String::new(),
         )
     }));
+    // CUSTOM: any stored rule that is not a preset is this choice; it opens the sheet.
+    let preset = task
+        .rrule
+        .as_deref()
+        .is_some_and(|stored| REPEAT_RULES.iter().any(|(_, rule)| *rule == stored));
+    repeat_choices.push(chip(
+        REPEAT_CUSTOM,
+        editor_words::repeat_custom(locale),
+        task.repeats && !preset,
+        dated,
+        String::new(),
+    ));
     out.push(wire::TodoField {
         key: REPEATS.to_owned(),
         label: words::field_repeats(locale),

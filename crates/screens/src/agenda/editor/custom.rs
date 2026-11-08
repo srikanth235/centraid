@@ -149,54 +149,55 @@ fn problem_sentence(locale: Locale, problem: Problem) -> String {
     }
 }
 
-impl Editor {
-    /// Open the sheet over the draft's rule, or over a fresh weekly one.
-    pub(super) fn open_custom(&mut self) {
-        let Some(draft) = &self.draft else { return };
-        let start = draft.start_day.clone();
-        let custom = match draft::rule_for(draft) {
-            Some(rule) => match repeat::from_rrule(&rule, &start) {
-                Some(spec) => Custom {
+/// Whether an event closed the sheet with Done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Done {
+    Open,
+    Applied,
+}
+
+impl Custom {
+    /// A sheet over `rule`, or over a fresh weekly one. A stored rule the sheet
+    /// cannot represent opens read-only.
+    #[must_use]
+    pub fn open(rule: Option<&str>, start_day: &str) -> Self {
+        match rule {
+            Some(rule) => match repeat::from_rrule(rule, start_day) {
+                Some(spec) => Self {
                     spec,
                     read_only: false,
                 },
-                None => Custom {
-                    spec: Spec::starting(&start),
+                None => Self {
+                    spec: Spec::starting(start_day),
                     read_only: true,
                 },
             },
-            None => Custom {
-                spec: Spec::starting(&start),
+            None => Self {
+                spec: Spec::starting(start_day),
                 read_only: false,
             },
-        };
-        self.close_sheet();
-        self.sheet = Sheet::CustomRepeat;
-        self.custom = Some(custom);
+        }
     }
 
-    /// The working spec, when the sheet is open and editable.
+    /// The working spec, when the sheet is editable.
     fn spec_mut(&mut self) -> Option<&mut Spec> {
-        self.custom
-            .as_mut()
-            .filter(|custom| !custom.read_only)
-            .map(|custom| &mut custom.spec)
+        (!self.read_only).then_some(&mut self.spec)
     }
 
-    pub(super) fn custom_freq(&mut self, key: &str) {
+    pub fn freq(&mut self, key: &str) {
         if let (Some(freq), Some(spec)) = (Freq::of_key(key), self.spec_mut()) {
             spec.freq = freq;
         }
     }
 
-    pub(super) fn custom_interval(&mut self, interval: i32) {
+    pub fn interval(&mut self, interval: i32) {
         if let Some(spec) = self.spec_mut() {
             // A value out of range is kept, so the sheet can say why it is not a rule.
             spec.interval = interval.clamp(0, MAX_INTERVAL + 1);
         }
     }
 
-    pub(super) fn custom_weekday(&mut self, key: &str) {
+    pub fn weekday(&mut self, key: &str) {
         let Some(token) = WEEKDAYS.iter().find(|day| **day == key).copied() else {
             return;
         };
@@ -209,13 +210,13 @@ impl Editor {
         }
     }
 
-    pub(super) fn custom_month_mode(&mut self, key: &str) {
+    pub fn month_mode(&mut self, key: &str) {
         if let (Some(mode), Some(spec)) = (MonthMode::of_key(key), self.spec_mut()) {
             spec.month_mode = mode;
         }
     }
 
-    pub(super) fn custom_month_day(&mut self, key: &str) {
+    pub fn month_day(&mut self, key: &str) {
         let Some(day) = key
             .parse::<i32>()
             .ok()
@@ -232,7 +233,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn custom_ordinal(&mut self, key: &str) {
+    pub fn ordinal(&mut self, key: &str) {
         if let Some(ordinal) = key.parse::<i32>().ok().filter(|n| ORDINALS.contains(n))
             && let Some(spec) = self.spec_mut()
         {
@@ -240,7 +241,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn custom_nth_weekday(&mut self, key: &str) {
+    pub fn nth_weekday(&mut self, key: &str) {
         if let (Some(token), Some(spec)) = (
             WEEKDAYS.iter().find(|day| **day == key).copied(),
             self.spec_mut(),
@@ -249,13 +250,13 @@ impl Editor {
         }
     }
 
-    pub(super) fn custom_end(&mut self, key: &str) {
+    pub fn end(&mut self, key: &str) {
         if let (Some(end), Some(spec)) = (End::of_key(key), self.spec_mut()) {
             spec.end = end;
         }
     }
 
-    pub(super) fn custom_until(&mut self, day: &str) {
+    pub fn until(&mut self, day: &str) {
         if civil::epoch_day_of(day).is_none() {
             return;
         }
@@ -264,98 +265,74 @@ impl Editor {
         }
     }
 
-    pub(super) fn custom_count(&mut self, count: i32) {
+    pub fn count(&mut self, count: i32) {
         if let Some(spec) = self.spec_mut() {
             spec.count = count.clamp(0, MAX_COUNT + 1);
         }
     }
 
-    /// "Replace this rule": the stored rule the sheet could not show gives way
-    /// to a fresh weekly one.
-    pub(super) fn replace_custom(&mut self) {
-        let start = self
-            .draft
-            .as_ref()
-            .map(|draft| draft.start_day.clone())
-            .unwrap_or_default();
-        if let Some(custom) = self.custom.as_mut().filter(|custom| custom.read_only) {
-            custom.spec = Spec::starting(&start);
-            custom.read_only = false;
+    /// A read-only sheet gives way to a fresh weekly rule starting at `start_day`.
+    pub fn replace(&mut self, start_day: &str) {
+        if self.read_only {
+            self.spec = Spec::starting(start_day);
+            self.read_only = false;
         }
     }
 
-    /// Done. A whole rule goes to the draft and the sheet closes; a read-only
-    /// sheet just closes, leaving the stored rule as it was.
-    pub(super) fn apply_custom(&mut self) {
-        let Some(custom) = self.custom.clone() else {
-            return;
-        };
-        let Some(draft) = &self.draft else { return };
-        if custom.read_only {
-            self.close_sheet();
-            return;
+    /// The whole rule the sheet builds, or `None` while it is read-only or not a rule.
+    #[must_use]
+    pub fn rule(&self, start_day: &str) -> Option<String> {
+        if self.read_only {
+            return None;
         }
-        let Ok(rule) = repeat::to_rrule(&custom.spec, &draft.start_day) else {
-            return;
-        };
-        // A rule that is one of the presets is that preset.
-        let preset = RULES
-            .iter()
-            .find(|(_, preset)| {
-                draft::same_repeat(
-                    &Draft {
-                        repeat_key: REPEAT_CUSTOM.to_owned(),
-                        repeat_rule: (*preset).to_owned(),
-                        ..Draft::default()
-                    },
-                    &Draft {
-                        repeat_key: REPEAT_CUSTOM.to_owned(),
-                        repeat_rule: rule.clone(),
-                        ..Draft::default()
-                    },
-                )
-            })
-            .map(|(key, _)| (*key).to_owned());
-        self.close_sheet();
-        self.edit(|d| {
-            Some(Draft {
-                repeat_key: preset.clone().unwrap_or_else(|| REPEAT_CUSTOM.to_owned()),
-                repeat_rule: if preset.is_some() {
-                    String::new()
-                } else {
-                    rule.clone()
-                },
-                ..d.clone()
-            })
-        });
+        repeat::to_rrule(&self.spec, start_day).ok()
     }
 
-    /// The sheet the view draws, while it is open.
-    pub(super) fn custom_sheet(
+    /// One event of the editor's custom family, for a page that shows the sheet
+    /// without the editor. [`Done::Applied`] says the member pressed Done: the
+    /// caller then reads [`Self::rule`]. Events of other families are not the sheet's.
+    pub fn on_event(&mut self, kind: &wire::agenda_editor_event::Kind, start_day: &str) -> Done {
+        use wire::agenda_editor_event::Kind as K;
+        match kind {
+            K::CustomFreq(picked) => self.freq(&picked.key),
+            K::CustomInterval(changed) => self.interval(changed.interval),
+            K::CustomWeekday(toggled) => self.weekday(&toggled.key),
+            K::CustomMonthMode(picked) => self.month_mode(&picked.key),
+            K::CustomMonthDay(toggled) => self.month_day(&toggled.key),
+            K::CustomOrdinal(picked) => self.ordinal(&picked.key),
+            K::CustomNthWeekday(picked) => self.nth_weekday(&picked.key),
+            K::CustomEnd(picked) => self.end(&picked.key),
+            K::CustomUntil(changed) => self.until(&changed.day),
+            K::CustomCount(changed) => self.count(changed.count),
+            K::CustomReplace(_) => self.replace(start_day),
+            K::CustomApplied(_) => return Done::Applied,
+            _ => {}
+        }
+        Done::Open
+    }
+
+    /// The sheet the view draws. `stored_summary` words a read-only rule.
+    #[must_use]
+    pub fn sheet(
         &self,
         locale: Locale,
-        draft: &Draft,
-    ) -> Option<wire::AgendaCustomRepeatSheet> {
-        let custom = self.custom.as_ref()?;
+        start_day: &str,
+        stored_summary: impl FnOnce() -> String,
+    ) -> wire::AgendaCustomRepeatSheet {
+        let custom = self;
         let spec = &custom.spec;
         if custom.read_only {
-            let summary = self
-                .event()
-                .and_then(|event| event.rrule.as_deref())
-                .and_then(|rule| rule_words::of_rule(locale, rule))
-                .filter(|_| draft::same_repeat(draft, self.baseline.as_ref().unwrap_or(draft)))
-                .unwrap_or_else(|| words::unrepresentable(locale));
-            return Some(wire::AgendaCustomRepeatSheet {
+            return wire::AgendaCustomRepeatSheet {
                 title: words::title(locale),
                 read_only: true,
                 replace_label: words::replace(locale),
-                summary,
+                summary: stored_summary(),
                 done_label: words::done(locale),
                 can_apply: true,
                 ..wire::AgendaCustomRepeatSheet::default()
-            });
+            };
         }
-        let checked = spec.check(&draft.start_day);
+        let checked = spec.check(start_day);
         let steps = u64::try_from(spec.interval.max(1)).unwrap_or(1);
         let unit = match spec.freq {
             Freq::Daily => words::unit_days(locale, steps),
@@ -379,7 +356,7 @@ impl Editor {
                 })
                 .collect()
         };
-        Some(wire::AgendaCustomRepeatSheet {
+        wire::AgendaCustomRepeatSheet {
             title: words::title(locale),
             read_only: false,
             replace_label: String::new(),
@@ -465,7 +442,153 @@ impl Editor {
             show_count: spec.end == End::After,
             count: spec.count,
             count_label: words::count_label(locale, u64::try_from(spec.count.max(1)).unwrap_or(1)),
-        })
+        }
+    }
+}
+
+impl Editor {
+    /// Open the sheet over the draft's rule, or over a fresh weekly one.
+    pub(super) fn open_custom(&mut self) {
+        let Some(draft) = &self.draft else { return };
+        let custom = Custom::open(draft::rule_for(draft).as_deref(), &draft.start_day);
+        self.close_sheet();
+        self.sheet = Sheet::CustomRepeat;
+        self.custom = Some(custom);
+    }
+
+    pub(super) fn custom_freq(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.freq(key);
+        }
+    }
+
+    pub(super) fn custom_interval(&mut self, interval: i32) {
+        if let Some(custom) = &mut self.custom {
+            custom.interval(interval);
+        }
+    }
+
+    pub(super) fn custom_weekday(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.weekday(key);
+        }
+    }
+
+    pub(super) fn custom_month_mode(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.month_mode(key);
+        }
+    }
+
+    pub(super) fn custom_month_day(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.month_day(key);
+        }
+    }
+
+    pub(super) fn custom_ordinal(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.ordinal(key);
+        }
+    }
+
+    pub(super) fn custom_nth_weekday(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.nth_weekday(key);
+        }
+    }
+
+    pub(super) fn custom_end(&mut self, key: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.end(key);
+        }
+    }
+
+    pub(super) fn custom_until(&mut self, day: &str) {
+        if let Some(custom) = &mut self.custom {
+            custom.until(day);
+        }
+    }
+
+    pub(super) fn custom_count(&mut self, count: i32) {
+        if let Some(custom) = &mut self.custom {
+            custom.count(count);
+        }
+    }
+
+    /// "Replace this rule": the stored rule the sheet could not show gives way
+    /// to a fresh weekly one.
+    pub(super) fn replace_custom(&mut self) {
+        let start = self
+            .draft
+            .as_ref()
+            .map(|draft| draft.start_day.clone())
+            .unwrap_or_default();
+        if let Some(custom) = &mut self.custom {
+            custom.replace(&start);
+        }
+    }
+
+    /// Done. A whole rule goes to the draft and the sheet closes; a read-only
+    /// sheet just closes, leaving the stored rule as it was.
+    pub(super) fn apply_custom(&mut self) {
+        let Some(custom) = self.custom.clone() else {
+            return;
+        };
+        let Some(draft) = &self.draft else { return };
+        if custom.read_only {
+            self.close_sheet();
+            return;
+        }
+        let Some(rule) = custom.rule(&draft.start_day) else {
+            return;
+        };
+        // A rule that is one of the presets is that preset.
+        let preset = RULES
+            .iter()
+            .find(|(_, preset)| {
+                draft::same_repeat(
+                    &Draft {
+                        repeat_key: REPEAT_CUSTOM.to_owned(),
+                        repeat_rule: (*preset).to_owned(),
+                        ..Draft::default()
+                    },
+                    &Draft {
+                        repeat_key: REPEAT_CUSTOM.to_owned(),
+                        repeat_rule: rule.clone(),
+                        ..Draft::default()
+                    },
+                )
+            })
+            .map(|(key, _)| (*key).to_owned());
+        self.close_sheet();
+        self.edit(|d| {
+            Some(Draft {
+                repeat_key: preset.clone().unwrap_or_else(|| REPEAT_CUSTOM.to_owned()),
+                repeat_rule: if preset.is_some() {
+                    String::new()
+                } else {
+                    rule.clone()
+                },
+                ..d.clone()
+            })
+        });
+    }
+
+    /// The sheet the view draws, while it is open.
+    pub(super) fn custom_sheet(
+        &self,
+        locale: Locale,
+        draft: &Draft,
+    ) -> Option<wire::AgendaCustomRepeatSheet> {
+        let custom = self.custom.as_ref()?;
+        Some(custom.sheet(locale, &draft.start_day, || {
+            self.event()
+                .and_then(|event| event.rrule.as_deref())
+                .and_then(|rule| rule_words::of_rule(locale, rule))
+                .filter(|_| draft::same_repeat(draft, self.baseline.as_ref().unwrap_or(draft)))
+                .unwrap_or_else(|| words::unrepresentable(locale))
+        }))
     }
 }
 

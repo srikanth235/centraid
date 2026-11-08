@@ -64,7 +64,7 @@
 //! ignores everything after it: the core remembers no key, and a second Save
 //! would file the event again.
 
-mod custom;
+pub(super) mod custom;
 pub(super) mod draft;
 mod fields;
 pub mod repeat;

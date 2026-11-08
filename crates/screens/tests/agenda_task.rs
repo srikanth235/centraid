@@ -624,6 +624,106 @@ fn reminder_repeats_priority_and_effort_are_each_one_write() {
     assert_eq!(field(d.view(i), "effort").value, "~1 hour");
 }
 
+fn custom_event(d: &mut Driver, i: u64, kind: wire::agenda_editor_event::Kind) {
+    send_detail(
+        d,
+        i,
+        de::Kind::CustomRepeat(wire::AgendaEditorEvent { kind: Some(kind) }),
+    );
+}
+
+#[test]
+fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
+    use wire::agenda_editor_event as ee;
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    // Custom is a choice beside the presets, and no sheet is up until it is chosen.
+    let repeats = field(d.view(i), "repeats");
+    assert_eq!(
+        repeats.choices.last().map(|c| c.key.as_str()),
+        Some("custom")
+    );
+    assert!(detail_data(d.view(i)).custom_repeat.is_none());
+
+    choose(&mut d, i, "repeats", "custom");
+    let sheet = detail_data(d.view(i))
+        .custom_repeat
+        .clone()
+        .expect("the sheet");
+    assert!(!sheet.read_only && sheet.can_apply);
+    // Closing the sheet drops the working rule and writes nothing.
+    let before = task_of(&d, &id).updated_at;
+    send_detail(&mut d, i, de::Kind::FieldClosed(de::FieldClosed {}));
+    assert!(detail_data(d.view(i)).custom_repeat.is_none());
+    assert_eq!(task_of(&d, &id).updated_at, before);
+
+    // Every 2 weeks on Wednesday and Saturday, saved to the existing task.
+    choose(&mut d, i, "repeats", "custom");
+    custom_event(
+        &mut d,
+        i,
+        ee::Kind::CustomInterval(ee::CustomIntervalChanged { interval: 2 }),
+    );
+    custom_event(
+        &mut d,
+        i,
+        ee::Kind::CustomWeekday(ee::CustomWeekdayToggled { key: "SA".into() }),
+    );
+    custom_event(&mut d, i, ee::Kind::CustomApplied(ee::CustomApplied {}));
+    assert!(detail_data(d.view(i)).custom_repeat.is_none());
+    let stored = task_of(&d, &id);
+    assert!(stored.repeats);
+    let rule = stored.rrule.clone().expect("a rule");
+    assert!(rule.starts_with("FREQ=WEEKLY;INTERVAL=2;BYDAY="), "{rule}");
+    let repeats = field(d.view(i), "repeats");
+    assert_eq!(selected(repeats), "custom");
+    assert!(
+        repeats.value.starts_with("Every 2 weeks"),
+        "{}",
+        repeats.value
+    );
+
+    // The stored custom rule opens editable, in its parts.
+    choose(&mut d, i, "repeats", "custom");
+    let sheet = detail_data(d.view(i))
+        .custom_repeat
+        .clone()
+        .expect("the sheet");
+    assert!(!sheet.read_only);
+    assert_eq!(sheet.interval, 2);
+    // Done with nothing changed writes nothing more.
+    let before = task_of(&d, &id).updated_at;
+    custom_event(&mut d, i, ee::Kind::CustomApplied(ee::CustomApplied {}));
+    assert_eq!(task_of(&d, &id).updated_at, before);
+    assert!(detail_data(d.view(i)).custom_repeat.is_none());
+
+    // A rule the sheet builds that is a preset still shows as the rule it is.
+    choose(&mut d, i, "repeats", "custom");
+    custom_event(
+        &mut d,
+        i,
+        ee::Kind::CustomInterval(ee::CustomIntervalChanged { interval: 1 }),
+    );
+    custom_event(&mut d, i, ee::Kind::CustomApplied(ee::CustomApplied {}));
+    assert_eq!(
+        task_of(&d, &id)
+            .rrule
+            .as_deref()
+            .map(|r| r.starts_with("FREQ=WEEKLY")),
+        Some(true)
+    );
+}
+
+#[test]
+fn a_custom_repeat_needs_a_due_date_and_opens_no_sheet_without_one() {
+    let mut d = driver();
+    let id = task(&d, "Idea");
+    let i = open(&mut d, &id);
+    choose(&mut d, i, "repeats", "custom");
+    assert!(detail_data(d.view(i)).custom_repeat.is_none());
+}
+
 #[test]
 fn a_reminder_or_repeat_needs_a_due_date_and_writes_nothing_without_one() {
     let mut d = driver();

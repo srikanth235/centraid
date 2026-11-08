@@ -73,6 +73,17 @@ struct TodoDetailView: View {
                 }
             }
         }
+        // THE CUSTOM REPEAT SHEET: the editor's own, over this task's rule; Done is Rust's.
+        .sheet(isPresented: Binding(
+            get: { hasCustomRepeat(state) },
+            set: { open in if !open, hasCustomRepeat(state) { send(event { $0.fieldClosed = .init() }) } }
+        )) {
+            if case let .data(detail)? = state.content, detail.hasCustomRepeat {
+                AgendaCustomRepeatSheetView(sheet: detail.customRepeat) { editorEvent in
+                    send(event { $0.customRepeat = editorEvent })
+                }
+            }
+        }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
             set: { open in if !open, state.hasConfirm { send(event { $0.dismissed = .init() }) } }
@@ -88,6 +99,11 @@ struct TodoDetailView: View {
         .onChange(of: state.finished) { _, finished in
             if finished { onClose() }
         }
+    }
+
+    private func hasCustomRepeat(_ state: Centraid_Core_V1_TodoDetailState) -> Bool {
+        if case let .data(detail)? = state.content { return detail.hasCustomRepeat }
+        return false
     }
 
     private func readContent(_ state: Centraid_Core_V1_TodoDetailState) -> ScreenContent<Centraid_Core_V1_TodoDetailData> {
