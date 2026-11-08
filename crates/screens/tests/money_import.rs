@@ -96,6 +96,12 @@ fn a_csv_waits_for_its_account_then_plans_and_publishes_the_plans_own_input() {
     assert_eq!(statement.counts[0].label, "New");
     assert_eq!(statement.counts[0].detail, "5");
     assert_eq!(statement.rows.len(), 5);
+    // A NEW ROW WEARS THE APP'S ACCENT, not a neutral grey.
+    for row in &statement.rows {
+        let chip = row.chip.as_ref().expect("a chip");
+        assert_eq!(chip.label, "New");
+        assert_eq!(chip.tone, wire::status_chip::Tone::Accent as i32);
+    }
     assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
 
     let before = home_rows_marker(&d);

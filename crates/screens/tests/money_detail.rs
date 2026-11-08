@@ -405,6 +405,14 @@ fn recurring_charges_are_rows_with_a_cadence_and_a_state() {
     for row in &data.rows {
         assert!(row.meta.contains('·'), "{}", row.meta);
         assert!(row.detail.contains("seen"), "{}", row.detail);
+        for chip in &row.chips {
+            let tone = match chip.label.as_str() {
+                "Paid" => wire::status_chip::Tone::Accent,
+                "Due" => wire::status_chip::Tone::Neutral,
+                _ => continue,
+            };
+            assert_eq!(chip.tone, tone as i32, "{}", chip.label);
+        }
     }
 }
 

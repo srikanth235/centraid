@@ -165,6 +165,9 @@ message Confirm {
 
 // A row's status as a finished label and a tone. `seam` is "not yet", `net`
 // is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
+// `accent` is the app's own colour for a state that is the app's good news
+// ("New" on an import row, "Paid" on a bill): a wash of the app accent with the
+// accent's text.
 message StatusChip {
   string label = 1;
   Tone tone = 2;
@@ -175,6 +178,7 @@ message StatusChip {
     TONE_SEAM = 2;
     TONE_NET = 3;
     TONE_WARNING = 4;
+    TONE_ACCENT = 5;
   }
 }
 

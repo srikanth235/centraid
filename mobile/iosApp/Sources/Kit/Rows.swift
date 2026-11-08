@@ -183,6 +183,7 @@ struct StatusChipView: View {
     let chip: Centraid_Core_V1_StatusChip
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     init(_ chip: Centraid_Core_V1_StatusChip) { self.chip = chip }
 
@@ -193,7 +194,7 @@ struct StatusChipView: View {
         case .seam: return "seam"
         case .net: return "net"
         case .warning: return "warning"
-        case .neutral, .unspecified, .UNRECOGNIZED: return neutral
+        case .neutral, .accent, .unspecified, .UNRECOGNIZED: return neutral
         }
     }
 
@@ -204,6 +205,15 @@ struct StatusChipView: View {
         switch chip.tone {
         case .seam, .warning: KitBadge(label: chip.label, state: .amber)
         case .net: KitBadge(label: chip.label, state: .red)
+        case .accent:
+            // THE APP'S OWN GOOD NEWS: a wash of the accent under the accent's text.
+            Text(chip.label)
+                .kitType(.badge)
+                .foregroundStyle(accent.text)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         case .neutral, .unspecified, .UNRECOGNIZED:
             Text(chip.label)
                 .kitType(.badge)
