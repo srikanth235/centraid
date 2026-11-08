@@ -612,11 +612,8 @@ impl EventPage {
                     },
                     wire::AgendaAction {
                         key: ACTION_CANCEL.to_owned(),
-                        label: if is_series_occurrence(event) {
-                            words::cancel_series(locale)
-                        } else {
-                            words::cancel_event(locale)
-                        },
+                        // THE BOARD'S WORD, with its ellipsis: a confirmation follows.
+                        label: words::cancel_action(locale),
                         enabled: true,
                         destructive: true,
                         accessibility_label: words::a11y_cancel(locale),

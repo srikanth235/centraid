@@ -147,7 +147,7 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
         .iter()
         .map(|a| (a.key.as_str(), a.label.as_str()))
         .collect();
-    assert_eq!(actions, [("edit", "Edit"), ("cancel", "Cancel event")]);
+    assert_eq!(actions, [("edit", "Edit"), ("cancel", "Cancel…")]);
     assert!(!data.is_past, "2099 is ahead");
     assert_eq!(
         data.accessibility_label,

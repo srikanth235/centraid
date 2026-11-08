@@ -23,7 +23,7 @@ catalog! {
     plain cancel_event = ("Cancel event", "Cancel event");
     plain cancel_scope_body = ("Pick which occurrences to cancel.", "Pick which occurrences to cancel.");
     plain cancel_scope_title = ("Cancel a repeating event", "Cancel a repeating event");
-    plain cancel_series = ("Cancel…", "Cancel…");
+    plain cancel_action = ("Cancel…", "Cancel…");
     plain close = ("Close", "Close");
     plain confirm_cancel_body = ("It comes off your calendar, and its guests see it as cancelled.", "It comes off your calendar, and its guests see it as cancelled.");
     plain confirm_cancel_title = ("Cancel this event?", "Cancel this event?");
