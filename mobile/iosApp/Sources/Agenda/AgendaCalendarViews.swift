@@ -224,6 +224,11 @@ struct AgendaLayoutKey: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
 
     var body: some View {
+        // REMINDERS' BAR has no layout to pick: the key is the Calendar's.
+        if !header.layouts.isEmpty { menu }
+    }
+
+    private var menu: some View {
         Menu {
             Picker(header.layoutLabel, selection: selection) {
                 ForEach(header.layouts, id: \.key) { layout in

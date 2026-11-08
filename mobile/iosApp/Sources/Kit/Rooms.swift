@@ -140,6 +140,8 @@ struct SearchOpener: View {
 struct PlaceBar {
     let leading: AnyView
     let actions: AnyView
+    /// Reminders' board keeps its big title under the same bar; the Calendar's has none.
+    var showsTitle = false
 }
 
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
@@ -263,7 +265,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // THE HEADER IS THE PAGE'S: the title at 34 bold, the scope under it. The system bar
             // above carries only the keys (the glass filter and the filled accent `+`) and a
             // back chevron where the place was pushed.
-            if bar == nil { KitHeader(title: title, subtitle: subtitle) }
+            if bar == nil || bar?.showsTitle == true { KitHeader(title: title, subtitle: subtitle) }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }

@@ -115,8 +115,17 @@ pub fn has_calendar_header(destination: Dest) -> bool {
     matches!(destination, Dest::Day | Dest::Week)
 }
 
-/// THE CALENDAR'S HEADER (#1173, `Calendar.dc.html`): the month chip, the layout
-/// key, Day's all-day lane and the Today key's visibility. `data` is the
+/// Whether the place wears the shared header ([`calendar_header`]) at all: the Calendar's Day and
+/// Week, and Reminders, whose board (`Main.dc.html`) is the same bar with no chip and no layout
+/// key, and the place's own title under it. One model, one view per shell, drawn by both.
+#[must_use]
+pub fn has_place_header(destination: Dest) -> bool {
+    has_calendar_header(destination) || destination == Dest::Todo
+}
+
+/// THE SHARED HEADER (#1173, `Calendar.dc.html` and `Main.dc.html`): the month chip, the layout
+/// key, Day's all-day lane and the Today key's visibility on the Calendar; on Reminders only the
+/// bar and the place's `title`, since there is no month to go back to and no layout to pick. `data` is the
 /// answer the view draws; the lane is TAKEN from its Day column so it is drawn
 /// once. Not `shown` while denied or while a search term is answering.
 pub fn calendar_header(
@@ -127,8 +136,16 @@ pub fn calendar_header(
     shown: bool,
     data: Option<&mut wire::AgendaHomeData>,
 ) -> wire::AgendaCalendarHeader {
-    if !shown || !has_calendar_header(destination) {
+    if !shown || !has_place_header(destination) {
         return wire::AgendaCalendarHeader::default();
+    }
+    if destination == Dest::Todo {
+        return wire::AgendaCalendarHeader {
+            shown: true,
+            layout: destination as i32,
+            title: reminders::reminders_title(locale),
+            ..wire::AgendaCalendarHeader::default()
+        };
     }
     let month = if anchor.is_empty() {
         String::new()
@@ -161,6 +178,7 @@ pub fn calendar_header(
         today_label: words::today(locale),
         month_icon_key: "ChevronLeft".to_owned(),
         layout_icon_key: "Rows".to_owned(),
+        title: String::new(),
     }
 }
 

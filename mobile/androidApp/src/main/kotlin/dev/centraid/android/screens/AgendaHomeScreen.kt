@@ -152,16 +152,17 @@ public fun AgendaHomeScreen(
     // drawn only while the bar can be (`quick_add.shown`); elsewhere it is the
     // add sheet.
     val plusOpensBar = state.add_opens_quick_add
-    // THE CALENDAR'S HEADER (Day and Week) stands in the key row for the app's title.
+    // THE SHARED HEADER (Day, Week and Reminders) stands in the key row; Reminders keeps its title under it.
     val header = state.calendar_header?.takeIf { it.shown }
     val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = "agenda",
-            title = chrome.title,
+            title = header?.title?.takeIf { it.isNotEmpty() } ?: chrome.title,
             meta = meta,
             barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },
             barActions = header?.let { { AgendaLayoutKey(it, onEvent) } },
+            barShowsTitle = header?.title?.isNotEmpty() == true,
             trailing = if (plusShown) {
                 RoomAction(
                     iconKey = "Plus",

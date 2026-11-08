@@ -972,11 +972,16 @@ fn day_and_week_carry_the_header_and_nothing_else_keeps_it() {
     r.destination(Dest::Week);
     assert!(r.header().shown);
     assert_eq!(r.header().layout, Dest::Week as i32);
-    for place in [Dest::Month, Dest::Year, Dest::Schedule, Dest::Todo] {
+    for place in [Dest::Month, Dest::Year, Dest::Schedule] {
         r.destination(place);
         assert!(!r.header().shown, "{place:?} keeps its own header");
         assert!(r.header().all_day.is_empty());
     }
+    // Reminders wears the same header with its own title, no chip and no layout key.
+    r.destination(Dest::Todo);
+    assert!(r.header().shown);
+    assert_eq!(r.header().title, "Reminders");
+    assert!(r.header().month_label.is_empty() && r.header().layouts.is_empty());
     r.destination(Dest::Month);
     assert!(
         !r.state().calendar_views.is_empty(),

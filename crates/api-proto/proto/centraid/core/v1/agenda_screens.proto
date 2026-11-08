@@ -165,13 +165,13 @@ message AgendaCalendarView {
   bool current = 5;
 }
 
-// THE CALENDAR'S HEADER (#1173, `design/mockups/Calendar.dc.html`): over the
-// hour grid of Day and Week, in place of the app's title, the Day menu, the
+// THE SHARED HEADER (#1173, `design/mockups/Calendar.dc.html`, and Reminders'
+// `Main.dc.html`): over the hour grid of Day and Week, in place of the app's title, the Day menu, the
 // date line and the ‹ › stepper. The week strip it sits over is
 // `AgendaHomeData.week_strip`; a swipe on the strip or the grid pages a week
 // (`WeekPaged`) and a tap on a day is `DayPicked`.
 message AgendaCalendarHeader {
-  // False on every place but Day and Week, while denied, and while a search
+  // False on every place but Day, Week and Reminders, while denied, and while a search
   // term is answering. A shell draws its own title and day bar then.
   bool shown = 1;
   // The chip's words, the anchor's month alone: "November". Empty until the
@@ -201,6 +201,11 @@ message AgendaCalendarHeader {
   // Catalogue icons for the chip's chevron and the layout key.
   string month_icon_key = 12;
   string layout_icon_key = 13;
+  // THE PLACE'S OWN TITLE under the bar, for a place that has one (Reminders:
+  // `Main.dc.html`). Empty on Day and Week, which draw none. When the header is
+  // `shown` with no `month_label` and no `layouts`, the bar holds only the
+  // app's verb: the same header, with nothing to go back to and no layout to pick.
+  string title = 14;
 }
 
 message AgendaToolbar {

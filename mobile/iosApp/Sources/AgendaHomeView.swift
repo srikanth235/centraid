@@ -31,12 +31,12 @@ struct AgendaHomeView: View {
 
     var body: some View {
         let content = readContent(state)
-        // THE CALENDAR'S HEADER (Day and Week) stands in the bar for the app's title.
+        // THE SHARED HEADER (Day, Week and Reminders) stands in the bar; Reminders keeps its title under it.
         let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
             app: "agenda",
-            title: state.chrome.title,
+            title: header?.title.isEmpty == false ? header?.title ?? "" : state.chrome.title,
             trailing: addAction(state, denied: content.isDenied),
             // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
             // through Rust, at the foot. None on the gate, which has nothing to search.
@@ -51,7 +51,8 @@ struct AgendaHomeView: View {
             bar: header.map { header in
                 PlaceBar(
                     leading: AnyView(AgendaMonthChip(header: header, send: send)),
-                    actions: AnyView(AgendaLayoutKey(header: header, send: send))
+                    actions: AnyView(AgendaLayoutKey(header: header, send: send)),
+                    showsTitle: !header.title.isEmpty
                 )
             },
             showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping

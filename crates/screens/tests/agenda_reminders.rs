@@ -278,6 +278,40 @@ fn the_calendar_headers_layout_key_offers_day_week_month_list_and_year() {
 }
 
 #[test]
+fn reminders_wear_the_shared_header_with_its_title_and_nothing_to_pick() {
+    let mut d = driver();
+    let i = d.push(agenda::TAB, routes::home(wire::AgendaDestination::Todo, ""));
+    let state = match &d.view(i).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => state.clone(),
+        other => panic!("not Agenda's home: {other:?}"),
+    };
+    // The board's bar: no chip, no layout key, the place's title under it.
+    let header = state
+        .calendar_header
+        .as_ref()
+        .expect("Reminders draws the header");
+    assert!(header.shown);
+    assert_eq!(header.title, "Reminders");
+    assert!(header.month_label.is_empty());
+    assert!(header.layouts.is_empty());
+    assert!(header.all_day.is_empty());
+    assert!(!header.today_shown);
+    // Day has no title of its own: the header's is empty there.
+    let j = d.push(agenda::TAB, routes::home(wire::AgendaDestination::Day, ""));
+    let day = match &d.view(j).kind {
+        Some(wire::view_state::Kind::AgendaHome(state)) => state.clone(),
+        other => panic!("not Agenda's home: {other:?}"),
+    };
+    assert!(
+        day.calendar_header
+            .as_ref()
+            .expect("header")
+            .title
+            .is_empty()
+    );
+}
+
+#[test]
 fn dragging_a_row_renumbers_the_list_and_the_list_draws_in_that_order() {
     let mut d = driver();
     let list_id = project(&d, "Reorder me");

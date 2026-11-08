@@ -228,6 +228,8 @@ internal fun AgendaMonthChip(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
  */
 @Composable
 internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeEvent) -> Unit) {
+    // REMINDERS' BAR has no layout to pick.
+    if (header.layouts.isEmpty()) return
     var open by remember { mutableStateOf(false) }
     Box {
         IconKey(header.layout_icon_key, header.layout_label, "agenda-layout-key") { open = true }

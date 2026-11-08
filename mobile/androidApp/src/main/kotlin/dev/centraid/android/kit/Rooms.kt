@@ -192,6 +192,8 @@ public fun AppPlace(
      */
     barLeading: (@Composable () -> Unit)? = null,
     barActions: (@Composable () -> Unit)? = null,
+    /** Reminders' board keeps its big title under the same bar; the Calendar's has none. */
+    barShowsTitle: Boolean = false,
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
@@ -204,10 +206,14 @@ public fun AppPlace(
         // filled accent `+`), then the title at 34 bold with the scope under it.
         Row(
             Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp),
-            horizontalArrangement = if (barLeading != null) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp, Alignment.End),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            barLeading?.invoke()
+            if (barLeading != null) {
+                barLeading.invoke()
+                // THE KEYS STAY AT THE END even when the leading slot draws nothing (Reminders).
+                Spacer(Modifier.weight(1f))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 barActions?.invoke()
                 if (lead != null) HeaderVerb(lead)
@@ -215,7 +221,7 @@ public fun AppPlace(
                 if (trailing != null) HeaderVerb(trailing)
             }
         }
-        if (barLeading == null) {
+        if (barLeading == null || barShowsTitle) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(bottom = 8.dp)) {
                 RoomTitle(title)
                 if (meta.isNotEmpty()) {

@@ -30,6 +30,7 @@ catalog! {
     plain quick_chip_saves_repeats = ("Saves as “{title}”, repeating {when}", "Saves as “{title}”, repeating {when}");
     plain quick_chip_spoken_due = ("Due {when}. Saves as {title}.", "Due {when}. Saves as {title}.");
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
+    plain reminders_title = ("Reminders", "Reminders");
     plain row_unflagged = ("Flag removed", "Flag removed");
     plain row_flagged = ("Flagged", "Flagged");
     plain scheduled_empty = ("Nothing is scheduled.", "Nothing is scheduled.");
