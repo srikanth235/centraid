@@ -175,6 +175,11 @@
         "verbs": "act"
       },
       {
+        "schema": "place",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
         "schema": "tag",
         "table": "add",
         "verbs": "act"
@@ -1791,6 +1796,56 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-place",
+      "verb": "create",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "command": "place.add",
+      "phrasings": [
+        "remember the Café Roma as a place",
+        "add a place called Mum's house",
+        "make a place for the office"
+      ],
+      "description": "Found a place by its name through place.add, for an event whose location the member typed rather than picked. The event is then pointed at it through event.propose or event.edit (place_id).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "aliases": ["name"]
+          },
+          "address": {
+            "type": ["string", "null"],
+            "maxLength": 1000
+          }
+        },
+        "required": ["title"],
         "additionalProperties": false
       },
       "output": {

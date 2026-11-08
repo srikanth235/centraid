@@ -140,6 +140,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         more_open: false,
         custom: None,
         place_query: String::new(),
+        typed_place: String::new(),
         zone_query: String::new(),
         asking: Asking::None,
         scope: None,
@@ -191,6 +192,9 @@ struct Editor {
     custom: Option<custom::Custom>,
     /// What the place and zone searches hold.
     place_query: String,
+    /// A place the member TYPED and the vault does not hold yet: it is founded when the event
+    /// saves (a place already called that is reused). Empty with a place picked or none.
+    typed_place: String,
     zone_query: String,
     asking: Asking,
     /// The save scope picked.
@@ -405,7 +409,9 @@ impl Editor {
 
     fn dirty(&self) -> bool {
         match (&self.draft, &self.baseline) {
-            (Some(draft), Some(base)) => draft::dirty(draft, base),
+            (Some(draft), Some(base)) => {
+                draft::dirty(draft, base) || !self.typed_place.trim().is_empty()
+            }
             _ => false,
         }
     }
@@ -455,9 +461,16 @@ impl Editor {
             self.save_tried = self.draft.is_some();
             return Vec::new();
         }
-        let (Some(draft), Some(base)) = (self.draft.clone(), self.baseline.clone()) else {
+        let (Some(mut draft), Some(base)) = (self.draft.clone(), self.baseline.clone()) else {
             return Vec::new();
         };
+        // A TYPED PLACE becomes a place of the vault first; the event then points at it.
+        if !self.is_task() && !self.typed_place.trim().is_empty() {
+            match self.found_typed_place(ctx) {
+                Some(id) => draft.place_id = id,
+                None => return Vec::new(),
+            }
+        }
         if self.mode == Mode::Create {
             return if self.is_task() {
                 self.save_task(ctx, &draft)
@@ -1040,7 +1053,8 @@ impl Editor {
             return Vec::new();
         };
         let rule_changed = !draft::same_repeat(draft, base);
-        let whole_event_only = draft::series_only(draft, base);
+        let whole_event_only =
+            draft::series_only(draft, base) || !self.typed_place.trim().is_empty();
         let moves_series = draft::times_changed(draft, base) && event.is_recurrence_instance;
         scopes(locale, self.scope)
             .into_iter()
@@ -1422,7 +1436,8 @@ impl Editor {
                 Vec::new()
             },
             place_query: self.place_query.clone(),
-            show_clear_location: show_event && !draft.place_id.is_empty(),
+            show_clear_location: show_event
+                && (!draft.place_id.is_empty() || !self.typed_place.trim().is_empty()),
             show_second_reminder: show_event && draft.reminder_key != REMINDER_NONE,
             second_reminder_label: if show_event {
                 self.second_reminder_choices(locale, draft)

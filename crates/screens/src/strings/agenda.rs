@@ -4,6 +4,8 @@ catalog! {
     plain a11y_cancel = ("Cancel this event", "Cancel this event");
     plain a11y_edit = ("Edit this event", "Edit this event");
     plain action_edit = ("Edit", "Edit");
+    plain action_open_map = ("Open in Maps", "Open in Maps");
+    plain a11y_open_map = ("Open this location in Maps", "Open this location in Maps");
     plain all_day = ("All day", "All day");
     plain app_title = ("Agenda", "Agenda");
     plain band_day = ("Day", "Day");

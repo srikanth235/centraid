@@ -16,6 +16,8 @@ catalog! {
     plain placeholder_zone_search = ("Search time zones", "Search time zones");
     plain location_none = ("No location", "No location");
     plain place_unnamed = ("A place with no name", "A place with no name");
+    // The row that takes what the member typed as the place, when no place is called that.
+    plain place_use = ("Use “{place}”", "Use “{place}”");
     plain no_places = ("No places match.", "No places match.");
     plain busy = ("Busy", "Busy");
     plain free = ("Free", "Free");

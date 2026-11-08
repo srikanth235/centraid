@@ -1697,6 +1697,24 @@
         "verb": "edit"
       },
       {
+        "action": "add-place",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "place.add",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "remember the Café Roma as a place",
+          "add a place called Mum's house",
+          "make a place for the office"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
         "action": "record-calendar-push",
         "also": [],
         "app": "agenda",

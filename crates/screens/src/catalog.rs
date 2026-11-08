@@ -1003,6 +1003,30 @@ pub mod act {
             }
         }
 
+        /// Found a place by its name through place.add, for an event whose location the member typed rather than picked. The event is then pointed at it through event.propose or event.edit (place_id).
+        #[derive(Clone, Debug, Default)]
+        pub struct AddPlace {
+            pub title: String,
+            pub address: Field<String>,
+            pub id: Option<String>,
+        }
+        impl AddPlace {
+            pub const NAME: &str = "add-place";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("title".to_owned(), text(self.title));
+                put_field(&mut map, "address", self.address, |it| text(it));
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<AddPlace> for wire::ActRequest {
+            fn from(value: AddPlace) -> Self {
+                value.request()
+            }
+        }
+
         /// Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.
         #[derive(Clone, Debug, Default)]
         pub struct RecordCalendarPush {
