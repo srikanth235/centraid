@@ -123,6 +123,7 @@ private struct SettingsSegmented: View {
 private struct SettingsRowView: View {
     let row: Centraid_Core_V1_SettingsRow
     let open: (Centraid_Core_V1_Route) -> Void
+    @Environment(\.colorScheme) private var scheme
 
     /// THE ROW'S TILE, as Rust names it: the vault's round initial, the state-amber fill (the
     /// recovery key), or the shell's colour.
@@ -145,7 +146,7 @@ private struct SettingsRowView: View {
             // A ROW THAT MAKES SOMETHING: the shell's tint under the shell's glyph.
             CentraidIconView(iconKey: row.iconKey, tint: AppAccent.shell.text, size: 16)
                 .frame(width: 32, height: 32)
-                .background(AppAccent.shell.tile, in: RoundedRectangle(cornerRadius: 32 * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+                .background(AppAccent.shell.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 32 * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
                 .accessibilityHidden(true)
         default:
             if !row.iconKey.isEmpty { KitTile(iconKey: row.iconKey, size: 32) }

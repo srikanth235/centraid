@@ -55,6 +55,7 @@ import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.theme.centraidDark
 
 /**
  * `home.settings` (#1173, the Settings board): a pushed page of cards. The appearance is one
@@ -179,7 +180,7 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
                         .padding(end = 12.dp)
                         .size(32.dp)
                         .clip(RoundedCornerShape((32 * CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
-                        .background(appAccent("").tile)
+                        .background(appAccent("").wash(centraidDark()))
                         .clearAndSetSemantics { },
                     contentAlignment = Alignment.Center,
                 ) { CentraidIcon(iconKey = row.icon_key, tint = appAccent("").text, size = 16.dp) }

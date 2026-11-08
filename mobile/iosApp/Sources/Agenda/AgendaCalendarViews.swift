@@ -395,10 +395,13 @@ struct AgendaTimeGridView: View {
             ScrollView {
                 ZStack(alignment: .topLeading) {
                     // THE OPENING SPOT: an unseen 1pt mark where `scroll_to_minute` falls.
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id("agenda-grid-open")
-                        .padding(.top, CGFloat(grid.scrollToMinute) * perMinute)
+                    VStack(spacing: 0) {
+                        Color.clear.frame(width: 1, height: CGFloat(grid.scrollToMinute) * perMinute)
+                        Color.clear.frame(width: 1, height: 1).id("agenda-grid-open")
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 1, height: total, alignment: .top)
+                    .allowsHitTesting(false)
                     hourLines(grid, width: width, perMinute: perMinute)
                     // AN EMPTY SLOT'S LONG PRESS: the minute under the finger, which Rust snaps.
                     AgendaSlotPress(holdSeconds: AgendaGridMetrics.slotHold) { point in
@@ -443,8 +446,16 @@ struct AgendaTimeGridView: View {
                     onNext: { send(AgendaCalendarEvents.dayStepped(1)) }
                 )
             )
-            .onAppear { proxy.scrollTo("agenda-grid-open", anchor: .top) }
-            .onChange(of: grid.scrollToMinute) { _, _ in proxy.scrollTo("agenda-grid-open", anchor: .top) }
+            // ON THE NEXT TURN: the first pass has laid out no grid yet, and a scroll asked for
+            // before the layout lands on the top of the day (the page opened at midnight).
+            .task(id: grid.scrollToMinute) {
+                // Twice: once as soon as the first pass has landed, once after the content's own
+                // size is settled (a scroll asked for earlier is dropped on the floor).
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                proxy.scrollTo("agenda-grid-open", anchor: .top)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                proxy.scrollTo("agenda-grid-open", anchor: .top)
+            }
         }
     }
 
@@ -1022,6 +1033,10 @@ private struct AgendaYearMonthView: View {
                         ForEach(Array(week.enumerated()), id: \.offset) { _, day in
                             Text(day.dayNumber)
                                 .centraidType("annotLabel")
+                                // ONE LINE: a two-digit day in a seventh of a third of the screen wrapped
+                                // ("3" over "0") and pushed the week out of its columns.
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                                 .foregroundStyle(day.isToday ? Theme.color("onAccent", scheme) : Theme.color("textSoft", scheme))
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.yearDay)
                                 .background {
