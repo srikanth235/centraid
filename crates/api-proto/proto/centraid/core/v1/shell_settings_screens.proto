@@ -34,9 +34,13 @@ message SettingsRow {
   string accessibility_label = 6;
   // How the row's leading tile is drawn: "" the page's colour (the shell's) under a white
   // glyph, "amber" the state-amber fill (the recovery key), "initial" the vault's round
-  // avatar carrying `initial`.
+  // avatar carrying `initial`, "neutral" a grey fill under a white glyph, "add" the shell's
+  // tint under the shell's glyph, with the title in the shell's colour (a row that makes
+  // something).
   string tile = 7;
   string initial = 8;
+  // The row's current value, drawn at the trailing edge before the chevron ("Wi-Fi only").
+  string value = 9;
 }
 
 message SettingsSection {

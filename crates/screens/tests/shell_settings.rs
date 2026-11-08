@@ -248,6 +248,25 @@ fn each_row_names_its_tile_as_the_board_draws_it() {
 }
 
 #[test]
+fn the_board_rows_make_a_vault_and_name_the_download_rule() {
+    let (mut d, _home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    let data = data(&d, i);
+    // Make a vault opens the page that makes one, under the vault row.
+    let make = &data.sections[0].rows[1];
+    assert_eq!(make.title, "Make a vault");
+    assert_eq!(make.tile, "add");
+    assert_eq!(make.route.as_ref().unwrap().screen, "words.make");
+    // Download settings shows the one rule (the default until the store is read) and opens
+    // the Backup page that changes it.
+    let download = &data.sections[1].rows[1];
+    assert_eq!(download.title, "Download settings");
+    assert_eq!(download.value, "Wi-Fi only");
+    assert_eq!(download.tile, "neutral");
+    assert_eq!(download.route.as_ref().unwrap().screen, "backup.home");
+}
+
+#[test]
 fn the_platform_answer_changes_the_key_sentence() {
     let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored(""));
