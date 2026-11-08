@@ -1029,8 +1029,14 @@ private struct AgendaImportRemindersSheet: View {
                     .foregroundStyle(Theme.color("text", scheme))
             }
             .kitToggle()
+            // THE BOARD'S CARD ROW: the switch sits on a plate of its own.
+            .padding(.horizontal, 16)
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
             .accessibilityIdentifier("agenda-import-reminders-completed")
         }
+        // THE BOARD'S COMPACT SHEET: title, the switch and the verb, no more.
+        .presentationDetents([.height(230)])
     }
 }
 

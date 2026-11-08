@@ -37,8 +37,15 @@ struct AgendaAttachmentsView: View {
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.vertical, 8)
             }
-            ForEach(section.items, id: \.attachmentID) { tile in
-                row(tile)
+            // THE BOARD'S CARD: the attachments in one rounded plate, a hairline between.
+            if !section.items.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(section.items.enumerated()), id: \.element.attachmentID) { index, tile in
+                        row(tile, last: index == section.items.count - 1)
+                    }
+                }
+                .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
             if section.hasMore_p, !section.moreLabel.isEmpty {
                 KitLink(label: section.moreLabel, identifier: "\(idPrefix)-more") {
@@ -46,7 +53,7 @@ struct AgendaAttachmentsView: View {
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
             }
-            HStack(spacing: 20) {
+            HStack(spacing: 8) {
                 addButton(
                     label: section.addPhotoLabel,
                     iconKey: section.addPhotoIconKey,
@@ -64,6 +71,7 @@ struct AgendaAttachmentsView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 12)
             if section.busy, !section.busyLabel.isEmpty {
                 Text(section.busyLabel)
                     .centraidType("annotLabel")
@@ -101,7 +109,7 @@ struct AgendaAttachmentsView: View {
     }
 
     /// One attachment: its thumbnail (or the kind's icon tile), its words, and a Remove.
-    private func row(_ tile: Centraid_Core_V1_AgendaAttachmentTile) -> some View {
+    private func row(_ tile: Centraid_Core_V1_AgendaAttachmentTile, last: Bool) -> some View {
         HStack(spacing: 8) {
             Button { open(tile.route) } label: {
                 HStack(spacing: 12) {
@@ -124,13 +132,20 @@ struct AgendaAttachmentsView: View {
             .buttonStyle(KitRowPress())
             .accessibilityLabel(tile.accessibilityLabel.isEmpty ? tile.title : tile.accessibilityLabel)
             .accessibilityIdentifier("\(idPrefix)-\(tile.attachmentID)")
-            KitLink(label: tile.removeLabel, dense: true, identifier: "\(idPrefix)-remove-\(tile.attachmentID)") {
+            // THE BOARD'S ×: a quiet glyph, the word still the spoken label.
+            Button {
                 event { $0.removeAsked = .with { $0.attachmentID = tile.attachmentID } }
+            } label: {
+                CentraidIconView(iconKey: "X", tint: Theme.color("textFaint", scheme), size: 16)
+                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(tile.removeAccessibilityLabel.isEmpty ? tile.removeLabel : tile.removeAccessibilityLabel)
+            .accessibilityIdentifier("\(idPrefix)-remove-\(tile.attachmentID)")
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .overlay(alignment: .bottom) { KitHairline() }
+        .padding(.leading, 12)
+        .overlay(alignment: .bottom) { if !last { KitHairline() } }
     }
 
     /// The photo's own thumbnail when this phone holds one, else the kind's icon tile; a
@@ -161,13 +176,17 @@ struct AgendaAttachmentsView: View {
     private func addButton(label: String, iconKey: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                CentraidIconView(iconKey: iconKey, tint: Theme.color(section.busy ? "textDisabled" : "link", scheme), size: 18)
+                CentraidIconView(iconKey: iconKey, tint: Theme.color(section.busy ? "textDisabled" : "text", scheme), size: 18)
                 Text(label)
                     .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color(section.busy ? "textDisabled" : "link", scheme))
+                    .foregroundStyle(Theme.color(section.busy ? "textDisabled" : "text", scheme))
             }
+            // THE BOARD'S PILL: ink on a plain capsule with a hairline, not a link.
+            .padding(.horizontal, 14)
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .contentShape(Rectangle())
+            .background(Capsule().fill(Surface.card))
+            .overlay(Capsule().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(section.busy)

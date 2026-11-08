@@ -91,6 +91,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.core.Screens
 import dev.centraid.android.backup.MediaStoreDeleter
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
@@ -503,42 +504,54 @@ internal class RustRoot(
                 onOpen = open,
                 onHome = toHome,
             )
-            event != null -> AgendaEventScreen(
-                state = event,
-                onEvent = { send(ScreenEvent(agenda_event = it)) },
-                onOpen = open,
-                onBack = back,
-                onCall = { uri -> openCall(context, uri) },
-            )
-            editor != null -> AgendaEditorScreen(
-                state = editor,
-                onEvent = { send(ScreenEvent(agenda_editor = it)) },
-            )
-            list != null -> TodoListScreen(
-                state = list,
-                onEvent = { send(ScreenEvent(todo_list = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            project != null -> TodoProjectScreen(
-                state = project,
-                onEvent = { send(ScreenEvent(todo_project = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            detail != null -> TodoDetailScreen(
-                state = detail,
-                onEvent = { send(ScreenEvent(todo_detail = it)) },
-                onOpen = open,
-                // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
-                onClose = back,
-            )
-            catchUp != null -> TodoCatchUpScreen(
-                state = catchUp,
-                onEvent = { send(ScreenEvent(todo_catch_up = it)) },
-                onOpen = open,
-                onBack = back,
-            )
+            event != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                AgendaEventScreen(
+                    state = event,
+                    onEvent = { send(ScreenEvent(agenda_event = it)) },
+                    onOpen = open,
+                    onBack = back,
+                    onCall = { uri -> openCall(context, uri) },
+                )
+            }
+            editor != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                AgendaEditorScreen(
+                    state = editor,
+                    onEvent = { send(ScreenEvent(agenda_editor = it)) },
+                )
+            }
+            list != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                TodoListScreen(
+                    state = list,
+                    onEvent = { send(ScreenEvent(todo_list = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
+            project != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                TodoProjectScreen(
+                    state = project,
+                    onEvent = { send(ScreenEvent(todo_project = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
+            detail != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                TodoDetailScreen(
+                    state = detail,
+                    onEvent = { send(ScreenEvent(todo_detail = it)) },
+                    onOpen = open,
+                    // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
+                    onClose = back,
+                )
+            }
+            catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+                TodoCatchUpScreen(
+                    state = catchUp,
+                    onEvent = { send(ScreenEvent(todo_catch_up = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
             lockerHome != null -> LockerHomeScreen(
                 state = lockerHome,
                 onEvent = { send(ScreenEvent(locker_home = it)) },

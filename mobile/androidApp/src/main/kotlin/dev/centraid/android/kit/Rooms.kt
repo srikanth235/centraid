@@ -384,6 +384,8 @@ public data class SheetOutline(
     val label: String,
     val testTag: String,
     val ink: String = "text",
+    /** Drawn as a centred text key in the link ink, no outline (the style sheets' Cancel). */
+    val link: Boolean = false,
     val onPress: () -> Unit,
 )
 
@@ -458,7 +460,20 @@ public fun SheetRoom(
                         )
                     }
                     outlines.forEach { outline ->
-                        OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
+                        if (outline.link) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .clickable(onClick = outline.onPress)
+                                    .testTag(outline.testTag),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(outline.label, style = centraidType("smallStrong"), color = appAccent().text)
+                            }
+                        } else {
+                            OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
+                        }
                     }
                 }
             }

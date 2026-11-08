@@ -220,7 +220,10 @@ fn a_calendar_is_renamed_and_restyled_and_its_icon_cleared() {
     assert_eq!(sheet.name, "Work");
     assert_eq!(sheet.color_key, "violet");
     assert_eq!(sheet.icon_key, "Book");
-    assert!(!sheet.can_submit, "nothing changed");
+    assert!(
+        sheet.can_submit,
+        "Save is armed by the name, as the board draws it"
+    );
 
     name_it(&mut d, "Day job");
     color_it(&mut d, "petrol");
@@ -336,7 +339,10 @@ fn a_list_is_restyled_from_its_page_and_an_unstyled_one_keeps_its_derived_colour
         sheet.color_key, derived,
         "the derived colour is the selected one"
     );
-    assert!(!sheet.can_submit);
+    assert!(
+        sheet.can_submit,
+        "an edit's Save is armed with a name, as the board draws it"
+    );
 
     // An icon alone writes no colour: the list stays unstyled in colour.
     send_project(

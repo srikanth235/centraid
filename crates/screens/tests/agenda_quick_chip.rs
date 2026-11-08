@@ -93,6 +93,7 @@ fn a_typed_day_and_time_show_as_a_chip_and_save_as_a_dated_task() {
     assert_eq!(chip.title, "Zq Call mom");
     assert_eq!(chip.dismiss_label, "Keep as text");
     assert_eq!(chip.spoken, "Due Tomorrow, 09:00. Saves as Zq Call mom.");
+    assert_eq!(chip.saves_as, "Saves as “Zq Call mom”, due Tomorrow, 09:00");
     assert!(!chip.repeats);
     // The field still holds what the member typed.
     assert_eq!(bar(&d, id).title, "Zq Call mom tomorrow 9am");

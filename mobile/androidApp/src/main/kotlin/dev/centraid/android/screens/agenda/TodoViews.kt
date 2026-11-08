@@ -466,10 +466,9 @@ internal fun TodoQuickAddBar(
 private fun QuickAddChipView(chip: QuickAddChip, onDismiss: () -> Unit, testTag: String) {
     val accent = appAccent("agenda")
     val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
-    Row(
+    Column(
         Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
             Modifier
@@ -501,13 +500,12 @@ private fun QuickAddChipView(chip: QuickAddChip, onDismiss: () -> Unit, testTag:
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon("X", tint = accent.text, size = 14.dp) }
         }
+        // THE BOARD'S FOOTNOTE: what the words will save as, under the pill.
         Text(
-            chip.title,
+            chip.saves_as,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).clearAndSetSemantics { },
+            modifier = Modifier.clearAndSetSemantics { },
         )
     }
 }

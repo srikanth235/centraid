@@ -1,5 +1,20 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -143,15 +158,29 @@ private fun EventBody(
         if (rsvp != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
                 Text(rsvp.question, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
-                Row(Modifier.padding(top = 8.dp)) {
+                // THE BOARD'S THREE EQUAL KEYS: the answer given filled in Agenda's blue.
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rsvp.choices.forEach { choice ->
-                        OutlineButton(
-                            label = choice.label,
-                            testTag = "agenda-rsvp-${choice.partstat}",
-                            ink = if (choice.selected) "accent" else if (choice.enabled) "text" else "textFaint",
-                            modifier = Modifier.padding(end = 8.dp),
+                        val shape = RoundedCornerShape(percent = 50)
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clip(shape)
+                                .background(if (choice.selected) appAccent("agenda").fill else Surface.card, shape)
+                                .then(if (choice.selected) Modifier else Modifier.border(1.dp, Surface.line, shape))
+                                .clickable(enabled = choice.enabled) {
+                                    onEvent(AgendaEventEvent(rsvp = AgendaEventEvent.RsvpPicked(partstat = choice.partstat)))
+                                }
+                                .testTag("agenda-rsvp-${choice.partstat}")
+                                .semantics { role = Role.RadioButton; selected = choice.selected },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            if (choice.enabled) onEvent(AgendaEventEvent(rsvp = AgendaEventEvent.RsvpPicked(partstat = choice.partstat)))
+                            Text(
+                                choice.label,
+                                style = centraidType(if (choice.selected) "smallStrong" else "small"),
+                                color = if (choice.selected) Color.White else centraidColor(if (choice.enabled) "text" else "textFaint"),
+                            )
                         }
                     }
                 }

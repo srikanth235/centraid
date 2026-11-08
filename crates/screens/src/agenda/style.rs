@@ -124,13 +124,10 @@ impl Draft {
             .is_none_or(|initial| self.icon != initial.icon)
     }
 
-    /// Create or Save is armed: a name, and when editing, something changed.
+    /// Create or Save is armed by a name. An edit stays armed with nothing changed (the
+    /// board's Save is solid); a submit that changes nothing writes nothing and closes.
     pub(super) fn can_submit(&self) -> bool {
         !self.name.trim().is_empty()
-            && (self.initial.is_none()
-                || self.name_changed()
-                || self.color_changed()
-                || self.icon_changed())
     }
 
     /// The sheet, as a shell draws it.

@@ -350,7 +350,7 @@ struct TodoCatchUpView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.back, onBack: onBack) {
+        PushedPage(title: "", parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -361,6 +361,13 @@ struct TodoCatchUpView: View {
                 ) { catchUp in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            // THE BOARD'S LARGE TITLE, the head line under it.
+                            Text(state.chrome.title)
+                                .kitType(.title)
+                                .foregroundStyle(Surface.ink)
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .accessibilityAddTraits(.isHeader)
+                                .accessibilityIdentifier("tasks-catch-up-title")
                             if !catchUp.head.isEmpty {
                                 Text(catchUp.head)
                                     .centraidType("small")

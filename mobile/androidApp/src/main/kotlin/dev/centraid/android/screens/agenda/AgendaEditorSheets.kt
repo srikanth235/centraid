@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
+import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -198,15 +201,15 @@ internal fun CustomRepeatSheetView(
         },
     ) {
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
-            if (custom.summary.isNotEmpty()) {
-                Text(
-                    custom.summary,
-                    style = centraidType("body"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("agenda-editor-custom-summary"),
-                )
-            }
             if (custom.read_only) {
+                if (custom.summary.isNotEmpty()) {
+                    Text(
+                        custom.summary,
+                        style = centraidType("body"),
+                        color = centraidColor("text"),
+                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("agenda-editor-custom-summary"),
+                    )
+                }
                 if (custom.replace_label.isNotEmpty()) {
                     OutlineButton(custom.replace_label, testTag = "agenda-editor-custom-replace", modifier = Modifier.padding(KitGeometry.GUTTER)) {
                         onEvent(AgendaEditorEvent(custom_replace = AgendaEditorEvent.CustomReplaceTapped()))
@@ -230,8 +233,33 @@ internal fun CustomRepeatSheetView(
             ) { onEvent(AgendaEditorEvent(custom_interval = AgendaEditorEvent.CustomIntervalChanged(interval = it))) }
             if (custom.show_weekdays) {
                 Eyebrow(custom.weekdays_label)
-                Chips(custom.weekdays, "agenda-editor-custom-weekday") {
-                    onEvent(AgendaEditorEvent(custom_weekday = AgendaEditorEvent.CustomWeekdayToggled(key = it)))
+                // THE WEEK IN ONE ROW: seven equal keys, the picked ones filled.
+                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    custom.weekdays.forEach { choice ->
+                        val shape = RoundedCornerShape(KitGeometry.RADIUS)
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clip(shape)
+                                .background(if (choice.selected) appAccent().fill else Surface.fill, shape)
+                                .clickable { onEvent(AgendaEditorEvent(custom_weekday = AgendaEditorEvent.CustomWeekdayToggled(key = choice.key))) }
+                                .testTag("agenda-editor-custom-weekday-${choice.key}")
+                                .clearAndSetSemantics {
+                                    contentDescription = choice.accessibility_label.ifEmpty { choice.label }
+                                    role = Role.Checkbox
+                                    selected = choice.selected
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                choice.label,
+                                style = centraidType(if (choice.selected) "smallStrong" else "small"),
+                                color = if (choice.selected) Color.White else centraidColor("text"),
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
             }
             if (custom.show_month_modes) {
@@ -287,6 +315,15 @@ internal fun CustomRepeatSheetView(
                     after = custom.count_label,
                     testTag = "agenda-editor-custom-count",
                 ) { onEvent(AgendaEditorEvent(custom_count = AgendaEditorEvent.CustomCountChanged(count = it))) }
+            }
+            // THE BOARD'S ORDER: the rule's sentence after its controls.
+            if (custom.summary.isNotEmpty()) {
+                Text(
+                    custom.summary,
+                    style = centraidType("body"),
+                    color = centraidColor("text"),
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).testTag("agenda-editor-custom-summary"),
+                )
             }
             if (custom.error.isNotEmpty()) {
                 Text(

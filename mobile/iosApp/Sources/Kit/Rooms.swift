@@ -520,6 +520,8 @@ struct SheetOutline {
     let label: String
     /// `net` when it destroys.
     var tone: String = "text"
+    /// Drawn as a text key in the link ink, centred, with no outline (the style sheets' Cancel).
+    var link: Bool = false
     var identifier: String = ""
     let action: () -> Void
 }
@@ -540,6 +542,7 @@ struct SheetRoom<Content: View>: View {
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     init(
         title: String,
@@ -559,12 +562,16 @@ struct SheetRoom<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .kitType(.section)
-                .foregroundStyle(Surface.ink)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
-                .padding(.top, 20)
+            // A SHEET THAT DRAWS ITS OWN HEAD (the custom repeat's title with Done beside it)
+            // passes no title.
+            if !title.isEmpty {
+                Text(title)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
+                    .padding(.top, 20)
+            }
             content()
             if !status.isEmpty {
                 Text(status)
@@ -584,8 +591,21 @@ struct SheetRoom<Content: View>: View {
                         .disabled(!primary.enabled)
                     }
                     ForEach(Array(outlines.enumerated()), id: \.offset) { _, outline in
-                        KitOutlineButton(label: outline.label, tone: outline.tone, action: outline.action)
+                        if outline.link {
+                            // THE APP'S BLUE, as the board's Cancel: a word, no outline.
+                            Button(action: outline.action) {
+                                Text(outline.label)
+                                    .centraidType("smallStrong")
+                                    .foregroundStyle(accent.text)
+                                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             .accessibilityIdentifier(outline.identifier)
+                        } else {
+                            KitOutlineButton(label: outline.label, tone: outline.tone, action: outline.action)
+                                .accessibilityIdentifier(outline.identifier)
+                        }
                     }
                 }
             }

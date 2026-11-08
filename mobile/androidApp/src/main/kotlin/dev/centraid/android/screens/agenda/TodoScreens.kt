@@ -15,6 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import centraid.core.v1.QuickAddChipDismissed
 import centraid.core.v1.Route
 import centraid.core.v1.TodoCatchUpEvent
@@ -323,7 +325,7 @@ internal fun TodoCatchUpScreen(
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
+    PushedPage(title = "", parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -336,6 +338,15 @@ internal fun TodoCatchUpScreen(
                     EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-catch-up")) {
+                        // THE BOARD'S LARGE TITLE, the head line under it.
+                        item(key = "title") {
+                            Text(
+                                chrome?.title.orEmpty(),
+                                style = centraidType("title"),
+                                color = centraidColor("text"),
+                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).semantics { heading() }.testTag("tasks-catch-up-title"),
+                            )
+                        }
                         if (catchUp.head.isNotEmpty()) {
                             item(key = "head") {
                                 Text(catchUp.head, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))

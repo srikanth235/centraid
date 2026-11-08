@@ -231,18 +231,31 @@ struct AgendaEventView: View {
             Text(rsvp.question)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("text", scheme))
-            // A CHOICE AMONG SEVERAL, each answer able to be unavailable on its
-            // own: chips (a selected one is never accent).
+            // THE BOARD'S THREE EQUAL KEYS: Going, Maybe, Not going share the width, the
+            // answer given filled in Agenda's blue, the others a plain capsule.
             HStack(spacing: 8) {
                 ForEach(rsvp.choices, id: \.partstat) { choice in
-                    KitChip(
-                        label: choice.label,
-                        selected: choice.selected,
-                        identifier: "agenda-rsvp-\(choice.partstat)"
-                    ) {
+                    Button {
                         send(event { $0.rsvp = .with { $0.partstat = choice.partstat } })
+                    } label: {
+                        Text(choice.label)
+                            .centraidType(choice.selected ? "smallStrong" : "small")
+                            .foregroundStyle(choice.selected ? Color.white : Theme.color(choice.enabled ? "text" : "textDisabled", scheme))
+                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                            .background {
+                                if choice.selected {
+                                    Capsule().fill(AppAccent("agenda").fill)
+                                } else {
+                                    Capsule().fill(Surface.card)
+                                    Capsule().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline)
+                                }
+                            }
+                            .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
                     .disabled(!choice.enabled)
+                    .accessibilityAddTraits(choice.selected ? .isSelected : [])
+                    .accessibilityIdentifier("agenda-rsvp-\(choice.partstat)")
                 }
             }
             if !rsvp.note.isEmpty {

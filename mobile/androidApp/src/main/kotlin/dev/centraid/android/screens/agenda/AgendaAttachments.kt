@@ -1,6 +1,9 @@
 package dev.centraid.android.screens.agenda
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +65,18 @@ internal fun AgendaAttachmentsView(
         if (section.items.isEmpty() && section.empty_label.isNotEmpty()) {
             Text(section.empty_label, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
         }
-        section.items.forEach { tile -> AttachmentTile(tile, prefix, onEvent, onOpen) }
+        // THE BOARD'S CARD: the attachments in one rounded plate.
+        if (section.items.isNotEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = KitGeometry.GUTTER)
+                    .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                    .background(Surface.card),
+            ) {
+                section.items.forEach { tile -> AttachmentTile(tile, prefix, onEvent, onOpen) }
+            }
+        }
         if (section.has_more && section.more_label.isNotEmpty()) {
             KitLink(
                 label = section.more_label,
@@ -73,7 +87,7 @@ internal fun AgendaAttachmentsView(
         if (section.busy && section.busy_label.isNotEmpty()) {
             Text(section.busy_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER / 2)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AddVerb(section.add_photo_label, section.add_photo_icon_key, "$prefix-attachment-add-photo", !section.busy) {
                 onEvent(AgendaAttachmentEvent(add_photo = AgendaAttachmentEvent.AddPhoto()))
             }
@@ -102,9 +116,11 @@ private fun AddVerb(label: String, iconKey: String, testTag: String, enabled: Bo
     Row(
         Modifier
             .heightIn(min = KitGeometry.ROW_MIN)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
+            .clip(CircleShape)
+            .background(Surface.card, CircleShape)
+            .border(1.dp, Surface.line, CircleShape)
             .clickable(enabled = enabled, onClick = onTap)
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = 14.dp)
             .testTag(testTag)
             .clearAndSetSemantics {
                 contentDescription = label
@@ -128,7 +144,7 @@ private fun AttachmentTile(
     onOpen: (Route) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(start = KitGeometry.GUTTER),
+        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -162,12 +178,18 @@ private fun AttachmentTile(
                 Text(tile.badge, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = 8.dp))
             }
         }
-        KitLink(
-            label = tile.remove_label,
-            onClick = { onEvent(AgendaAttachmentEvent(remove_asked = AgendaAttachmentEvent.RemoveAsked(attachment_id = tile.attachment_id))) },
-            modifier = Modifier
+        // THE BOARD'S ×: a quiet glyph; the word stays the spoken label.
+        Box(
+            Modifier
+                .size(KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .clickable { onEvent(AgendaAttachmentEvent(remove_asked = AgendaAttachmentEvent.RemoveAsked(attachment_id = tile.attachment_id))) }
                 .testTag("$prefix-attachment-remove-${tile.attachment_id}")
-                .semantics { contentDescription = tile.remove_accessibility_label.ifEmpty { tile.remove_label } },
-        )
+                .clearAndSetSemantics {
+                    contentDescription = tile.remove_accessibility_label.ifEmpty { tile.remove_label }
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) { CentraidIcon("X", tint = centraidColor("textFaint"), size = 16.dp) }
     }
 }

@@ -3,11 +3,9 @@ package dev.centraid.android.screens.agenda
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -44,7 +42,6 @@ import dev.centraid.android.theme.centraidType
  * and the icon grid, and sends each pick. Colours are `[list]` palette keys looked up through the
  * generated colour resources, icons are catalogue keys; every word is the sheet's.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AgendaStyleSheetView(
     style: AgendaStyleSheet,
@@ -59,7 +56,7 @@ internal fun AgendaStyleSheetView(
         onDismiss = onCancel,
         expanded = true,
         primary = SheetPrimary(style.submit_label, testTag = "agenda-style-submit", enabled = style.can_submit, onPress = onSubmit),
-        outlines = listOf(SheetOutline(style.cancel_label, testTag = "agenda-style-cancel", onPress = onCancel)),
+        outlines = listOf(SheetOutline(style.cancel_label, testTag = "agenda-style-cancel", link = true, onPress = onCancel)),
     ) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             EditableFieldRow(
@@ -84,15 +81,13 @@ internal fun AgendaStyleSheetView(
                 color = centraidColor("textSoft"),
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
             )
-            FlowRow(
-                Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            // THE BOARD'S GRID: eight to a row, each cell a 44dp target.
+            Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER)) {
                 style.colors.forEach { swatch ->
                     Box(
                         Modifier
-                            .size(KitGeometry.ROW_MIN)
+                            .weight(1f)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clip(CircleShape)
                             .clickable { onColor(swatch.key) }
                             .testTag("agenda-style-color-${swatch.key}")
@@ -105,7 +100,7 @@ internal fun AgendaStyleSheetView(
                     ) {
                         Box(
                             Modifier
-                                .size(32.dp)
+                                .size(28.dp)
                                 .clip(CircleShape)
                                 .background(agendaListColor(swatch.key) ?: centraidColor("textFaint"))
                                 .then(if (swatch.selected) Modifier.border(3.dp, centraidColor("text"), CircleShape) else Modifier),
@@ -119,17 +114,14 @@ internal fun AgendaStyleSheetView(
                 color = centraidColor("textSoft"),
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
             )
-            FlowRow(
-                Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                // "No icon" clears it: an empty key.
-                StyleChip(style.no_icon_label, "agenda-style-icon-none", style.no_icon_selected) { onIcon("") }
-                style.icons.forEach { icon ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER)) {
+              style.icons.chunked(8).forEach { rowIcons ->
+                Row(Modifier.fillMaxWidth()) {
+                  rowIcons.forEach { icon ->
                     Box(
                         Modifier
-                            .size(KitGeometry.ROW_MIN)
+                            .weight(1f)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clip(CircleShape)
                             .then(if (icon.selected) Modifier.background(centraidColor("bgSunken"), CircleShape) else Modifier)
                             .clickable { onIcon(icon.key) }
@@ -143,7 +135,14 @@ internal fun AgendaStyleSheetView(
                     ) {
                         CentraidIcon(icon.key, tint = centraidColor(if (icon.selected) "text" else "textSoft"), size = 22.dp, solid = icon.selected)
                     }
+                  }
+                  repeat(8 - rowIcons.size) { Box(Modifier.weight(1f)) }
                 }
+              }
+            }
+            // "No icon" clears it: an empty key.
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                StyleChip(style.no_icon_label, "agenda-style-icon-none", style.no_icon_selected) { onIcon("") }
             }
         }
     }

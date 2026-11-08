@@ -377,7 +377,7 @@ struct QuickAddChipView: View {
 
     var body: some View {
         let accent = AppAccent("agenda")
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 CentraidIconView(iconKey: chip.repeats ? "Repeat" : "Calendar", tint: accent.text, size: 14)
                     .accessibilityHidden(true)
@@ -399,10 +399,10 @@ struct QuickAddChipView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(chip.spoken)
             .accessibilityIdentifier("tasks-quick-add-chip")
-            Text(chip.title)
+            // THE BOARD'S FOOTNOTE: what the words will save as, under the pill.
+            Text(chip.savesAs)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityHidden(true)
         }

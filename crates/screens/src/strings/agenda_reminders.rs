@@ -26,6 +26,8 @@ catalog! {
     plain quick_chip_every_work_day = ("Every weekday", "Every weekday");
     plain quick_chip_every_year = ("Every year", "Every year");
     plain quick_chip_keep_text = ("Keep as text", "Keep as text");
+    plain quick_chip_saves_due = ("Saves as “{title}”, due {when}", "Saves as “{title}”, due {when}");
+    plain quick_chip_saves_repeats = ("Saves as “{title}”, repeating {when}", "Saves as “{title}”, repeating {when}");
     plain quick_chip_spoken_due = ("Due {when}. Saves as {title}.", "Due {when}. Saves as {title}.");
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain row_unflagged = ("Flag removed", "Flag removed");

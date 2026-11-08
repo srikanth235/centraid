@@ -152,12 +152,14 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .agendaEditor(let state)?:
             AgendaEditorView(
                 state: state,
                 send: { store.send(instance, .agendaEditor($0)) },
                 onDone: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .todoList(let state)?:
             TodoListView(
                 state: state,
@@ -165,6 +167,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .todoProject(let state)?:
             TodoProjectView(
                 state: state,
@@ -172,6 +175,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .todoDetail(let state)?:
             TodoDetailView(
                 state: state,
@@ -179,6 +183,7 @@ struct RustScreenView: View {
                 open: open,
                 onClose: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .todoCatchUp(let state)?:
             TodoCatchUpView(
                 state: state,
@@ -186,6 +191,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("agenda"))
         case .backupHome(let state)?:
             BackupHomeView(
                 state: state,

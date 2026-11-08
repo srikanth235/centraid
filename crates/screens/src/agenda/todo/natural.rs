@@ -122,7 +122,16 @@ pub fn read_words(
             &[("when", &label), ("title", &title)],
         )
     };
+    let saves_as = fill(
+        &if parsed.repeat.is_some() {
+            reminders::quick_chip_saves_repeats(locale)
+        } else {
+            reminders::quick_chip_saves_due(locale)
+        },
+        &[("when", &label), ("title", &title)],
+    );
     let chip = wire::QuickAddChip {
+        saves_as,
         repeats: parsed.repeat.is_some(),
         label,
         title,

@@ -20,6 +20,9 @@ struct AgendaStyleSheetView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// THE BOARD'S GRID: eight to a row, the colours and the icons alike.
+    private static let eight = Array(repeating: GridItem(.flexible(), spacing: 0), count: 8)
+
     var body: some View {
         SheetRoom(
             title: style.title,
@@ -29,7 +32,7 @@ struct AgendaStyleSheetView: View {
                 identifier: "agenda-style-submit",
                 action: onSubmit
             ),
-            outlines: [SheetOutline(label: style.cancelLabel, identifier: "agenda-style-cancel", action: onCancel)]
+            outlines: [SheetOutline(label: style.cancelLabel, link: true, identifier: "agenda-style-cancel", action: onCancel)]
         ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -48,18 +51,18 @@ struct AgendaStyleSheetView: View {
                     Text(style.colorLabel)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textSoft", scheme))
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: CentraidGeometry.targetMinCoarse), spacing: 4)], spacing: 4) {
+                    LazyVGrid(columns: Self.eight, spacing: 0) {
                         ForEach(style.colors, id: \.key) { swatch in
                             Button { onColor(swatch.key) } label: {
                                 Circle()
                                     .fill(AgendaPalette.list(swatch.key) ?? Theme.color("textFaint", scheme))
-                                    .frame(width: 32, height: 32)
+                                    .frame(width: 28, height: 28)
                                     .overlay {
                                         if swatch.selected {
                                             Circle().strokeBorder(Theme.color("text", scheme), lineWidth: 2).padding(-4)
                                         }
                                     }
-                                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -71,7 +74,7 @@ struct AgendaStyleSheetView: View {
                     Text(style.iconLabel)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textSoft", scheme))
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: CentraidGeometry.targetMinCoarse), spacing: 4)], spacing: 4) {
+                    LazyVGrid(columns: Self.eight, spacing: 0) {
                         ForEach(style.icons, id: \.key) { icon in
                             Button { onIcon(icon.key) } label: {
                                 CentraidIconView(
@@ -85,6 +88,7 @@ struct AgendaStyleSheetView: View {
                                         Circle().fill(Theme.color("bgSunken", scheme))
                                     }
                                 }
+                                .frame(maxWidth: .infinity)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
