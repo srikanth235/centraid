@@ -242,7 +242,7 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
 }
 
 #[test]
-fn the_calendar_tab_has_a_view_menu_of_day_week_month_list_and_year() {
+fn the_calendar_headers_layout_key_offers_day_week_month_list_and_year() {
     let mut d = driver();
     let i = d.push(agenda::TAB, routes::home(wire::AgendaDestination::Day, ""));
     let state = match &d.view(i).kind {
@@ -250,8 +250,18 @@ fn the_calendar_tab_has_a_view_menu_of_day_week_month_list_and_year() {
         other => panic!("not Agenda's home: {other:?}"),
     };
     assert!(state.band[0].current);
-    let menu: Vec<(&str, bool, i32)> = state
-        .calendar_views
+    // Day and Week draw the board's header, whose layout key holds the views.
+    let header = state
+        .calendar_header
+        .as_ref()
+        .expect("Day draws the header");
+    assert!(header.shown);
+    assert!(
+        state.calendar_views.is_empty(),
+        "the old view menu is Month, List and Year only"
+    );
+    let menu: Vec<(&str, bool, i32)> = header
+        .layouts
         .iter()
         .map(|v| (v.label.as_str(), v.current, v.destination))
         .collect();
