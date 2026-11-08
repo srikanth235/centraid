@@ -396,8 +396,8 @@ fn reminders_put_overdue_first_and_count_what_is_true() {
 }
 
 #[test]
-fn an_overdue_row_says_yesterday_then_the_weekday_then_days() {
-    // 2026-11-07 is a Saturday: -1 Yesterday, -2..-6 the weekday, -7 and beyond the count.
+fn an_overdue_row_says_yesterday_then_the_weekday_then_a_short_date() {
+    // 2026-11-07 is a Saturday: -1 Yesterday, -2..-6 the weekday, -7 and beyond a short date.
     let days = [
         (1_i64, "Yesterday"),
         (2, "Thu"),
@@ -405,8 +405,8 @@ fn an_overdue_row_says_yesterday_then_the_weekday_then_days() {
         (4, "Tue"),
         (5, "Mon"),
         (6, "Sun"),
-        (7, "7 days ago"),
-        (20, "20 days ago"),
+        (7, "31 Oct"),
+        (20, "18 Oct"),
     ];
     for (back, want) in days {
         let day = crate::kit::civil::plus_days(TODAY, -back).unwrap();

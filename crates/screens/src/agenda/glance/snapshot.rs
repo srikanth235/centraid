@@ -602,9 +602,9 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
 }
 
 /// A REMINDERS ROW'S DUE WORDS, as the widget board writes them: "Yesterday", then the weekday
-/// ("Wed") for the rest of the week, and only past a week the count of days. The app's lists keep
-/// "3 days ago" ([`rows::due_label`]); a widget row has no room for a sentence and the weekday is
-/// what a glance reads.
+/// ("Wed") for the rest of the week, and past a week a short date ("28 Oct"). The app's lists keep
+/// "3 days ago" ([`rows::due_label`]); a widget row has no room for a sentence and the weekday or
+/// the date is what a glance reads.
 fn due_label(locale: Locale, task: &wire::AgendaTask, context: &rows::Context) -> String {
     if task.overdue
         && task
@@ -612,6 +612,9 @@ fn due_label(locale: Locale, task: &wire::AgendaTask, context: &rows::Context) -
             .is_some_and(|days| (-6..=-2).contains(&days))
     {
         return civil::weekday_short(locale, &task.due_day);
+    }
+    if task.overdue && task.days_from_today.is_some_and(|days| days <= -7) {
+        return civil::short_date(locale, &task.due_day);
     }
     rows::due_label(locale, task, context)
 }

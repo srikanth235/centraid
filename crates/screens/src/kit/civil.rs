@@ -119,6 +119,44 @@ pub fn month_name(locale: Locale, month: u32) -> String {
     }
 }
 
+/// `Oct` for 10, or empty outside 1..=12.
+#[must_use]
+pub fn month_short(locale: Locale, month: u32) -> String {
+    match month {
+        1 => shared::month_short_01(locale),
+        2 => shared::month_short_02(locale),
+        3 => shared::month_short_03(locale),
+        4 => shared::month_short_04(locale),
+        5 => shared::month_short_05(locale),
+        6 => shared::month_short_06(locale),
+        7 => shared::month_short_07(locale),
+        8 => shared::month_short_08(locale),
+        9 => shared::month_short_09(locale),
+        10 => shared::month_short_10(locale),
+        11 => shared::month_short_11(locale),
+        12 => shared::month_short_12(locale),
+        _ => String::new(),
+    }
+}
+
+/// `28 Oct`: the day of the month and the short month, in the locale's order, or the input when
+/// it is not a day.
+#[must_use]
+pub fn short_date(locale: Locale, day: &str) -> String {
+    let month = day
+        .get(5..7)
+        .and_then(|digits| digits.parse().ok())
+        .map(|month| month_short(locale, month))
+        .unwrap_or_default();
+    match day_of_month_of(day) {
+        Some(dom) if !month.is_empty() => crate::strings::fill(
+            &shared::short_date(locale),
+            &[("day", &dom.to_string()), ("month", &month)],
+        ),
+        _ => day.to_owned(),
+    }
+}
+
 /// `March` out of a `YYYY-MM-…` stamp, or empty.
 #[must_use]
 pub fn month_of(locale: Locale, stamp: &str) -> String {
