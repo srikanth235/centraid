@@ -212,7 +212,7 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
         body.health != null -> Glance(tile, body.health!!.figure, body.health!!.caption, modifier)
         body.people != null -> Glance(tile, body.people!!.figure, body.people!!.caption, modifier)
         body.locker != null -> Glance(tile, body.locker!!.state_label, tile.name, modifier)
-        body.notes != null -> LineWidget(tile, body.notes!!.title, body.notes!!.edited, modifier)
+        body.notes != null -> LineWidget(tile, body.notes!!.title, body.notes!!.edited, modifier, next = body.notes!!.next_title)
         body.docs != null -> LineWidget(
             tile,
             body.docs!!.rows.firstOrNull()?.name.orEmpty(),
@@ -298,10 +298,12 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
 
 /** A LINE (medium, one row): the app's name in its colour, what is newest, a word about it. */
 @Composable
-private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Modifier) {
+private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Modifier, next: String = "") {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         WText(tile.name, appAccent(tile.app_id).text, strong = true)
         WText(title, ink())
+        // THE NOTE AFTER IT (Notes): a new vault's two starter notes both show.
+        if (next.isNotEmpty()) WText(next, ink())
         if (line.isNotEmpty()) WText(line, meta())
     }
 }

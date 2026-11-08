@@ -153,6 +153,9 @@ message HomeTileBody {
     string title = 2;
     // "Edited yesterday".
     string edited = 5;
+    // THE NOTE AFTER IT, by title, so a vault that holds two (a new vault ships with two
+    // starter notes) shows both on the tile; empty with one note.
+    string next_title = 6;
   }
 
   // This month's spending, one finished amount per currency.
