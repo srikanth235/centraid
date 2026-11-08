@@ -799,3 +799,68 @@ fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
     assert!(world.event_data(page).followed_guests.is_empty());
     assert_eq!(world.event_data(page).followed_heading, "");
 }
+
+/// A place founded through `add-place`: its id and its name.
+fn a_known_place(world: &mut World) -> (String, String) {
+    let done = world.act(act::agenda::AddPlace {
+        title: "Café Roma".to_owned(),
+        ..Default::default()
+    });
+    let output: serde_json::Value = serde_json::from_slice(&done.output).expect("json output");
+    (
+        output["id"].as_str().expect("the id").to_owned(),
+        "Café Roma".to_owned(),
+    )
+}
+
+#[test]
+fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not() {
+    let mut world = World::new();
+    let (place_id, name) = a_known_place(&mut world);
+    let at = world.propose(
+        "Dinner",
+        "2099-06-15T19:00:00",
+        "2099-06-15T20:00:00",
+        |p| p.place_id = Field::Is(place_id),
+    );
+    let page = world.open_event(&at, &at, None, "2099-06-15");
+    let keys: Vec<&str> = world
+        .event_data(page)
+        .actions
+        .iter()
+        .map(|a| a.key.as_str())
+        .collect();
+    assert_eq!(keys, ["open_map", "edit", "cancel"]);
+    let map = world.event_data(page).actions[0].clone();
+    assert_eq!(map.label, "Open in Maps");
+    assert!(map.route.is_none() && map.enabled && !map.destructive);
+    let update = world.driver.send(
+        page,
+        wire::screen_event::Kind::AgendaEvent(wire::AgendaEventEvent {
+            kind: Some(action("open_map")),
+        }),
+    );
+    let asked = agenda_event_support::asked(&update);
+    let [wire::effect::Kind::OpenMap(open)] = asked.as_slice() else {
+        panic!("one OpenMap effect: {asked:?}")
+    };
+    assert_eq!(open.query, name);
+
+    let bare = world.propose("Call", "2099-06-16T10:00:00", "2099-06-16T10:30:00", |_| {});
+    let page = world.open_event(&bare, &bare, None, "2099-06-16");
+    let keys: Vec<&str> = world
+        .event_data(page)
+        .actions
+        .iter()
+        .map(|a| a.key.as_str())
+        .collect();
+    assert_eq!(keys, ["edit", "cancel"]);
+    // Asked anyway, a page with no location opens nothing.
+    let update = world.driver.send(
+        page,
+        wire::screen_event::Kind::AgendaEvent(wire::AgendaEventEvent {
+            kind: Some(action("open_map")),
+        }),
+    );
+    assert!(agenda_event_support::asked(&update).is_empty());
+}

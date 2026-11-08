@@ -123,6 +123,19 @@ pub(super) fn smart_color(view: wire::TodoView) -> &'static str {
     }
 }
 
+/// The Overdue group's "Catch up": open the Catch up page, as Home's notice does.
+/// Any other verb key is not this page's to act on.
+pub(super) fn verb_effects(key: &str) -> Vec<wire::Effect> {
+    if key != rows::VERB_CATCH_UP {
+        return Vec::new();
+    }
+    vec![wire::Effect {
+        kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+            route: Some(super::routes::catch_up()),
+        })),
+    }]
+}
+
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::TodoList(args)) = &route.args else {
@@ -306,7 +319,7 @@ impl List {
                     self.reload(ctx);
                 }
             }
-            None => {}
+            Some(L::GroupVerb(_)) | None => {}
         }
     }
 }
@@ -315,7 +328,12 @@ impl Screen for List {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
-            Some(E::TodoList(list)) => self.event(list, ctx),
+            Some(E::TodoList(list)) => {
+                if let Some(L::GroupVerb(verb)) = &list.kind {
+                    return verb_effects(&verb.key);
+                }
+                self.event(list, ctx);
+            }
             _ => {}
         }
         Vec::new()

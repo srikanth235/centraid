@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import centraid.core.v1.QuickAddChipDismissed
@@ -96,7 +98,7 @@ internal fun TodoListScreen(
                             list.groups,
                             onCheck = { onEvent(TodoListEvent(row_checked = TodoListEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
-                            onVerb = { },
+                            onVerb = { onEvent(TodoListEvent(group_verb = TodoListEvent.GroupVerb(key = it))) },
                             menu = chrome?.let {
                                 TodoRowMenu(
                                     it,
@@ -160,7 +162,13 @@ internal fun TodoProjectScreen(
                     EmptyStateView(empty, onAction = null)
                 } else {
                     val listColor = agendaListColor(project.list_color_key)
-                    LazyColumn(Modifier.fillMaxSize().testTag("tasks-project")) {
+                    val listState = rememberLazyListState()
+                    val reorder = remember(listState, onEvent) {
+                        TodoReorderState(listState) { id, before ->
+                            onEvent(TodoProjectEvent(row_moved = TodoProjectEvent.RowMoved(task_id = id, before_id = before)))
+                        }
+                    }
+                    LazyColumn(Modifier.fillMaxSize().testTag("tasks-project"), state = listState) {
                         // THE TITLE IN THE LIST'S COLOUR (#1173).
                         listColor?.let { color ->
                             item(key = "title") {
@@ -211,6 +219,7 @@ internal fun TodoProjectScreen(
                                     onMove = { id, before -> onEvent(TodoProjectEvent(row_moved = TodoProjectEvent.RowMoved(task_id = id, before_id = before))) },
                                 )
                             },
+                            reorder = reorder,
                         )
                         // "2 completed · Show · Clear", and the rows while shown.
                         val completed = project.completed

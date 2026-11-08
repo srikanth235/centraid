@@ -2231,6 +2231,13 @@ message TodoListEvent {
     // THE SWIPE (#1173): Flag/Unflag and Delete (to the trash, with Undo).
     RowFlagged row_flagged = 11;
     RowDeleted row_deleted = 12;
+    // A group's quiet verb (#1173): "Catch up" on Overdue opens the Catch up page.
+    GroupVerb group_verb = 13;
+  }
+
+  // A group's `verb_key`, sent back as the project page sends it.
+  message GroupVerb {
+    string key = 1;
   }
 
   // The row's flag is set (`flagged` true) or cleared.
@@ -2526,6 +2533,9 @@ message TodoDetailData {
   optional TodoLink link = 20;
   // The attachments section: photos and files on the task.
   AgendaAttachmentsSection attachments = 21;
+  // The Custom repeat sheet, while it is open: the editor's own sheet, over
+  // this task's stored rule. Its events go back as `TodoDetailEvent.custom_repeat`.
+  optional AgendaCustomRepeatSheet custom_repeat = 22;
 }
 
 // A task's address and the one control that opens it in the browser.
@@ -2604,6 +2614,8 @@ message TodoDetailEvent {
     // WAVE 2 (#1173): the link's open control, and the attachments section.
     OpenLinkTapped open_link = 30;
     AgendaAttachmentEvent attachment = 31;
+    // The Custom repeat sheet's controls: the editor's `custom_*` events, same meaning.
+    AgendaEditorEvent custom_repeat = 32;
   }
 
   message Refreshed {}

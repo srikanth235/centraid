@@ -359,6 +359,66 @@ fn c2_a_centraid_edit_is_written_to_the_phone_and_then_stated() {
     assert!(phone.event("Offsite day").is_some());
 }
 
+/// An event's link rides with the phone's copy: the Android writer keeps it in the description and
+/// its reader splits it out again, so the vault sees the same notes and link it wrote. A link
+/// written is stated only when it changed, and a pass that reads back what was written owes nothing.
+#[test]
+fn an_events_link_is_stated_only_when_it_changed_and_reads_back_without_a_write() {
+    let mut phone = phone(false);
+    let linked = |notes: &str, url: &str| wire::PhoneCalendarEvent {
+        notes: notes.to_owned(),
+        url: url.to_owned(),
+        ..meeting("Offsite", "uid:offsite")
+    };
+    phone.import(writable_work(vec![linked(
+        "Bring slides",
+        "https://example.com/offsite",
+    )]));
+    let event = phone.event("Offsite").expect("imported");
+    assert_eq!(
+        event.conferencing_uri.as_deref(),
+        Some("https://example.com/offsite")
+    );
+    assert_eq!(event.description.as_deref(), Some("Bring slides"));
+    assert!(phone.writes().is_empty());
+
+    // The member changes the notes: the notes are stated, the link is not.
+    let id = event.event_id;
+    phone.act(act::agenda::EditEvent {
+        event_id: id.clone(),
+        description: Field::Is("Bring slides and badge".into()),
+        ..act::agenda::EditEvent::default()
+    });
+    let writes = phone.writes();
+    let fields = only(&writes[0]).fields.clone().expect("fields");
+    assert_eq!(fields.notes, "Bring slides and badge");
+    assert!(fields.states_notes && !fields.states_url);
+    phone.written_ok();
+    // The phone reads back the notes and the link apart: nothing is owed, nothing changes.
+    phone.pass(writable_work(vec![linked(
+        "Bring slides and badge",
+        "https://example.com/offsite",
+    )]));
+    assert!(phone.writes().is_empty());
+    let event = phone.event("Offsite").expect("still there");
+    assert_eq!(
+        event.conferencing_uri.as_deref(),
+        Some("https://example.com/offsite")
+    );
+    assert_eq!(event.description.as_deref(), Some("Bring slides and badge"));
+
+    // The member changes the link: the link is stated with the value, the notes are not.
+    phone.act(act::agenda::EditEvent {
+        event_id: id,
+        url: Field::Is("https://example.com/moved".into()),
+        ..act::agenda::EditEvent::default()
+    });
+    let writes = phone.writes();
+    let fields = only(&writes[0]).fields.clone().expect("fields");
+    assert_eq!(fields.url, "https://example.com/moved");
+    assert!(fields.states_url && !fields.states_notes);
+}
+
 /// C3: both changed the same field: the member's edit wins, and the phone is overwritten.
 #[test]
 fn c3_when_both_changed_the_same_field_the_members_edit_wins_and_is_written() {

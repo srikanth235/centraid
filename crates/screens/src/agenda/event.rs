@@ -56,6 +56,8 @@ use crate::strings::{
 
 pub const ACTION_EDIT: &str = "edit";
 pub const ACTION_CANCEL: &str = "cancel";
+/// Open the event's location in the phone's maps app (an `OpenMap` effect).
+pub const ACTION_OPEN_MAP: &str = "open_map";
 
 pub const ACCEPTED: &str = "accepted";
 pub const TENTATIVE: &str = "tentative";
@@ -188,6 +190,23 @@ impl EventPage {
         self.reload(ctx);
     }
 
+    /// The location's name, as the maps app is asked for it. Nothing without a location.
+    fn open_map(&self) -> Vec<wire::Effect> {
+        let Some(place) = self
+            .event()
+            .and_then(|event| event.location_name.as_deref())
+            .map(str::trim)
+            .filter(|place| !place.is_empty())
+        else {
+            return Vec::new();
+        };
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OpenMap(wire::OpenMap {
+                query: place.to_owned(),
+            })),
+        }]
+    }
+
     fn ask_cancel(&mut self) {
         let Some(event) = self.event() else { return };
         if is_series_occurrence(event) {
@@ -293,6 +312,9 @@ impl Screen for EventPage {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
                 Some(K::Action(picked)) if picked.key == ACTION_CANCEL => self.ask_cancel(),
+                Some(K::Action(picked)) if picked.key == ACTION_OPEN_MAP => {
+                    return self.open_map();
+                }
                 // `edit` is the shell's push of the action's route.
                 Some(K::Action(_)) | None => {}
                 Some(K::Scope(picked)) => {
@@ -564,34 +586,45 @@ impl EventPage {
             guest_heading,
             guests,
             rsvp,
-            actions: vec![
-                wire::AgendaAction {
-                    key: ACTION_EDIT.to_owned(),
-                    label: words::action_edit(locale),
+            actions: place
+                .map(|_| wire::AgendaAction {
+                    key: ACTION_OPEN_MAP.to_owned(),
+                    label: words::action_open_map(locale),
                     enabled: true,
                     destructive: false,
-                    accessibility_label: words::a11y_edit(locale),
-                    route: Some(routes::editor(
-                        &event.event_id,
-                        &self.route.instance_key,
-                        self.route.original_start_local.as_deref(),
-                        &self.route.day,
-                        wire::AgendaEditorKind::Event,
-                    )),
-                },
-                wire::AgendaAction {
-                    key: ACTION_CANCEL.to_owned(),
-                    label: if is_series_occurrence(event) {
-                        words::cancel_series(locale)
-                    } else {
-                        words::cancel_event(locale)
-                    },
-                    enabled: true,
-                    destructive: true,
-                    accessibility_label: words::a11y_cancel(locale),
+                    accessibility_label: words::a11y_open_map(locale),
                     route: None,
-                },
-            ],
+                })
+                .into_iter()
+                .chain([
+                    wire::AgendaAction {
+                        key: ACTION_EDIT.to_owned(),
+                        label: words::action_edit(locale),
+                        enabled: true,
+                        destructive: false,
+                        accessibility_label: words::a11y_edit(locale),
+                        route: Some(routes::editor(
+                            &event.event_id,
+                            &self.route.instance_key,
+                            self.route.original_start_local.as_deref(),
+                            &self.route.day,
+                            wire::AgendaEditorKind::Event,
+                        )),
+                    },
+                    wire::AgendaAction {
+                        key: ACTION_CANCEL.to_owned(),
+                        label: if is_series_occurrence(event) {
+                            words::cancel_series(locale)
+                        } else {
+                            words::cancel_event(locale)
+                        },
+                        enabled: true,
+                        destructive: true,
+                        accessibility_label: words::a11y_cancel(locale),
+                        route: None,
+                    },
+                ])
+                .collect(),
             is_past: ended(event, &detail.today, &detail.now_local),
             accessibility_label: spoken_parts.join(", "),
             call_label: if call_uri.is_empty() {

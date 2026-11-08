@@ -41,6 +41,10 @@ message SettingsRow {
   string initial = 8;
   // The row's current value, drawn at the trailing edge before the chevron ("Wi-Fi only").
   string value = 9;
+  // A row with no page behind it that is still pressed: the tap is `RowPressed` with this `id`,
+  // and the row draws its chevron as a row with a route does (the vault row, which opens
+  // Home's vault switcher).
+  bool pressable = 10;
 }
 
 message SettingsSection {
@@ -65,11 +69,19 @@ message SettingsState {
     Loading loading = 3;
     SettingsData data = 4;
   }
+  // The page handed its job to Home (the vault switcher is Home's sheet): the shell pops it.
+  bool finished = 5;
 }
 
 message SettingsEvent {
   oneof kind {
     AppearancePicked appearance_picked = 1;
+    RowPressed row_pressed = 2;
+  }
+
+  // A `SettingsRow.id` of a row with `pressable` set.
+  message RowPressed {
+    string id = 1;
   }
 
   message AppearancePicked {

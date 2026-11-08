@@ -11,10 +11,17 @@ use super::draft::{
     Draft, REMINDER_NONE, REMINDERS, TRAVELS, ZONE_FLOATING, alerts_of, normalize_url,
 };
 use crate::agenda::event::reminder_label;
+use crate::catalog::act;
 use crate::catalog::load;
+use crate::kit::act as kit_act;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::screen::Ctx;
-use crate::strings::{Locale, agenda as words, agenda_editor as editor_words};
+use crate::strings::{Locale, agenda as words, agenda_editor as editor_words, fill};
+
+/// The key of the choice that takes the words the member typed as the place: `text:<words>`.
+const TYPED: &str = "text:";
+/// A place's name is at most this long (the vault's bound).
+const MAX_PLACE_NAME: usize = 120;
 
 pub const AVAILABILITY_BUSY: &str = "busy";
 pub const AVAILABILITY_FREE: &str = "free";
@@ -204,10 +211,27 @@ impl Editor {
     }
 
     pub(super) fn pick_place(&mut self, id: &str) {
+        // THE ROW THAT TAKES THE TYPED WORDS: the place is founded when the event saves.
+        if let Some(typed) = id.strip_prefix(TYPED) {
+            let typed: String = typed.trim().chars().take(MAX_PLACE_NAME).collect();
+            if typed.is_empty() {
+                return;
+            }
+            self.close_sheet();
+            self.typed_place = typed;
+            self.edit(|d| {
+                Some(Draft {
+                    place_id: String::new(),
+                    ..d.clone()
+                })
+            });
+            return;
+        }
         if !self.place_known(id) {
             return;
         }
         self.close_sheet();
+        self.typed_place.clear();
         let id = id.to_owned();
         self.edit(|d| {
             Some(Draft {
@@ -219,12 +243,41 @@ impl Editor {
 
     pub(super) fn clear_place(&mut self) {
         self.close_sheet();
+        self.typed_place.clear();
         self.edit(|d| {
             Some(Draft {
                 place_id: String::new(),
                 ..d.clone()
             })
         });
+    }
+
+    /// The typed place as a place of the vault: one already called that (the list, A to Z, is
+    /// the vault's), else a new one. `None` says why on the status line and saves nothing.
+    pub(super) fn found_typed_place(&mut self, ctx: &Ctx) -> Option<String> {
+        let name = self.typed_place.trim().to_owned();
+        // THE VAULT'S PLACES NOW, not the list read when the page opened: another page may have
+        // founded these words since.
+        if let Some(known) = read_places(ctx)
+            .into_iter()
+            .find(|place| place.label.trim().eq_ignore_ascii_case(&name))
+        {
+            return Some(known.id);
+        }
+        let key = kit_act::key(&["add-place", &name], kit_act::fresh());
+        let settled = kit_act::act(
+            ctx,
+            act::agenda::AddPlace {
+                title: name,
+                ..Default::default()
+            },
+            &key,
+        );
+        if !settled.committed {
+            self.settle(&settled);
+            return None;
+        }
+        settled.output_text("id")
     }
 
     /// The place's name: the vault's list, else the event's own answer.
@@ -245,6 +298,9 @@ impl Editor {
     }
 
     pub(super) fn location_label(&self, locale: Locale, draft: &Draft) -> String {
+        if !self.typed_place.trim().is_empty() {
+            return self.typed_place.trim().to_owned();
+        }
         if draft.place_id.is_empty() {
             return editor_words::location_none(locale);
         }
@@ -262,10 +318,33 @@ impl Editor {
             .places
             .iter()
             .filter(|place| matches_query(&self.place_query, &[&place.label]))
-            .map(|place| choice(&place.id, &place.label, place.id == draft.place_id))
+            .map(|place| {
+                choice(
+                    &place.id,
+                    &place.label,
+                    self.typed_place.trim().is_empty() && place.id == draft.place_id,
+                )
+            })
             .collect();
+        // WHAT THE MEMBER TYPED is a place too: the chosen words stay in the list, and the words
+        // in the search box are offered unless a place is already called that.
+        let typed = self.typed_place.trim();
+        if !typed.is_empty() && matches_query(&self.place_query, &[typed]) {
+            choices.insert(0, choice(&format!("{TYPED}{typed}"), typed, true));
+        }
+        let query = self.place_query.trim();
+        let offered = !query.is_empty()
+            && !query.eq_ignore_ascii_case(typed)
+            && !loaded
+                .places
+                .iter()
+                .any(|place| place.label.trim().eq_ignore_ascii_case(query));
+        if offered {
+            let label = fill(&editor_words::place_use(locale), &[("place", query)]);
+            choices.push(choice(&format!("{TYPED}{query}"), &label, false));
+        }
         let chosen_listed = loaded.places.iter().any(|place| place.id == draft.place_id);
-        if !draft.place_id.is_empty() && !chosen_listed {
+        if !draft.place_id.is_empty() && !chosen_listed && typed.is_empty() {
             let label = self.location_label(locale, draft);
             if matches_query(&self.place_query, &[&label]) {
                 choices.insert(0, choice(&draft.place_id, &label, true));

@@ -120,7 +120,7 @@ internal fun AgendaEventDetailSheets(
             onDismiss = close,
         )
         AgendaEditorState.Sheet.SHEET_CUSTOM_REPEAT -> data.custom_repeat?.let { custom ->
-            CustomRepeatSheetView(chrome, custom, onEvent, close)
+            CustomRepeatSheetView(chrome.custom_repeat_title, custom, onEvent, close)
         }
         else -> Unit
     }
@@ -178,15 +178,15 @@ private fun ChoiceSheet(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CustomRepeatSheetView(
-    chrome: AgendaEditorChrome,
+internal fun CustomRepeatSheetView(
+    fallbackTitle: String,
     custom: AgendaCustomRepeatSheet,
     onEvent: (AgendaEditorEvent) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var pickingUntil by remember { mutableStateOf(false) }
     SheetRoom(
-        title = custom.title.ifEmpty { chrome.custom_repeat_title },
+        title = custom.title.ifEmpty { fallbackTitle },
         onDismiss = onDismiss,
         expanded = true,
         primary = if (custom.read_only) {

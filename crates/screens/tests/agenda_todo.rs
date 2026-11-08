@@ -772,6 +772,70 @@ fn overdue(d: &centraid_screens::testing::Driver, title: &str, days_ago: i64) ->
     )
 }
 
+/// The screens of the pending `OpenRoute` effects.
+fn opened_routes(d: &centraid_screens::testing::Driver) -> Vec<String> {
+    d.effects
+        .iter()
+        .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::OpenRoute(open) => open.route.as_ref().map(|r| r.screen.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_overdue_verb_opens_catch_up_on_a_list_page_and_a_project_page() {
+    let mut d = driver();
+    clear_tasks(&d);
+    overdue(&d, "Invoice", 14);
+    let garden = project(&d, "Garden");
+    add(
+        &d,
+        act::agenda::AddTask {
+            title: "Late bulbs".into(),
+            project_id: Field::Is(garden.clone()),
+            due: due(&day(&d, -3)),
+            ..Default::default()
+        },
+    );
+
+    let i = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Today));
+    let group = group_titled(&list_data(d.view(i)).groups, "Overdue").clone();
+    assert_eq!(group.verb_label, "Catch up");
+    d.effects.clear();
+    send_list(
+        &mut d,
+        i,
+        wire::todo_list_event::Kind::GroupVerb(wire::todo_list_event::GroupVerb {
+            key: group.verb_key.clone(),
+        }),
+    );
+    assert_eq!(opened_routes(&d), vec![agenda::CATCH_UP.to_owned()]);
+
+    // A verb that is not Catch up opens nothing from a list page.
+    d.effects.clear();
+    send_list(
+        &mut d,
+        i,
+        wire::todo_list_event::Kind::GroupVerb(wire::todo_list_event::GroupVerb {
+            key: "add:".into(),
+        }),
+    );
+    assert!(opened_routes(&d).is_empty());
+
+    // The project page honours it too, and still honours `add:`.
+    let p = d.push(agenda::TAB, routes::project(&garden, "Garden"));
+    d.effects.clear();
+    send_project(
+        &mut d,
+        p,
+        pe::Kind::GroupVerb(pe::GroupVerb {
+            key: group.verb_key,
+        }),
+    );
+    assert_eq!(opened_routes(&d), vec![agenda::CATCH_UP.to_owned()]);
+}
+
 #[test]
 fn catch_up_piles_what_came_due_and_names_the_absence() {
     let mut d = driver();

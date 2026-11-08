@@ -27,6 +27,7 @@ agenda,star-task,star,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
 agenda,unstar-task,unstar,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
 agenda,create-calendar,create:kind,list,direct,no,no
 agenda,style-container,edit:color,list,direct,no,no
+agenda,add-place,create,event,card,yes: crates/screens/src/agenda/editor.rs,no
 agenda,record-calendar-push,import:items,event,card,yes: crates/screens/src/agenda/calendar.rs,no
 docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
 docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes

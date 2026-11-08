@@ -43,7 +43,11 @@ struct SettingsView: View {
                             // THE ROWS ARE ONE CARD; the last hairline falls outside the clip.
                             VStack(spacing: 0) {
                                 ForEach(section.rows, id: \.id) { row in
-                                    SettingsRowView(row: row, open: open)
+                                    SettingsRowView(row: row, open: open) {
+                                        var event = Centraid_Core_V1_SettingsEvent()
+                                        event.kind = .rowPressed(.with { $0.id = row.id })
+                                        send(event)
+                                    }
                                 }
                             }
                             .padding(.bottom, -1)
@@ -70,6 +74,10 @@ struct SettingsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-settings")
+        // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
+        .onChange(of: state.finished) { _, finished in
+            if finished { onBack() }
+        }
     }
 }
 
@@ -123,6 +131,8 @@ private struct SettingsSegmented: View {
 private struct SettingsRowView: View {
     let row: Centraid_Core_V1_SettingsRow
     let open: (Centraid_Core_V1_Route) -> Void
+    /// A row with no page behind it is still pressed (`pressable`): Rust is told which.
+    let press: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     /// THE ROW'S TILE, as Rust names it: the vault's round initial, the state-amber fill (the
@@ -167,7 +177,7 @@ private struct SettingsRowView: View {
                 Text(row.value).kitType(.row).foregroundStyle(Surface.meta)
             }
             // A row that MAKES something draws no chevron (the board's Make a vault).
-            if row.hasRoute && row.tile != "add" {
+            if (row.hasRoute || row.pressable) && row.tile != "add" {
                 CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
             }
         }
@@ -181,13 +191,15 @@ private struct SettingsRowView: View {
         Group {
             if row.hasRoute {
                 Button { open(row.route) } label: { content }.buttonStyle(.plain)
+            } else if row.pressable {
+                Button(action: press) { content }.buttonStyle(.plain)
             } else {
                 content
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row.accessibilityLabel)
-        .accessibilityAddTraits(row.hasRoute ? .isButton : [])
+        .accessibilityAddTraits(row.hasRoute || row.pressable ? .isButton : [])
         .accessibilityIdentifier("settings-row-\(row.id)")
     }
 }

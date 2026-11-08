@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_fourteen_queries_and_twenty_nine_actions() {
+    fn it_declares_fourteen_queries_and_thirty_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 14);
-        assert_eq!(manifest.actions.len(), 29);
+        assert_eq!(manifest.actions.len(), 30);
         for name in [
             "upcoming",
             "search",

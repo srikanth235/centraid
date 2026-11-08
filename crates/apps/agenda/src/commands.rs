@@ -114,7 +114,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The twenty-nine, in the manifest's own order.
+/// The thirty, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -160,6 +160,8 @@ pub const ACTIONS: &[ActionRow] = &[
     // A CALENDAR OF THE VAULT'S OWN is a container: the shared verb, and the shared colour and
     // icon verb a list wears too. A calendar is renamed with `entity.retitle` (`rename-list`).
     act("create-calendar", "container.create"),
+    // A PLACE THE MEMBER TYPED (#1173): an event's location that is not one the vault holds.
+    act("add-place", "place.add"),
     act("style-container", "container.style"),
     // TWO-WAY SYNC (#1173): the shell's answers to a write-back to the phone's calendars.
     act("record-calendar-push", "follow.pushed"),
@@ -194,7 +196,7 @@ mod tests {
 
     #[test]
     fn the_events_own_and_the_tasks_own_are_the_verbs_the_rest_are_shared() {
-        assert_eq!(ACTIONS.len(), 29);
+        assert_eq!(ACTIONS.len(), 30);
         let own = |prefix: &str| -> Vec<&str> {
             ACTIONS
                 .iter()
@@ -234,7 +236,7 @@ mod tests {
             creates,
             ["create-project", "create-section", "create-calendar"]
         );
-        assert_eq!(act_scope_tables().len(), 25);
+        assert_eq!(act_scope_tables().len(), 26);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

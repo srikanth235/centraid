@@ -75,6 +75,8 @@ public fun KitSwipeRow(
     actions: List<KitRowAction>,
     modifier: Modifier = Modifier,
     onTap: (() -> Unit)? = null,
+    /** False where a long press does something else (it lifts a row to reorder it). */
+    menuOnLongPress: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     if (actions.isEmpty()) {
@@ -132,7 +134,7 @@ public fun KitSwipeRow(
                     onClick = {
                         if (offset.value != 0f) scope.launch { offset.animateTo(0f) } else onTap?.invoke()
                     },
-                    onLongClick = { menu = true },
+                    onLongClick = if (menuOnLongPress) ({ menu = true }) else null,
                 ),
         ) {
             content()

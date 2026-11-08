@@ -105,6 +105,15 @@ internal fun TodoDetailScreen(
     if (open != null) {
         TodoFieldSheet(open, state.chrome?.add_tag_verb.orEmpty(), onEvent)
     }
+    // THE CUSTOM REPEAT SHEET: the editor's own, over this task's rule; Done is Rust's.
+    state.data_?.custom_repeat?.let { custom ->
+        CustomRepeatSheetView(
+            fallbackTitle = "",
+            custom = custom,
+            onEvent = { onEvent(TodoDetailEvent(custom_repeat = it)) },
+            onDismiss = { onEvent(TodoDetailEvent(field_closed = TodoDetailEvent.FieldClosed())) },
+        )
+    }
     val confirm = state.confirm
     if (confirm != null) {
         ConfirmSheet(

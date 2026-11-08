@@ -1567,9 +1567,19 @@ fn a_location_is_picked_from_the_vaults_places_searched_and_cleared() {
         narrowed.iter().any(|c| c.key == first_id),
         "{word}: {narrowed:?}"
     );
-    assert!(narrowed.len() <= listed.len());
+    // (Typed words are offered beside the matches; they are not a place of the vault.)
+    assert!(
+        narrowed
+            .iter()
+            .filter(|c| !c.key.starts_with("text:"))
+            .count()
+            <= listed.len()
+    );
+    // Words no place is called are offered as a place to use, and nothing else matches.
     world.send_editor(page, place_search("zzzzzz"));
-    assert!(world.editor_data(page).places.is_empty());
+    let offered = world.editor_data(page).places.clone();
+    assert_eq!(offered.len(), 1, "{offered:?}");
+    assert_eq!(offered[0].label, "Use “zzzzzz”");
     world.send_editor(page, place_search(""));
 
     // A place that is not the vault's is ignored; a real one is chosen.
@@ -1609,6 +1619,108 @@ fn a_location_is_picked_from_the_vaults_places_searched_and_cleared() {
             .location_place_id,
         None
     );
+}
+
+#[test]
+fn a_location_may_be_typed_and_is_founded_as_a_place_once() {
+    let mut world = World::new();
+    let before = the_places(&world).len();
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Coffee");
+    world.send_editor(page, sheet(Sheet::Location));
+    world.send_editor(page, place_search("Café Roma"));
+    let offered = world.editor_data(page).places.clone();
+    let row = offered
+        .iter()
+        .find(|c| c.label == "Use “Café Roma”")
+        .unwrap_or_else(|| panic!("no row offers the typed words: {offered:?}"));
+    world.send_editor(page, place(&row.key.clone()));
+    // Nothing is founded by picking: the draft holds the words and no place yet.
+    assert_eq!(the_places(&world).len(), before);
+    assert_eq!(world.draft(page).place_id, "");
+    let data = world.editor_data(page);
+    assert_eq!(data.location_label, "Café Roma");
+    assert!(data.show_clear_location && data.dirty);
+    // The sheet shows the typed words as the chosen place.
+    world.send_editor(page, sheet(Sheet::Location));
+    let chosen = world.editor_data(page).places.clone();
+    assert!(
+        chosen.iter().any(|c| c.label == "Café Roma" && c.selected),
+        "{chosen:?}"
+    );
+    world.send_editor(page, place_search(""));
+    world.send_editor(page, sheet(Sheet::None));
+    world.save(page);
+    assert!(
+        world.editor_state(page).dismissed,
+        "{:?}",
+        world.editor_state(page).status
+    );
+    let event = made(&world, "Coffee", "2099-06-17");
+    let id = event.location_place_id.clone().expect("a place");
+    assert_eq!(the_places(&world).len(), before + 1);
+    assert!(
+        the_places(&world).contains(&(id.clone(), "Café Roma".to_owned())),
+        "{:?}",
+        the_places(&world)
+    );
+
+    // The event page names it, and offers it to the maps app.
+    let shown = world.open_event(&event.event_id, &event.instance_key, None, "2099-06-17");
+    assert!(
+        world
+            .event_data(shown)
+            .facts
+            .iter()
+            .any(|f| f.detail == "Café Roma")
+    );
+
+    // A page opened now lists the place by its name, so it is picked, not founded again.
+    let lunch = {
+        let early = world.open_new("2099-06-18", Kind::Event);
+        world.title(early, "Lunch");
+        world.send_editor(early, sheet(Sheet::Location));
+        world.send_editor(early, place_search("café roma"));
+        let listed = world.editor_data(early).places.clone();
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        assert_eq!(listed[0].key, id, "the existing place, found by its name");
+        world.send_editor(early, place(&listed[0].key.clone()));
+        world.save(early);
+        assert!(world.editor_state(early).dismissed);
+        made(&world, "Lunch", "2099-06-18")
+    };
+    assert_eq!(lunch.location_place_id.as_deref(), Some(id.as_str()));
+    assert_eq!(the_places(&world).len(), before + 1);
+}
+
+#[test]
+fn typed_words_that_became_a_place_meanwhile_are_that_place() {
+    let mut world = World::new();
+    let before = the_places(&world).len();
+    // Two pages are open before either saves; each types the same words.
+    let first = world.open_new("2099-06-17", Kind::Event);
+    let second = world.open_new("2099-06-18", Kind::Event);
+    for (page, title) in [(first, "Coffee"), (second, "Lunch")] {
+        world.title(page, title);
+        world.send_editor(page, sheet(Sheet::Location));
+        world.send_editor(page, place_search("Café Roma"));
+        let typed = world
+            .editor_data(page)
+            .places
+            .last()
+            .expect("the typed words are offered")
+            .key
+            .clone();
+        world.send_editor(page, place(&typed));
+    }
+    world.save(first);
+    world.save(second);
+    assert!(world.editor_state(first).dismissed && world.editor_state(second).dismissed);
+    assert_eq!(the_places(&world).len(), before + 1, "one place, not two");
+    let coffee = made(&world, "Coffee", "2099-06-17");
+    let lunch = made(&world, "Lunch", "2099-06-18");
+    assert!(coffee.location_place_id.is_some());
+    assert_eq!(coffee.location_place_id, lunch.location_place_id);
 }
 
 #[test]
