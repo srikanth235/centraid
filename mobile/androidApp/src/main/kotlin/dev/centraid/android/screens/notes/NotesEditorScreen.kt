@@ -55,7 +55,10 @@ import centraid.core.v1.NotesEditorEvent
 import centraid.core.v1.NotesEditorState
 import centraid.core.v1.NotesHistoryEvent
 import centraid.core.v1.NotesHistoryState
+import centraid.core.v1.NotesLinkChipKind
+import centraid.core.v1.NotesLinkResolution
 import centraid.core.v1.NotesLinkSheet
+import centraid.core.v1.StatusLine as StatusLineMessage
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
@@ -104,16 +107,19 @@ public fun NotesEditorScreen(
     val chrome = state.chrome
     val clean = state.autosave?.refused != true && state.autosave?.edit_seq == state.autosave?.saved_seq
     val reload: Any? = if (clean) state.note_id else null
-    // THE SPLICE SIGNAL: each time the link sheet closes, the body takes Rust's
-    // value once (a pick wrote `[[title]]` into it there).
-    val linkCloses = remember(state.note_id) { mutableIntStateOf(0) }
-    val wasOpen = remember(state.note_id) { booleanArrayOf(false) }
+    // A CORE EDIT (a checklist tap, Return, Undo, a pick) is on its way back: the body field may
+    // take the core's body even while it has the keyboard.
+    val pending = remember(state.note_id) { CoreEditPending() }
+    val bodyFocused = remember(state.note_id) { mutableStateOf(false) }
     val linkOpen = state.link != null
-    LaunchedEffect(linkOpen) {
-        if (wasOpen[0] && !linkOpen) linkCloses.intValue += 1
-        wasOpen[0] = linkOpen
+    val send: (NotesEditorEvent) -> Unit = { event ->
+        if (event.checklist_requested != null || event.checklist_toggled != null || event.return_pressed != null ||
+            event.status_acted != null || event.link_picked != null
+        ) {
+            pending.value = true
+        }
+        onEvent(event)
     }
-    val bodyReload: Any? = reload ?: linkCloses.intValue.takeIf { it > 0 }?.let { Pair(state.note_id, it) }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
     CompositionLocalProvider(LocalAppAccentId provides "notes") {
@@ -132,7 +138,15 @@ public fun NotesEditorScreen(
             null
         },
     ) {
-        StatusLine(chrome?.status.orEmpty())
+        // THE ONE STATUS LINE: the core's sentence, with its one verb (Undo) while it has one.
+        if (chrome != null && chrome.status_action.isNotEmpty()) {
+            StatusLine(
+                line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action),
+                actTag = "notes-editor-status-action",
+            ) { send(NotesEditorEvent(status_acted = NotesEditorEvent.StatusActed())) }
+        } else {
+            StatusLine(chrome?.status.orEmpty())
+        }
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, draft),
             onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
@@ -163,16 +177,28 @@ public fun NotesEditorScreen(
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
                 TagsRow(state, onEvent)
-                EditableFieldRow(
-                    key = "",
+                NotesRichBody(
                     value = note.body,
-                    reload = bodyReload,
+                    rich = state.rich,
+                    selection = state.selection,
+                    follows = !bodyFocused.value || pending.value || linkOpen,
+                    pending = pending,
                     placeholder = chrome?.body_placeholder.orEmpty(),
-                    style = "reading",
-                    singleLine = false,
-                    testTag = "notes-body",
-                    modifier = Modifier.padding(top = 4.dp),
                     onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
+                    onFocus = { bodyFocused.value = it },
+                    onReturn = { caret -> send(NotesEditorEvent(return_pressed = NotesEditorEvent.ReturnPressed(caret = caret))) },
+                    onToggle = { at -> send(NotesEditorEvent(checklist_toggled = NotesEditorEvent.ChecklistToggled(at = at))) },
+                    onLink = { chip, at ->
+                        val route = chip.route
+                        if (chip.kind == NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE &&
+                            chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED && route != null
+                        ) {
+                            onOpen(route)
+                        } else {
+                            send(NotesEditorEvent(link_opened = NotesEditorEvent.LinkOpened(at = at)))
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 4.dp),
                 )
                 // THE TOOLS under the words: checklist and link are Rust's events.
                 if (chrome != null) {
@@ -181,7 +207,7 @@ public fun NotesEditorScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         IconKey("Todo", chrome.checklist_label, "notes-tool-checklist") {
-                            onEvent(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
+                            send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
                         }
                         IconKey("Link", chrome.link_label, "notes-tool-link") {
                             onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
@@ -215,7 +241,7 @@ public fun NotesEditorScreen(
             onDismiss = { menuOpen = false },
         )
     }
-    state.link?.let { sheet -> LinkSheet(sheet, onEvent) }
+    state.link?.let { sheet -> LinkSheet(sheet, send) }
 }
 
 /**
