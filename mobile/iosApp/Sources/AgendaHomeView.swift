@@ -695,7 +695,7 @@ struct AgendaSectionView: View {
                     .accessibilityAddTraits(.isHeader)
             }
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
         }
         .id(section.day)
@@ -776,7 +776,7 @@ struct AgendaSectionView: View {
                     .accessibilityAddTraits(.isHeader)
             }
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
             HStack(alignment: .top, spacing: Self.dateGap) {
                 dateColumn

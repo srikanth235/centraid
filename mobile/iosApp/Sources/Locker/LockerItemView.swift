@@ -223,38 +223,43 @@ struct LockerFieldRowView: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.label)
-                .kitType(.meta)
-                .foregroundStyle(Surface.meta)
-            Group {
-                if row.sealed && !row.revealed {
-                    Text(row.mask)
-                        .centraidType("mono")
-                        .kerning(2)
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                } else {
-                    HStack(spacing: 8) {
-                        Text(row.value)
-                            .centraidType(row.monospace ? "mono" : "body")
-                            .font(row.key == "otp_seed" ? .system(size: 28, weight: .semibold, design: .monospaced) : nil)
-                            .foregroundStyle(Surface.ink)
-                        if row.hasCountdown {
-                            LockerCountdownRing(countdown: row.countdown)
+        // THE BOARD'S ROW: the label over the value on the left, the verbs on the trailing edge of
+        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack.
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                Group {
+                    if row.sealed && !row.revealed {
+                        Text(row.mask)
+                            .centraidType("mono")
+                            .kerning(2)
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(row.value)
+                                .centraidType(row.monospace ? "mono" : "body")
+                                .font(row.key == "otp_seed" ? .system(size: 28, weight: .semibold, design: .monospaced) : nil)
+                                .foregroundStyle(Surface.ink)
+                            if row.hasCountdown {
+                                LockerCountdownRing(countdown: row.countdown)
+                            }
                         }
                     }
                 }
+                .textSelection(.disabled)
+                .accessibilityIdentifier("locker-value-\(row.key)")
+                if !row.note.isEmpty {
+                    Text(row.note)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .monospacedDigit()
+                }
             }
-            .textSelection(.disabled)
-            .accessibilityIdentifier("locker-value-\(row.key)")
-            if !row.note.isEmpty {
-                Text(row.note)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .monospacedDigit()
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if !row.verbs.isEmpty {
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     ForEach(row.verbs, id: \.key) { verb in
                         KitLink(label: verb.label, dense: true, identifier: "locker-verb-\(row.key)-\(verb.key)") {
                             onVerb(verb)

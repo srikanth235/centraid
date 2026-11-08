@@ -90,7 +90,30 @@ struct RustScreenView: View {
     /// THE SCREEN, SHIELDED while Rust holds a `ScreenshotShield` for it: always wrapped, so the
     /// view keeps its identity (and its state) as the shield goes on and off.
     var body: some View {
-        WordsShield(secure: store.shielded.contains(instance)) { screen }
+        WordsShield(secure: store.shielded.contains(instance)) {
+            if appId.isEmpty {
+                screen
+            } else {
+                screen.appAccent(appId)
+            }
+        }
+    }
+
+    /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets
+    /// it presents) wears that app's colour, not the shell's. A page that is no app's (Settings,
+    /// Backup, search, the words) stays the shell's; a view that states its own accent still wins.
+    private var appId: String {
+        switch store.views[instance]?.kind {
+        case .photosHome?, .photosShelf?, .photosPicker?, .photosPlaces?, .photosLightbox?, .photosEditor?: "photos"
+        case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
+        case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
+             .moneyCategories?, .moneyImport?, .moneySearch?: "money"
+        case .docsDrive?, .docsDocument?, .docsVersions?, .docsEditor?: "docs"
+        case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
+        case .notesHome?, .notesEditor?, .notesHistory?: "notes"
+        case .peopleHome?, .peoplePerson?, .peopleEditor?: "people"
+        default: ""
+        }
     }
 
     @ViewBuilder

@@ -276,7 +276,7 @@ private struct UtilitiesGroup: View {
             ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 {
                     Rectangle()
-                        .fill(Theme.color("line", scheme))
+                        .fill(Surface.line)
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }
@@ -327,7 +327,7 @@ private struct DeletedGroup: View {
             ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 {
                     Rectangle()
-                        .fill(Theme.color("line", scheme))
+                        .fill(Surface.line)
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }

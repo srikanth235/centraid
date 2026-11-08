@@ -74,6 +74,7 @@ public fun PhotoPickerScreen(
                             modifier = Modifier.weight(1f),
                             selected = data.cells.filter { it.picked }.map { it.tile!!.photo_id }.toSet(),
                             taken = data.cells.filter { it.taken }.map { it.tile!!.photo_id }.toSet(),
+                            showsRing = true,
                             takenLabel = data.taken_label,
                             onTap = { photoId ->
                                 onEvent(PhotosPickerEvent(pick = PhotosPickerEvent.PickToggled(photo_id = photoId)))

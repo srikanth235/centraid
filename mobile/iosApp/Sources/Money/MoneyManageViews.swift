@@ -391,7 +391,8 @@ struct MoneyCategoriesView: View {
                         meta: row.meta,
                         dimmed: row.archived,
                         accessibility: row.accessibilityLabel,
-                        identifier: "money-category-row-\(categoryID)"
+                        identifier: "money-category-row-\(categoryID)",
+                        divider: false
                     ) { send(event { $0.category = .with { $0.categoryID = categoryID } }) }
                 }
             }

@@ -26,6 +26,9 @@ struct PhotoCellsGrid: View {
     var taken: Set<String> = []
     /// What a taken cell is spoken as, Rust's ("Already in this album").
     var takenLabel = ""
+    /// A picker's cells all carry the empty ring, so every one reads as choosable (the board draws
+    /// it on each, and a pink frame on the chosen).
+    var showsRing = false
     var minimumCell: CGFloat = 96
     var onTap: ((String) -> Void)?
     /// The download arrow. Both ids, because they answer different questions:
@@ -40,6 +43,7 @@ struct PhotoCellsGrid: View {
                     isSelected: selected.contains(cell.photoID),
                     isTaken: taken.contains(cell.photoID),
                     takenLabel: takenLabel,
+                    showsRing: showsRing,
                     onTap: onTap,
                     onFetch: onFetch
                 )
@@ -57,8 +61,10 @@ struct PhotoCellSquare: View {
     var isSelected = false
     var isTaken = false
     var takenLabel = ""
+    var showsRing = false
     var onTap: ((String) -> Void)?
     var onFetch: ((String, String) -> Void)?
+    @Environment(\.appAccent) private var accent
 
     private var path: String? {
         cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty ? cell.thumbnailPath : nil
@@ -93,6 +99,13 @@ struct PhotoCellSquare: View {
                         .accessibilityLabel(takenLabel)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
+                } else if showsRing {
+                    PhotoSelectionDot(selected: false)
+                }
+            }
+            .overlay {
+                if isSelected, !isTaken, showsRing {
+                    Rectangle().strokeBorder(accent.fill, lineWidth: 3)
                 }
             }
             .overlay(alignment: .bottomTrailing) { PhotoKindLine(cell: cell, rung: PhotoKindLine.minimumRung) }

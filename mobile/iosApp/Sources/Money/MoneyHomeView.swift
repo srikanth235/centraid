@@ -214,7 +214,8 @@ struct MoneyHomeView: View {
                     CentraidRow(
                         title: spending.recurringLabel,
                         meta: spending.recurringMeta,
-                        identifier: "money-recurring"
+                        identifier: "money-recurring",
+                        divider: false
                     ) { open(spending.recurringRoute) }
                 }
             }
@@ -320,10 +321,13 @@ struct MoneyHomeView: View {
         case .more:
             OptionSheet(title: chrome.moreTitle) {
                 ForEach(Array(chrome.moreRows.enumerated()), id: \.offset) { _, row in
-                    MoneySheetRow(
+                    // THE KIT'S SHEET ROW, as the More board draws it: a tile, the verb and its
+                    // line, a chevron, padded inside the card.
+                    SheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
                         detail: row.meta,
+                        chevron: true,
                         identifier: "money-more-\(row.route.screen.replacingOccurrences(of: "money.", with: ""))"
                     ) {
                         // The sheet closes behind the page the row opens.

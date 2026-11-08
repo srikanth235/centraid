@@ -68,6 +68,8 @@ public fun PhotoCellsGrid(
     taken: Set<String> = emptySet(),
     /** What a taken cell says after its own label ("Already in this album"), Rust's words. */
     takenLabel: String = "",
+    /** A picker's cells all carry the empty ring and the chosen a frame (the board draws both). */
+    showsRing: Boolean = false,
     minimumCell: Int = 96,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
@@ -91,6 +93,7 @@ public fun PhotoCellsGrid(
                 isSelected = cell.photo_id in selected,
                 isTaken = cell.photo_id in taken,
                 takenLabel = takenLabel,
+                showsRing = showsRing,
                 onTap = onTap,
                 onFetch = onFetch,
             )
@@ -105,6 +108,7 @@ public fun PhotoCellSquare(
     isSelected: Boolean = false,
     isTaken: Boolean = false,
     takenLabel: String = "",
+    showsRing: Boolean = false,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
 ) {
@@ -138,6 +142,11 @@ public fun PhotoCellSquare(
             SelectionDot(selected = true, muted = true)
         } else if (isSelected) {
             SelectionDot(selected = true)
+        } else if (showsRing) {
+            SelectionDot(selected = false)
+        }
+        if (isSelected && !isTaken && showsRing) {
+            Box(Modifier.fillMaxSize().border(SELECTION_OUTLINE.dp, appAccent("photos").fill))
         }
         KindLine(cell, rung = TILE_KIND_MIN_RUNG)
     }

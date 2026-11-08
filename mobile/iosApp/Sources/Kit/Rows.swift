@@ -23,6 +23,9 @@ struct CentraidRow: View {
     var pendingLabel: String = KitWords.PENDING
     var accessibility: String = ""
     var identifier: String = ""
+    /// The row's own rule under it. A card that draws its rules BETWEEN rows (`KitHairline`) turns
+    /// this off, so the last row never trails a line past the card's corner and no rule doubles.
+    var divider: Bool = true
     var onTap: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
@@ -57,6 +60,7 @@ struct CentraidRow: View {
         pendingLabel: String = KitWords.PENDING,
         accessibility: String = "",
         identifier: String = "",
+        divider: Bool = true,
         onTap: (() -> Void)? = nil
     ) {
         self.title = title
@@ -70,6 +74,7 @@ struct CentraidRow: View {
         self.pendingLabel = pendingLabel
         self.accessibility = accessibility
         self.identifier = identifier
+        self.divider = divider
         self.onTap = onTap
     }
 
@@ -86,6 +91,14 @@ struct CentraidRow: View {
         .modifier(OptionalIdentifier(identifier: identifier))
     }
 
+    private var trailingText: some View {
+        Text(trailing)
+            .centraidType("smallStrong")
+            .monospacedDigit()
+            .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
+            .lineLimit(1)
+    }
+
     private var row: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -97,17 +110,22 @@ struct CentraidRow: View {
                     Text(pending ? (meta.isEmpty ? pendingLabel : "\(meta) · \(pendingLabel)") : meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
             Spacer(minLength: 8)
-            ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
-            if !trailing.isEmpty {
-                Text(trailing)
-                    .centraidType("smallStrong")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
-                    .lineLimit(1)
+            // THE TRAILING COLUMN, AS THE MONEY BOARDS DRAW IT: the figure with its state chip UNDER
+            // it, right-aligned; a chip alone stays beside the title's line.
+            if !trailing.isEmpty, !chips.isEmpty {
+                VStack(alignment: .trailing, spacing: 4) {
+                    trailingText
+                    HStack(spacing: 6) {
+                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                    }
+                }
+            } else {
+                ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                if !trailing.isEmpty { trailingText }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -123,10 +141,12 @@ struct CentraidRow: View {
             }
         }
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Surface.line)
-                .frame(height: CentraidGeometry.hairline)
-                .padding(.leading, CentraidGeometry.pageMargin)
+            if divider {
+                Rectangle()
+                    .fill(Surface.line)
+                    .frame(height: CentraidGeometry.hairline)
+                    .padding(.leading, CentraidGeometry.pageMargin)
+            }
         }
         .contentShape(Rectangle())
     }
@@ -394,7 +414,7 @@ struct KitHairline: View {
 
     var body: some View {
         Rectangle()
-            .fill(Theme.color("line", scheme))
+            .fill(Surface.line)
             .frame(height: CentraidGeometry.hairline)
             .padding(.leading, inset)
     }

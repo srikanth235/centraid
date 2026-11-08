@@ -314,7 +314,8 @@ struct MoneyRecurringView: View {
                                         trailing: MoneyWords.amount(row.amount),
                                         chips: row.chips,
                                         accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
-                                        identifier: "money-recurring-\(row.key)"
+                                        identifier: "money-recurring-\(row.key)",
+                                        divider: false
                                     )
                                 }
                             }

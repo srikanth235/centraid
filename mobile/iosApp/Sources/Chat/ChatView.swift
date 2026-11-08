@@ -599,7 +599,7 @@ private struct ChatDrawer: View {
                     .padding(.vertical, 8)
                     .overlay(alignment: .top) {
                         Rectangle()
-                            .fill(Theme.color("line", scheme))
+                            .fill(Surface.line)
                             .frame(height: CentraidGeometry.hairline)
                     }
                     .accessibilityIdentifier("chat-drawer-delete-all")

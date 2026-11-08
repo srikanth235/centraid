@@ -3,6 +3,7 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -121,10 +122,15 @@ public fun CentraidRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 } else if (meta.isNotEmpty()) {
-                    KitText(meta, KitType.Meta, softInk, maxLines = 1)
+                    KitText(meta, KitType.Meta, softInk, maxLines = 2)
                 }
             }
-            chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+            // THE MONEY BOARDS' TRAILING COLUMN: a figure with its state chip UNDER it; a chip
+            // alone stays beside the title.
+            val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
+            if (!chipUnderFigure) {
+                chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+            }
             if (trailing.isNotEmpty() || pending) {
                 // THE FIGURE: right-aligned, with its sub-label under it.
                 Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
@@ -137,6 +143,11 @@ public fun CentraidRow(
                             textAlign = TextAlign.End,
                             maxLines = 1,
                         )
+                    }
+                    if (chipUnderFigure) {
+                        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            chips.forEach { chip -> StatusChipView(chip) }
+                        }
                     }
                     val note = if (pending) pendingLabel else trailingNote
                     if (note.isNotEmpty()) {

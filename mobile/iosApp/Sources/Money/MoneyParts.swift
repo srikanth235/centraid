@@ -990,6 +990,8 @@ struct MoneyChevronRow: View {
                     Text(title)
                         .kitType(.row)
                         .fontWeight(mono ? .semibold : .regular)
+                        // A RULE'S PATTERN IS TYPED TEXT: the board sets it in a mono face.
+                        .monospaced(mono)
                         .foregroundStyle(Surface.ink)
                         .lineLimit(2)
                     if !meta.isEmpty {

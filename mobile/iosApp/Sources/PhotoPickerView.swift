@@ -50,6 +50,7 @@ struct PhotoPickerView: View {
                             selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
                             taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
                             takenLabel: data.takenLabel,
+                            showsRing: true,
                             onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
                         )
                         if data.canShowMore {

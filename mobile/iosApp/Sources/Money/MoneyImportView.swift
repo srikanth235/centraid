@@ -198,7 +198,8 @@ struct MoneyImportView: View {
                     trailing: line.hasAmount_p ? MoneyWords.amount(line.amount) : "",
                     chips: line.hasChip ? [line.chip] : [],
                     accessibility: MoneyWords.spoken(line.accessibilityLabel, line.hasAmount_p ? line.amount : nil),
-                    identifier: "money-import-\(statement.key)-\(line.key)"
+                    identifier: "money-import-\(statement.key)-\(line.key)",
+                    divider: false
                 )
             }
         }
