@@ -1450,6 +1450,22 @@
       "x": 2350,
       "y": 17400
     },
+    "SettingsDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Download settings",
+      "w": 390,
+      "x": 2820,
+      "y": 17400
+    },
+    "SettingsDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Download settings · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 17400
+    },
     "SettingsDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2095,6 +2111,7 @@
     "Trash.dc.html",
     "LockScreen.dc.html",
     "Settings.dc.html",
+    "SettingsDownload.dc.html",
     "EmptyReminders.dc.html",
     "FirstHome.dc.html",
     "PermissionPhotos.dc.html",
@@ -2189,6 +2206,7 @@
     "TrashDark.dc.html",
     "LockScreenDark.dc.html",
     "SettingsDark.dc.html",
+    "SettingsDownloadDark.dc.html",
     "EmptyRemindersDark.dc.html",
     "FirstHomeDark.dc.html",
     "PermissionPhotosDark.dc.html",

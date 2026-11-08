@@ -252,8 +252,10 @@ fn the_vault_row_opens_homes_switcher_and_steps_aside() {
             .sections
             .iter()
             .flat_map(|s| &s.rows)
-            .all(|row| { row.pressable == (row.id == "vaults") }),
-        "only the vault row is pressed rather than pushed"
+            .all(|row| {
+                row.pressable == matches!(row.id.as_str(), "vaults" | "download-settings")
+            }),
+        "only the vault and download rows are pressed rather than pushed"
     );
     // Home holds a roster to list: the lockup's own sheet needs one.
     let personal = wire::ShellVault {
@@ -335,13 +337,72 @@ fn the_board_rows_make_a_vault_and_name_the_download_rule() {
     assert_eq!(make.title, "Make a vault");
     assert_eq!(make.tile, "add");
     assert_eq!(make.route.as_ref().unwrap().screen, "words.make");
-    // Download settings shows the one rule (the default until the store is read) and opens
-    // the Backup page that changes it.
+    // Download settings shows the one rule (the default until the store is read) and opens its
+    // own sheet, not the Backup page.
     let download = &data.sections[1].rows[1];
     assert_eq!(download.title, "Download settings");
     assert_eq!(download.value, "Wi-Fi only");
     assert_eq!(download.tile, "neutral");
-    assert_eq!(download.route.as_ref().unwrap().screen, "backup.home");
+    assert!(download.route.is_none() && download.pressable);
+}
+
+fn sheet_event(d: &mut Driver, i: u64, kind: wire::settings_event::Kind) {
+    d.send(i, E::Settings(wire::SettingsEvent { kind: Some(kind) }));
+}
+
+#[test]
+fn download_settings_opens_a_sheet_of_the_one_rule_and_a_pick_keeps_it() {
+    use wire::settings_event::{Kind as S, RowPressed, TransferRuleChosen, TransferRulesClosed};
+    let (mut d, _home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    assert!(state(&d, i).transfer_sheet.is_none());
+
+    sheet_event(
+        &mut d,
+        i,
+        S::RowPressed(RowPressed {
+            id: "download-settings".into(),
+        }),
+    );
+    let sheet = state(&d, i).transfer_sheet.expect("the sheet is open");
+    assert_eq!(sheet.title, "Downloads");
+    let picked: Vec<&str> = sheet
+        .choices
+        .iter()
+        .filter(|choice| choice.picked)
+        .map(|choice| choice.stored.as_str())
+        .collect();
+    assert_eq!(picked, ["wifi-only"], "the default until the store says");
+    assert_eq!(sheet.choices.len(), 3);
+
+    // CLOSING WRITES NOTHING.
+    sheet_event(&mut d, i, S::TransferRulesClosed(TransferRulesClosed {}));
+    assert!(state(&d, i).transfer_sheet.is_none());
+
+    // A PICK IS ONE WRITE TO THE DEVICE STORE, and the sheet closes behind it.
+    sheet_event(
+        &mut d,
+        i,
+        S::RowPressed(RowPressed {
+            id: "download-settings".into(),
+        }),
+    );
+    let before = d.effects.len();
+    sheet_event(
+        &mut d,
+        i,
+        S::TransferRuleChosen(TransferRuleChosen {
+            stored: "manual".into(),
+        }),
+    );
+    assert!(state(&d, i).transfer_sheet.is_none());
+    assert!(
+        d.effects[before..].iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Secrets(batch)) if batch.ops.iter().any(|op| op.key == "transfer-rule" && op.value == b"manual")
+        )),
+        "the rule is written to the device store"
+    );
 }
 
 #[test]

@@ -136,7 +136,11 @@ private struct HomeRoot: View {
                 }
             )
         ) {
-            TransferRulesSheet(sheet: home.transferSheet, store: store)
+            TransferRulesSheet(
+                sheet: home.transferSheet,
+                onPick: { stored in store.sendHome(.transferRuleChosen(.with { $0.stored = stored })) },
+                onClose: { store.sendHome(.transferRulesClosed(.init())) }
+            )
         }
         // A REAL BINDING: dismissing shuts the sheet in Rust, which owns it.
         .sheet(

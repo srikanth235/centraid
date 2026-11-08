@@ -78,6 +78,28 @@ struct SettingsView: View {
         .onChange(of: state.finished) { _, finished in
             if finished { onBack() }
         }
+        // DOWNLOAD SETTINGS is a sheet of its own (Rust's `transfer_sheet`): the member's one
+        // transfer rule, the same three choices Home's gear draws. Dismissing it tells Rust.
+        .sheet(
+            isPresented: Binding(
+                get: { state.hasTransferSheet },
+                set: { open in
+                    if !open { send(Self.event { $0.kind = .transferRulesClosed(.init()) }) }
+                }
+            )
+        ) {
+            TransferRulesSheet(
+                sheet: state.transferSheet,
+                onPick: { stored in send(Self.event { $0.kind = .transferRuleChosen(.with { $0.stored = stored }) }) },
+                onClose: { send(Self.event { $0.kind = .transferRulesClosed(.init()) }) }
+            )
+        }
+    }
+
+    private static func event(_ build: (inout Centraid_Core_V1_SettingsEvent) -> Void) -> Centraid_Core_V1_SettingsEvent {
+        var event = Centraid_Core_V1_SettingsEvent()
+        build(&event)
+        return event
     }
 }
 
