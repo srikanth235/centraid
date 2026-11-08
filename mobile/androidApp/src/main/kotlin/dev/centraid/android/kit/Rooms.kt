@@ -78,6 +78,10 @@ public data class RoomAction(
     val iconKey: String,
     val label: String,
     val testTag: String = "room-action",
+    /** Drawn as the accent pill with the label in white (an editor's Save), not as an icon key. */
+    val pill: Boolean = false,
+    /** A pill that cannot be pressed yet is drawn quiet. */
+    val enabled: Boolean = true,
     val onPress: () -> Unit,
 )
 
@@ -359,7 +363,11 @@ public fun EditorRoom(
                 }
                 AutosaveStatus(status)
             }
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (trailing != null && trailing.pill) {
+                KitPillButton(trailing.label, trailing.onPress, testTag = trailing.testTag, enabled = trailing.enabled)
+            } else if (trailing != null) {
+                IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            }
         }
         Column(Modifier.weight(1f).fillMaxWidth(), content = content)
     }
@@ -420,6 +428,8 @@ public fun SheetRoom(
     swipeable: Boolean = true,
     secure: Boolean = false,
     expanded: Boolean = false,
+    /** A pill in the title row (a large sheet's Done), drawn quiet while it is not enabled. */
+    headerAction: SheetPrimary? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val canLeave by rememberUpdatedState(swipeable)
@@ -445,7 +455,17 @@ public fun SheetRoom(
                 .semantics { testTagsAsResourceId = true }
                 .testTag("sheet-room"),
         ) {
-            if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
+            if (headerAction != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoomTitle(title, Modifier.weight(1f))
+                    KitPillButton(headerAction.label, headerAction.onPress, testTag = headerAction.testTag, enabled = headerAction.enabled)
+                }
+            } else if (title.isNotEmpty()) {
+                RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
+            }
             content()
             StatusLine(status)
             if (primary != null || outlines.isNotEmpty()) {

@@ -75,12 +75,12 @@ pub struct Fold<'a> {
 /// The calendar's colour role by id: People's convention, so no view converts
 /// a wheel word. A calendar that stores `var(--c-<hue>)` gets that hue; one that
 /// stores nothing, or a colour the wheel cannot name, gets its id's own.
-pub(super) struct Hues<'a> {
+pub(in crate::agenda) struct Hues<'a> {
     stored: HashMap<&'a str, Option<&'a str>>,
 }
 
 impl<'a> Hues<'a> {
-    pub(super) fn of(calendars: &'a [wire::AgendaCalendar]) -> Self {
+    pub(in crate::agenda) fn of(calendars: &'a [wire::AgendaCalendar]) -> Self {
         Self {
             stored: calendars
                 .iter()
@@ -92,7 +92,7 @@ impl<'a> Hues<'a> {
     /// THE GRID'S COLOUR for a calendar (#1173): the list-palette token (`listBlue`)
     /// when the member chose one of the eight list colours, so a block, a chip and
     /// a dot read the colour the picker showed; else the wheel role of `hue`.
-    pub(super) fn grid_hue(&self, id: Option<&str>) -> String {
+    pub(in crate::agenda) fn grid_hue(&self, id: Option<&str>) -> String {
         let stored = id
             .and_then(|id| self.stored.get(id).copied().flatten())
             .map(str::trim);
@@ -464,7 +464,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                         .filter(|name| !name.trim().is_empty())
                         .cloned()
                         .unwrap_or_else(|| words::calendar_unnamed(locale)),
-                    hue_key: hues.hue(Some(&calendar.calendar_id)),
+                    hue_key: hues.grid_hue(Some(&calendar.calendar_id)),
                     color_key: centraid_design::list_color_key(
                         &calendar.calendar_id,
                         calendar.color.as_deref(),
@@ -728,7 +728,7 @@ fn event_row(
         title,
         time_label,
         meta: meta.join(META_SEPARATOR),
-        calendar_hue_key: hues.hue(event.calendar_id.as_deref()),
+        calendar_hue_key: hues.grid_hue(event.calendar_id.as_deref()),
         status: status as i32,
         status_label,
         accessibility_label,

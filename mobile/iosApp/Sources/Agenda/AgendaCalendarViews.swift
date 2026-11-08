@@ -51,7 +51,7 @@ enum AgendaGridMetrics {
 
 /// The hue key's colour: the party role Rust names for a calendar (`cTeal`, `cSlate`...), the
 /// same the rows' dots use; an unknown key is the neutral slate, never clear.
-private func agendaHue(_ key: String, _ scheme: ColorScheme) -> Color {
+func agendaHue(_ key: String, _ scheme: ColorScheme) -> Color {
     // A calendar the member coloured from the list palette arrives as its token (`listBlue`).
     if key.hasPrefix("list") { return AgendaPalette.token(key) }
     return Theme.color(KitHue.role(key) ?? "cSlate", scheme)

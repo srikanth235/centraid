@@ -66,6 +66,7 @@ import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.screens.agenda.agendaListColor
+import dev.centraid.android.screens.agenda.gridHue
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
@@ -671,7 +672,7 @@ private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
                 .width(2.dp)
                 .height(28.dp)
                 .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["xs"] ?: 0).dp))
-                .background(hueColor(row.calendar_hue_key)),
+                .background(gridHue(row.calendar_hue_key)),
         )
         Text(
             row.time_label,
@@ -804,7 +805,7 @@ private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit, onEdit: () -
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // THE CALENDAR'S COLOUR is a list-palette key; its own icon, when it has one, stands in for the dot.
-            val hue = agendaListColor(row.color_key) ?: hueColor(row.hue_key)
+            val hue = agendaListColor(row.color_key) ?: gridHue(row.hue_key)
             if (row.icon_key.isNotEmpty()) {
                 CentraidIcon(row.icon_key, tint = if (row.on) hue else centraidColor("textFaint"), size = 18.dp)
             } else {

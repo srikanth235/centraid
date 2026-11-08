@@ -43,6 +43,7 @@ use super::rule_words;
 use wire::screen_event::Kind as E;
 
 use super::attachments::Attachments;
+use super::home::Hues;
 use super::routes;
 use super::todo::rows::hue_role;
 use crate::catalog::{act, load};
@@ -65,8 +66,6 @@ pub const DECLINED: &str = "declined";
 const ANSWERS: [&str; 3] = [ACCEPTED, TENTATIVE, DECLINED];
 const NEEDS_ACTION: &str = "needs-action";
 const MIDNIGHT: &str = "00:00";
-/// The hue of an event on no calendar.
-const NO_CALENDAR_HUE: &str = "cSlate";
 const DAY: usize = 10;
 
 /// The registry factory.
@@ -893,17 +892,14 @@ pub fn person_hue(party_id: &str) -> String {
     hue_role(centraid_design::identity_hue_key(party_id))
 }
 
-/// A calendar's hue as a colour role: the stored hue when it is a wheel hue,
-/// else the id's own; an event on no calendar has the neutral one.
+/// A calendar's colour, THE ONE THE GRID DRAWS (#1173): `Hues::grid_hue`, so the picker, the
+/// More sheet, the event page and the grid's dots and blocks all read the same key (the list
+/// palette's token when the member chose one of its eight, else the wheel role). An event on no
+/// calendar has the neutral one.
 #[must_use]
 pub fn calendar_hue(calendar_id: Option<&str>, calendar: Option<&wire::AgendaCalendar>) -> String {
-    let Some(id) = calendar_id else {
-        return NO_CALENDAR_HUE.to_owned();
-    };
-    let key =
-        centraid_design::party_hue_key(id, calendar.and_then(|calendar| calendar.color.as_deref()))
-            .unwrap_or_else(|| centraid_design::identity_hue_key(id));
-    hue_role(key)
+    let own = calendar.map_or(&[][..], std::slice::from_ref);
+    Hues::of(own).grid_hue(calendar_id)
 }
 
 #[cfg(test)]
@@ -993,5 +989,27 @@ mod tests {
         };
         assert_eq!(denied.body, "Ask the owner of this vault for access.");
         assert_eq!(denied.receipt, "consent.revoked");
+    }
+    #[test]
+    fn the_event_page_the_picker_and_the_grid_name_a_calendars_colour_alike() {
+        let calendar = |color: Option<&str>| wire::AgendaCalendar {
+            calendar_id: "cal-1".to_owned(),
+            name: Some("Work".to_owned()),
+            color: color.map(str::to_owned),
+            icon: None,
+        };
+        // A colour chosen from the list palette is its token, as the grid draws it.
+        let blue = calendar(Some("blue"));
+        assert_eq!(calendar_hue(Some("cal-1"), Some(&blue)), "listBlue");
+        // A wheel colour keeps its role; a calendar that stored nothing keeps its id's own.
+        let teal = calendar(Some("var(--c-teal)"));
+        assert_eq!(calendar_hue(Some("cal-1"), Some(&teal)), "cTeal");
+        let bare = calendar(None);
+        assert_eq!(
+            calendar_hue(Some("cal-1"), Some(&bare)),
+            Hues::of(std::slice::from_ref(&bare)).grid_hue(Some("cal-1"))
+        );
+        // No calendar at all is the neutral one.
+        assert_eq!(calendar_hue(None, None), "cSlate");
     }
 }

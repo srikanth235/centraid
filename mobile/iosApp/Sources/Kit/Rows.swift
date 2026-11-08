@@ -149,7 +149,7 @@ private struct OptionalLabel: ViewModifier {
     }
 }
 
-private struct OptionalIdentifier: ViewModifier {
+struct OptionalIdentifier: ViewModifier {
     let identifier: String
     func body(content: Content) -> some View {
         if identifier.isEmpty { content } else { content.accessibilityIdentifier(identifier) }
@@ -213,24 +213,30 @@ struct SectionHeader: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
 
-    init(_ head: KitSectionHead, onVerb: (() -> Void)? = nil) {
+    /// A head the board sets in sentence case (Catch up's piles): the row rung in semibold, the
+    /// count in meta, instead of the 12pt capitals every other head wears.
+    var sentenceCase = false
+
+    init(_ head: KitSectionHead, sentenceCase: Bool = false, onVerb: (() -> Void)? = nil) {
         self.head = head
+        self.sentenceCase = sentenceCase
         self.onVerb = onVerb
     }
 
-    init(title: String, count: UInt32? = nil, verb: String = "", onVerb: (() -> Void)? = nil) {
-        self.init(KitSectionHead(title: title, count: count, verbLabel: verb), onVerb: onVerb)
+    init(title: String, count: UInt32? = nil, verb: String = "", sentenceCase: Bool = false, onVerb: (() -> Void)? = nil) {
+        self.init(KitSectionHead(title: title, count: count, verbLabel: verb), sentenceCase: sentenceCase, onVerb: onVerb)
     }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(head.title)
-                .kitType(.group)
+                .kitType(sentenceCase ? .row : .group)
+                .fontWeight(sentenceCase ? .semibold : nil)
                 .foregroundStyle(Surface.meta)
                 .accessibilityAddTraits(.isHeader)
             if let count = head.count {
                 Text("\(count)")
-                    .kitType(.group)
+                    .kitType(sentenceCase ? .meta : .group)
                     .foregroundStyle(Surface.meta)
             }
             Spacer(minLength: 0)

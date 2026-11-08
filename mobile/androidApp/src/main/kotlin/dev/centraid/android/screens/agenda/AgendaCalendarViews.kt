@@ -411,7 +411,7 @@ private fun StripDay(day: AgendaStripDay, modifier: Modifier, onEvent: (AgendaHo
 
 /** A calendar's colour in the grids: its list-palette token (`listBlue`) when the member chose one, else a party hue. */
 @Composable
-private fun gridHue(key: String): Color =
+internal fun gridHue(key: String): Color =
     (if (key.startsWith("list")) agendaTokenColor(key) else null) ?: hueColor(key)
 
 @Composable

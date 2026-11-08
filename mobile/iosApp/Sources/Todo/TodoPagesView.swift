@@ -379,7 +379,7 @@ struct TodoCatchUpView: View {
                                 EmptyStateView(catchUp.empty)
                             }
                             ForEach(catchUp.piles, id: \.key) { pile in
-                                SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel) {
+                                SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel, sentenceCase: true) {
                                     send(event { $0.completeAll = .with { $0.pile = pile.key } })
                                 }
                                 // A count rides in the head; any other meta is its own line.

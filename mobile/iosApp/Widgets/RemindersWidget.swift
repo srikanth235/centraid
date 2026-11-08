@@ -164,7 +164,8 @@ private struct RemindersRows: View {
     private func content(_ row: AgendaGlanceSnapshot.Reminders.Row) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .stroke(row.overdue ? WidgetPalette.red : WidgetPalette.agenda, lineWidth: 1.5)
+                // THE BOARD DRAWS EVERY CIRCLE IN AGENDA'S BLUE; only the date wears the red.
+                .stroke(WidgetPalette.agenda, lineWidth: 1.5)
                 .frame(width: 14, height: 14)
             Text(row.title)
                 .font(WidgetType.rowTitle)

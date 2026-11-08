@@ -13,7 +13,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import dev.centraid.android.kit.ChoiceRow
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,7 +45,6 @@ import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
@@ -72,7 +76,8 @@ internal fun AgendaEventScreen(
 ) {
     val chrome = state.chrome
     PushedPage(
-        title = chrome?.title.orEmpty(),
+        // THE EVENT'S OWN NAME IS THE LARGE TITLE (#1173): the bar carries only the chevron.
+        title = "",
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         status = state.status?.sentence.orEmpty(),
@@ -125,19 +130,34 @@ private fun EventBody(
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
-            Text(
+            KitText(
                 data.title,
-                style = centraidType("title"),
-                color = centraidColor(if (data.is_past) "textSoft" else "text"),
+                KitType.Title,
+                if (data.is_past) Surface.meta else Surface.ink,
                 modifier = Modifier.semantics { heading() },
             )
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            if (data.calendar_name.isNotEmpty()) {
+                Row(Modifier.padding(top = 4.dp).testTag("agenda-event-calendar"), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(gridHue(data.calendar_hue_key)))
+                    Text(
+                        data.calendar_name,
+                        style = centraidType("annotLabel"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
         }
-        if (data.calendar_name.isNotEmpty()) {
-            CentraidRow(title = data.calendar_name, hueKey = data.calendar_hue_key, testTag = "agenda-event-calendar")
+        // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
+        if (data.facts.isNotEmpty()) {
+            AgendaGroupCard(Modifier.testTag("agenda-event-facts")) {
+                data.facts.forEachIndexed { index, fact ->
+                    AgendaFactRow(fact.label, fact.detail, divider = index < data.facts.lastIndex)
+                }
+            }
         }
-        data.facts.forEach { FieldRow(key = it.label, value = it.detail) }
         if (data.call_uri.isNotEmpty() && data.call_label.isNotEmpty()) {
             OutlineButton(
                 label = data.call_label,
@@ -191,14 +211,16 @@ private fun EventBody(
         }
         if (data.guests.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.guest_heading))
-            data.guests.forEach { guest ->
-                CentraidRow(
-                    title = guest.name,
-                    meta = guest.reply_label,
-                    hueKey = guest.hue_key,
-                    a11y = guest.accessibility_label,
-                    testTag = "agenda-guest-${guest.party_id}",
-                )
+            AgendaGroupCard(Modifier.padding(top = 0.dp)) {
+                data.guests.forEach { guest ->
+                    CentraidRow(
+                        title = guest.name,
+                        meta = guest.reply_label,
+                        hueKey = guest.hue_key,
+                        a11y = guest.accessibility_label,
+                        testTag = "agenda-guest-${guest.party_id}",
+                    )
+                }
             }
         }
         // THE GUESTS OF A FOLLOWED CALENDAR'S EVENT (#1173): names and replies the phone's calendar holds.
@@ -224,13 +246,15 @@ private fun EventBody(
                 onOpen = onOpen,
             )
         }
-        Row(Modifier.padding(KitGeometry.GUTTER)) {
+        // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share the
+        // width, Cancel in the red outline.
+        ChoiceRow(Modifier.padding(KitGeometry.GUTTER)) {
             data.actions.forEach { action ->
                 OutlineButton(
                     label = action.label,
                     testTag = "agenda-action-${action.key}",
                     ink = if (!action.enabled) "textFaint" else if (action.destructive) "net" else "text",
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     // A BUTTON THAT OPENS A PAGE (Edit) carries its route; Cancel is an event.
                     val route = action.route
