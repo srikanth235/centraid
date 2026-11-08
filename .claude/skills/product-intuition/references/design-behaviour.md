@@ -24,7 +24,7 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 
 ## App roots
 
-**One way home.** The band holds the Home key, up to four places and the search key. Back chevrons appear only on pages you drill into. The shell band lists Home, Chat and Backup, never an installed app; every app is a tile on Home.
+**One way home.** The band holds the Home key, up to four places and the search key. Back chevrons appear only on pages you drill into. The shell band lists Home, Chat and Backup, never an installed app; every app is a tile on Home. A locked Locker keeps the whole band (Home and the plate of its places, dimmed with none lit, no search): a tap on a place starts the unlock and lands there once it opens.
 
 | Slot | Holds | Never |
 | --- | --- | --- |

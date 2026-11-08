@@ -335,7 +335,8 @@ struct BandKey: View {
     let iconKey: String
     let spoken: String
     let identifier: String
-    /// A key standing ALONE (a locked Locker has no plate and no search): glass has nothing to
+    /// A key standing ALONE (a page that ends with no plate and no search; a locked Locker keeps its
+    /// dimmed plate and is not one): glass has nothing to
     /// sit beside and over a flat page reads as a heavy ring, so it is the board's soft card
     /// disc with a faint hairline and a soft shadow.
     var flat: Bool = false
