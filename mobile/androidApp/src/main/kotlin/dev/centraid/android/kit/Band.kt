@@ -5,6 +5,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import dev.centraid.android.theme.centraidColor
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -323,10 +324,15 @@ public fun AppBand(
      */
     segments: List<BandSegment> = emptyList(),
     onSegment: (String) -> Unit = {},
+    /**
+     * The places are behind a lock (a locked Locker): drawn in the disabled ink with no place lit,
+     * and still pressable — a press is the member's way to start the unlock.
+     */
+    locked: Boolean = false,
 ) {
     var placesOpen by remember { mutableStateOf(false) }
     val folded = segments.isNotEmpty() && !placesOpen
-    val lit = tabs.indexOfFirst { it.selected }
+    val lit = if (locked) -1 else tabs.indexOfFirst { it.selected }
     val searchKey = LocalBandSearchKey.current
     val haptics = LocalHapticFeedback.current
     val first = remember { booleanArrayOf(true) }
@@ -382,7 +388,8 @@ public fun AppBand(
                     AppBandTabView(
                         iconKey = tab.iconKey,
                         label = tab.label,
-                        selected = tab.selected,
+                        selected = tab.selected && !locked,
+                        locked = locked,
                         testTag = "$app-band-${tab.key}",
                         onPress = {
                             placesOpen = false
@@ -518,7 +525,9 @@ private fun AppBandTabView(
     testTag: String,
     onPress: () -> Unit,
     modifier: Modifier = Modifier,
+    locked: Boolean = false,
 ) {
+    val ink = if (locked) centraidColor("textDisabled") else if (selected) Surface.ink else Surface.meta
     Column(
         modifier
             .fillMaxHeight()
@@ -536,7 +545,7 @@ private fun AppBandTabView(
             iconKey = iconKey,
             // Inactive is `textFaint`, as on the Home band: the lit mark is the
             // one ink shape in the strip.
-            tint = if (selected) Surface.ink else Surface.meta,
+            tint = ink,
             size = BandPolicy.BAND_ICON_SIZE.dp,
         )
         Text(
@@ -544,7 +553,7 @@ private fun AppBandTabView(
             // THE HELD PAIR: one rung, two weights, no reflow — and it holds at
             // every font scale (`control` scales elsewhere).
             style = centraidType(if (selected) "control" else "band", scales = false),
-            color = if (selected) Surface.ink else Surface.meta,
+            color = ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

@@ -55,7 +55,7 @@ struct LockerWallView: View {
                 if !wall.unlockLabel.isEmpty || !wall.wordsLabel.isEmpty {
                     KitChoiceStack {
                         if !wall.unlockLabel.isEmpty {
-                            KitInkButton(label: wall.unlockLabel) {
+                            KitInkButton(label: wall.unlockLabel, iconKey: wall.unlockIcon) {
                                 send(LockerWallEvents.make { $0.unlock = .init() })
                             }
                             .accessibilityIdentifier("locker-unlock")

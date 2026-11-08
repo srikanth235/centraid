@@ -180,7 +180,7 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
                 if (wall.unlock_label.isNotEmpty() || wall.words_label.isNotEmpty()) {
                     ChoiceStack(Modifier.padding(top = 20.dp)) {
                         if (wall.unlock_label.isNotEmpty()) {
-                            InkButton(label = wall.unlock_label, testTag = "locker-unlock", onPress = onUnlock)
+                            InkButton(label = wall.unlock_label, testTag = "locker-unlock", iconKey = wall.unlock_icon, onPress = onUnlock)
                         }
                         if (wall.words_label.isNotEmpty()) {
                             if (wall.unlock_label.isEmpty()) {
@@ -254,6 +254,37 @@ internal fun LockerHomeScreen(
 ) {
     SecureWindow(state.secure)
     val chrome = state.chrome
+    val wall = state.wall
+    if (wall != null) {
+        // A LOCKED LOCKER KEEPS ITS WHOLE BAND: Home, the plate of places dimmed, no search. A place
+        // pressed starts the unlock (as the button does) and lands there once it opens.
+        dev.centraid.android.kit.AppPlace(
+            app = "locker",
+            title = chrome?.title.orEmpty(),
+            band = if (state.band.isEmpty()) {
+                null
+            } else {
+                {
+                    AppBand(
+                        app = "locker",
+                        tabs = state.band.map {
+                            AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
+                        },
+                        onSelect = { key -> onEvent(LockerHomeEvent(band = LockerHomeEvent.BandPicked(key = key))) },
+                        onHome = onHome,
+                        locked = state.band_locked,
+                    )
+                }
+            },
+        ) {
+            LockerWallView(
+                wall,
+                onUnlock = { sendWall(LockerWallEvent(unlock = LockerWallEvent.UnlockTapped())) },
+                onWords = onWords,
+            )
+        }
+        return
+    }
     LockerCovered(state.wall, chrome?.title.orEmpty(), onHome, sendWall, onWords) {
         val data = state.data_
         val generating = state.destination == LockerDestination.LOCKER_DESTINATION_GENERATE

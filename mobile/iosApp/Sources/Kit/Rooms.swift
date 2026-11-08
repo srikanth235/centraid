@@ -657,6 +657,8 @@ struct KitInkButton: View {
     var destructive: Bool = false
     /// When non-empty, replaces the default `kit-primary` / `kit-destructive` id.
     var identifier: String = ""
+    /// A glyph before the label (the lock wall's face or fingerprint); empty for none.
+    var iconKey: String = ""
     let action: () -> Void
 
     @Environment(\.isEnabled) private var enabled
@@ -672,10 +674,16 @@ struct KitInkButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .kitType(.row)
-                .fontWeight(.semibold)
-                .foregroundStyle(ink)
+            HStack(spacing: 10) {
+                if !iconKey.isEmpty {
+                    CentraidIconView(iconKey: iconKey, tint: ink, size: 20)
+                        .accessibilityHidden(true)
+                }
+                Text(label)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ink)
+            }
                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                 .background {
                     if !destructive {

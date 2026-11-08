@@ -520,6 +520,8 @@ public fun InkButton(
     destructive: Boolean = false,
     testTag: String = "kit-ink-button",
     enabled: Boolean = true,
+    /** A glyph before the label (the lock wall's face or fingerprint); empty for none. */
+    iconKey: String = "",
     onPress: () -> Unit,
 ) {
     // THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label; a
@@ -551,15 +553,21 @@ public fun InkButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-            color = when {
-                !enabled -> meta
-                destructive -> red
-                else -> Color.White
-            },
-        )
+        val ink = when {
+            !enabled -> meta
+            destructive -> red
+            else -> Color.White
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (iconKey.isNotEmpty()) {
+                Box(Modifier.clearAndSetSemantics { }) { CentraidIcon(iconKey = iconKey, tint = ink, size = 20.dp) }
+            }
+            Text(
+                label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = ink,
+            )
+        }
     }
 }
 

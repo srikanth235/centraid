@@ -169,6 +169,9 @@ struct AppBand: View {
     /// back, and a pick of a place puts the control back.
     var segments: [BandSegment] = []
     var onSegment: (String) -> Void = { _ in }
+    /// The places are behind a lock (a locked Locker): drawn in the disabled ink with no place lit,
+    /// and still tappable — a tap is the member's way to start the unlock.
+    var locked: Bool = false
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -210,14 +213,15 @@ struct AppBand: View {
                 BandSegmented(segments: segments, onPick: onSegment)
             } else if !tabs.isEmpty || onMore != nil {
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
-            // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
-            // is a control that does nothing.
+            // AT ALL with no tabs: an empty capsule is a control that does nothing. (A locked
+            // Locker keeps its plate, dimmed: its places start the unlock.)
             HStack(spacing: BandMetrics.groupGutter) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
                         iconKey: tab.iconKey,
                         label: tab.label,
-                        selected: tab.selected,
+                        selected: tab.selected && !locked,
+                        locked: locked,
                         rule: rule,
                         identifier: "\(app)-band-\(tab.key.isEmpty ? tab.label.lowercased() : tab.key)",
                         onPress: {
@@ -384,6 +388,7 @@ private struct AppBandTab: View {
     let iconKey: String
     let label: String
     let selected: Bool
+    var locked: Bool = false
     let rule: Namespace.ID
     let identifier: String
     let onPress: () -> Void
@@ -391,14 +396,15 @@ private struct AppBandTab: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let ink = locked ? Theme.color("textDisabled", scheme) : (selected ? Surface.ink : Surface.meta)
         Button(action: onPress) {
             VStack(spacing: BandMetrics.labelGap) {
                 CentraidIconView(
                     iconKey: iconKey,
                     // Inactive is `textFaint`, as on the Home band: the mark
                     // recedes further than the word, so the lit tab's mark is
-                    // the one ink shape in the strip.
-                    tint: selected ? Surface.ink : Surface.meta,
+                    // the one ink shape in the strip. A locked band is all disabled ink.
+                    tint: ink,
                     size: BandMetrics.iconSize,
                     strokeWidth: CentraidGeometry.appMarkStroke
                 )
@@ -407,7 +413,7 @@ private struct AppBandTab: View {
                     // THE HELD PAIR: one rung, two weights, no reflow — and it
                     // holds at every text size (`control` scales elsewhere).
                     .centraidType(selected ? "control" : "band", scales: false)
-                    .foregroundStyle(selected ? Surface.ink : Surface.meta)
+                    .foregroundStyle(ink)
                     .lineLimit(1)
             }
             .padding(.top, BandMetrics.tabTop)

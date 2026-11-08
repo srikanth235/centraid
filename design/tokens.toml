@@ -613,6 +613,7 @@ colors = [
   { light = "#8E897F", text = "#5C5852", fill = "#5C5852", line = "#5C5852" },
   { light = "#8E8A84", fill = "#5F5B55" },
   { light = "#8FA6C4", ink = "#ABBDD3" },
+  { light = "#9C9C99", text = "#565654", ink = "#565654" },
   { light = "#A8398A", text = "#E573C3", fill = "#BB4C9C", line = "#E573C3" },
   { light = "#AFC1D9", ink = "#A9BCD6" },
   { light = "#BB365C", text = "#F76E8E", fill = "#CB4669", line = "#F76E8E" },

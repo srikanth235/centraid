@@ -221,7 +221,7 @@ impl Item {
 
     /// A session step answered LOCKED: idle ended it under this page.
     fn locked(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        match self.wall.expired(ctx) {
+        match self.wall.expired() {
             Change::Closed => self.wipe(ctx),
             _ => Vec::new(),
         }

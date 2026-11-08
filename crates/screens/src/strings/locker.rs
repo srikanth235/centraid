@@ -96,7 +96,6 @@ catalog! {
     plain fact_reveal = ("Reveal", "Reveal");
     plain fact_reveal_detail = ("One field at a time, for 30 seconds", "One field at a time, for 30 seconds");
     plain fact_session = ("Session", "Session");
-    plain fact_session_detail = ("Locks after 5 idle minutes", "Locks after 5 idle minutes");
     plain fields_head = ("Fields", "Fields");
     plain field_add = ("Add a field", "Add a field");
     plain field_address = ("Postal address", "Postal address");
@@ -205,7 +204,11 @@ catalog! {
     plain lock_body_lead = ("Items stay hidden until you unlock with", "Items stay hidden until you unlock with");
     plain lock_body_tail = (".", ".");
     plain lock_did_not_open = ("Locker did not open on this phone.", "Locker did not open on this phone.");
-    plain lock_expired = ("Locked after five minutes idle.", "Locked after five minutes idle.");
+    plain lock_idle_line = ("Locked after {span} idle.", "Locked after {span} idle.");
+    plain lock_idle_line_now = ("Locked as soon as you stop.", "Locked as soon as you stop.");
+    counted span_hours = ("{n} hour", "{n} hours");
+    counted span_minutes = ("{n} minute", "{n} minutes");
+    counted span_seconds = ("{n} second", "{n} seconds");
     plain lock_failed = ("Not recognised. Try again, or use the passcode.", "Not recognised. Try again, or use the passcode.");
     plain lock_failed_passcode = ("That did not unlock Locker. Try again.", "That did not unlock Locker. Try again.");
     plain lock_locked_out = ("Too many tries. Unlock the phone with its passcode, then try again.", "Too many tries. Unlock the phone with its passcode, then try again.");
@@ -366,7 +369,8 @@ catalog! {
     plain unlock_with = ("Unlock with", "Unlock with");
     plain unstar = ("Unstar", "Unstar");
     plain used_today = ("today", "today");
-    plain unlocked_status = ("Unlocked · locks after 5 idle minutes", "Unlocked · locks after 5 idle minutes");
+    plain unlocked_status = ("Unlocked · locks after {span} idle", "Unlocked · locks after {span} idle");
+    plain unlocked_status_now = ("Unlocked, and locks as soon as you stop", "Unlocked, and locks as soon as you stop");
     plain verification_code = ("Verification code", "Verification code");
     plain updated = ("Changed", "Changed");
     plain use_on_item = ("Put it on an item", "Put it on an item");

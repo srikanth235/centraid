@@ -47,6 +47,10 @@ message LockerWall {
   string accessibility_label = 7;
   // Set with `words_label`: the page the words control opens.
   optional Route words_route = 8;
+  // The glyph on the unlock control, by icon key: `ScanFace` for a phone that
+  // unlocks with a face, `Fingerprint` for a fingerprint; empty for none (a
+  // passcode, or a check not yet probed).
+  string unlock_icon = 9;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -192,7 +196,9 @@ message LockerHomeState {
     LockerHomeData data = 7;
   }
   Sheet sheet = 8;
-  // Four tabs in order; EMPTY while locked or denied.
+  // Four tabs in order; EMPTY while denied. A LOCKED Locker keeps the same band
+  // (`band_locked`): the places are drawn dimmed and a tap starts the unlock,
+  // then lands on that place.
   repeated LockerBandTab band = 9;
   LockerHomeChrome chrome = 10;
   LockerSearchField search = 11;
@@ -202,6 +208,8 @@ message LockerHomeState {
   reserved "filter";
   // A refusal or a note over the page.
   optional StatusLine status = 13;
+  // The wall is up and `band` is the places behind it: dimmed, still tappable.
+  bool band_locked = 14;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;

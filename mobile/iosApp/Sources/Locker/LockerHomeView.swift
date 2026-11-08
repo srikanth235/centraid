@@ -74,7 +74,7 @@ struct LockerHomeView: View {
         ) {
             AppBand(
                 app: "locker",
-                tabs: covered ? [] : state.band.map { tab in
+                tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
                         event: Data(tab.key.utf8),
@@ -87,6 +87,7 @@ struct LockerHomeView: View {
                     let key = String(decoding: picked, as: UTF8.self)
                     send(LockerHomeEvents.make { $0.band = .with { $0.key = key } })
                 },
+                locked: state.bandLocked,
                 onHome: onHome
             )
         } content: {

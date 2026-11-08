@@ -30,7 +30,8 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.unlock_label, "Unlock with your face");
-    assert!(wall.notice.is_empty(), "a cancel is not a failure");
+    // A CANCEL IS NOT A FAILURE: the wall says only the member's lock setting.
+    assert_eq!(wall.notice, "Locked after 5 minutes idle.");
     // The wall reads nothing: no content under it.
     assert!(home(&d, id).content.is_none() && !home(&d, id).secure);
 }
@@ -594,4 +595,79 @@ fn the_header_lock_key_covers_the_locker_and_says_its_words() {
     assert!(state.wall.is_some(), "the wall is back");
     assert!(!state.secure, "nothing is shown under the wall");
     assert!(state.content.is_none());
+}
+
+#[test]
+fn a_locked_locker_keeps_its_band_and_a_tapped_place_starts_the_unlock_and_lands_there() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    // THE SAME BAND AS AN OPEN LOCKER, dimmed: the places are there and flagged locked.
+    let state = home(&d, id);
+    assert!(state.band_locked && state.wall.is_some());
+    let keys: Vec<&str> = state.band.iter().map(|t| t.key.as_str()).collect();
+    assert_eq!(keys, ["items", "review", "generate", "more"]);
+
+    // A TAP ON A PLACE IS THE UNLOCK BUTTON: the same owner check goes up.
+    let asked = d.effects.len();
+    home_event(
+        &mut d,
+        id,
+        H::Band(wire::locker_home_event::BandPicked {
+            key: "review".into(),
+        }),
+    );
+    assert!(
+        d.effects[asked..].iter().any(|e| matches!(
+            e.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )),
+        "a place on the locked band asks the owner check"
+    );
+    assert_eq!(
+        wall_of(&d, id).unwrap().phase,
+        wire::locker_wall::Phase::Unlocking as i32
+    );
+    d.answer_effect(passed(wire::Biometry::Face));
+    let state = home(&d, id);
+    assert!(state.wall.is_none() && !state.band_locked);
+    assert_eq!(
+        state.destination,
+        wire::LockerDestination::Review as i32,
+        "the unlock lands on the place that was tapped"
+    );
+}
+
+#[test]
+fn a_cancelled_unlock_forgets_the_place_and_the_button_lands_on_items() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    home_event(
+        &mut d,
+        id,
+        H::Band(wire::locker_home_event::BandPicked {
+            key: "generate".into(),
+        }),
+    );
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    assert_eq!(
+        wall_of(&d, id).unwrap().phase,
+        wire::locker_wall::Phase::Locked as i32
+    );
+    d.send(
+        id,
+        E::LockerWall(wire::LockerWallEvent {
+            kind: Some(wire::locker_wall_event::Kind::Unlock(
+                wire::locker_wall_event::UnlockTapped {},
+            )),
+        }),
+    );
+    d.answer_effect(passed(wire::Biometry::Face));
+    assert_eq!(
+        home(&d, id).destination,
+        wire::LockerDestination::Items as i32
+    );
 }

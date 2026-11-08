@@ -89,6 +89,9 @@ pub struct Wall {
     /// the locked wall says them, and after an unlock they are what that unlock
     /// cleared, which the Locker's home says once.
     failed: Failed,
+    /// How long an unlocked session may sit idle, as the core last answered it;
+    /// `None` until it has.
+    idle_ms: Option<u64>,
 }
 
 /// The refused unlocks one session answer carried.
@@ -143,6 +146,7 @@ impl Default for Wall {
             asking: false,
             probing: false,
             failed: Failed::default(),
+            idle_ms: None,
         }
     }
 }
@@ -156,6 +160,12 @@ impl Wall {
     #[must_use]
     pub fn is_open(&self) -> bool {
         self.phase == Phase::Open
+    }
+
+    /// The owner check is up, or the core is opening the session.
+    #[must_use]
+    pub fn is_unlocking(&self) -> bool {
+        self.phase == Phase::Unlocking
     }
 
     fn session(
@@ -184,6 +194,7 @@ impl Wall {
     /// carries none (an unlock cleared them), and what that unlock cleared is
     /// kept for the home to say.
     fn see_failures(&mut self, answer: &wire::LockerSessionResponse) {
+        self.idle_ms = Some(answer.idle_timeout_ms);
         if !Self::open_state(answer) {
             self.failed = Failed::of(answer);
         }
@@ -254,7 +265,7 @@ impl Wall {
         self.see_failures(&answer);
         match (self.phase, Self::open_state(&answer)) {
             (Phase::Open, true) | (Phase::Unlocking, _) => Step::default(),
-            (Phase::Open, false) => self.lock(words::lock_expired(ctx.locale())),
+            (Phase::Open, false) => self.lock(),
             (_, true) => {
                 self.phase = Phase::Open;
                 Step::change(Change::Opened)
@@ -396,6 +407,7 @@ impl Wall {
                 self.notice.clear();
                 // WHAT THIS UNLOCK CLEARED (#1146): the refused ones, told once.
                 self.failed = Failed::of(&answer);
+                self.idle_ms = Some(answer.idle_timeout_ms);
                 Step {
                     // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED
                     // (R-ONBOARD-10): the core seals a Locker secret only while
@@ -459,19 +471,58 @@ impl Wall {
 
     /// A reveal (or any session step) answered LOCKED: idle ended the session
     /// under this screen.
-    pub fn expired(&mut self, ctx: &Ctx) -> Change {
+    pub fn expired(&mut self) -> Change {
         if self.phase == Phase::Open {
-            return self.lock(words::lock_expired(ctx.locale())).change;
+            return self.lock().change;
         }
         Change::None
     }
 
-    fn lock(&mut self, notice: String) -> Step {
+    /// Idle ended the session: the wall says the setting that did it, as it says
+    /// it for every locked wall.
+    fn lock(&mut self) -> Step {
         self.asking = false;
         self.phase = Phase::Locked;
         self.failed = Failed::default();
-        self.notice = notice;
+        self.notice.clear();
         Step::change(Change::Closed)
+    }
+
+    /// The member's lock setting as a span ("5 minutes"), or `None` when the
+    /// core has not said or the setting is "as soon as idle".
+    fn idle_span(&self, locale: Locale) -> Option<String> {
+        let ms = self.idle_ms.filter(|ms| *ms > 0)?;
+        let seconds = ms.div_ceil(1000);
+        Some(if seconds >= 3600 && seconds % 3600 == 0 {
+            words::span_hours(locale, seconds / 3600)
+        } else if seconds >= 60 && seconds % 60 == 0 {
+            words::span_minutes(locale, seconds / 60)
+        } else if seconds >= 60 {
+            words::span_minutes(locale, seconds.div_ceil(60))
+        } else {
+            words::span_seconds(locale, seconds)
+        })
+    }
+
+    /// "Locked after 5 minutes idle." — what the wall says of the member's lock
+    /// setting; empty before the core has answered.
+    #[must_use]
+    pub fn idle_line(&self, locale: Locale) -> String {
+        match (self.idle_ms, self.idle_span(locale)) {
+            (Some(0), _) => words::lock_idle_line_now(locale),
+            (_, Some(span)) => fill(&words::lock_idle_line(locale), &[("span", &span)]),
+            _ => String::new(),
+        }
+    }
+
+    /// "Unlocked · locks after 5 minutes idle" — the Locker's own status line.
+    #[must_use]
+    pub fn unlocked_line(&self, locale: Locale) -> String {
+        match (self.idle_ms, self.idle_span(locale)) {
+            (Some(0), _) => words::unlocked_status_now(locale),
+            (_, Some(span)) => fill(&words::unlocked_status(locale), &[("span", &span)]),
+            _ => String::new(),
+        }
     }
 
     // --- words ---------------------------------------------------------------
@@ -486,6 +537,15 @@ impl Wall {
             }
             wire::Biometry::Optic => words::method_optic(locale),
             _ => words::method_passcode(locale),
+        }
+    }
+
+    /// The glyph the unlock control wears: the biometry the phone has, by icon key.
+    fn unlock_icon(&self) -> &'static str {
+        match self.biometry {
+            wire::Biometry::Face => "ScanFace",
+            wire::Biometry::Fingerprint | wire::Biometry::Touch => "Fingerprint",
+            _ => "",
         }
     }
 
@@ -537,12 +597,17 @@ impl Wall {
                 words::lock_no_words_notice(locale)
             }
         } else if matches!(self.phase, Phase::Locked | Phase::Failed) {
-            [Some(self.notice.clone()), self.failures_line(locale)]
-                .into_iter()
-                .flatten()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")
+            // EVERY LOCKED WALL SAYS THE MEMBER'S LOCK SETTING; a failed one says why first.
+            [
+                Some(self.notice.clone()),
+                Some(self.idle_line(locale)),
+                self.failures_line(locale),
+            ]
+            .into_iter()
+            .flatten()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
         } else {
             String::new()
         };
@@ -556,11 +621,17 @@ impl Wall {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(". ");
+        let unlock_icon = if unlock_label.is_empty() {
+            String::new()
+        } else {
+            self.unlock_icon().to_owned()
+        };
         Some(wire::LockerWall {
             phase: phase as i32,
             title,
             body,
             unlock_label,
+            unlock_icon,
             notice,
             words_label: if unavailable && !self.keyed {
                 words::lock_no_words_action(locale)
@@ -576,3 +647,85 @@ impl Wall {
 
 /// How long a copied secret stays on the clipboard.
 pub const CLIPBOARD_LIFE: Duration = Duration::from_secs(30);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wall_with(idle_ms: Option<u64>) -> Wall {
+        Wall {
+            idle_ms,
+            ..Wall::default()
+        }
+    }
+
+    #[test]
+    fn the_wall_says_the_members_own_lock_setting() {
+        let en = Locale::En;
+        let cases = [
+            (None, ""),
+            (Some(0), "Locked as soon as you stop."),
+            (Some(30_000), "Locked after 30 seconds idle."),
+            (Some(60_000), "Locked after 1 minute idle."),
+            (Some(300_000), "Locked after 5 minutes idle."),
+            (Some(90_000), "Locked after 2 minutes idle."),
+            (Some(3_600_000), "Locked after 1 hour idle."),
+            (Some(7_200_000), "Locked after 2 hours idle."),
+        ];
+        for (idle, line) in cases {
+            assert_eq!(wall_with(idle).idle_line(en), line, "{idle:?}");
+        }
+        assert_eq!(
+            wall_with(Some(300_000)).unlocked_line(en),
+            "Unlocked · locks after 5 minutes idle"
+        );
+        assert_eq!(
+            wall_with(Some(0)).unlocked_line(en),
+            "Unlocked, and locks as soon as you stop"
+        );
+        assert_eq!(wall_with(None).unlocked_line(en), "");
+    }
+
+    #[test]
+    fn the_unlock_control_wears_the_glyph_of_the_phones_biometry() {
+        let en = Locale::En;
+        let cases = [
+            (wire::Biometry::Face, "ScanFace"),
+            (wire::Biometry::Fingerprint, "Fingerprint"),
+            (wire::Biometry::Touch, "Fingerprint"),
+            (wire::Biometry::Optic, ""),
+            (wire::Biometry::Passcode, ""),
+            (wire::Biometry::Unspecified, ""),
+        ];
+        for (biometry, icon) in cases {
+            let wall = Wall {
+                biometry,
+                ..Wall::default()
+            };
+            assert_eq!(wall.view(en).expect("a wall").unlock_icon, icon);
+        }
+        // NO CONTROL, NO GLYPH.
+        let unlocking = Wall {
+            biometry: wire::Biometry::Face,
+            phase: Phase::Unlocking,
+            ..Wall::default()
+        };
+        assert_eq!(unlocking.view(en).expect("a wall").unlock_icon, "");
+    }
+
+    #[test]
+    fn every_locked_phase_carries_the_setting_in_its_notice() {
+        let en = Locale::En;
+        for phase in [Phase::Locked, Phase::Failed] {
+            let mut wall = wall_with(Some(300_000));
+            wall.phase = phase;
+            wall.notice = if phase == Phase::Failed {
+                "That did not unlock Locker. Try again.".to_owned()
+            } else {
+                String::new()
+            };
+            let notice = wall.view(en).expect("a wall").notice;
+            assert!(notice.ends_with("Locked after 5 minutes idle."), "{notice}");
+        }
+    }
+}

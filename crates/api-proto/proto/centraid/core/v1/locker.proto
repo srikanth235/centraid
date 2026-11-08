@@ -459,6 +459,10 @@ message LockerSessionResponse {
   uint32 failed_unlocks = 10;
   string failed_unlock_local_day = 11;
   string failed_unlock_local_time = 12;
+  // HOW LONG AN UNLOCKED SESSION MAY SIT IDLE before it ends, on every answer:
+  // the wall and the Locker's facts say the member's real setting, not a fixed
+  // five minutes. Zero locks as soon as the phone is idle.
+  uint64 idle_timeout_ms = 13;
 }
 
 enum LockerSessionState {

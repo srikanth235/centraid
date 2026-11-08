@@ -895,7 +895,7 @@ mod tests {
         assert_eq!(tokens.brand["teal"], "#00AA98");
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
-        assert_eq!(tokens.icons.len(), 148);
+        assert_eq!(tokens.icons.len(), 150);
         assert_eq!(tokens.native.app.len(), 8);
     }
 
