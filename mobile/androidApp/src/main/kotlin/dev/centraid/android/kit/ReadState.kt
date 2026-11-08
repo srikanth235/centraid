@@ -289,6 +289,9 @@ public fun OutlineButton(
             .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
             .widthIn(min = 44.dp)
             .clip(shape)
+            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
+            // sits on a card fill, so the keys read as keys on the page.
+            .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
             .border(KitGeometry.HAIRLINE, edge, shape)
             .clickable(enabled = enabled, onClick = onPress)
             // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is

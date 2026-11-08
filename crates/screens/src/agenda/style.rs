@@ -297,19 +297,3 @@ fn style_color(key: &str) -> act::agenda::StyleContainerColor {
         _ => C::Blue,
     }
 }
-
-/// The events' hue role (the wheel's `cIndigo`) nearest to a list colour, for
-/// the places that still draw a calendar in the hue wheel: the same calendar
-/// reads as nearly the same colour on its events as on its dot.
-#[must_use]
-pub(super) fn wheel_of_list_color(key: &str) -> Option<&'static str> {
-    Some(match key {
-        "blue" | "indigo" => "indigo",
-        "mustard" => "ochre",
-        "violet" | "orchid" => "violet",
-        "petrol" => "teal",
-        "graphite" => "slate",
-        "raspberry" => "rose",
-        _ => return None,
-    })
-}

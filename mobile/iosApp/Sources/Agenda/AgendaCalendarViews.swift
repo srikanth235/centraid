@@ -827,7 +827,10 @@ private struct AgendaBlockView: View {
     private var handle: some View {
         // NO MARK ON THE BOARD: the foot is a grip by touch and by the accessibility action only.
         Color.clear
-            .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.handleHeight)
+            // A FIXED FOOT: `Color.clear` is greedy, and a `minHeight` let it fill the whole block, so the
+            // grip swallowed every tap meant for the block (a movable event never opened on a tap).
+            .frame(maxWidth: .infinity)
+            .frame(height: AgendaGridMetrics.handleHeight)
             .contentShape(Rectangle())
             .gesture(resizeGesture)
             .accessibilityElement(children: .ignore)

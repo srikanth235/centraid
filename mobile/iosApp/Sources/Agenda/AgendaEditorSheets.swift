@@ -131,7 +131,7 @@ struct AgendaCustomRepeatSheetView: View {
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background {
                             if choice.selected {
-                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous).fill(Surface.sheetCard)
+                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous).fill(Surface.card)
                             }
                         }
                         .contentShape(Rectangle())

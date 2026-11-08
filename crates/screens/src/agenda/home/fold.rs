@@ -46,7 +46,6 @@ use crate::agenda::style;
 use crate::agenda::todo::rows;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
-use centraid_vault::commands::container::LIST_COLORS;
 
 const CANCELLED: &str = "cancelled";
 const NEEDS_ACTION: &str = "needs-action";
@@ -89,35 +88,19 @@ impl<'a> Hues<'a> {
         }
     }
 
-    /// THE GRID'S COLOUR for a calendar (#1173): the list-palette token (`listBlue`)
-    /// when the member chose one of the eight list colours, so a block, a chip and
-    /// a dot read the colour the picker showed; else the wheel role of `hue`.
+    /// THE ONE COLOUR OF A CALENDAR (#1173): its list-palette token (`listBlue`), the colour
+    /// the member chose or else the id's own place on the palette (`list_color_key`), which is
+    /// also what the More sheet's mark wears. So a block, a chip, a dot, the picker and the
+    /// event page all read the same colour; an event on no calendar is the neutral one.
     pub(in crate::agenda) fn grid_hue(&self, id: Option<&str>) -> String {
-        let stored = id
-            .and_then(|id| self.stored.get(id).copied().flatten())
-            .map(str::trim);
-        match stored {
-            Some(key) if LIST_COLORS.contains(&key) => {
-                let mut chars = key.chars();
-                let first = chars.next().map(|c| c.to_ascii_uppercase());
-                format!("list{}{}", first.unwrap_or_default(), chars.as_str())
-            }
-            _ => self.hue(id),
-        }
-    }
-
-    pub(super) fn hue(&self, id: Option<&str>) -> String {
         let Some(id) = id else {
             return NO_CALENDAR_HUE.to_owned();
         };
-        let stored = self.stored.get(id).copied().flatten();
-        // A colour the member chose is a list key; events are still drawn on
-        // the wheel, so it lands on the nearest wheel hue.
-        let key = stored
-            .and_then(|stored| style::wheel_of_list_color(stored.trim()))
-            .or_else(|| centraid_design::party_hue_key(id, stored))
-            .unwrap_or_else(|| centraid_design::identity_hue_key(id));
-        rows::hue_role(key)
+        let stored = self.stored.get(id).copied().flatten().map(str::trim);
+        let key = centraid_design::list_color_key(id, stored);
+        let mut chars = key.chars();
+        let first = chars.next().map(|c| c.to_ascii_uppercase());
+        format!("list{}{}", first.unwrap_or_default(), chars.as_str())
     }
 }
 
@@ -1063,7 +1046,7 @@ mod tests {
     }
 
     #[test]
-    fn a_calendars_hue_is_its_stored_wheel_hue_else_its_ids_own_and_no_calendar_is_slate() {
+    fn a_calendars_hue_is_its_list_colour_else_its_ids_own_and_no_calendar_is_slate() {
         let mut open = timed("n", "No calendar", "2026-06-16T09:00", None);
         open.calendar_id = None;
         let data = fold_of(
@@ -1071,17 +1054,23 @@ mod tests {
             Dest::Schedule,
             &[],
         );
-        assert_eq!(data.calendars[0].hue_key, "cTeal");
+        assert_eq!(data.calendars[0].hue_key, "listPetrol");
+        let own = |id: &str, stored: &str| {
+            let key = centraid_design::list_color_key(id, Some(stored));
+            format!("list{}{}", key[..1].to_uppercase(), &key[1..])
+        };
         assert_eq!(
             data.calendars[1].hue_key,
-            rows::hue_role(centraid_design::identity_hue_key("cal-2")),
-            "steelblue is no hue the wheel names"
+            own("cal-2", "steelblue"),
+            "a colour the palette cannot name falls to the id's own"
         );
+        // THE MORE SHEET'S MARK AND THE GRID READ ONE COLOUR.
+        assert_eq!(data.calendars[0].hue_key, own("cal-1", "var(--c-teal)"),);
         let hues: Vec<&str> = rows_of(&data)
             .iter()
             .map(|row| row.calendar_hue_key.as_str())
             .collect();
-        assert_eq!(hues, ["cTeal", "cSlate"]);
+        assert_eq!(hues, ["listPetrol", "cSlate"]);
     }
 
     #[test]

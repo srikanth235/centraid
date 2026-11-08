@@ -1001,9 +1001,10 @@ mod tests {
         // A colour chosen from the list palette is its token, as the grid draws it.
         let blue = calendar(Some("blue"));
         assert_eq!(calendar_hue(Some("cal-1"), Some(&blue)), "listBlue");
-        // A wheel colour keeps its role; a calendar that stored nothing keeps its id's own.
+        // A wheel colour lands on its nearest list colour; a calendar that stored nothing keeps
+        // its id's own place on the palette, the one the More sheet's mark wears.
         let teal = calendar(Some("var(--c-teal)"));
-        assert_eq!(calendar_hue(Some("cal-1"), Some(&teal)), "cTeal");
+        assert_eq!(calendar_hue(Some("cal-1"), Some(&teal)), "listPetrol");
         let bare = calendar(None);
         assert_eq!(
             calendar_hue(Some("cal-1"), Some(&bare)),

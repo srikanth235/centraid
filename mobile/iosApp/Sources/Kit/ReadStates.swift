@@ -95,7 +95,7 @@ struct RowSkeleton: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .frame(minHeight: meta ? 56 : CentraidGeometry.targetMinCoarse)
                 Rectangle()
-                    .fill(Theme.color("line", scheme))
+                    .fill(Surface.line)
                     .frame(height: CentraidGeometry.hairline)
                     .padding(.leading, CentraidGeometry.pageMargin)
             }
@@ -375,6 +375,9 @@ struct KitOutlineButton: View {
             }
             .padding(.horizontal, inRow ? 8 : 16)
             .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a `KitChoiceRow` the
+            // outline sits on a card fill, so the three read as keys on the page.
+            .background(inRow ? Surface.card : Color.clear, in: Capsule())
             .overlay(
                 Capsule()
                     .strokeBorder(
