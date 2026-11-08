@@ -23,9 +23,11 @@
 //!
 //! ## A turn settles ONCE
 //!
-//! The core tells a turn's end twice (a terminal event and the answer to the `send` call) and
-//! which comes first is not promised. Both carry the turn id this screen minted, and a turn is
-//! settled only while it is the running one.
+//! The core tells a turn's end twice (a terminal event and the answer to the `send` call). The
+//! event is emitted BEFORE the turn is saved, so it only draws the words; the answer to `send`
+//! comes after the save, carries the thread, and is what ends the turn. A tap, a new chat or a
+//! reopen therefore never runs against a thread the core has not written. Both carry the turn id
+//! this screen minted, and a turn is settled only while it is the running one.
 //!
 //! ## A write the model proposes is a card, and a tap makes it (#1088)
 //!
