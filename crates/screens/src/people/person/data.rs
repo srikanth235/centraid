@@ -132,6 +132,14 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
                 is_new: false,
             }),
         ),
+        "document" => (
+            "docs.document",
+            wire::route::Args::DocsDocument(wire::DocsDocumentRoute {
+                document_id: item.id.clone(),
+                title: item.title.clone(),
+                parent: String::new(),
+            }),
+        ),
         _ => return None,
     };
     Some(wire::Route {
@@ -142,7 +150,7 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
 }
 
 /// IN YOUR VAULT (#1173): the rows, each in its own app's colour (the shell looks `app_key`
-/// up), in the core's order: events, tasks, notes. An item of a kind this build does not know
+/// up), in the core's order: events, tasks, notes, documents. An item of a kind this build does not know
 /// is not shown.
 #[must_use]
 pub fn vault(
@@ -159,10 +167,14 @@ pub fn vault(
             let (app_key, kind_label) = match item.kind.as_str() {
                 "event" => ("agenda", words::vault_kind_event(locale)),
                 "task" => ("agenda", words::vault_kind_task(locale)),
+                "document" => ("docs", words::vault_kind_document(locale)),
                 _ => ("notes", words::vault_kind_note(locale)),
             };
             let when = if item.kind == "event" {
                 event_when(locale, cycle, item)
+            } else if item.kind == "document" && !item.via.is_empty() {
+                // ON THE ITEM IT IS ATTACHED TO ("On Dinner with Maya").
+                fill(&words::vault_on(locale), &[("item", &item.via)])
             } else {
                 fold::when_logged(locale, &item.created_local_day, today)
             };
@@ -607,6 +619,11 @@ mod tests {
             item("event", "ev3", "Standing call"),
             item("task", "tk", "Send Ada the book"),
             item("note", "nt", "Loves chess, hates tea"),
+            wire::PeopleVaultItem {
+                via: "Lunch with Ada".to_owned(),
+                ..item("document", "dc", "Menu.pdf")
+            },
+            item("document", "dc2", "Passport scan"),
             item("diary", "xx", "A kind this build does not know"),
         ];
         sheet.vault_more = 3;
@@ -614,8 +631,8 @@ mod tests {
         let head = data.vault_head.unwrap();
         assert_eq!(head.title, "In your vault");
         assert_eq!(
-            head.count, 8,
-            "the 5 shown and the 3 more: an unknown kind is not shown"
+            head.count, 10,
+            "the 7 shown and the 3 more: an unknown kind is not shown"
         );
         assert_eq!(
             data.vault
@@ -632,6 +649,8 @@ mod tests {
                 ("agenda", "Event", "Standing call"),
                 ("agenda", "Task", "Send Ada the book"),
                 ("notes", "Note", "Loves chess, hates tea"),
+                ("docs", "Doc", "Menu.pdf"),
+                ("docs", "Doc", "Passport scan"),
             ]
         );
         assert_eq!(
@@ -644,6 +663,8 @@ mod tests {
                 "Fri 25 December · all day",
                 "",
                 "Wed 4 November",
+                "Wed 4 November",
+                "On Lunch with Ada",
                 "Wed 4 November"
             ]
         );
@@ -666,6 +687,7 @@ mod tests {
             item("event", "ev2", "Standing call"),
             item("task", "tk", "Send"),
             item("note", "nt", "Chess"),
+            item("document", "dc", "Menu.pdf"),
         ];
         let rows = person(EN, HourCycle::default(), &sheet, "2026-11-09").vault;
         let routed: Vec<(&str, String)> = rows
@@ -676,6 +698,7 @@ mod tests {
                     wire::route::Args::AgendaEvent(e) => format!("{}@{}", e.event_id, e.day),
                     wire::route::Args::TodoDetail(t) => t.task_id.clone(),
                     wire::route::Args::NotesEditor(n) => format!("{}:{}", n.note_id, n.is_new),
+                    wire::route::Args::DocsDocument(d) => format!("{}:{}", d.document_id, d.title),
                     other => panic!("{other:?}"),
                 };
                 (route.screen.as_str(), detail)
@@ -688,6 +711,7 @@ mod tests {
                 ("agenda.event", "ev2@2026-11-09".to_owned()),
                 ("agenda.task", "tk".to_owned()),
                 ("notes.editor", "nt:false".to_owned()),
+                ("docs.document", "dc:Menu.pdf".to_owned()),
             ],
             "a dated event opens on its day, a repeating one on today"
         );

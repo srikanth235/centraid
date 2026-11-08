@@ -37,7 +37,11 @@ impl World {
             Box::new(Arc::clone(&clock)),
             Box::new(SeededIds::new("people")),
         )
-        .expect("a vault");
+        .expect("a vault")
+        // Documents keep their bytes: a few tests attach one.
+        .with_blobs(Box::new(
+            centraid_vault::bytes::FsBlobStore::open(dir.join("bytes")).expect("a store"),
+        ));
         vault.found("Home", "Owner").expect("founded");
         Self {
             dir,
@@ -509,6 +513,78 @@ fn in_your_vault_is_what_else_is_about_the_person_events_tasks_notes_in_that_ord
             .collect::<Vec<_>>(),
         ["event", "event", "event", "task", "task", "task", "note"],
         "the kinds stay in order after the cap"
+    );
+}
+
+#[test]
+fn in_your_vault_lists_the_documents_attached_to_the_person_or_to_what_is_about_them() {
+    let w = World::new();
+    let ada = w.person("Ada", json!({}));
+    let bob = w.person("Bob", json!({}));
+    let links = |id: &str| {
+        let (data, denial) = w.read(|door| load_person(door, id).expect("reads"));
+        assert!(denial.is_none());
+        data.person.expect("a sheet").vault
+    };
+    let document = |title: &str| -> String {
+        w.ok(
+            "document.create_text",
+            json!({ "title": title, "body_text": title, "media_type": "text/plain" }),
+        )["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    // Nothing attached: nothing listed.
+    assert!(links(&ada).items.is_empty());
+
+    let lunch = w.ok(
+        "event.propose",
+        json!({ "title": "Lunch with Ada", "starts": "2026-11-07T12:30:00", "timing": "floating",
+                "attendees": [ada] }),
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let passport = document("Passport scan");
+    let menu = document("Menu");
+    let gone = document("Old receipt");
+    let elsewhere = document("Bob's lease");
+    let both = document("Both");
+    w.ok("edge.add", json!({ "from": ada, "rel": "attached", "to": passport }));
+    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": menu }));
+    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": gone }));
+    w.ok("entity.trash", json!({ "id": gone }));
+    w.ok("edge.add", json!({ "from": bob, "rel": "attached", "to": elsewhere }));
+    w.ok("edge.add", json!({ "from": ada, "rel": "attached", "to": both }));
+    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": both }));
+
+    let seen = links(&ada);
+    let docs: Vec<(&str, Option<&str>)> = seen
+        .items
+        .iter()
+        .filter(|item| item.kind.key() == "document")
+        .map(|item| (item.title.as_str(), item.via.as_deref()))
+        .collect();
+    assert_eq!(docs.len(), 3, "{docs:?}: a trashed one and Bob's are not Ada's");
+    assert!(docs.contains(&("Passport scan", None)), "attached to the person");
+    assert!(docs.contains(&("Menu", Some("Lunch with Ada"))), "attached to their event");
+    assert!(
+        docs.contains(&("Both", None)),
+        "attached to both: once, and the person's own"
+    );
+    assert_eq!(
+        seen.items.last().map(|item| item.kind.key()),
+        Some("document"),
+        "documents come after events, tasks and notes"
+    );
+    assert_eq!(
+        links(&bob)
+            .items
+            .iter()
+            .map(|item| item.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Bob's lease"]
     );
 }
 

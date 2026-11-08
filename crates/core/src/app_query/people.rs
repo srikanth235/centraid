@@ -507,6 +507,7 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                     title: item.title,
                     local_start,
                     all_day,
+                    via: item.via.unwrap_or_default(),
                 }
             })
             .collect(),
