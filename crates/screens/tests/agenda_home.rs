@@ -398,10 +398,11 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
     assert_eq!(state.destination, Dest::Day as i32);
     // NOT A DEVICE-CLOCK GUESS: the anchor is the day the answer names.
     assert_eq!(state.anchor_day, r.today());
-    let toolbar = state.toolbar.as_ref().unwrap();
-    assert!(toolbar.shown && toolbar.at_today);
-    assert_eq!(toolbar.range_label, "Today");
-    assert_eq!(toolbar.month_label, month_year(&r.today()));
+    // DAY HAS THE CALENDAR'S HEADER, not the day bar.
+    assert!(!state.toolbar.as_ref().unwrap().shown);
+    let header = state.calendar_header.as_ref().unwrap();
+    assert!(header.shown && !header.today_shown);
+    assert_eq!(header.month_label, civil::month_of(Locale::En, &r.today()));
     // THE BAND, computed: places only, then More (R-CHROME-5), no Search tab.
     assert_eq!(
         state
@@ -490,31 +491,30 @@ fn a_day_step_moves_the_window_and_the_bar_names_it() {
     r.settle();
     r.step(1);
     assert_eq!(r.state().anchor_day, r.day(1));
-    let toolbar = r.state().toolbar.clone().unwrap();
-    assert_eq!(toolbar.range_label, "Tomorrow");
-    assert!(!toolbar.at_today);
+    assert!(r.state().calendar_header.as_ref().unwrap().today_shown);
     assert_eq!(
         mine(r.data(), &["Zq Step"]),
         [format!("{}: Zq Step", r.state().anchor_day)]
     );
     r.step(-2);
-    assert_eq!(r.state().toolbar.as_ref().unwrap().range_label, "Yesterday");
     assert!(mine(r.data(), &["Zq Step"]).is_empty());
     r.step(3);
-    assert_eq!(
-        r.state().toolbar.as_ref().unwrap().range_label,
-        civil_long(&r.state().anchor_day)
-    );
-    // The bar's month follows the anchor across a month.
+    // The chip's month follows the anchor across a month.
     r.step(40);
-    let month = r.state().toolbar.as_ref().unwrap().month_label.clone();
-    assert_eq!(month, month_year(&r.state().anchor_day));
+    let month = r
+        .state()
+        .calendar_header
+        .as_ref()
+        .unwrap()
+        .month_label
+        .clone();
+    assert_eq!(month, civil::month_of(Locale::En, &r.state().anchor_day));
 
     // TODAY GOES BACK, and at today it is nothing.
     let before = r.driver.view(r.id).revision;
     r.send(H::Today(wire::agenda_home_event::TodayRequested {}));
     assert_eq!(r.state().anchor_day, r.today());
-    assert_eq!(r.state().toolbar.as_ref().unwrap().range_label, "Today");
+    assert!(!r.state().calendar_header.as_ref().unwrap().today_shown);
     let after = r.driver.view(r.id).revision;
     assert!(after > before);
     r.send(H::Today(wire::agenda_home_event::TodayRequested {}));
