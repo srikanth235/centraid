@@ -149,6 +149,9 @@ private struct WidgetBody: View {
     let tile: Centraid_Core_V1_HomeTile
     @Environment(\.colorScheme) private var scheme
     @Environment(\.homeLoadingLabel) private var loadingLabel
+    /// At the largest text the tile is a full-width card whose lines would clip: the title and
+    /// the note after it wrap, and "Edited today" is the line that goes first.
+    @Environment(\.isLargestText) private var largestText
 
     private var accent: Color { AppAccent(tile.appID).text }
     private var meta: Color { Surface.meta }
@@ -274,24 +277,26 @@ private struct WidgetBody: View {
     }
 
     /// A LINE (medium, one row): the app's name in its colour, then what is
-    /// newest in it and a word about it.
+    /// newest in it and a word about it. AT THE LARGEST TEXT the word about it is dropped first
+    /// and the titles wrap to two lines, so no line is cut mid-word.
     private func line(title: String, next: String = "", meta line2: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let titleLines = largestText ? 2 : 1
+        return VStack(alignment: .leading, spacing: 2) {
             Text(tile.name)
                 .centraidType("annotLabelOn")
                 .foregroundStyle(accent)
             Text(title)
                 .centraidType("annotLabel")
                 .foregroundStyle(ink)
-                .lineLimit(1)
+                .lineLimit(titleLines)
             // THE NOTE AFTER IT (Notes): a new vault's two starter notes both show.
             if !next.isEmpty {
                 Text(next)
                     .centraidType("annotLabel")
                     .foregroundStyle(ink)
-                    .lineLimit(1)
+                    .lineLimit(titleLines)
             }
-            if !line2.isEmpty {
+            if !line2.isEmpty, !largestText {
                 Text(line2)
                     .centraidType("annotLabel")
                     .foregroundStyle(meta)

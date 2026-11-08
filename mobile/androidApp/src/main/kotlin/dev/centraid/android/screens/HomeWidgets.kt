@@ -296,15 +296,21 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
     }
 }
 
-/** A LINE (medium, one row): the app's name in its colour, what is newest, a word about it. */
+/**
+ * A LINE (medium, one row): the app's name in its colour, what is newest, a word about it. AT THE
+ * LARGEST TEXT the word about it is dropped first and the titles wrap to two lines, so no line is
+ * cut mid-word.
+ */
 @Composable
 private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Modifier, next: String = "") {
+    val largest = rememberLargestText()
+    val titleLines = if (largest) 2 else 1
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         WText(tile.name, appAccent(tile.app_id).text, strong = true)
-        WText(title, ink())
+        WText(title, ink(), maxLines = titleLines)
         // THE NOTE AFTER IT (Notes): a new vault's two starter notes both show.
-        if (next.isNotEmpty()) WText(next, ink())
-        if (line.isNotEmpty()) WText(line, meta())
+        if (next.isNotEmpty()) WText(next, ink(), maxLines = titleLines)
+        if (line.isNotEmpty() && !largest) WText(line, meta())
     }
 }
 
