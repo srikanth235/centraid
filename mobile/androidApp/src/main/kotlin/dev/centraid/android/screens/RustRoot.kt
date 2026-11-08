@@ -247,6 +247,8 @@ internal class RustRoot(
                         made?.open_route?.let(::push)
                     },
                     onClose = { closed = sentence },
+                    leadingIcon = if (made?.running == true) "" else "Check",
+                    accentApp = made?.open_route?.screen.orEmpty().substringBefore('.'),
                 )
             }
         }

@@ -51,7 +51,7 @@ pub fn label(locale: Locale, metric: Metric) -> String {
     }
 }
 
-/// A figure and its unit word, apart: `"8,412" ""`, `"7 h 12 m" ""`,
+/// A figure and its unit word, apart: `"8,412" ""`, `"7 h 12 min" ""`,
 /// `"412" "kcal"`, `"157.4" "lb"`.
 #[must_use]
 pub fn figure(locale: Locale, metric: Metric, value: f64, units: Units) -> (String, String) {
@@ -79,7 +79,7 @@ pub fn phrase(locale: Locale, metric: Metric, value: f64, units: Units) -> Strin
     }
 }
 
-/// Minutes asleep as `7 h 12 m`, or `48 m`.
+/// Minutes asleep as `7 h 12 min`, or `48 min`.
 #[must_use]
 pub fn duration(locale: Locale, minutes: f64) -> String {
     let total = round(minutes).max(0);
@@ -433,7 +433,7 @@ mod tests {
             figure(EN, Metric::Steps, 8_412.4, m),
             ("8,412".into(), String::new())
         );
-        assert_eq!(figure(EN, Metric::Sleep, 432.0, m).0, "7 h 12 m");
+        assert_eq!(figure(EN, Metric::Sleep, 432.0, m).0, "7 h 12 min");
         assert_eq!(
             figure(EN, Metric::Energy, 412.0, m),
             ("412".into(), "kcal".into())
@@ -446,7 +446,7 @@ mod tests {
             figure(EN, Metric::Weight, 71.4, Units::Imperial),
             ("157.4".into(), "lb".into())
         );
-        assert_eq!(duration(EN, 48.0), "48 m");
+        assert_eq!(duration(EN, 48.0), "48 min");
     }
 
     #[test]

@@ -1,6 +1,9 @@
 package dev.centraid.android.screens.docs
 
 import dev.centraid.android.kit.SearchAskRow
+import dev.centraid.android.kit.Surface
+import dev.centraid.design.CentraidScale
+import dev.centraid.android.kit.appAccent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -783,23 +786,43 @@ internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersions
                 EmptyStateView(empty, onAction = null)
                 return@ReadStateView
             }
+            // THE BOARD (DocVersions): the versions in one white card, Restore in the app's colour.
             LazyColumn(Modifier.fillMaxSize()) {
-                items(data.versions, key = { "v-" + it.key }) { version ->
-                    CentraidRow(
-                        title = version.label,
-                        meta = version.meta,
-                        // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
-                        testTag = "docs-version-${version.key}",
-                        accessory = if (version.restore_label.isNotEmpty()) {
-                            {
-                                OutlineButton(label = version.restore_label, testTag = "docs-version-restore-${version.key}") {
-                                    onEvent(DocsVersionsEvent(restored = DocsVersionsEvent.Restored(key = version.key)))
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                    )
+                item {
+                    Column(
+                        Modifier
+                            .padding(horizontal = KitGeometry.GUTTER)
+                            .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                            .background(Surface.card),
+                    ) {
+                        data.versions.forEach { version ->
+                            CentraidRow(
+                                title = version.label,
+                                meta = version.meta,
+                                // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
+                                testTag = "docs-version-${version.key}",
+                                accessory = if (version.restore_label.isNotEmpty()) {
+                                    {
+                                        Text(
+                                            version.restore_label,
+                                            style = centraidType("annotLabelOn"),
+                                            color = appAccent().text,
+                                            modifier = Modifier
+                                                .heightIn(min = KitGeometry.ROW_MIN)
+                                                .clickable {
+                                                    onEvent(DocsVersionsEvent(restored = DocsVersionsEvent.Restored(key = version.key)))
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 12.dp)
+                                                .testTag("docs-version-restore-${version.key}")
+                                                .semantics { role = Role.Button },
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -693,3 +693,17 @@ struct KitInkButton: View {
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)
     }
 }
+
+extension View {
+    /// A PAGE THAT SCROLLS UNDER GLASS KEYS WITH CONTENT OF ITS OWN (a hero's round keys) takes a
+    /// hard top edge on iOS 26: the content stops at the bar's edge instead of showing through the
+    /// glass behind the back and Edit keys. Earlier systems draw no such edge, so nothing changes.
+    @ViewBuilder
+    func hardTopScrollEdge() -> some View {
+        if #available(iOS 26, *) {
+            scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
+    }
+}

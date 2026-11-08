@@ -139,7 +139,7 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
     let sleep = &today_data.metrics[0];
     assert_eq!(
         (sleep.value.as_str(), sleep.when_label.as_str()),
-        ("7 h 12 m", "Last night")
+        ("7 h 12 min", "Last night")
     );
     // Pinned order is fixed: the first two cards are wide (with a sparkline), the rest compact
     // and without one.

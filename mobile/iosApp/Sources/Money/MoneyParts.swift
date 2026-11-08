@@ -756,6 +756,8 @@ struct MoneySection: View {
 struct MoneyNote: View {
     let text: String
     var ink: String = "textSoft"
+    /// Centred under a button it explains (the import's "Nothing is saved until you import").
+    var centered: Bool = false
 
     @Environment(\.moneyInset) private var inset
 
@@ -764,7 +766,8 @@ struct MoneyNote: View {
             Text(text)
                 .kitType(.meta)
                 .foregroundStyle(ink == "net" ? StateColor.red.text : Surface.meta)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(centered ? .center : .leading)
+                .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
                 .padding(.horizontal, inset + 4)
                 .padding(.vertical, 6)
         }

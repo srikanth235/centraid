@@ -84,6 +84,9 @@ final class ScreenStore: ObservableObject {
     private var running: Set<UInt64> = []
     /// The `words.make` instances whose made vault the made-vault imports were told of.
     private var madeTold: Set<UInt64> = []
+    /// The instances the SHELL popped (a Cancel or a back): a `words.make` the core closed
+    /// instead was closed by the vault it made coming to the front.
+    private var shellPopped: Set<UInt64> = []
 
     init(core: any ScreenCore) {
         self.core = core
@@ -264,6 +267,7 @@ final class ScreenStore: ObservableObject {
     /// The shell popped a screen it opened (a back control or a swipe); Rust drops it.
     func popped(tab: String, instance: UInt64) {
         claimed.remove(instance)
+        shellPopped.insert(instance)
         var popped = Centraid_Core_V1_NavPopped()
         popped.tab = tab
         popped.instance = instance
@@ -321,6 +325,15 @@ final class ScreenStore: ObservableObject {
             navigation = update.navigation
         }
         for id in update.closed {
+            // A VAULT MADE IS A VAULT IN FRONT, AND THE CORE CLOSES EVERY SCREEN FOR IT: the
+            // `words.make` page goes with its `finished` view undelivered (the quiet make never
+            // shows one at all). A make page the core closed, which the shell did not pop, is the
+            // made vault the imports are told of.
+            if case .wordsMake? = views[id]?.kind, !shellPopped.contains(id), madeTold.insert(id).inserted {
+                var made = Centraid_Core_V1_ImportsMadeEvent()
+                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
+                sendRoot(RustScreens.madeTab, .importsMade(made))
+            }
             closed.insert(id)
             views[id] = nil
             queues[id] = nil

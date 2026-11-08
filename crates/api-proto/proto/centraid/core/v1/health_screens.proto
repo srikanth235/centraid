@@ -442,6 +442,8 @@ message HealthWorkoutData {
   string foot = 5;
   // The workout is no longer in the vault.
   optional EmptyState gone = 6;
+  // The kind's mark, for the chip over the title (#1173): the same one its row draws.
+  string kind_icon_key = 7;
 }
 
 message HealthWorkoutEvent {

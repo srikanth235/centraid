@@ -25,7 +25,7 @@ struct HealthConnectView: View {
 
     var body: some View {
         let state = state
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
             EmptyView()
         } content: {
             ScrollView {

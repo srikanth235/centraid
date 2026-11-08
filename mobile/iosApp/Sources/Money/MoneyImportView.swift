@@ -109,12 +109,14 @@ struct MoneyImportView: View {
                     send(event { $0.publish = .init() })
                 }
                 if !plan.publishNote.isEmpty {
-                    MoneyNote(text: plan.publishNote)
+                    MoneyNote(text: plan.publishNote, centered: true)
                 }
+                // THE BOARD'S "START OVER" IS A CENTRED LINK, not a second button.
                 if !plan.discardLabel.isEmpty {
-                    MoneyQuietButton(label: plan.discardLabel, identifier: "money-import-discard") {
+                    KitLink(label: plan.discardLabel, identifier: "money-import-discard") {
                         send(event { $0.discard = .init() })
                     }
+                    .frame(maxWidth: .infinity)
                 }
             }
         } else if !plan.discardLabel.isEmpty {

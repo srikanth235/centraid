@@ -25,6 +25,37 @@ struct ShellBanner: View {
         return line
     }
 
+    /// THE CHIP'S WORDS DO NOT SHRINK: when the chip and the verb do not fit one line the verb
+    /// goes under it, never past the edge.
+    @ViewBuilder
+    private func remindersRow(_ line: Centraid_Core_V1_ImportsMadeState) -> some View {
+        let chip = KitChip(
+            label: line.completedLabel,
+            selected: includeCompleted,
+            identifier: "import-completed-toggle"
+        ) {
+            includeCompleted.toggle()
+        }
+        let verb = KitLink(label: line.remindersLabel, identifier: "import-reminders") {
+            var request = Centraid_Core_V1_ImportsMadeEvent()
+            request.remindersRequested = .with { $0.includeCompleted = includeCompleted }
+            store.sendRoot(RustScreens.madeTab, .importsMade(request))
+        }
+        let hasChip = !line.completedLabel.isEmpty
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                if hasChip { chip }
+                Spacer(minLength: 0)
+                verb
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                if hasChip { chip }
+                verb
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var body: some View {
         let line = line
         VStack(spacing: 0) {
@@ -40,29 +71,16 @@ struct ShellBanner: View {
                         },
                         closeLabel: line.running ? "" : KitWords.DISMISS,
                         onClose: { shell.putImportLineAway(line.summary) },
-                        identifier: "import"
+                        identifier: "import",
+                        leadingIcon: line.running ? "" : "Check"
                     )
+                    // THE ACTION WEARS THE COLOUR OF THE APP IT OPENS ("Open People" is People's).
+                    .environment(\.appAccent, AppAccent(line.hasOpenRoute ? String(line.openRoute.screen.split(separator: ".").first ?? "") : ""))
                     // THE REMINDERS IMPORT (iOS), offered once the made vault's imports are over:
                     // the option and the verb are Rust's words, the tap asks the OS and imports.
                     if !line.running, !line.remindersLabel.isEmpty {
-                        HStack(spacing: 12) {
-                            if !line.completedLabel.isEmpty {
-                                KitChip(
-                                    label: line.completedLabel,
-                                    selected: includeCompleted,
-                                    identifier: "import-completed-toggle"
-                                ) {
-                                    includeCompleted.toggle()
-                                }
-                            }
-                            Spacer(minLength: 0)
-                            KitLink(label: line.remindersLabel, identifier: "import-reminders") {
-                                var request = Centraid_Core_V1_ImportsMadeEvent()
-                                request.remindersRequested = .with { $0.includeCompleted = includeCompleted }
-                                store.sendRoot(RustScreens.madeTab, .importsMade(request))
-                            }
-                        }
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        remindersRow(line)
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
                     }
                 }
                 .background(Theme.color("bg", scheme))

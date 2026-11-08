@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -155,7 +156,25 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
                     LazyColumn(Modifier.testTag("health-workout-page")) {
                         item(key = "head") {
                             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 4.dp)) {
-                                KitText(data.kind_label, KitType.Group, appAccent("health").text)
+                                // THE KIND IS A CHIP (HealthWorkout): the kind's mark and word on the app's pale tile.
+                                Row(
+                                    Modifier
+                                        .padding(bottom = 6.dp)
+                                        .clip(CircleShape)
+                                        .background(appAccent("health").tile)
+                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    if (data.kind_icon_key.isNotEmpty()) {
+                                        CentraidIcon(iconKey = data.kind_icon_key, tint = appAccent("health").text, size = 14.dp)
+                                    }
+                                    Text(
+                                        data.kind_label,
+                                        style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                                        color = appAccent("health").text,
+                                    )
+                                }
                                 KitText(data.title, KitType.Title, Surface.ink, Modifier.semantics { heading() })
                                 KitText(data.when_label, KitType.Meta, Surface.meta)
                             }

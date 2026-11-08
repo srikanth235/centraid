@@ -123,6 +123,7 @@ impl WorkoutPage {
         .join(" ");
         wire::HealthWorkoutData {
             kind_label: figures::kind_word(locale, &row.kind_key),
+            kind_icon_key: figures::kind_icon(&row.kind_key).to_owned(),
             title: figures::title(
                 locale,
                 &row.kind_key,

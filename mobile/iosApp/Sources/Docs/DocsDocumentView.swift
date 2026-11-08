@@ -451,6 +451,7 @@ struct DocsVersionsView: View {
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     static func event(_ build: (inout Centraid_Core_V1_DocsVersionsEvent) -> Void) -> Centraid_Core_V1_DocsVersionsEvent {
         var event = Centraid_Core_V1_DocsVersionsEvent()
@@ -469,7 +470,8 @@ struct DocsVersionsView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
+        // THE BOARD (DocVersions): the title large in the page, the versions in one white card.
+        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack, showsTitle: true) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -484,7 +486,8 @@ struct DocsVersionsView: View {
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(data.versions, id: \.key) { version in
+                                ForEach(Array(data.versions.enumerated()), id: \.element.key) { index, version in
+                                    if index > 0 { KitHairline().padding(.leading, 16) }
                                     HStack(spacing: 8) {
                                         // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
                                         CentraidRow(title: version.label, meta: version.meta)
@@ -492,6 +495,7 @@ struct DocsVersionsView: View {
                                             KitLink(
                                                 label: version.restoreLabel,
                                                 dense: true,
+                                                tint: accent.text,
                                                 identifier: "docs-version-restore-\(version.key)"
                                             ) {
                                                 send(Self.event { $0.restored = .with { $0.key = version.key } })
@@ -501,6 +505,8 @@ struct DocsVersionsView: View {
                                     .padding(.trailing, 8)
                                 }
                             }
+                            .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
                             .padding(.bottom, 16)
                         }
                         .refreshable { send(Self.event { $0.refreshed = .init() }) }

@@ -102,7 +102,35 @@ internal fun HealthSection(title: String, note: String = "") {
 @Composable
 private fun HealthFigureText(value: String, unit: String, size: Int, unitColor: Color = Surface.meta) {
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(value, style = kitTextStyle(KitType.Row).copy(fontSize = size.sp, fontWeight = FontWeight.Bold), color = Surface.ink)
+        // A FIGURE THAT CARRIES ITS OWN UNITS ("7 h 12 min", the core's words): the numbers in the
+        // figure's weight, every run of letters in the small meta unit, as the board draws it.
+        val ink = Surface.ink
+        val meta = Surface.meta
+        val unitSize = kitTextStyle(KitType.Meta).fontSize
+        Text(
+            buildAnnotatedString {
+                var run = StringBuilder()
+                var isUnit = false
+                fun flush() {
+                    if (run.isEmpty()) return
+                    if (isUnit) {
+                        withStyle(SpanStyle(fontSize = unitSize, fontWeight = FontWeight.Normal, color = meta)) { append(run.toString()) }
+                    } else {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = ink)) { append(run.toString()) }
+                    }
+                    run = StringBuilder()
+                }
+                for (ch in value) {
+                    val u = ch.isLetter() || ch == ' '
+                    if (u != isUnit) flush()
+                    isUnit = u
+                    run.append(ch)
+                }
+                flush()
+            },
+            style = kitTextStyle(KitType.Row).copy(fontSize = size.sp, fontWeight = FontWeight.Bold),
+            color = Surface.ink,
+        )
         if (unit.isNotEmpty()) KitText(unit, KitType.Meta, unitColor, Modifier.padding(bottom = 2.dp))
     }
 }
@@ -295,6 +323,9 @@ internal fun HealthChart(data: HealthMetricData) {
     val bars: List<HealthChartBar> = data.bars
     var scrubbed by remember(bars.size) { mutableStateOf<Int?>(null) }
     val radius = RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp)
+    // THE TYPICAL'S WORD HAS A GUTTER OF ITS OWN (HealthMetric): at the line's end, past the last
+    // bar, never over it.
+    val gutter = if (data.has_typical && data.typical_label.isNotEmpty()) 52.dp else 0.dp
     Column(
         Modifier
             .fillMaxWidth()
@@ -309,7 +340,7 @@ internal fun HealthChart(data: HealthMetricData) {
                 .pointerInput(bars.size) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
-                        val slot = size.width / bars.size.coerceAtLeast(1).toFloat()
+                        val slot = (size.width - gutter.toPx()) / bars.size.coerceAtLeast(1).toFloat()
                         fun indexOf(x: Float) = (x / slot).toInt().coerceIn(0, (bars.size - 1).coerceAtLeast(0))
                         scrubbed = indexOf(down.position.x)
                         do {
@@ -321,19 +352,19 @@ internal fun HealthChart(data: HealthMetricData) {
                 },
         ) {
             val height = maxHeight
-            val width = maxWidth
+            val width = maxWidth - gutter
             if (data.has_typical_range) {
                 val top = height * (1f - fraction(data.typical_high_bp))
                 val bottom = height * (1f - fraction(data.typical_low_bp))
                 Box(
                     Modifier
-                        .fillMaxWidth()
+                        .width(width)
                         .offset(y = top)
                         .height((bottom - top).coerceAtLeast(2.dp))
                         .background(accent.fill.copy(alpha = 0.08f)),
                 )
             }
-            Row(Modifier.fillMaxWidth().fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (bars.size > 14) 3.dp else 8.dp)) {
+            Row(Modifier.width(width).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(if (bars.size > 14) 3.dp else 8.dp)) {
                 bars.forEachIndexed { index, bar ->
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
                         if (bar.has_value) {
@@ -351,13 +382,14 @@ internal fun HealthChart(data: HealthMetricData) {
             }
             if (data.has_typical) {
                 val y = height * (1f - fraction(data.typical_bp))
-                Box(Modifier.fillMaxWidth().offset(y = y).height(1.5.dp).background(accent.text))
+                Box(Modifier.width(width).offset(y = y).height(1.5.dp).background(accent.text))
                 if (data.typical_label.isNotEmpty()) {
                     KitText(
                         data.typical_label,
                         KitType.Meta,
                         accent.text,
-                        Modifier.align(Alignment.TopEnd).offset(y = (y - 18.dp).coerceAtLeast(0.dp)),
+                        Modifier.align(Alignment.TopEnd).width(gutter).padding(start = 4.dp).offset(y = (y - 9.dp).coerceAtLeast(0.dp)),
+                        maxLines = 1,
                     )
                 }
             }
@@ -380,7 +412,7 @@ internal fun HealthChart(data: HealthMetricData) {
             }
         }
         if (data.ticks.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp, end = gutter), horizontalArrangement = Arrangement.SpaceBetween) {
                 data.ticks.forEach { KitText(it, KitType.Meta, Surface.meta, maxLines = 1) }
             }
         }

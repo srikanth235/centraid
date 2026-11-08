@@ -60,8 +60,8 @@ catalog! {
     plain denied_body = ("Health can’t read this vault.", "Health can’t read this vault.");
     plain denied_scope = ("Reading daily totals and workouts", "Reading daily totals and workouts");
     plain denied_title = ("Health is off", "Health is off");
-    plain duration_hours = ("{h} h {m} m", "{h} h {m} m");
-    plain duration_minutes = ("{m} m", "{m} m");
+    plain duration_hours = ("{h} h {m} min", "{h} h {m} min");
+    plain duration_minutes = ("{m} min", "{m} min");
     plain fact_above_days = ("Days above typical", "Days above typical");
     plain fact_above_months = ("Months above typical", "Months above typical");
     plain fact_above_weeks = ("Weeks above typical", "Weeks above typical");

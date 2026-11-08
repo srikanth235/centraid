@@ -21,7 +21,8 @@ struct HealthWorkoutView: View {
 
     var body: some View {
         let state = state
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        // THE BOARD HAS NO BAR TITLE: the kind is the chip over the page's own title.
+        PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
@@ -50,9 +51,21 @@ struct HealthWorkoutView: View {
     @ViewBuilder
     private func page(_ workout: Centraid_Core_V1_HealthWorkoutData) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(workout.kindLabel)
-                .kitType(.group)
-                .foregroundStyle(accent.text)
+            // THE KIND IS A CHIP (HealthWorkout): the kind's mark and word on the app's pale tile.
+            HStack(spacing: 6) {
+                if !workout.kindIconKey.isEmpty {
+                    CentraidIconView(iconKey: workout.kindIconKey, tint: accent.text, size: 14)
+                        .accessibilityHidden(true)
+                }
+                Text(workout.kindLabel)
+                    .kitType(.meta)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(accent.text)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(accent.tile))
+            .padding(.bottom, 6)
             Text(workout.title)
                 .kitType(.title)
                 .foregroundStyle(Surface.ink)

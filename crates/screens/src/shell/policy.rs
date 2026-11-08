@@ -74,11 +74,6 @@ pub fn content_size(widget: &str) -> Size {
 /// the usual case does not move when it lands.
 #[must_use]
 pub fn size_of(widget: &str, status: Status) -> Size {
-    // HEALTH IS ALWAYS SMALL: its invitation is one word ("Connect"), so it never takes a
-    // medium slot and the row of four glances stays whole.
-    if widget == "health" {
-        return Size::Small;
-    }
     match status {
         Status::Empty | Status::Unknown => Size::Medium,
         _ => content_size(widget),
@@ -122,7 +117,14 @@ pub fn fold(tiles: Vec<wire::HomeTile>) -> Folded {
     let mut tiles = tiles;
     tiles.sort_by_key(|tile| place(&tile.widget));
     for tile in &mut tiles {
-        let size = size_of(&tile.widget, tile.status());
+        // HEALTH'S INVITATION IS ONE WORD ("Connect") WHILE OTHER APPS HOLD DATA: a small slot,
+        // so the row of four glances stays whole. On day one every widget is the board's
+        // uniform medium, and Health says "Connect your health app" like the rest.
+        let size = if tile.widget == "health" && springboard != wire::HomeSpringboard::FirstRun {
+            Size::Small
+        } else {
+            size_of(&tile.widget, tile.status())
+        };
         tile.size = size as i32;
         tile.height = height_of(&tile.widget);
     }
@@ -255,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn day_one_is_the_first_run_order_with_every_invitation_medium_but_healths() {
+    fn day_one_is_the_first_run_order_with_every_invitation_medium() {
         let folded = fold(of(&ORDER, Status::Empty));
         assert_eq!(folded.springboard, wire::HomeSpringboard::FirstRun);
         assert_eq!(order(&folded), FIRST_RUN_ORDER);
@@ -270,12 +272,7 @@ mod tests {
         );
         // The calendar and the photographs are tall mediums; the rest one row.
         for tile in &folded.tiles {
-            let want = if tile.widget == "health" {
-                Size::Small
-            } else {
-                Size::Medium
-            };
-            assert_eq!(tile.size(), want, "{}", tile.widget);
+            assert_eq!(tile.size(), Size::Medium, "{}", tile.widget);
         }
         let height = |widget: &str| {
             folded
@@ -302,14 +299,14 @@ mod tests {
     }
 
     #[test]
-    fn health_is_small_whatever_it_has_to_show() {
-        for status in [
-            Status::Content,
-            Status::Empty,
-            Status::Unknown,
-            Status::Loading,
-        ] {
-            assert_eq!(size_of("health", status), Size::Small, "{status:?}");
+    fn health_is_small_beside_content_whatever_it_has_to_show() {
+        for status in [Status::Empty, Status::Unknown, Status::Loading] {
+            let mut read = of(&ORDER, Status::Content);
+            read.retain(|tile| tile.widget != "health");
+            read.push(tile("health", status));
+            let folded = fold(read);
+            let health = folded.tiles.iter().find(|t| t.widget == "health").unwrap();
+            assert_eq!(health.size(), Size::Small, "{status:?}");
         }
     }
 

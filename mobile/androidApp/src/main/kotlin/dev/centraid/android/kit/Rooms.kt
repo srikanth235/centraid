@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -592,13 +593,14 @@ public fun StatusLine(status: String, modifier: Modifier = Modifier) {
  */
 @Composable
 public fun Modifier.kitStatusPill(): Modifier {
-    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+    // THE BOARDS DRAW THE LINE AS A PILL (StatusLine, FirstImports): fully round.
+    val shape = RoundedCornerShape(50)
     return padding(vertical = 4.dp)
         .heightIn(min = KitGeometry.ROW_MIN)
         .clip(shape)
         .background(Surface.card)
         .border(KitGeometry.HAIRLINE, Surface.border, shape)
-        .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
+        .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
 }
 
 /**
@@ -664,10 +666,16 @@ public fun ProgressStatusLine(
     closeLabel: String = "",
     onClose: () -> Unit = {},
     testTag: String = "room-progress-line",
+    leadingIcon: String = "",
 ) {
     if (sentence.isEmpty()) return
     Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).kitStatusPill().testTag(testTag)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // A mark before the sentence (FirstImports draws a green check once the work is done).
+            if (leadingIcon.isNotEmpty()) {
+                CentraidIcon(iconKey = leadingIcon, tint = StateColor.Green.text, size = 18.dp)
+                Spacer(Modifier.width(10.dp))
+            }
             KitText(
                 sentence,
                 KitType.Row,
@@ -688,7 +696,25 @@ public fun ProgressStatusLine(
                         .semantics { role = Role.Button },
                 )
             }
-            if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
+            if (closeLabel.isNotEmpty()) {
+                // THE CLOSE KEY IS A FILLED CIRCLE ON THE BOARDS (FirstImports).
+                Box(
+                    Modifier
+                        .size(KitGeometry.ROW_MIN)
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose)
+                        .testTag("$testTag-close")
+                        .clearAndSetSemantics {
+                            contentDescription = closeLabel
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Surface.fill), contentAlignment = Alignment.Center) {
+                        CentraidIcon(iconKey = "X", tint = Surface.meta, size = 12.dp)
+                    }
+                }
+            }
         }
         if (permille != null) {
             KitProgressBar(

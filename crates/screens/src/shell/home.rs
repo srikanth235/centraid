@@ -468,7 +468,16 @@ impl Home {
             .iter()
             .map(|(widget, app, made)| self.dress(locale, widget, app, made))
             .collect();
-        let folded = policy::fold(tiles);
+        let mut folded = policy::fold(tiles);
+        // A small Health invitation has room for one word; the medium one says the sentence.
+        for tile in &mut folded.tiles {
+            if tile.widget == "health"
+                && tile.size() == wire::HomeTileSize::Small
+                && tile.status() != wire::HomeTileStatus::Content
+            {
+                tile.empty_copy = words::tile_empty_health_small(locale);
+            }
+        }
         wire::HomeData {
             springboard: folded.springboard as i32,
             grid_rows: folded.rows,

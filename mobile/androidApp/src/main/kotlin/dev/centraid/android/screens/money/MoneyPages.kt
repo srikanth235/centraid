@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
@@ -261,13 +262,17 @@ internal fun MoneyImportScreen(
                                     testTag = "money-import-publish",
                                     modifier = gutter,
                                 ) { onEvent(MoneyImportEvent(publish = MoneyImportEvent.Publish())) }
-                                MoneyNote(plan.publish_note)
+                                // CENTRED UNDER THE BUTTON IT EXPLAINS (MoneyImport).
+                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { MoneyNote(plan.publish_note) }
+                                // THE BOARD'S "START OVER" IS A CENTRED LINK, not a second button.
                                 if (plan.discard_label.isNotEmpty()) {
-                                    OutlineButton(
-                                        label = plan.discard_label,
-                                        testTag = "money-import-discard",
-                                        modifier = gutter,
-                                    ) { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) }
+                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        KitLink(
+                                            label = plan.discard_label,
+                                            onClick = { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) },
+                                            modifier = Modifier.testTag("money-import-discard"),
+                                        )
+                                    }
                                 }
                             }
                         } else if (plan.discard_label.isNotEmpty()) {

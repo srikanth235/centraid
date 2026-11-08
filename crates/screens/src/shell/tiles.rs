@@ -1347,7 +1347,7 @@ mod tests {
                 body.caption.as_str(),
                 body.line.as_str()
             ),
-            ("8,412", "steps today", "Slept 7 h 12 m")
+            ("8,412", "steps today", "Slept 7 h 12 min")
         );
         // Connected with no figures: nothing is invented.
         let quiet = health_tile(Locale::En, &health_today(vec![], true));
@@ -1700,8 +1700,8 @@ mod tests {
 
     #[test]
     fn a_duration_is_hours_and_minutes() {
-        assert_eq!(duration(Locale::En, 45.0), "45 m");
-        assert_eq!(duration(Locale::En, 7.0 * 60.0 + 12.0), "7 h 12 m");
-        assert_eq!(duration(Locale::En, -3.0), "0 m");
+        assert_eq!(duration(Locale::En, 45.0), "45 min");
+        assert_eq!(duration(Locale::En, 7.0 * 60.0 + 12.0), "7 h 12 min");
+        assert_eq!(duration(Locale::En, -3.0), "0 min");
     }
 }

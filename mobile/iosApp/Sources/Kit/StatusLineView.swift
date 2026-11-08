@@ -42,9 +42,11 @@ struct StatusLineView: View {
 /// the pill, never a toast that overlays and goes.
 struct KitStatusPill: ViewModifier {
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+        // THE BOARDS DRAW THE LINE AS A PILL (StatusLine, FirstImports): fully round, so a
+        // second line of words rounds with it.
+        let shape = Capsule()
         content
-            .padding(.leading, 14)
+            .padding(.leading, 16)
             .padding(.trailing, 6)
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
             .background(Surface.card, in: shape)
@@ -67,13 +69,20 @@ struct ProgressStatusLine: View {
     var closeLabel: String = ""
     var onClose: () -> Void = {}
     var identifier: String = "status"
+    /// A mark before the sentence (FirstImports draws a green check once the work is done).
+    var leadingIcon: String = ""
+    var leadingTint: Color = StateColor.green.text
 
     @Environment(\.appAccent) private var accent
 
     var body: some View {
         if !sentence.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    if !leadingIcon.isEmpty {
+                        CentraidIconView(iconKey: leadingIcon, tint: leadingTint, size: 18)
+                            .accessibilityHidden(true)
+                    }
                     Text(sentence)
                         .kitType(.row)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.ink)
@@ -93,7 +102,9 @@ struct ProgressStatusLine: View {
                     }
                     if !closeLabel.isEmpty {
                         Button(action: onClose) {
-                            CentraidIconView(iconKey: "X", tint: Surface.meta, size: 16)
+                            CentraidIconView(iconKey: "X", tint: Surface.meta, size: 12)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(Surface.fill))
                                 .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
                                 .contentShape(Rectangle())
                         }

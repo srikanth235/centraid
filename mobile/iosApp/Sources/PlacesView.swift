@@ -33,19 +33,19 @@ struct PlacesView: View {
                 // THE TITLE AT 34 (#1173), then Cards · Map as one segmented control.
                 KitHeader(title: state.title)
                     .padding(.horizontal, -CentraidGeometry.pageMargin)
-                HStack {
-                    KitSegmented(
-                        options: [
-                            (key: Centraid_Core_V1_PhotosPlacesState.Presentation.cards, label: state.cardsLabel),
-                            (key: Centraid_Core_V1_PhotosPlacesState.Presentation.map, label: state.mapLabel),
-                        ],
-                        selected: state.presentation,
-                        identifier: "places-presentation"
-                    ) { presentation in
-                        event { $0.presentation = .with { $0.presentation = presentation } }
-                    }
-                    Spacer()
+                // THE BOARD'S CONTROL IS THE WIDTH OF THE PAGE, the two segments equal.
+                KitSegmented(
+                    options: [
+                        (key: Centraid_Core_V1_PhotosPlacesState.Presentation.cards, label: state.cardsLabel),
+                        (key: Centraid_Core_V1_PhotosPlacesState.Presentation.map, label: state.mapLabel),
+                    ],
+                    selected: state.presentation,
+                    identifier: "places-presentation",
+                    fills: true
+                ) { presentation in
+                    event { $0.presentation = .with { $0.presentation = presentation } }
                 }
+                .frame(maxWidth: .infinity)
 
                 // OVER THE LIST, NEVER INSTEAD OF IT: a refused rename changed
                 // nothing, so the places a member was renaming from stay.

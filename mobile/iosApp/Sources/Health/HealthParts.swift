@@ -170,16 +170,36 @@ struct HealthPinnedCard: View {
 
     private func figure(size: CGFloat, unitSize: CGFloat) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(line.value)
-                .font(.system(size: size, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(Surface.ink)
+            Self.runs(line.value, size: size, unitSize: unitSize)
             if !line.unit.isEmpty {
                 Text(line.unit)
                     .font(.system(size: unitSize))
                     .foregroundStyle(Surface.meta)
             }
         }
+    }
+
+    /// A FIGURE THAT CARRIES ITS OWN UNITS ("7 h 12 min", the core's words): the numbers in the
+    /// figure's weight, every run of letters in the small meta unit, as the board draws it.
+    static func runs(_ value: String, size: CGFloat, unitSize: CGFloat) -> Text {
+        var text = Text("")
+        var run = ""
+        var isUnit = false
+        func flush() {
+            guard !run.isEmpty else { return }
+            text = text + (isUnit
+                ? Text(run).font(.system(size: unitSize)).foregroundColor(Surface.meta)
+                : Text(run).font(.system(size: size, weight: .bold)).foregroundColor(Surface.ink))
+            run = ""
+        }
+        for ch in value {
+            let unit = ch.isLetter || ch == " "
+            if unit != isUnit { flush() }
+            isUnit = unit
+            run.append(ch)
+        }
+        flush()
+        return text.monospacedDigit()
     }
 }
 
@@ -335,19 +355,23 @@ struct HealthBarChart: View {
     @Environment(\.appAccent) private var accent
     @State private var scrubbed: Int?
 
+    /// THE TYPICAL'S WORD HAS A GUTTER OF ITS OWN (HealthMetric): at the line's end, past the last
+    /// bar, never over it.
+    private var gutter: CGFloat { data.hasTypical_p && !data.typicalLabel.isEmpty ? 52 : 0 }
+
     var body: some View {
         let spacing: CGFloat = data.bars.count > 14 ? 3 : 8
         VStack(alignment: .leading, spacing: 8) {
             GeometryReader { proxy in
                 let height = proxy.size.height
-                let width = proxy.size.width
+                let width = proxy.size.width - gutter
                 ZStack(alignment: .topLeading) {
                     if data.hasTypicalRange_p {
                         let top = height * (1 - healthFraction(data.typicalHighBp))
                         let bottom = height * (1 - healthFraction(data.typicalLowBp))
                         Rectangle()
                             .fill(accent.fill.opacity(0.08))
-                            .frame(height: max(bottom - top, 2))
+                            .frame(width: width, height: max(bottom - top, 2))
                             .offset(y: top)
                     }
                     HStack(alignment: .bottom, spacing: spacing) {
@@ -359,7 +383,7 @@ struct HealthBarChart: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .frame(height: height, alignment: .bottom)
+                    .frame(width: width, height: height, alignment: .bottom)
                     if data.hasTypical_p {
                         let at = height * (1 - healthFraction(data.typicalBp))
                         Path { path in
@@ -370,9 +394,10 @@ struct HealthBarChart: View {
                         Text(data.typicalLabel)
                             .kitType(.meta)
                             .foregroundStyle(accent.text)
-                            .padding(.horizontal, 4)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .offset(y: max(at - 16, 0))
+                            .lineLimit(1)
+                            .padding(.leading, 4)
+                            .frame(width: gutter, alignment: .leading)
+                            .offset(x: width, y: max(at - 9, 0))
                     }
                     if let index = scrubbed, data.bars.indices.contains(index), !data.bars[index].callout.isEmpty {
                         let slot = width / CGFloat(max(data.bars.count, 1))
@@ -415,6 +440,7 @@ struct HealthBarChart: View {
             .kitType(.meta)
             .foregroundStyle(Surface.meta)
             .lineLimit(1)
+            .padding(.trailing, gutter)
             .accessibilityHidden(true)
         }
     }

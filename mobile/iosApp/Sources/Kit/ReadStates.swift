@@ -270,13 +270,24 @@ struct SearchAskRow: View {
                 onAsk?()
                 press()
             } label: {
-                Text(ask.label)
-                    .kitType(.row)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(accent.text)
-                    .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                    .contentShape(Rectangle())
+                // THE BOARD'S ASK ROW (Search): a pale round mark with the sparkle, the words in
+                // semibold, a chevron at the trailing edge.
+                HStack(spacing: 12) {
+                    CentraidIconView(iconKey: "Sparkle", tint: accent.text, size: 16)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(accent.tile))
+                        .accessibilityHidden(true)
+                    Text(ask.label)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(accent.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 14)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search-ask-about")

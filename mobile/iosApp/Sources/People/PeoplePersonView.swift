@@ -243,6 +243,7 @@ private struct PeoplePersonBody: View {
             .padding(.bottom, CentraidGeometry.pageMargin)
         }
         .refreshable { send(PeopleEvents.person { $0.refreshed = .init() }) }
+        .hardTopScrollEdge()
         .accessibilityIdentifier("people-person")
         // The page's colour runs up under the hero, fading into the page.
         .background(alignment: .top) {
