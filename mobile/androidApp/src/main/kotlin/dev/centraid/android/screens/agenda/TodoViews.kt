@@ -160,7 +160,11 @@ internal fun TodoRowView(
                             Text(
                                 row.due_label,
                                 style = centraidType("annotLabel"),
-                                color = centraidColor(if (row.overdue) "warning" else "textSoft"),
+                                color = if (row.overdue) {
+                                    agendaTokenColor("stateRedText") ?: centraidColor("warning")
+                                } else {
+                                    centraidColor("textSoft")
+                                },
                                 maxLines = 1,
                             )
                         }

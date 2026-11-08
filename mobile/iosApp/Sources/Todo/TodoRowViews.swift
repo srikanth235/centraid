@@ -141,7 +141,7 @@ struct TodoRowView: View {
                                 Text(row.dueLabel)
                                     .centraidType("annotLabel")
                                     .monospacedDigit()
-                                    .foregroundStyle(Theme.color(row.overdue ? "warning" : "textSoft", scheme))
+                                    .foregroundStyle(row.overdue ? AgendaPalette.token("stateRedText") : Theme.color("textSoft", scheme))
                             }
                             if !row.meta.isEmpty {
                                 Text(row.meta)
