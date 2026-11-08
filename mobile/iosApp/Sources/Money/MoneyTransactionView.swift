@@ -308,9 +308,9 @@ struct MoneyTargetView: View {
             .padding(.leading, 14)
             .padding(.trailing, 6)
             .frame(minHeight: 52)
-            .background(Surface.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Surface.card, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(accent.fill, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous).strokeBorder(accent.fill, lineWidth: 1.5)
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -365,6 +365,7 @@ struct MoneyTargetView: View {
     }
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.colorScheme) private var scheme
 }
 
 /// `money.recurring` — what repeats, per merchant (#1099). A read: nothing here writes.

@@ -968,7 +968,11 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
 /// The live documents attached to the person (`via` none) or to one of the events and tasks in
 /// `shown` (`via` that item's title). One document attached to several is listed once, under
 /// the person if it is attached to them, else under the first item by id.
-fn attached_documents(door: &dyn PageDoor, id: &str, shown: &[VaultItem]) -> KitResult<Vec<VaultItem>> {
+fn attached_documents(
+    door: &dyn PageDoor,
+    id: &str,
+    shown: &[VaultItem],
+) -> KitResult<Vec<VaultItem>> {
     let mut carriers: Vec<String> = vec![id.to_owned()];
     let titles: BTreeMap<&str, &str> = shown
         .iter()
@@ -983,7 +987,12 @@ fn attached_documents(door: &dyn PageDoor, id: &str, shown: &[VaultItem]) -> Kit
         order: ("from_id", "to_id"),
         column: "from_id",
     }
-    .within(WIDE, door, &carriers, Some(("rel = ?", vec![text("attached")])))?;
+    .within(
+        WIDE,
+        door,
+        &carriers,
+        Some(("rel = ?", vec![text("attached")])),
+    )?;
     // The person's own first, so a document attached to both is theirs.
     let mut owner_of: BTreeMap<String, Option<String>> = BTreeMap::new();
     let mut pairs: Vec<(String, String)> = attached
@@ -991,11 +1000,19 @@ fn attached_documents(door: &dyn PageDoor, id: &str, shown: &[VaultItem]) -> Kit
         .filter_map(|row| Some((text_of(row, "from_id")?, text_of(row, "to_id")?)))
         .collect();
     pairs.sort_by(|(left, _), (right, _)| {
-        (left != id).cmp(&(right != id)).then_with(|| left.cmp(right))
+        (left != id)
+            .cmp(&(right != id))
+            .then_with(|| left.cmp(right))
     });
     for (from, document) in pairs {
         owner_of.entry(document).or_insert_with(|| {
-            (from != id).then(|| titles.get(from.as_str()).copied().unwrap_or_default().to_owned())
+            (from != id).then(|| {
+                titles
+                    .get(from.as_str())
+                    .copied()
+                    .unwrap_or_default()
+                    .to_owned()
+            })
         });
     }
     let documents: Vec<String> = owner_of.keys().cloned().collect();

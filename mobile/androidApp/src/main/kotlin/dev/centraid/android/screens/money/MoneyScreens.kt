@@ -584,9 +584,9 @@ private fun TargetAmountField(state: MoneyTargetState, target: centraid.core.v1.
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(KitGeometry.RADIUS))
                 .background(Surface.card)
-                .border(1.5.dp, accent.fill, RoundedCornerShape(12.dp))
+                .border(1.5.dp, accent.fill, RoundedCornerShape(KitGeometry.RADIUS))
                 .padding(start = 14.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),

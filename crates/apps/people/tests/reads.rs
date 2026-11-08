@@ -551,13 +551,31 @@ fn in_your_vault_lists_the_documents_attached_to_the_person_or_to_what_is_about_
     let gone = document("Old receipt");
     let elsewhere = document("Bob's lease");
     let both = document("Both");
-    w.ok("edge.add", json!({ "from": ada, "rel": "attached", "to": passport }));
-    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": menu }));
-    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": gone }));
+    w.ok(
+        "edge.add",
+        json!({ "from": ada, "rel": "attached", "to": passport }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": lunch, "rel": "attached", "to": menu }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": lunch, "rel": "attached", "to": gone }),
+    );
     w.ok("entity.trash", json!({ "id": gone }));
-    w.ok("edge.add", json!({ "from": bob, "rel": "attached", "to": elsewhere }));
-    w.ok("edge.add", json!({ "from": ada, "rel": "attached", "to": both }));
-    w.ok("edge.add", json!({ "from": lunch, "rel": "attached", "to": both }));
+    w.ok(
+        "edge.add",
+        json!({ "from": bob, "rel": "attached", "to": elsewhere }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": ada, "rel": "attached", "to": both }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": lunch, "rel": "attached", "to": both }),
+    );
 
     let seen = links(&ada);
     let docs: Vec<(&str, Option<&str>)> = seen
@@ -566,9 +584,19 @@ fn in_your_vault_lists_the_documents_attached_to_the_person_or_to_what_is_about_
         .filter(|item| item.kind.key() == "document")
         .map(|item| (item.title.as_str(), item.via.as_deref()))
         .collect();
-    assert_eq!(docs.len(), 3, "{docs:?}: a trashed one and Bob's are not Ada's");
-    assert!(docs.contains(&("Passport scan", None)), "attached to the person");
-    assert!(docs.contains(&("Menu", Some("Lunch with Ada"))), "attached to their event");
+    assert_eq!(
+        docs.len(),
+        3,
+        "{docs:?}: a trashed one and Bob's are not Ada's"
+    );
+    assert!(
+        docs.contains(&("Passport scan", None)),
+        "attached to the person"
+    );
+    assert!(
+        docs.contains(&("Menu", Some("Lunch with Ada"))),
+        "attached to their event"
+    );
     assert!(
         docs.contains(&("Both", None)),
         "attached to both: once, and the person's own"

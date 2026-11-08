@@ -71,9 +71,14 @@ const BRACKETS: &str = "[[";
 /// What a typed `[[title]]` is, as last read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Resolution {
-    Resolved { id: String, title: String },
+    Resolved {
+        id: String,
+        title: String,
+    },
     /// In the trash, as this note: the id Restore brings back.
-    Trashed { id: String },
+    Trashed {
+        id: String,
+    },
     Missing,
 }
 
@@ -1992,10 +1997,12 @@ mod tests {
 
     fn opens_editor(effects: &[wire::Effect]) -> Option<String> {
         effects.iter().find_map(|effect| match &effect.kind {
-            Some(wire::effect::Kind::OpenRoute(open)) => match open.route.as_ref()?.args.as_ref()? {
-                wire::route::Args::NotesEditor(args) => Some(args.note_id.clone()),
-                _ => None,
-            },
+            Some(wire::effect::Kind::OpenRoute(open)) => {
+                match open.route.as_ref()?.args.as_ref()? {
+                    wire::route::Args::NotesEditor(args) => Some(args.note_id.clone()),
+                    _ => None,
+                }
+            }
             _ => None,
         })
     }
@@ -2022,7 +2029,10 @@ mod tests {
         let chrome = view.chrome.clone().expect("chrome");
         assert_eq!(chrome.status_action, "");
         let chips = chips(&view);
-        assert_eq!(chips[0].resolution, wire::NotesLinkResolution::Resolved as i32);
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
         assert_eq!(chips[0].route, Some(routes::editor(&made)));
         // Exactly one note by that name now exists, and it is the one that opened.
         let again = ev(
@@ -2054,7 +2064,10 @@ mod tests {
         assert_eq!(opens_editor(&effects), Some(old.clone()));
         let view = state(&*screen, &ctx);
         let chips = chips(&view);
-        assert_eq!(chips[0].resolution, wire::NotesLinkResolution::Resolved as i32);
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
         assert_eq!(chips[0].route, Some(routes::editor(&old)));
     }
 
