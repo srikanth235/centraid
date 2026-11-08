@@ -187,6 +187,10 @@ struct AgendaHomeView: View {
                 onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
             )
         }
+        // THE SHEETS WEAR AGENDA'S BLUE (the boards' Create, Save and Import reminders): the accent
+        // is set on the screen that presents them, so a sheet's ink button no longer falls back to
+        // the shell's teal.
+        .environment(\.appAccent, AppAccent("agenda"))
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
     }

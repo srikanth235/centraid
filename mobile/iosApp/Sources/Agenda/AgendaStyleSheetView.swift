@@ -106,6 +106,8 @@ struct AgendaStyleSheetView: View {
         // and the icon grid under them do not fit a half sheet, which hid the icons below a
         // scroll.
         .presentationDetents([.large])
+        // Create and Save wear Agenda's blue, whichever screen presents the sheet.
+        .environment(\.appAccent, AppAccent("agenda"))
     }
 
     /// The chosen colour, or the quiet ink while none is.
