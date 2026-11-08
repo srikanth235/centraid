@@ -233,6 +233,84 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     assert_eq!(data.about_title, "About");
 }
 
+fn home_state(d: &Driver, i: u64) -> wire::HomeState {
+    match &d.view(i).kind {
+        Some(wire::view_state::Kind::Home(state)) => (**state).clone(),
+        other => panic!("not Home: {other:?}"),
+    }
+}
+
+#[test]
+fn the_vault_row_opens_homes_switcher_and_steps_aside() {
+    let (mut d, home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    let vaults = data(&d, i).sections[0].rows[0].clone();
+    // It has no page to push, but it is pressed, and says so (the board's chevron).
+    assert!(vaults.route.is_none() && vaults.pressable);
+    assert!(
+        data(&d, i)
+            .sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .all(|row| { row.pressable == (row.id == "vaults") }),
+        "only the vault row is pressed rather than pushed"
+    );
+    // Home holds a roster to list: the lockup's own sheet needs one.
+    let personal = wire::ShellVault {
+        vault_id: "v1".into(),
+        name: "Personal".into(),
+        state: wire::HomeVaultState::Online as i32,
+        ..Default::default()
+    };
+    d.send(
+        home,
+        E::Home(wire::HomeEvent {
+            kind: Some(wire::home_event::Kind::VaultsTold(
+                wire::home_event::VaultsTold {
+                    vault: Some(personal.clone()),
+                    vaults: vec![personal],
+                    none: false,
+                },
+            )),
+        }),
+    );
+    assert!(home_state(&d, home).sheet.is_none());
+    assert!(!state(&d, i).finished);
+
+    d.send(
+        i,
+        E::Settings(wire::SettingsEvent {
+            kind: Some(wire::settings_event::Kind::RowPressed(
+                wire::settings_event::RowPressed {
+                    id: "vaults".into(),
+                },
+            )),
+        }),
+    );
+    // Home draws the switcher the lockup opens, and this page hands over.
+    assert!(
+        home_state(&d, home).sheet.is_some(),
+        "Home's switcher is open"
+    );
+    assert!(state(&d, i).finished);
+
+    // A row that is not pressed does nothing here.
+    let (mut d, home, i) = started();
+    answer(&mut d, i, keychain_get, stored(""));
+    d.send(
+        i,
+        E::Settings(wire::SettingsEvent {
+            kind: Some(wire::settings_event::Kind::RowPressed(
+                wire::settings_event::RowPressed {
+                    id: "backup".into(),
+                },
+            )),
+        }),
+    );
+    assert!(!state(&d, i).finished);
+    assert!(home_state(&d, home).sheet.is_none());
+}
+
 #[test]
 fn each_row_names_its_tile_as_the_board_draws_it() {
     let (mut d, _home, i) = started();

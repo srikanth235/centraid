@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +70,8 @@ internal fun SettingsScreen(
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
 ) {
+    // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
+    LaunchedEffect(state.finished) { if (state.finished) onBack() }
     PushedPage(title = state.title, parentTitle = state.back_label, onBack = onBack) {
         ReadStateView(
             content = screenContentOf(state.loading, null, state.data_),
@@ -112,7 +115,9 @@ private fun SettingsBody(data: SettingsData, onEvent: (SettingsEvent) -> Unit, o
                 Column {
                     GroupHead(section.title)
                     Column(Modifier.kitCard().testTag("settings-section-${section.key}")) {
-                        section.rows.forEach { row -> SettingsRowView(row, onOpen) }
+                        section.rows.forEach { row ->
+                            SettingsRowView(row, onOpen) { onEvent(SettingsEvent(row_pressed = SettingsEvent.RowPressed(id = row.id))) }
+                        }
                     }
                 }
             }
@@ -149,19 +154,27 @@ private fun GroupHead(title: String) {
 }
 
 @Composable
-private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
+private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit, onPress: () -> Unit) {
     val route = row.route
+    // A row with no page behind it is still pressed (`pressable`): Rust is told which.
+    val tappable = route != null || row.pressable
     Column {
         Row(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .then(if (route != null) Modifier.clickable { onOpen(route) } else Modifier)
+                .then(
+                    when {
+                        route != null -> Modifier.clickable { onOpen(route) }
+                        row.pressable -> Modifier.clickable(onClick = onPress)
+                        else -> Modifier
+                    },
+                )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .testTag("settings-row-${row.id}")
                 .clearAndSetSemantics {
                     contentDescription = row.accessibility_label
-                    if (route != null) role = Role.Button
+                    if (tappable) role = Role.Button
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -194,7 +207,7 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
                 KitText(row.value_, KitType.Row, Surface.meta, Modifier.padding(start = 8.dp))
             }
             // A row that MAKES something draws no chevron (the board's Make a vault).
-            if (route != null && row.tile != "add") {
+            if (tappable && row.tile != "add") {
                 CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp, modifier = Modifier.padding(start = 8.dp))
             }
         }

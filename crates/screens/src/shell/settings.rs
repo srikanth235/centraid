@@ -4,7 +4,7 @@
 //! | Section | What it holds |
 //! |---|---|
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
-//! | Vault | how many vaults this phone holds |
+//! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
 //! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
 //! | About | the version |
@@ -26,6 +26,9 @@ use crate::custody::secrets::VaultSecrets;
 use crate::kit::read::Reading;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{home as home_words, settings as words};
+
+/// The id of the row that shows the vaults.
+const VAULTS_ROW: &str = "vaults";
 
 /// The Keychain key the appearance is kept under: Home's, the same three values.
 const APPEARANCE_KEY: &str = "appearance";
@@ -85,6 +88,8 @@ struct Settings {
     synced: Option<wire::SyncedSecretsStatus>,
     /// The name of the vault in front, whose first letter is the vault row's avatar.
     vault_name: Option<String>,
+    /// The vault row was pressed: Home draws the switcher, so this page is done.
+    finished: bool,
 }
 
 impl Settings {
@@ -95,6 +100,7 @@ impl Settings {
             standing: None,
             synced: None,
             vault_name: None,
+            finished: false,
         }
     }
 
@@ -145,6 +151,7 @@ impl Settings {
             };
             wire::SettingsRow {
                 id: id.to_owned(),
+                pressable: false,
                 title,
                 meta,
                 icon_key: icon.to_owned(),
@@ -201,6 +208,9 @@ impl Settings {
                                 "initial",
                                 String::new(),
                             );
+                            // THE VAULT ROW OPENS HOME'S SWITCHER (the lockup's sheet): a tap is an
+                            // event, and the chevron says it is a row that goes somewhere.
+                            vaults.pressable = true;
                             vaults.initial = self
                                 .vault_name
                                 .as_deref()
@@ -304,6 +314,24 @@ impl Screen for Settings {
                 _ => {}
             },
             Some(E::Settings(settings)) => {
+                // THE VAULT ROW: Home's switcher is the one list of vaults, so Home is asked to
+                // open it, and this page, which sits over Home, steps aside.
+                if let Some(S::RowPressed(pressed)) = &settings.kind {
+                    if pressed.id == VAULTS_ROW && !self.finished {
+                        self.finished = true;
+                        ctx.post(
+                            super::HOME,
+                            wire::ScreenEvent {
+                                kind: Some(E::Home(wire::HomeEvent {
+                                    kind: Some(wire::home_event::Kind::Vault(
+                                        wire::home_event::VaultPressed {},
+                                    )),
+                                })),
+                            },
+                        );
+                    }
+                    return Vec::new();
+                }
                 if let Some(S::AppearancePicked(picked)) = settings.kind
                     && let Some(chosen) = Appearance::of_id(&picked.id)
                     && self.appearance != Some(chosen)
@@ -341,6 +369,7 @@ impl Screen for Settings {
                 title: words::settings_title(locale),
                 back_label: home_words::band_home(locale),
                 content: Some(content),
+                finished: self.finished,
             })),
             ..wire::ViewState::default()
         }
