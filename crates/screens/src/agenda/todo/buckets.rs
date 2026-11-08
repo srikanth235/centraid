@@ -72,6 +72,13 @@ fn group(
     })
 }
 
+/// The Overdue group's quiet verb, which opens Catch up.
+fn with_catch_up(locale: Locale, mut group: wire::TodoRowGroup) -> wire::TodoRowGroup {
+    group.verb_label = words::catch_up(locale);
+    group.verb_key = rows::VERB_CATCH_UP.to_owned();
+    group
+}
+
 /// How many open roots are due today or before: the Today card's count.
 #[must_use]
 pub fn today_count(board: &wire::AgendaTaskBoard) -> usize {
@@ -116,7 +123,8 @@ pub fn today(
             words::group_overdue(locale),
             &overdue,
             ctx,
-        ),
+        )
+        .map(|group| with_catch_up(locale, group)),
         group(locale, "today", words::group_today(locale), &untimed, &day),
         group(
             locale,
@@ -177,13 +185,15 @@ pub fn scheduled(
         } else {
             civil::relative_day(locale, day, ctx.today)
         };
-        out.extend(group(
-            locale,
-            &format!("day|{day}"),
-            title,
-            &dated[at..end],
-            &ctx,
-        ));
+        out.extend(
+            group(locale, &format!("day|{day}"), title, &dated[at..end], &ctx).map(|group| {
+                if overdue {
+                    with_catch_up(locale, group)
+                } else {
+                    group
+                }
+            }),
+        );
         at = end;
     }
     out

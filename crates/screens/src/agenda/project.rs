@@ -541,7 +541,14 @@ impl Screen for Project {
                 self.reload(ctx);
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
-            Some(E::TodoProject(project)) => self.event(project, ctx),
+            Some(E::TodoProject(project)) => {
+                if let Some(P::GroupVerb(verb)) = &project.kind {
+                    if verb.key == rows::VERB_CATCH_UP {
+                        return list::verb_effects(&verb.key);
+                    }
+                }
+                self.event(project, ctx);
+            }
             _ => {}
         }
         Vec::new()

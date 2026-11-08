@@ -83,7 +83,7 @@ struct TodoListView: View {
                             ForEach(list.groups, id: \.key) { group in
                                 TodoGroupView(
                                     group: group,
-                                    onVerb: { _ in },
+                                    onVerb: { key in send(event { $0.groupVerb = .with { $0.key = key } }) },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
                                     onPick: open,
                                     chrome: state.chrome,

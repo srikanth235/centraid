@@ -96,7 +96,7 @@ internal fun TodoListScreen(
                             list.groups,
                             onCheck = { onEvent(TodoListEvent(row_checked = TodoListEvent.RowChecked(task_id = it))) },
                             onOpen = onOpen,
-                            onVerb = { },
+                            onVerb = { onEvent(TodoListEvent(group_verb = TodoListEvent.GroupVerb(key = it))) },
                             menu = chrome?.let {
                                 TodoRowMenu(
                                     it,
