@@ -170,7 +170,7 @@ fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire:
             "all",
             reminders::smart_all(locale),
             "Inbox",
-            "textInk",
+            "appLocker",
             Some(counts.all),
             wire::TodoView::All,
         ),
