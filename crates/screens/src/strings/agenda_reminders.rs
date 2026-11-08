@@ -16,9 +16,17 @@ catalog! {
     plain hide_completed = ("Hide", "Hide");
     plain move_down = ("Move down", "Move down");
     plain move_up = ("Move up", "Move up");
+    plain menu_completed = ("Completed", "Completed");
+    plain menu_flagged_only = ("Flagged only", "Flagged only");
+    plain menu_show = ("Show", "Show");
+    plain menu_sort = ("Sort", "Sort");
     plain morning = ("Morning", "Morning");
     plain my_lists = ("My Lists", "My Lists");
     plain new_reminder = ("New Reminder", "New Reminder");
+    plain sort_due = ("Due date", "Due date");
+    plain sort_manual = ("Manual", "Manual");
+    plain sort_priority = ("Priority", "Priority");
+    plain sort_title = ("Title", "Title");
     plain quick_chip_day_time = ("{day}, {time}", "{day}, {time}");
     plain quick_chip_every_day = ("Every day", "Every day");
     plain quick_chip_every_month = ("Every month", "Every month");

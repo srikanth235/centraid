@@ -13,6 +13,7 @@ use super::held::Held;
 use crate::agenda::routes;
 use crate::agenda::style;
 use crate::agenda::todo::rows;
+use crate::agenda::todo::view::Options;
 use crate::kit::civil::HourCycle;
 use crate::strings::{
     Locale, agenda_home as sentences, agenda_reminders as reminders, task as words,
@@ -20,6 +21,7 @@ use crate::strings::{
 
 /// To-do's data, or `None` when the Inbox board and the projects are not both
 /// held.
+#[cfg(test)]
 #[must_use]
 pub fn fold(
     locale: Locale,
@@ -27,12 +29,26 @@ pub fn fold(
     held: &Held,
     limit: u32,
 ) -> Option<wire::AgendaHomeData> {
+    fold_shaped(locale, cycle, held, limit, &Options::default())
+}
+
+/// [`fold`] with the Reminders "Filter and sort" choice applied to the Inbox's rows.
+#[must_use]
+pub fn fold_shaped(
+    locale: Locale,
+    cycle: HourCycle,
+    held: &Held,
+    limit: u32,
+    options: &Options,
+) -> Option<wire::AgendaHomeData> {
     let board = held.inbox.as_ref()?;
     let answer = held.projects.as_ref()?;
     let (projects, sections) = held.projects_of();
     let mut ctx = rows::Context::of(&board.today, projects, sections);
     ctx.cycle = cycle;
-    let groups = rows::groups(locale, &board.groups, &ctx);
+    let mut shaped = board.groups.clone();
+    options.shape(&mut shaped);
+    let groups = rows::groups(locale, &shaped, &ctx);
     let project_groups = project_groups(locale, answer);
     let counts = board.counts.as_ref();
     let open = counts.map(|counts| counts.open);

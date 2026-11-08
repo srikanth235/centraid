@@ -15,6 +15,7 @@ use super::home::long_day;
 use super::todo::buckets;
 use super::todo::ops::Ops;
 use super::todo::rows::{self, Context};
+use super::todo::view::Prefs;
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
@@ -150,6 +151,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         limit: rows::PAGE,
         phase: Phase::Loading,
         ops: Ops::default(),
+        prefs: Prefs::default(),
     }))
 }
 
@@ -159,6 +161,8 @@ struct List {
     limit: u32,
     phase: Phase<wire::AgendaTaskBoard>,
     ops: Ops,
+    /// The Reminders "Filter and sort" choice, read from the keychain on `Appeared`.
+    prefs: Prefs,
 }
 
 impl List {
@@ -240,6 +244,16 @@ impl List {
         let row_ctx = Context {
             cycle,
             ..Context::of(&board.today, &board.projects, &board.sections)
+        };
+        // THE CHOICE of the Reminders menu shapes the rows; Today keeps its parts of the day.
+        let shaped;
+        let board = if self.view == wire::TodoView::Logbook {
+            board
+        } else {
+            let mut copy = board.clone();
+            self.prefs.options.shape(&mut copy.groups);
+            shaped = copy;
+            &shaped
         };
         let groups = match self.view {
             wire::TodoView::Today => buckets::today(locale, board, &row_ctx),
@@ -327,7 +341,14 @@ impl List {
 impl Screen for List {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::Appeared(_)) => {
+                self.reload(ctx);
+                return self.prefs.reset_and_ask();
+            }
+            Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::EffectResult(result)) => {
+                self.prefs.answers(&result);
+            }
             Some(E::TodoList(list)) => {
                 if let Some(L::GroupVerb(verb)) = &list.kind {
                     return verb_effects(&verb.key);

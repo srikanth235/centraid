@@ -84,6 +84,9 @@ import dev.centraid.android.screens.agenda.AgendaTodoPlace
 import dev.centraid.android.screens.agenda.AgendaMonthView
 import dev.centraid.android.screens.agenda.AgendaPeriod
 import dev.centraid.android.screens.agenda.AgendaTimeView
+import centraid.core.v1.FilterMenuCleared
+import centraid.core.v1.FilterMenuPicked
+import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.screens.agenda.AgendaLayoutKey
 import dev.centraid.android.screens.agenda.AgendaMonthChip
 import dev.centraid.android.screens.agenda.AgendaTodayButton
@@ -163,6 +166,17 @@ public fun AgendaHomeScreen(
             barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },
             barActions = header?.let { { AgendaLayoutKey(it, onEvent) } },
             barShowsTitle = header?.title?.isNotEmpty() == true,
+            // THE REMINDERS "FILTER AND SORT" FUNNEL (Main.dc.html): Rust's menu, present on the
+            // Reminders place only.
+            filter = state.filter_menu?.let { menu ->
+                RoomFilter(
+                    menu = menu,
+                    onPick = { section, option ->
+                        onEvent(AgendaHomeEvent(filter_menu_picked = FilterMenuPicked(section_key = section, option_key = option)))
+                    },
+                    onClear = { onEvent(AgendaHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
+                )
+            },
             trailing = if (plusShown) {
                 RoomAction(
                     iconKey = "Plus",

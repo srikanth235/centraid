@@ -50,6 +50,7 @@ use super::todo::natural::{Chipper, Fields};
 use super::todo::ops::{NewTask, Ops};
 use super::todo::quick::Quick;
 use super::todo::rows;
+use super::todo::view::Prefs;
 use crate::kit::civil;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -106,6 +107,8 @@ pub(super) struct Home {
     held: Held,
     /// The phone's calendar, imported and followed for as long as Agenda is up.
     calendar: CalendarFollow,
+    /// The Reminders "Filter and sort" choice, kept on the phone (`todo::view`).
+    prefs: Prefs,
 }
 
 /// The registry factory.
@@ -159,6 +162,7 @@ impl Home {
             ops: Ops::default(),
             held: Held::default(),
             calendar: CalendarFollow::new(),
+            prefs: Prefs::default(),
         }
     }
 
@@ -220,7 +224,7 @@ impl Home {
         match event {
             H::Refreshed(_) => self.refresh(ctx),
             // Taken before this match: it returns the shell's effects.
-            H::ImportRequested(_) => {}
+            H::ImportRequested(_) | H::FilterMenuPicked(_) | H::FilterMenuCleared(_) => {}
             H::Destination(moved) => {
                 let destination = Dest::try_from(moved.destination).unwrap_or(Dest::Unspecified);
                 self.move_to(destination, ctx);
@@ -617,7 +621,13 @@ impl Home {
     fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
         let locale = ctx.locale();
         if self.destination == Dest::Todo && self.active_term().is_none() {
-            return place::fold(locale, ctx.hour_cycle(), &self.held, self.limit);
+            return place::fold_shaped(
+                locale,
+                ctx.hour_cycle(),
+                &self.held,
+                self.limit,
+                &self.prefs.options,
+            );
         }
         let term = self.active_term();
         fold::events(&fold::Fold {
@@ -649,6 +659,11 @@ impl Home {
         )
     }
 
+    /// Whether the Reminders menu is on the page: the Reminders place, with its list showing.
+    fn menu_offered(&self) -> bool {
+        self.destination == Dest::Todo && !self.denied() && self.active_term().is_none()
+    }
+
     /// The calendars are known (the data is the events' fold, not To-do's), so
     /// the sheet may offer "New Calendar".
     fn shows_calendars(&self) -> bool {
@@ -665,7 +680,15 @@ impl Screen for Home {
                     self.quick.chip.hold(ctx);
                 }
                 self.refresh(ctx);
-                return self.calendar.attach();
+                // THE CALENDAR'S FLAG IS A KEYCHAIN READ and an answer carries no key, so the
+                // choice is read after it has landed, never beside it.
+                let mut effects = self.calendar.attach();
+                if effects.is_empty() {
+                    effects.extend(self.prefs.ask());
+                } else {
+                    self.prefs.defer();
+                }
+                return effects;
             }
             Some(E::EnvironmentChanged(_)) => self.refresh(ctx),
             // The vault moved: the view reloads, and an event of a writable phone calendar may
@@ -692,9 +715,43 @@ impl Screen for Home {
                         })
                         .unwrap_or_default();
                 }
+                Some(H::FilterMenuPicked(picked)) if self.menu_offered() => {
+                    let mut options = self.prefs.options;
+                    if options.pick(crate::kit::menu::Pick::of(&picked)) {
+                        self.prefs.options = options;
+                        return vec![self.prefs.save()];
+                    }
+                }
+                Some(H::FilterMenuCleared(_)) if self.menu_offered() => {
+                    if self.prefs.options.clear() {
+                        return vec![self.prefs.save()];
+                    }
+                }
+                Some(H::FilterMenuPicked(_) | H::FilterMenuCleared(_)) => {}
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
+            Some(E::EffectResult(result)) => {
+                // THE CHOICE'S OWN ANSWER is not the calendar's.
+                if self.prefs.answers(&result) {
+                    return Vec::new();
+                }
+                let keychain = matches!(
+                    result.outcome,
+                    Some(
+                        wire::effect_result::Outcome::Keychain(_)
+                            | wire::effect_result::Outcome::Failed(_)
+                    )
+                );
+                let mut effects = self
+                    .calendar
+                    .on_event(&E::EffectResult(result), ctx)
+                    .unwrap_or_default();
+                if keychain {
+                    effects.extend(self.prefs.after_other());
+                }
+                return effects;
+            }
             Some(other) => {
                 if let Some(effects) = self.calendar.on_event(&other, ctx) {
                     return effects;
@@ -799,6 +856,8 @@ impl Screen for Home {
                         chrome::band(locale, self.destination, sheet_up)
                     },
                     calendar_header: Some(calendar_header),
+                    filter_menu: (self.menu_offered() && data.is_some())
+                        .then(|| self.prefs.options.menu(locale)),
                     calendar_views: if denied || chrome::has_calendar_header(self.destination) {
                         Vec::new()
                     } else {

@@ -1394,6 +1394,22 @@
       "x": 0,
       "y": 1160
     },
+    "RemindersFilterMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Reminders filter and sort menu",
+      "w": 390,
+      "x": 7050,
+      "y": 3480
+    },
+    "RemindersFilterMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Reminders filter and sort menu · dark",
+      "w": 390,
+      "x": 7050,
+      "y": 3480
+    },
     "RestoreHeld.dc.html": {
       "h": 844,
       "page": "light",
@@ -2052,6 +2068,7 @@
     "BackupRunning.dc.html",
     "Calendar.dc.html",
     "Main.dc.html",
+    "RemindersFilterMenu.dc.html",
     "Today.dc.html",
     "List.dc.html",
     "Details.dc.html",
@@ -2147,6 +2164,7 @@
     "BackupRunningDark.dc.html",
     "CalendarDark.dc.html",
     "MainDark.dc.html",
+    "RemindersFilterMenuDark.dc.html",
     "TodayDark.dc.html",
     "ListDark.dc.html",
     "DetailsDark.dc.html",

@@ -48,6 +48,7 @@ struct AgendaHomeView: View {
                 onTerm: { term in send(AgendaEvents.make { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(AgendaEvents.make { $0.searchClosed = .init() }) }
             ),
+            filter: filter,
             bar: header.map { header in
                 PlaceBar(
                     leading: AnyView(AgendaMonthChip(header: header, send: send)),
@@ -194,6 +195,24 @@ struct AgendaHomeView: View {
         .environment(\.appAccent, AppAccent("agenda"))
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
+    }
+
+    /// THE REMINDERS "FILTER AND SORT" FUNNEL (`Main.dc.html`): Rust's menu, drawn only when it is
+    /// on the state (the Reminders place). A pick or the clear row is an event.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(AgendaEvents.make {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(AgendaEvents.make { $0.filterMenuCleared = .init() }) }
+        )
     }
 
     /// The state's four content branches as the kit's one read shape.

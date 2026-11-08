@@ -17,6 +17,7 @@ use super::todo::ops::{NewTask, Ops};
 use super::todo::order;
 use super::todo::quick::Quick;
 use super::todo::rows::{self, Context};
+use super::todo::view::{Prefs, Sort};
 use crate::catalog::{act, load};
 use crate::kit::civil::HourCycle;
 use crate::kit::read;
@@ -49,6 +50,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         style: None,
         show_completed: false,
         completed: Vec::new(),
+        prefs: Prefs::default(),
     }))
 }
 
@@ -76,6 +78,9 @@ struct Project {
     show_completed: bool,
     /// This list's completed tasks (done, not won't-do), newest first.
     completed: Vec<wire::AgendaTask>,
+    /// The Reminders "Filter and sort" choice: its order and filter shape the rows, and its
+    /// "Completed" opens the completed rows drawn (the page's own toggle then overrides it).
+    prefs: Prefs,
 }
 
 impl Project {
@@ -161,6 +166,11 @@ impl Project {
     /// its group). Only a drop inside one group is a reorder; another group's
     /// neighbour is a move between sections, which the filing sheet owns.
     fn move_row(&mut self, task_id: &str, before_id: &str, ctx: &Ctx) {
+        // A DROP IS THE MEMBER'S OWN ORDER: under any other sort the rows are not where the
+        // positions put them, so a drop would write places nobody saw.
+        if self.prefs.options.sort != Sort::Manual {
+            return;
+        }
         let Some(board) = self.phase.data() else {
             return;
         };
@@ -295,7 +305,9 @@ impl Project {
         let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
         row_ctx.show_project = false;
         row_ctx.cycle = cycle;
-        let groups = rows::groups(locale, &board.groups, &row_ctx);
+        let mut shaped = board.groups.clone();
+        self.prefs.options.shape(&mut shaped);
+        let groups = rows::groups(locale, &shaped, &row_ctx);
         rename(wire::TodoProjectData {
             today: board.today.clone(),
             count_label: rows::count(locale, rows::root_count(&groups)),
@@ -539,6 +551,12 @@ impl Screen for Project {
             Some(E::Appeared(_)) => {
                 self.chip.hold(ctx);
                 self.reload(ctx);
+                return self.prefs.reset_and_ask();
+            }
+            Some(E::EffectResult(result)) => {
+                if self.prefs.answers(&result) {
+                    self.show_completed = self.prefs.options.show_completed;
+                }
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::TodoProject(project)) => {

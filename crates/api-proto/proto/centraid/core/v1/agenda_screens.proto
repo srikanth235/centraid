@@ -120,6 +120,10 @@ message AgendaHomeState {
   // layout key, the all-day lane and the Today key's visibility. Not `shown`
   // on every other place, which keeps its own title and day bar.
   AgendaCalendarHeader calendar_header = 35;
+  // THE REMINDERS "FILTER AND SORT" MENU (#1173, Main.dc.html): Show (flagged only,
+  // completed) and Sort. Present on the Reminders place only; absent on the Calendar,
+  // the gate and while a search answers. A pick comes back as `FilterMenuPicked`.
+  optional FilterMenu filter_menu = 36;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -849,6 +853,9 @@ message AgendaHomeEvent {
     MonthChipTapped month_chip = 57;
     LayoutToggled layout_toggled = 58;
     WeekPaged week_paged = 59;
+    // THE REMINDERS FILTER AND SORT MENU: a pick, and the clear row.
+    FilterMenuPicked filter_menu_picked = 60;
+    FilterMenuCleared filter_menu_cleared = 61;
   }
 
   // The "‹ November" chip: back to the month the anchor is in.
