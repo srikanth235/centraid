@@ -68,7 +68,11 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.AppTile
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitProgressBar
 import dev.centraid.android.kit.KitSpinner
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.kitTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.theme.centraidColor
@@ -170,11 +174,27 @@ private fun BackupPage(
                 }
             }
             if (model.progress.isNotEmpty()) {
-                Row(
-                    Modifier.testTag("backup-progress").semantics(mergeDescendants = true) { },
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) { KitSpinner(model.progress) }
+                if (model.progress_known) {
+                    // THE RUN'S BAR (BackupRunning): what a gateway has acknowledged of the whole,
+                    // and the bytes still to go under it.
+                    Column(
+                        Modifier.padding(top = 6.dp).testTag("backup-progress").semantics(mergeDescendants = true) { },
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        KitProgressBar(model.progress_fraction, height = 6.dp)
+                        Text(
+                            model.progress,
+                            style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                            color = conditionTint(model),
+                        )
+                    }
+                } else {
+                    Row(
+                        Modifier.testTag("backup-progress").semantics(mergeDescendants = true) { },
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { KitSpinner(model.progress) }
+                }
             }
             line?.waiting.orEmpty().map { it.sentence }.filter { it.isNotEmpty() }.forEach { Sentence(it) }
             if (model.background_notice.isNotEmpty()) Sentence(model.background_notice, "backup-background-notice")

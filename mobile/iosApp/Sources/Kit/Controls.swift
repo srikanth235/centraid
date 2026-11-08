@@ -446,6 +446,8 @@ struct KitSpinner: View {
 struct KitProgressBar: View {
     let fraction: Double
     var onStage: Bool = false
+    /// 2 is the rule of a progress line; a status card's bar (Backup's run) is 6.
+    var height: CGFloat = 2
 
     @Environment(\.colorScheme) private var scheme
 
@@ -460,7 +462,7 @@ struct KitProgressBar: View {
                     .frame(width: proxy.size.width * clamped)
             }
         }
-        .frame(height: 2)
+        .frame(height: height)
         .clipShape(shape)
         .accessibilityElement(children: .ignore)
         .accessibilityValue("\(Int((clamped * 100).rounded())) percent")

@@ -253,6 +253,12 @@ message BackupHomeData {
   string key_summary = 38;
   // "Restore my vaults": the row under the recovery key, and its event.
   string restore_label = 39;
+  // A RUN'S BYTES, for the status card's bar under `progress` ("Backing up — 412
+  // MB to go"). Known only while a run is going and the phone can say how many
+  // bytes the backup covers; the fraction is what a gateway has acknowledged
+  // of that total, 0..1. Otherwise `progress` is drawn with a spinner.
+  bool progress_known = 40;
+  float progress_fraction = 41;
 }
 
 // WHERE THE BACKUP STANDS, in one word the page draws its status card from (#1173).

@@ -41,6 +41,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -363,13 +364,15 @@ public fun KitProgressBar(
     onStage: Boolean = false,
     /** A fill that is no token (the chat's download wears the shell's teal), over [ink]. */
     fill: Color? = null,
+    /** 2dp is the rule of a progress line; a status card's bar (Backup's run) is 6dp. */
+    height: Dp = 2.dp,
 ) {
     val clamped = fraction.coerceIn(0f, 1f)
     val shape = controlRadius("sm")
     Box(
         modifier
             .fillMaxWidth()
-            .height(2.dp)
+            .height(height)
             .clip(shape)
             .background(centraidColor(if (onStage) "onStageSoft" else "bgSunken"))
             .semantics { progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f) },
