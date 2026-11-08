@@ -448,6 +448,8 @@ struct KitProgressBar: View {
     var onStage: Bool = false
     /// 2 is the rule of a progress line; a status card's bar (Backup's run) is 6.
     var height: CGFloat = 2
+    /// A fill that is no token (Backup's run wears the shell's teal), over the accent.
+    var fill: Color? = nil
 
     @Environment(\.colorScheme) private var scheme
 
@@ -458,7 +460,7 @@ struct KitProgressBar: View {
             ZStack(alignment: .leading) {
                 shape.fill(Theme.color(onStage ? "onStageSoft" : "bgSunken", scheme))
                 shape
-                    .fill(Theme.color(onStage ? "onStage" : "accent", scheme))
+                    .fill(fill ?? Theme.color(onStage ? "onStage" : "accent", scheme))
                     .frame(width: proxy.size.width * clamped)
             }
         }

@@ -181,11 +181,11 @@ private fun BackupPage(
                         Modifier.padding(top = 6.dp).testTag("backup-progress").semantics(mergeDescendants = true) { },
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        KitProgressBar(model.progress_fraction, height = 6.dp)
+                        KitProgressBar(model.progress_fraction, height = 6.dp, fill = appAccent("").text)
                         Text(
                             model.progress,
                             style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
-                            color = conditionTint(model),
+                            color = appAccent("").text,
                         )
                     }
                 } else {

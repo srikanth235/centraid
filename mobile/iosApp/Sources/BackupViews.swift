@@ -133,11 +133,11 @@ struct BackupHomeView: View {
                     // THE RUN'S BAR (BackupRunning): what a gateway has acknowledged of the whole,
                     // and the bytes still to go under it.
                     VStack(alignment: .leading, spacing: 8) {
-                        KitProgressBar(fraction: Double(model.progressFraction), height: 6)
+                        KitProgressBar(fraction: Double(model.progressFraction), height: 6, fill: AppAccent.shell.text)
                         Text(model.progress)
                             .kitType(.meta)
                             .fontWeight(.semibold)
-                            .foregroundStyle(tint(model))
+                            .foregroundStyle(AppAccent.shell.text)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 6)
