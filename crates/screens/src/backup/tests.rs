@@ -124,6 +124,26 @@ impl ScreenCtx for Fake {
     fn push(&self, _: wire::ScreenUpdate) {}
 
     fn wake_after(&self, _: std::time::Duration) {}
+
+    /// The device's ledger of paired gateways, which is what the reading names.
+    fn vault(&self, request: centraid_core::screens::VaultRequest) -> Result<wire::Response> {
+        use centraid_core::screens::VaultRequest;
+        match request {
+            VaultRequest::Pins(_) => Ok(wire::Response {
+                kind: Some(wire::response::Kind::Pins(wire::PinsResponse {
+                    destinations: self
+                        .status
+                        .borrow()
+                        .as_ref()
+                        .map(|status| status.destinations.clone())
+                        .unwrap_or_default(),
+                })),
+            }),
+            other => Err(CoreError::Unavailable {
+                reason: format!("the scripted door answers no {other:?}"),
+            }),
+        }
+    }
 }
 
 /// A Backup screen over a scripted core and a shell with two stores.
@@ -1459,6 +1479,137 @@ fn nothing_the_screen_says_carries_the_words_themselves() {
     let text = String::from_utf8_lossy(&encoded);
     assert!(!text.contains("abandon"));
     assert!(!text.contains(SEED));
+}
+
+// ---- a gateway that moved -------------------------------------------------
+
+/// A reading in which the laptop's items wait for a backup device that does not answer.
+fn lost() -> wire::BackupStatusResponse {
+    wire::BackupStatusResponse {
+        content_confirmed: 4,
+        waiting: waiting(&[(wire::WaitReason::Gateway, 6)]),
+        ..both()
+    }
+}
+
+/// The `BrowseGateways` effects among `effects`, in order, as their `on`.
+fn browses(effects: &[wire::Effect]) -> Vec<bool> {
+    effects
+        .iter()
+        .filter_map(|effect| match &effect.kind {
+            Some(wire::effect::Kind::BrowseGateways(browse)) => Some(browse.on),
+            _ => None,
+        })
+        .collect()
+}
+
+fn sighted(gw: &str, addresses: &[&str]) -> E {
+    E::EffectResult(wire::EffectResult {
+        effect_id: 0,
+        outcome: Some(wire::effect_result::Outcome::GatewaysSighted(
+            wire::GatewaysSighted {
+                sightings: vec![wire::GatewaySighting {
+                    service_name: "centraid-gateway".to_owned(),
+                    txt: [("gw".to_owned(), gw.to_owned())].into(),
+                    addresses: addresses.iter().map(|a| (*a).to_owned()).collect(),
+                }],
+            },
+        )),
+    })
+}
+
+fn kept(refreshed: bool) -> Option<wire::response::Kind> {
+    Some(wire::response::Kind::RefreshDestination(
+        wire::RefreshDestinationResponse {
+            refreshed,
+            ..Default::default()
+        },
+    ))
+}
+
+#[test]
+fn a_gateway_the_core_cannot_reach_is_browsed_for_and_one_that_answers_is_not() {
+    // ITEMS WAIT FOR A BACKUP DEVICE that does not answer: the browse begins with the page.
+    let page = Page::open(lost());
+    assert_eq!(browses(&page.effects), [true]);
+    // A gateway that answers, a vault with none paired and a vault that moved are not browsed for.
+    for status in [
+        both(),
+        status(Vec::new()),
+        wire::BackupStatusResponse {
+            frozen: true,
+            ..lost()
+        },
+    ] {
+        assert!(browses(&Page::open(status).effects).is_empty());
+    }
+}
+
+#[test]
+fn rediscovery_matches_by_identity_asks_the_core_and_stops_on_a_kept_address() {
+    let mut paired = lost();
+    paired.destinations[0].gateway_id = "a1b2c3d4".to_owned();
+    let mut page = Page::open(paired.clone());
+    assert_eq!(browses(&page.effects), [true]);
+    page.effects.clear();
+    // A gateway of another identity, at an address: nothing is offered.
+    page.send(sighted("ffffffff", &["192.168.1.99:7443"]));
+    assert!(page.jobs.is_empty());
+    // The paired one, by its id, at a new address (the recorded one is not offered again).
+    page.send(sighted(
+        "A1B2C3D4",
+        &["192.168.1.20:7443", "192.168.1.77:7443"],
+    ));
+    assert_eq!(page.jobs, ["refresh:a1b2c3d4"]);
+    // THE CORE REFUSED the address (nothing answered as that gateway): the browse goes on.
+    page.answer_job(kept(false));
+    assert!(browses(&page.effects).is_empty());
+    // A later window finds it and the core keeps the address: the browse ends, once.
+    page.send(sighted("a1b2c3d4", &["192.168.1.78:7443"]));
+    assert_eq!(page.jobs, ["refresh:a1b2c3d4"]);
+    page.answer_job(kept(true));
+    assert_eq!(browses(&page.effects), [false]);
+    // IT IS NOT BROWSED FOR AGAIN while the page stays open, though the pass has not reached it yet.
+    page.effects.clear();
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
+    assert!(browses(&page.effects).is_empty());
+    // A page opened anew looks again.
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: true }));
+    assert_eq!(browses(&page.effects), [true]);
+}
+
+#[test]
+fn a_browse_ends_when_the_gateway_answers_the_app_leaves_the_front_or_the_page_is_left() {
+    // THE PASS REACHED IT: the next read has nothing waiting for a gateway, and the browse ends.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.set_status(both());
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
+    assert_eq!(browses(&page.effects), [false]);
+
+    // THE APP LEAVES THE FRONT: a browse is foreground work, and comes back with the front.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: false }));
+    assert_eq!(browses(&page.effects), [false]);
+    page.effects.clear();
+    page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
+    assert!(
+        browses(&page.effects).is_empty(),
+        "nothing browses in the background"
+    );
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: true }));
+    assert_eq!(browses(&page.effects), [true]);
+
+    // THE PAGE IS LEFT.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.send(E::Left(wire::Left {}));
+    assert_eq!(browses(&page.effects), [false]);
 }
 
 // ---- what the doors are asked ---------------------------------------------
