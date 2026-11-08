@@ -7,7 +7,10 @@
 #
 # Needs a vault-holding install (`onboarding.yaml` leaves one). For the
 # ready branch launch a DEBUG build with
-# `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>` so no download happens.
+# `SIMCTL_CHILD_CENTRAID_DEV_CHAT_SCRIPT=<path to a JSON script>` (`KeyedModel` in
+# `crates/assist/src/testing.rs`): the slot then holds a model that says what the script says, so
+# no download happens and every chat state can be reached on purpose. The hook is read in
+# `centraid_assist_llama::process_host` under `debug_assertions` only; a release build has none.
 appId: dev.centraid.Centraid
 name: chat
 ---

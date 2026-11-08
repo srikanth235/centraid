@@ -139,6 +139,29 @@ impl Config {
     }
 }
 
+/// A SCRIPTED CHAT MODEL FOR DRIVING THE SCREENS ON A SIMULATOR (#1173): when the process was
+/// started with `CENTRAID_DEV_CHAT_SCRIPT=<path to a JSON script>` (see
+/// [`centraid_assist::testing::KeyedModel`]), the slot holds a model that says what the script
+/// says and no weights are loaded, so the download step is skipped and every chat state can be
+/// reached on purpose.
+///
+/// **IT CANNOT SHIP.** The reading of the variable exists only under `debug_assertions`; a release
+/// build (`--release`, which is what a signed phone library is) compiles the second definition,
+/// which returns `None` without looking at the environment. `the_dev_script_is_not_in_a_release_build`
+/// holds that.
+#[cfg(all(feature = "engine", debug_assertions))]
+fn dev_chat_script() -> Option<Arc<dyn centraid_assist::model::Model>> {
+    let path = std::env::var_os("CENTRAID_DEV_CHAT_SCRIPT")?;
+    let text = std::fs::read_to_string(&path).ok()?;
+    let model = centraid_assist::testing::KeyedModel::from_json(&text).ok()?;
+    Some(Arc::new(model))
+}
+
+#[cfg(all(feature = "engine", not(debug_assertions)))]
+fn dev_chat_script() -> Option<Arc<dyn centraid_assist::model::Model>> {
+    None
+}
+
 /// The process's one model slot, with this engine's loader registered.
 ///
 /// Registered exactly once, however many handles ask: the first call builds the
@@ -150,6 +173,9 @@ pub fn process_host() -> Arc<ModelHost> {
     Arc::clone(HOST.get_or_init(|| {
         let host = ModelHost::new();
         host.set_loader(Arc::new(LlamaLoader::default()));
+        if let Some(model) = dev_chat_script() {
+            host.install(model);
+        }
         Arc::new(host)
     }))
 }
@@ -157,6 +183,14 @@ pub fn process_host() -> Arc<ModelHost> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// In a release build the hook is not compiled in: the function that would read the variable is
+    /// the one that returns `None`, so the variable is never looked at.
+    #[cfg(all(feature = "engine", not(debug_assertions)))]
+    #[test]
+    fn the_dev_script_is_not_in_a_release_build() {
+        assert!(super::dev_chat_script().is_none());
+    }
 
     #[cfg(feature = "engine")]
     #[test]

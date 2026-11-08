@@ -115,19 +115,53 @@ pub fn app_of(kind: Kind) -> Option<App> {
 
 /// The card of a row: its name, its date, and one word of state.
 #[must_use]
-pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
+pub fn card_of(row: &Row, today: Date) -> Option<Card> {
     let how = card_kind(row.kind)?;
     let mut card = Card::new(how.app, how.entity, row.id.clone(), row.name.clone());
-    if let Some(stamp) = row.date {
-        card = card.subtitle(stamp.show());
+    // A person's date is when the row was made, which says nothing about them; every other kind's
+    // is the day it is about.
+    if let Some(stamp) = row.date.filter(|_| row.kind != Kind::Person) {
+        card = card.subtitle(friendly(stamp, today));
     }
     // A transaction's one word is what it moved: `-42.00 USD`.
     let state = match (row.kind, row.field("amount"), row.field("status")) {
         (Kind::Transaction, Some(amount), _) => amount.show(None),
-        (_, _, Some(Val::Enum(status))) => (*status).to_owned(),
+        // the ordinary state of a row is not worth a word on a card
+        (_, _, Some(Val::Enum(status))) if !matches!(*status, "confirmed" | "open" | "posted") => {
+            (*status).to_owned()
+        }
         _ => String::new(),
     };
     Some(card.meta(state))
+}
+
+/// A card's day in the member's words (the board's "Today · 11:15"): today, tomorrow and
+/// yesterday by name, any other day as `Fri 6 Nov` (with the year when it is not this one), then
+/// the time when the row has one.
+fn friendly(stamp: crate::native::dates::Stamp, today: Date) -> String {
+    use crate::native::dates::{clock, weekday_abbrev};
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let date = stamp.date;
+    let day = match (date - today).get_days() {
+        0 => "Today".to_owned(),
+        1 => "Tomorrow".to_owned(),
+        -1 => "Yesterday".to_owned(),
+        _ => {
+            let month = MONTHS[usize::try_from(date.month() - 1).unwrap_or(0)];
+            let year = if date.year() == today.year() {
+                String::new()
+            } else {
+                format!(" {}", date.year())
+            };
+            format!("{} {} {month}{year}", weekday_abbrev(date), date.day())
+        }
+    };
+    match stamp.time {
+        Some(time) => format!("{day} · {}", clock(time)),
+        None => day,
+    }
 }
 
 #[cfg(test)]
@@ -191,5 +225,17 @@ mod tests {
             card_kind(Kind::Transaction).map(|how| how.opens),
             Some(Opens::Row)
         );
+    }
+
+    #[test]
+    fn a_card_says_its_day_in_words_and_a_person_has_none() {
+        use crate::native::dates::Stamp;
+        let today = Date::constant(2026, 11, 8);
+        let at = |text: &str| friendly(Stamp::parse(text).unwrap(), today);
+        assert_eq!(at("2026-11-08T16:00:00"), "Today · 16:00");
+        assert_eq!(at("2026-11-09"), "Tomorrow");
+        assert_eq!(at("2026-11-07"), "Yesterday");
+        assert_eq!(at("2026-11-05 06:09"), "Thu 5 Nov · 06:09");
+        assert_eq!(at("2027-01-02"), "Sat 2 Jan 2027");
     }
 }

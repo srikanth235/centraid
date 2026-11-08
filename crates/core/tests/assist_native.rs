@@ -1253,30 +1253,18 @@ fn an_event_question_in_another_zone_is_answered_on_that_zones_days() {
     let (day, in_utc) = night_call_in("Etc/UTC");
     let (_, in_auckland) = night_call_in("Pacific/Auckland");
     // UTC: that evening, 22:30
-    assert!(in_utc.ends_with(&format!("{day} 22:30")), "{in_utc}");
+    assert!(in_utc.ends_with(" · 22:30"), "{in_utc}");
     // Auckland (UTC+13 in October): the next morning, 11:30 on the NEXT local day
-    let next = ymd(days_of(&day) + 1);
     assert!(
-        in_auckland.ends_with(&format!("{next} 11:30")),
+        in_auckland.ends_with(" · 11:30"),
         "{in_auckland} (day {day})"
     );
-}
-
-/// Days since 1970-01-01 of a `YYYY-MM-DD`.
-fn days_of(day: &str) -> i64 {
-    let mut parts = day.split('-').map(|part| part.parse::<i64>().unwrap());
-    let (year, month, date) = (
-        parts.next().unwrap(),
-        parts.next().unwrap(),
-        parts.next().unwrap(),
+    // the cards name the day in words, so the zone's day shows as a different one
+    assert_ne!(
+        in_utc.trim_end_matches(" · 22:30"),
+        in_auckland.trim_end_matches(" · 11:30"),
+        "{in_utc} vs {in_auckland}"
     );
-    let y = year - i64::from(month <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y.rem_euclid(400);
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + date - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 // ---------------------------------------------------------------------------
