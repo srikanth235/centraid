@@ -294,7 +294,15 @@ fn week_reads_the_whole_week_from_the_regions_first_weekday() {
         .collect();
     assert_eq!(initials, "MTWTFSS");
     assert!(strip.days[2].is_selected && strip.days[6].dot_hue_keys.len() == 1);
-    assert_eq!(strip.days[0].dot_hue_keys.len(), 0);
+    // The seeded vault's weekly "Morning run" lands on whichever weekday tomorrow is, so a day can
+    // hold a dot this test did not put there: what it asserts is that none of ITS events is on
+    // Monday, the day nobody wrote to.
+    assert!(
+        r.grid().days[0]
+            .blocks
+            .iter()
+            .all(|b| !b.instance_key.starts_with("zq-"))
+    );
     assert_eq!(strip.step_days, 7);
     assert_eq!(r.data().today.len(), 10);
 
