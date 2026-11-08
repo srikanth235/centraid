@@ -180,6 +180,9 @@ catalog! {
     plain items_status = ("Secrets stay hidden until you reveal them.", "Secrets stay hidden until you reveal them.");
     plain item_gone = ("This item is gone", "This item is gone");
     plain item_gone_body = ("It was erased, or never on this phone.", "It was erased, or never on this phone.");
+    plain item_last_used = ("{type} · last used {when}", "{type} · last used {when}");
+    plain item_never_used = ("{type} · never used", "{type} · never used");
+    plain item_starred = ("Starred", "Starred");
     plain item_status = ("Revealed secrets hide again after 30 seconds.", "Revealed secrets hide again after 30 seconds.");
     plain keeps_backup = ("Backup", "Backup");
     plain keeps_backup_detail = ("Stored encrypted on your backup device.", "Stored encrypted on your backup device.");
@@ -195,6 +198,7 @@ catalog! {
     plain kind_pin = ("PIN", "PIN");
     plain length = ("Length · {n}", "Length · {n}");
     plain locked_sentence = ("Locker is locked.", "Locker is locked.");
+    plain more_actions = ("More actions", "More actions");
     plain last_used = ("Last used", "Last used");
     plain last_used_never = ("Never", "Never");
     counted lock_failed_unlocks = ("{n} failed unlock · last {when}", "{n} failed unlocks · last {when}");
@@ -361,6 +365,7 @@ catalog! {
     plain unlock_again = ("Try again", "Try again");
     plain unlock_with = ("Unlock with", "Unlock with");
     plain unstar = ("Unstar", "Unstar");
+    plain used_today = ("today", "today");
     plain unlocked_status = ("Unlocked · locks after 5 idle minutes", "Unlocked · locks after 5 idle minutes");
     plain verification_code = ("Verification code", "Verification code");
     plain updated = ("Changed", "Changed");

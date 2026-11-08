@@ -159,6 +159,8 @@ message LockerVerb {
   // `copy_code`; `edit` on a custom field; `rename` on a passkey's name.
   string key = 1;
   string label = 2;
+  // Drawn as a tinted pill, not a text verb: the verification code card's Copy.
+  bool pill = 3;
 }
 
 message LockerAction {
@@ -462,11 +464,16 @@ message LockerItemChrome {
   string edit_label = 3;
   optional Route edit_route = 4;
   string retry = 5;
+  // The "…" menu's spoken name ("More actions"); the menu itself is
+  // `LockerItemData.actions`.
+  string menu_label = 6;
 }
 
 message LockerItemData {
   string title = 1;
-  string type_label = 2;
+  // 2 was `type_label`: the hero's `subtitle` says the type now.
+  reserved 2;
+  reserved "type_label";
   string type_chip = 3;
   // 4 was `type_key`: nothing read it (#1152).
   reserved 4;
@@ -482,6 +489,8 @@ message LockerItemData {
   string memo_label = 12;
   // "Add a memo" / "Edit the memo"; empty on a trashed item.
   string memo_action = 13;
+  // The "…" menu in the header: add a field, star, archive, trash (restore and
+  // erase on a trashed item).
   repeated LockerAction actions = 14;
   // No item has this id any more.
   optional EmptyState gone = 15;
@@ -490,6 +499,11 @@ message LockerItemData {
   // "Change password on website": opens the item's own address; absent when
   // the item has none or is trashed (#1173). A tap is `Action` with its key.
   optional LockerAction change_password = 17;
+  // THE CENTRED HERO'S SECOND LINE: "Login · last used today".
+  string subtitle = 18;
+  // The star beside the title is spoken as this ("Starred"); empty when the
+  // item is not starred and no star is drawn.
+  string star_label = 19;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a

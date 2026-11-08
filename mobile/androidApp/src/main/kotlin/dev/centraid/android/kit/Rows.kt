@@ -1,6 +1,7 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

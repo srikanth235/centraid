@@ -44,9 +44,28 @@ struct LockerItemView: View {
             // is `secure`: the bar is outside the secure canvas, and the page
             // already draws the title in its shielded header.
             PushedPage(title: state.secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
-                if !state.chrome.editLabel.isEmpty {
-                    ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
-                        if state.chrome.hasEditRoute { open(state.chrome.editRoute) }
+                HStack(spacing: 8) {
+                    // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
+                    if case let .data(item)? = state.content, !item.hasGone, !item.actions.isEmpty {
+                        Menu {
+                            ForEach(item.actions, id: \.key) { action in
+                                Button(role: action.destructive ? .destructive : nil) {
+                                    send(LockerItemEvents.make { $0.action = .with { $0.key = action.key } })
+                                } label: {
+                                    Text(action.label)
+                                }
+                                .accessibilityIdentifier("locker-item-action-\(action.key)")
+                            }
+                        } label: {
+                            ToolbarIconFace(iconKey: "MoreHoriz")
+                        }
+                        .accessibilityLabel(state.chrome.menuLabel)
+                        .accessibilityIdentifier("locker-item-menu")
+                    }
+                    if !state.chrome.editLabel.isEmpty {
+                        ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
+                            if state.chrome.hasEditRoute { open(state.chrome.editRoute) }
+                        }
                     }
                 }
             } content: {
@@ -137,19 +156,33 @@ struct LockerItemView: View {
 
     @ViewBuilder
     private func page(_ item: Centraid_Core_V1_LockerItemData) -> some View {
-        HStack(spacing: 12) {
-            LockerTypeChip(letters: item.typeChip)
-            VStack(alignment: .leading, spacing: 2) {
+        // THE CENTRED HERO (the Locker item board): the type's chip large, the title with its star
+        // beside it, and the type with when it was last used under that.
+        VStack(spacing: 8) {
+            LockerTypeChip(letters: item.typeChip, side: 64)
+            HStack(spacing: 6) {
                 Text(item.title)
                     .kitType(.title)
                     .foregroundStyle(Surface.ink)
-                Text(item.typeLabel)
-                    .kitType(.meta)
-                    .foregroundStyle(Surface.meta)
+                    .multilineTextAlignment(.center)
+                if !item.starLabel.isEmpty {
+                    CentraidIconView(iconKey: "Star", tint: AppAccent("locker").text, size: 18, solid: true)
+                        .accessibilityLabel(item.starLabel)
+                        .accessibilityIdentifier("locker-item-star")
+                }
             }
-            Spacer(minLength: 0)
-            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+            Text(item.subtitle)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .multilineTextAlignment(.center)
+            if !item.chips.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                }
+            }
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("locker-item-head")
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
@@ -196,20 +229,6 @@ struct LockerItemView: View {
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
-        }
-        if !item.actions.isEmpty {
-            VStack(spacing: 0) {
-                ForEach(item.actions, id: \.key) { action in
-                    SheetRow(
-                        label: action.label,
-                        destructive: action.destructive,
-                        identifier: "locker-item-action-\(action.key)",
-                        onTap: { send(LockerItemEvents.make { $0.action = .with { $0.key = action.key } }) }
-                    )
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, 12)
         }
     }
 }
@@ -261,8 +280,23 @@ struct LockerFieldRowView: View {
             if !row.verbs.isEmpty {
                 HStack(spacing: 12) {
                     ForEach(row.verbs, id: \.key) { verb in
-                        KitLink(label: verb.label, dense: true, identifier: "locker-verb-\(row.key)-\(verb.key)") {
-                            onVerb(verb)
+                        if verb.pill {
+                            // THE CODE CARD'S COPY: a green pill, as the board draws it.
+                            Button(action: { onVerb(verb) }) {
+                                Text(verb.label)
+                                    .centraidType("smallStrong")
+                                    .foregroundStyle(StateColor.green.text)
+                                    .padding(.horizontal, 14)
+                                    .frame(minHeight: 36)
+                                    .background(StateColor.green.tint, in: Capsule())
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("locker-verb-\(row.key)-\(verb.key)")
+                        } else {
+                            KitLink(label: verb.label, dense: true, identifier: "locker-verb-\(row.key)-\(verb.key)") {
+                                onVerb(verb)
+                            }
                         }
                     }
                 }

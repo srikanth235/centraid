@@ -281,6 +281,8 @@ public fun PushedPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
+    /** A second key before the trailing one: the "…" that opens a page's verbs (a Locker item). */
+    more: RoomAction? = null,
     /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
     filter: RoomFilter? = null,
     /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
@@ -308,6 +310,7 @@ public fun PushedPage(
             )
             Spacer(Modifier.weight(1f))
             if (filter != null) FilterMenuButton(app, filter)
+            if (more != null) HeaderVerb(more)
             if (trailing != null) HeaderVerb(trailing)
         }
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))

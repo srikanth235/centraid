@@ -538,17 +538,17 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
 
 /** The type's two letters in the app's fill, white on it. */
 @Composable
-private fun TypeChip(letters: String, modifier: Modifier = Modifier) {
+private fun TypeChip(letters: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 32.dp) {
     if (letters.isEmpty()) return
     Box(
         modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape((32 * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+            .size(size)
+            .clip(RoundedCornerShape((size.value * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
             .background(appAccent("locker").fill)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        KitText(letters, KitType.Badge, androidx.compose.ui.graphics.Color.White)
+        KitText(letters, if (size.value > 40f) KitType.Title else KitType.Badge, androidx.compose.ui.graphics.Color.White)
     }
 }
 
@@ -721,12 +721,17 @@ internal fun LockerItemScreen(
 ) {
     SecureWindow(state.secure)
     val chrome = state.chrome
+    var menuOpen by remember { mutableStateOf(false) }
     LockerCovered(state.wall, chrome?.back_label.orEmpty(), onBack, sendWall, onWords) {
         val data = state.data_
         PushedPage(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
+            // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
+            more = data?.takeIf { it.gone == null && it.actions.isNotEmpty() }?.let {
+                RoomAction("MoreHoriz", chrome?.menu_label.orEmpty(), "locker-item-menu") { menuOpen = true }
+            },
             trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
                 RoomAction("Pencil", label, "locker-item-edit") { chrome.edit_route?.let(onOpen) }
             },
@@ -744,19 +749,33 @@ internal fun LockerItemScreen(
                 }
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("locker-item-head"),
-                            verticalAlignment = Alignment.CenterVertically,
+                        // THE CENTRED HERO (the Locker item board): the type's chip large, the title with
+                        // its star beside it, and the type with when it was last used under that.
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("locker-item-head"),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            TypeChip(item.type_chip)
-                            Text(
-                                item.type_label,
-                                style = centraidType("annotLabelOn"),
-                                color = centraidColor("textSoft"),
-                                modifier = Modifier.padding(start = 10.dp).weight(1f),
-                            )
-                            if (item.starred) CentraidIcon(iconKey = "Star", tint = appAccent("locker").text, size = 16.dp)
-                            item.chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+                            TypeChip(item.type_chip, size = 64.dp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    item.title,
+                                    style = kitTextStyle(KitType.Title),
+                                    color = Surface.ink,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                                if (item.star_label.isNotEmpty()) {
+                                    Box(Modifier.testTag("locker-item-star").semantics { contentDescription = item.star_label }) {
+                                        CentraidIcon(iconKey = "Star", tint = appAccent("locker").text, size = 18.dp, solid = true)
+                                    }
+                                }
+                            }
+                            Text(item.subtitle, style = kitTextStyle(KitType.Meta), color = Surface.meta, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            if (item.chips.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    item.chips.forEach { chip -> StatusChipView(chip) }
+                                }
+                            }
                         }
                         LockerNote(item.trashed_note, ink = "net")
                         LockerNote(item.status_line)
@@ -822,25 +841,19 @@ internal fun LockerItemScreen(
                             }
                         }
                     }
-                    if (item.actions.isNotEmpty()) {
-                        item(key = "actions") {
-                            FlowRow(
-                                Modifier.fillMaxWidth().padding(KitGeometry.GUTTER),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                item.actions.forEach { action ->
-                                    OutlineButton(
-                                        action.label,
-                                        testTag = "locker-item-action-${action.key}",
-                                        ink = if (action.destructive) "net" else "text",
-                                    ) { onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = action.key))) }
-                                }
-                            }
-                        }
-                    }
                 }
             }
+        }
+        if (menuOpen && data != null) {
+            OptionSheet(
+                title = chrome?.menu_label.orEmpty(),
+                options = data.actions.map { SheetOption(key = it.key, label = it.label, destructive = it.destructive) },
+                onPick = { key ->
+                    menuOpen = false
+                    onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = key)))
+                },
+                onDismiss = { menuOpen = false },
+            )
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(
@@ -1016,8 +1029,25 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
             }
         }
         row.verbs.forEach { verb ->
-            OutlineButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
-                onVerb(verb.key)
+            if (verb.pill) {
+                // THE CODE CARD'S COPY: a green pill, as the board draws it.
+                Text(
+                    verb.label,
+                    style = centraidType("smallStrong"),
+                    color = StateColor.Green.text,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .heightIn(min = 36.dp)
+                        .clip(CircleShape)
+                        .background(StateColor.Green.tint)
+                        .clickable { onVerb(verb.key) }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                        .testTag("locker-verb-${row.key}-${verb.key}"),
+                )
+            } else {
+                OutlineButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
+                    onVerb(verb.key)
+                }
             }
         }
     }

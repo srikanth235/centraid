@@ -51,7 +51,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `locker-filter-show-<all\|starred\|archived\|type>` | Locker | the shelf's filter with its counts |
 | `locker-category-<all\|codes\|card\|wifi\|review\|trash>` | Locker | the landing's category cards (#1173); Trash pushes its page, Review switches to Review, the rest open that category's list |
 | `locker-category-back` | Locker | the chevron above a category's list, back to the landing (Android also takes the system back) |
-| `locker-item-action-<key>` | Locker item | an item action button: `change_password` is "Change password on website" (opens the item's own address); one id on both shells (Android's was `locker-action-<key>`) |
+| `locker-item-menu` | Locker item | the header's "…" key; its entries are `locker-item-action-<key>` on iOS and `sheet-option-<key>` on Android |
+| `locker-item-action-<key>` | Locker item | an item action (a "…" menu entry): `change_password` is "Change password on website" (opens the item's own address); one id on both shells (Android's was `locker-action-<key>`) |
 | `locker-item`, `locker-item-head`, `locker-item-edit` | Locker item | the item page's scroller, its head line (type chip, type word, status chips) and the header's Edit key (Android's was `locker-edit`) |
 | `locker-field-<key>`, `locker-value-<key>`, `locker-verb-<key>-<verb>` | Locker item | one field row (`username`, `password`, `address`, `otp_seed` …), its value as drawn (the mask while sealed) and one of its verbs (`copy`, `reveal`, `hide`, `open`); iOS drew `locker-field-<key>-value` and `locker-field-<key>-<verb>`, now these. `locker-code-countdown` is the one-time code's ring |
 | `locker-item-memo`, `locker-item-status` | Locker item (iOS) | the memo's Add or Edit button and the status line's verb (Undo) |
