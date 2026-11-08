@@ -86,6 +86,61 @@ fn noun(key: &str, locale: Locale) -> Option<String> {
     })
 }
 
+/// The kind's plural, the first half of a step's second line: "Reminders". `None` for a kind the
+/// table lacks.
+pub(super) fn group(key: &str, locale: Locale) -> Option<String> {
+    Some(match key {
+        "reminder" => words::group_reminder(locale),
+        "event" => words::group_event(locale),
+        "list" => words::group_list(locale),
+        "section" => words::group_section(locale),
+        "person" => words::group_person(locale),
+        "touch" => words::group_touch(locale),
+        "note" => words::group_note(locale),
+        "notebook" => words::group_notebook(locale),
+        "document" => words::group_document(locale),
+        "folder" => words::group_folder(locale),
+        "photo" => words::group_photo(locale),
+        "album" => words::group_album(locale),
+        "transaction" => words::group_transaction(locale),
+        "account" => words::group_account(locale),
+        "category" => words::group_category(locale),
+        "rule" => words::group_rule(locale),
+        "budget" => words::group_budget(locale),
+        "metric" => words::group_metric(locale),
+        "workout" => words::group_workout(locale),
+        "item" => words::group_item(locale),
+        _ => return None,
+    })
+}
+
+/// A step's second line, as the board draws it under the row's title: the kind's plural and
+/// when the row is, "Reminders · today, 10:45". `when` is the spelling the core composed
+/// (`today 10:45`): the clock moves behind a comma so the day and the hour read apart.
+pub(super) fn subtitle(noun_key: &str, when: &str, locale: Locale) -> String {
+    let group = group(noun_key, locale).unwrap_or_default();
+    let when = when_line(when);
+    match (group.is_empty(), when.is_empty()) {
+        (false, false) => format!("{group} · {when}"),
+        (false, true) => group,
+        _ => when,
+    }
+}
+
+fn when_line(when: &str) -> String {
+    let when = when.trim();
+    match when.rsplit_once(' ') {
+        Some((day, clock))
+            if clock.len() <= 5
+                && clock.contains(':')
+                && clock.chars().all(|c| c.is_ascii_digit() || c == ':') =>
+        {
+            format!("{day}, {clock}")
+        }
+        _ => when.to_owned(),
+    }
+}
+
 /// The verb alone, or the phrase a verb reads as on its own (`edit` is "Save changes").
 enum Say {
     Verb(String),
@@ -218,6 +273,30 @@ mod tests {
         for verb in verbs {
             assert_ne!(verb_of(verb), "", "{verb} has no key in the label table");
             assert_ne!(of(&[(verb, "task")]), "Confirm", "{verb}");
+        }
+    }
+
+    #[test]
+    fn a_second_line_names_the_kind_and_when_with_the_clock_behind_a_comma() {
+        assert_eq!(
+            subtitle("reminder", "today 10:45", EN),
+            "Reminders · today, 10:45"
+        );
+        assert_eq!(
+            subtitle("reminder", "Fri 6 Nov", EN),
+            "Reminders · Fri 6 Nov"
+        );
+        assert_eq!(subtitle("event", "", EN), "Events");
+        assert_eq!(subtitle("", "", EN), "");
+        assert_eq!(subtitle("gadget", "tomorrow 09:00", EN), "tomorrow, 09:00");
+    }
+
+    #[test]
+    fn every_noun_key_has_a_plural() {
+        for kind in [
+            "task", "event", "project", "person", "note", "doc", "photo", "item",
+        ] {
+            assert!(group(noun_of(kind), EN).is_some(), "{kind}");
         }
     }
 

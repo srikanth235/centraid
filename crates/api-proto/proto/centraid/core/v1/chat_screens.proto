@@ -228,6 +228,11 @@ message ChatPending {
 message ChatPendingStep {
   string summary = 1;
   bool destructive = 2;
+  // The row's name, the step's title on the card ("Bring Chris a birthday card"), and the
+  // line under it ("Reminders · today, 10:45"). Both empty when the core did not name the
+  // row; the shell then draws `summary` (#1173).
+  string title = 3;
+  string subtitle = 4;
 }
 
 message ChatAttachment {

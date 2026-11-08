@@ -148,7 +148,7 @@ struct NotesEditorView: View {
                                     onToggle: { at in dispatch(event { $0.checklistToggled = .with { $0.at = at } }) },
                                     onLink: openChip
                                 )
-                                .frame(minHeight: 280)
+                                .frame(minHeight: 280, alignment: .top)
                             }
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -318,6 +318,9 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                         .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
                         .lineLimit(1)
                         .accessibilityIdentifier("kit-autosave-status")
+                        // A principal toolbar item does not redraw when only its text changes; a
+                        // new identity per sentence does, so a tapped chip's "in the trash" shows.
+                        .id(status)
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
             }

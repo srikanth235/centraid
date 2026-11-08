@@ -1,7 +1,8 @@
 //! The words on a Proposed change card's confirm button (#1173, `design/mockups/Chat`): the
 //! button says what it will do ("Add reminder"), not a bare "Confirm". One verb word, one noun
 //! for the kind of row, and the few verbs that read better as a phrase on their own. A card whose
-//! steps disagree, or whose verb or kind this table lacks, keeps `chat::confirm`.
+//! steps disagree, or whose verb or kind this table lacks, keeps `chat::confirm`. The `group_` words are the kind's plural, the first half of the card's
+//! second line ("Reminders · today, 10:45").
 
 catalog! {
     plain verb_create = ("Add", "Add");
@@ -43,4 +44,24 @@ catalog! {
     plain noun_metric = ("metric", "metric");
     plain noun_workout = ("workout", "workout");
     plain noun_item = ("item", "item");
+    plain group_reminder = ("Reminders", "Reminders");
+    plain group_event = ("Events", "Events");
+    plain group_list = ("Lists", "Lists");
+    plain group_section = ("Sections", "Sections");
+    plain group_person = ("People", "People");
+    plain group_touch = ("Touches", "Touches");
+    plain group_note = ("Notes", "Notes");
+    plain group_notebook = ("Notebooks", "Notebooks");
+    plain group_document = ("Documents", "Documents");
+    plain group_folder = ("Folders", "Folders");
+    plain group_photo = ("Photos", "Photos");
+    plain group_album = ("Albums", "Albums");
+    plain group_transaction = ("Transactions", "Transactions");
+    plain group_account = ("Accounts", "Accounts");
+    plain group_category = ("Categories", "Categories");
+    plain group_rule = ("Rules", "Rules");
+    plain group_budget = ("Budgets", "Budgets");
+    plain group_metric = ("Metrics", "Metrics");
+    plain group_workout = ("Workouts", "Workouts");
+    plain group_item = ("Items", "Items");
 }

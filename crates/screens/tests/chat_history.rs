@@ -141,6 +141,14 @@ fn a_reopened_thread_draws_a_proposal_as_an_inert_card_and_how_it_ended_as_the_l
     let card = message.pending.expect("an inert card");
     assert_eq!(card.state(), State::Inert);
     assert!(card.pending_id.is_empty(), "nothing can name it");
+    // THE ROW IT NAMED SURVIVES THE REOPEN: its title and second line, inert, not a bare "Not done."
+    assert_eq!(card.steps.len(), 1);
+    assert_eq!(card.steps[0].title, "Pick up the dry cleaning");
+    assert!(card.steps[0].subtitle.starts_with("Reminders"));
+    assert!(
+        message.cards.is_empty(),
+        "the stored step is not a tappable card"
+    );
 
     // a proposal that was applied reads as the line the member was told, with no card
     let mut chat = Chat::ready(script(&complete_dry_cleaning()));

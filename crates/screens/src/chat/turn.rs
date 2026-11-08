@@ -652,6 +652,9 @@ impl Msg {
                 .iter()
                 .map(|step| Step {
                     summary: step.summary.clone(),
+                    title: step.title.clone(),
+                    when: step.when.clone(),
+                    changes: step.changes.clone(),
                     destructive: step.destructive,
                     app: super::model::app_of_kind(&step.kind),
                     verb: super::confirm::verb_of(&step.verb),

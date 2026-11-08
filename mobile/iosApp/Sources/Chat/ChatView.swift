@@ -985,10 +985,20 @@ private struct ChatPendingCard: View {
                             Circle()
                                 .strokeBorder(Theme.color("textFaint", scheme), lineWidth: 1.6)
                                 .frame(width: 20, height: 20)
-                            Text(verbatim: step.summary)
-                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
-                                .foregroundStyle(step.destructive ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textInk))
-                                .multilineTextAlignment(.leading)
+                            // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step
+                            // the core did not name by title keeps its composed sentence.
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: step.title.isEmpty ? step.summary : step.title)
+                                    .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                    .foregroundStyle(step.destructive ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textInk))
+                                    .multilineTextAlignment(.leading)
+                                if !step.subtitle.isEmpty {
+                                    Text(verbatim: step.subtitle)
+                                        .font(.system(size: CentraidScale.metaSize))
+                                        .foregroundStyle(Color(CentraidAsset.textMeta))
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
                         }
                     }
                     if !pending.moreLine.isEmpty {
@@ -1302,15 +1312,15 @@ private struct ChatVisionBanner: View {
                     // attempt stopped, and the one action.
                     Text(step.statusLine.isEmpty ? step.sizeLine : step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(step.statusLine.isEmpty ? "textSoft" : "net", scheme))
+                        .foregroundStyle(Theme.color("textSoft", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("chat-vision-line")
-                    KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)
+                    ChatDownloadButton(label: step.actionLabel, action: onDownload)
                     .accessibilityIdentifier("chat-vision-download")
                 } else {
                     Text(step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(step.progressKnown || step.statusLine.hasPrefix("Download") ? "net" : "textSoft", scheme))
+                        .foregroundStyle(Theme.color("textSoft", scheme))
                         .accessibilityIdentifier("chat-vision-status")
                     Spacer(minLength: 0)
                 }
@@ -1396,12 +1406,12 @@ private struct ChatModelStepView: View {
                         .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-error")
                 }
-                KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)
+                ChatDownloadButton(label: step.actionLabel, action: onDownload)
                     .accessibilityIdentifier("chat-download")
             case .downloading:
                 Text(step.statusLine)
                     .chatType("labelOn")
-                    .foregroundStyle(Theme.color("net", scheme))
+                    .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityIdentifier("chat-model-status")
                 ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
                     .animation(reduceMotion ? nil : ChatMotion.state, value: step.progress)
@@ -1433,6 +1443,26 @@ private struct ChatModelStepView: View {
 
 /// A hairline-thin track with a `net` fill: how much of the file has arrived.
 /// Unknown size draws the empty track; the status line carries the words.
+/// THE DOWNLOAD'S ONE ACTION, in the shell's teal as the composer's send is: red is the error
+/// colour and a download is no error (#1173).
+private struct ChatDownloadButton: View {
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(verbatim: label)
+                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 20)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .background(Capsule().fill(Color(CentraidAsset.shell)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct ProgressTrack: View {
     let fraction: Double?
     @Environment(\.colorScheme) private var scheme
@@ -1442,7 +1472,7 @@ private struct ProgressTrack: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.color("bgSunken", scheme))
                 Capsule()
-                    .fill(Theme.color("net", scheme))
+                    .fill(Color(CentraidAsset.shell))
                     .frame(width: proxy.size.width * CGFloat(min(max(fraction ?? 0, 0), 1)))
             }
         }

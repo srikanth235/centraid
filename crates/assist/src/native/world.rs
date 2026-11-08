@@ -418,7 +418,7 @@ impl World {
         let entities = entities(door, "person")?;
         let people = door.table(
             "person",
-            "id, form, role, nickname, met, cadence_days",
+            "id, form, role, nickname, met, birthday, cadence_days",
             "id",
             "id",
         )?;
@@ -443,11 +443,16 @@ impl World {
                     .map(Val::Num),
             );
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
-            self.insert(Row {
+            let mut row = Row {
                 kind: Kind::Person,
                 date: touched.get(&id).and_then(|at| Stamp::parse(at)),
                 ..Row::of(Kind::Person, &id, entity, fields)
-            });
+            };
+            // the birthday is the card's second fact (`MM-DD` or a full date), never the model's
+            if let Some(birthday) = text(person, "birthday").filter(|day| !day.is_empty()) {
+                row.extra.insert("birthday", birthday);
+            }
+            self.insert(row);
         }
         Ok(())
     }
@@ -456,10 +461,12 @@ impl World {
         let entities = entities(door, "event")?;
         let events = door.table(
             "event",
-            "id, starts, ends, timing, zone, rule, status, description",
+            "id, starts, ends, timing, zone, rule, status, place_id, description",
             "id",
             "id",
         )?;
+        // the place's name is the card's third part (`Café Lume`), never the model's
+        let places = self::entities(door, "place")?;
         let spec = Kind::Event.spec();
         for event in &events {
             let id = text(event, "id").unwrap_or_default();
@@ -492,6 +499,13 @@ impl World {
                 if let Some(value) = text(event, column) {
                     row.extra.insert(name, value);
                 }
+            }
+            if let Some(name) = text(event, "place_id")
+                .and_then(|place| places.get(&place))
+                .and_then(|place| text(place, "title"))
+                .filter(|name| !name.trim().is_empty())
+            {
+                row.extra.insert("place", name);
             }
             let all_day = row.extra.get("timing").map(String::as_str) == Some("all-day");
             if all_day {

@@ -423,7 +423,14 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
     if held.destructive {
         parts.push(words::a11y_destructive(locale));
     }
-    parts.extend(held.steps.iter().map(|step| step.summary.clone()));
+    parts.extend(held.steps.iter().filter_map(|step| {
+        let said = if step.summary.is_empty() {
+            &step.title
+        } else {
+            &step.summary
+        };
+        (!said.is_empty()).then(|| said.clone())
+    }));
     if !more.is_empty() {
         parts.push(more.clone());
     }
@@ -446,6 +453,14 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
             .map(|step| wire::ChatPendingStep {
                 summary: step.summary.clone(),
                 destructive: step.destructive,
+                title: step.title.clone(),
+                subtitle: if step.title.is_empty() {
+                    String::new()
+                } else if !step.changes.is_empty() {
+                    step.changes.clone()
+                } else {
+                    super::confirm::subtitle(step.noun, &step.when, locale)
+                },
             })
             .collect(),
         more_line: more,

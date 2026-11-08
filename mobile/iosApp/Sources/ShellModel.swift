@@ -40,9 +40,19 @@ final class ShellModel: ObservableObject {
             if path != oldValue {
                 importLineMoved()
                 rustPopped(from: oldValue)
+                // BACK FROM A ROW OPENED IN THE CHAT goes back to the chat, not to Home: the push
+                // selects Home's stack in Rust, so the place the member left is put back once the
+                // stack is empty again.
+                if path.isEmpty, !oldValue.isEmpty, returnsToChat {
+                    returnsToChat = false
+                    screens?.selectTab(RustScreens.chatTab)
+                }
             }
         }
     }
+
+    /// A page was opened while the Chat place showed: the stack's last pop returns there.
+    private var returnsToChat = false
 
     /// THE SCREEN RUNTIME'S STORE, once the core is open. Every view draws from it.
     @Published private(set) var screens: ScreenStore?
@@ -230,6 +240,7 @@ final class ShellModel: ObservableObject {
 
     /// Push a route Rust built onto the shell's stack (a row's `route`).
     func open(_ route: Centraid_Core_V1_Route) {
+        if path.isEmpty { returnsToChat = tab == .chat }
         path.append(.rust(RustEntry.make(route)))
     }
 
@@ -252,6 +263,7 @@ final class ShellModel: ObservableObject {
     /// move itself, as Compose tells it: `NavPopToRoot` closes whatever is left above the root.
     func popToRoot() {
         guard !path.isEmpty else { return }
+        returnsToChat = false
         path.removeAll()
         screens?.popToRoot(tab: RustScreens.homeTab)
     }
@@ -312,6 +324,7 @@ final class ShellModel: ObservableObject {
     /// while it shows, it only shuts the drawer.
     func select(place: String) {
         importLineMoved()
+        returnsToChat = false
         switch place {
         case RustScreens.chatTab:
             if tab == .chat {

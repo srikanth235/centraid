@@ -273,6 +273,8 @@ fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
                 title: step.title.clone(),
                 summary: step.summary.clone(),
                 destructive: step.destructive,
+                when: step.when.clone(),
+                changes: step.changes.clone(),
             })
             .collect(),
         destructive: card.destructive,
@@ -828,7 +830,21 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 text: answered.text.clone(),
                 refusal: None,
                 notice: store::notice_word(&answered.notices),
-                cards: answered.cards.clone(),
+                // The proposal's rows are kept as cards, so a thread reopened later draws their
+                // titles on the inert card (the pending write itself is memory).
+                cards: answered
+                    .cards
+                    .iter()
+                    .cloned()
+                    .chain(
+                        pending_seen
+                            .as_ref()
+                            .map(|card| {
+                                centraid_assist::native_turn::cards::step_cards(&card.steps)
+                            })
+                            .unwrap_or_default(),
+                    )
+                    .collect(),
             };
             let saved = persist(&said, record.as_ref(), carried.as_ref());
             sent(
@@ -1005,6 +1021,8 @@ mod tests {
                 kind: "task".to_owned(),
                 title: "Old".to_owned(),
                 summary: "Delete task \"Old\"".to_owned(),
+                when: String::new(),
+                changes: String::new(),
                 destructive: true,
             }],
             more: 3,

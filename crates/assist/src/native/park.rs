@@ -160,6 +160,9 @@ pub struct RowChange {
     pub created: bool,
     pub fields: Vec<FieldChange>,
     pub links: Vec<LinkChange>,
+    /// The name the kind's one date goes by in `fields` (`due`, `starts`...): the card reads
+    /// its "when" from that field.
+    pub date_label: &'static str,
 }
 
 /// Whether a verb deletes, removes or cancels: the writes a card asks twice for.

@@ -89,7 +89,6 @@ import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitProgressBar
 import dev.centraid.android.kit.OutlineButton
@@ -685,12 +684,19 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             pending.steps.forEach { step ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
-                    Text(
-                        step.summary,
-                        color = centraidResource(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
-                        fontSize = tokenSp(R.dimen.centraid_text_row),
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step the
+                    // core did not name by title keeps its composed sentence.
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            step.title.ifEmpty { step.summary },
+                            color = centraidResource(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
+                            fontSize = tokenSp(R.dimen.centraid_text_row),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (step.subtitle.isNotEmpty()) {
+                            Text(step.subtitle, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
+                        }
+                    }
                 }
             }
             if (pending.more_line.isNotEmpty()) {
@@ -967,13 +973,13 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 Text(step.note_line, style = centraidType("small"), color = centraidColor("textSoft"))
             }
             if (state.phase == ChatState.Phase.PHASE_DOWNLOADING && step.progress_known) {
-                KitProgressBar(step.progress, ink = "net")
+                KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
             }
             if (step.status_line.isNotEmpty()) {
                 Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
             }
             if (step.action_label.isNotEmpty()) {
-                InkButton(step.action_label, testTag = "chat-download") {
+                DownloadButton(step.action_label, testTag = "chat-download") {
                     onEvent(ChatEvent(download = ChatEvent.DownloadTapped(vision = false)))
                 }
             }
@@ -981,6 +987,24 @@ private fun ChatModelStepView(state: ChatState, onEvent: (ChatEvent) -> Unit) {
                 Text(state.error, style = centraidType("small"), color = centraidColor("net"), modifier = Modifier.testTag("chat-error"))
             }
         }
+    }
+}
+
+/** THE DOWNLOAD'S ONE ACTION, in the shell's teal as the composer's send is: red is the error colour. */
+@Composable
+private fun DownloadButton(label: String, testTag: String, onPress: () -> Unit) {
+    Box(
+        Modifier
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(CircleShape)
+            .background(centraidResource(R.color.centraid_shell))
+            .clickable(onClick = onPress)
+            .padding(horizontal = 20.dp)
+            .semantics { role = Role.Button }
+            .testTag(testTag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = Color.White, fontSize = tokenSp(R.dimen.centraid_text_row), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -996,12 +1020,12 @@ private fun VisionBanner(step: ChatModelStep, onDownload: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (step.size_line.isNotEmpty()) Text(step.size_line, style = centraidType("small"), color = centraidColor("textSoft"))
-        if (step.progress_known) KitProgressBar(step.progress, ink = "net")
+        if (step.progress_known) KitProgressBar(step.progress, fill = centraidResource(R.color.centraid_shell))
         if (step.status_line.isNotEmpty()) {
-            Text(step.status_line, style = centraidType("small"), color = centraidColor(if (step.action_label.isNotEmpty()) "net" else "textSoft"))
+            Text(step.status_line, style = centraidType("small"), color = centraidColor("textSoft"))
         }
         if (step.action_label.isNotEmpty()) {
-            OutlineButton(step.action_label, testTag = "chat-vision-download", onPress = onDownload)
+            DownloadButton(step.action_label, testTag = "chat-vision-download", onPress = onDownload)
         }
     }
 }
@@ -1107,7 +1131,7 @@ private fun ChatDrawer(
                     testTag = "chat-drawer-search",
                 )
             } else {
-                ActionRow("Search", state.drawer_search_placeholder, "chat-drawer-search-open") {
+                SearchPill(state.drawer_search_placeholder, "chat-drawer-search-open") {
                     onEvent(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
                 }
             }
@@ -1149,21 +1173,27 @@ private fun ChatDrawer(
     }
 }
 
+/** THE DRAWER'S SEARCH, closed: a pill on the card colour under a hairline, as the Chats board draws it. */
 @Composable
-private fun ActionRow(iconKey: String, label: String, tag: String, onClick: () -> Unit) {
+private fun SearchPill(label: String, tag: String, onClick: () -> Unit) {
+    val shape = CircleShape
     Row(
         Modifier
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(shape)
+            .background(Surface.card)
+            .border(KitGeometry.HAIRLINE, Surface.border, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = KitGeometry.GUTTER)
+            .padding(horizontal = 14.dp)
             .testTag(tag)
             .semantics { role = Role.Button },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CentraidIcon(iconKey, tint = centraidColor("textSoft"), size = 16.dp)
-        Text(label, style = centraidType("smallStrong"), color = centraidColor("text"))
+        CentraidIcon("Search", tint = centraidColor("textFaint"), size = 16.dp)
+        Text(label, style = centraidType("body"), color = centraidColor("textFaint"), maxLines = 1)
     }
 }
 

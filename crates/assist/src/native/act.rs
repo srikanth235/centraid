@@ -1994,6 +1994,7 @@ impl Session {
             created,
             fields,
             links,
+            date_label,
         })
     }
 

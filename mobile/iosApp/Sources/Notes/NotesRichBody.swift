@@ -140,6 +140,7 @@ struct NotesRichBody: UIViewRepresentable {
             view.checkFill = palette.checkFill
             view.checkRing = palette.checkRing
             view.checkInk = palette.checkInk
+            view.chipIconSize = palette.chipIcon
             view.setMarks(checks: checks, chips: chips)
         }
 
@@ -228,7 +229,29 @@ struct NotesRichBody: UIViewRepresentable {
                         range: at
                     )
                 }
-                chips.append(.init(range: at, chip: chip))
+                // THE BRACKETS ARE HIDDEN, NEVER DELETED (#1173): `[[` and `]]` stay in the text, so
+                // every offset the core holds is still the text's; they are drawn clear at a hair's
+                // size, and the second `[` carries the width of the chip's icon, which the mark
+                // draws there.
+                var iconed = false
+                if chip.kind == .note, at.length > 4 {
+                    let text = storage.string as NSString
+                    let open = NSRange(location: at.location, length: 2)
+                    let close = NSRange(location: at.location + at.length - 2, length: 2)
+                    if text.substring(with: open) == "[[", text.substring(with: close) == "]]" {
+                        for bracket in [open, close] {
+                            storage.addAttributes([.font: palette.bracketFace, .foregroundColor: UIColor.clear], range: bracket)
+                        }
+                        storage.addAttribute(
+                            .kern,
+                            value: palette.chipIcon + palette.chipIconGap,
+                            range: NSRange(location: open.location + 1, length: 1)
+                        )
+                        iconed = true
+                    }
+                }
+                let tint = chip.resolution == .trashed ? palette.faint : (chip.resolution == .missing ? palette.missing : palette.accentText)
+                chips.append(.init(range: at, chip: chip, iconed: iconed, tint: tint))
             default:
                 break
             }
@@ -301,6 +324,11 @@ struct NotesRichPalette {
     let checkInk: UIColor
     /// The space after a checklist circle, a half of the face's size.
     let gap: CGFloat
+    /// The face a hidden bracket is set in: too small to have a width.
+    let bracketFace = UIFont.systemFont(ofSize: 0.01)
+    /// A chip's icon, and the space between it and the words.
+    let chipIcon: CGFloat
+    let chipIconGap: CGFloat = 4
     let slant: CGFloat = 0.2
 
     init(scheme: ColorScheme, size: DynamicTypeSize, accent: AppAccent) {
@@ -323,6 +351,7 @@ struct NotesRichPalette {
         checkRing = UIColor(Surface.meta)
         checkInk = UIColor.white
         gap = font.pointSize / 2
+        chipIcon = (font.pointSize * 0.8).rounded()
     }
 }
 
@@ -340,6 +369,9 @@ final class NotesRichTextView: UITextView {
     struct Chip {
         let range: NSRange
         let chip: Centraid_Core_V1_NotesLinkChip
+        /// The brackets are hidden and the icon is drawn where the first one stood.
+        var iconed = false
+        var tint = UIColor.clear
     }
 
     enum Hit {
@@ -353,6 +385,7 @@ final class NotesRichTextView: UITextView {
     var checkFill = UIColor.clear
     var checkRing = UIColor.clear
     var checkInk = UIColor.clear
+    var chipIconSize: CGFloat = 0
     private var checks: [Check] = []
     private var chips: [Chip] = []
     private var circles: [NotesCheckMark] = []
@@ -422,6 +455,9 @@ final class NotesRichTextView: UITextView {
             let rect = firstRect(for: range)
             mark.isHidden = rect.isNull || rect.isInfinite || rect.isEmpty
             mark.frame = rect
+            mark.iconSize = item.iconed ? chipIconSize : 0
+            mark.iconTint = item.tint
+            mark.setNeedsDisplay()
             mark.accessibilityLabel = item.chip.accessibilityLabel
             mark.accessibilityIdentifier = "notes-chip-\(item.range.location)"
             mark.onActivate = { [weak self] in self?.onActivateChip?(item.chip, UInt32(item.range.location)) }
@@ -544,9 +580,33 @@ private final class NotesCheckMark: UIView {
 /// core's label ("Note Lisbon itinerary") and can open it.
 private final class NotesChipMark: UIView {
     var onActivate: () -> Void = {}
+    /// The icon drawn at the chip's leading edge, where the hidden `[[` stood; zero for none.
+    var iconSize: CGFloat = 0
+    var iconTint = UIColor.clear
+
+    override func draw(_ rect: CGRect) {
+        guard iconSize > 0, let context = UIGraphicsGetCurrentContext() else { return }
+        let factor = iconSize / CentraidGeometry.appMarkViewBox
+        context.saveGState()
+        context.translateBy(x: 0, y: (bounds.height - iconSize) / 2)
+        context.scaleBy(x: factor, y: factor)
+        iconTint.setStroke()
+        iconTint.setFill()
+        context.setLineWidth(CentraidGeometry.appMarkStroke)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        for entry in CentraidCatalog.icons["FileText"] ?? [] {
+            guard let path = SVGPath.parse(entry.d) else { continue }
+            context.addPath(path)
+            if entry.filled { context.fillPath(using: entry.evenOdd ? .evenOdd : .winding) } else { context.strokePath() }
+        }
+        context.restoreGState()
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
         isUserInteractionEnabled = false
         isAccessibilityElement = true
         accessibilityTraits = .link

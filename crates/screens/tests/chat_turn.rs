@@ -324,6 +324,13 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
         ),
         ("Complete reminder", "Not now")
     );
+    // THE STEP DRAWS AS THE BOARD'S ROW: the row's name, then its kind's plural and when it is.
+    assert_eq!(pending.steps[0].title, DRY_CLEANING);
+    assert!(
+        pending.steps[0].subtitle.starts_with("Reminders"),
+        "{}",
+        pending.steps[0].subtitle
+    );
     // THE CARD IS LABELLED AND COLOURED BY THE CORE (#1173): "Proposed change", in the colour of
     // the app whose row it changes (a task is Agenda's), and nothing is written yet.
     assert_eq!(pending.title, "Proposed change");

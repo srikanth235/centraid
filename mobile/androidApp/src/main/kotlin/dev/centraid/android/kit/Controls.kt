@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -365,6 +366,8 @@ public fun KitProgressBar(
     modifier: Modifier = Modifier,
     ink: String = "accent",
     onStage: Boolean = false,
+    /** A fill that is no token (the chat's download wears the shell's teal), over [ink]. */
+    fill: Color? = null,
 ) {
     val clamped = fraction.coerceIn(0f, 1f)
     val shape = controlRadius("sm")
@@ -380,7 +383,7 @@ public fun KitProgressBar(
             Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(clamped)
-                .background(centraidColor(if (onStage) "onStage" else ink)),
+                .background(fill ?: centraidColor(if (onStage) "onStage" else ink)),
         )
     }
 }

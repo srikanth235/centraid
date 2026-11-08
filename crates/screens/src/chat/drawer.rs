@@ -4,7 +4,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 use wire::assist_request::Kind as Ask;
 
-use super::model::{Chat, Fail, Msg, Pending, Proposal, Row, Search, Source, Stage};
+use super::model::{Chat, Fail, Msg, Pending, Proposal, Row, Search, Source, Stage, Step};
 use super::turn::stored_card;
 use crate::catalog::{act, load};
 use crate::kit::act as writes;
@@ -198,12 +198,17 @@ impl Chat {
                     id: next,
                     user: false,
                     text: message.text.clone(),
-                    cards: message.cards.iter().map(stored_card).collect(),
+                    cards: message
+                        .cards
+                        .iter()
+                        .filter(|card| card.entity != STEP_ENTITY)
+                        .map(stored_card)
+                        .collect(),
                     stopped: matches!(outcome, O::Stopped | O::Refused),
                     truncated: message
                         .notices
                         .contains(&(wire::AssistNotice::DocTruncated as i32)),
-                    proposal: stored_proposal(outcome, ctx),
+                    proposal: stored_proposal(outcome, &message.cards, ctx),
                     ..Msg::default()
                 });
                 next += 1;
@@ -341,15 +346,37 @@ impl Chat {
     }
 }
 
+/// The entity a stored proposal's step card carries (`centraid_assist` keeps it).
+const STEP_ENTITY: &str = centraid_assist::native_turn::cards::PROPOSAL_STEP;
+
 /// The card a stored answer draws, if any (R-1088-10). A `proposed` answer is a write no session
 /// holds any more: its text is the "Proposed: …" line and its card is INERT, nothing to tap and
 /// nothing run, with no id because the core has nothing by that name. The four ends need no card:
 /// the vault replaced the answer's text with the line the member was told ("Done.", "Not done.",
 /// "That changed since. Ask again."), and that text is what the message draws.
-fn stored_proposal(outcome: wire::ChatStoredOutcome, ctx: &Ctx) -> Option<Proposal> {
+fn stored_proposal(
+    outcome: wire::ChatStoredOutcome,
+    cards: &[wire::ChatStoredCard],
+    ctx: &Ctx,
+) -> Option<Proposal> {
     (outcome == wire::ChatStoredOutcome::Proposed).then(|| Proposal {
         id: String::new(),
-        steps: Vec::new(),
+        // The rows the write named, kept as cards beside the answer: the inert card draws their
+        // titles and when, and no verb is tappable.
+        steps: cards
+            .iter()
+            .filter(|card| card.entity == STEP_ENTITY)
+            .map(|card| Step {
+                summary: String::new(),
+                title: card.title.clone(),
+                when: card.subtitle.clone(),
+                changes: String::new(),
+                destructive: false,
+                app: super::model::app_of_kind(&card.meta),
+                verb: super::confirm::verb_of(&card.qualifier),
+                noun: super::confirm::noun_of(&card.meta),
+            })
+            .collect(),
         more: 0,
         destructive: false,
         stage: Stage::Inert,

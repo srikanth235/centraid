@@ -45,6 +45,12 @@ pub(super) enum Stage {
 #[derive(Clone, Debug)]
 pub(super) struct Step {
     pub summary: String,
+    /// The row's name, as the core named it; empty when it did not. The card's step title.
+    pub title: String,
+    /// When the row is, as the core spelled it (`today 10:45`); empty when the step moves no date.
+    pub when: String,
+    /// What moved on the row, as the core spelled it; the card's second line for an edit.
+    pub changes: String,
     pub destructive: bool,
     /// The app the row belongs to, by the kind the core named it by (`task`, `person`…); empty
     /// when the kind is not one an app owns.
@@ -773,6 +779,9 @@ mod proposal_app_tests {
                 .iter()
                 .map(|kind| Step {
                     summary: String::new(),
+                    title: String::new(),
+                    when: String::new(),
+                    changes: String::new(),
                     destructive: false,
                     app: app_of_kind(kind),
                     verb: "",

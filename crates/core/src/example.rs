@@ -1846,6 +1846,13 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
     };
     let work = calendar("Work", "blue", 1);
     let family = calendar("Family", "violet", 2);
+    // The lunch has a place, so the event card has a third part to say ("Café Lume").
+    let cafe = Seeder::id(
+        seeder
+            .run("place.add", json!({ "title": "Café Lume" }))
+            .as_ref(),
+        "id",
+    );
     for (title, (days, hour, minute, minutes), busy, guests) in BUSY_WEEK {
         let calendar_id = if WORK_EVENTS.contains(&title) {
             work.clone()
@@ -1875,6 +1882,9 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
         });
         if let Some(calendar_id) = calendar_id {
             input["calendar_id"] = json!(calendar_id);
+        }
+        if let (Some(cafe), "Lunch with Chris") = (&cafe, title) {
+            input["place_id"] = json!(cafe);
         }
         seeder.run("event.propose", input);
     }

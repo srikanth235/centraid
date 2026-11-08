@@ -505,6 +505,12 @@ message AssistPendingStep {
   string summary = 4;
   // This step deletes or removes (or cancels, or settles money).
   bool destructive = 5;
+  // When the row is, as the card spells it (`today 10:45`): what the kind's date
+  // moves to. Empty when the step moves none.
+  string when = 6;
+  // What moved on the row, spelled (`name "A" → "B"`): an edit's or a reschedule's own
+  // line. Empty when the step names no field.
+  string changes = 7;
 }
 
 // The member tapped Confirm.

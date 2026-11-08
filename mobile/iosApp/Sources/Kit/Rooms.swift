@@ -123,15 +123,10 @@ struct SearchOpener: View {
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            .background(
-                Theme.color("bgSunken", scheme),
-                in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                    .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-            )
-            .contentShape(Rectangle())
+            // A PILL, as the Chats board draws it (#1173): the card colour under a hairline.
+            .background(Surface.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(placeholder)

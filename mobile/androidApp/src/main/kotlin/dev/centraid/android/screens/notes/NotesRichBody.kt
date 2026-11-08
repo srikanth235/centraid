@@ -45,6 +45,8 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
+import dev.centraid.android.kit.CentraidIcon
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import centraid.core.v1.NotesEditorSelection
@@ -220,11 +222,28 @@ internal fun NotesRichBody(
                             role = Role.Button
                         }
                         .testTag("notes-chip-${range.start}"),
-                )
+                ) {
+                    if (chip.kind == NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE && range.end - range.start > 4) {
+                        CentraidIcon(
+                            "FileText",
+                            tint = when (chip.resolution) {
+                                NotesLinkResolution.NOTES_LINK_RESOLUTION_TRASHED -> palette.faint
+                                NotesLinkResolution.NOTES_LINK_RESOLUTION_MISSING -> palette.missing
+                                else -> palette.accentText
+                            },
+                            size = CHIP_ICON.dp,
+                            modifier = Modifier.align(Alignment.CenterStart),
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+/** A chip's icon and the space after it, in sp: the second hidden bracket carries both. */
+private const val CHIP_ICON = 13f
+private const val CHIP_ICON_GAP = 4f
 
 /** The most marks laid over a very large note: past them the words are drawn as text. */
 private const val MARK_LIMIT = 400
@@ -354,6 +373,15 @@ private fun styleSpan(
                     SpanStyle(color = palette.accentText, background = palette.chipGround, fontWeight = FontWeight.SemiBold),
                     at,
                 )
+            }
+            // THE BRACKETS ARE HIDDEN, NEVER DELETED (#1173): `[[` and `]]` stay in the text so every
+            // offset the core holds is still the text's; they are drawn clear at a hair's size, and
+            // the second `[` carries the width of the chip's icon, which the mark draws there.
+            if (chip.kind == NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE && at.last - at.first + 1 > 4) {
+                val hair = SpanStyle(color = Color.Transparent, fontSize = 1.sp)
+                style(hair, at.first..at.first + 1)
+                style(hair, at.last - 1..at.last)
+                style(SpanStyle(letterSpacing = (CHIP_ICON + CHIP_ICON_GAP).sp), at.first + 1..at.first + 1)
             }
         }
         else -> Unit
