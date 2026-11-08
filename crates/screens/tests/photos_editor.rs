@@ -49,10 +49,12 @@ fn a_tie_on_a_half_pixel_goes_up_and_a_rectangle_never_leaves_the_bitmap() {
 
 #[test]
 fn the_tools_are_pure_changes_to_the_plan() {
-    // Straighten levels a degree anticlockwise and wraps to level past the limit.
-    assert_eq!(editor::next_straighten(0), -1);
-    assert_eq!(editor::next_straighten(-14), -15);
-    assert_eq!(editor::next_straighten(-15), 0);
+    // The straighten slider's angle is held inside its reach either way.
+    assert_eq!(editor::clamp_straighten(0), 0);
+    assert_eq!(editor::clamp_straighten(7), 7);
+    assert_eq!(editor::clamp_straighten(-15), -15);
+    assert_eq!(editor::clamp_straighten(40), 15);
+    assert_eq!(editor::clamp_straighten(-40), -15);
     assert_eq!(editor::signed_degrees(0), "0°");
     assert_eq!(editor::signed_degrees(-3), "−3°");
     assert_eq!(editor::signed_degrees(90), "+90°");
@@ -301,9 +303,10 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     assert_eq!(plan.quarters, 1);
     assert_eq!(plan.crop, Some(FULL_CROP));
     assert_eq!(plan.ratio, Ratio::Original as i32);
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(&mut d, at, ev::Kind::Straighten(ev::Straightened { degrees: -1 }));
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     let state = state_of(&d, at);
+    assert_eq!(state.straighten_limit, 15);
     assert_eq!(state.straighten_label, "Straighten −1°");
     assert_eq!(state.flip_label, "Flip ↔");
     assert_eq!(state.status_line, "Rotated +89°, flipped left to right");
@@ -311,6 +314,14 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     assert_eq!(state_of(&d, at).flip_label, "Flip ↕");
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     assert_eq!(state_of(&d, at).flip_label, "Flip");
+    // THE SLIDER SETS THE ANGLE: either side of level, to the limit and no further.
+    send(&mut d, at, ev::Kind::Straighten(ev::Straightened { degrees: 3 }));
+    assert_eq!(state_of(&d, at).straighten_label, "Straighten +3°");
+    assert_eq!(state_of(&d, at).plan.expect("plan").straighten, 3);
+    send(&mut d, at, ev::Kind::Straighten(ev::Straightened { degrees: -99 }));
+    assert_eq!(state_of(&d, at).plan.expect("plan").straighten, -15);
+    send(&mut d, at, ev::Kind::Straighten(ev::Straightened { degrees: 0 }));
+    assert_eq!(state_of(&d, at).straighten_label, "Straighten 0°");
     send(&mut d, at, ev::Kind::Reset(ev::Reset {}));
     assert!(!state_of(&d, at).edited);
     // A move and a scale respect the clamp.
@@ -400,7 +411,7 @@ fn title_of(d: &Driver, id: &str) -> (String, Option<String>) {
 fn save_asks_the_shell_to_render_and_the_answer_becomes_a_new_photograph_over_the_original() {
     let (mut d, at, original) = opened(b"editor-save-original");
     send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(&mut d, at, ev::Kind::Straighten(ev::Straightened { degrees: -1 }));
     let before = d.effects.len();
     send(&mut d, at, ev::Kind::Save(ev::Saved {}));
     assert_eq!(d.effects.len(), before + 1);

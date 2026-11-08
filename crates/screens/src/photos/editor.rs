@@ -38,7 +38,7 @@ use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
 
-pub const STRAIGHTEN_STEP: i32 = 1;
+/// The slider's reach each way, in whole degrees.
 pub const STRAIGHTEN_LIMIT: i32 = 15;
 /// Smallest crop side, as a fraction of the frame.
 pub const MIN_CROP: f64 = 0.1;
@@ -72,11 +72,10 @@ fn crop_of(plan: &wire::PhotosEditPlan) -> wire::PhotosEditCrop {
 // The geometry (v0's `photo-edit-model.ts`)
 // -----------------------------------------------------------------------------
 
-/// One press levels a degree anticlockwise; past the limit returns to level.
+/// The slider's angle, held inside its reach either way.
 #[must_use]
-pub fn next_straighten(degrees: i32) -> i32 {
-    let next = degrees - STRAIGHTEN_STEP;
-    if next < -STRAIGHTEN_LIMIT { 0 } else { next }
+pub fn clamp_straighten(degrees: i32) -> i32 {
+    degrees.clamp(-STRAIGHTEN_LIMIT, STRAIGHTEN_LIMIT)
 }
 
 /// The minus is U+2212, not a hyphen: a number in the numeric register.
@@ -447,7 +446,7 @@ impl Editor {
                 plan.crop = Some(FULL_CROP);
                 plan.ratio = Ratio::Original as i32;
             }
-            K::Straighten(_) => plan.straighten = next_straighten(plan.straighten),
+            K::Straighten(set) => plan.straighten = clamp_straighten(set.degrees),
             K::Flip(_) => plan.flip = next_flip(plan.flip),
             K::Ratio(chosen) => {
                 let ratio = Ratio::try_from(chosen.ratio).unwrap_or(Ratio::Unspecified);
@@ -728,6 +727,7 @@ impl Screen for Editor {
                 crop_smaller: words::photos_crop_smaller(locale),
             }),
             plan: Some(self.plan),
+            straighten_limit: STRAIGHTEN_LIMIT.unsigned_abs(),
         };
         wire::ViewState {
             instance: 0,
