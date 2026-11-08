@@ -131,6 +131,7 @@ struct Page {
     fake: Fake,
     env: Environment,
     screen: Box<dyn Screen>,
+    secrets: VaultSecrets,
     shell: FakeShell,
     /// Effects asked and not yet answered.
     effects: Vec<wire::Effect>,
@@ -143,6 +144,7 @@ struct Page {
 
 impl Page {
     fn over(status: wire::BackupStatusResponse) -> Self {
+        let secrets = VaultSecrets::new();
         let mut shell = FakeShell::default();
         shell
             .synced
@@ -160,7 +162,8 @@ impl Page {
                 platform: "ios".to_owned(),
                 ..Environment::default()
             },
-            screen: home::build(&routes::home(), &VaultSecrets::new()).expect("the screen builds"),
+            screen: home::build(&routes::home(), &secrets).expect("the screen builds"),
+            secrets,
             shell,
             effects: Vec::new(),
             jobs: Vec::new(),
@@ -245,6 +248,11 @@ impl Page {
             tag,
             bytes: called.encode_to_vec(),
         }));
+    }
+
+    /// What the pass service does with the screen's ask: it takes it off the conductor's inbox.
+    fn service_takes_the_ask(&self) -> Vec<wire::pass_asked::Ask> {
+        self.secrets.conductor().take_asks()
     }
 
     fn state(&self) -> wire::BackupHomeState {
@@ -977,15 +985,21 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
         ..both()
     });
     running.say(tap.clone());
-    // ONE PASS ASKED FOR, under its own tag, off the runtime's lock.
-    assert_eq!(running.jobs, vec![doors::PASS.to_owned()]);
+    // THE PASS IS THE CONDUCTOR'S: the screen asks it and runs no door of its own.
+    assert!(running.jobs.is_empty());
+    assert!(running.secrets.conductor().back_up_now_going());
     let data = running.data();
     assert!(!data.back_up_now_enabled);
     // BYTES TO GO, while bytes are to move (#1144).
     assert_eq!(data.progress, "Backing up — 380 MB to go");
-    // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
+    // A SECOND PRESS ASKS NOTHING MORE: the run is already going.
     running.say(tap.clone());
-    assert_eq!(running.jobs.len(), 1);
+    assert!(running.jobs.is_empty());
+    assert_eq!(
+        running.service_takes_the_ask(),
+        [wire::pass_asked::Ask::BackUpNow],
+        "one ask for two presses"
+    );
     // NOTHING LEFT TO MOVE is said plainly, never "0 bytes to go" while it runs.
     let mut whole = Page::open(both());
     whole.say(tap);
@@ -1005,9 +1019,18 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
         page.timers
             .contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true))
     );
+    // THE SERVICE TAKES THE ASK and the run goes; the screen still draws it.
+    assert_eq!(
+        page.service_takes_the_ask(),
+        [wire::pass_asked::Ask::BackUpNow]
+    );
+    assert!(!page.secrets.conductor().back_up_now_going());
     let reads = page.reads();
     page.set_status(both());
-    page.answer_job(None);
+    // THE LEDGER MOVES when the run ends: the screen reads again and stops drawing a run.
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
     assert_eq!(page.reads(), reads + 1);
     let data = page.data();
     assert_eq!(data.progress, "");
@@ -1464,34 +1487,6 @@ fn nothing_the_screen_says_carries_the_words_themselves() {
 // ---- what the doors are asked ---------------------------------------------
 
 #[test]
-fn a_pass_is_asked_for_under_the_rule_and_videos_bit_the_screen_shows_by_the_members_own_tap() {
-    use super::rule::TransferRule;
-    use centraid_core::screens::VaultRequest;
-    let drain = |rule, include| match doors::pass_request(rule, include) {
-        VaultRequest::Drain(drain) => drain,
-        other => panic!("not a pass: {other:?}"),
-    };
-    let wifi = drain(TransferRule::WifiOnly, true);
-    // THE MEMBER'S OWN TAP and a snapshot now: `asked` is set by nothing else.
-    assert!(wifi.asked && wifi.wants_snapshot);
-    assert_eq!(wifi.rule, wire::TransferRule::WifiOnly as i32);
-    assert!(!wifi.exclude_videos, "videos are included by default");
-    // THE LINK IS NOT THE SCREEN'S TO KNOW: the conservative reading, no deadline.
-    assert!(wifi.metered && !wifi.charging);
-    assert_eq!(wifi.deadline_ms, 0);
-    let manual = drain(TransferRule::Manual, false);
-    assert_eq!(manual.rule, wire::TransferRule::Manual as i32);
-    assert!(
-        manual.exclude_videos,
-        "include videos off is exclude_videos on"
-    );
-    assert_eq!(
-        drain(TransferRule::WifiAndCellularPhotos, true).rule,
-        wire::TransferRule::WifiAndCellularPhotos as i32
-    );
-}
-
-#[test]
 fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
     use centraid_core::screens::VaultRequest;
     let VaultRequest::ForgetDestination(forget) = doors::forget_request("gw-7") else {
@@ -1501,7 +1496,6 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
     assert_eq!(doors::forget_tag("gw-7"), "backup.forget:gw-7");
     // A tag this screen did not ask is not its answer.
     assert_eq!(doors::done("other", &[]), None);
-    assert_eq!(doors::done(doors::PASS, &[]), Some(doors::Done::Pass));
     // A refusal, or bytes that are not an answer, are not forgotten.
     let refused = wire::VaultCalled {
         response: Vec::new(),

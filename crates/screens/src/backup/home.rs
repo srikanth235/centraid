@@ -129,6 +129,7 @@ impl Backup {
     // ---- reading ----------------------------------------------------------
 
     fn read(&mut self, ctx: &Ctx) {
+        self.run_over(ctx);
         match reading::load(ctx) {
             Reading::Data(standing) => {
                 self.standing = Some(standing);
@@ -320,11 +321,23 @@ impl Backup {
         self.backing_up_now = true;
         self.notice = Notice::None;
         ctx.start_timer(PROGRESS_TIMER, PROGRESS_EVERY);
-        ctx.vault_async(
-            doors::PASS,
-            doors::pass_request(self.rule, self.include_videos),
-        );
+        // THE PASS CONDUCTOR RUNS IT, as it runs every pass: the camera-roll walk first, the
+        // long run the platform keeps alive (iOS's keep-awake and background session, Android's
+        // foreground job), and the drain under the member's rule and the link the platform
+        // reports, never a link this screen guessed.
+        self.secrets
+            .conductor()
+            .ask(ctx, wire::pass_asked::Ask::BackUpNow);
         Vec::new()
+    }
+
+    /// The run is the conductor's: when it no longer holds a "Back up now" (it ended, however it
+    /// ended), the screen stops drawing one and reads what the run moved.
+    fn run_over(&mut self, ctx: &Ctx) {
+        if self.backing_up_now && !self.secrets.conductor().back_up_now_going() {
+            self.backing_up_now = false;
+            ctx.cancel_timer(PROGRESS_TIMER);
+        }
     }
 
     fn forget(&mut self, gateway_id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -392,11 +405,6 @@ impl Backup {
             return;
         };
         match done {
-            // A RUN THAT ENDED IS RE-READ: what it moved is the line's to say.
-            Done::Pass => {
-                self.backing_up_now = false;
-                ctx.cancel_timer(PROGRESS_TIMER);
-            }
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either way
             // (#1080): a token the gateway was not told about stays live there
             // until its operator revokes it.
