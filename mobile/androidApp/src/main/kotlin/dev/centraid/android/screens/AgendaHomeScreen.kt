@@ -83,6 +83,8 @@ import dev.centraid.android.screens.agenda.AgendaTodoPlace
 import dev.centraid.android.screens.agenda.AgendaMonthView
 import dev.centraid.android.screens.agenda.AgendaPeriod
 import dev.centraid.android.screens.agenda.AgendaTimeView
+import dev.centraid.android.screens.agenda.AgendaLayoutKey
+import dev.centraid.android.screens.agenda.AgendaMonthChip
 import dev.centraid.android.screens.agenda.AgendaTodayButton
 import dev.centraid.android.screens.agenda.AgendaViewMenu
 import dev.centraid.android.screens.agenda.AgendaYearView
@@ -149,12 +151,16 @@ public fun AgendaHomeScreen(
     // drawn only while the bar can be (`quick_add.shown`); elsewhere it is the
     // add sheet.
     val plusOpensBar = state.add_opens_quick_add
+    // THE CALENDAR'S HEADER (Day and Week) stands in the key row for the app's title.
+    val header = state.calendar_header?.takeIf { it.shown }
     val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = "agenda",
             title = chrome.title,
             meta = meta,
+            barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },
+            barActions = header?.let { { AgendaLayoutKey(it, onEvent) } },
             trailing = if (plusShown) {
                 RoomAction(
                     iconKey = "Plus",
@@ -234,7 +240,7 @@ public fun AgendaHomeScreen(
                             if (todo != null) {
                                 AgendaTodoPlace(todo, words, actions, onEvent)
                             } else if (timeGrid != null) {
-                                AgendaTimeView(data.week_strip, timeGrid, onEvent, onOpen, actions.onCheck)
+                                AgendaTimeView(data.week_strip, state.calendar_header, timeGrid, onEvent, onOpen, actions.onCheck)
                             } else if (month != null) {
                                 AgendaMonthView(month, actions, onEvent, onOpen)
                             } else if (year != null) {
@@ -245,9 +251,14 @@ public fun AgendaHomeScreen(
                         }
                     }
                     // THE FLOATING TODAY: over the content's bottom-start, above the band.
-                    if (toolbar != null && toolbar.shown && !toolbar.at_today) {
+                    val todayLabel = when {
+                        header != null -> header.today_label.takeIf { header.today_shown }
+                        toolbar != null && toolbar.shown && !toolbar.at_today -> chrome.today
+                        else -> null
+                    }
+                    if (todayLabel != null) {
                         AgendaTodayButton(
-                            label = chrome.today,
+                            label = todayLabel,
                             modifier = Modifier.align(Alignment.BottomStart).padding(KitGeometry.GUTTER),
                         ) { onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested())) }
                     }

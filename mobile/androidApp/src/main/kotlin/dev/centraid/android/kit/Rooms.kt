@@ -181,6 +181,12 @@ public fun AppPlace(
     filter: RoomFilter? = null,
     /** The scope the page is in, under the app's name (Notes' notebook, Money's month). */
     subtitle: RoomSubtitle? = null,
+    /**
+     * A BAR OF THE PLACE'S OWN (#1173): the Calendar's header. [barLeading] stands at the start of
+     * the key row and the page draws no title; [barActions] sit before the app's keys.
+     */
+    barLeading: (@Composable () -> Unit)? = null,
+    barActions: (@Composable () -> Unit)? = null,
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
@@ -193,19 +199,25 @@ public fun AppPlace(
         // filled accent `+`), then the title at 34 bold with the scope under it.
         Row(
             Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            horizontalArrangement = if (barLeading != null) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (lead != null) HeaderVerb(lead)
-            if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) HeaderVerb(trailing)
-        }
-        Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(bottom = 8.dp)) {
-            RoomTitle(title)
-            if (meta.isNotEmpty()) {
-                KitText(meta, KitType.Meta, Surface.meta)
+            barLeading?.invoke()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                barActions?.invoke()
+                if (lead != null) HeaderVerb(lead)
+                if (filter != null) FilterMenuButton(app, filter)
+                if (trailing != null) HeaderVerb(trailing)
             }
-            if (subtitle != null) RoomSubtitleLine(subtitle)
+        }
+        if (barLeading == null) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(bottom = 8.dp)) {
+                RoomTitle(title)
+                if (meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, Surface.meta)
+                }
+                if (subtitle != null) RoomSubtitleLine(subtitle)
+            }
         }
         BandStage(
             modifier = Modifier.weight(1f).fillMaxWidth(),

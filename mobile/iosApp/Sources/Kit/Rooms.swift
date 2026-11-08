@@ -139,6 +139,14 @@ struct SearchOpener: View {
     }
 }
 
+/// A PLACE'S OWN BAR (#1173): the Calendar's header stands in the system bar, a leading chip and
+/// the keys before the app's one verb, and the page draws no title. Values, so a place passes
+/// views and the kit stays ignorant of what they are.
+struct PlaceBar {
+    let leading: AnyView
+    let actions: AnyView
+}
+
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
@@ -216,6 +224,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     var filter: FilterSlot? = nil
     /// The scope the page is in, under the app's name (Notes' notebook, Money's month).
     var subtitle: SubtitleSlot? = nil
+    /// A bar of the place's own: no drawn title, its leading view and keys in the system bar.
+    var bar: PlaceBar? = nil
     var showsBand: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
@@ -234,6 +244,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
+        bar: PlaceBar? = nil,
         showsBand: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
@@ -245,6 +256,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.lead = lead
         self.filter = filter
         self.subtitle = subtitle
+        self.bar = bar
         self.showsBand = showsBand
         self.trailing = trailing
         self.band = band
@@ -256,7 +268,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // THE HEADER IS THE PAGE'S: the title at 34 bold, the scope under it. The system bar
             // above carries only the keys (the glass filter and the filled accent `+`) and a
             // back chevron where the place was pushed.
-            KitHeader(title: title, subtitle: subtitle)
+            if bar == nil { KitHeader(title: title, subtitle: subtitle) }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -270,7 +282,13 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
+            if let bar {
+                ToolbarItem(placement: .topBarLeading) {
+                    bar.leading.environment(\.appAccent, AppAccent(app))
+                }
+            }
             ToolbarItemGroup(placement: .primaryAction) {
+                if let bar { bar.actions.environment(\.appAccent, AppAccent(app)) }
                 if let lead { RoomTrailing(action: lead, app: app) }
                 if let filter { FilterMenuButton(app: app, slot: filter) }
                 // THE BAR IS HOSTED OUTSIDE THE PAGE'S ENVIRONMENT, so the filled `+` takes the
@@ -336,6 +354,7 @@ extension AppPlace where Trailing == RoomTrailing {
         lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
+        bar: PlaceBar? = nil,
         showsBand: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -347,6 +366,7 @@ extension AppPlace where Trailing == RoomTrailing {
             lead: lead,
             filter: filter,
             subtitle: subtitle,
+            bar: bar,
             showsBand: showsBand,
             trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,

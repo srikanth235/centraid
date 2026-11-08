@@ -47,9 +47,10 @@ enum AgendaGridMetrics {
     static let yearDay: CGFloat = 16
 }
 
-/// The hue key's colour: the list palette Rust names (`blue`, `raspberry`...).
+/// The hue key's colour: the party role Rust names for a calendar (`cTeal`, `cSlate`...), the
+/// same the rows' dots use; an unknown key is the neutral slate, never clear.
 private func agendaHue(_ key: String, _ scheme: ColorScheme) -> Color {
-    AgendaPalette.list(key) ?? Theme.color("textFaint", scheme)
+    Theme.color(KitHue.role(key) ?? "cSlate", scheme)
 }
 
 /// A hue's pale ground: the icon chip's own strength, light or dark.
@@ -67,6 +68,10 @@ private enum AgendaCalendarEvents {
 
     static func dayStepped(_ days: Int) -> Event {
         AgendaEvents.make { $0.dayStepped = .with { $0.days = Int32(days) } }
+    }
+
+    static func weekPaged(_ weeks: Int) -> Event {
+        AgendaEvents.make { $0.weekPaged = .with { $0.weeks = Int32(weeks) } }
     }
 
     static func periodStepped(_ by: Int) -> Event {
@@ -176,6 +181,110 @@ struct AgendaViewMenu: View {
     }
 }
 
+// MARK: - The header
+
+/// THE BACK-TO-MONTH CHIP of Day and Week's header (`design/mockups/Calendar.dc.html`): a chevron
+/// and the anchor's month, leading in the system bar. A tap sends `MonthChipTapped`; Rust opens
+/// the Month. Nothing is drawn until Rust has named the month.
+struct AgendaMonthChip: View {
+    let header: Centraid_Core_V1_AgendaCalendarHeader
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+
+    var body: some View {
+        if !header.monthLabel.isEmpty {
+            Button {
+                send(AgendaEvents.make { $0.monthChip = .init() })
+            } label: {
+                HStack(spacing: 4) {
+                    CentraidIconView(iconKey: header.monthIconKey, tint: Surface.ink, size: 18)
+                    Text(header.monthLabel)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                }
+                .fixedSize()
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(header.monthAccessibility)
+            .accessibilityIdentifier("agenda-month-chip")
+        }
+    }
+}
+
+/// THE LAYOUT KEY: the glyph in the bar's glass, a tap lists Rust's layouts (Day, Week, then
+/// Month, List and Year) and a pick sends `LayoutToggled`, which keeps the day.
+struct AgendaLayoutKey: View {
+    let header: Centraid_Core_V1_AgendaCalendarHeader
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+
+    var body: some View {
+        Menu {
+            Picker(header.layoutLabel, selection: selection) {
+                ForEach(header.layouts, id: \.key) { layout in
+                    Text(layout.label)
+                        .tag(layout.key)
+                        .accessibilityIdentifier("agenda-view-\(layout.key)")
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            CentraidIconView(iconKey: header.layoutIconKey, tint: Surface.ink, size: 18)
+                .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(header.layoutLabel)
+        .accessibilityIdentifier("agenda-layout-key")
+    }
+
+    private var selection: Binding<String> {
+        Binding(
+            get: { header.layouts.first(where: { $0.destination == header.layout })?.key ?? "" },
+            set: { key in
+                if let layout = header.layouts.first(where: { $0.key == key }) {
+                    send(AgendaEvents.make { $0.layoutToggled = .with { $0.layout = layout.destination } })
+                }
+            }
+        )
+    }
+}
+
+/// DAY'S ALL-DAY LANE, one row under the strip: Rust's label and its chips side by side, the
+/// chips scrolling across when they run out of room. Not drawn on a day with none.
+private struct AgendaAllDayLane: View {
+    let header: Centraid_Core_V1_AgendaCalendarHeader
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if !header.allDay.isEmpty {
+            HStack(spacing: 8) {
+                Text(header.allDayLabel)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(header.allDay, id: \.key) { chip in
+                            AgendaChipView(chip: chip, send: send, open: open)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("agenda-all-day-lane")
+        }
+    }
+}
+
 // MARK: - Today
 
 /// THE FLOATING TODAY KEY, bottom-leading above the band: glass on iOS 26, the card's solid
@@ -232,7 +341,7 @@ private struct AgendaCheckCircle: View {
 // MARK: - The week strip
 
 /// THE WEEK STRIP: seven days from the region's first weekday. A tap picks the day, a swipe steps
-/// a week (`step_days`).
+/// a week (`WeekPaged`).
 struct AgendaWeekStripView: View {
     let strip: Centraid_Core_V1_AgendaWeekStrip
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
@@ -253,8 +362,8 @@ struct AgendaWeekStripView: View {
             AgendaSwipe(
                 previousLabel: strip.previousLabel,
                 nextLabel: strip.nextLabel,
-                onPrevious: { send(AgendaCalendarEvents.dayStepped(-Int(strip.stepDays))) },
-                onNext: { send(AgendaCalendarEvents.dayStepped(Int(strip.stepDays))) }
+                onPrevious: { send(AgendaCalendarEvents.weekPaged(-1)) },
+                onNext: { send(AgendaCalendarEvents.weekPaged(1)) }
             )
         )
         .accessibilityElement(children: .contain)
@@ -312,10 +421,12 @@ private struct AgendaStripDayView: View {
 
 // MARK: - Day and Week
 
-/// DAY AND WEEK: the strip (Day only, when Rust sends it), the all-day row, and the hour grid in
-/// a scroll view. A level swipe over the grid steps the day.
+/// DAY AND WEEK: the strip, Day's all-day lane, the Week's all-day columns and the hour grid in
+/// a scroll view. A level swipe over the grid steps the day, or pages the week.
 struct AgendaTimeGridView: View {
     let home: Centraid_Core_V1_AgendaHomeData
+    /// Day's all-day lane lives on the header (Rust took it out of the Day column).
+    let header: Centraid_Core_V1_AgendaCalendarHeader
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     /// A block is being dragged: the grid's own swipe stands aside.
@@ -329,6 +440,7 @@ struct AgendaTimeGridView: View {
             if home.hasWeekStrip {
                 AgendaWeekStripView(strip: home.weekStrip, send: send)
             }
+            AgendaAllDayLane(header: header, send: send, open: open)
             GeometryReader { geo in
                 let count = max(grid.days.count, 1)
                 let columnWidth = max((geo.size.width - AgendaGridMetrics.gutter) / CGFloat(count), 1)
@@ -442,8 +554,9 @@ struct AgendaTimeGridView: View {
                     previousLabel: home.weekStrip.previousLabel,
                     nextLabel: home.weekStrip.nextLabel,
                     busy: busy,
-                    onPrevious: { send(AgendaCalendarEvents.dayStepped(-1)) },
-                    onNext: { send(AgendaCalendarEvents.dayStepped(1)) }
+                    // DAY STEPS A DAY; THE WEEK PAGES ITS WEEK.
+                    onPrevious: { send(grid.days.count > 1 ? AgendaCalendarEvents.weekPaged(-1) : AgendaCalendarEvents.dayStepped(-1)) },
+                    onNext: { send(grid.days.count > 1 ? AgendaCalendarEvents.weekPaged(1) : AgendaCalendarEvents.dayStepped(1)) }
                 )
             )
             // ON THE NEXT TURN: the first pass has laid out no grid yet, and a scroll asked for
@@ -605,7 +718,8 @@ private struct AgendaBlockView: View {
         let placed = placement(move)
         let newEnd = resizedEnd(stretch)
         let height = max(CGFloat(newEnd - placed.start), 15) * perMinute
-        let x = CGFloat(placed.index) * columnWidth + laneWidth * CGFloat(block.column)
+        // THE HOUR LABELS' GUTTER comes first: the columns start after it.
+        let x = AgendaGridMetrics.gutter + CGFloat(placed.index) * columnWidth + laneWidth * CGFloat(block.column)
         let dragging = move != .zero || stretch != 0
         ZStack(alignment: .bottom) {
             ZStack(alignment: .topLeading) {

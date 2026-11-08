@@ -27,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +65,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.AgendaCalendarHeader
 import centraid.core.v1.AgendaGridBlock
 import centraid.core.v1.AgendaGridChip
 import centraid.core.v1.AgendaGridDay
@@ -77,6 +80,8 @@ import centraid.core.v1.AgendaWeekStrip
 import centraid.core.v1.AgendaYearGrid
 import centraid.core.v1.AgendaYearMonth
 import centraid.core.v1.Route
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
@@ -96,7 +101,7 @@ import kotlin.math.roundToInt
  * THE CALENDAR'S GRIDS (#1173): Day and Week's hour grid under the week strip, the Month and the Year.
  *
  * Rust lays every grid out (`AgendaHomeData.week_strip`, `time_grid`, `month`, `year`) and this file
- * only draws them and sends: a tap is `DayPicked`, a swipe `DayStepped` or `PeriodStepped`, a long
+ * only draws them and sends: a tap is `DayPicked`, a swipe `DayStepped`, `WeekPaged` or `PeriodStepped`, a long
  * press on an empty slot `SlotPressed`, a drop `EventMoved`, a foot dragged `EventResized`. A block's
  * minute is what the finger is over; the core snaps (`snap_minutes`), and the preview under the finger
  * snaps to the same grid.
@@ -116,6 +121,9 @@ private const val MIN_BLOCK_MINUTES: Int = 15
 
 /** The foot a resize drag takes hold of. */
 private val RESIZE_HANDLE: Dp = 14.dp
+
+/** The chevron's and the menu check's size in the header. */
+private val CHIP_ICON: Dp = 18.dp
 
 /** The check circle on a task, in a block and in a chip. */
 private val CHECK_SIZE: Dp = 18.dp
@@ -159,11 +167,10 @@ private fun Modifier.swipeStep(onStep: (Int) -> Unit): Modifier {
     }
 }
 
-/** What the toolbar's ‹ › say and step, per place: the week, the month and the year step a period. */
+/** What the toolbar's ‹ › say and step, per place: the month and the year step a period (Day and Week have no day bar). */
 internal class AgendaPeriod(val previous: String, val next: String)
 
 internal fun agendaPeriod(destination: AgendaDestination, data: AgendaHomeData?): AgendaPeriod? = when (destination) {
-    AgendaDestination.AGENDA_DESTINATION_WEEK -> data?.week_strip?.let { AgendaPeriod(it.previous_label, it.next_label) }
     AgendaDestination.AGENDA_DESTINATION_MONTH -> data?.month?.let { AgendaPeriod(it.previous_label, it.next_label) }
     AgendaDestination.AGENDA_DESTINATION_YEAR -> data?.year?.let { AgendaPeriod(it.previous_label, it.next_label) }
     else -> null
@@ -173,8 +180,97 @@ internal fun stepPeriod(onEvent: (AgendaHomeEvent) -> Unit, by: Int) {
     onEvent(AgendaHomeEvent(period_stepped = AgendaHomeEvent.PeriodStepped(by_ = by)))
 }
 
+private fun pageWeek(onEvent: (AgendaHomeEvent) -> Unit, weeks: Int) {
+    onEvent(AgendaHomeEvent(week_paged = AgendaHomeEvent.WeekPaged(weeks = weeks)))
+}
+
 private fun pickDay(onEvent: (AgendaHomeEvent) -> Unit, day: String, destination: AgendaDestination) {
     onEvent(AgendaHomeEvent(day_picked = AgendaHomeEvent.DayPicked(day = day, destination = destination)))
+}
+
+/**
+ * THE BACK-TO-MONTH CHIP of Day and Week's header (`design/mockups/Calendar.dc.html`): a tonal pill
+ * with a chevron and the anchor's month, leading in the key row. A tap sends `MonthChipTapped`.
+ * Nothing is drawn until the core has named the month.
+ */
+@Composable
+internal fun AgendaMonthChip(header: AgendaCalendarHeader, onEvent: (AgendaHomeEvent) -> Unit) {
+    if (header.month_label.isEmpty()) return
+    Row(
+        Modifier
+            .height(KitGeometry.ROW_MIN)
+            .clip(CircleShape)
+            .background(Surface.card)
+            .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
+            .clickable { onEvent(AgendaHomeEvent(month_chip = AgendaHomeEvent.MonthChipTapped())) }
+            .padding(start = KitGeometry.GUTTER / 2, end = KitGeometry.GUTTER)
+            .testTag("agenda-month-chip")
+            .clearAndSetSemantics {
+                contentDescription = header.month_accessibility
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CentraidIcon(header.month_icon_key, tint = Surface.ink, size = CHIP_ICON)
+        Text(header.month_label, style = kitTextStyle(KitType.Row), color = Surface.ink)
+    }
+}
+
+/**
+ * THE LAYOUT KEY: a tonal circle that lists Rust's layouts (Day, Week, then Month, List and Year);
+ * a pick sends `LayoutToggled`, which keeps the day.
+ */
+@Composable
+internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeEvent) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconKey(header.layout_icon_key, header.layout_label, "agenda-layout-key") { open = true }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            containerColor = Surface.card,
+            shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
+        ) {
+            header.layouts.forEach { layout ->
+                val current = layout.destination == header.layout
+                DropdownMenuItem(
+                    text = { Text(layout.label, style = kitTextStyle(KitType.Row), color = Surface.ink) },
+                    trailingIcon = if (current) {
+                        { CentraidIcon("Check", tint = appAccent("agenda").text, size = CHIP_ICON) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        open = false
+                        onEvent(AgendaHomeEvent(layout_toggled = AgendaHomeEvent.LayoutToggled(layout = layout.destination)))
+                    },
+                    modifier = Modifier.testTag("agenda-view-${layout.key}"),
+                )
+            }
+        }
+    }
+}
+
+/** DAY'S ALL-DAY LANE: one row under the strip, Rust's label then its chips; none on a day with none. */
+@Composable
+private fun AgendaAllDayLane(
+    header: AgendaCalendarHeader,
+    onOpen: (Route) -> Unit,
+    onCheck: (String) -> Unit,
+) {
+    if (header.all_day.isEmpty()) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .testTag("agenda-all-day-lane"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = Modifier.width(GUTTER_WIDTH))
+        header.all_day.forEach { chip -> AllDayChip(chip, onOpen, onCheck, Modifier.weight(1f)) }
+    }
+    Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
 }
 
 /** THE FLOATING TODAY KEY: a tonal button over the content's bottom-start, above the band. */
@@ -208,6 +304,7 @@ internal fun AgendaTodayButton(label: String, modifier: Modifier = Modifier, onP
 @Composable
 internal fun AgendaTimeView(
     strip: AgendaWeekStrip?,
+    header: AgendaCalendarHeader?,
     grid: AgendaTimeGrid,
     onEvent: (AgendaHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
@@ -215,14 +312,15 @@ internal fun AgendaTimeView(
 ) {
     Column(Modifier.fillMaxSize()) {
         if (strip != null) AgendaWeekStripView(strip, onEvent)
+        if (header != null) AgendaAllDayLane(header, onOpen, onCheck)
         val several = grid.days.size > 1
         Column(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .swipeStep { by ->
-                    // DAY STEPS A DAY; THE WEEK STEPS ITS WEEK.
-                    if (several) stepPeriod(onEvent, by) else onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = by)))
+                    // DAY STEPS A DAY; THE WEEK PAGES ITS WEEK.
+                    if (several) pageWeek(onEvent, by) else onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = by)))
                 }
                 .testTag("agenda-time-grid"),
         ) {
@@ -239,16 +337,16 @@ private fun AgendaWeekStripView(strip: AgendaWeekStrip, onEvent: (AgendaHomeEven
         Modifier
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
-            .swipeStep { by -> onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = by * strip.step_days))) }
+            .swipeStep { by -> pageWeek(onEvent, by) }
             .testTag("agenda-week-strip")
             .semantics {
                 customActions = listOf(
                     CustomAccessibilityAction(strip.previous_label) {
-                        onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -strip.step_days)))
+                        pageWeek(onEvent, -1)
                         true
                     },
                     CustomAccessibilityAction(strip.next_label) {
-                        onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = strip.step_days)))
+                        pageWeek(onEvent, 1)
                         true
                     },
                 )
@@ -364,12 +462,16 @@ private fun AllDayStrip(
 }
 
 @Composable
-private fun AllDayChip(chip: AgendaGridChip, onOpen: (Route) -> Unit, onCheck: (String) -> Unit) {
+private fun AllDayChip(
+    chip: AgendaGridChip,
+    onOpen: (Route) -> Unit,
+    onCheck: (String) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
     val hue = hueColor(chip.hue_key)
     val shape = RoundedCornerShape(radius("sm"))
     Row(
-        Modifier
-            .fillMaxWidth()
+        modifier
             .clip(shape)
             .background(Surface.card)
             .background(pale(hue))

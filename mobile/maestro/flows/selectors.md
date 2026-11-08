@@ -80,13 +80,16 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `tasks-project-edit` | a project page | the header verb "Edit List": opens the style sheet on the list |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
-| `agenda-view-menu` | Agenda (Calendar) | the Calendar's view menu key (#1173); its rows are `agenda-view-<key>`: `day`, `week`, `month`, `list`, `year`, and on Month `agenda-month-style-grid` / `agenda-month-style-list` |
-| `agenda-week-strip` | Agenda (Day, Week) | the week strip; a swipe changes week, and a day is `agenda-strip-day-<YYYY-MM-DD>` |
+| `agenda-month-chip` | Agenda (Day, Week) | the header's back-to-month chip, "‹ November" (`calendar_header.month_label`); a tap opens the Month on the same day |
+| `agenda-layout-key` | Agenda (Day, Week) | the header's layout key; its rows are `agenda-view-<key>` (`day`, `week`, `month`, `list`, `year`) and a pick keeps the day |
+| `agenda-all-day-lane` | Agenda (Day) | the all-day lane under the strip, one row of chips (`agenda-grid-chip-<key>`); not drawn on a day with none |
+| `agenda-view-menu` | Agenda (Month, Year, List) | the view menu key (#1173); its rows are `agenda-view-<key>`: `day`, `week`, `month`, `list`, `year`, and on Month `agenda-month-style-grid` / `agenda-month-style-list` |
+| `agenda-week-strip` | Agenda (Day, Week) | the week strip; a swipe pages a week (`WeekPaged`), and a day is `agenda-strip-day-<YYYY-MM-DD>` |
 | `agenda-time-grid` | Agenda (Day, Week) | the hour grid; a long press on an empty slot opens the add sheet at that time |
-| `agenda-grid-allday-<day>` | Agenda (Day, Week) | one day's all-day strip; a chip in it is `agenda-grid-chip-<key>` |
+| `agenda-grid-allday-<day>` | Agenda (Week) | one day's all-day column; a chip in it is `agenda-grid-chip-<key>` |
 | `agenda-grid-block-<key>` | Agenda (Day, Week) | one timed block (`<day>\|<instance_key>` or `<day>\|task:<id>`); drag moves it, its foot resizes it; a task block's circle is `agenda-grid-block-check-<taskId>` |
 | `agenda-now-line` | Agenda (Day, Week on today) | the now line |
-| `agenda-today-button` | Agenda (Calendar) | the floating Today button, drawn away from today |
+| `agenda-today-button` | Agenda (Calendar) | the floating Today key, drawn away from today (Day and Week: `calendar_header.today_shown`) |
 | `agenda-month-grid` | Agenda (Month) | the month; a cell is `agenda-month-cell-<YYYY-MM-DD>` |
 | `agenda-year-grid` | Agenda (Year) | the twelve months; one is `agenda-year-month-<YYYY-MM>` |
 | `agenda-quick-tool-<key>` | Agenda (To-do), a list page | the keyboard toolbar's `date`, `tag` and `flag` keys over the quick add; the date choices are `agenda-quick-due-<key>`, the tag field `agenda-quick-tag-field`, and what the next add carries `agenda-quick-staged` |

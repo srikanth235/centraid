@@ -31,6 +31,8 @@ struct AgendaHomeView: View {
 
     var body: some View {
         let content = readContent(state)
+        // THE CALENDAR'S HEADER (Day and Week) stands in the bar for the app's title.
+        let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
             app: "agenda",
@@ -46,6 +48,12 @@ struct AgendaHomeView: View {
                 onTerm: { term in send(AgendaEvents.make { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(AgendaEvents.make { $0.searchClosed = .init() }) }
             ),
+            bar: header.map { header in
+                PlaceBar(
+                    leading: AnyView(AgendaMonthChip(header: header, send: send)),
+                    actions: AnyView(AgendaLayoutKey(header: header, send: send))
+                )
+            },
             showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
@@ -98,7 +106,11 @@ struct AgendaHomeView: View {
                 }
                 // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
                 .overlay(alignment: .bottomLeading) {
-                    if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
+                    if let header {
+                        if header.todayShown, !content.isDenied {
+                            AgendaTodayButton(label: header.todayLabel, send: send)
+                        }
+                    } else if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
                         AgendaTodayButton(label: state.chrome.today, send: send)
                     }
                 }
@@ -239,10 +251,11 @@ struct AgendaHomeView: View {
         return nil
     }
 
-    /// WEEK, MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); Day and the lists by days.
+    /// MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); the lists by days. Day and Week
+    /// have no day bar: they page by swipe.
     private func stepsPeriod(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
         switch state.calendarViews.first(where: { $0.current })?.destination {
-        case .week?, .month?, .year?: return true
+        case .month?, .year?: return true
         default: return false
         }
     }
@@ -265,7 +278,7 @@ struct AgendaHomeView: View {
             AgendaTodoList(home: home, state: state, send: send, open: open)
         } else if home.hasTimeGrid {
             // DAY AND WEEK: the hour grid, under the week strip on Day.
-            AgendaTimeGridView(home: home, send: send, open: open)
+            AgendaTimeGridView(home: home, header: state.calendarHeader, send: send, open: open)
         } else if home.hasMonth {
             AgendaMonthView(home: home, chrome: state.chrome, send: send, open: open)
         } else if home.hasYear {
@@ -347,7 +360,7 @@ private struct CalendarImportButton: View {
 
 // MARK: - Toolbar
 
-/// The day bar: range label and ‹ ›. Today is the floating key (`AgendaTodayButton`).
+/// The day bar of Month, Year and the lists: range label and ‹ ›. Today is the floating key (`AgendaTodayButton`).
 private struct AgendaToolbarView: View {
     let toolbar: Centraid_Core_V1_AgendaToolbar
     /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").

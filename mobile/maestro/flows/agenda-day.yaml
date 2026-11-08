@@ -44,10 +44,21 @@ name: agenda-day
       - assertVisible: "Task done"
       - tapOn:
           id: "agenda-status-action"
-# The view menu: Month is a grid of whole weeks, Year twelve months, and
-# List draws the same rows over the coming days.
+# The layout key (Day and Week's header) lists the views: Month is a grid of whole weeks, Year
+# twelve months, and List draws the same rows over the coming days. The month chip goes back to
+# the Month; Month, Year and List keep the view menu.
+- assertVisible:
+    id: "agenda-month-chip"
+- tapOn:
+    id: "agenda-month-chip"
+- assertVisible:
+    id: "agenda-month-grid"
 - tapOn:
     id: "agenda-view-menu"
+- tapOn:
+    id: "agenda-view-day"
+- tapOn:
+    id: "agenda-layout-key"
 - tapOn:
     id: "agenda-view-month"
 - assertVisible:
