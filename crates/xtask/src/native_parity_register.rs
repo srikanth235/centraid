@@ -38,9 +38,6 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 /// One reason, several rows.
-const NO_URL_COLUMN: &str = "SwiftUI sets `EKEvent.url`; Android's CalendarContract has no URL column, so the Android writer has nothing to say";
-
-/// One reason, several rows.
 const CALENDAR_OWED: &str = "`shell.calendar-owed` is read by Rust only: core/app_query/imports.rs builds the answer and agenda/calendar_push.rs reads it, then hands the shells `CalendarWriteFields`";
 
 /// One reason, several rows.
@@ -189,10 +186,6 @@ pub const REGISTER: &[Entry] = &[
             Shell::Ios,
             "an original that lives only in iCloud; Android's media store holds what is on the device",
         ),
-    ),
-    (
-        "CalendarWriteFields.states_url",
-        platform(Shell::Ios, NO_URL_COLUMN),
     ),
     (
         "ImportsMadeEvent.reminders_requested",
