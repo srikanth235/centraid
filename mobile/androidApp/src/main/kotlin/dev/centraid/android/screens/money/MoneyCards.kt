@@ -46,6 +46,8 @@ import centraid.core.v1.MoneyInOutNet
 import centraid.core.v1.MoneyRestLine
 import centraid.core.v1.MoneyRow
 import centraid.core.v1.StatusChip
+import androidx.compose.foundation.layout.defaultMinSize
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitText
@@ -90,6 +92,7 @@ internal fun MoneyCardStack(modifier: Modifier = Modifier, content: @Composable 
 /** SPENT AND LEFT AGAINST THE TARGET, then In, Out and Net, in one card. */
 @Composable
 internal fun MoneyOverviewCard(hero: MoneyHero, daysLeft: String, inOut: MoneyInOutNet?) {
+    val largest = rememberLargestText()
     Column(Modifier.fillMaxWidth().kitCard().padding(16.dp)) {
         Column(
             Modifier.semantics(mergeDescendants = true) {}.testTag("money-hero"),
@@ -100,29 +103,37 @@ internal fun MoneyOverviewCard(hero: MoneyHero, daysLeft: String, inOut: MoneyIn
             if (hero.has_bar) {
                 MoneyPlanBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label, Modifier.padding(top = 6.dp))
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                KitText(
-                    hero.figures.joinToString(" · ") { "${it.label} ${it.amount}" },
-                    KitType.Meta,
-                    Surface.body,
-                    Modifier.weight(1f),
-                    maxLines = 2,
-                )
-                KitText(daysLeft, KitType.Meta, Surface.meta, maxLines = 1)
+            // AT THE LARGEST TEXT THE FIGURES AND THE DAYS LEFT STACK, so neither is cut (#1173).
+            val figures = hero.figures.joinToString(" · ") { "${it.label} ${it.amount}" }
+            if (largest) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    KitText(figures, KitType.Meta, Surface.body, maxLines = Int.MAX_VALUE)
+                    KitText(daysLeft, KitType.Meta, Surface.meta, maxLines = Int.MAX_VALUE)
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    KitText(figures, KitType.Meta, Surface.body, Modifier.weight(1f), maxLines = 2)
+                    KitText(daysLeft, KitType.Meta, Surface.meta, maxLines = 1)
+                }
             }
         }
         if (inOut != null && inOut.figures.isNotEmpty()) {
             Box(Modifier.padding(vertical = 12.dp)) { MoneyHairline(0.dp) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val figuresRow: @Composable (Modifier) -> Unit = { figureModifier ->
                 inOut.figures.forEach { figure ->
                     Column(
-                        Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
+                        figureModifier.clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         KitText(figure.label, KitType.Meta, Surface.meta)
-                        KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
+                        KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = if (largest) Int.MAX_VALUE else 1)
                     }
                 }
+            }
+            if (largest) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) { figuresRow(Modifier.fillMaxWidth()) }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { figuresRow(Modifier.weight(1f)) }
             }
         }
     }
@@ -155,6 +166,35 @@ internal fun MoneyPlanBar(fillBp: Int, tickBp: Int, over: Boolean, spoken: Strin
 /** ROWS THAT NEED A CATEGORY: the count in its badge, the title, and the word that opens them. */
 @Composable
 internal fun MoneyReviewBanner(count: String, title: String, review: String, spokenLabel: String, onTap: () -> Unit) {
+    // AT THE LARGEST TEXT THE WORD THAT OPENS THE ROWS DROPS UNDER THE SENTENCE (#1173).
+    val largest = rememberLargestText()
+    if (largest) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                .background(StateColor.Amber.tint)
+                .clickable(onClick = onTap)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .testTag("money-needs-category")
+                .semantics(mergeDescendants = true) {
+                    contentDescription = spokenLabel
+                    role = Role.Button
+                },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    Modifier.defaultMinSize(minWidth = 26.dp, minHeight = 26.dp).clip(CircleShape).background(StateColor.Amber.fill),
+                    contentAlignment = Alignment.Center,
+                ) { KitText(count, KitType.Meta, Color.White, maxLines = 1) }
+                KitText(title, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = Int.MAX_VALUE)
+            }
+            KitText(review, KitType.Row, StateColor.Amber.text, maxLines = 1)
+        }
+        return
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -185,25 +225,34 @@ internal fun MoneyReviewBanner(count: String, title: String, review: String, spo
 /** A DAY'S HEADING AND WHAT IT CAME TO: "Today" and "-₹2,450" (money in is green). */
 @Composable
 internal fun MoneyDayHeading(section: MoneyDaySection) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KitText(
-            section.heading,
-            KitType.Row,
-            Surface.ink,
-            Modifier.weight(1f).semantics { heading() },
-            maxLines = 1,
-        )
+    // AT THE LARGEST TEXT THE TOTAL DROPS UNDER THE DAY, so neither word is broken (#1173).
+    val largest = rememberLargestText()
+    val day: @Composable (Modifier) -> Unit = { modifier ->
+        KitText(section.heading, KitType.Row, Surface.ink, modifier.semantics { heading() }, maxLines = if (largest) Int.MAX_VALUE else 1)
+    }
+    val total: @Composable () -> Unit = {
         if (section.total.isNotEmpty()) {
             KitText(
                 section.total,
                 KitType.Meta,
                 if (section.total_positive) StateColor.Green.text else Surface.meta,
                 Modifier.semantics { contentDescription = spoken(section.heading, section.total) },
-                maxLines = 1,
+                maxLines = if (largest) Int.MAX_VALUE else 1,
             )
+        }
+    }
+    if (largest) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            day(Modifier)
+            total()
+        }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            day(Modifier.weight(1f))
+            total()
         }
     }
 }
@@ -211,34 +260,45 @@ internal fun MoneyDayHeading(section: MoneyDaySection) {
 /** THE TRANSACTION ROW: a tile, the name over its meta line, the signed amount and any badge. */
 @Composable
 internal fun MoneyTxnRow(row: MoneyRow, onTap: (() -> Unit)?) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .let { if (onTap != null) it.clickable(onClick = onTap) else it }
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .testTag("money-row-${row.txn_id}")
-            .semantics(mergeDescendants = true) {
-                contentDescription = spoken(row.accessibility_label, row.amount)
-                if (onTap != null) role = Role.Button
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        MoneyTile(row)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            KitText(row.title, KitType.Row, if (row.dimmed) Surface.meta else Surface.ink, maxLines = 2)
-            if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 2)
+    // AT THE LARGEST TEXT THE AMOUNT DROPS UNDER THE NAME: side by side the name was cut to a few
+    // letters (#1173).
+    val largest = rememberLargestText()
+    val lines = if (largest) Int.MAX_VALUE else 2
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = KitGeometry.ROW_MIN)
+        .let { if (onTap != null) it.clickable(onClick = onTap) else it }
+        .padding(horizontal = 16.dp, vertical = 10.dp)
+        .testTag("money-row-${row.txn_id}")
+        .semantics(mergeDescendants = true) {
+            contentDescription = spoken(row.accessibility_label, row.amount)
+            if (onTap != null) role = Role.Button
         }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            KitText(
-                row.amount,
-                KitType.Row,
-                moneyInk(row.positive, row.amount_tone),
-                maxLines = 1,
-            )
-            if (row.category_label.isNotEmpty()) KitText(row.category_label, KitType.Meta, Surface.meta, maxLines = 1)
+    val name: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MoneyTile(row)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                KitText(row.title, KitType.Row, if (row.dimmed) Surface.meta else Surface.ink, maxLines = lines)
+                if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = lines)
+            }
+        }
+    }
+    val figures: @Composable (Alignment.Horizontal) -> Unit = { align ->
+        Column(horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            KitText(row.amount, KitType.Row, moneyInk(row.positive, row.amount_tone), maxLines = if (largest) Int.MAX_VALUE else 1)
+            if (row.category_label.isNotEmpty()) KitText(row.category_label, KitType.Meta, Surface.meta, maxLines = if (largest) Int.MAX_VALUE else 1)
             row.chips.forEach { StatusChipView(it) }
+        }
+    }
+    if (largest) {
+        Column(rowModifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            name(Modifier.fillMaxWidth())
+            figures(Alignment.Start)
+        }
+    } else {
+        Row(rowModifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            name(Modifier.weight(1f))
+            figures(Alignment.End)
         }
     }
 }
@@ -246,13 +306,15 @@ internal fun MoneyTxnRow(row: MoneyRow, onTap: (() -> Unit)?) {
 /** The tile at a row's start: the category's colour as a pale ground with its first letter, a swap glyph for a transfer. */
 @Composable
 internal fun MoneyTile(row: MoneyRow) {
-    val shape = RoundedCornerShape((36 * CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp)
+    // The tile grows with the letter it carries at the largest text, so the letter is not cut.
+    val side = if (rememberLargestText()) 56 else 36
+    val shape = RoundedCornerShape((side * CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp)
     val ground = when {
         row.tile_icon.isNotEmpty() || row.color_key.isEmpty() -> Surface.fill
         else -> docsListColor(row.color_key).copy(alpha = (if (centraidDark()) CentraidGeometry.ICON_CHIP_TINT_DARK else CentraidGeometry.ICON_CHIP_TINT_LIGHT).toFloat())
     }
     Box(
-        Modifier.size(36.dp).clip(shape).background(ground).clearAndSetSemantics { },
+        Modifier.size(side.dp).clip(shape).background(ground).clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         if (row.tile_icon.isNotEmpty()) {

@@ -115,7 +115,9 @@ struct CentraidResolvedType {
 }
 
 extension Theme {
-    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (product-intuition/references/design-behaviour.md § Accessibility).
+    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (product-intuition/references/design-behaviour.md § Accessibility):
+    /// every size up to the largest accessibility size (AX5, owner ruling of 8 November). Layouts
+    /// reflow from `reflowSize` up; nothing truncates or overlaps.
     ///
     /// The app root caps the environment at this once, but a SHEET DOES NOT
     /// INHERIT THAT CAP: a presentation is a hosting controller of its own and
@@ -124,7 +126,11 @@ extension Theme {
     /// size and overlapped). So `SheetPresentation` states the cap again on a
     /// sheet's root, and `resolve` clamps as a backstop for every role drawn
     /// anywhere a cap did not reach.
-    static let textSizeCap: DynamicTypeSize = .xxxLarge
+    static let textSizeCap: DynamicTypeSize = .accessibility5
+
+    /// WHERE A LAYOUT REFLOWS: a card that shared a row has the row to itself, a segmented choice
+    /// stacks. The size the LargeText board draws (`xxxLarge`) and every size above it.
+    static let reflowSize: DynamicTypeSize = .xxxLarge
 
     /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (product-intuition/references/design-behaviour.md § Accessibility).
     ///

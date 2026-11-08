@@ -218,6 +218,17 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
 }
 
 #[test]
+fn the_lockup_is_bare_until_the_shelf_has_told_which_vault_is_in_front() {
+    // Before the first VaultsTold the shelf has said nothing: "No vault yet" would be a claim
+    // about a phone that may hold one, and flashed on every first frame.
+    let (d, i) = started();
+    let bar = state(&d, i).bar.unwrap();
+    let vault = bar.vault.unwrap();
+    assert!(vault.name.is_empty(), "{}", vault.name);
+    assert!(vault.accessibility_label.is_empty());
+}
+
+#[test]
 fn a_phone_with_no_vault_is_a_failed_home_with_no_empty_tiles() {
     let (mut d, i) = started();
     tell(

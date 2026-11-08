@@ -95,7 +95,7 @@ private struct SettingsSegmented: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let stacked = dynamicTypeSize >= Theme.textSizeCap
+        let stacked = dynamicTypeSize >= Theme.reflowSize
         let layout = stacked ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
         layout {
             ForEach(choices, id: \.id) { choice in

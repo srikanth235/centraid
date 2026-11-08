@@ -12,6 +12,7 @@ import SwiftUI
 /// due words and clamped meta under it, the project dot, the pending rule —
 /// and its family under it.
 struct TodoRowView: View {
+    @Environment(\.isLargestText) private var largestText
     let row: Centraid_Core_V1_TodoRow
     let onCheck: (String) -> Void
     let onPick: (Centraid_Core_V1_Route) -> Void
@@ -121,7 +122,7 @@ struct TodoRowView: View {
                             .centraidType(row.subtask ? "small" : "body")
                             .foregroundStyle(Theme.color(settled ? "textFaint" : "text", scheme))
                             .strikethrough(row.check == .done, color: Theme.color("textFaint", scheme))
-                            .lineLimit(2)
+                            .lineLimit(largestText ? nil : 2)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if !row.priorityLabel.isEmpty {
                             Text(row.priorityLabel)
@@ -146,7 +147,7 @@ struct TodoRowView: View {
                                 Text(row.meta)
                                     .centraidType("annotLabel")
                                     .foregroundStyle(Theme.color("textFaint", scheme))
-                                    .lineLimit(1)
+                                    .lineLimit(largestText ? nil : 1)
                             }
                         }
                     }

@@ -1,10 +1,10 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    /// WHETHER TEXT IS AT THE LARGEST SIZE THE APP FOLLOWS (#1173, the LargeText board). The root
-    /// caps Dynamic Type at `Theme.textSizeCap`, so this is true exactly at the cap: the point
-    /// where a card that shared a row with another no longer has room for its words.
-    var isLargestText: Bool { dynamicTypeSize >= Theme.textSizeCap }
+    /// WHETHER TEXT IS AT A SIZE WHERE LAYOUTS REFLOW (#1173, the LargeText board): `Theme.reflowSize`
+    /// and every size above it, up to the cap. The point where a card that shared a row with
+    /// another no longer has room for its words.
+    var isLargestText: Bool { dynamicTypeSize >= Theme.reflowSize }
 }
 
 /// CARDS IN `columns` COLUMNS, ONE COLUMN AT THE LARGEST TEXT. The cards of a row share the row's
@@ -18,7 +18,7 @@ struct KitCardGrid<Item: Identifiable, Card: View>: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var across: Int { dynamicTypeSize >= Theme.textSizeCap ? 1 : max(columns, 1) }
+    private var across: Int { dynamicTypeSize >= Theme.reflowSize ? 1 : max(columns, 1) }
 
     var body: some View {
         let rows = stride(from: 0, to: items.count, by: across).map { Array(items[$0 ..< min($0 + across, items.count)]) }

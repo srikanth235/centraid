@@ -97,7 +97,7 @@ The values are in `design/tokens.toml`; the reasoning per app is on the rules bo
 
 - Text is 4.5:1 or more and controls 3:1 or more, in light and dark, on every surface they land on.
 - Glass turns solid under Reduce Transparency (and Increase Contrast on iOS), on any OS version. Android's plates are already opaque; high-contrast text is the one signal its band listens to.
-- Cards reflow at large text sizes. Both shells follow the system text size within a cap (iOS Dynamic Type up to `xxxLarge`, Android font scale 1.3), set once at the root; the band's labels hold their size at every setting. Components survive the largest permitted size, reduced motion, light and dark, VoiceOver and TalkBack, and RTL (leading and trailing, never left and right).
+- Cards reflow at large text sizes. Both shells follow the system text size up to the largest the system offers (iOS Dynamic Type up to `accessibility5`, Android font scale 2.0; owner ruling of 8 November), set once at the root, and layouts reflow from `xxxLarge` / 1.3 up; the band's labels hold their size at every setting. Components survive the largest permitted size, reduced motion, light and dark, VoiceOver and TalkBack, and RTL (leading and trailing, never left and right).
 - Reduced motion is honoured everywhere: the slide or entry becomes the change.
 - Text in a fixed-height container is line-clamped, never clipped. State is never expressed with container opacity. Icon-only controls carry a label; decorative glyphs say so.
 - Targets and rows are 44 and the page margin is the token's; a band holds at most five destinations because a tab below 44 stops being a tap target.

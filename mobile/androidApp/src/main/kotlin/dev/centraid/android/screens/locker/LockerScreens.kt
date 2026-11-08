@@ -728,7 +728,7 @@ internal fun LockerItemScreen(
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
             trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
-                RoomAction("Pencil", label, "locker-edit") { chrome.edit_route?.let(onOpen) }
+                RoomAction("Pencil", label, "locker-item-edit") { chrome.edit_route?.let(onOpen) }
             },
             statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
         ) {
@@ -745,7 +745,7 @@ internal fun LockerItemScreen(
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("locker-item-head"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TypeChip(item.type_chip)
@@ -778,7 +778,7 @@ internal fun LockerItemScreen(
                         if (change != null && section.rows.any { it.key == "password" }) {
                             item(key = "change-password") {
                                 Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
-                                    OutlineButton(change.label, testTag = "locker-action-change_password") {
+                                    OutlineButton(change.label, testTag = "locker-item-action-change_password") {
                                         onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = change.key)))
                                     }
                                 }
@@ -832,7 +832,7 @@ internal fun LockerItemScreen(
                                 item.actions.forEach { action ->
                                     OutlineButton(
                                         action.label,
-                                        testTag = "locker-action-${action.key}",
+                                        testTag = "locker-item-action-${action.key}",
                                         ink = if (action.destructive) "net" else "text",
                                     ) { onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = action.key))) }
                                 }

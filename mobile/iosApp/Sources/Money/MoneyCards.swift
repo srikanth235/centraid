@@ -38,6 +38,7 @@ struct MoneyOverviewCard: View {
     let inOut: Centraid_Core_V1_MoneyInOutNet?
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.isLargestText) private var largestText
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,23 +56,25 @@ struct MoneyOverviewCard: View {
                     MoneyPlanBar(fillBp: hero.fillBp, tickBp: hero.tickBp, over: hero.over, spoken: hero.accessibilityLabel)
                         .padding(.top, 6)
                 }
-                HStack(alignment: .firstTextBaseline) {
+                // AT THE LARGEST TEXT THE FIGURES AND THE DAYS LEFT STACK: side by side the days
+                // were cut to "22 days…" (#1173).
+                (largestText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(alignment: .firstTextBaseline))) {
                     Text(hero.figures.map { "\($0.label) \($0.amount)" }.joined(separator: " \u{00B7} "))
                         .kitType(.meta)
                         .foregroundStyle(Surface.body)
-                        .lineLimit(2)
-                    Spacer(minLength: 8)
+                        .lineLimit(largestText ? nil : 2)
+                    if !largestText { Spacer(minLength: 8) }
                     Text(daysLeft)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .lineLimit(largestText ? nil : 1)
                 }
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("money-hero")
             if let inOut, !inOut.figures.isEmpty {
                 KitHairline(inset: 0).padding(.vertical, 12)
-                HStack(alignment: .top, spacing: 12) {
+                (largestText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(alignment: .top, spacing: 12))) {
                     ForEach(Array(inOut.figures.enumerated()), id: \.offset) { _, figure in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(figure.label)
@@ -82,8 +85,8 @@ struct MoneyOverviewCard: View {
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
                                 .foregroundStyle(moneyInk(positive: figure.positive, tone: figure.tone))
-                                .minimumScaleFactor(0.75)
-                                .lineLimit(1)
+                                .minimumScaleFactor(largestText ? 1 : 0.75)
+                                .lineLimit(largestText ? nil : 1)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityElement(children: .ignore)
@@ -143,26 +146,32 @@ struct MoneyReviewBanner: View {
     let spoken: String
     let onTap: () -> Void
 
+    @Environment(\.isLargestText) private var largestText
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                Text(count)
-                    .kitType(.meta)
-                    .fontWeight(.bold)
-                    .foregroundStyle(Color.white)
-                    .frame(minWidth: 26, minHeight: 26)
-                    .background(StateColor.amber.fill, in: Circle())
-                Text(title)
-                    .kitType(.row)
-                    .foregroundStyle(Surface.ink)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            // AT THE LARGEST TEXT THE WORD THAT OPENS THE ROWS DROPS UNDER THE SENTENCE (#1173).
+            (largestText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))) {
+                HStack(spacing: 12) {
+                    Text(count)
+                        .kitType(.meta)
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.white)
+                        .frame(minWidth: 26, minHeight: 26)
+                        .background(StateColor.amber.fill, in: Circle())
+                    Text(title)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(largestText ? nil : 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 Text(review)
                     .kitType(.row)
                     .fontWeight(.semibold)
                     .foregroundStyle(StateColor.amber.text)
             }
             .padding(.horizontal, 16)
+            .padding(.vertical, largestText ? 12 : 0)
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .background(StateColor.amber.tint, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
             .contentShape(Rectangle())
@@ -179,14 +188,17 @@ struct MoneyReviewBanner: View {
 struct MoneyDayHeading: View {
     let section: Centraid_Core_V1_MoneyDaySection
 
+    @Environment(\.isLargestText) private var largestText
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        // AT THE LARGEST TEXT THE TOTAL DROPS UNDER THE DAY, so neither word is broken (#1173).
+        (largestText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout(alignment: .firstTextBaseline))) {
             Text(section.heading)
                 .kitType(.row)
                 .fontWeight(.semibold)
                 .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
+            if !largestText { Spacer(minLength: 8) }
             if !section.total.isEmpty {
                 Text(section.total)
                     .kitType(.meta)
@@ -206,36 +218,42 @@ struct MoneyTxnRow: View {
     let row: Centraid_Core_V1_MoneyRow
     var onTap: (() -> Void)? = nil
 
+    @Environment(\.isLargestText) private var largestText
+
     var body: some View {
         Button { onTap?() } label: {
-            HStack(spacing: 12) {
-                MoneyTile(row: row)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title)
-                        .kitType(.row)
-                        .foregroundStyle(row.dimmed ? Surface.meta : Surface.ink)
-                        .lineLimit(2)
-                    if !row.meta.isEmpty {
-                        Text(row.meta)
-                            .kitType(.meta)
-                            .foregroundStyle(Surface.meta)
-                            .lineLimit(2)
+            // AT THE LARGEST TEXT THE AMOUNT DROPS UNDER THE NAME: side by side the name was cut
+            // to a few letters (#1173).
+            (largestText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))) {
+                HStack(spacing: 12) {
+                    MoneyTile(row: row)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.title)
+                            .kitType(.row)
+                            .foregroundStyle(row.dimmed ? Surface.meta : Surface.ink)
+                            .lineLimit(largestText ? nil : 2)
+                        if !row.meta.isEmpty {
+                            Text(row.meta)
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                                .lineLimit(largestText ? nil : 2)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: largestText ? .leading : .trailing, spacing: 4) {
                     Text(row.amount)
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .monospacedDigit()
                         .foregroundStyle(moneyInk(positive: row.positive, tone: row.amountTone))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .lineLimit(largestText ? nil : 1)
+                        .minimumScaleFactor(largestText ? 1 : 0.7)
                     if !row.categoryLabel.isEmpty {
                         Text(row.categoryLabel)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(1)
+                            .lineLimit(largestText ? nil : 1)
                     }
                     ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in
                         StatusChipView(chip)
@@ -262,9 +280,11 @@ struct MoneyTile: View {
     let row: Centraid_Core_V1_MoneyRow
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isLargestText) private var largestText
 
     var body: some View {
-        let side: CGFloat = 36
+        // The tile grows with the letter it carries at the largest text, so the letter is not cut.
+        let side: CGFloat = largestText ? 56 : 36
         let shape = RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous)
         ZStack {
             if !row.tileIcon.isEmpty {

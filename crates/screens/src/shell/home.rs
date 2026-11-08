@@ -477,12 +477,15 @@ impl Home {
     fn bar(&self, locale: Locale) -> wire::HomeBar {
         let vault = match &self.vault {
             Some(vault) => finish_vault(locale, vault),
-            None => wire::HomeVault {
+            // "NO VAULT YET" IS A CLAIM, made only once the shelf has said the phone holds none.
+            // Before the first `VaultsTold` the lockup is bare, so first launch never flashes it.
+            None if self.none => wire::HomeVault {
                 name: photos::vault_none_yet(locale),
                 initial: initial_of(&photos::vault_none_yet(locale)),
                 accessibility_label: photos::vault_none_yet(locale),
                 ..Default::default()
             },
+            None => wire::HomeVault::default(),
         };
         // The backup's status stands in the line only for a vault that has not
         // moved: a moved vault says so itself.

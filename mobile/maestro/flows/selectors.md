@@ -51,7 +51,12 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `locker-filter-show-<all\|starred\|archived\|type>` | Locker | the shelf's filter with its counts |
 | `locker-category-<all\|codes\|card\|wifi\|review\|trash>` | Locker | the landing's category cards (#1173); Trash pushes its page, Review switches to Review, the rest open that category's list |
 | `locker-category-back` | Locker | the chevron above a category's list, back to the landing (Android also takes the system back) |
-| `locker-item-action-change_password` (iOS), `locker-action-change_password` (Android) | Locker item | "Change password on website": opens the item's own address |
+| `locker-item-action-<key>` | Locker item | an item action button: `change_password` is "Change password on website" (opens the item's own address); one id on both shells (Android's was `locker-action-<key>`) |
+| `locker-item`, `locker-item-head`, `locker-item-edit` | Locker item | the item page's scroller, its head line (type chip, type word, status chips) and the header's Edit key (Android's was `locker-edit`) |
+| `locker-field-<key>`, `locker-value-<key>`, `locker-verb-<key>-<verb>` | Locker item | one field row (`username`, `password`, `address`, `otp_seed` …), its value as drawn (the mask while sealed) and one of its verbs (`copy`, `reveal`, `hide`, `open`); iOS drew `locker-field-<key>-value` and `locker-field-<key>-<verb>`, now these. `locker-code-countdown` is the one-time code's ring |
+| `locker-item-memo`, `locker-item-status` | Locker item (iOS) | the memo's Add or Edit button and the status line's verb (Undo) |
+| `locker-lock` | Locker home | the header's lock key: covers every item now, the same lock as More's row (`LockerHomeEvent.lock_requested`, #1173) |
+| `tasks-list-title`, `tasks-list-add` | Agenda smart-list page (Today, Scheduled, All, Flagged, Completed) | the large title in the list's colour, and the header's plus: the add sheet on the core's today (#1173) |
 | `room-subtitle`, `room-subtitle-clear` | Notes (the notebook the library is scoped to, with its ✕ `room-subtitle-clear`), Money (the month, tappable: opens the month sheet) | the title's second line, which replaced the notebook and month chips |
 | `photos-grain-<years\|months\|all>` | Photos | one segment of the zoom control in the band (Years · Months · All), between the folded place key and the search key; `photos-band-places` is that folded key, which brings the plate of places back |
 | `agenda-search` | Agenda | Agenda's search field once open, at the foot in the band's place; it finds events, tasks and projects: the projects whose name matched as `search-container-schedule.project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |

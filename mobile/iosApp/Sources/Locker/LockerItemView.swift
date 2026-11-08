@@ -62,6 +62,7 @@ struct LockerItemView: View {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
                             }
+                            .accessibilityIdentifier("locker-item")
                         }
                     }
                 }
@@ -149,6 +150,7 @@ struct LockerItemView: View {
             Spacer(minLength: 0)
             ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
         }
+        .accessibilityIdentifier("locker-item-head")
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
         LockerNote(text: item.trashedNote)
@@ -244,7 +246,7 @@ struct LockerFieldRowView: View {
                 }
             }
             .textSelection(.disabled)
-            .accessibilityIdentifier("locker-field-\(row.key)-value")
+            .accessibilityIdentifier("locker-value-\(row.key)")
             if !row.note.isEmpty {
                 Text(row.note)
                     .centraidType("annotLabel")
@@ -254,7 +256,7 @@ struct LockerFieldRowView: View {
             if !row.verbs.isEmpty {
                 HStack(spacing: 16) {
                     ForEach(row.verbs, id: \.key) { verb in
-                        KitLink(label: verb.label, dense: true, identifier: "locker-field-\(row.key)-\(verb.key)") {
+                        KitLink(label: verb.label, dense: true, identifier: "locker-verb-\(row.key)-\(verb.key)") {
                             onVerb(verb)
                         }
                     }
@@ -267,6 +269,7 @@ struct LockerFieldRowView: View {
         .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityIdentifier("locker-field-\(row.key)")
     }
 }
 

@@ -84,96 +84,131 @@ struct VaultHeader: View {
     /// The Backup tab shows the lockup too, but not the search and settings keys.
     private var onHome: Bool { shell.tab == .home }
 
-    var body: some View {
-        HStack(spacing: 12) {
-            // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
-            // switch; the status under them is the Backup tab's.
+    @Environment(\.isLargestText) private var largestText
+
+    /// THE VAULT'S MARK: the switch's first half.
+    private var markKey: some View {
+        // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
+        // switch; the status under them is the Backup tab's.
+        Button {
+            store.sendHome(.vault(.init()))
+        } label: {
+            Text(vault.initial)
+                .centraidType("smallStrong")
+                .foregroundStyle(mark.ink)
+                .frame(width: 30, height: 30)
+                // A static control rung, not `iconChipRadius` — that
+                // ratio is for app chips.
+                .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+    }
+    .buttonStyle(.plain)
+    .accessibilityHidden(true)
+
+    }
+
+    /// THE NAME AND THE LINES UNDER IT.
+    private var lockupText: some View {
+        VStack(alignment: .leading, spacing: 1) {
             Button {
                 store.sendHome(.vault(.init()))
             } label: {
-                Text(vault.initial)
+                Text(vault.name)
                     .centraidType("smallStrong")
-                    .foregroundStyle(mark.ink)
-                    .frame(width: 30, height: 30)
-                    // A static control rung, not `iconChipRadius` — that
-                    // ratio is for app chips.
-                    .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(largestText ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHidden(true)
+            .accessibilityLabel(bar.switchLabel)
+            .accessibilityIdentifier("home-vault-switch")
 
-            VStack(alignment: .leading, spacing: 1) {
-                Button {
-                    store.sendHome(.vault(.init()))
-                } label: {
-                    Text(vault.name)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(bar.switchLabel)
-                .accessibilityIdentifier("home-vault-switch")
+            if !status.isEmpty {
+                statusLine
+            } else if !vault.stateLine.isEmpty {
+                Text(vault.stateLine)
+                    .centraidType("mono")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !vault.originalsLine.isEmpty {
+                Text(vault.originalsLine)
+                    .centraidType("mono")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("home-originals-waiting")
+            }
+    }
 
-                if !status.isEmpty {
-                    statusLine
-                } else if !vault.stateLine.isEmpty {
-                    Text(vault.stateLine)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !vault.originalsLine.isEmpty {
-                    Text(vault.originalsLine)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("home-originals-waiting")
+    }
+
+    /// THE TRAILING KEYS AS ONE GROUP.
+    private var keys: some View {
+        // THE TRAILING KEYS AS ONE GROUP: their 44pt targets touch, so
+        // the 36pt plates stand 8pt apart and read as a pair.
+        HStack(spacing: 0) {
+            // THE DOOR TO THE TRANSFER RULES (#1025 S4), beside the line that
+            // reports them rather than buried in settings.
+            if vault.originalsWithheld > 0 {
+                KitIconKey(
+                    iconKey: "Settings",
+                    label: bar.transferRulesLabel,
+                    identifier: "home-transfer-rules"
+                ) {
+                    store.sendHome(.transferRulesPressed(.init()))
                 }
             }
-
-            // THE TRAILING KEYS AS ONE GROUP: their 44pt targets touch, so
-            // the 36pt plates stand 8pt apart and read as a pair.
-            HStack(spacing: 0) {
-                // THE DOOR TO THE TRANSFER RULES (#1025 S4), beside the line that
-                // reports them rather than buried in settings.
-                if vault.originalsWithheld > 0 {
-                    KitIconKey(
-                        iconKey: "Settings",
-                        label: bar.transferRulesLabel,
-                        identifier: "home-transfer-rules"
-                    ) {
-                        store.sendHome(.transferRulesPressed(.init()))
-                    }
-                }
-                if onHome, bar.hasSearchRoute {
-                    KitIconKey(
-                        iconKey: "Search",
-                        label: bar.searchLabel,
-                        glass: true,
-                        identifier: "home-search-open"
-                    ) {
-                        shell.open(bar.searchRoute)
-                    }
-                }
-                // SETTINGS: the appearance, the vault, the backup and the recovery key
-                // live behind it (the appearance key retired into it, #1173).
-                if onHome, bar.hasSettingsRoute {
-                    KitIconKey(
-                        iconKey: "Settings",
-                        label: bar.settingsLabel,
-                        glass: true,
-                        identifier: "home-settings-open"
-                    ) {
-                        shell.open(bar.settingsRoute)
-                    }
+            if onHome, bar.hasSearchRoute {
+                KitIconKey(
+                    iconKey: "Search",
+                    label: bar.searchLabel,
+                    glass: true,
+                    identifier: "home-search-open"
+                ) {
+                    shell.open(bar.searchRoute)
                 }
             }
-            // The last plate's edge on the page margin, not 4pt inside it:
-            // the target overhangs by its own inset, (44 - 36) / 2.
-            .padding(.trailing, -4)
+            // SETTINGS: the appearance, the vault, the backup and the recovery key
+            // live behind it (the appearance key retired into it, #1173).
+            if onHome, bar.hasSettingsRoute {
+                KitIconKey(
+                    iconKey: "Settings",
+                    label: bar.settingsLabel,
+                    glass: true,
+                    identifier: "home-settings-open"
+                ) {
+                    shell.open(bar.settingsRoute)
+                }
+            }
+    }
+    // The last plate's edge on the page margin, not 4pt inside it:
+    // the target overhangs by its own inset, (44 - 36) / 2.
+    .padding(.trailing, -4)
+    }
+
+    var body: some View {
+        // AT THE LARGEST TEXT THE KEYS DROP UNDER THE LOCKUP (#1173): beside it they left the
+        // name a sliver of the row, and it was cut to a few letters.
+        Group {
+            if largestText {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 12) {
+                        markKey
+                        lockupText
+                    }
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        keys
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    markKey
+                    lockupText
+                    keys
+                }
+            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 12)

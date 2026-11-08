@@ -85,11 +85,12 @@ public fun CentraidTheme(
 }
 
 /**
- * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS caps Dynamic Type at
- * `DynamicTypeSize.xxxLarge`, Android caps the system font scale here
- * (product-intuition/references/design-behaviour.md § Accessibility). A member who sets text larger than this reads this.
+ * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS follows Dynamic Type up to
+ * `DynamicTypeSize.accessibility5`, Android follows the system font scale up to 2.0, the
+ * largest the system offers (owner ruling of 8 November; product-intuition/references/design-behaviour.md
+ * § Accessibility). Layouts reflow from `rememberLargestText`; nothing truncates or overlaps.
  */
-private const val MAX_FONT_SCALE: Float = 1.3f
+private const val MAX_FONT_SCALE: Float = 2.0f
 
 /**
  * The roles that hold their size at every font scale. `band` is the only one,

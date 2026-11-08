@@ -134,7 +134,8 @@ public fun VaultHeader(
                     name,
                     style = centraidType("smallStrong"),
                     color = centraidColor("text"),
-                    maxLines = 1,
+                    // AT THE LARGEST TEXT THE NAME WRAPS and is never cut (#1173).
+                    maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (status.isNotEmpty()) {

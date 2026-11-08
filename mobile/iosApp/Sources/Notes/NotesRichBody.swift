@@ -49,6 +49,7 @@ struct NotesRichBody: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
         tap.delegate = context.coordinator
         view.addGestureRecognizer(tap)
+        view.activationTap = tap
         context.coordinator.appliedSeq = selection?.seq ?? 0
         view.onActivateCheck = { [weak coordinator = context.coordinator] at in coordinator?.parent.onToggle(at) }
         view.onActivateChip = { [weak coordinator = context.coordinator] chip, at in coordinator?.parent.onLink(chip, at) }
@@ -265,6 +266,11 @@ struct NotesRichBody: UIViewRepresentable {
             true
         }
 
+        func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if let view = gesture.view as? NotesRichTextView { view.fingerDown(at: touch.location(in: view)) }
+            return true
+        }
+
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let view = gesture.view as? NotesRichTextView else { return }
             let point = gesture.location(in: view)
@@ -420,6 +426,41 @@ final class NotesRichTextView: UITextView {
             mark.accessibilityIdentifier = "notes-chip-\(item.range.location)"
             mark.onActivate = { [weak self] in self?.onActivateChip?(item.chip, UInt32(item.range.location)) }
         }
+    }
+
+    /// The one recogniser that acts on a mark. A touch that lands on a circle or a chip is only
+    /// the core's event: the text view's own recognisers (place the caret, raise the keyboard)
+    /// are refused for the length of that touch, so it never becomes an edit.
+    weak var activationTap: UITapGestureRecognizer?
+
+    private var touchIsOnMark = false
+    private var markTouchEpoch = 0
+
+    /// A finger came down at `point` (the activation tap's delegate hears it before any
+    /// recogniser decides): over a mark, the text view's own caret and keyboard handling is
+    /// refused until the tap has been recognised, a beat after the finger lifts.
+    func fingerDown(at point: CGPoint) {
+        markTouchEpoch += 1
+        let epoch = markTouchEpoch
+        touchIsOnMark = hit(at: point) != nil
+        guard touchIsOnMark else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            if self?.markTouchEpoch == epoch { self?.touchIsOnMark = false }
+        }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        touchIsOnMark ? false : super.becomeFirstResponder()
+    }
+
+    override var selectedTextRange: UITextRange? {
+        get { super.selectedTextRange }
+        set { if !touchIsOnMark { super.selectedTextRange = newValue } }
+    }
+
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        if gesture !== activationTap, touchIsOnMark { return false }
+        return super.gestureRecognizerShouldBegin(gesture)
     }
 
     var onActivateCheck: ((UInt32) -> Void)?

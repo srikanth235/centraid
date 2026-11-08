@@ -13,9 +13,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * WHETHER TEXT IS AT THE LARGEST SIZE THE APP FOLLOWS (#1173, the LargeText board). The root caps
- * the font scale at 1.3 (`CentraidTheme`), so this is true exactly at the cap: the point where
- * a card that shared a row with another no longer has room for its words.
+ * WHETHER TEXT IS AT A SIZE WHERE LAYOUTS REFLOW (#1173, the LargeText board): a font scale of 1.3
+ * and every scale above it, up to the root's cap (`CentraidTheme`). The point where a card that
+ * shared a row with another no longer has room for its words.
  */
 @Composable
 public fun rememberLargestText(): Boolean = LocalDensity.current.fontScale >= LARGEST_TEXT_SCALE

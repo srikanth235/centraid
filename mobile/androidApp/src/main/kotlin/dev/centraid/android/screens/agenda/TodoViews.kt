@@ -55,6 +55,7 @@ import centraid.core.v1.QuickAddChip
 import centraid.core.v1.TodoQuickAdd
 import centraid.core.v1.TodoRow
 import centraid.core.v1.TodoRowGroup
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.kit.CentraidIcon
@@ -146,7 +147,7 @@ internal fun TodoRowView(
                     row.title,
                     style = centraidType(if (row.subtask) "small" else "body"),
                     color = centraidColor(if (row.check == TodoCheck.TODO_CHECK_OPEN) "text" else "textFaint"),
-                    maxLines = 2,
+                    maxLines = if (rememberLargestText()) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val line = listOf(row.due_label, row.meta).filter { it.isNotEmpty() }
@@ -165,7 +166,7 @@ internal fun TodoRowView(
                                 (if (row.due_label.isNotEmpty()) " · " else "") + row.meta,
                                 style = centraidType("annotLabel"),
                                 color = centraidColor("textSoft"),
-                                maxLines = 1,
+                                maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
