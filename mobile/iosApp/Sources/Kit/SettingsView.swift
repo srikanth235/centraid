@@ -139,6 +139,14 @@ private struct SettingsRowView: View {
                 .accessibilityHidden(true)
         case "amber":
             KitTile(iconKey: row.iconKey, size: 32, fill: StateColor.amber.fill)
+        case "neutral":
+            KitTile(iconKey: row.iconKey, size: 32, fill: Surface.meta)
+        case "add":
+            // A ROW THAT MAKES SOMETHING: the shell's tint under the shell's glyph.
+            CentraidIconView(iconKey: row.iconKey, tint: AppAccent.shell.text, size: 16)
+                .frame(width: 32, height: 32)
+                .background(AppAccent.shell.tile, in: RoundedRectangle(cornerRadius: 32 * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+                .accessibilityHidden(true)
         default:
             if !row.iconKey.isEmpty { KitTile(iconKey: row.iconKey, size: 32) }
         }
@@ -148,12 +156,15 @@ private struct SettingsRowView: View {
         let content = HStack(spacing: 12) {
             tile
             VStack(alignment: .leading, spacing: 1) {
-                Text(row.title).kitType(.row).foregroundStyle(Surface.ink)
+                Text(row.title).kitType(.row).foregroundStyle(row.tile == "add" ? AppAccent.shell.text : Surface.ink)
                 if !row.meta.isEmpty {
                     Text(row.meta).kitType(.meta).foregroundStyle(Surface.meta)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if !row.value.isEmpty {
+                Text(row.value).kitType(.row).foregroundStyle(Surface.meta)
+            }
             if row.hasRoute {
                 CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
             }

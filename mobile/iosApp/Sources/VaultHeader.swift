@@ -68,7 +68,7 @@ struct VaultHeader: View {
                 Text(status)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(minHeight: 18)
             .contentShape(Rectangle())
@@ -123,13 +123,13 @@ struct VaultHeader: View {
                     Text(vault.stateLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !vault.originalsLine.isEmpty {
                     Text(vault.originalsLine)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("home-originals-waiting")
                 }
             }

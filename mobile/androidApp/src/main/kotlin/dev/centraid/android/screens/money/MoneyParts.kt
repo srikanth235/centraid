@@ -1,6 +1,22 @@
 package dev.centraid.android.screens.money
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.selected
+import centraid.core.v1.MoneyChoice
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.SheetRoom
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.screens.docs.docsListColor
+import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.SheetOption
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -131,3 +147,91 @@ internal fun MoneyHeading(text: String) {
     )
 }
 
+
+/**
+ * A SHEET OF CHOICES that scrolls: a month, an account, a category, a merge target. Choices that
+ * name a group (the category picker) stand in a card per group under its capitals heading, and a
+ * category wears its colour as a dot, "No category" the dashed one (iOS `MoneyChoiceSheet`).
+ */
+@Composable
+internal fun MoneyChoiceSheet(
+    title: String,
+    choices: List<MoneyChoice>,
+    tagPrefix: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // A picker of categories: any choice with a colour, and any with a group name.
+    val hasDots = choices.any { it.color_key.isNotEmpty() } && choices.any { it.detail.isNotEmpty() }
+    if (!hasDots) {
+        OptionSheet(
+            title = title,
+            options = choices.map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            onPick = onPick,
+            onDismiss = onDismiss,
+        )
+        return
+    }
+    // The choices as runs sharing one group name, in order; the first run is the ungrouped lead.
+    val runs = mutableListOf<Pair<String, MutableList<MoneyChoice>>>()
+    choices.forEach { choice ->
+        val last = runs.lastOrNull()
+        if (last != null && last.first == choice.detail) last.second += choice else runs += choice.detail to mutableListOf(choice)
+    }
+    SheetRoom(title = title, onDismiss = onDismiss) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            runs.forEach { (group, items) ->
+                if (group.isNotEmpty()) {
+                    KitText(
+                        group,
+                        KitType.Group,
+                        Surface.meta,
+                        Modifier.padding(start = KitGeometry.GUTTER + 4.dp, end = KitGeometry.GUTTER, top = 14.dp, bottom = 4.dp).semantics { heading() },
+                    )
+                }
+                Column(
+                    Modifier
+                        .padding(horizontal = KitGeometry.GUTTER)
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .background(Surface.sheetCard),
+                ) {
+                    items.forEachIndexed { index, choice ->
+                        if (index > 0) MoneyHairline()
+                        MoneyChoiceRow(choice, "$tagPrefix-${choice.key}") { onPick(choice.key) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice with its colour dot: a filled dot for a category, the dashed one for "No category". */
+@Composable
+private fun MoneyChoiceRow(choice: MoneyChoice, testTag: String, onTap: () -> Unit) {
+    val meta = Surface.meta
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onTap)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .testTag(testTag)
+            .clearAndSetSemantics {
+                contentDescription = choice.label
+                role = Role.Button
+                selected = choice.selected
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (choice.color_key.isEmpty()) {
+            Canvas(Modifier.size(10.dp)) {
+                drawCircle(meta, style = Stroke(1.2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))))
+            }
+        } else {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(docsListColor(choice.color_key)))
+        }
+        KitText(choice.label, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 2)
+        if (choice.selected) CentraidIcon(iconKey = "Check", tint = appAccent().text, size = 16.dp)
+    }
+}

@@ -136,7 +136,8 @@ impl Settings {
                    meta: String,
                    icon: &str,
                    route: Option<wire::Route>,
-                   tile: &str| {
+                   tile: &str,
+                   value: String| {
             let spoken = if meta.is_empty() {
                 title.clone()
             } else {
@@ -151,8 +152,14 @@ impl Settings {
                 accessibility_label: spoken,
                 tile: tile.to_owned(),
                 initial: String::new(),
+                value,
             }
         };
+        let rule = crate::backup::rule::TransferRule::of(
+            self.secrets
+                .device_value(crate::backup::rule::RULE_KEY)
+                .as_deref(),
+        );
         wire::SettingsData {
             appearance: Some(wire::SettingsAppearance {
                 title: words::settings_appearance(locale),
@@ -175,14 +182,23 @@ impl Settings {
                     key: "vault".to_owned(),
                     title: words::settings_vault(locale),
                     rows: vec![{
-                        // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does.
+                        // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does,
+                        // and is called by the vault's name.
                         let mut vaults = row(
                             "vaults",
-                            words::settings_vaults_row(locale),
+                            self.vault_name
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|name| !name.is_empty())
+                                .map_or_else(
+                                    || words::settings_vaults_row(locale),
+                                    str::to_owned,
+                                ),
                             words::settings_vaults_held(locale, held),
                             "Lock",
                             None,
                             "initial",
+                            String::new(),
                         );
                         vaults.initial = self
                             .vault_name
@@ -191,19 +207,43 @@ impl Settings {
                             .map(|first| first.to_uppercase().collect())
                             .unwrap_or_else(|| "V".to_owned());
                         vaults
-                    }],
+                    },
+                    // MAKE A VAULT is the pushed page Home's switcher and the welcome open.
+                    row(
+                        "make-vault",
+                        words::settings_make_vault(locale),
+                        String::new(),
+                        "Plus",
+                        Some(crate::custody::routes::make()),
+                        "add",
+                        String::new(),
+                    )],
                 },
                 wire::SettingsSection {
                     key: "backup".to_owned(),
                     title: words::settings_backup(locale),
-                    rows: vec![row(
-                        "backup",
-                        words::settings_backup(locale),
-                        self.backup_meta(ctx),
-                        "Cloud",
-                        Some(backup::routes::home()),
-                        "",
-                    )],
+                    rows: vec![
+                        row(
+                            "backup",
+                            words::settings_backup(locale),
+                            self.backup_meta(ctx),
+                            "Cloud",
+                            Some(backup::routes::home()),
+                            "",
+                            String::new(),
+                        ),
+                        // THE ONE TRANSFER RULE, read from the store the Backup page and Home's
+                        // gear write; it is changed on the Backup page this row opens.
+                        row(
+                            "download-settings",
+                            words::settings_download_settings(locale),
+                            String::new(),
+                            "Download",
+                            Some(backup::routes::home()),
+                            "neutral",
+                            rule.short(locale),
+                        ),
+                    ],
                 },
                 wire::SettingsSection {
                     key: "recovery-key".to_owned(),
@@ -215,6 +255,7 @@ impl Settings {
                         "Key",
                         Some(backup::routes::show_key()),
                         "amber",
+                        String::new(),
                     )],
                 },
             ],

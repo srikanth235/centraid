@@ -404,10 +404,14 @@ public fun StageKey(
     /** The label is drawn under the mark (a trashed photograph's Restore and Delete forever). */
     showLabel: Boolean = false,
     destructive: Boolean = false,
+    /** On the light viewer page: the page's ink and the app's text colour, not the stage's. */
+    light: Boolean = false,
 ) {
     // A LIT TOGGLE (the favourite) wears the app's colour, never amber: amber only means a state.
     val ink = if (enabled && on && !destructive) {
-        appAccent("photos").tile
+        if (light) appAccent("photos").text else appAccent("photos").tile
+    } else if (light) {
+        if (!enabled) Surface.meta else if (destructive) centraidColor("net") else Surface.ink
     } else {
         centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
     }

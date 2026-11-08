@@ -230,8 +230,8 @@ private struct StatusRibbon: View {
                 Text(status.copy)
                     .centraidType(loud ? "small" : "mono")
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    // THE SENTENCE WRAPS, whole, as the board's does; it is never cut to "...".
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             if !status.action.isEmpty {

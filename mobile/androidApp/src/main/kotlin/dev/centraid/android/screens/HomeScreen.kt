@@ -488,8 +488,6 @@ private fun StatusRibbon(
             text = status.copy,
             style = centraidType(if (loud) "small" else "mono"),
             color = if (loud) centraidColor("text") else centraidColor("textFaint"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (status.action.isNotEmpty()) {

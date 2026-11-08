@@ -34,6 +34,37 @@ struct PhotosLightboxView: View {
         // unlabelled full-screen tap is not reachable at all under VoiceOver.
         let chromeVisible = state.chromeVisible || voiceOver || state.slideshow
         ZStack {
+            if state.slideshow {
+                darkStage(model, chromeVisible: chromeVisible)
+            } else {
+                lightPage(model)
+            }
+        }
+        // THE STAGE ROOM TAKES NO HEADER (product-intuition/references/design-behaviour.md § Rooms): its way out is the close
+        // chip and the swipe down, both the same act.
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: sheetBinding) { item in
+            sheet(item.kind)
+        }
+        .onChange(of: model.mediaKey, initial: true) { _, _ in
+            media.update(
+                videoPath: model.videoPath,
+                mediaType: model.originalMediaType,
+                livePath: model.livePath
+            )
+        }
+        .onChange(of: state.dismissed, initial: true) { _, gone in
+            if gone { onClose() }
+        }
+    }
+
+    // MARK: - The slideshow: the dark stage
+
+    /// THE SLIDESHOW IS A MODE, and a mode is the stage: full bleed on the darkest surface, the
+    /// chrome floating over it. Every other viewing is the light page ([lightPage]).
+    @ViewBuilder
+    private func darkStage(_ model: PhotosLightboxModel, chromeVisible: Bool) -> some View {
+        ZStack {
             // THE STAGE IS THE DARKEST SURFACE AND IT IS NOT THE PAGE.
             Theme.color("stage", scheme).ignoresSafeArea()
             switch state.content {
@@ -66,22 +97,121 @@ struct PhotosLightboxView: View {
                 if chromeVisible { chrome(photo) }
             }
         }
-        // THE STAGE ROOM TAKES NO HEADER (product-intuition/references/design-behaviour.md § Rooms): its way out is the close
-        // chip and the swipe down, both the same act.
-        .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: sheetBinding) { item in
-            sheet(item.kind)
+    }
+
+    // MARK: - The viewer: a light page
+
+    /// THE VIEWER IS A LIGHT PAGE (#1173, the Photo viewer board): the way out, the stamp and the
+    /// menu across the top; the photograph in a band of its own; then the cards that say what the
+    /// vault knows about it (caption, when and with what, place and labels, where the original
+    /// is); and the floating bar of verbs. The photograph keeps every gesture it had (page,
+    /// zoom, swipe down), inside its band.
+    @ViewBuilder
+    private func lightPage(_ model: PhotosLightboxModel) -> some View {
+        ZStack(alignment: .bottom) {
+            Surface.page.ignoresSafeArea()
+            VStack(spacing: 0) {
+                lightHeader()
+                switch state.content {
+                case .loading?, nil:
+                    band(model, photo: nil)
+                    Spacer(minLength: 0)
+                case let .denied(denied)?:
+                    DeniedGate(denied)
+                case let .failure(failure)?:
+                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
+                        .padding(CentraidGeometry.pageMargin)
+                    Spacer(minLength: 0)
+                case let .photo(photo)?:
+                    band(model, photo: photo)
+                    ScrollView {
+                        PhotosLightboxInfo(state: state, photo: photo, send: send)
+                            // THE BAR FLOATS OVER THE FOOT: the last card scrolls clear of it.
+                            .padding(.bottom, 104)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                }
+            }
+            if case let .photo(photo)? = state.content {
+                lightToolbar(photo)
+            }
         }
-        .onChange(of: model.mediaKey, initial: true) { _, _ in
-            media.update(
-                videoPath: model.videoPath,
-                mediaType: model.originalMediaType,
-                livePath: model.livePath
-            )
+        .appAccent("photos")
+    }
+
+    /// The top row: close, the stamp (WHEN outranks WHAT), the menu.
+    private func lightHeader() -> some View {
+        let stamp = { () -> (String, String) in
+            if case let .photo(photo)? = state.content { return (photo.stampDate, photo.stampLine) }
+            return ("", "")
+        }()
+        return HStack(alignment: .center) {
+            chip(icon: "ChevronLeft", label: state.words.close, light: true, action: onClose)
+                .accessibilityIdentifier("photos.lightbox.close")
+            Spacer()
+            VStack(spacing: 2) {
+                if !stamp.0.isEmpty { Text(stamp.0).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink) }
+                if !stamp.1.isEmpty { Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta) }
+            }
+            Spacer()
+            chip(icon: "more", label: state.words.more, light: true) { send(sheetEvent(.more)) }
         }
-        .onChange(of: state.dismissed, initial: true) { _, gone in
-            if gone { onClose() }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+    }
+
+    /// THE PHOTOGRAPH'S BAND: the stage, on its own ground, with what plays or loads over its foot.
+    private func band(_ model: PhotosLightboxModel, photo: Centraid_Core_V1_PhotosLightboxPhoto?) -> some View {
+        ZStack(alignment: .bottom) {
+            Theme.color("stage", scheme)
+            stage(model)
+            if let photo, model.drawablePath == nil {
+                // NEVER A BROKEN IMAGE. Each of these is a truthful state.
+                Text(photo.stageLabel)
+                    .centraidType("body")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Theme.color("onStage", scheme))
+                    .padding(CentraidGeometry.pageMargin)
+                    .allowsHitTesting(false)
+                    .frame(maxHeight: .infinity)
+            } else if photo == nil, model.framePath(state.photoID) == nil {
+                Text(state.words.opening)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .frame(maxHeight: .infinity)
+            }
+            if let photo {
+                VStack(spacing: 4) {
+                    if let live = media.live {
+                        LiveChip(live: live, words: state.words)
+                    }
+                    statusLine(photo)
+                    if let video = media.video {
+                        LightboxTransport(player: video, words: state.words)
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                    }
+                }
+                .padding(.bottom, 4)
+            }
         }
+        .containerRelativeFrame(.vertical) { height, _ in height * 0.4 }
+        .clipped()
+    }
+
+    /// THE BAR OF VERBS, floating at the foot: the same verbs as ever, in the page's ink.
+    private func lightToolbar(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
+        VStack(spacing: 4) {
+            if state.hasStatus, !state.status.sentence.isEmpty, !state.status.refused {
+                Text(state.status.sentence)
+                    .kitType(.meta)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Surface.meta)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .accessibilityIdentifier("photos.lightbox.status")
+            }
+            toolbar(light: true)
+        }
+        .padding(.bottom, 8)
     }
 
     private func stage(_ model: PhotosLightboxModel) -> some View {
@@ -170,7 +300,7 @@ struct PhotosLightboxView: View {
                 // goes away with the rest of the chrome.
                 LightboxFilmstrip(state: PhotosLightboxModel(state: state), send: send)
                     .padding(.bottom, 4)
-                toolbar
+                toolbar()
             }
         }
         .padding(.vertical, 8)
@@ -210,13 +340,15 @@ struct PhotosLightboxView: View {
         }
     }
 
-    private func pagerButton(icon: String, label: String, target: String) -> some View {
+    private func pagerButton(icon: String, label: String, target: String, light: Bool = false) -> some View {
         Button {
             if !target.isEmpty { send(.moved(.with { $0.photoID = target })) }
         } label: {
             CentraidIconView(
                 iconKey: icon,
-                tint: Theme.color(target.isEmpty ? "onStageSoft" : "onStage", scheme),
+                tint: light
+                    ? (target.isEmpty ? Surface.meta : Surface.ink)
+                    : Theme.color(target.isEmpty ? "onStageSoft" : "onStage", scheme),
                 size: 20
             )
             .frame(width: 44, height: 44)
@@ -229,7 +361,7 @@ struct PhotosLightboxView: View {
 
     /// THE BOTTOM ROW. Every verb is live or visibly refused, and the refusal is
     /// a VISIBLE sentence and not only an accessibility hint.
-    private var toolbar: some View {
+    private func toolbar(light: Bool = false) -> some View {
         let reasons = Array(Set(state.toolbar.filter { !$0.enabled && !$0.why.isEmpty }.map(\.why))).sorted()
         var trashed = false
         if case let .photo(photo)? = state.content { trashed = photo.trashed }
@@ -240,25 +372,25 @@ struct PhotosLightboxView: View {
         return VStack(spacing: 4) {
             HStack(spacing: 0) {
                 if paged {
-                    pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID)
+                    pagerButton(icon: "ChevronLeft", label: state.words.previous, target: state.previousID, light: light)
                 }
                 ForEach(state.toolbar, id: \.kind.rawValue) { verb in
-                    toolbarKey(verb, labelled: trashed)
+                    toolbarKey(verb, labelled: trashed, light: light)
                         .frame(maxWidth: .infinity)
                 }
                 if paged {
-                    pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID)
+                    pagerButton(icon: "ChevronRight", label: state.words.next, target: state.nextID, light: light)
                 }
             }
             // A FLOATING BAR in Liquid Glass on iOS 26, solid before it and under Reduce
             // Transparency or Increase Contrast.
             .padding(.horizontal, 8)
-            .modifier(PhotosStageGlass(shape: Capsule(), solid: Theme.color("stageSunken", scheme)))
+            .modifier(PhotosStageGlass(shape: Capsule(), solid: light ? Surface.card : Theme.color("stageSunken", scheme)))
             ForEach(reasons, id: \.self) { reason in
                 Text(reason)
                     .centraidType("small")
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(light ? Surface.meta : Theme.color("onStageSoft", scheme))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -267,16 +399,18 @@ struct PhotosLightboxView: View {
     /// ONE VERB OF THE BAR. A toggle that is ON is drawn solid (a filled star) and is
     /// announced as selected; over a trashed photograph the verbs carry their words, because
     /// a restore and a delete-forever side by side are two marks a member must tell apart.
-    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb, labelled: Bool = false) -> some View {
+    private func toolbarKey(_ verb: Centraid_Core_V1_PhotosLightboxVerb, labelled: Bool = false, light: Bool = false) -> some View {
         Button {
             guard verb.enabled else { return }
             // Edit is a page: the shell pushes the route Rust built.
             if verb.hasRoute { open(verb.route) } else { send(verbEvent(verb)) }
         } label: {
             // A LIT TOGGLE (the favourite) wears the app's colour, never amber.
+            let rest = light ? Surface.ink : Theme.color("onStage", scheme)
+            let soft = light ? Surface.meta : Theme.color("onStageSoft", scheme)
             let ink = verb.enabled && verb.on
-                ? AppAccent("photos").tile
-                : Theme.color(verb.enabled ? (verb.destructive ? "net" : "onStage") : "onStageSoft", scheme)
+                ? (light ? AppAccent("photos").text : AppAccent("photos").tile)
+                : (verb.enabled ? (verb.destructive ? Theme.color("net", scheme) : rest) : soft)
             VStack(spacing: 2) {
                 CentraidIconView(
                     iconKey: verb.iconKey,
@@ -294,6 +428,10 @@ struct PhotosLightboxView: View {
                 }
             }
             .frame(minWidth: 44, minHeight: 44)
+            .background(
+                light && verb.kind == .info ? Surface.fill : Color.clear,
+                in: Circle()
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -305,11 +443,11 @@ struct PhotosLightboxView: View {
     }
 
     /// One round plate around one control: 44pt exactly, a plate and not a chip.
-    private func chip(icon: String, label: String, action: @escaping () -> Void) -> some View {
+    private func chip(icon: String, label: String, light: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            CentraidIconView(iconKey: icon, tint: Theme.color("onStage", scheme), size: 20)
+            CentraidIconView(iconKey: icon, tint: light ? Surface.ink : Theme.color("onStage", scheme), size: 20)
                 .frame(width: 44, height: 44)
-                .modifier(PhotosStageGlass(shape: Circle(), solid: Theme.color("stageSunken", scheme)))
+                .modifier(PhotosStageGlass(shape: Circle(), solid: light ? Surface.card : Theme.color("stageSunken", scheme)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -341,7 +479,7 @@ struct PhotosLightboxView: View {
         if state.albumChoice.open { return LightboxSheetItem(kind: .album) }
         if state.hasConfirm { return LightboxSheetItem(kind: .confirm) }
         switch state.sheet {
-        case .info: return LightboxSheetItem(kind: .info)
+        case .info: return nil
         case .share: return LightboxSheetItem(kind: .share)
         case .more: return LightboxSheetItem(kind: .more)
         case .place: return LightboxSheetItem(kind: .place)
@@ -353,10 +491,8 @@ struct PhotosLightboxView: View {
     private func sheet(_ kind: LightboxSheetItem.Kind) -> some View {
         switch kind {
         case .info:
-            if case let .photo(photo)? = state.content {
-                PhotosLightboxInfoSheet(state: state, photo: photo, send: send)
-                    .modifier(SheetPresentation(detents: [.fraction(0.64), .large]))
-            }
+            // THE CARDS ARE ON THE PAGE, so Info presents nothing.
+            EmptyView()
         case .share:
             OptionSheet(title: state.words.shareTitle) {
                 ForEach(state.shareChoices, id: \.precision.rawValue) { choice in
@@ -499,11 +635,11 @@ private struct PhotosLightboxPlaceSheet: View {
 
 // MARK: - The info sheet
 
-/// THE INFO SHEET — everything the vault knows about this photograph, and the four
+/// THE CARDS UNDER THE PHOTOGRAPH — everything the vault knows about it, and the four
 /// things a member may change about it: the caption, the labels, the place, and a
 /// copy of where it was taken. No destructive control here, ever: Trash lives on
 /// the bar alone. A field the record lacks is omitted, never invented.
-private struct PhotosLightboxInfoSheet: View {
+private struct PhotosLightboxInfo: View {
     @Environment(\.colorScheme) private var scheme
     let state: Centraid_Core_V1_PhotosLightboxState
     let photo: Centraid_Core_V1_PhotosLightboxPhoto
@@ -516,10 +652,8 @@ private struct PhotosLightboxInfoSheet: View {
 
     var body: some View {
         let words = state.words
-        ScrollView {
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(words.infoTitle).kitType(.title).foregroundStyle(Surface.ink).padding(.top, 8)
-
                 // A REFUSED EDIT IS SAID HERE, where the member made it.
                 if state.hasStatus, state.status.refused, !state.status.sentence.isEmpty {
                     Text(state.status.sentence).kitType(.meta).foregroundStyle(StateColor.red.text)
@@ -543,7 +677,7 @@ private struct PhotosLightboxInfoSheet: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
 
                 // WHEN AND WITH WHAT, one card of rows.
                 if !photo.facts.isEmpty {
@@ -565,7 +699,7 @@ private struct PhotosLightboxInfoSheet: View {
                             }
                         }
                     }
-                    .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                    .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                 }
 
                 // PLACE AND LABELS, one card.
@@ -575,7 +709,7 @@ private struct PhotosLightboxInfoSheet: View {
                     labels(words).padding(14)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
 
                 // WHERE THE BYTES ARE, in a sentence that says what fetching costs.
                 Text(photo.whereabouts)
@@ -590,11 +724,11 @@ private struct PhotosLightboxInfoSheet: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, CentraidGeometry.pageMargin)
-            // NOTHING UNDER THE SHEET'S CORNERS: the last line scrolls clear of the radius.
-            .padding(.bottom, 48)
+            .padding(.top, 14)
         }
-        .background(Surface.sheet.ignoresSafeArea())
+        // THE CARDS' NAME is what a screen reader says on entering them.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(words.infoTitle)
         .appAccent("photos")
         .onAppear(perform: resetCaption)
         .onChange(of: state.photoID) { _, _ in resetCaption() }

@@ -39,6 +39,7 @@ import centraid.core.v1.SettingsEvent
 import centraid.core.v1.SettingsRow
 import centraid.core.v1.SettingsState
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.design.CentraidGeometry
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSegment
 import dev.centraid.android.kit.KitSegmented
@@ -171,11 +172,25 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Text(row.initial, style = kitTextStyle(KitType.Row), color = Color.White, fontWeight = FontWeight.Bold) }
                 "amber" -> KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp, fill = StateColor.Amber.fill)
+                "neutral" -> KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp, fill = Surface.meta)
+                // A ROW THAT MAKES SOMETHING: the shell's tint under the shell's glyph.
+                "add" -> Box(
+                    Modifier
+                        .padding(end = 12.dp)
+                        .size(32.dp)
+                        .clip(RoundedCornerShape((32 * CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+                        .background(appAccent("").tile)
+                        .clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) { CentraidIcon(iconKey = row.icon_key, tint = appAccent("").text, size = 16.dp) }
                 else -> if (row.icon_key.isNotEmpty()) KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp)
             }
             Column(Modifier.weight(1f)) {
-                KitText(row.title, KitType.Row, Surface.ink)
+                KitText(row.title, KitType.Row, if (row.tile == "add") appAccent("").text else Surface.ink)
                 if (row.meta.isNotEmpty()) Text(row.meta, style = kitTextStyle(KitType.Meta), color = Surface.meta)
+            }
+            if (row.value_.isNotEmpty()) {
+                KitText(row.value_, KitType.Row, Surface.meta, Modifier.padding(start = 8.dp))
             }
             if (route != null) {
                 CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp, modifier = Modifier.padding(start = 8.dp))
