@@ -385,7 +385,7 @@ fn reminders_put_overdue_first_and_count_what_is_true() {
     assert_eq!(doc["reminders"]["flagged_count"], 1);
     let rows = &doc["reminders"]["rows"];
     assert_eq!(rows[0]["overdue"], true);
-    assert_eq!(rows[0]["due_label"], "3 days ago");
+    assert_eq!(rows[0]["due_label"], "Wed");
     assert_eq!(rows[1]["due_label"], "Yesterday");
     assert_eq!(rows[2]["due_label"], "09:00");
     assert_eq!(rows[2]["flagged"], true);
@@ -393,6 +393,29 @@ fn reminders_put_overdue_first_and_count_what_is_true() {
     assert_eq!(doc["words"]["overdue_label"], "2 overdue");
     assert_eq!(doc["words"]["today_label"], "2 today");
     assert_eq!(doc["words"]["flagged_label"], "1 flagged");
+}
+
+#[test]
+fn an_overdue_row_says_yesterday_then_the_weekday_then_days() {
+    // 2026-11-07 is a Saturday: -1 Yesterday, -2..-6 the weekday, -7 and beyond the count.
+    let days = [
+        (1_i64, "Yesterday"),
+        (2, "Thu"),
+        (3, "Wed"),
+        (4, "Tue"),
+        (5, "Mon"),
+        (6, "Sun"),
+        (7, "7 days ago"),
+        (20, "20 days ago"),
+    ];
+    for (back, want) in days {
+        let day = crate::kit::civil::plus_days(TODAY, -back).unwrap();
+        let doc = build(vec![], vec![task("t", "Late", &day, "")]);
+        assert_eq!(
+            doc["reminders"]["rows"][0]["due_label"], want,
+            "{back} days back"
+        );
+    }
 }
 
 #[test]

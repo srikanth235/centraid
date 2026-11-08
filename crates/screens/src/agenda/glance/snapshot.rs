@@ -591,7 +591,7 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
             // A task due today with no time is in the Today list already: it
             // needs no label of its own.
             due_label: if task.overdue || !task.due_time.is_empty() {
-                rows::due_label(locale, task, &context)
+                due_label(locale, task, &context)
             } else {
                 String::new()
             },
@@ -599,6 +599,21 @@ fn reminders(inputs: &Inputs, open: &[&wire::AgendaTask]) -> Vec<Reminder> {
             flagged: task.flagged,
         })
         .collect()
+}
+
+/// A REMINDERS ROW'S DUE WORDS, as the widget board writes them: "Yesterday", then the weekday
+/// ("Wed") for the rest of the week, and only past a week the count of days. The app's lists keep
+/// "3 days ago" ([`rows::due_label`]); a widget row has no room for a sentence and the weekday is
+/// what a glance reads.
+fn due_label(locale: Locale, task: &wire::AgendaTask, context: &rows::Context) -> String {
+    if task.overdue
+        && task
+            .days_from_today
+            .is_some_and(|days| (-6..=-2).contains(&days))
+    {
+        return civil::weekday_short(locale, &task.due_day);
+    }
+    rows::due_label(locale, task, context)
 }
 
 /// The local wall clock after which the document is stale: the next local
