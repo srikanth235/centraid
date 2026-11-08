@@ -676,6 +676,34 @@ fn seed_notes(seeder: &mut Seeder, rich: bool) {
                 "notebook_id": travel,
             }),
         );
+        // LINKS (#1173): a note whose body links to a live note, a trashed one and none at all,
+        // and holds a web address, so the editor's link chips draw every state they have.
+        let old_plans = Seeder::id(
+            seeder
+                .run(
+                    "note.create",
+                    json!({
+                        "title": "Old plans",
+                        "body": "Superseded by the shortlist.",
+                        "format": "plain",
+                        "notebook_id": travel,
+                    }),
+                )
+                .as_ref(),
+            "id",
+        );
+        if let Some(id) = old_plans {
+            seeder.run("entity.trash", json!({ "id": id }));
+        }
+        seeder.run(
+            "note.create",
+            json!({
+                "title": "Trip hub",
+                "body": "Start with [[Drive vs fly]], then see [[Old plans]]. Still to write: [[Packing ideas]].\n\nCabin listing: https://example.com/tahoe-cabin",
+                "format": "markdown",
+                "notebook_id": travel,
+            }),
+        );
     }
 }
 

@@ -10,7 +10,9 @@ import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -253,19 +255,25 @@ private fun SuggestionChips(suggestions: List<String>, onPick: (String) -> Unit)
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         suggestions.forEachIndexed { index, suggestion ->
+            // THE BOARD'S SMALL PILL (13 in the meta size, 7 over 12 of padding) inside a 44 target.
             Box(
                 Modifier
                     .heightIn(min = KitGeometry.ROW_MIN)
                     .clip(CircleShape)
-                    .background(Surface.card)
-                    .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
                     .clickable { onPick(suggestion) }
-                    .padding(horizontal = 14.dp)
                     .testTag("chat-suggestion-$index")
                     .semantics { role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) {
-                KitText(suggestion, KitType.Meta, Surface.ink, maxLines = 1)
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(Surface.card)
+                        .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                ) {
+                    KitText(suggestion, KitType.Meta, Surface.ink, maxLines = 1)
+                }
             }
         }
     }
@@ -274,11 +282,13 @@ private fun SuggestionChips(suggestions: List<String>, onPick: (String) -> Unit)
 // ---------------------------------------------------------------- the header --
 
 @Composable
-private fun KeyButton(iconKey: String, label: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun KeyButton(iconKey: String, label: String, tag: String, enabled: Boolean = true, plate: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
             .size(KitGeometry.ROW_MIN)
             .clip(CircleShape)
+            // THE BOARD'S ROUND KEYS: a white plate with the strong hairline.
+            .then(if (plate) Modifier.background(centraidColor("bgElev")).border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape) else Modifier)
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag)
             .semantics {
@@ -291,6 +301,7 @@ private fun KeyButton(iconKey: String, label: String, tag: String, enabled: Bool
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatHeader(
     state: ChatState,
@@ -299,15 +310,23 @@ private fun ChatHeader(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    // THE BOARD'S HEADER: a round key at each end (the drawer, New chat), the title and the vault
+    // line centred between them, no rule under it. Rename and Delete moved off the old "more"
+    // menu to a long press on the title.
     var menu by remember { mutableStateOf(false) }
-    val hasMenu = state.can_new_chat || state.can_manage_thread
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            KeyButton("Menu", state.drawer_label, "chat-drawer", onClick = onDrawer)
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        KeyButton("Menu", state.drawer_label, "chat-drawer", plate = true, onClick = onDrawer)
+        Box(Modifier.weight(1f)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(enabled = state.can_manage_thread, onClick = {}, onLongClick = { menu = true }),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
                     state.title,
                     style = centraidType("smallStrong"),
@@ -317,7 +336,7 @@ private fun ChatHeader(
                     modifier = Modifier.semantics { heading() }.testTag("chat-title"),
                 )
                 // THE ASSISTANT'S AVATAR is the bare app mark (#1173), small, before the line.
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     CentraidMark(size = 16.dp)
                     Text(
                         state.subtitle,
@@ -329,32 +348,20 @@ private fun ChatHeader(
                     )
                 }
             }
-            Box {
-                KeyButton("MoreVert", state.menu_label, "chat-menu", enabled = hasMenu) { menu = true }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = centraidColor("bgElev")) {
-                    if (state.can_new_chat) {
-                        DropdownMenuItem(
-                            text = { Text(state.new_chat_label, style = centraidType("body"), color = centraidColor("text")) },
-                            onClick = { menu = false; onNewChat() },
-                            modifier = Modifier.testTag("chat-menu-new"),
-                        )
-                    }
-                    if (state.can_manage_thread) {
-                        DropdownMenuItem(
-                            text = { Text(state.rename_label, style = centraidType("body"), color = centraidColor("text")) },
-                            onClick = { menu = false; onRename() },
-                            modifier = Modifier.testTag("chat-menu-rename"),
-                        )
-                        DropdownMenuItem(
-                            text = { Text(state.delete_label, style = centraidType("body"), color = centraidColor("net")) },
-                            onClick = { menu = false; onDelete() },
-                            modifier = Modifier.testTag("chat-menu-delete"),
-                        )
-                    }
-                }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = centraidColor("bgElev")) {
+                DropdownMenuItem(
+                    text = { Text(state.rename_label, style = centraidType("body"), color = centraidColor("text")) },
+                    onClick = { menu = false; onRename() },
+                    modifier = Modifier.testTag("chat-menu-rename"),
+                )
+                DropdownMenuItem(
+                    text = { Text(state.delete_label, style = centraidType("body"), color = centraidColor("net")) },
+                    onClick = { menu = false; onDelete() },
+                    modifier = Modifier.testTag("chat-menu-delete"),
+                )
             }
         }
-        Box(Modifier.fillMaxWidth().size(width = 0.dp, height = KitGeometry.HAIRLINE).background(centraidColor("line")))
+        KeyButton("PenLine", state.new_chat_label, "chat-new", enabled = state.can_new_chat, plate = true, onClick = onNewChat)
     }
 }
 
@@ -453,21 +460,22 @@ private fun ErrorLine(state: ChatState, onRetry: () -> Unit) {
     }
 }
 
+/** COPY AND TRY AGAIN, QUIET: the board's thread draws no buttons under an answer, so each is a small icon key in the faint ink; the words are its spoken label. */
 @Composable
 private fun ActionButton(iconKey: String, label: String, tag: String, onClick: () -> Unit) {
-    Row(
+    Box(
         Modifier
-            .heightIn(min = 32.dp)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
+            .size(KitGeometry.ROW_MIN)
+            .clip(CircleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp)
             .testTag(tag)
-            .semantics { role = Role.Button },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .semantics {
+                contentDescription = label
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        CentraidIcon(iconKey, tint = centraidColor("textSoft"), size = 14.dp)
-        Text(label, style = centraidType("small"), color = centraidColor("textSoft"))
+        CentraidIcon(iconKey, tint = centraidColor("textFaint"), size = 18.dp)
     }
 }
 
@@ -495,10 +503,12 @@ private fun MessageRow(
                 Text(
                     message.text,
                     style = centraidType("body"),
-                    color = centraidResource(R.color.centraid_surface_page),
+                    // In the dark it is the raised grey of the border role with white text, not the
+                    // light ink inverted (ChatDark.dc.html).
+                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color.White else centraidResource(R.color.centraid_surface_page),
                     modifier = Modifier
                         .clip(RoundedCornerShape(dimensionResource(R.dimen.centraid_radius_card) * 1.25f))
-                        .background(centraidResource(R.color.centraid_text_ink))
+                        .background(centraidResource(if (androidx.compose.foundation.isSystemInDarkTheme()) R.color.centraid_surface_border else R.color.centraid_text_ink))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 )
             }
@@ -506,7 +516,8 @@ private fun MessageRow(
         return
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (message.text.isNotEmpty()) {
+        // A proposed write is told by its card; the sentence over it said the same.
+        if (message.text.isNotEmpty() && !(message.pending != null && !message.streaming)) {
             MarkdownText(message.text, message.streaming, message.accessibility_label)
         }
         message.cards.forEachIndexed { index, card ->
@@ -524,9 +535,9 @@ private fun MessageRow(
             Text(message.note, style = centraidType("mono"), color = centraidColor("textFaint"), modifier = Modifier.testTag("chat-note"))
         }
         if (!message.streaming && (message.text.isNotEmpty() || message.cards.isNotEmpty())) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 if (message.text.isNotEmpty()) {
-                    ActionButton("Copy", if (copied) state.copied_label.ifEmpty { state.copy_label } else state.copy_label, "chat-copy") {
+                    ActionButton(if (copied) "Check" else "Copy", if (copied) state.copied_label.ifEmpty { state.copy_label } else state.copy_label, "chat-copy") {
                         onCopied()
                         onEvent(ChatEvent(copied = ChatEvent.Copied(message_id = message.id)))
                     }
@@ -588,13 +599,28 @@ private fun CardRow(card: ChatCard, appName: String, onOpen: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .background(appAccent(card.app).fill),
-        )
+        if (card.app == "people") {
+            // A PERSON WEARS INITIALS, as the board's card does, in the app's colour.
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(appAccent(card.app).fill.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    card.title.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase(),
+                    color = appAccent(card.app).text,
+                    fontSize = tokenSp(R.dimen.centraid_text_meta),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(appAccent(card.app).fill),
+            )
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 card.title,
@@ -645,30 +671,27 @@ private fun PendingCard(pending: ChatPending, onConfirm: () -> Unit, onCancel: (
             .padding(horizontal = 14.dp, vertical = 14.dp)
             .semantics { contentDescription = pending.accessibility_label }
             .testTag("chat-pending"),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .background(appAccent(pending.app).fill),
-        )
+        // THE BOARD'S CARD IS NEUTRAL: a grey "PROPOSED CHANGE", then each row with the empty ring
+        // of a thing not yet done in front of it.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 pending.title.uppercase(),
-                color = appAccent(pending.app).text,
-                fontSize = tokenSp(R.dimen.centraid_text_badge),
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.6.sp,
+                color = centraidResource(R.color.centraid_text_meta),
+                fontSize = tokenSp(R.dimen.centraid_text_meta),
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.4.sp,
             )
             pending.steps.forEach { step ->
-                Text(
-                    step.summary,
-                    color = centraidResource(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
-                    fontSize = tokenSp(R.dimen.centraid_text_row),
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(20.dp).border(1.6.dp, centraidColor("textFaint"), CircleShape))
+                    Text(
+                        step.summary,
+                        color = centraidResource(if (step.destructive) R.color.centraid_state_red_text else R.color.centraid_text_ink),
+                        fontSize = tokenSp(R.dimen.centraid_text_row),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
             if (pending.more_line.isNotEmpty()) {
                 Text(pending.more_line, color = centraidResource(R.color.centraid_text_meta), fontSize = tokenSp(R.dimen.centraid_text_meta))
@@ -722,13 +745,11 @@ private fun ChatComposer(
     onScope: (String) -> Unit,
 ) {
     var attachMenu by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(KitGeometry.RADIUS * 2)
+    val shape = CircleShape
     Column(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // THE SCOPE PILL: which app this chat reads. Choosing starts a chat in that scope.
-        if (state.scopes.isNotEmpty() && state.messages.isEmpty()) ScopePill(state, onScope)
         if (state.pending.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.pending.forEach { chip ->
@@ -745,11 +766,14 @@ private fun ChatComposer(
                 .shadow(3.dp, shape)
                 .clip(shape)
                 .background(centraidResource(R.color.centraid_surface_card))
-                .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.Bottom,
+                .padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box {
-                KeyButton("Plus", state.attach_label, "chat-attach", enabled = state.can_attach) { attachMenu = true }
+                Box(Modifier.size(KitGeometry.ROW_MIN).clip(CircleShape).background(centraidColor("bgSunken"))) {
+                    KeyButton("Plus", state.attach_label, "chat-attach", enabled = state.can_attach) { attachMenu = true }
+                }
                 DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }, containerColor = centraidColor("bgElev")) {
                     val photoRoute = state.attach_photo_route
                     if (photoRoute != null) {
@@ -790,13 +814,14 @@ private fun ChatComposer(
                     modifier = Modifier.fillMaxWidth().testTag("chat-composer").semantics { contentDescription = state.composer_placeholder },
                 )
             }
+            if (state.scopes.isNotEmpty()) ScopePill(state, onScope)
             if (state.streaming) {
                 SendKey("Stop", state.stop_label, filled = true, tag = "chat-stop") {
                     onEvent(ChatEvent(stopped = ChatEvent.Stopped()))
                 }
             } else {
                 val ready = draft.isNotBlank() && !state.vision_blocked
-                SendKey("PaperPlaneTilt", state.send_label, filled = ready, tag = "chat-send", enabled = ready, onClick = onSend)
+                SendKey("ArrowUp", state.send_label, filled = ready, tag = "chat-send", enabled = ready, onClick = onSend)
             }
         }
     }
@@ -811,9 +836,10 @@ private fun ScopePill(state: ChatState, onScope: (String) -> Unit) {
             Modifier
                 .heightIn(min = 32.dp)
                 .clip(CircleShape)
+                .background(centraidColor("bgElev"))
                 .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), CircleShape)
                 .clickable { open = true }
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 10.dp)
                 .testTag("chat-scope")
                 .semantics {
                     contentDescription = state.scope_label + ", " + name
@@ -822,8 +848,7 @@ private fun ScopePill(state: ChatState, onScope: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 1)
-            CentraidIcon("ChevronDown", tint = centraidColor("textSoft"), size = 14.dp)
+            Text(name, color = centraidColor("text"), fontSize = tokenSp(R.dimen.centraid_text_meta), fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = centraidColor("bgElev")) {
             DropdownMenuItem(
@@ -844,12 +869,12 @@ private fun ScopePill(state: ChatState, onScope: (String) -> Unit) {
 
 @Composable
 private fun SendKey(iconKey: String, label: String, filled: Boolean, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+    // THE BOARD'S SEND: a round dark-teal key with an up arrow, dimmed while there is nothing to send.
     Box(
         Modifier
             .size(KitGeometry.ROW_MIN)
             .clip(CircleShape)
-            .background(if (filled) centraidResource(R.color.centraid_shell) else androidx.compose.ui.graphics.Color.Transparent)
-            .border(KitGeometry.HAIRLINE, if (filled) androidx.compose.ui.graphics.Color.Transparent else centraidColor("lineStrong"), CircleShape)
+            .background(centraidResource(R.color.centraid_shell).copy(alpha = if (filled) 1f else 0.35f))
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag)
             .semantics {
@@ -858,7 +883,7 @@ private fun SendKey(iconKey: String, label: String, filled: Boolean, tag: String
             },
         contentAlignment = Alignment.Center,
     ) {
-        CentraidIcon(iconKey, tint = if (filled) Color.White else centraidColor("textDisabled"), size = 18.dp)
+        CentraidIcon(iconKey, tint = Color.White, size = 18.dp)
     }
 }
 

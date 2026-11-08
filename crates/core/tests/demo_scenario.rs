@@ -230,8 +230,9 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
         2
     );
 
-    // NOTES: a pinned one, a checklist, and one with three versions.
-    assert!(scenario.entities("note") >= 9 && scenario.entities("note") <= 12);
+    // NOTES: a pinned one, a checklist, one with three versions, and one linking to a live, a
+    // trashed and a missing note (with a trashed note to be linked to).
+    assert!(scenario.entities("note") >= 9 && scenario.entities("note") <= 14);
     assert_eq!(
         scenario.count("edge", "from_id", "to_id = 'flag:pinned'", vec![]),
         1

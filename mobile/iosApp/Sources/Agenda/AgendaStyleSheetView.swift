@@ -102,6 +102,10 @@ struct AgendaStyleSheetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        // THE WHOLE GRID IN VIEW (the board's tall sheet; Android's `expanded`): the eight colours
+        // and the icon grid under them do not fit a half sheet, which hid the icons below a
+        // scroll.
+        .presentationDetents([.large])
     }
 
     /// The chosen colour, or the quiet ink while none is.

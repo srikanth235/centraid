@@ -104,6 +104,9 @@ public enum CentraidCatalog {
         "ArrowRight": [
             CentraidIconPath(d: "M5 12h14M12 5l7 7-7 7", filled: false, evenOdd: false),
         ],
+        "ArrowUp": [
+            CentraidIconPath(d: "M12 19V5M6 11l6-6 6 6", filled: false, evenOdd: false),
+        ],
         "Backup": [
             CentraidIconPath(d: "M20 12a8 8 0 1 0-3 6.2", filled: false, evenOdd: false),
             CentraidIconPath(d: "M20 6v6h-6", filled: false, evenOdd: false),
@@ -408,6 +411,10 @@ public enum CentraidCatalog {
         ],
         "Pause": [
             CentraidIconPath(d: "M6 5h4v14H6zM14 5h4v14h-4z", filled: true, evenOdd: false),
+        ],
+        "PenLine": [
+            CentraidIconPath(d: "M12 20h9", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z", filled: false, evenOdd: false),
         ],
         "Pencil": [
             CentraidIconPath(d: "M14 4l6 6L9 21H3v-6z", filled: false, evenOdd: false),

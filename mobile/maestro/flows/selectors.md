@@ -177,7 +177,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-pending-confirm` | Chat | its confirm, worded by its verb ("Add reminder"; "Confirm" when the steps differ) (outlined in `net` when the card asks twice) |
 | `chat-pending-cancel` | Chat | its Cancel |
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
-| `chat-new` | Chat | the header's New chat |
+| `chat-new` | Chat | the header's round New chat key (the pencil, trailing); the drawer's key is `chat-drawer` (leading) |
+| `chat-menu-rename`, `chat-menu-delete` | Chat | the long-press menu on the header's title (the old "⋮" menu is gone, #1173): Rename and Delete, only on a chat that exists |
 | `kit-empty-import` | any app | the import from where the phone holds the data ("Import contacts" on People), in place of the empty state's action |
 | `kit-empty` | any app | the empty state itself (its sentence) |
 | `kit-empty-action` | any app | the empty state's one action ("Add a document"), when there is no import |
