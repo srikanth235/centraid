@@ -985,7 +985,7 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     );
     let calendar = r.data().calendars[0].clone();
     assert!(!calendar.hidden && calendar.state_label == "Shown");
-    assert!(calendar.hue_key.starts_with('c'));
+    assert!(calendar.hue_key.starts_with("list"), "{}", calendar.hue_key);
     let before = r.driver.view(r.id).revision;
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {

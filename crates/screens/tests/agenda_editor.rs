@@ -1125,7 +1125,8 @@ fn a_calendar_pick_closes_its_sheet_and_unknown_picks_are_ignored() {
         .iter()
         .map(|c| c.hue_key.as_str())
         .collect();
-    assert!(hues.iter().all(|hue| hue.starts_with('c')), "{hues:?}");
+    // Every calendar reads from the list palette, the one the More sheet and the grid share.
+    assert!(hues.iter().all(|hue| hue.starts_with("list")), "{hues:?}");
 }
 
 // ---- AGENDA WAVE 2 (#1173): the event editor's place, second alert,

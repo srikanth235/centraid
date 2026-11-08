@@ -58,7 +58,7 @@ fn opening_reads_the_occurrence_by_its_key_and_names_its_calendar() {
     assert!(!calendar_id.is_empty());
     assert_eq!(data.calendar_name, name);
     assert!(
-        data.calendar_hue_key.starts_with('c'),
+        data.calendar_hue_key.starts_with("list"),
         "{}",
         data.calendar_hue_key
     );
