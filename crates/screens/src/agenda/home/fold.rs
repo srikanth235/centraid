@@ -46,6 +46,7 @@ use crate::agenda::style;
 use crate::agenda::todo::rows;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
+use centraid_vault::commands::container::LIST_COLORS;
 
 const CANCELLED: &str = "cancelled";
 const NEEDS_ACTION: &str = "needs-action";
@@ -85,6 +86,23 @@ impl<'a> Hues<'a> {
                 .iter()
                 .map(|calendar| (calendar.calendar_id.as_str(), calendar.color.as_deref()))
                 .collect(),
+        }
+    }
+
+    /// THE GRID'S COLOUR for a calendar (#1173): the list-palette token (`listBlue`)
+    /// when the member chose one of the eight list colours, so a block, a chip and
+    /// a dot read the colour the picker showed; else the wheel role of `hue`.
+    pub(super) fn grid_hue(&self, id: Option<&str>) -> String {
+        let stored = id
+            .and_then(|id| self.stored.get(id).copied().flatten())
+            .map(str::trim);
+        match stored {
+            Some(key) if LIST_COLORS.contains(&key) => {
+                let mut chars = key.chars();
+                let first = chars.next().map(|c| c.to_ascii_uppercase());
+                format!("list{}{}", first.unwrap_or_default(), chars.as_str())
+            }
+            _ => self.hue(id),
         }
     }
 

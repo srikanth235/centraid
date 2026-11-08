@@ -1787,8 +1787,45 @@ const BUSY_WEEK: [Slot; 15] = [
     ("Kayak lesson", (9, 10, 0, 120), true, &["Dana"]),
 ];
 
+/// Two more calendars beside the vault's own, so the grids draw more than one
+/// colour: the titles of the busy week that go on each.
+const WORK_EVENTS: [&str; 6] = [
+    "Design review",
+    "Team standup",
+    "Focus block",
+    "Sprint planning",
+    "1:1 with Jake",
+    "Sprint demo",
+];
+const FAMILY_EVENTS: [&str; 4] = [
+    "Lunch with Chris",
+    "Climbing with Priya",
+    "Board games",
+    "Kayak lesson",
+];
+
 fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
+    let mut calendar = |title: &str, color: &str, position: i64| {
+        Seeder::id(
+            seeder
+                .run(
+                    "container.create",
+                    json!({ "kind": "calendar", "title": title, "color": color, "position": position }),
+                )
+                .as_ref(),
+            "id",
+        )
+    };
+    let work = calendar("Work", "blue", 1);
+    let family = calendar("Family", "violet", 2);
     for (title, (days, hour, minute, minutes), busy, guests) in BUSY_WEEK {
+        let calendar_id = if WORK_EVENTS.contains(&title) {
+            work.clone()
+        } else if FAMILY_EVENTS.contains(&title) {
+            family.clone()
+        } else {
+            None
+        };
         let guests: Vec<&str> = guests
             .iter()
             .filter_map(|name| {
@@ -1799,18 +1836,19 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
                 }
             })
             .collect();
-        seeder.run(
-            "event.propose",
-            json!({
-                "title": title,
-                "starts": at(now, days, hour, minute),
-                "ends": at(now, days, hour, minute + minutes),
-                "zone": "Etc/UTC",
-                "busy": busy,
-                "attendees": guests,
-                "reminders": [15],
-            }),
-        );
+        let mut input = json!({
+            "title": title,
+            "starts": at(now, days, hour, minute),
+            "ends": at(now, days, hour, minute + minutes),
+            "zone": "Etc/UTC",
+            "busy": busy,
+            "attendees": guests,
+            "reminders": [15],
+        });
+        if let Some(calendar_id) = calendar_id {
+            input["calendar_id"] = json!(calendar_id);
+        }
+        seeder.run("event.propose", input);
     }
     // The two that already happened, so "earlier this week" has a row.
     for (title, days, hour) in [("Team retro", -1, 15), ("Haircut", -2, 12)] {
@@ -1824,6 +1862,17 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
             }),
         );
     }
+    // An all-day event TODAY, so the Calendar header's all-day lane has a chip.
+    let mut offsite = json!({
+        "title": "Company offsite",
+        "starts": day(now, 0),
+        "ends": day(now, 0),
+        "timing": "all-day",
+    });
+    if let Some(work) = work {
+        offsite["calendar_id"] = json!(work);
+    }
+    seeder.run("event.propose", offsite);
     // The long weekend, as ONE ALL-DAY SPAN: `ends` is the LAST day, inclusive.
     seeder.run(
         "event.propose",

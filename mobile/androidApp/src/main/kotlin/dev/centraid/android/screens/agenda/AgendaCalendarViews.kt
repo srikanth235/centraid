@@ -122,6 +122,12 @@ private const val MIN_BLOCK_MINUTES: Int = 15
 /** The foot a resize drag takes hold of. */
 private val RESIZE_HANDLE: Dp = 14.dp
 
+/** Minutes either side of the now line inside which an hour label is not drawn. */
+private const val NOW_CLASH_MINUTES = 16
+
+/** A lane this wide has room for a block's second line. */
+private val DETAIL_FROM_WIDTH: Dp = 96.dp
+
 /** The chevron's and the menu check's size in the header. */
 private val CHIP_ICON: Dp = 18.dp
 
@@ -398,10 +404,15 @@ private fun StripDay(day: AgendaStripDay, modifier: Modifier, onEvent: (AgendaHo
             )
         }
         Row(Modifier.height(8.dp).padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            day.dot_hue_keys.take(3).forEach { key -> Dot(hueColor(key)) }
+            day.dot_hue_keys.take(3).forEach { key -> Dot(gridHue(key)) }
         }
     }
 }
+
+/** A calendar's colour in the grids: its list-palette token (`listBlue`) when the member chose one, else a party hue. */
+@Composable
+private fun gridHue(key: String): Color =
+    (if (key.startsWith("list")) agendaTokenColor(key) else null) ?: hueColor(key)
 
 @Composable
 private fun Dot(color: Color) {
@@ -468,7 +479,7 @@ private fun AllDayChip(
     onCheck: (String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
-    val hue = hueColor(chip.hue_key)
+    val hue = gridHue(chip.hue_key)
     val shape = RoundedCornerShape(radius("sm"))
     Row(
         modifier
@@ -540,13 +551,30 @@ private fun HourGrid(
             .verticalScroll(scroll),
     ) {
         Box(Modifier.width(GUTTER_WIDTH).height(DAY_MINUTES.minuteDp())) {
+            val now = grid.now
             grid.hours.forEach { mark ->
+                // THE NOW PILL HIDES THE HOUR IT SITS ON.
+                if (now == null || kotlin.math.abs(now.minute - mark.minute) >= NOW_CLASH_MINUTES) {
+                    Text(
+                        mark.label,
+                        style = kitTextStyle(KitType.Badge),
+                        color = Surface.meta,
+                        maxLines = 1,
+                        modifier = Modifier.offset(x = 4.dp, y = mark.minute.minuteDp()),
+                    )
+                }
+            }
+            if (now != null) {
                 Text(
-                    mark.label,
+                    now.label,
                     style = kitTextStyle(KitType.Badge),
-                    color = Surface.meta,
+                    color = androidx.compose.ui.graphics.Color.White,
                     maxLines = 1,
-                    modifier = Modifier.offset(x = 4.dp, y = mark.minute.minuteDp()),
+                    modifier = Modifier
+                        .offset(x = 2.dp, y = now.minute.minuteDp() - 9.dp)
+                        .zIndex(2f)
+                        .background(appAccent("agenda").fill, CircleShape)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
         }
@@ -600,13 +628,13 @@ private fun DayColumn(
             GridBlock(block, index, grid, columnWidth, snap, hourPx, onEvent, onOpen, onCheck)
         }
         val now = grid.now
-        if (now != null && now.day == day.day) NowLine(now.minute, now.label, now.accessibility_label)
+        if (now != null && now.day == day.day) NowLine(now.minute, now.accessibility_label)
     }
 }
 
 @Composable
-private fun NowLine(minute: Int, label: String, spoken: String) {
-    val net = centraidColor("net")
+private fun NowLine(minute: Int, spoken: String) {
+    val accent = appAccent("agenda").fill
     Row(
         Modifier
             .fillMaxWidth()
@@ -616,9 +644,8 @@ private fun NowLine(minute: Int, label: String, spoken: String) {
             .clearAndSetSemantics { contentDescription = spoken },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(net))
-        Box(Modifier.weight(1f).height(1.dp).background(net))
-        Text(label, style = kitTextStyle(KitType.Badge), color = net, modifier = Modifier.padding(horizontal = 2.dp))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+        Box(Modifier.weight(1f).height(2.dp).background(accent))
     }
 }
 
@@ -639,7 +666,7 @@ private fun GridBlock(
     onOpen: (Route) -> Unit,
     onCheck: (String) -> Unit,
 ) {
-    val hue = hueColor(block.hue_key)
+    val hue = gridHue(block.hue_key)
     val shape = RoundedCornerShape(radius("sm"))
     val columns = block.columns.coerceAtLeast(1)
     val lane = columnWidth / columns
@@ -780,23 +807,14 @@ private fun GridBlock(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (shownHeight >= HOUR_HEIGHT * 0.6f) {
+                if (lane >= DETAIL_FROM_WIDTH && block.detail.isNotEmpty() && (block.is_task || shownHeight >= HOUR_HEIGHT * 0.6f)) {
                     Text(
-                        block.time_label,
+                        block.detail,
                         style = kitTextStyle(KitType.Badge),
                         color = Surface.meta,
-                        maxLines = 1,
+                        maxLines = if (shownHeight >= HOUR_HEIGHT * 0.9f) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (block.meta.isNotEmpty() && shownHeight >= HOUR_HEIGHT * 0.9f) {
-                        Text(
-                            block.meta,
-                            style = kitTextStyle(KitType.Badge),
-                            color = Surface.meta,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
@@ -835,10 +853,7 @@ private fun GridBlock(
                             onDragCancel = { foot = null },
                         )
                     },
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Box(Modifier.padding(bottom = 2.dp).width(CHECK_SIZE + 6.dp).height(3.dp).clip(CircleShape).background(hue))
-            }
+            ) {}
         }
     }
 }
@@ -948,7 +963,7 @@ private fun MonthCell(cell: AgendaMonthCell, grid: Boolean, modifier: Modifier, 
         if (grid) {
             Column(Modifier.fillMaxWidth().padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 cell.chips.take(3).forEach { chip ->
-                    val hue = hueColor(chip.hue_key)
+                    val hue = gridHue(chip.hue_key)
                     val shape = RoundedCornerShape(radius("sm"))
                     Text(
                         chip.title,
@@ -976,7 +991,7 @@ private fun MonthCell(cell: AgendaMonthCell, grid: Boolean, modifier: Modifier, 
             }
         } else {
             Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                cell.dot_hue_keys.take(3).forEach { key -> Dot(hueColor(key)) }
+                cell.dot_hue_keys.take(3).forEach { key -> Dot(gridHue(key)) }
             }
         }
     }

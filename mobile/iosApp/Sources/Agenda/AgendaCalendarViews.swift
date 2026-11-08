@@ -24,12 +24,12 @@ enum AgendaGridMetrics {
     /// The strip's and a month cell's day circle.
     static let dayCircle: CGFloat = 36
     static let nowDot: CGFloat = 6
+    /// Minutes either side of the now line inside which an hour label is not drawn.
+    static let nowClash = 16
     /// A task's check circle on a chip or a block.
     static let checkSize: CGFloat = 14
     /// The foot of a movable block that a drag resizes.
     static let handleHeight: CGFloat = 16
-    static let handleWidth: CGFloat = 24
-    static let handleThickness: CGFloat = 3
     static let minutesPerDay = 1440
     /// How far, and how level, a swipe must be to step.
     static let swipeDistance: CGFloat = 48
@@ -39,6 +39,8 @@ enum AgendaGridMetrics {
     static let dragHold: Double = 0.3
     /// A block this tall shows its time, and one this tall its meta line.
     static let timeFrom: CGFloat = 40
+    /// A lane this wide (a Day column, a lone event in a Week) has room for the second line.
+    static let detailFromWidth: CGFloat = 96
     static let metaFrom: CGFloat = 56
     /// Month rows: the grid style's hold three chips, the list style's a day number and dots.
     static let monthRowGrid: CGFloat = 84
@@ -50,7 +52,9 @@ enum AgendaGridMetrics {
 /// The hue key's colour: the party role Rust names for a calendar (`cTeal`, `cSlate`...), the
 /// same the rows' dots use; an unknown key is the neutral slate, never clear.
 private func agendaHue(_ key: String, _ scheme: ColorScheme) -> Color {
-    Theme.color(KitHue.role(key) ?? "cSlate", scheme)
+    // A calendar the member coloured from the list palette arrives as its token (`listBlue`).
+    if key.hasPrefix("list") { return AgendaPalette.token(key) }
+    return Theme.color(KitHue.role(key) ?? "cSlate", scheme)
 }
 
 /// A hue's pale ground: the icon chip's own strength, light or dark.
@@ -477,16 +481,18 @@ struct AgendaTimeGridView: View {
                 Text(grid.allDayLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .padding(.leading, 4)
+                    .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
                 ForEach(grid.days, id: \.day) { day in
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(day.allDay, id: \.key) { chip in
                             AgendaChipView(chip: chip, send: send, open: open)
                         }
                     }
-                    .frame(width: columnWidth, alignment: .topLeading)
                     .padding(.horizontal, 2)
+                    .frame(width: columnWidth, alignment: .topLeading)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("agenda-grid-allday-\(day.day)")
                 }
@@ -576,11 +582,14 @@ struct AgendaTimeGridView: View {
         ZStack(alignment: .topLeading) {
             ForEach(grid.hours, id: \.minute) { mark in
                 let y = CGFloat(mark.minute) * perMinute
+                // THE NOW PILL HIDES THE HOUR IT SITS ON: two clocks in one gutter read as a smear.
+                let clashes = grid.hasNow && abs(Int(grid.now.minute) - Int(mark.minute)) < AgendaGridMetrics.nowClash
                 Text(mark.label)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
                     .padding(.trailing, 6)
+                    .opacity(clashes ? 0 : 1)
                     .offset(y: y - 8)
                 Rectangle()
                     .fill(Surface.line)
@@ -607,7 +616,8 @@ struct AgendaTimeGridView: View {
         }
     }
 
-    /// THE NOW LINE, on its day's column: the clock in the gutter, a dot and a rule.
+    /// THE NOW LINE, on its day's column: the accent's rule and dot, and the clock as a filled
+    /// pill in the gutter (the hour label it would clash with is not drawn, see `hourLines`).
     private func nowLine(
         _ now: Centraid_Core_V1_AgendaGridNow,
         days: [String],
@@ -618,18 +628,21 @@ struct AgendaTimeGridView: View {
         return ZStack(alignment: .topLeading) {
             Text(now.label)
                 .centraidType("annotLabelOn")
-                .foregroundStyle(Theme.color("net", scheme))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(accent.fill, in: Capsule())
                 .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
-                .padding(.trailing, 6)
-                .offset(y: -8)
+                .padding(.trailing, 2)
+                .offset(y: -9)
             Circle()
-                .fill(Theme.color("net", scheme))
+                .fill(accent.fill)
                 .frame(width: AgendaGridMetrics.nowDot, height: AgendaGridMetrics.nowDot)
                 .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth - AgendaGridMetrics.nowDot / 2, y: -AgendaGridMetrics.nowDot / 2)
             Rectangle()
-                .fill(Theme.color("net", scheme))
-                .frame(width: columnWidth, height: CentraidGeometry.hairline)
-                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth)
+                .fill(accent.fill)
+                .frame(width: max(columnWidth, 0), height: 2)
+                .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth, y: -1)
         }
         .offset(y: CGFloat(now.minute) * perMinute)
         .allowsHitTesting(false)
@@ -752,36 +765,51 @@ private struct AgendaBlockView: View {
         .zIndex(dragging ? 1 : 0)
     }
 
-    /// The block's face: the ground, its bar or dashes, and its words.
+    /// The block's face, as the board draws it: the hue's pale ground and 3pt bar; the title, then
+    /// one line of time and place. A task is dashed, its circle and title on one line. A narrow lane
+    /// (the Week) shows the title alone, truncated, and a short block just its title.
     private func face(width: CGFloat, height: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: Theme.radius("sm", scheme), style: .continuous)
         let hue = agendaHue(block.hueKey, scheme)
         let ink = Theme.color(block.isPast ? "textSoft" : "text", scheme)
+        let roomy = width >= AgendaGridMetrics.detailFromWidth
+        // A WEEK LANE IS A SLIVER: the title in the small bold face, packed to the edges.
+        let titleFace = roomy ? "smallStrong" : "annotLabelOn"
         return VStack(alignment: .leading, spacing: 0) {
-            Text(block.title)
-                .centraidType("smallStrong")
-                .foregroundStyle(ink)
-                .lineLimit(1)
-            if height >= AgendaGridMetrics.timeFrom {
-                Text(block.timeLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+            if block.isTask {
+                HStack(spacing: 4) {
+                    Text(block.title)
+                        .centraidType(titleFace)
+                        .foregroundStyle(ink)
+                        .lineLimit(1)
+                    if roomy, !block.detail.isEmpty {
+                        Text(block.detail)
+                            .centraidType("annotLabel")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+            } else {
+                Text(block.title)
+                    .centraidType(titleFace)
+                    .foregroundStyle(ink)
                     .lineLimit(1)
-            }
-            if height >= AgendaGridMetrics.metaFrom, !block.meta.isEmpty {
-                Text(block.meta)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
+                if roomy, height >= AgendaGridMetrics.timeFrom, !block.detail.isEmpty {
+                    Text(block.detail)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(height >= AgendaGridMetrics.metaFrom ? 2 : 1)
+                }
             }
         }
-        .padding(.leading, block.isTask ? 28 : AgendaGridMetrics.barWidth + 5)
-        .padding(.trailing, 4)
-        .padding(.top, 2)
+        .padding(.leading, block.isTask ? (roomy ? 28 : 21) : AgendaGridMetrics.barWidth + (roomy ? 6 : 3))
+        .padding(.trailing, roomy ? 4 : 1)
+        .padding(.top, block.isTask ? 0 : 4)
         .frame(width: width, height: height, alignment: .topLeading)
         .background {
             if block.isTask {
-                shape.strokeBorder(hue, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                shape.strokeBorder(hue, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             } else {
                 shape.fill(agendaWash(block.hueKey, scheme))
             }
@@ -797,9 +825,8 @@ private struct AgendaBlockView: View {
 
     /// THE FOOT'S GRIP: a drag on it moves the end.
     private var handle: some View {
-        Capsule()
-            .fill(agendaHue(block.hueKey, scheme))
-            .frame(width: AgendaGridMetrics.handleWidth, height: AgendaGridMetrics.handleThickness)
+        // NO MARK ON THE BOARD: the foot is a grip by touch and by the accessibility action only.
+        Color.clear
             .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.handleHeight)
             .contentShape(Rectangle())
             .gesture(resizeGesture)

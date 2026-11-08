@@ -244,13 +244,19 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
     assert_eq!(scenario.entities("album"), 2);
 
     // AGENDA: a busy week with overlaps (five FREE events laid over busy ones), an
-    // all-day span, twenty-five tasks in four coloured lists, and two invitations the
+    // all-day span and an all-day event today, two more calendars (Work, blue; Family,
+    // violet) with the week's events filed on them, twenty-five tasks in four coloured lists, and two invitations the
     // member has not answered.
-    assert_eq!(scenario.entities("event"), 23);
+    assert_eq!(scenario.entities("event"), 24);
     assert_eq!(scenario.count("event", "id", "busy = 0", vec![]), 5);
     assert_eq!(
         scenario.count("event", "id", "timing = 'all-day'", vec![]),
-        1
+        2
+    );
+    assert_eq!(scenario.entities("calendar"), 3);
+    assert_eq!(
+        scenario.count("event", "id", "calendar_id <> 'calendar:default'", vec![]),
+        11
     );
     assert_eq!(scenario.entities("task"), 25);
     assert_eq!(

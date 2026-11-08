@@ -49,6 +49,8 @@ pub const DOTS: usize = 3;
 pub const CHIPS: usize = 3;
 const BIRTHDAY_HUE: &str = "rose";
 const SEPARATOR: &str = ", ";
+/// Between the time and the place on a block's second line.
+const META_SEPARATOR: &str = " · ";
 
 /// Regions whose week opens on Sunday; every other region's opens on Monday.
 const SUNDAY_FIRST: [&str; 20] = [
@@ -383,7 +385,7 @@ impl Input<'_> {
         calendars
             .into_iter()
             .take(DOTS)
-            .map(|calendar| self.hues.hue(calendar))
+            .map(|calendar| self.hues.grid_hue(calendar))
             .collect()
     }
 
@@ -565,7 +567,7 @@ fn chips_of(input: &Input, day: &str) -> Vec<wire::AgendaGridChip> {
             let title = event_title(locale, event);
             wire::AgendaGridChip {
                 key: format!("event:{}", event.instance_key),
-                hue_key: input.hues.hue(event.calendar_id.as_deref()),
+                hue_key: input.hues.grid_hue(event.calendar_id.as_deref()),
                 route: Some(routes::event(
                     &event.event_id,
                     &event.instance_key,
@@ -675,7 +677,7 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
         blocks.push(wire::AgendaGridBlock {
             key: format!("{day}|{}", event.instance_key),
             instance_key: event.instance_key.clone(),
-            hue_key: input.hues.hue(event.calendar_id.as_deref()),
+            hue_key: input.hues.grid_hue(event.calendar_id.as_deref()),
             start_minute: start,
             end_minute: end,
             is_past: past(end),
@@ -687,6 +689,11 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
                 day,
             )),
             title,
+            detail: [time_label.as_str(), meta.as_str()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(META_SEPARATOR),
             time_label,
             meta,
             accessibility_label,
@@ -725,6 +732,7 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
             task_id: task.task_id.clone(),
             route: Some(routes::task(&task.task_id)),
             title,
+            detail: meta.clone(),
             time_label,
             meta,
             accessibility_label,
@@ -770,7 +778,7 @@ fn marks_of(input: &Input, day: &str) -> Vec<Mark> {
         .map(|event| Mark {
             key: fold::event_key(event, day),
             title: event_title(locale, event),
-            hue_key: input.hues.hue(event.calendar_id.as_deref()),
+            hue_key: input.hues.grid_hue(event.calendar_id.as_deref()),
             is_task: false,
         })
         .collect();
@@ -1127,7 +1135,7 @@ mod tests {
         // One per calendar, in the order they first start: c2 (08:00), c1, c3.
         let expected: Vec<String> = ["c2", "c1", "c3"]
             .iter()
-            .map(|id| parts.hues.hue(Some(id)))
+            .map(|id| parts.hues.grid_hue(Some(id)))
             .collect();
         assert_eq!(wednesday.dot_hue_keys, expected);
         assert_eq!(wednesday.opens, Dest::Day as i32);

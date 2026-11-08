@@ -475,6 +475,8 @@ message AgendaGridBlock {
   string time_label = 4;
   // "Call" (the place), the task's list; empty for none.
   string meta = 5;
+  // A list-palette token (`listBlue`) when the calendar's colour is one the
+  // member chose, else a party hue role (`cTeal`).
   string hue_key = 6;
   int32 start_minute = 7;
   int32 end_minute = 8;
@@ -490,6 +492,10 @@ message AgendaGridBlock {
   // "Team standup, 09:30 to 10:15, Call".
   string accessibility_label = 15;
   Route route = 16;
+  // The second line, finished: an event's time and place on one line
+  // ("09:30 – 10:15 · Call"); a task's list, which a shell draws after the
+  // title when the block is one line tall.
+  string detail = 17;
 }
 
 // THE MONTH (#1173): whole weeks from the region's first weekday, so the
