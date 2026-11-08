@@ -88,6 +88,8 @@ struct SheetRow: View {
     var selected: Bool = false
     /// A row that opens another sheet or page says so with a trailing chevron.
     var chevron: Bool = false
+    /// A colour dot in the mark's place (a label wears its colour); the dot replaces the tile.
+    var dot: Color? = nil
     var identifier: String = ""
     let onTap: () -> Void
 
@@ -98,7 +100,11 @@ struct SheetRow: View {
         let ink = enabled ? (destructive ? StateColor.red.text : Surface.ink) : Surface.meta
         Button(action: onTap) {
             HStack(spacing: 12) {
-                if !iconKey.isEmpty {
+                if let dot {
+                    Circle().fill(dot).frame(width: 10, height: 10)
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                } else if !iconKey.isEmpty {
                     // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a
                     // destructive row's is the state's red.
                     KitTile(iconKey: iconKey, size: 32, fill: destructive ? StateColor.red.fill : nil)

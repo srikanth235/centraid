@@ -79,6 +79,8 @@ struct KitIconKey: View {
 struct KitLink: View {
     let label: String
     var dense: Bool = false
+    /// A link that wears the surrounding page's colour (the words pages' teal) instead of the link blue.
+    var tint: Color? = nil
     var identifier: String = ""
     let action: () -> Void
 
@@ -89,7 +91,7 @@ struct KitLink: View {
         Button(action: action) {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
-                .foregroundStyle(Theme.color(enabled ? "link" : "textDisabled", scheme))
+                .foregroundStyle(enabled ? (tint ?? Theme.color("link", scheme)) : Theme.color("textDisabled", scheme))
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .contentShape(Rectangle())
         }
@@ -178,29 +180,26 @@ struct KitChip: View {
 
 // MARK: - Segmented
 
-/// ONE OF TWO TO FOUR VIEWS OF THE SAME THING, in the band plate's grammar:
-/// one `bgElev` capsule with a `lineStrong` hairline, the lit segment in `text`
-/// at the `control` rung with a mark-wide rule over it, the others `textSoft`
-/// at `band`. The two rungs share a size, so a tap never reflows the plate.
-/// The caller places it (centre, margin); the plate owns nothing outside
-/// itself.
+/// ONE OF TWO TO FOUR VIEWS OF THE SAME THING, drawn as the boards draw it (HealthMetric,
+/// MoneySpending, Settings' appearance): a pale track, the lit segment a white card on it in the
+/// `row` rung's semibold, the others `meta`. The two weights share a size, so a tap never reflows
+/// the track. The caller places it (centre, margin); `fills` stretches the segments to equal
+/// widths across the whole line (Health's four ranges), else it hugs its words.
 struct KitSegmented<Key: Hashable>: View {
     let options: [(key: Key, label: String)]
     let selected: Key
     var identifier: String = ""
+    var fills = false
     let onSelect: (Key) -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        HStack(spacing: BandMetrics.groupGutter) {
+        HStack(spacing: 2) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 segment(option.key, option.label)
             }
         }
-        .padding(BandMetrics.platePad)
-        .background(Theme.color("bgElev", scheme), in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        .padding(3)
+        .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
@@ -209,20 +208,15 @@ struct KitSegmented<Key: Hashable>: View {
         let active = key == selected
         return Button { onSelect(key) } label: {
             Text(label)
-                .centraidType(active ? "control" : "band", scales: false)
-                .foregroundStyle(Theme.color(active ? "text" : "textSoft", scheme))
+                .kitType(.row)
+                .fontWeight(active ? .semibold : .regular)
+                .foregroundStyle(active ? Surface.ink : Surface.meta)
                 .lineLimit(1)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(alignment: .top) {
-                    if active {
-                        Capsule()
-                            .fill(Theme.color("text", scheme))
-                            .frame(width: BandMetrics.markSize, height: BandMetrics.activeRule)
-                            .padding(.top, CentraidGeometry.hairline)
-                    }
-                }
-                .contentShape(Capsule())
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: fills ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+                .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

@@ -380,6 +380,8 @@ message DocsLabelsSheet {
   string add_label = 5;
   string placeholder = 6;
   string remove_label = 7;
+  // The `available` labels again, each in its colour (same order), for the dot an offer wears.
+  repeated DocsLabelChip options = 8;
 }
 
 message DocsNewFolderSheet {

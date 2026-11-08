@@ -472,9 +472,13 @@ struct EditorRoom<Trailing: View, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AutosaveStatus(status)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.bottom, 4)
+            // WITH NO TRAILING CONTROL THE STATUS TAKES THE BAR'S TRAILING SLOT (the boards' "Done |
+            // title | Saved"); an editor with its own trailing key keeps the line over the content.
+            if !statusInBar {
+                AutosaveStatus(status)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.bottom, 4)
+            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -497,10 +501,14 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("kit-editor-close")
             }
-            ToolbarItem(placement: .topBarTrailing) { trailing() }
+            ToolbarItem(placement: .topBarTrailing) {
+                if statusInBar { AutosaveStatus(status, inline: true) } else { trailing() }
+            }
         }
         .onDisappear(perform: onDeparted)
     }
+
+    private var statusInBar: Bool { Trailing.self == EmptyView.self }
 }
 
 /// THE ONE INK BUTTON a sheet may carry.

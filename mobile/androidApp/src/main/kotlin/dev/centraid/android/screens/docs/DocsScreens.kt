@@ -170,7 +170,7 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
                 SheetRow(
                     label = chip.label,
                     detail = labels.remove_label,
-                    iconKey = "Tag",
+                    dot = docsListColor(chip.color_key),
                     testTag = "docs-label-${chip.tag_id}",
                     onTap = { actions.onLabelRemoved(chip.tag_id) },
                 )
@@ -188,8 +188,8 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
                     actions.onLabelAdded(labels.draft.trim())
                 }
             }
-            labels.available.forEach { label ->
-                SheetRow(label = label, iconKey = "Plus", testTag = "docs-label-offer", onTap = { actions.onLabelAdded(label) })
+            labels.options.forEach { option ->
+                SheetRow(label = option.label, dot = docsListColor(option.color_key), testTag = "docs-label-offer", onTap = { actions.onLabelAdded(option.label) })
             }
         }
         folder != null -> SheetRoom(

@@ -380,6 +380,11 @@ impl Document {
             .as_ref()
             .map(|drive| drive.labels.as_slice())
             .unwrap_or_default();
+        let rail_entries = answered
+            .drive
+            .as_ref()
+            .map(|drive| drive.label_entries.as_slice())
+            .unwrap_or_default();
         let (kind, title, body) = match &self.sheet {
             Sheet::None => return none,
             Sheet::Move => (
@@ -392,7 +397,13 @@ impl Document {
             Sheet::Labels(draft) => (
                 Kind::Labels,
                 words::labels_title(locale),
-                Body::Labels(fold::labels_sheet(locale, row, rail_labels, draft)),
+                Body::Labels(fold::labels_sheet(
+                    locale,
+                    row,
+                    rail_labels,
+                    rail_entries,
+                    draft,
+                )),
             ),
             Sheet::More => (
                 Kind::More,

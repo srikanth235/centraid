@@ -34,6 +34,7 @@ struct HealthMetricView: View {
                                 options: state.segments.map { (key: $0.key, label: $0.label) },
                                 selected: state.segments.first(where: \.active)?.key ?? "",
                                 identifier: "health-metric-range",
+                                fills: true,
                                 onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
                             )
                             .frame(maxWidth: .infinity)

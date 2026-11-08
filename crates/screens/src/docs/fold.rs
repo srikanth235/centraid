@@ -334,6 +334,7 @@ pub fn labels_sheet(
     locale: Locale,
     row: &wire::DocsDocumentRow,
     drive_labels: &[String],
+    entries: &[wire::DocsLabel],
     draft: &str,
 ) -> wire::DocsLabelsSheet {
     let on: Vec<&str> = row.labels.iter().map(|chip| chip.label.as_str()).collect();
@@ -344,6 +345,25 @@ pub fn labels_sheet(
             .iter()
             .filter(|label| !on.contains(&label.as_str()))
             .cloned()
+            .collect(),
+        // THE SAME LABELS WEARING THEIR COLOURS, for the offers' dots: one per `available` word.
+        options: drive_labels
+            .iter()
+            .filter(|label| !on.contains(&label.as_str()))
+            .map(|label| {
+                entries
+                    .iter()
+                    .find(|entry| &entry.label == label)
+                    .map_or_else(
+                        || wire::DocsLabelChip {
+                            tag_id: label.clone(),
+                            label: label.clone(),
+                            color_key: color_key("", label),
+                            selected: false,
+                        },
+                        chip,
+                    )
+            })
             .collect(),
         draft: draft.to_owned(),
         can_add: !typed.is_empty() && !on.contains(&typed),

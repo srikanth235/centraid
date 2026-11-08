@@ -112,6 +112,7 @@ struct HealthHomeView: View {
             options: segments.map { (key: $0.key, label: $0.label) },
             selected: segments.first(where: { $0.active })?.key ?? "",
             identifier: "health-range",
+            fills: true,
             onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
         )
         .frame(maxWidth: .infinity)

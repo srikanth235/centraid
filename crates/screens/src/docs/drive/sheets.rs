@@ -161,7 +161,13 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                 words::labels_title(locale),
                 document_id,
                 locale,
-                Body::Labels(fold::labels_sheet(locale, row, &rail.labels, draft)),
+                Body::Labels(fold::labels_sheet(
+                    locale,
+                    row,
+                    &rail.labels,
+                    &rail.label_entries,
+                    draft,
+                )),
             )
         }
         Sheet::NewFolder(name) => {

@@ -87,6 +87,14 @@ struct BackupHomeView: View {
 
     // MARK: the status card
 
+    private func markKey(_ model: Centraid_Core_V1_BackupHomeData) -> String {
+        switch model.condition {
+        case .upToDate: return "Check"
+        case .running: return "Refresh"
+        default: return model.line.tone == .urgent || model.condition == .notReached ? "AlertCircle" : "Refresh"
+        }
+    }
+
     private func tint(_ model: Centraid_Core_V1_BackupHomeData) -> Color {
         switch model.condition {
         case .upToDate: return StateColor.green.text
@@ -101,7 +109,11 @@ struct BackupHomeView: View {
     private func statusCard(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
-                Circle().fill(tint(model)).frame(width: 10, height: 10).padding(.top, 6)
+                // THE STATE'S MARK (Backup, BackupRunning, BackupFailed): a round badge in the state's
+                // pale ground, its glyph in the state's colour.
+                CentraidIconView(iconKey: markKey(model), tint: tint(model), size: 20)
+                    .frame(width: 40, height: 40)
+                    .background(tint(model).opacity(0.14), in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.line.sentence)
@@ -110,8 +122,11 @@ struct BackupHomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if !model.line.detail.isEmpty { sentence(model.line.detail) }
                     if !model.lastGood.isEmpty { sentence(model.lastGood, id: "backup-last-good") }
-                    if !model.reason.isEmpty { sentence(model.reason, id: "backup-reason") }
                 }
+            }
+            // WHY THE DEVICE IS NOT ANSWERING is an amber callout of its own, not a quiet line.
+            if !model.reason.isEmpty {
+                WordsCallout(text: model.reason, state: .amber, identifier: "backup-reason")
             }
             if !model.progress.isEmpty {
                 KitSpinner(label: model.progress).accessibilityIdentifier("backup-progress")

@@ -114,6 +114,14 @@ pub(super) fn seed_people(seeder: &mut Seeder, now: i64, elapse: &dyn Fn(i64)) -
     let mut circle = Circle::default();
     for (key, name, role, cadence, birthday, phone, email) in PEOPLE {
         let mut input = json!({ "title": name, "role": role, "cadence_days": cadence });
+        // PRIYA'S BIRTHDAY IS NINE DAYS OUT, WHATEVER TODAY IS: the person's hero draws "Birthday
+        // in 9 days" and the chat person card carries the same fact only inside the month.
+        let soon = format!("1993-{}", &day(now, 9)[5..]);
+        let birthday = if key == "Priya" {
+            Some(soon.as_str())
+        } else {
+            birthday
+        };
         if let Some(birthday) = birthday {
             input["birthday"] = json!(birthday);
         }

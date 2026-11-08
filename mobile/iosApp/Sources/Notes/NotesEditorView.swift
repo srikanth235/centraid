@@ -340,7 +340,7 @@ private struct NotesTagsRow: View {
 
     var body: some View {
         if !tags.isEmpty || !placeholder.isEmpty {
-            NotesFlow(spacing: 8) {
+            KitFlow(spacing: 8) {
                 ForEach(tags, id: \.conceptID) { tag in
                     HStack(spacing: 4) {
                         Text(tag.label)
@@ -390,7 +390,7 @@ private struct NotesTagsRow: View {
 }
 
 /// Chips that wrap onto the next line.
-private struct NotesFlow: Layout {
+struct KitFlow: Layout {
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

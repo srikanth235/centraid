@@ -105,9 +105,9 @@ private struct DocsLabelsSheetView: View {
                     .disabled(!labels.canAdd)
                     .accessibilityIdentifier("docs-label-add")
             }
-            ForEach(labels.available, id: \.self) { label in
-                SheetRow(iconKey: "Tag", label: label, identifier: "docs-label-\(label)") {
-                    actions.onLabelAdd(label)
+            ForEach(labels.options, id: \.tagID) { option in
+                SheetRow(label: option.label, dot: docsListColor(option.colorKey), identifier: "docs-label-\(option.label)") {
+                    actions.onLabelAdd(option.label)
                 }
             }
         }

@@ -284,7 +284,7 @@ struct WordsEntryView: View {
             } footer: {
                 // LEAVE THE HELD SEED for the grid: a link, then the scan, then the verb.
                 if !state.wordsLabel.isEmpty {
-                    KitLink(label: state.wordsLabel, identifier: "words-use-words") {
+                    KitLink(label: state.wordsLabel, tint: AppAccent.shell.text, identifier: "words-use-words") {
                         send(Self.event { $0.useWords = .init() })
                     }
                     .frame(maxWidth: .infinity)
@@ -673,7 +673,7 @@ struct WordsShowView: View {
 /// THE WORDS PAGES' FRAME: a round X at the top leading edge (the screen's own leave control,
 /// `secondary_label`, spoken as its label), the content scrolling, and the answers pinned at
 /// the foot. With no leave control and no answers it is just the page.
-private struct WordsFrame<Content: View, Footer: View>: View {
+struct WordsFrame<Content: View, Footer: View>: View {
     let closeLabel: String
     let closeIdentifier: String
     let onClose: () -> Void
@@ -729,14 +729,17 @@ private struct WordsFrame<Content: View, Footer: View>: View {
 struct WordsHead: View {
     let title: String
     let lead: String
+    /// A badge page (PairDevice, PairCheck) centres its head over the badge.
+    var centered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: centered ? .center : .leading, spacing: 8) {
             if !title.isEmpty {
                 Text(title)
                     .kitType(.title)
                     .foregroundStyle(Surface.ink)
                     .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(centered ? .center : .leading)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("words-title")
             }
@@ -744,6 +747,7 @@ struct WordsHead: View {
                 Text(lead)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
+                    .multilineTextAlignment(centered ? .center : .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -805,7 +809,7 @@ struct WordsControls: View {
                         .accessibilityIdentifier("\(prefix)-primary")
                 }
                 if !secondary.isEmpty {
-                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    KitLink(label: secondary, tint: AppAccent.shell.text, identifier: "\(prefix)-secondary", action: onSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -816,7 +820,7 @@ struct WordsControls: View {
 
 /// A SECOND VERB IN THE SHELL'S TINT: the shell's teal over its own pale ground, full width,
 /// beside the one ink button ("Save a copy", "Scan QR code", "Try again").
-private struct WordsTonalButton: View {
+struct WordsTonalButton: View {
     let label: String
     var iconKey: String? = nil
     var identifier = ""

@@ -110,7 +110,7 @@ struct PeopleEditorView: View {
                 .foregroundStyle(Surface.meta)
                 .accessibilityAddTraits(.isHeader)
             // THE FIVE CHOICES WRAP: none is pushed off the edge to be found by scrolling.
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 8) {
+            KitFlow(spacing: 8) {
                     ForEach(state.cadences, id: \.days) { cadence in
                         // THE CHOSEN CADENCE IS FILLED in the app's colour under a white label; the
                         // others are white pills with a hairline.

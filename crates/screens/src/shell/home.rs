@@ -260,11 +260,15 @@ impl Home {
                 self.ask = Ask::None;
             }
             H::Shown(_) => self.reload(ctx),
+            // THE PAGE COVERS THE SHEET: a sheet left open under a pushed make or restore page is
+            // drawn over it on iOS (the page shows dimmed behind the roster), so it closes first.
             H::Make(_) => {
+                self.sheet_open = false;
                 self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Make(true))];
             }
             H::Restore(_) => {
+                self.sheet_open = false;
                 self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Restore(true))];
             }

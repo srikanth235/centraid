@@ -3,6 +3,9 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -123,6 +126,8 @@ public fun SheetRow(
     selected: Boolean = false,
     testTag: String = "sheet-row",
     enabled: Boolean = true,
+    /** A colour dot in the mark's place (a label wears its colour); it replaces the tile. */
+    dot: androidx.compose.ui.graphics.Color? = null,
 ) {
     val ink = when {
         !enabled -> Surface.meta
@@ -147,7 +152,11 @@ public fun SheetRow(
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (iconKey != null) {
+            if (dot != null) {
+                Box(Modifier.padding(end = 12.dp).size(32.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+                }
+            } else if (iconKey != null) {
                 // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a destructive
                 // row's is the state's red.
                 KitTile(
@@ -163,7 +172,7 @@ public fun SheetRow(
             }
             if (selected) CentraidIcon(iconKey = "Check", tint = accent.text, size = 16.dp)
         }
-        Spacer(Modifier.padding(start = if (iconKey != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        Spacer(Modifier.padding(start = if (iconKey != null || dot != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
     }
 }
 
