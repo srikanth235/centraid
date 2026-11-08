@@ -48,6 +48,7 @@ pub mod routes {
     #[must_use]
     pub fn home() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::Home(wire::HomeRoute {})),
         }
@@ -57,6 +58,7 @@ pub mod routes {
     #[must_use]
     pub fn search() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: SEARCH.to_owned(),
             args: Some(wire::route::Args::HomeSearch(wire::HomeSearchRoute {})),
         }
@@ -66,6 +68,7 @@ pub mod routes {
     #[must_use]
     pub fn settings() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: SETTINGS.to_owned(),
             args: Some(wire::route::Args::Settings(wire::SettingsRoute {})),
         }
@@ -76,6 +79,7 @@ pub mod routes {
     #[must_use]
     pub fn ask(question: &str, scope: &str) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: ASK.to_owned(),
             args: Some(wire::route::Args::Ask(wire::ShellAskRoute {
                 question: question.to_owned(),

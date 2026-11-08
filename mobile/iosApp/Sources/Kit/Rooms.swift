@@ -611,7 +611,7 @@ struct SheetRoom<Content: View>: View {
                             // THE APP'S BLUE, as the board's Cancel: a word, no outline.
                             Button(action: outline.action) {
                                 Text(outline.label)
-                                    .centraidType("smallStrong")
+                                    .centraidType("sheetKey")
                                     .foregroundStyle(outline.ink ? Surface.ink : accent.text)
                                     .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                                     .contentShape(Rectangle())
@@ -633,6 +633,47 @@ struct SheetRoom<Content: View>: View {
         // system's own sheet ground.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(SheetPresentation())
+    }
+}
+
+/// A ROUTED SCREEN THAT IS A SHEET (`Route.sheet`: Money's target, Photos' picker), as the boards
+/// draw it: the X at the leading edge (Cancel, in the bar's own glass), the title between, the
+/// page under it and, when the screen has one, a foot pinned to the bottom edge for its verbs.
+/// Cancel, a swipe down and a finished screen all close it the same way: the shell drops the
+/// sheet and Rust is told the pop.
+struct SheetPage<Content: View, Foot: View>: View {
+    let title: String
+    var cancelLabel: String = KitWords.CANCEL
+    let onCancel: () -> Void
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let foot: () -> Foot
+
+    var body: some View {
+        NavigationStack {
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Surface.sheet.ignoresSafeArea())
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    foot()
+                        .frame(maxWidth: .infinity)
+                        .background(Surface.sheet.ignoresSafeArea(edges: .bottom))
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onCancel) {
+                            CentraidIconView(iconKey: "X", tint: Surface.ink, size: 18)
+                                .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(cancelLabel)
+                        .accessibilityIdentifier("kit-sheet-cancel")
+                    }
+                }
+        }
+        .modifier(SheetPresentation(detents: [.large]))
     }
 }
 
@@ -682,14 +723,14 @@ struct KitInkButton: View {
 
     var body: some View {
         Button(action: action) {
-            // `smallStrong` IS THE SEMIBOLD FACE: `.fontWeight` does not reach a custom face.
+            // `sheetKey` IS THE BOARD'S 16/600: `.fontWeight` does not reach a custom face.
             HStack(spacing: 10) {
                 if !iconKey.isEmpty {
                     CentraidIconView(iconKey: iconKey, tint: ink, size: 20)
                         .accessibilityHidden(true)
                 }
                 Text(label)
-                    .centraidType("smallStrong")
+                    .centraidType("sheetKey")
                     .foregroundStyle(ink)
             }
                 .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)

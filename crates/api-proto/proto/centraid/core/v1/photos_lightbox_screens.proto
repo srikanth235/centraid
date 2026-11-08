@@ -334,7 +334,7 @@ message PhotosLightboxEvent {
 message PhotosEditPlan {
   // Quarter turns clockwise, 0-3.
   uint32 quarters = 1;
-  // Whole degrees, 0 to -15 (anticlockwise only, one control).
+  // Whole degrees, -15 to +15 (the slider; negative is anticlockwise).
   sint32 straighten = 2;
   Flip flip = 3;
   Ratio ratio = 4;
@@ -422,6 +422,8 @@ message PhotosEditorState {
   bool dismissed = 17;
   repeated PhotosEditorRatio ratios = 18;
   PhotosEditorWords words = 19;
+  // The slider's reach each way, in whole degrees (15): it runs from minus this to plus this.
+  uint32 straighten_limit = 20;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -493,8 +495,10 @@ message PhotosEditorEvent {
   // A quarter turn resets the crop and the ratio.
   message Rotated {}
 
-  // One press levels a degree anticlockwise; past the limit returns to level.
-  message Straightened {}
+  // The slider's angle, in whole degrees; Rust clamps it to the limit either way.
+  message Straightened {
+    sint32 degrees = 1;
+  }
 
   message Flipped {}
 

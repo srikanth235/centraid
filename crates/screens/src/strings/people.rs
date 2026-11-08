@@ -232,8 +232,10 @@ catalog! {
     plain vault_all_day = ("{day} · all day", "{day} · all day");
     plain vault_at = ("{day}, {time}", "{day}, {time}");
     plain vault_head = ("In your vault", "In your vault");
+    plain vault_kind_document = ("Doc", "Doc");
     plain vault_kind_event = ("Event", "Event");
     plain vault_kind_note = ("Note", "Note");
+    plain vault_on = ("On {item}", "On {item}");
     plain vault_kind_task = ("Task", "Task");
     plain vault_more = ("and {n} more", "and {n} more");
 }

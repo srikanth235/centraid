@@ -43,6 +43,7 @@ pub mod routes {
     #[must_use]
     pub fn laptop() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: LAPTOP.to_owned(),
             args: None,
         }

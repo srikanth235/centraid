@@ -307,6 +307,25 @@ internal class RustRoot(
                 ScreenEvent(home = HomeEvent(phone_scheme_told = HomeEvent.PhoneSchemeTold(dark = phoneDark))),
             )
         }
+        // A SHEET ROUTE (`Route.sheet`) is drawn over the entry under it: that entry is what the
+        // member still sees, and the sheet's own screen composes its ModalBottomSheet on top.
+        val sheetOver = top.route?.sheet == true && entries.size > 1
+        val shown = if (sheetOver) entries[entries.size - 2] else top
+        ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
+        if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+    }
+
+    /** THE ENTRY THE MEMBER SEES: Home, another tab's root over the band, or a page. */
+    @Composable
+    private fun ShownEntry(
+        runtime: Screens,
+        navigation: centraid.core.v1.Navigation?,
+        views: Map<Long, centraid.core.v1.ViewState>,
+        top: centraid.core.v1.StackEntry,
+        root: centraid.core.v1.StackEntry,
+        inChat: Boolean,
+        homeRoot: Long?,
+    ) {
         // HOME IS ON SCREEN AGAIN after a cover was popped: the Locker's state and any tile may have
         // moved without a table changing.
         val atRoot = top.instance == root.instance && !inChat

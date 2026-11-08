@@ -28,15 +28,19 @@ enum RustScreens {
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
 /// push, so two pushes of the same route are two entries.
-struct RustEntry: Hashable {
+struct RustEntry: Hashable, Identifiable {
     let token: Int
+    var id: Int { token }
     let route: Centraid_Core_V1_Route
+    /// The tab whose stack holds it: Home's for a page, the place the member was in for a sheet
+    /// (a sheet opened from Chat must not select Home under itself).
+    var tab: String = RustScreens.homeTab
 
     @MainActor private static var last = 0
 
-    @MainActor static func make(_ route: Centraid_Core_V1_Route) -> RustEntry {
+    @MainActor static func make(_ route: Centraid_Core_V1_Route, tab: String = RustScreens.homeTab) -> RustEntry {
         last += 1
-        return RustEntry(token: last, route: route)
+        return RustEntry(token: last, route: route, tab: tab)
     }
 }
 
@@ -67,6 +71,10 @@ struct RustScreenView: View {
 
     /// This entry leaves the stack (a finished screen, a back control).
     private func pop() {
+        if let entry, shell.sheet == entry {
+            shell.sheet = nil
+            return
+        }
         guard let entry, shell.path.last == .rust(entry) else { return }
         shell.path.removeLast()
     }

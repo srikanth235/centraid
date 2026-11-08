@@ -113,6 +113,7 @@ pub mod routes {
     #[must_use]
     pub fn thread(thread_id: &str, title: &str) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: super::THREAD.to_owned(),
             args: Some(wire::route::Args::ChatThread(wire::ChatThreadRoute {
                 thread_id: thread_id.to_owned(),
@@ -125,6 +126,7 @@ pub mod routes {
     #[must_use]
     pub fn ask(question: &str, scope: &str) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: super::ASK.to_owned(),
             args: Some(wire::route::Args::Ask(wire::ShellAskRoute {
                 question: question.to_owned(),
@@ -137,6 +139,7 @@ pub mod routes {
     #[must_use]
     pub fn home() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::Chat(wire::ChatRoute {})),
         }

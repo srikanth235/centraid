@@ -27,7 +27,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -430,21 +435,10 @@ private fun EditBar(
                 style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
             )
         }
-        // STRAIGHTEN is one degree a press (the core's step), on a card of its own.
-        Text(
-            text = state.straighten_label,
-            color = if (editing) ink else soft,
-            style = kitTextStyle(KitType.Row),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
-                .background(Surface.card)
-                .clickable(enabled = editing, role = Role.Button) {
-                    onEvent(PhotosEditorEvent(straighten = PhotosEditorEvent.Straightened()))
-                }
-                .heightIn(min = 52.dp)
-                .padding(horizontal = 16.dp, vertical = 15.dp),
-        )
+        // STRAIGHTEN IS A SLIDER on a card of its own, as the board draws it: the angle in whole
+        // degrees either side of level, to the limit Rust states. Every whole degree is one
+        // `straighten` event carrying the angle; Rust clamps and keeps it.
+        StraightenCard(state, plan, editing, ink, soft, onEvent)
         // THE THREE KEYS, equal and white: turn, mirror, start over.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) {
@@ -568,6 +562,53 @@ private fun ratioEvent(ratio: PhotosEditPlan.Ratio, frameRatio: Double): PhotosE
 
 @Composable
 private fun radius(name: String): Int = LocalCentraidTokens.current.radii[name] ?: 0
+
+@Composable
+private fun StraightenCard(
+    state: PhotosEditorState,
+    plan: PhotosEditPlan,
+    editing: Boolean,
+    ink: Color,
+    soft: Color,
+    onEvent: (PhotosEditorEvent) -> Unit,
+) {
+    val limit = state.straighten_limit.coerceAtLeast(1)
+    var position by remember(plan.straighten) { mutableFloatStateOf(plan.straighten.toFloat()) }
+    val accent = appAccent()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+            .background(Surface.card)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    ) {
+        Text(text = state.straighten_label, color = if (editing) ink else soft, style = kitTextStyle(KitType.Row))
+        Slider(
+            value = position,
+            onValueChange = { next ->
+                position = next
+                val whole = next.roundToInt()
+                if (editing && whole != plan.straighten) {
+                    onEvent(PhotosEditorEvent(straighten = PhotosEditorEvent.Straightened(degrees = whole)))
+                }
+            },
+            enabled = editing,
+            valueRange = -limit.toFloat()..limit.toFloat(),
+            steps = (2 * limit - 1),
+            colors = SliderDefaults.colors(
+                thumbColor = accent.fill,
+                activeTrackColor = accent.fill,
+                inactiveTrackColor = Surface.line,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("photos-editor-straighten")
+                .semantics { contentDescription = state.straighten_label },
+        )
+    }
+}
 
 /** Whole degrees of turn: quarter turns plus the straighten (Rust's `total_rotation`). */
 private fun totalRotation(plan: PhotosEditPlan): Int = (plan.quarters % 4) * 90 + plan.straighten

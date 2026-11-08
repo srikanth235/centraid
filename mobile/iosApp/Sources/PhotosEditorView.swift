@@ -281,6 +281,34 @@ struct PhotosEditorView: View {
 
     // MARK: - The bar
 
+    private func straightenCard(editing: Bool) -> some View {
+        let limit = Double(max(state.straightenLimit, 1))
+        let angle = Binding<Double>(
+            get: { Double(plan.straighten) },
+            set: { value in
+                let degrees = Int32(value.rounded())
+                guard editing, degrees != plan.straighten else { return }
+                send(.straighten(.with { $0.degrees = degrees }))
+            }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(state.straightenLabel)
+                .kitType(.row)
+                .foregroundStyle(editing ? Surface.ink : Surface.meta)
+            Slider(value: angle, in: -limit...limit, step: 1)
+                .tint(accent.fill)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .disabled(!editing)
+                .accessibilityLabel(state.straightenLabel)
+                .accessibilityIdentifier("photos.editor.straighten")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+    }
+
     private var editBar: some View {
         let editing = isEditing
         return VStack(alignment: .leading, spacing: 10) {
@@ -306,22 +334,10 @@ struct PhotosEditorView: View {
                     .foregroundStyle(Surface.ink)
                     .accessibilityIdentifier("photos.editor.status")
             }
-            // STRAIGHTEN is one degree a press (the core's step), on a card of its own.
-            Button {
-                guard editing else { return }
-                send(.straighten(.init()))
-            } label: {
-                Text(state.straightenLabel)
-                    .kitType(.row)
-                    .foregroundStyle(editing ? Surface.ink : Surface.meta)
-                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!editing)
-            .accessibilityIdentifier("photos.editor.straighten")
+            // STRAIGHTEN IS A SLIDER on a card of its own, as the board draws it: the angle in
+            // whole degrees either side of level, to the limit Rust states. Every whole degree
+            // is one `straighten` event carrying the angle; Rust clamps and keeps it.
+            straightenCard(editing: editing)
             // THE THREE KEYS, equal and white: turn, mirror, start over.
             HStack(spacing: 8) {
                 tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }

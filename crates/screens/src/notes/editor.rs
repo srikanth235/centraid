@@ -71,9 +71,23 @@ const BRACKETS: &str = "[[";
 /// What a typed `[[title]]` is, as last read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Resolution {
-    Resolved { id: String, title: String },
-    Trashed,
+    Resolved {
+        id: String,
+        title: String,
+    },
+    /// In the trash, as this note: the id Restore brings back.
+    Trashed {
+        id: String,
+    },
     Missing,
+}
+
+/// WHAT A TAP ON A DEAD LINK OFFERS, on the status line beside its sentence: make the note the
+/// link names, or bring the trashed one back. Either opens the note afterwards.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Offer {
+    Create { title: String },
+    Restore { id: String, title: String },
 }
 
 /// The toggle the status line's Undo takes back.
@@ -209,6 +223,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         said: false,
         undo: None,
+        offer: None,
         selection: None,
         selection_seq: 0,
         resolutions: HashMap::new(),
@@ -249,6 +264,8 @@ struct Editor {
     said: bool,
     /// The toggle Undo would take back; shown while its sentence is.
     undo: Option<Undo>,
+    /// The Create or Restore a dead link's sentence carries; shown while its sentence is.
+    offer: Option<Offer>,
     /// Where the caret goes after a core edit, until the shell's next edit.
     selection: Option<u32>,
     selection_seq: u64,
@@ -400,6 +417,7 @@ impl Editor {
     /// An edit takes the editing sentence and its Undo away.
     fn forget_sentence(&mut self) {
         self.undo = None;
+        self.offer = None;
         if self.said {
             self.status = None;
             self.said = false;
@@ -478,17 +496,18 @@ impl Editor {
         };
         for title in unresolved {
             let wanted = title.trim().to_lowercase();
-            let trashed = trash.notes.iter().any(|row| {
+            let trashed = trash.notes.iter().find(|row| {
                 row.title
                     .as_deref()
                     .is_some_and(|name| name.trim().to_lowercase() == wanted)
             });
             self.resolutions.insert(
                 title,
-                if trashed {
-                    Resolution::Trashed
-                } else {
-                    Resolution::Missing
+                match trashed {
+                    Some(row) => Resolution::Trashed {
+                        id: row.note_id.clone(),
+                    },
+                    None => Resolution::Missing,
                 },
             );
         }
@@ -613,16 +632,74 @@ impl Editor {
                 })),
             }],
             LinkTarget::Wiki(title) => {
-                let template = match self.resolutions.get(title) {
+                let (template, offer) = match self.resolutions.get(title) {
                     Some(Resolution::Resolved { .. }) => return Vec::new(),
-                    Some(Resolution::Trashed) => words::link_trashed(locale),
-                    _ => words::link_missing(locale),
+                    Some(Resolution::Trashed { id }) => (
+                        words::link_trashed(locale),
+                        Offer::Restore {
+                            id: id.clone(),
+                            title: title.clone(),
+                        },
+                    ),
+                    _ => (
+                        words::link_missing(locale),
+                        Offer::Create {
+                            title: title.clone(),
+                        },
+                    ),
                 };
                 self.forget_sentence();
                 self.say(fill(&template, &[("title", title)]));
+                self.offer = Some(offer);
                 Vec::new()
             }
         }
+    }
+
+    /// THE STATUS LINE'S VERB, when it is a dead link's: Create makes the note the link names,
+    /// Restore brings the trashed one back, and either opens it. A refusal is the sentence.
+    fn accept(&mut self, ctx: &Ctx, offer: Offer) -> Vec<wire::Effect> {
+        let (request, title, known): (wire::ActRequest, String, Option<String>) = match offer {
+            Offer::Create { title } => (
+                act::notes::CreateNote {
+                    title: title.clone(),
+                    body: String::new(),
+                    format: Some(act::notes::CreateNoteFormat::Markdown),
+                    ..Default::default()
+                }
+                .into(),
+                title,
+                None,
+            ),
+            Offer::Restore { id, title } => (
+                act::notes::RestoreNote {
+                    note_id: id.clone(),
+                }
+                .into(),
+                title,
+                Some(id),
+            ),
+        };
+        let key = kit_act::key(&[&request.action.clone(), &title], kit_act::fresh());
+        let settled = kit_act::act(ctx, request, &key);
+        self.wrote(&settled);
+        self.forget_sentence();
+        if !settled.committed {
+            self.say(settled.refusal);
+            return Vec::new();
+        }
+        // The act is this editor's own commit, which keeps the cache: this title means the note
+        // now, so it is read again.
+        self.resolutions.remove(&title);
+        self.resolve(ctx);
+        let Some(id) = known.or_else(|| settled.output_text("id")) else {
+            return Vec::new();
+        };
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                route: Some(routes::editor(&id)),
+            })),
+        }]
     }
 
     /// Return, made by the core: the body and where the caret goes.
@@ -687,6 +764,7 @@ impl Editor {
         self.wrote(&settled);
         self.status = (!settled.committed).then_some(settled.refusal);
         self.undo = None;
+        self.offer = None;
         self.said = false;
     }
 
@@ -736,6 +814,7 @@ impl Editor {
         self.wrote(&settled);
         self.status = (!settled.committed).then_some(settled.refusal);
         self.undo = None;
+        self.offer = None;
         self.said = false;
         self.reload(ctx);
     }
@@ -846,7 +925,15 @@ impl Editor {
                 self.reload_all(ctx);
             }
             Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
-            Some(N::StatusActed(_)) => self.undo(ctx),
+            Some(N::StatusActed(_)) => {
+                return match self.offer.take() {
+                    Some(offer) => self.accept(ctx, offer),
+                    None => {
+                        self.undo(ctx);
+                        Vec::new()
+                    }
+                };
+            }
             Some(N::LinkOpened(opened)) => return self.open_chip(ctx, opened.at),
             Some(N::ReturnPressed(pressed)) => self.return_pressed(ctx, pressed.caret),
             Some(N::Save(_)) => self.save_now(ctx),
@@ -965,7 +1052,7 @@ impl Editor {
                         Some(routes::editor(id)),
                         words::link_note_spoken(locale),
                     ),
-                    Some(Resolution::Trashed) => (
+                    Some(Resolution::Trashed { .. }) => (
                         typed.clone(),
                         wire::NotesLinkResolution::Trashed,
                         None,
@@ -1202,13 +1289,18 @@ impl Screen for Editor {
                         .or_else(|| self.status.clone())
                         .unwrap_or(save_status)
                 },
-                // Undo is offered while its sentence is the one shown.
-                status_action: if self.undo.is_some()
+                // Undo, or a dead link's Create or Restore, is offered while its sentence is the
+                // one shown.
+                status_action: if (self.undo.is_some() || self.offer.is_some())
                     && !autosave.refused
                     && self.read_failure.is_none()
                     && self.status.is_some()
                 {
-                    words::undo(locale)
+                    match &self.offer {
+                        Some(Offer::Create { .. }) => words::link_create(locale),
+                        Some(Offer::Restore { .. }) => words::link_restore(locale),
+                        None => words::undo(locale),
+                    }
                 } else {
                     String::new()
                 },
@@ -1882,15 +1974,120 @@ mod tests {
         assert!(opened_link(&mut screen, &ctx, starts[2]).is_empty());
         let chrome = state(&*screen, &ctx).chrome.expect("chrome");
         assert_eq!(chrome.status, "No note called Nowhere");
-        assert_eq!(chrome.status_action, "");
+        assert_eq!(chrome.status_action, "Create note");
         assert!(opened_link(&mut screen, &ctx, starts[1]).is_empty());
-        assert_eq!(
-            state(&*screen, &ctx).chrome.expect("chrome").status,
-            "Old plan is in the trash"
-        );
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "Old plan is in the trash");
+        assert_eq!(chrome.status_action, "Restore");
         // Typing takes the sentence away.
         typed(&mut screen, &ctx, "x");
         assert_eq!(state(&*screen, &ctx).chrome.expect("chrome").status, "");
+    }
+
+    fn chip_starts(screen: &dyn Screen, ctx: &Ctx) -> Vec<u32> {
+        state(screen, ctx)
+            .rich
+            .expect("rich")
+            .spans
+            .iter()
+            .filter(|span| span.chip.is_some())
+            .map(|span| span.range.expect("range").start)
+            .collect()
+    }
+
+    fn opens_editor(effects: &[wire::Effect]) -> Option<String> {
+        effects.iter().find_map(|effect| match &effect.kind {
+            Some(wire::effect::Kind::OpenRoute(open)) => {
+                match open.route.as_ref()?.args.as_ref()? {
+                    wire::route::Args::NotesEditor(args) => Some(args.note_id.clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn a_link_to_a_missing_note_offers_to_make_it_and_opens_it() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "Host", "see [[Packing list]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let at = chip_starts(&*screen, &ctx)[0];
+        assert!(opened_link(&mut screen, &ctx, at).is_empty());
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "No note called Packing list");
+        assert_eq!(chrome.status_action, "Create note");
+        // The verb makes the note, opens it, and the chip now resolves to it.
+        let effects = ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        let made = opens_editor(&effects).expect("the new note opens");
+        let view = state(&*screen, &ctx);
+        let chrome = view.chrome.clone().expect("chrome");
+        assert_eq!(chrome.status_action, "");
+        let chips = chips(&view);
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
+        assert_eq!(chips[0].route, Some(routes::editor(&made)));
+        // Exactly one note by that name now exists, and it is the one that opened.
+        let again = ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        assert!(again.is_empty(), "the offer is spent");
+    }
+
+    #[test]
+    fn a_link_to_a_trashed_note_offers_to_restore_it_and_opens_it() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let old = make(&driver, "Old plan", "x");
+        trash(&driver, &old);
+        let id = make(&driver, "Host", "see [[Old plan]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let at = chip_starts(&*screen, &ctx)[0];
+        opened_link(&mut screen, &ctx, at);
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "Old plan is in the trash");
+        assert_eq!(chrome.status_action, "Restore");
+        let effects = ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        assert_eq!(opens_editor(&effects), Some(old.clone()));
+        let view = state(&*screen, &ctx);
+        let chips = chips(&view);
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32
+        );
+        assert_eq!(chips[0].route, Some(routes::editor(&old)));
+    }
+
+    #[test]
+    fn typing_takes_a_dead_links_offer_away_with_its_sentence() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "Host", "see [[Nowhere]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        let at = chip_starts(&*screen, &ctx)[0];
+        opened_link(&mut screen, &ctx, at);
+        typed(&mut screen, &ctx, "see [[Nowhere]] x");
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status_action, "");
+        let effects = ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        assert!(effects.is_empty());
     }
 
     #[test]

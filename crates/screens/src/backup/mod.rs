@@ -61,6 +61,7 @@ pub mod routes {
     #[must_use]
     pub fn home() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: HOME.to_owned(),
             args: Some(wire::route::Args::BackupHome(wire::BackupHomeRoute {})),
         }
@@ -72,6 +73,7 @@ pub mod routes {
     #[must_use]
     pub fn add_destination() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: "pair.laptop".to_owned(),
             args: None,
         }
@@ -82,6 +84,7 @@ pub mod routes {
     #[must_use]
     pub fn show_key() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: "words.show".to_owned(),
             args: None,
         }

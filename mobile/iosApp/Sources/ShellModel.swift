@@ -51,6 +51,15 @@ final class ShellModel: ObservableObject {
         }
     }
 
+    /// A SCREEN THE ROUTE SAYS IS A SHEET (`Route.sheet`): Money's target, Photos' picker. It is
+    /// presented over whatever page opened it and never joins `path`; Rust still holds it on its
+    /// stack, so closing it by any road (its X, a swipe down, `finished`) reports the pop.
+    @Published var sheet: RustEntry? {
+        didSet {
+            if sheet != oldValue { sheetClosed(oldValue) }
+        }
+    }
+
     /// A page was opened while the Chat place showed: the stack's last pop returns there.
     private var returnsToChat = false
 
@@ -240,6 +249,17 @@ final class ShellModel: ObservableObject {
 
     /// Push a route Rust built onto the shell's stack (a row's `route`).
     func open(_ route: Centraid_Core_V1_Route) {
+        if route.sheet {
+            // ON THE STACK OF THE PLACE THE MEMBER IS IN, so Chat stays under its sheet.
+            let place: String
+            switch tab {
+            case .chat: place = RustScreens.chatTab
+            case .backup: place = RustScreens.backupTab
+            case .home: place = RustScreens.homeTab
+            }
+            sheet = RustEntry.make(route, tab: place)
+            return
+        }
         if path.isEmpty { returnsToChat = tab == .chat }
         path.append(.rust(RustEntry.make(route)))
     }
@@ -249,10 +269,10 @@ final class ShellModel: ObservableObject {
         guard let screens, rustInstances[entry.token] == nil, !rustOpening.contains(entry.token) else { return }
         rustOpening.insert(entry.token)
         defer { rustOpening.remove(entry.token) }
-        guard let instance = await screens.open(tab: RustScreens.homeTab, route: entry.route) else { return }
+        guard let instance = await screens.open(tab: entry.tab, route: entry.route) else { return }
         // Popped while the push was in flight: Rust is told at once.
-        guard path.contains(.rust(entry)) else {
-            screens.popped(tab: RustScreens.homeTab, instance: instance)
+        guard path.contains(.rust(entry)) || sheet == entry else {
+            screens.popped(tab: entry.tab, instance: instance)
             return
         }
         rustInstances[entry.token] = instance
@@ -262,6 +282,7 @@ final class ShellModel: ObservableObject {
     /// stack, which `rustPopped` reports as `NavPopped` for the lowest entry) and Rust is told the
     /// move itself, as Compose tells it: `NavPopToRoot` closes whatever is left above the root.
     func popToRoot() {
+        sheet = nil
         guard !path.isEmpty else { return }
         returnsToChat = false
         path.removeAll()
@@ -273,6 +294,10 @@ final class ShellModel: ObservableObject {
     /// closes its own page this way). Rust already dropped them, so it is not told `NavPopped`.
     private func rustClosed(_ instances: [UInt64]) {
         let gone = Set(instances)
+        if let open = sheet, let instance = rustInstances[open.token], gone.contains(instance) {
+            rustInstances[open.token] = nil
+            sheet = nil
+        }
         let entries = path.compactMap { route -> RustEntry? in
             if case let .rust(entry) = route, let instance = rustInstances[entry.token], gone.contains(instance) {
                 return entry
@@ -300,6 +325,15 @@ final class ShellModel: ObservableObject {
         guard let instance = rustInstances[lowest.token] else { return }
         for entry in removed { rustInstances[entry.token] = nil }
         screens.popped(tab: RustScreens.homeTab, instance: instance)
+    }
+
+    /// The sheet left (its X, a swipe down, `finished`, Home): Rust drops its instance.
+    private func sheetClosed(_ old: RustEntry?) {
+        guard let old else { return }
+        rustOpening.remove(old.token)
+        guard let instance = rustInstances[old.token] else { return }
+        rustInstances[old.token] = nil
+        screens?.popped(tab: old.tab, instance: instance)
     }
 
     /// Tell a route it is on screen: the chat's scope follows the app last open.

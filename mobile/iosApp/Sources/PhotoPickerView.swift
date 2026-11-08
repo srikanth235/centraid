@@ -9,6 +9,9 @@ import SwiftUI
 /// A refused add is `status`, above the grid and never instead of it, so the
 /// member keeps the library they were choosing from.
 ///
+/// A SHEET over the page that asked (`Route.sheet`), as PhotosPicker.dc.html draws it: the X, the
+/// title ("Add to “Portugal”"), the library, and the foot pinned under it.
+///
 /// The Compose twin is `androidApp/.../screens/PhotoPickerScreen.kt`.
 struct PhotoPickerView: View {
     @Environment(\.colorScheme) private var scheme
@@ -25,6 +28,18 @@ struct PhotoPickerView: View {
     }
 
     var body: some View {
+        SheetPage(title: state.title, onCancel: onFinished) {
+            grid
+        } foot: {
+            foot
+        }
+        .onChange(of: state.finished) { _, done in
+            if done { onFinished() }
+        }
+        .appAccent("photos")
+    }
+
+    private var grid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if state.hasStatus {
@@ -62,36 +77,29 @@ struct PhotoPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle(state.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .background(Surface.page.ignoresSafeArea())
-        // THE FOOT: how many are chosen, the sentence about albums, and the one filled button,
-        // in the app's colour, greyed with nothing picked and never absent: a control that
-        // appears when a member picks is a control that moves under their thumb.
-        .safeAreaInset(edge: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.chosenLabel)
-                    .kitType(.row)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Surface.ink)
-                Text(state.refersNote)
-                    .kitType(.meta)
-                    .foregroundStyle(Surface.meta)
-                KitInkButton(label: state.addLabel, identifier: "photos.picker.add") {
-                    event { $0.confirm = .init() }
-                }
-                .disabled(!state.addEnabled)
-                .padding(.top, 8)
+    }
+
+    // THE FOOT: how many are chosen, the sentence about albums, and the one filled button,
+    // in the app's colour, greyed with nothing picked and never absent: a control that
+    // appears when a member picks is a control that moves under their thumb.
+    private var foot: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(state.chosenLabel)
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.ink)
+            Text(state.refersNote)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+            KitInkButton(label: state.addLabel, identifier: "photos.picker.add") {
+                event { $0.confirm = .init() }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(Surface.page.ignoresSafeArea(edges: .bottom))
+            .disabled(!state.addEnabled)
+            .padding(.top, 8)
         }
-        .onChange(of: state.finished) { _, done in
-            if done { onFinished() }
-        }
-        .appAccent("photos")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 }

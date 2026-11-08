@@ -23,6 +23,7 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SheetPage
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
@@ -47,13 +48,17 @@ public fun PhotoPickerScreen(
     onFinished: () -> Unit = {},
 ) {
     LaunchedEffect(state.finished) { if (state.finished) onFinished() }
-    Column(Modifier.fillMaxSize()) {
+    // A SHEET over the page that asked (`Route.sheet`), as PhotosPicker.dc.html draws it: the X,
+    // the title, the library, and the foot docked under it.
+    SheetPage(
+        title = state.title,
+        onDismiss = onFinished,
+        foot = { PickerFoot(state, onEvent) },
+    ) {
         Column(
-            modifier = Modifier.weight(1f).padding(horizontal = KitGeometry.GUTTER).padding(top = 16.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = KitGeometry.GUTTER).padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            KitText(state.title, KitType.Section, Surface.ink, maxLines = 2)
-
             state.status?.let { ScreenFailure(it.sentence, "") }
 
             val loading = state.loading
@@ -90,32 +95,36 @@ public fun PhotoPickerScreen(
                 }
             }
         }
-        // THE FOOT, docked as on iOS: how many are chosen, the sentence about albums, and the one
-        // ink button, drawn disabled with nothing picked rather than absent so it does not move
-        // under a thumb.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(Surface.page)
-                .padding(horizontal = KitGeometry.GUTTER)
-                .padding(top = 12.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                state.chosen_label,
-                style = kitTextStyle(KitType.Row),
-                color = Surface.ink,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-            KitText(state.refers_note, KitType.Meta, Surface.meta)
-            InkButton(
-                label = state.add_label,
-                testTag = "picker-add",
-                enabled = state.add_enabled,
-                modifier = Modifier.padding(top = 8.dp),
-                onPress = { onEvent(PhotosPickerEvent(confirm = PhotosPickerEvent.ConfirmRequested())) },
-            )
-        }
+    }
+}
+
+/**
+ * THE FOOT, docked as on iOS: how many are chosen, the sentence about albums, and the one ink
+ * button, drawn disabled with nothing picked rather than absent so it does not move under a thumb.
+ */
+@Composable
+private fun PickerFoot(state: PhotosPickerState, onEvent: (PhotosPickerEvent) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER)
+            .padding(top = 12.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            state.chosen_label,
+            style = kitTextStyle(KitType.Row),
+            color = Surface.ink,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        KitText(state.refers_note, KitType.Meta, Surface.meta)
+        InkButton(
+            label = state.add_label,
+            testTag = "picker-add",
+            enabled = state.add_enabled,
+            modifier = Modifier.padding(top = 8.dp),
+            onPress = { onEvent(PhotosPickerEvent(confirm = PhotosPickerEvent.ConfirmRequested())) },
+        )
     }
 }

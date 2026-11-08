@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +55,11 @@ public fun ConfirmSheet(
             testTag = confirmTag,
             onPress = onConfirm,
         ),
+        // THE WAY OUT IS A TEXT KEY UNDER THE VERB (the Trash and Cancel-event boards): bold page
+        // ink, no outline, the same 50 tall.
+        outlines = listOf(
+            SheetOutline(label = cancelLabel, testTag = "confirm-cancel", link = true, pageInk = true, onPress = onDismiss),
+        ),
     ) {
         if (confirm.body.isNotEmpty()) {
             Text(
@@ -65,21 +69,6 @@ public fun ConfirmSheet(
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
             )
         }
-        Text(
-            cancelLabel,
-            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-            color = Surface.meta,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = KitGeometry.ROW_MIN)
-                .clickable(onClick = onDismiss)
-                .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-                .testTag("confirm-cancel")
-                .clearAndSetSemantics {
-                    contentDescription = cancelLabel
-                    role = Role.Button
-                },
-        )
     }
 }
 

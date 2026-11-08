@@ -267,7 +267,8 @@ message PeopleSheet {
   repeated PeopleRelation relations = 10;
   // IN YOUR VAULT (#1173): what else in the vault is about this person, newest first within
   // each kind, at most `VAULT_PER_KIND` of a kind (the Rust cap) and the kinds in the order
-  // events, tasks, notes. Yearly dates are not here (they are `dates`), and neither are the
+  // events, tasks, notes, documents (a document attached to the person, or to one of their
+  // events or tasks). Money has no kind here: no transaction joins a person. Yearly dates are not here (they are `dates`), and neither are the
   // notes written about the person in People (they are `notes`): these are the notes that
   // link to them from Notes.
   repeated PeopleVaultItem vault = 11;
@@ -280,7 +281,7 @@ message PeopleSheet {
 // One thing in the vault that is about a person, from another app.
 message PeopleVaultItem {
   string id = 1;
-  // `event`, `task` or `note`.
+  // `event`, `task`, `note` or `document`.
   string kind = 2;
   string title = 3;
   // An event's start in the request's zone (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), and whether it
@@ -289,6 +290,8 @@ message PeopleVaultItem {
   bool all_day = 5;
   // The row's creation civil day (`YYYY-MM-DD`) in the request's zone.
   string created_local_day = 6;
+  // A document attached to an event or task rather than to the person: that item's title.
+  string via = 7;
 }
 
 // One `related` edge, read from the sheet's person. The edge is labelled by what its target is

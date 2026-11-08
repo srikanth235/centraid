@@ -201,6 +201,7 @@ mod kit {
 
     fn route() -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: ROOT.to_owned(),
             args: Some(wire::route::Args::Trash(wire::TrashRoute {})),
         }

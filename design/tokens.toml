@@ -297,6 +297,12 @@ font_size = 15.0
 line_height = 21.0
 weight = 600
 
+[native.type.sheetKey]
+family = "sans"
+font_size = 16.0
+line_height = 22.0
+weight = 600
+
 [native.type.control]
 family = "sans"
 font_size = 11.0

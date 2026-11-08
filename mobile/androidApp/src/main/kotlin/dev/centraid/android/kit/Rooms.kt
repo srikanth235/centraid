@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +52,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -383,6 +385,9 @@ public fun EditorRoom(
     }
 }
 
+/** A sheet's full-width keys (the ink button and the text key under it): the boards draw them 50 tall. */
+private val SHEET_KEY_HEIGHT = 50.dp
+
 /** The one ink button a [SheetRoom] may carry. */
 public data class SheetPrimary(
     val label: String,
@@ -404,6 +409,8 @@ public data class SheetOutline(
     val ink: String = "text",
     /** Drawn as a centred text key in the link ink, no outline (the style sheets' Cancel). */
     val link: Boolean = false,
+    /** With [link]: the word is the page's ink, not the app's (the confirm's Cancel). */
+    val pageInk: Boolean = false,
     val onPress: () -> Unit,
 )
 
@@ -494,18 +501,74 @@ public fun SheetRoom(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = KitGeometry.ROW_MIN)
+                                    .heightIn(min = SHEET_KEY_HEIGHT)
                                     .clickable(onClick = outline.onPress)
                                     .testTag(outline.testTag),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(outline.label, style = centraidType("smallStrong"), color = appAccent().text)
+                                Text(
+                                    outline.label,
+                                    style = centraidType("sheetKey"),
+                                    color = if (outline.pageInk) Surface.ink else appAccent().text,
+                                )
                             }
                         } else {
                             OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A ROUTED SCREEN THAT IS A SHEET (`Route.sheet`: Money's target, Photos' picker), as the boards
+ * draw it: the X (Cancel) at the leading edge, the title centred, the page under it and, when the
+ * screen has one, a [foot] pinned to the bottom edge for its verbs. The X, the scrim, a drag down
+ * and back all call [onDismiss]; the shell then pops the screen's entry, which closes the sheet.
+ * It opens at full height: it is a page in a sheet, not a half-sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+public fun SheetPage(
+    title: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    cancelLabel: String = KitWords.CANCEL,
+    foot: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Surface.sheet,
+    ) {
+        // A SHEET IS ITS OWN WINDOW (see [SheetRoom]): Maestro's `id:` selectors need the flag again.
+        Column(
+            modifier.fillMaxSize().navigationBarsPadding().imePadding()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("sheet-page"),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconKey("X", cancelLabel, "sheet-cancel", onPress = onDismiss)
+                Text(
+                    title,
+                    style = centraidType("sheetKey"),
+                    color = Surface.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { heading() },
+                )
+                Spacer(Modifier.size(KitGeometry.ROW_MIN))
+            }
+            Column(Modifier.weight(1f).fillMaxWidth(), content = content)
+            if (foot != null) {
+                Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), content = foot)
             }
         }
     }
@@ -541,7 +604,7 @@ public fun InkButton(
     Box(
         modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = SHEET_KEY_HEIGHT)
             .clip(shape)
             .then(
                 when {
@@ -568,11 +631,7 @@ public fun InkButton(
             if (iconKey.isNotEmpty()) {
                 Box(Modifier.clearAndSetSemantics { }) { CentraidIcon(iconKey = iconKey, tint = ink, size = 20.dp) }
             }
-            Text(
-                label,
-                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-                color = ink,
-            )
+            Text(label, style = centraidType("sheetKey"), color = ink)
         }
     }
 }

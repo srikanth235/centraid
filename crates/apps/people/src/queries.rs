@@ -782,6 +782,9 @@ pub enum VaultKind {
     Task,
     /// A note that links to them (a note written about them is one of their `notes`).
     Note,
+    /// A document attached to them, or to an event or task that is about them (the menu on
+    /// "Dinner with Maya").
+    Document,
 }
 
 impl VaultKind {
@@ -791,6 +794,7 @@ impl VaultKind {
             Self::Event => "event",
             Self::Task => "task",
             Self::Note => "note",
+            Self::Document => "document",
         }
     }
 }
@@ -807,10 +811,12 @@ pub struct VaultItem {
     pub starts: Option<String>,
     pub timing: Option<String>,
     pub zone: Option<String>,
+    /// A document attached to an item rather than to the person: that item's title.
+    pub via: Option<String>,
 }
 
 /// What else in the vault is about one person: the items shown (events, then tasks, then
-/// notes; newest first within a kind; at most [`VAULT_PER_KIND`] of each) and how many more
+/// notes, then documents; newest first within a kind; at most [`VAULT_PER_KIND`] of each) and how many more
 /// there are than shown.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct VaultLinks {
@@ -822,6 +828,11 @@ pub struct VaultLinks {
 /// (`edge_to`, one `to_id`): an event's `attendee` or `about` edge, a task's `about`, a note's
 /// `links`. A yearly all-day event is one of their dates, a cancelled event is not on the
 /// calendar, and a row in the trash is no row. A note's `about` edge is People's own note.
+///
+/// DOCUMENTS are the `attached` edges that START at the person or at one of their events or
+/// tasks. A document is a link to an item only when the item is one this list shows: the edge
+/// that ties it to the person is the item's. Money has no such link: a transaction joins no
+/// person in the model (`edge_shape`), and a merchant is not a person.
 pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks> {
     let ids = [id.to_owned()];
     let incoming = Read {
@@ -931,8 +942,10 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
             starts,
             timing,
             zone,
+            via: None,
         });
     }
+    items.extend(attached_documents(door, id, &items)?);
     items.sort_by(|left, right| {
         left.kind
             .cmp(&right.kind)
@@ -950,6 +963,88 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
         more: total - items.len(),
         items,
     })
+}
+
+/// The live documents attached to the person (`via` none) or to one of the events and tasks in
+/// `shown` (`via` that item's title). One document attached to several is listed once, under
+/// the person if it is attached to them, else under the first item by id.
+fn attached_documents(
+    door: &dyn PageDoor,
+    id: &str,
+    shown: &[VaultItem],
+) -> KitResult<Vec<VaultItem>> {
+    let mut carriers: Vec<String> = vec![id.to_owned()];
+    let titles: BTreeMap<&str, &str> = shown
+        .iter()
+        .filter(|item| matches!(item.kind, VaultKind::Event | VaultKind::Task))
+        .map(|item| (item.id.as_str(), item.title.as_str()))
+        .collect();
+    carriers.extend(titles.keys().map(|id| (*id).to_owned()));
+    let attached = Read {
+        name: "people.vault.attached",
+        table: "edge",
+        select: "from_id, to_id",
+        order: ("from_id", "to_id"),
+        column: "from_id",
+    }
+    .within(
+        WIDE,
+        door,
+        &carriers,
+        Some(("rel = ?", vec![text("attached")])),
+    )?;
+    // The person's own first, so a document attached to both is theirs.
+    let mut owner_of: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut pairs: Vec<(String, String)> = attached
+        .iter()
+        .filter_map(|row| Some((text_of(row, "from_id")?, text_of(row, "to_id")?)))
+        .collect();
+    pairs.sort_by(|(left, _), (right, _)| {
+        (left != id)
+            .cmp(&(right != id))
+            .then_with(|| left.cmp(right))
+    });
+    for (from, document) in pairs {
+        owner_of.entry(document).or_insert_with(|| {
+            (from != id).then(|| {
+                titles
+                    .get(from.as_str())
+                    .copied()
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+        });
+    }
+    let documents: Vec<String> = owner_of.keys().cloned().collect();
+    let rows = Read {
+        name: "people.vault.document",
+        table: "entity",
+        select: "id, title, created_at",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .within(
+        WIDE,
+        door,
+        &documents,
+        Some(("kind = ? AND deleted_at IS NULL", vec![text("document")])),
+    )?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let document = text_of(row, "id")?;
+            Some(VaultItem {
+                via: owner_of.get(&document).cloned().flatten(),
+                id: document,
+                kind: VaultKind::Document,
+                title: text_of(row, "title")?,
+                created_at: text_of(row, "created_at")?,
+                starts: None,
+                timing: None,
+                zone: None,
+            })
+        })
+        .collect())
 }
 
 /// The important dates of these people: the birthday column, and the yearly
