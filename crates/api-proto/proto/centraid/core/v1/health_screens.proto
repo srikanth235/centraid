@@ -92,6 +92,7 @@ message HealthMetricLine {
   string typical = 6;
   // 7 was the range bar the Summary no longer draws (#1173).
   reserved 7;
+  reserved "bar";
   string accessibility_label = 8;
   // The metric's page.
   Route route = 9;
@@ -228,6 +229,7 @@ message HealthTodayData {
   repeated HealthWorkoutLine workouts = 5;
   // 6 was the foot naming the store: the header's subtitle says it now (#1173).
   reserved 6;
+  reserved "foot";
   // "against your own typical", beside the Pinned heading.
   string metrics_note = 7;
   // "Highlights"; EMPTY when no metric moved enough to say so.
@@ -390,6 +392,7 @@ message HealthChartBar {
   bool current = 3;
   // 4 was `above_typical`: the bars are one tint and the current one the colour (#1173).
   reserved 4;
+  reserved "above_typical";
   string accessibility_label = 5;
   // What the scrubber says while a finger is on the bar: "Thu 30 Oct · 11,204".
   string callout = 6;
