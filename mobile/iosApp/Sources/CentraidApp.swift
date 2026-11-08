@@ -56,6 +56,12 @@ struct CentraidApp: App {
                         .modifier(ShellLineHost(shell: shell))
                     }
             }
+            // A SCREEN RUST SAYS IS A SHEET (`Route.sheet`), over the page that opened it.
+            .sheet(item: $shell.sheet) { entry in
+                RustScreenHost(shell: shell, entry: entry)
+                    .environment(\.askChat, { shell.open($0) })
+                    .kitRootTint()
+            }
             // THE ROOT'S TINT (product-intuition/references/design-behaviour.md § Controls): `link`
             // ink on every platform control, not system blue.
             .kitRootTint()

@@ -134,12 +134,14 @@ impl Rig {
                 }))
             });
         let root = wire::Route {
+            sheet: false,
             screen: QUIET.to_owned(),
             args: None,
         };
         let runtime = Runtime::new(registry, vec![("t".to_owned(), root)]).with_services({
             let mut services = passes::services();
             services.push(wire::Route {
+                sheet: false,
                 screen: centraid_screens::imports::CAMERA_ROLL.to_owned(),
                 args: None,
             });
@@ -825,6 +827,7 @@ impl Title for wire::ViewState {
 
 fn passes_probe_route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: PROBE.to_owned(),
         args: None,
     }

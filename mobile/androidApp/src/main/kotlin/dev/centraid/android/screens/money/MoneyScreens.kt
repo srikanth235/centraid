@@ -2,6 +2,24 @@ package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.toggleableState
+import dev.centraid.android.kit.SheetPage
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.android.kit.rememberEditorText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
@@ -483,16 +501,47 @@ private fun OfferCard(offer: centraid.core.v1.MoneyOffer, key: String, onEvent: 
 // money.target
 // ---------------------------------------------------------------------------
 
+/**
+ * `money.target` as a SHEET over Money (`Route.sheet`), the way MoneyTarget.dc.html draws it: the
+ * X, the title, the figures, the amount with "Use average" inside the field, the carry switch, the
+ * next month's effect, and Save pinned at the foot with Remove under it.
+ */
 @Composable
 internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEvent) -> Unit, onBack: () -> Unit) {
     val chrome = state.chrome
     val data = state.data_
-    PushedPage(
-        title = data?.title.orEmpty().ifEmpty { chrome?.title.orEmpty() },
-        parentTitle = chrome?.back_label.orEmpty(),
-        onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
-        meta = data?.month_label.orEmpty(),
+    // SAVED OR REMOVED: Rust says the screen is done, the sheet closes.
+    LaunchedEffect(state.finished) { if (state.finished) onBack() }
+    SheetPage(
+        title = chrome?.title.orEmpty(),
+        onDismiss = onBack,
+        foot = {
+            if (state.status != null) StatusLine(state.status?.sentence.orEmpty())
+            if (data != null) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    InkButton(
+                        label = data.save_label,
+                        enabled = data.can_save,
+                        testTag = "money-target-save",
+                    ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
+                    if (data.remove_label.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 50.dp)
+                                .clickable { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
+                                .testTag("money-target-remove"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(data.remove_label, style = centraidType("sheetKey"), color = StateColor.Red.text)
+                        }
+                    }
+                }
+            }
+        },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -500,57 +549,101 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) { target ->
             LazyColumn {
+                item(key = "head") {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 8.dp)) {
+                        KitText(target.title, KitType.Section, Surface.ink, maxLines = 2)
+                        KitText(target.month_label, KitType.Row, Surface.meta)
+                    }
+                }
+                item(key = "figures") { MoneyFigureCard(target.figures) }
                 item(key = "amount") {
-                    EditableFieldRow(
-                        key = "${target.amount_label} · ${target.currency_label}",
-                        value = state.amount_text,
-                        reload = "${state.month}-${state.category_id}",
-                        testTag = "money-target-amount",
-                        onEdit = { onEvent(MoneyTargetEvent(amount = MoneyTargetEvent.AmountEdited(text = it))) },
-                    )
+                    TargetAmountField(state, target, onEvent)
                     MoneyNote(target.issue, ink = "net")
                     MoneyNote(target.exponent_hint)
                 }
-                item(key = "figures") { MoneyFigureCard(target.figures) }
-                item(key = "average") {
-                    OutlineButton(
-                        label = target.use_average_label,
-                        testTag = "money-target-average",
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
-                    ) { onEvent(MoneyTargetEvent(use_average = MoneyTargetEvent.UseAverage())) }
-                }
-                item(key = "carry") {
-                    MoneyToggleRow(target.carry_label, state.carry, "money-target-carry") {
-                        onEvent(MoneyTargetEvent(carry = MoneyTargetEvent.CarryToggled()))
-                    }
-                    MoneyNote(target.carry_note)
-                }
+                item(key = "carry") { TargetCarryCard(target, state.carry, onEvent) }
                 item(key = "preview") {
                     MoneyFigureCard(listOf(centraid.core.v1.MoneyFigure(label = target.preview_label, amount = target.preview)))
                     MoneyNote(target.preview_note)
                 }
-                item(key = "save") {
-                    // SAVE AND REMOVE ARE ALTERNATIVES: one stack.
-                    val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
-                    ChoiceStack(Modifier.padding(vertical = 8.dp)) {
-                        InkButton(
-                            label = target.save_label,
-                            enabled = target.can_save,
-                            testTag = "money-target-save",
-                            modifier = gutter,
-                        ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
-                        if (target.remove_label.isNotEmpty()) {
-                            OutlineButton(
-                                label = target.remove_label,
-                                ink = "net",
-                                testTag = "money-target-remove",
-                                modifier = gutter,
-                            ) { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
-                        }
-                    }
-                }
             }
         }
+    }
+}
+
+/** THE AMOUNT, on a card with the accent's ring: the currency, the figure, and "Use average" inside. */
+@Composable
+private fun TargetAmountField(state: MoneyTargetState, target: centraid.core.v1.MoneyTargetData, onEvent: (MoneyTargetEvent) -> Unit) {
+    val accent = appAccent()
+    val editor = rememberEditorText(state.amount_text, "${state.month}-${state.category_id}")
+    val text = editor.text
+    val label = "${target.amount_label} · ${target.currency_label}"
+    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
+        KitText(target.amount_label, KitType.Meta, Surface.meta, Modifier.padding(start = 4.dp, bottom = 6.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface.card)
+                .border(1.5.dp, accent.fill, RoundedCornerShape(12.dp))
+                .padding(start = 14.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            KitText(target.currency_label, KitType.Row, Surface.meta)
+            BasicTextField(
+                value = text.value,
+                onValueChange = { next ->
+                    if (editor.edited(next)) onEvent(MoneyTargetEvent(amount = MoneyTargetEvent.AmountEdited(text = next)))
+                },
+                singleLine = true,
+                textStyle = centraidType("title").copy(color = Surface.ink),
+                cursorBrush = SolidColor(Surface.ink),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("money-target-amount")
+                    .semantics { contentDescription = label },
+            )
+            Box(
+                Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable { onEvent(MoneyTargetEvent(use_average = MoneyTargetEvent.UseAverage())) }
+                    .padding(horizontal = 6.dp)
+                    .testTag("money-target-average"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(target.use_average_label, style = centraidType("sheetKey"), color = accent.text)
+            }
+        }
+    }
+}
+
+/** THE CARRY SWITCH, with its sentence under the label, on a card. */
+@Composable
+private fun TargetCarryCard(target: centraid.core.v1.MoneyTargetData, carry: Boolean, onEvent: (MoneyTargetEvent) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .kitCard()
+            .clickable { onEvent(MoneyTargetEvent(carry = MoneyTargetEvent.CarryToggled())) }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .testTag("money-target-carry")
+            .semantics(mergeDescendants = true) {
+                role = Role.Switch
+                toggleableState = if (carry) ToggleableState.On else ToggleableState.Off
+                contentDescription = target.carry_label
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            KitText(target.carry_label, KitType.Row, Surface.ink)
+            KitText(target.carry_note, KitType.Meta, Surface.meta)
+        }
+        Switch(checked = carry, onCheckedChange = null, colors = kitSwitchColors())
     }
 }
 

@@ -196,6 +196,7 @@ fn an_unknown_route_tab_or_instance_is_refused_by_name() {
         kind: Some(wire::nav_event::Kind::Push(wire::NavPush {
             tab: "proof".to_owned(),
             route: Some(wire::Route {
+                sheet: false,
                 screen: "nowhere".to_owned(),
                 args: None,
             }),

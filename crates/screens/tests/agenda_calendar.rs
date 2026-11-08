@@ -483,6 +483,7 @@ impl Screen for Host {
 
 fn host_route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: "test.calendar".to_owned(),
         args: None,
     }

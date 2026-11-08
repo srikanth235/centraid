@@ -285,6 +285,17 @@ fn a_category(d: &centraid_screens::testing::Driver) -> wire::Route {
 }
 
 #[test]
+fn a_target_is_a_sheet_over_money_and_the_pages_beside_it_are_not() {
+    let d = driver();
+    let route = a_category(&d);
+    // THE ROUTE SAYS HOW IT OPENS: the shells never name the screen to know.
+    assert!(route.sheet);
+    assert!(!routes::search("Money").sheet);
+    assert!(!routes::recurring("Money").sheet);
+    assert!(!routes::home(wire::MoneyDestination::Unspecified).sheet);
+}
+
+#[test]
 fn a_target_is_seeded_from_the_stored_plan_and_previews_next_month() {
     let mut d = driver();
     let route = a_category(&d);

@@ -20,6 +20,10 @@ package centraid.core.v1;
 message Route {
   // The screen's registered name, e.g. `proof.counter`, `agenda.event`.
   string screen = 1;
+  // The screen opens as a sheet over the page that asked for it, not as a page pushed on the
+  // stack (Money's target, Photos' picker): the shells present it that way, and a swipe down or
+  // the X closes it as a back does. Rust decides; a shell never names the screen to know.
+  bool sheet = 2;
   // 403 was `locker.access`, the Locker's access history, gone with its receipt
   // table (#1146).
   reserved 403;

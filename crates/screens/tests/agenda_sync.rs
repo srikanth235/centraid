@@ -84,6 +84,7 @@ fn phone(imported: bool) -> Phone {
     let host = world.driver.push(
         "agenda",
         wire::Route {
+            sheet: false,
             screen: "test.sync".to_owned(),
             args: None,
         },

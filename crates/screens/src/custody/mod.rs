@@ -69,6 +69,7 @@ pub fn registry_with(secrets: &secrets::VaultSecrets, keeper: &keeper::KeeperSlo
 #[must_use]
 pub fn services() -> Vec<wire::Route> {
     vec![wire::Route {
+        sheet: false,
         screen: FILING.to_owned(),
         args: None,
     }]
@@ -136,6 +137,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }

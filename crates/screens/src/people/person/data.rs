@@ -135,6 +135,7 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
         _ => return None,
     };
     Some(wire::Route {
+        sheet: false,
         screen: screen.to_owned(),
         args: Some(args),
     })

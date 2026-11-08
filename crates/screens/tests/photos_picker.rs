@@ -12,6 +12,14 @@ fn open(d: &mut Driver, album_id: &str, name: &str) -> u64 {
     d.push(photos::TAB, photos::routes::picker(album_id, name))
 }
 
+#[test]
+fn both_pickers_are_sheets_and_the_pages_beside_them_are_not() {
+    assert!(photos::routes::picker("album", "Portugal").sheet);
+    assert!(photos::routes::attach_picker().sheet);
+    assert!(!photos::routes::places().sheet);
+    assert!(!photos::routes::editor("photo").sheet);
+}
+
 fn state(d: &Driver, instance: u64) -> &wire::PhotosPickerState {
     match &d.view(instance).kind {
         Some(wire::view_state::Kind::PhotosPicker(state)) => state,

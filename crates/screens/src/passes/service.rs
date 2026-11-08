@@ -63,6 +63,7 @@ pub const NAME: &str = "passes.conductor";
 #[must_use]
 pub fn route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: NAME.to_owned(),
         args: None,
     }

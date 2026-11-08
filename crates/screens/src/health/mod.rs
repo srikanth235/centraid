@@ -286,6 +286,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }

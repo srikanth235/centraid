@@ -50,6 +50,7 @@ pub mod routes {
 
     fn route(screen: &str, vault_id: &str) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(wire::route::Args::Imports(wire::ImportsRoute {
                 vault_id: vault_id.to_owned(),

@@ -604,6 +604,7 @@ fn edit_carries_the_editor_route_and_is_not_an_event() {
     let editor = world.driver.push(
         "agenda",
         wire::Route {
+            sheet: false,
             screen: route.screen,
             args: Some(wire::route::Args::AgendaEditor(args)),
         },

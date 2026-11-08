@@ -636,6 +636,47 @@ struct SheetRoom<Content: View>: View {
     }
 }
 
+/// A ROUTED SCREEN THAT IS A SHEET (`Route.sheet`: Money's target, Photos' picker), as the boards
+/// draw it: the X at the leading edge (Cancel, in the bar's own glass), the title between, the
+/// page under it and, when the screen has one, a foot pinned to the bottom edge for its verbs.
+/// Cancel, a swipe down and a finished screen all close it the same way: the shell drops the
+/// sheet and Rust is told the pop.
+struct SheetPage<Content: View, Foot: View>: View {
+    let title: String
+    var cancelLabel: String = KitWords.CANCEL
+    let onCancel: () -> Void
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let foot: () -> Foot
+
+    var body: some View {
+        NavigationStack {
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Surface.sheet.ignoresSafeArea())
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    foot()
+                        .frame(maxWidth: .infinity)
+                        .background(Surface.sheet.ignoresSafeArea(edges: .bottom))
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onCancel) {
+                            CentraidIconView(iconKey: "X", tint: Surface.ink, size: 18)
+                                .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(cancelLabel)
+                        .accessibilityIdentifier("kit-sheet-cancel")
+                    }
+                }
+        }
+        .modifier(SheetPresentation(detents: [.large]))
+    }
+}
+
 /// A SHEET'S PRESENTATION — its ground, its grabber, its detents — as one
 /// modifier, so a caller that hosts a `SheetRoom` somewhere the presentation
 /// preferences cannot climb out of (a capture shield's secure canvas is a

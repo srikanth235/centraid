@@ -40,6 +40,7 @@ const RECEIPT_TIMER: &str = "receipt";
 #[must_use]
 pub fn route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: NAME.to_owned(),
         args: None,
     }
