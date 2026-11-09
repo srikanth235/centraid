@@ -592,6 +592,11 @@ fn a_secret_is_sealed_only_while_the_session_is_open() {
     let unlocked = scratch.unlock();
     assert_eq!(unlocked.state, wire::LockerSessionState::Unlocked as i32);
     assert!(unlocked.remaining_ms > 0);
+    // THE ANSWER SAYS THE IDLE SETTING, so the wall never guesses it.
+    assert_eq!(
+        unlocked.idle_timeout_ms,
+        u64::try_from(crate::locker::SESSION_TIMEOUT_MS).unwrap_or(0)
+    );
     assert_eq!(unlocked.failed_unlocks, 0, "nothing was refused before it");
     scratch.run(
         "locker.add_item",

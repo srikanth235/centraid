@@ -17,7 +17,7 @@
 //! the command plane, with the plan's `publish_input`.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::money::{Money, minor_units};
 use centraid_apps_kit::page::{PageCursor, PageRequest};
@@ -256,8 +256,43 @@ pub(crate) fn spending(
                     account_name: l.account_name,
                 }),
             truncated: data.truncated,
+            weekly: data.weekly.iter().map(spend_series).collect(),
+            daily: data.daily.iter().map(spend_series).collect(),
+            tail: data
+                .tail
+                .iter()
+                .map(|t| wire::money_spending::SpendingTail {
+                    currency: t.currency.clone(),
+                    count: count(t.count),
+                    spent: Some(amount(&t.spent)),
+                })
+                .collect(),
         })
     })
+}
+
+fn spend_series(series: &phone::SpendSeries) -> wire::money_spending::SpendSeries {
+    wire::money_spending::SpendSeries {
+        currency: series.currency.clone(),
+        buckets: series
+            .buckets
+            .iter()
+            .map(|b| wire::money_spending::SpendBucket {
+                first_day: b.first_day,
+                last_day: b.last_day,
+                spent: Some(amount_in(b.spent_minor, &series.currency)),
+                parts: b
+                    .parts
+                    .iter()
+                    .map(|p| wire::money_spending::SpendPart {
+                        category_id: p.category_id.clone().unwrap_or_default(),
+                        spent: Some(amount_in(p.spent_minor, &series.currency)),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        pace: some_amount(series.pace.as_ref()),
+    }
 }
 
 pub(crate) fn activity(
@@ -314,6 +349,15 @@ pub(crate) fn activity(
                     .cursor
                     .map(|(sort_key, pk)| wire::MoneyCursor { sort_key, pk }),
                 truncated: data.truncated,
+                days: data
+                    .days
+                    .iter()
+                    .map(|d| wire::MoneyDayTotal {
+                        day: d.day.clone(),
+                        totals: d.totals.iter().map(amount).collect(),
+                        complete: d.complete,
+                    })
+                    .collect(),
             })
         },
     )

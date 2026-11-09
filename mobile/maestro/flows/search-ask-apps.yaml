@@ -21,7 +21,7 @@ name: search-ask-apps
 # --- Agenda ---------------------------------------------------------------
 - launchApp
 - tapOn:
-    id: "home-tile-agenda"
+    id: "home-tile-calendar"
 - tapOn:
     id: "agenda-search-open"
 - inputText: "zzqxv"

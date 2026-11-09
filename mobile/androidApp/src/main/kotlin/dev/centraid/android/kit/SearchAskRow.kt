@@ -1,6 +1,14 @@
 package dev.centraid.android.kit
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -14,7 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Route
 import centraid.core.v1.SearchAsk
-import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -33,16 +41,24 @@ public fun SearchAskRow(
 ) {
     if (ask == null) return
     val target = route ?: ask.route ?: return
-    Text(
-        ask.label,
-        style = centraidType("smallStrong"),
-        color = centraidColor("link"),
-        modifier = modifier
+    // THE BOARD'S ASK ROW (Search): a pale round mark with the sparkle, the words in semibold, a
+    // chevron at the trailing edge.
+    val accent = appAccent()
+    Row(
+        modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
             .clickable { onOpen(target) }
             .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
             .testTag("search-ask-about")
             .semantics { role = Role.Button },
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(30.dp).clip(CircleShape).background(accent.tint ?: accent.wash(centraidDark())), contentAlignment = Alignment.Center) {
+            CentraidIcon(iconKey = "Sparkle", tint = accent.text, size = 16.dp)
+        }
+        Text(ask.label, style = centraidType("smallStrong"), color = accent.text, modifier = Modifier.weight(1f))
+        CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 14.dp)
+    }
 }

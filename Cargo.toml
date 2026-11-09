@@ -7,7 +7,7 @@ resolver = "3"
 # the exclusion of its parent.
 members = [
   "crates/*",
-  "crates/apps/agenda",
+  "crates/apps/calendar",
   "crates/apps/docs",
   "crates/apps/health",
   "crates/apps/kit",
@@ -16,6 +16,7 @@ members = [
   "crates/apps/notes",
   "crates/apps/people",
   "crates/apps/photos",
+  "crates/apps/reminders",
 ]
 exclude = ["crates/apps"]
 
@@ -57,7 +58,7 @@ proptest = "1"
 # and the preupdate hook, which a system libsqlite3 almost never carries.
 # `hooks` gives the commit/rollback hooks the commit guard needs; `functions`
 # the applier's scalar helpers.
-rusqlite = { version = "0.40", features = [
+rusqlite = { version = "0.41", features = [
   "bundled",
   "session",
   "hooks",
@@ -101,6 +102,13 @@ sha2 = "0.11"
 # nothing the vault names, stores or deduplicates is SHA-1.
 sha1 = "0.11"
 thiserror = "2"
+# The design tokens file (`design/tokens.toml`, #1173). Parse and serde only:
+# no writer, no ordered maps. Already in the lock via cbindgen.
+toml = { version = "0.9", default-features = false, features = [
+  "parse",
+  "serde",
+  "std",
+] }
 tracing = "0.1"
 
 # Wave 2 lane C — the schema workspace, the transport-generic protocol and the

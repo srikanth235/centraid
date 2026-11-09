@@ -12,8 +12,20 @@ import UniformTypeIdentifiers
 
 /// `OwnerCheck`: `LAContext().evaluatePolicy(.deviceOwnerAuthentication, …)`.
 /// With `ask` false it only reads what this phone can do and raises nothing.
+@MainActor
 enum OwnerCheckPerformer {
+    /// The evaluation that is up, so a `cancel` can take its sheet down.
+    private static var pending: LAContext?
+
     static func run(_ check: Centraid_Core_V1_OwnerCheck) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        // THE MEMBER LEFT LOCKER BEFORE ANSWERING: invalidating the context ends
+        // the evaluation (its callback answers `appCancel`, a cancel Rust ignores
+        // as late) and takes Face ID's sheet down from over whatever is under it.
+        if check.cancel {
+            pending?.invalidate()
+            pending = nil
+            return .done(Centraid_Core_V1_EffectDone())
+        }
         let context = LAContext()
         var error: NSError?
         let available = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
@@ -33,6 +45,9 @@ enum OwnerCheckPerformer {
             checked.outcome = .unavailable
             return .ownerChecked(checked)
         }
+        pending?.invalidate()
+        pending = context
+        defer { if pending === context { pending = nil } }
         let outcome: Centraid_Core_V1_OwnerChecked.Outcome = await withCheckedContinuation { continuation in
             context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: check.reason) { ok, error in
                 continuation.resume(returning: ok ? .succeeded : Self.outcome(error))
@@ -43,7 +58,7 @@ enum OwnerCheckPerformer {
     }
 
     /// THE OUTCOME MAP: a dismissal is not a failure.
-    static func outcome(_ error: Swift.Error?) -> Centraid_Core_V1_OwnerChecked.Outcome {
+    nonisolated static func outcome(_ error: Swift.Error?) -> Centraid_Core_V1_OwnerChecked.Outcome {
         guard let error = error as? LAError else { return .failed }
         switch error.code {
         case .userCancel, .systemCancel, .appCancel: return .cancelled
@@ -67,11 +82,34 @@ enum FilePerformer {
         _ pick: Centraid_Core_V1_PickBytes,
         _ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes(pick.accept))
-        picker.allowsMultipleSelection = false
+        // A FOLDER is read whole (#1173): its files, named by their path below it. SEVERAL files
+        // come back the same way, each by its name. A single pick is the four fields as before.
+        let picker = UIDocumentPickerViewController(
+            forOpeningContentTypes: pick.folder ? [.folder] : contentTypes(pick.accept)
+        )
+        picker.allowsMultipleSelection = pick.multiple && !pick.folder
+        let extensions = pick.accept
+            .filter { !$0.contains("/") }
+            .map { ($0.hasPrefix(".") ? String($0.dropFirst()) : $0).lowercased() }
         let holder = PickerHolder { urls in
             var file = Centraid_Core_V1_BytesPicked()
-            if let url = urls.first {
+            if pick.folder || pick.multiple {
+                var picked: [Centraid_Core_V1_PickedBytes] = []
+                for url in urls {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    if pick.folder {
+                        picked += readFolder(url, extensions: extensions)
+                    } else if let bytes = try? Data(contentsOf: url) {
+                        var one = Centraid_Core_V1_PickedBytes()
+                        one.name = url.lastPathComponent
+                        one.content = bytes
+                        picked.append(one)
+                    }
+                }
+                file.files = picked
+                file.cancelled = urls.isEmpty
+            } else if let url = urls.first {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 if let bytes = try? Data(contentsOf: url) {
@@ -86,6 +124,30 @@ enum FilePerformer {
             done(.bytesPicked(file))
         }
         present(picker, holder)
+    }
+
+    /// Every file below `root` whose extension is among `extensions` (any, when none is named),
+    /// named by its path below `root`, `/` separated. Hidden files and folders are skipped.
+    private static func readFolder(_ root: URL, extensions: [String]) -> [Centraid_Core_V1_PickedBytes] {
+        guard let walk = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+        var out: [Centraid_Core_V1_PickedBytes] = []
+        let base = root.standardizedFileURL.path
+        for case let url as URL in walk {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            if !extensions.isEmpty, !extensions.contains(url.pathExtension.lowercased()) { continue }
+            guard let bytes = try? Data(contentsOf: url) else { continue }
+            var one = Centraid_Core_V1_PickedBytes()
+            let path = url.standardizedFileURL.path
+            one.name = path.hasPrefix(base + "/") ? String(path.dropFirst(base.count + 1)) : url.lastPathComponent
+            one.content = bytes
+            out.append(one)
+            if out.count >= 5_000 { break }
+        }
+        return out
     }
 
     /// WHAT `PickBytes.accept` MEANS TO THE PICKER: a media type or an extension (with or without

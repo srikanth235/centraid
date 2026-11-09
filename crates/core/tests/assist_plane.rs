@@ -296,12 +296,12 @@ fn no_sealed_value_is_in_any_prompt_a_session_ever_builds() {
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     // Every scope a chat can have, asked a question a vault's secrets answer.
-    for app in ["", "agenda"] {
+    for app in ["", "calendar", "reminders"] {
         let session = sample.start(app);
         sample.send(session, 1, "What is my Vaultbank login password?");
     }
     let prompts = model.prompts();
-    assert_eq!(prompts.len(), 4);
+    assert_eq!(prompts.len(), 5);
     // The world the phone loads holds the Locker item by its plain rows (the owner's ruling of
     // 2026-10-22), so its title is listed; a sealed value never was in a prompt and so cannot be
     // in an answer (R-1088-3).
@@ -484,15 +484,18 @@ fn suggestions_name_things_from_this_vault() {
     let offered = centraid_assist::suggest::suggest(
         &sample.handle.assist_door(),
         common::chat::TZ,
-        Some(App::Agenda),
+        Some(App::Reminders),
     );
-    let agenda = prompts("agenda");
+    let agenda = prompts("reminders");
     assert_eq!(
         agenda,
         offered.iter().map(|s| s.text.clone()).collect::<Vec<_>>()
     );
-    assert!(offered.iter().all(|s| s.app == App::Agenda), "{offered:?}");
-    // THERE IS NO `tasks` APP: the tasks are Agenda's (#1128), so the word is refused.
+    assert!(
+        offered.iter().all(|s| s.app == App::Reminders),
+        "{offered:?}"
+    );
+    // THERE IS NO `tasks` APP: the tasks are Reminders', so the word is refused.
     match sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
         app: "tasks".to_owned(),
         tz: common::chat::TZ.to_owned(),

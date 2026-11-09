@@ -48,10 +48,13 @@ class ScreensRoundTripSpec : StringSpec({
             // The band is Rust's: only the places whose tabs exist, Home lit.
             navigation.band!!.tabs.map { it.tab to it.selected } shouldBe
                 listOf("home" to true, "chat" to false, "backup" to false)
-            // Home's tiles are read in the springboard's order, through the apps' own queries.
+            // Home's widgets sit in the board's order (`CONTENT_ORDER`, crates/screens/src/shell/policy.rs):
+            // Calendar and Reminders are two apps with a tile each.
             val home = screens.views.value[root.instance]!!.home!!
             home.data_!!.tiles.map { it.app_id } shouldBe
-                listOf("photos", "docs", "agenda", "notes", "money", "health", "people", "locker")
+                listOf(
+                    "calendar", "reminders", "photos", "money", "health", "people", "locker", "notes", "docs",
+                )
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()

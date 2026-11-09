@@ -12,11 +12,17 @@ struct TodoListView: View {
     let send: (Centraid_Core_V1_TodoListEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    @Environment(\.colorScheme) private var scheme
 
     private func event(_ build: (inout Centraid_Core_V1_TodoListEvent) -> Void) -> Centraid_Core_V1_TodoListEvent {
         var event = Centraid_Core_V1_TodoListEvent()
         build(&event)
         return event
+    }
+
+    /// The large title's colour: the smart list's own, as Rust names it; nil for a view with none.
+    private var heading: Color? {
+        state.colorKey.isEmpty ? nil : AgendaPalette.token(state.colorKey)
     }
 
     private var content: ScreenContent<Centraid_Core_V1_TodoListData> {
@@ -30,8 +36,17 @@ struct TodoListView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
-            EmptyView()
+        // THE TITLE IS THE PAGE'S OWN, LARGE, IN THE SMART LIST'S COLOUR (#1173): the bar
+        // carries the back chevron and the plus, and no small title.
+        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack, titleColor: heading, titleIdentifier: "tasks-list-title") {
+            if state.hasAddRoute, !state.addLabel.isEmpty {
+                RoomTrailing(
+                    action: RoomAction(iconKey: "Plus", label: state.addLabel, identifier: "tasks-list-add") {
+                        open(state.addRoute)
+                    },
+                    app: "reminders"
+                )
+            }
         } content: {
             VStack(spacing: 0) {
                 ReadStateView(
@@ -39,26 +54,45 @@ struct TodoListView: View {
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
                 ) { list in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            TodoCountLine(count: list.countLabel, window: list.windowLabel)
+                    // A LIST, so a row can be swiped (#1173): each task is a row of its own.
+                    List {
+                            if !list.subtitle.isEmpty {
+                                Text(list.subtitle)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                                    .todoPlainRow()
+                            }
+                            if !list.countLabel.isEmpty || !list.windowLabel.isEmpty {
+                                TodoCountLine(count: list.countLabel, window: list.windowLabel)
+                                    .todoPlainRow()
+                            }
                             if list.groups.isEmpty, list.hasEmpty, !list.empty.headline.isEmpty {
                                 EmptyStateView(list.empty)
+                                    .todoPlainRow()
                             }
                             ForEach(list.groups, id: \.key) { group in
                                 TodoGroupView(
                                     group: group,
-                                    onVerb: { _ in },
+                                    onVerb: { key in send(event { $0.groupVerb = .with { $0.key = key } }) },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    chrome: state.chrome,
+                                    onFlag: { id, on in send(event { $0.rowFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                    onDelete: { id in send(event { $0.rowDeleted = .with { $0.taskID = id } }) },
+                                    inList: true
                                 )
                             }
-                            ShowMoreFooter(visible: list.canShowMore, label: state.chrome.showMore) {
-                                send(event { $0.nextPage = .init() })
+                            if list.canShowMore {
+                                ShowMoreFooter(visible: list.canShowMore, label: state.chrome.showMore) {
+                                    send(event { $0.nextPage = .init() })
+                                }
+                                .todoPlainRow()
                             }
-                        }
-                        .padding(.bottom, 16)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .environment(\.defaultMinListRowHeight, 0)
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("tasks-list")
                 }
@@ -95,10 +129,54 @@ struct TodoProjectView: View {
         }
     }
 
+    /// "2 completed · Show · Clear", and the rows while shown.
+    @ViewBuilder
+    private func completedSummary(_ completed: Centraid_Core_V1_TodoCompleted) -> some View {
+        HStack(spacing: 12) {
+            Text(completed.countLabel)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            Spacer(minLength: 0)
+            KitLink(label: completed.shown ? state.chrome.hideCompletedVerb : state.chrome.showCompletedVerb, identifier: "tasks-completed-toggle") {
+                send(event { $0.completedToggled = .init() })
+            }
+            KitLink(label: state.chrome.clearCompletedVerb_p, identifier: "tasks-completed-clear") {
+                send(event { $0.completedCleared = .init() })
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 12)
+        .todoPlainRow()
+        ForEach(completed.rows, id: \.taskID) { row in
+            TodoRowView(
+                row: row,
+                onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
+                onPick: open,
+                chrome: state.chrome,
+                onFlag: { id, on in send(event { $0.rowFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                onDelete: { id in send(event { $0.rowDeleted = .with { $0.taskID = id } }) }
+            )
+            .todoPlainRow()
+        }
+    }
+
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
+        // THE TITLE, in the list's colour with its own icon, is inline in the top row (round 9).
+        PushedPage(
+            title: state.title,
+            parentTitle: state.chrome.back,
+            onBack: onBack,
+            titleColor: { if case let .data(p) = content { return AgendaPalette.list(p.listColorKey) } else { return nil } }(),
+            titleIcon: { if case let .data(p) = content { return p.iconKey } else { return "" } }()
+        ) {
             if case let .data(project) = content, project.found {
                 HStack(spacing: 4) {
+                    // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
+                    if !project.styleLabel.isEmpty {
+                        ToolbarVerb(label: project.styleLabel, identifier: "tasks-project-edit") {
+                            send(event { $0.styleRequested = .init() })
+                        }
+                    }
                     if !project.renameLabel.isEmpty {
                         ToolbarVerb(label: project.renameLabel, identifier: "tasks-rename-project") {
                             send(event { $0.rename = .init() })
@@ -118,23 +196,36 @@ struct TodoProjectView: View {
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
                 ) { project in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            TodoCountLine(count: project.countLabel, window: "")
+                    // A LIST, so a row can be swiped (#1173): each task is a row of its own.
+                    List {
+                            if !project.countLabel.isEmpty {
+                                TodoCountLine(count: project.countLabel, window: "")
+                                    .todoPlainRow()
+                            }
                             if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
                                 EmptyStateView(project.empty)
+                                    .todoPlainRow()
                             }
                             ForEach(project.groups, id: \.key) { group in
                                 TodoGroupView(
                                     group: group,
                                     onVerb: { key in send(event { $0.groupVerb = .with { $0.key = key } }) },
                                     onCheck: { id in send(event { $0.rowChecked = .with { $0.taskID = id } }) },
-                                    onPick: open
+                                    onPick: open,
+                                    chrome: state.chrome,
+                                    onFlag: { id, on in send(event { $0.rowFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                    onDelete: { id in send(event { $0.rowDeleted = .with { $0.taskID = id } }) },
+                                    onMove: { moved, before in send(event { $0.rowMoved = .with { $0.taskID = moved; $0.beforeID = before } }) },
+                                    inList: true
                                 )
                             }
-                        }
-                        .padding(.bottom, 16)
+                            if project.hasCompleted, project.completed.count > 0 {
+                                completedSummary(project.completed)
+                            }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .environment(\.defaultMinListRowHeight, 0)
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .scrollDismissesKeyboard(.interactively)
                     .accessibilityIdentifier("tasks-project")
@@ -143,10 +234,15 @@ struct TodoProjectView: View {
                 if !content.isDenied {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
-                        placeholder: state.chrome.quickAddPlaceholder,
+                        placeholder: state.chrome.newReminder,
                         verb: state.chrome.quickAddVerb,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
-                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
+                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
+                        onDismissChip: { send(event { $0.quickAddChipDismissed = .init() }) },
+                        // THE KEYBOARD TOOLBAR (#1173).
+                        onTool: { key in send(event { $0.quickTool = .with { $0.key = key } }) },
+                        onDue: { key in send(event { $0.quickDue = .with { $0.key = key } }) },
+                        onTag: { text in send(event { $0.quickTag = .with { $0.text = text } }) }
                     )
                 }
             }
@@ -171,6 +267,21 @@ struct TodoProjectView: View {
                 .accessibilityLabel(state.chrome.addSectionPlaceholder)
                 .accessibilityIdentifier("tasks-new-section-field")
             }
+        }
+        // THE STYLE SHEET: "Edit list".
+        .sheet(isPresented: Binding(
+            get: { state.sheet == .style },
+            set: { open in if !open, state.sheet == .style { send(event { $0.sheetClosed = .init() }) } }
+        )) {
+            AgendaStyleSheetView(
+                style: state.style,
+                appKey: "reminders",
+                onName: { name in send(event { $0.styleName = .with { $0.name = name } }) },
+                onColor: { key in send(event { $0.styleColor = .with { $0.key = key } }) },
+                onIcon: { key in send(event { $0.styleIcon = .with { $0.key = key } }) },
+                onSubmit: { send(event { $0.styleSubmitted = .init() }) },
+                onCancel: { send(event { $0.sheetClosed = .init() }) }
+            )
         }
         .sheet(isPresented: Binding(
             get: { state.sheet == .rename },
@@ -246,7 +357,7 @@ struct TodoCatchUpView: View {
                                 EmptyStateView(catchUp.empty)
                             }
                             ForEach(catchUp.piles, id: \.key) { pile in
-                                SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel) {
+                                SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel, sentenceCase: true) {
                                     send(event { $0.completeAll = .with { $0.pile = pile.key } })
                                 }
                                 // A count rides in the head; any other meta is its own line.

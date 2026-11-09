@@ -45,15 +45,29 @@ fn a_question_streams_into_the_thread_and_settles_once_with_its_thread_named() {
     assert_eq!(answer.cards.len(), 6);
     assert!(!answer.streaming && !state.streaming && state.activity.is_empty());
     assert!(state.error.is_empty());
+    // THE THREAD IS LIVE (#1173): the answer settles and the chips above the composer come back.
     assert!(
-        state.suggestions.is_empty(),
-        "suggestions go with the first question"
+        !state.suggestions.is_empty() && state.suggestions.len() <= 3,
+        "{:?}",
+        state.suggestions
     );
     // The core saved the turn: the header takes the title and the drawer lists the chat.
     assert_eq!(state.title, "what tasks do I have?");
     assert!(!state.thread_id.is_empty());
     assert_eq!(chat.thread_titles(), ["what tasks do I have?"]);
     assert!(state.can_retry && state.can_new_chat);
+}
+
+#[test]
+fn suggestions_are_offered_in_a_live_thread_as_well_as_an_empty_one() {
+    let mut chat = ready();
+    let first = chat.state().suggestions.clone();
+    assert_eq!(first.len(), 3);
+    chat.say("what tasks do I have?");
+    let live = chat.state();
+    assert_eq!(live.messages.len(), 2);
+    assert_eq!(live.suggestions.len(), 3, "chips above the composer");
+    assert!(!live.streaming);
 }
 
 #[test]
@@ -308,8 +322,19 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
             pending.confirm_label.as_str(),
             pending.cancel_label.as_str()
         ),
-        ("Confirm", "Cancel")
+        ("Complete reminder", "Not now")
     );
+    // THE STEP DRAWS AS THE BOARD'S ROW: the row's name, then its kind's plural and when it is.
+    assert_eq!(pending.steps[0].title, DRY_CLEANING);
+    assert!(
+        pending.steps[0].subtitle.starts_with("Reminders"),
+        "{}",
+        pending.steps[0].subtitle
+    );
+    // THE CARD IS LABELLED AND COLOURED BY THE CORE (#1173): "Proposed change", in the colour of
+    // the app whose row it changes (a task is Reminders'), and nothing is written yet.
+    assert_eq!(pending.title, "Proposed change");
+    assert_eq!(pending.app, "reminders");
     assert!(!pending.destructive && pending.more_line.is_empty());
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
@@ -405,7 +430,7 @@ fn a_card_whose_rows_moved_says_so_and_runs_nothing() {
         .unwrap()
     };
     let mut request =
-        centraid_screens::catalog::act::agenda::CompleteTask { task_id: task }.request();
+        centraid_screens::catalog::act::reminders::CompleteTask { task_id: task }.request();
     request.invoke_key = "test:moved:1".to_owned();
     let moved = chat.driver.act(request);
     assert_eq!(moved.status, wire::ActStatus::Executed as i32, "{moved:?}");

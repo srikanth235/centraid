@@ -662,7 +662,12 @@ impl Screen for Editor {
             }
             Some(E::Left(_)) => {
                 self.form = None;
-                Vec::new()
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::TabHidden(_)) => {
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }

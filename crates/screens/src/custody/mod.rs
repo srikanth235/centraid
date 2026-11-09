@@ -69,6 +69,7 @@ pub fn registry_with(secrets: &secrets::VaultSecrets, keeper: &keeper::KeeperSlo
 #[must_use]
 pub fn services() -> Vec<wire::Route> {
     vec![wire::Route {
+        sheet: false,
         screen: FILING.to_owned(),
         args: None,
     }]
@@ -116,6 +117,19 @@ pub fn custody_place(
     }
 }
 
+/// Where a held key came back from, as the line under "Recovery key found" ("In iCloud
+/// Keychain", "In Google"). A held key is one the keychain carried, so this names the platform's
+/// place without asking it; empty on a platform that has none.
+#[must_use]
+pub fn held_place(locale: Locale, platform: &str) -> String {
+    let place = match platform {
+        "ios" => words::place_ios(locale),
+        "android" => words::place_android(locale),
+        _ => return String::new(),
+    };
+    crate::strings::fill(&words::restore_held_in(locale), &[("place", &place)])
+}
+
 /// The routes a caller outside custody pushes: Home's vault switcher, Settings
 /// and Backup, Locker's wall and the pairing screen.
 pub mod routes {
@@ -123,6 +137,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }

@@ -13,7 +13,7 @@ name = "centraid_assist"
 path = "src/lib.rs"
 
 [dependencies]
-centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-apps-calendar = { path = "../apps/calendar" }
 centraid-apps-kit = { path = "../apps/kit" }
 centraid-search = { path = "../search" }
 centraid-vault = { path = "../vault" }

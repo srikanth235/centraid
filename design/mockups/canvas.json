@@ -26,6 +26,22 @@
       "x": 0,
       "y": 15080
     },
+    "AgendaEventAttachments.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "13 · Event with attachments",
+      "w": 390,
+      "x": 5640,
+      "y": 3480
+    },
+    "AgendaEventAttachmentsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "13 · Event with attachments · dark",
+      "w": 390,
+      "x": 5640,
+      "y": 3480
+    },
     "AgendaEventCancel.dc.html": {
       "h": 844,
       "page": "light",
@@ -65,6 +81,54 @@
       "w": 390,
       "x": 940,
       "y": 15080
+    },
+    "AgendaQuickAddChip.dc.html": {
+      "h": 960,
+      "page": "light",
+      "title": "2 · Quick-add chip (iPhone and Android)",
+      "w": 880,
+      "x": 960,
+      "y": 23200
+    },
+    "AgendaQuickAddChipDark.dc.html": {
+      "h": 960,
+      "page": "dark",
+      "title": "2 · Quick-add chip (iPhone and Android) · dark",
+      "w": 880,
+      "x": 960,
+      "y": 23200
+    },
+    "AgendaWidgets.dc.html": {
+      "h": 1290,
+      "page": "light",
+      "title": "1 · Widgets (iPhone and Android)",
+      "w": 880,
+      "x": 0,
+      "y": 23200
+    },
+    "AgendaWidgetsDark.dc.html": {
+      "h": 1290,
+      "page": "dark",
+      "title": "1 · Widgets (iPhone and Android) · dark",
+      "w": 880,
+      "x": 0,
+      "y": 23200
+    },
+    "AgendaTaskDetail.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "14 · Task with a link and attachments",
+      "w": 390,
+      "x": 6110,
+      "y": 3480
+    },
+    "AgendaTaskDetailDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "14 · Task with a link and attachments · dark",
+      "w": 390,
+      "x": 6110,
+      "y": 3480
     },
     "AndroidChat.dc.html": {
       "h": 915,
@@ -346,6 +410,38 @@
       "x": 0,
       "y": 3480
     },
+    "CalendarStyle.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · New calendar",
+      "w": 390,
+      "x": 3760,
+      "y": 3480
+    },
+    "CalendarStyleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · New calendar · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 3480
+    },
+    "CalendarStyleEdit.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Edit calendar",
+      "w": 390,
+      "x": 4230,
+      "y": 3480
+    },
+    "CalendarStyleEditDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Edit calendar · dark",
+      "w": 390,
+      "x": 4230,
+      "y": 3480
+    },
     "Chat.dc.html": {
       "h": 844,
       "page": "light",
@@ -379,7 +475,7 @@
       "y": 15080
     },
     "CodeMap.dc.html": {
-      "h": 1300,
+      "h": 1960,
       "page": "rules",
       "title": "Code map",
       "w": 1200,
@@ -394,8 +490,24 @@
       "x": 2560,
       "y": 0
     },
+    "CustomRepeat.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Custom repeat",
+      "w": 390,
+      "x": 4700,
+      "y": 3480
+    },
+    "CustomRepeatDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Custom repeat · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 3480
+    },
     "Decisions.dc.html": {
-      "h": 1780,
+      "h": 2060,
       "page": "rules",
       "title": "Decisions, words and behaviour",
       "w": 1200,
@@ -505,6 +617,22 @@
       "w": 390,
       "x": 0,
       "y": 18560
+    },
+    "EventEditorRows.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Event editor, more rows",
+      "w": 390,
+      "x": 5170,
+      "y": 3480
+    },
+    "EventEditorRowsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Event editor, more rows · dark",
+      "w": 390,
+      "x": 5170,
+      "y": 3480
     },
     "FilterMenu.dc.html": {
       "h": 844,
@@ -650,6 +778,22 @@
       "x": 1280,
       "y": 0
     },
+    "ImportReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "15 · Import reminders (iOS)",
+      "w": 390,
+      "x": 6580,
+      "y": 3480
+    },
+    "ImportRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "15 · Import reminders (iOS) · dark",
+      "w": 390,
+      "x": 6580,
+      "y": 3480
+    },
     "LargeText.dc.html": {
       "h": 844,
       "page": "light",
@@ -674,12 +818,60 @@
       "x": 1410,
       "y": 3480
     },
+    "RemindersToday.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Today, Overdue first",
+      "w": 390,
+      "x": 0,
+      "y": 25960
+    },
+    "CalendarReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "A day with reminders: tick, repeat, overdue",
+      "w": 390,
+      "x": 470,
+      "y": 25960
+    },
     "ListDark.dc.html": {
       "h": 844,
       "page": "dark",
       "title": "4 · A list, adding inline · dark",
       "w": 390,
       "x": 1410,
+      "y": 3480
+    },
+    "ListStyle.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · New list",
+      "w": 390,
+      "x": 2820,
+      "y": 3480
+    },
+    "ListStyleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · New list · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 3480
+    },
+    "ListStyleEdit.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Edit list",
+      "w": 390,
+      "x": 3290,
+      "y": 3480
+    },
+    "ListStyleEditDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Edit list · dark",
+      "w": 390,
+      "x": 3290,
       "y": 3480
     },
     "LockScreen.dc.html": {
@@ -1218,21 +1410,21 @@
       "x": 0,
       "y": 1160
     },
-    "RestoreDone.dc.html": {
+    "RemindersFilterMenu.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Restore done, one vault stayed",
+      "title": "2 · Reminders filter and sort menu",
       "w": 390,
-      "x": 1410,
-      "y": 1160
+      "x": 7050,
+      "y": 3480
     },
-    "RestoreDoneDark.dc.html": {
+    "RemindersFilterMenuDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Restore done, one vault stayed · dark",
+      "title": "2 · Reminders filter and sort menu · dark",
       "w": 390,
-      "x": 1410,
-      "y": 1160
+      "x": 7050,
+      "y": 3480
     },
     "RestoreHeld.dc.html": {
       "h": 844,
@@ -1288,6 +1480,22 @@
       "title": "6 · Settings",
       "w": 390,
       "x": 2350,
+      "y": 17400
+    },
+    "SettingsDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Download settings",
+      "w": 390,
+      "x": 2820,
+      "y": 17400
+    },
+    "SettingsDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Download settings · dark",
+      "w": 390,
+      "x": 2820,
       "y": 17400
     },
     "SettingsDark.dc.html": {
@@ -1417,6 +1625,94 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "CalendarMonth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar (Month view)",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "CalendarMonthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar (Month view) · dark",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "PhotoViewerInfo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A photo, details open",
+      "w": 390,
+      "x": 940,
+      "y": 12760
+    },
+    "PhotoViewerInfoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A photo, details open · dark",
+      "w": 390,
+      "x": 940,
+      "y": 12760
+    },
+    "NotesImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import notes",
+      "w": 390,
+      "x": 1410,
+      "y": 24000
+    },
+    "NotesAbout.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Notes about",
+      "w": 390,
+      "x": 1890,
+      "y": 24000
+    },
+    "NotesAboutPage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Note about",
+      "w": 390,
+      "x": 2370,
+      "y": 24000
+    },
+    "PeopleMoreContacts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · People more",
+      "w": 390,
+      "x": 2850,
+      "y": 24000
+    },
+    "PeopleImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import people",
+      "w": 390,
+      "x": 3330,
+      "y": 24000
+    },
+    "HealthSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Health search",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
+    },
+    "PersonLinks.dc.html": {
+      "h": 760,
+      "page": "light",
+      "title": "8 · Person links (Money, Photos, Docs, Locker)",
+      "w": 2070,
+      "x": 0,
+      "y": 24960
     }
   },
   "createdOnFiles": {
@@ -1449,6 +1745,7 @@
     "light17",
     "light18",
     "light19",
+    "light20",
     "dark0",
     "dark1",
     "dark2",
@@ -1468,7 +1765,8 @@
     "dark16",
     "dark17",
     "dark18",
-    "dark19"
+    "dark19",
+    "dark20"
   ],
   "notes": {
     "dark0": {
@@ -1830,6 +2128,24 @@
       "w": 240,
       "x": 0,
       "y": 10240
+    },
+    "light20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
+    },
+    "dark20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
     }
   },
   "order": [
@@ -1849,18 +2165,30 @@
     "RecoveryKey.dc.html",
     "RestoreWords.dc.html",
     "RestoreHeld.dc.html",
-    "RestoreDone.dc.html",
     "FirstImports.dc.html",
     "BackupSettingsEnd.dc.html",
     "PairDevice.dc.html",
     "PairCheck.dc.html",
     "BackupRunning.dc.html",
     "Calendar.dc.html",
+    "CalendarMonth.dc.html",
     "Main.dc.html",
+    "RemindersFilterMenu.dc.html",
     "Today.dc.html",
     "List.dc.html",
+    "RemindersToday.dc.html",
+    "CalendarReminders.dc.html",
     "Details.dc.html",
     "Swipe.dc.html",
+    "ListStyle.dc.html",
+    "ListStyleEdit.dc.html",
+    "CalendarStyle.dc.html",
+    "CalendarStyleEdit.dc.html",
+    "CustomRepeat.dc.html",
+    "EventEditorRows.dc.html",
+    "AgendaEventAttachments.dc.html",
+    "AgendaTaskDetail.dc.html",
+    "ImportReminders.dc.html",
     "Locker.dc.html",
     "LockerItem.dc.html",
     "People.dc.html",
@@ -1883,6 +2211,7 @@
     "NoteEditor.dc.html",
     "PhotosLibrary.dc.html",
     "PhotoViewer.dc.html",
+    "PhotoViewerInfo.dc.html",
     "TaskEditor.dc.html",
     "PersonEditor.dc.html",
     "LockerEditor.dc.html",
@@ -1907,6 +2236,7 @@
     "Trash.dc.html",
     "LockScreen.dc.html",
     "Settings.dc.html",
+    "SettingsDownload.dc.html",
     "EmptyReminders.dc.html",
     "FirstHome.dc.html",
     "PermissionPhotos.dc.html",
@@ -1926,6 +2256,8 @@
     "AndroidPhotos.dc.html",
     "AndroidChat.dc.html",
     "AndroidRecoveryKey.dc.html",
+    "AgendaWidgets.dc.html",
+    "AgendaQuickAddChip.dc.html",
     "WelcomeDark.dc.html",
     "HomeWidgetsDark.dc.html",
     "BackupSettingsDark.dc.html",
@@ -1933,18 +2265,28 @@
     "RecoveryKeyDark.dc.html",
     "RestoreWordsDark.dc.html",
     "RestoreHeldDark.dc.html",
-    "RestoreDoneDark.dc.html",
     "FirstImportsDark.dc.html",
     "BackupSettingsEndDark.dc.html",
     "PairDeviceDark.dc.html",
     "PairCheckDark.dc.html",
     "BackupRunningDark.dc.html",
     "CalendarDark.dc.html",
+    "CalendarMonthDark.dc.html",
     "MainDark.dc.html",
+    "RemindersFilterMenuDark.dc.html",
     "TodayDark.dc.html",
     "ListDark.dc.html",
     "DetailsDark.dc.html",
     "SwipeDark.dc.html",
+    "ListStyleDark.dc.html",
+    "ListStyleEditDark.dc.html",
+    "CalendarStyleDark.dc.html",
+    "CalendarStyleEditDark.dc.html",
+    "CustomRepeatDark.dc.html",
+    "EventEditorRowsDark.dc.html",
+    "AgendaEventAttachmentsDark.dc.html",
+    "AgendaTaskDetailDark.dc.html",
+    "ImportRemindersDark.dc.html",
     "LockerDark.dc.html",
     "LockerItemDark.dc.html",
     "PeopleDark.dc.html",
@@ -1967,6 +2309,7 @@
     "NoteEditorDark.dc.html",
     "PhotosLibraryDark.dc.html",
     "PhotoViewerDark.dc.html",
+    "PhotoViewerInfoDark.dc.html",
     "TaskEditorDark.dc.html",
     "PersonEditorDark.dc.html",
     "LockerEditorDark.dc.html",
@@ -1991,6 +2334,7 @@
     "TrashDark.dc.html",
     "LockScreenDark.dc.html",
     "SettingsDark.dc.html",
+    "SettingsDownloadDark.dc.html",
     "EmptyRemindersDark.dc.html",
     "FirstHomeDark.dc.html",
     "PermissionPhotosDark.dc.html",
@@ -2009,7 +2353,16 @@
     "AndroidNotesDark.dc.html",
     "AndroidPhotosDark.dc.html",
     "AndroidChatDark.dc.html",
-    "AndroidRecoveryKeyDark.dc.html"
+    "AndroidRecoveryKeyDark.dc.html",
+    "AgendaWidgetsDark.dc.html",
+    "AgendaQuickAddChipDark.dc.html",
+    "NotesImport.dc.html",
+    "NotesAbout.dc.html",
+    "NotesAboutPage.dc.html",
+    "PeopleMoreContacts.dc.html",
+    "PeopleImport.dc.html",
+    "HealthSearch.dc.html",
+    "PersonLinks.dc.html"
   ],
   "pages": [
     {

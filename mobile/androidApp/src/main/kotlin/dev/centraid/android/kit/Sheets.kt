@@ -1,7 +1,16 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -24,7 +33,7 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * THE CONFIRM (K5): a [SheetRoom] carrying the machine's finished `Confirm` —
- * the title names the noun, the body is the one full sentence DESIGN.md
+ * the title names the noun, the body is the one full sentence product-intuition/references/design-behaviour.md § Wording
  * allows a destructive confirm, and the one act is the primary. Destructive
  * is the outlined `net` button. Dismissing is the grabber, the scrim or
  * [cancelLabel]; each sends [onDismiss].
@@ -46,35 +55,25 @@ public fun ConfirmSheet(
             testTag = confirmTag,
             onPress = onConfirm,
         ),
+        // THE WAY OUT IS A TEXT KEY UNDER THE VERB (the Trash and Cancel-event boards): bold page
+        // ink, no outline, the same 50 tall.
+        outlines = listOf(
+            SheetOutline(label = cancelLabel, testTag = "confirm-cancel", link = true, pageInk = true, onPress = onDismiss),
+        ),
     ) {
         if (confirm.body.isNotEmpty()) {
             Text(
                 confirm.body,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
+                style = kitTextStyle(KitType.Row),
+                color = Surface.body,
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
             )
         }
-        Text(
-            cancelLabel,
-            style = centraidType("control"),
-            color = centraidColor("textSoft"),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = KitGeometry.ROW_MIN)
-                .clickable(onClick = onDismiss)
-                .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-                .testTag("confirm-cancel")
-                .clearAndSetSemantics {
-                    contentDescription = cancelLabel
-                    role = Role.Button
-                },
-        )
     }
 }
 
 /**
- * A REFUSAL TOLD IN A SHEET, NOT A DIALOG (DESIGN.md "The controls (mobile)"):
+ * A REFUSAL TOLD IN A SHEET, NOT A DIALOG (product-intuition/references/design-behaviour.md § Controls):
  * the act that was refused as the title, the sentence saying what happened and
  * what to do, and one way out, the outline [doneLabel]. The grabber, the scrim
  * and back are the same as Done.
@@ -93,8 +92,8 @@ public fun NoticeSheet(
     ) {
         Text(
             sentence,
-            style = centraidType("body"),
-            color = centraidColor("textSoft"),
+            style = kitTextStyle(KitType.Row),
+            color = Surface.body,
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
         )
     }
@@ -116,44 +115,57 @@ public fun SheetRow(
     selected: Boolean = false,
     testTag: String = "sheet-row",
     enabled: Boolean = true,
+    /** The hairline under the row; a group of rows leaves the last one without. */
+    divider: Boolean = true,
+    /** A colour dot in the mark's place (a label wears its colour); it replaces the tile. */
+    dot: androidx.compose.ui.graphics.Color? = null,
 ) {
-    val ink = centraidColor(
-        when {
-            !enabled -> "textDisabled"
-            destructive -> "net"
-            else -> "text"
-        },
-    )
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(enabled = enabled, onClick = onTap)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .testTag(testTag)
-            .clearAndSetSemantics {
-                contentDescription = if (detail.isEmpty()) label else "$label, $detail"
-                role = Role.Button
-                if (!enabled) disabled()
-                this.selected = selected
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (iconKey != null) {
-            CentraidIcon(
-                iconKey = iconKey,
-                tint = if (destructive || !enabled) ink else centraidColor("textSoft"),
-                size = 18.dp,
-                modifier = Modifier.padding(end = 12.dp),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(label, style = centraidType("body"), color = ink)
-            if (detail.isNotEmpty()) {
-                Text(detail, style = centraidType("annotLabel"), color = centraidColor(if (enabled) "textSoft" else "textDisabled"))
+    val ink = when {
+        !enabled -> Surface.meta
+        destructive -> StateColor.Red.text
+        else -> Surface.ink
+    }
+    val line = Surface.sheetLine
+    val accent = appAccent()
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clickable(enabled = enabled, onClick = onTap)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .testTag(testTag)
+                .clearAndSetSemantics {
+                    contentDescription = if (detail.isEmpty()) label else "$label, $detail"
+                    role = Role.Button
+                    if (!enabled) disabled()
+                    this.selected = selected
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (dot != null) {
+                Box(Modifier.padding(end = 12.dp).size(32.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+                }
+            } else if (iconKey != null) {
+                // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a destructive
+                // row's is the state's red.
+                KitTile(
+                    iconKey,
+                    Modifier.padding(end = 12.dp),
+                    size = 32.dp,
+                    fill = if (destructive) StateColor.Red.fill else null,
+                )
             }
+            Column(Modifier.weight(1f)) {
+                KitText(label, KitType.Row, ink)
+                if (detail.isNotEmpty()) KitText(detail, KitType.Meta, Surface.meta)
+            }
+            if (selected) CentraidIcon(iconKey = "Check", tint = accent.text, size = 16.dp)
         }
-        if (selected) CentraidIcon(iconKey = "Check", tint = centraidColor("text"), size = 16.dp)
+        if (divider) {
+            Spacer(Modifier.padding(start = if (iconKey != null || dot != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        }
     }
 }
 
@@ -168,8 +180,10 @@ public data class SheetOption(
 )
 
 /**
- * A CHOICE IS A SHEET (#1015 D4: content pushes, choices sheet): a titled
- * [SheetRoom] of [SheetRow]s. Picking sends [onPick]; the machine closes it.
+ * A CHOICE IS A SHEET (#1015 D4: content pushes, choices sheet): a titled [SheetRoom] of
+ * [SheetRow]s. Picking sends [onPick]; the machine closes it. **One surface** (#1173): the rows
+ * stand on the sheet itself, grouped by hairlines with none under the last, with no card of their
+ * own, and the sheet takes the height of its rows (it opens fully, never at a half detent).
  */
 @Composable
 public fun OptionSheet(
@@ -179,17 +193,20 @@ public fun OptionSheet(
     onDismiss: () -> Unit,
     status: String = "",
 ) {
-    SheetRoom(title = title, onDismiss = onDismiss, status = status) {
-        options.forEach { option ->
-            SheetRow(
-                label = option.label,
-                iconKey = option.iconKey,
-                detail = option.detail,
-                destructive = option.destructive,
-                selected = option.selected,
-                testTag = "sheet-option-${option.key}",
-                onTap = { onPick(option.key) },
-            )
+    SheetRoom(title = title, onDismiss = onDismiss, status = status, expanded = true) {
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER - 12.dp)) {
+            options.forEachIndexed { index, option ->
+                SheetRow(
+                    label = option.label,
+                    iconKey = option.iconKey,
+                    detail = option.detail,
+                    destructive = option.destructive,
+                    selected = option.selected,
+                    testTag = "sheet-option-${option.key}",
+                    divider = index < options.lastIndex,
+                    onTap = { onPick(option.key) },
+                )
+            }
         }
     }
 }

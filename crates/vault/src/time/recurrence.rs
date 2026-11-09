@@ -5,11 +5,11 @@
 //!
 //! - **A zoned rule keeps its WALL CLOCK through an offset change.** A 09:00
 //!   series is a 09:00 series on both sides of a DST boundary, because every
-//!   step is civil arithmetic ([`super::zone::add_wall_days`],
-//!   [`super::zone::add_wall_months`]) and the instant is resolved once, at
-//!   the end.
-//! - **A gap is skipped and a fold occurs once, at the earlier instant**
-//!   ([`super::zone::FireZone::resolve_wall_time`]).
+//!   step is civil arithmetic ([`super::period`]'s day numbers) and the
+//!   instant is resolved once, at the end.
+//! - **A gap moves forward and a fold occurs once, at the earlier instant**
+//!   ([`super::zone::FireZone::resolve_wall_time_forward`]): RFC 5545 section
+//!   3.3.5, owner decision on #1173.
 //! - **A refused rule expands to NO occurrences** — never to a plausible
 //!   series that means something else ([`super::rrule`]).
 //! - **An exception keys off the unmodified original occurrence**: the
@@ -26,11 +26,11 @@
 //!   20:00 in New York. Such a series has no zone of its own, so `zone` names
 //!   the calendar `now` (or a completion) is read on: the member's.
 
-use super::rrule::{self, DAY_TOKENS, Freq, MonthlyPin, ParsedRrule};
+use super::period::Plan;
+use super::rrule::{self, ParsedRrule, Until};
 use super::temporal;
 use super::zone::{
-    FireZone, WallTime, add_wall_days, add_wall_months, days_in_month, parse_wall_iso, wall_epoch,
-    wall_from_epoch, wall_iso, wall_weekday,
+    FireZone, WallTime, add_wall_days, parse_wall_iso, wall_epoch, wall_from_epoch, wall_iso,
 };
 
 /// Which reading a series' own times are under.
@@ -268,78 +268,6 @@ fn instant_for_comparison(value: &str, semantics: Semantics) -> Option<i64> {
     parse_wall_iso(value).map(wall_epoch)
 }
 
-fn step_anchor(initial: WallTime, rule: &ParsedRrule, index: i64) -> WallTime {
-    match rule.freq {
-        Freq::Daily => add_wall_days(initial, index * rule.interval),
-        Freq::Weekly => add_wall_days(initial, index * 7 * rule.interval),
-        Freq::Monthly => add_wall_months(initial, index * rule.interval),
-        Freq::Yearly => add_wall_months(initial, index * 12 * rule.interval),
-    }
-}
-
-/// The BYDAY members of one week, in civil order. The week's anchor is its
-/// SUNDAY, which is what makes `WKST` refusable rather than implementable
-/// ([`super::rrule`]).
-fn weekly_candidates(initial: WallTime, rule: &ParsedRrule, week_index: i64) -> Vec<WallTime> {
-    let anchor = add_wall_days(
-        initial,
-        week_index * 7 * rule.interval - wall_weekday(initial),
-    );
-    let mut walls: Vec<WallTime> = rule
-        .by_day
-        .as_deref()
-        .unwrap_or(&[])
-        .iter()
-        .filter_map(|day| {
-            DAY_TOKENS
-                .iter()
-                .position(|token| token == day)
-                .map(|offset| add_wall_days(anchor, offset as i64))
-        })
-        .collect();
-    walls.sort_by_key(|wall| wall_epoch(*wall));
-    walls
-}
-
-/// The ONE candidate of a MONTHLY rule pinned to a day (#1119, R-1119-1) in
-/// the month `period` steps from the anchor — or none, because **that month
-/// has no such day** (RFC 5545: the 31st of February is skipped, not clamped).
-/// It carries the anchor's wall clock, like every other candidate.
-fn monthly_candidates(
-    initial: WallTime,
-    rule: &ParsedRrule,
-    pin: MonthlyPin,
-    period: i64,
-) -> Vec<WallTime> {
-    let month = add_wall_months(initial, period * rule.interval);
-    let length = days_in_month(month.year, month.month);
-    let day = match pin {
-        MonthlyPin::MonthDay(-1) => length,
-        MonthlyPin::MonthDay(day) => day,
-        MonthlyPin::NthWeekday { ordinal, day } => {
-            let Some(target) = DAY_TOKENS.iter().position(|token| *token == day) else {
-                return Vec::new();
-            };
-            let target = target as i64;
-            if ordinal > 0 {
-                let first = wall_weekday(WallTime { day: 1, ..month });
-                1 + (target - first).rem_euclid(7) + 7 * (ordinal - 1)
-            } else {
-                let last = wall_weekday(WallTime {
-                    day: length,
-                    ..month
-                });
-                length - (last - target).rem_euclid(7)
-            }
-        }
-    };
-    if (1..=length).contains(&day) {
-        vec![WallTime { day, ..month }]
-    } else {
-        Vec::new()
-    }
-}
-
 fn resolve_candidate(
     wall: WallTime,
     semantics: Semantics,
@@ -347,7 +275,10 @@ fn resolve_candidate(
 ) -> Option<Occurrence> {
     let wall_start = wall_iso(wall, semantics != Semantics::AllDay);
     if semantics == Semantics::Zoned {
-        let resolved = zone?.resolve_wall_time(wall)?;
+        // A GAP MOVES FORWARD by the gap and still counts (RFC 5545 section
+        // 3.3.5, owner decision on #1173); `wall_start` stays the series'
+        // own wall clock, which is the exception key.
+        let resolved = zone?.resolve_wall_time_forward(wall);
         return Some(Occurrence {
             original_start: resolved.instant.clone(),
             start: resolved.instant,
@@ -363,58 +294,42 @@ fn resolve_candidate(
     })
 }
 
-fn within_until(occurrence: &Occurrence, rule: &ParsedRrule, semantics: Semantics) -> bool {
-    let Some(until) = rule.until.as_deref() else {
+/// Whether the occurrence at wall clock `wall` (resolving to `instant`) is
+/// still inside the rule's `UNTIL`, which is INCLUSIVE.
+///
+/// The three spellings mean three things. A UTC `UNTIL` is an instant: a zoned
+/// series compares the occurrence's instant, so "until 13:00Z" keeps the 09:00
+/// New York occurrence on a summer day. A floating `UNTIL` and a bare date are
+/// read on the series' own wall clock; a date takes the whole of its day. A
+/// floating or all-day series has no instant, so its `UNTIL` is read on the
+/// wall clock whatever its spelling (a `Z` there names no zone to convert from).
+fn within_until(rule: &ParsedRrule, wall: WallTime, instant: Option<i64>, zoned: bool) -> bool {
+    let Some(until) = rule.until_bound() else {
         return true;
     };
-    let Some(until_ms) = parse_basic_instant(until) else {
-        return true;
-    };
-    instant_for_comparison(&occurrence.start, semantics).is_none_or(|value| value <= until_ms)
-}
-
-/// Smallest period index whose candidates can land on or after `from_ms`.
-/// Overshoots by at most one interval so the subsequent walk still applies
-/// BYDAY / UNTIL / COUNT exactly.
-fn first_period_at_or_after(
-    initial: WallTime,
-    rule: &ParsedRrule,
-    from_ms: i64,
-    semantics: Semantics,
-) -> i64 {
-    let anchor_ms = wall_epoch(initial);
-    if from_ms <= anchor_ms {
-        return 0;
-    }
-    let delta = from_ms - anchor_ms;
-    match rule.freq {
-        Freq::Daily => (delta / (86_400_000 * rule.interval) - 1).max(0),
-        Freq::Weekly => (delta / (7 * 86_400_000 * rule.interval) - 1).max(0),
-        Freq::Monthly => {
-            let from_wall = wall_from_comparison_ms(from_ms, semantics);
-            let months = (from_wall.year - initial.year) * 12 + (from_wall.month - initial.month);
-            (months.div_euclid(rule.interval) - 1).max(0)
-        }
-        Freq::Yearly => {
-            let from_wall = wall_from_comparison_ms(from_ms, semantics);
-            let years = from_wall.year - initial.year;
-            (years.div_euclid(rule.interval) - 1).max(0)
-        }
+    let wall_ms = wall_epoch(wall);
+    match until {
+        Until::Utc(until_ms) if zoned => instant.is_none_or(|instant| instant <= until_ms),
+        Until::Utc(until_ms) | Until::Floating(until_ms) => wall_ms <= until_ms,
+        Until::Date(day) => wall_ms.div_euclid(86_400_000) <= day,
     }
 }
 
-/// The civil fields of a comparison value. For a floating series the
-/// comparison value IS a wall epoch; for a zoned one it is a UTC instant and
-/// its UTC calendar is a conservative lower bound, which is all the jump needs.
-fn wall_from_comparison_ms(millis: i64, _semantics: Semantics) -> WallTime {
-    wall_from_epoch(millis)
-}
+/// The days one walk may step before it gives up on a rule that never lands
+/// (`FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30`): generous, because a sparse rule
+/// such as Friday the 13th in February is years between hits.
+const MAX_PERIODS: usize = 120_000;
 
 /// EXPAND A RECURRENCE.
 ///
 /// Returns the occurrences in `[range_from, range_to)`, oldest first. An
 /// unsupported rule, an unreadable anchor or an empty range yields **no
 /// occurrences** rather than a plausible series meaning something else.
+///
+/// `COUNT` counts every occurrence of the series, a candidate in the zone's
+/// spring gap included (it moves forward, RFC 5545), and not one before the
+/// anchor. `max_instances`
+/// caps what comes back, never what is counted.
 #[must_use]
 pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
     let Some(rule) = rrule::parse(input.rrule) else {
@@ -433,38 +348,43 @@ pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
         return Vec::new();
     }
     let limit = input.max_instances.clamp(1, ABSOLUTE_MAX_INSTANCES);
+    let zoned = input.semantics == Semantics::Zoned;
+    let initial_epoch = wall_epoch(initial);
+    let plan = Plan::new(&rule, initial_epoch.div_euclid(86_400_000));
+    let time_of_day = initial_epoch.rem_euclid(86_400_000);
+    let to_day = to.div_euclid(86_400_000);
     let mut results: Vec<Occurrence> = Vec::new();
-    // Fast-forward analytically to the first period that can intersect
-    // `range_from` — but only for UNBOUNDED rules. A COUNT series must walk
-    // from the anchor so exhaustion is observed after a few periods (COUNT=1
-    // on a 2000 anchor must not convert twenty-six years of civil time).
+    // Fast-forward to the first period that can intersect `range_from`, but
+    // only for UNBOUNDED rules: a COUNT series must walk from the anchor so
+    // the count is exact (COUNT=1 on a 2000 anchor must not convert
+    // twenty-six years of civil time).
     let mut period = if rule.count.is_none() {
-        first_period_at_or_after(initial, &rule, from, input.semantics)
+        plan.first_period_near(from.div_euclid(86_400_000))
     } else {
         0
     };
     let mut emitted: i64 = 0;
-    let mut guard: usize = 0;
-    let initial_epoch = wall_epoch(initial);
-    while results.len() < limit && guard < limit.saturating_mul(16) {
-        guard += 1;
-        let walls = if rule.freq == Freq::Weekly && rule.by_day.is_some() {
-            weekly_candidates(initial, &rule, period)
-        } else if let Some(pin) = rule.monthly_pin {
-            monthly_candidates(initial, &rule, pin, period)
-        } else {
-            vec![step_anchor(initial, &rule, period)]
+    for _ in 0..MAX_PERIODS {
+        let Some((period_start, days)) = plan.period(period) else {
+            break;
         };
-        for wall in walls {
-            if wall_epoch(wall) < initial_epoch {
+        // A period starting past the range (a zone shifts a date by a day at
+        // most) can only hold occurrences past it.
+        if period_start > to_day + 2 {
+            break;
+        }
+        for day in days {
+            let wall = wall_from_epoch(day * 86_400_000 + time_of_day);
+            let wall_ms = wall_epoch(wall);
+            if wall_ms < initial_epoch {
                 continue;
             }
             let Some(occurrence) = resolve_candidate(wall, input.semantics, input.zone) else {
-                // A GAP IS SKIPPED, not substituted: the wall time exists at
-                // no instant in this zone, so nothing can deliver it.
+                // Only a zoned series with no zone resolves to nothing.
                 continue;
             };
-            if !within_until(&occurrence, &rule, input.semantics) {
+            let value = instant_for_comparison(&occurrence.start, input.semantics);
+            if !within_until(&rule, wall, value.filter(|_| zoned), zoned) {
                 return results;
             }
             if let Some(count) = rule.count
@@ -473,9 +393,7 @@ pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
                 return results;
             }
             emitted += 1;
-            let Some(value) = instant_for_comparison(&occurrence.start, input.semantics) else {
-                continue;
-            };
+            let Some(value) = value else { continue };
             if value >= to {
                 return results;
             }
@@ -701,6 +619,28 @@ fn day_epoch(day: &str) -> Option<i64> {
     parse_wall_iso(day).map(wall_epoch)
 }
 
+/// How far ahead [`next_occurrence`] looks: ten years, or two periods of a
+/// rule sparser than that (`FREQ=YEARLY;INTERVAL=12`), so a rule that lands
+/// rarely still answers.
+fn horizon_days(rrule: &str) -> i64 {
+    let ten_years = 10 * 366;
+    let Some(rule) = rrule::parse(rrule) else {
+        return ten_years;
+    };
+    let unit = match rule.freq {
+        rrule::Freq::Daily => 1,
+        rrule::Freq::Weekly => 7,
+        rrule::Freq::Monthly => 31,
+        rrule::Freq::Yearly => 366,
+    };
+    ten_years.max(
+        rule.interval
+            .saturating_mul(unit)
+            .saturating_mul(2)
+            .min(3_000_000),
+    )
+}
+
 /// The first date strictly after the day `input.after` falls on, in an
 /// ALL-DAY series.
 fn next_all_day(input: &NextOccurrenceInput<'_>) -> Option<String> {
@@ -711,7 +651,10 @@ fn next_all_day(input: &NextOccurrenceInput<'_>) -> Option<String> {
     } else {
         input.scheduled_start
     };
-    let horizon = wall_iso(add_wall_days(parse_wall_iso(&after)?, 10 * 366), false);
+    let horizon = wall_iso(
+        add_wall_days(parse_wall_iso(&after)?, horizon_days(input.rrule)),
+        false,
+    );
     expand(
         &ExpandInput::new(input.rrule, start, &after, &horizon)
             .with_semantics(Semantics::AllDay)
@@ -737,7 +680,7 @@ pub fn next_occurrence(input: &NextOccurrenceInput<'_>) -> Option<String> {
         input.scheduled_start
     };
     let after_ms = parse_instant_ms(input.after)?;
-    let horizon = crate::clock::format_iso_ms(after_ms + 10 * 366 * 86_400_000);
+    let horizon = crate::clock::format_iso_ms(after_ms + horizon_days(input.rrule) * 86_400_000);
     let mut expand_input = ExpandInput::new(input.rrule, start, input.after, &horizon)
         .with_semantics(Semantics::Zoned)
         .at_most(4_000);
@@ -974,7 +917,11 @@ mod tests {
     }
 
     #[test]
-    fn an_occurrence_in_the_spring_gap_is_skipped_not_substituted() {
+    fn an_occurrence_in_the_spring_gap_moves_forward_by_the_gap_and_counts() {
+        // FLIPPED to RFC 5545 section 3.3.5 by the owner's decision on #1173
+        // (a two-way sync with EventKit and CalendarContract has to expand the
+        // phone's occurrences, and both move a gap time forward). It used to
+        // be skipped and not counted.
         let new_york = zone("America/New_York");
         let occurrences = expand(
             &ExpandInput::new(
@@ -990,10 +937,31 @@ mod tests {
             .map(|occurrence| occurrence.wall_start.as_str())
             .collect();
         assert!(
-            !walls.contains(&"2026-03-08T02:30:00"),
-            "02:30 does not exist on the 8th: {walls:?}"
+            walls.contains(&"2026-03-08T02:30:00"),
+            "the gap day is an occurrence, keyed by its own wall clock: {walls:?}"
         );
-        assert_eq!(walls.len(), 4, "four of the five days have an 02:30");
+        assert_eq!(walls.len(), 5, "all five days are occurrences");
+        let gap = occurrences
+            .iter()
+            .find(|occurrence| occurrence.wall_start == "2026-03-08T02:30:00")
+            .expect("the gap day");
+        assert_eq!(
+            gap.start, "2026-03-08T07:30:00.000Z",
+            "02:30 on the gap day is 03:30 EDT, which is 07:30Z"
+        );
+        assert!(!gap.overlap);
+        // And it COUNTS: five occurrences from the 6th end on the 10th.
+        let counted = expand(
+            &ExpandInput::new(
+                "FREQ=DAILY;COUNT=5",
+                "2026-03-06T07:30:00.000Z",
+                "2026-03-06T00:00:00.000Z",
+                "2026-04-01T00:00:00.000Z",
+            )
+            .in_zone(&new_york),
+        );
+        assert_eq!(counted.len(), 5);
+        assert_eq!(counted[4].wall_start, "2026-03-10T02:30:00");
     }
 
     #[test]
@@ -1650,7 +1618,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pinned_day_in_the_spring_gap_is_skipped_and_one_in_the_fold_occurs_once() {
+    fn a_pinned_day_in_the_spring_gap_moves_forward_and_one_in_the_fold_occurs_once() {
         let la = zone("America/Los_Angeles");
         // 02:30 on the 8th of March 2026 does not exist in Los Angeles.
         let gap = expand(
@@ -1662,8 +1630,17 @@ mod tests {
             )
             .in_zone(&la),
         );
+        // RFC 5545 (owner decision on #1173): March's 02:30 is 03:30 PDT.
         let walls: Vec<&str> = gap.iter().map(|o| o.wall_start.as_str()).collect();
-        assert_eq!(walls, ["2026-02-08T02:30:00", "2026-04-08T02:30:00"]);
+        assert_eq!(
+            walls,
+            [
+                "2026-02-08T02:30:00",
+                "2026-03-08T02:30:00",
+                "2026-04-08T02:30:00"
+            ]
+        );
+        assert_eq!(gap[1].start, "2026-03-08T10:30:00.000Z");
         // 01:30 on the 1st of November happens twice; the earlier instant wins.
         let fold = expand(
             &ExpandInput::new(
@@ -1729,14 +1706,14 @@ mod tests {
     }
 
     #[test]
-    fn the_forms_still_refused_expand_to_nothing() {
+    fn the_forms_that_stay_refused_expand_to_nothing() {
         for rule in [
-            "FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1",
-            "FREQ=MONTHLY;BYDAY=MO,TU",
-            "FREQ=MONTHLY;BYDAY=MO",
-            "FREQ=MONTHLY;BYDAY=2MO;BYMONTHDAY=8",
-            "FREQ=MONTHLY;BYMONTHDAY=1,15",
-            "FREQ=YEARLY;BYDAY=2MO",
+            "FREQ=MONTHLY;BYSETPOS=1",
+            "FREQ=MONTHLY;BYDAY=6MO",
+            "FREQ=DAILY;BYHOUR=9",
+            "FREQ=HOURLY",
+            "FREQ=MONTHLY;COUNT=3;UNTIL=20261231",
+            "FREQ=WEEKLY;BYDAY=2MO",
             "FREQ=WEEKLY;BYMONTHDAY=1",
         ] {
             assert!(

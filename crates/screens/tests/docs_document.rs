@@ -590,3 +590,177 @@ fn restore_asks_nothing_and_brings_the_document_back_where_it_was() {
     assert!(!trash_ids(d.view(i)).contains(&id));
     assert_eq!(document(&d, &id).document.unwrap().folder_id, taxes);
 }
+
+// ---------------------------------------------------------------------------
+// The redesign (#1173): the Quick Look bar, the info card, Share, "Current"
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_quick_look_bar_is_share_star_labels_move_trash_and_the_card_says_what_it_is() {
+    let mut d = driver();
+    let folder_id = folder(&d, "Taxes 2025", None);
+    let id = pdf(&d, "Passport scan.pdf", 'd');
+    arrange(
+        &d,
+        act::docs::Move {
+            document_id: id.clone(),
+            folder_id: Some(folder_id),
+        },
+    );
+    let i = open(&mut d, &id, "Passport scan.pdf", "Recents");
+    let data = document_data(d.view(i));
+    let bar: Vec<&str> = data.bar.iter().map(|action| action.key.as_str()).collect();
+    assert_eq!(bar, ["share", "star", "labels", "move", "trash"]);
+    assert!(data.bar.last().unwrap().destructive);
+    assert_eq!(data.subtitle, "Docs \u{203a} Taxes 2025");
+    assert_eq!(data.kind_size, "PDF \u{b7} 2 KB");
+    assert!(data.changed.starts_with("Changed "), "{}", data.changed);
+    assert_eq!(data.labels_heading, "Labels");
+    // A starred document's bar offers Unstar, in the same place.
+    pick_doc(&mut d, i, "star");
+    let bar: Vec<String> = document_data(d.view(i))
+        .bar
+        .iter()
+        .map(|a| a.key.clone())
+        .collect();
+    assert_eq!(bar[1], "unstar");
+}
+
+#[test]
+fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
+    let mut d = driver();
+    // A PDF over bytes nobody stored: nothing to hand over, and the sentence says so.
+    let id = pdf(&d, "Lease.pdf", 'e');
+    let i = open(&mut d, &id, "Lease.pdf", "Recents");
+    pick_doc(&mut d, i, "share");
+    assert!(
+        waiting(&d)
+            .iter()
+            .all(|effect| !matches!(effect.kind, Some(wire::effect::Kind::ShareFile(_)))),
+        "no file, no share sheet"
+    );
+    assert_eq!(
+        document_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "This document isn't on this phone yet."
+    );
+}
+
+#[test]
+fn only_the_current_version_says_current_and_none_is_dimmed() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    for body in ["second", "third"] {
+        arrange(
+            &d,
+            act::docs::Edit {
+                document_id: id.clone(),
+                body_text: Some(body.to_owned()),
+                title: None,
+            },
+        );
+    }
+    let i = open(&mut d, &id, "Letter", "Docs");
+    let route = document_data(d.view(i))
+        .versions
+        .as_ref()
+        .unwrap()
+        .route
+        .clone()
+        .unwrap();
+    let page = d.push(docs::TAB, route);
+    let state = versions_state(d.view(page));
+    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    let current: Vec<&str> = data
+        .versions
+        .iter()
+        .filter(|version| version.meta.contains("Current"))
+        .map(|version| version.label.as_str())
+        .collect();
+    assert_eq!(current, ["Version 3"]);
+    assert_eq!(
+        data.versions
+            .iter()
+            .filter(|version| version.current)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_document_is_about_people_picked_by_name_and_taken_off_again() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let id = text(&d, "Lease", "words");
+    let maya = id_of(&arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Maya Rao".into(),
+            ..Default::default()
+        },
+    ));
+    arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Ravi Iyer".into(),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &id, "Lease", "");
+    let about = |d: &Driver, i: u64| {
+        document_data(d.view(i))
+            .about
+            .clone()
+            .expect("an About section")
+    };
+    let link = |kind: le::Kind| DD::About(wire::LinkEvent { kind: Some(kind) });
+    let section = about(&d, i);
+    assert_eq!(section.title, "About");
+    assert!(section.rows.is_empty());
+    assert_eq!(section.adds.len(), 1);
+    assert_eq!(section.adds[0].label, "Add person");
+    // The picker lists people by name; typing narrows it.
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Add(le::AddTapped {
+            key: "person".into(),
+        })),
+    );
+    let picker = document_state(d.view(i)).about_picker.clone().unwrap();
+    assert!(picker.open);
+    assert_eq!(picker.title, "Add person");
+    assert!(picker.candidates.len() >= 3, "the owner and the circle");
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Query(le::QueryChanged { text: "RAO".into() })),
+    );
+    let narrowed = document_state(d.view(i)).about_picker.clone().unwrap();
+    assert!(narrowed.candidates.iter().any(|c| c.id == maya));
+    assert!(
+        narrowed
+            .candidates
+            .iter()
+            .all(|c| c.title.to_lowercase().contains("rao"))
+    );
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Pick(le::Picked { id: maya.clone() })),
+    );
+    assert!(!document_state(d.view(i)).about_picker.clone().unwrap().open);
+    let section = about(&d, i);
+    assert_eq!(section.rows.len(), 1);
+    assert_eq!(section.rows[0].title, "Maya Rao");
+    assert_eq!(section.rows[0].remove_label, "Remove Maya Rao");
+    assert!(section.rows[0].route.is_some());
+    // Remove takes the link off.
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Remove(le::RemoveTapped { id: maya })),
+    );
+    assert!(about(&d, i).rows.is_empty());
+}

@@ -96,6 +96,8 @@ fn a_stored_thread_comes_back_with_its_messages_cards_and_session_and_the_follow
     assert_eq!(state.messages[1].text, FOUND_TASKS);
     assert_eq!(state.messages[1].cards.len(), 6);
     assert!(state.can_retry, "a stored question can be asked again");
+    // A REOPENED THREAD IS LIVE (#1173): the chips above the composer are offered again.
+    assert_eq!(state.suggestions.len(), 3, "{:?}", state.suggestions);
     // the follow-up is saved in the same thread
     chat.say("the first one");
     assert_eq!(chat.state().messages.len(), 4);
@@ -139,6 +141,14 @@ fn a_reopened_thread_draws_a_proposal_as_an_inert_card_and_how_it_ended_as_the_l
     let card = message.pending.expect("an inert card");
     assert_eq!(card.state(), State::Inert);
     assert!(card.pending_id.is_empty(), "nothing can name it");
+    // THE ROW IT NAMED SURVIVES THE REOPEN: its title and second line, inert, not a bare "Not done."
+    assert_eq!(card.steps.len(), 1);
+    assert_eq!(card.steps[0].title, "Pick up the dry cleaning");
+    assert!(card.steps[0].subtitle.starts_with("Reminders"));
+    assert!(
+        message.cards.is_empty(),
+        "the stored step is not a tappable card"
+    );
 
     // a proposal that was applied reads as the line the member was told, with no card
     let mut chat = Chat::ready(script(&complete_dry_cleaning()));
@@ -324,12 +334,12 @@ fn a_search_asks_the_chat_which_waits_for_the_model_then_asks_once_in_a_new_chat
         .host()
         .install(script(&read_tasks()));
     chat.event(C::Asked(wire::chat_event::Asked {
-        scope: "agenda".to_owned(),
+        scope: "reminders".to_owned(),
         question: "Tell me about “dentist”".to_owned(),
     }));
     chat.perform();
     let state = chat.state();
-    assert_eq!(state.scope_app, "agenda");
+    assert_eq!(state.scope_app, "reminders");
     assert_eq!(
         state.messages.len(),
         2,
@@ -372,7 +382,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
         _ => None,
     });
     assert_eq!(opened.len(), 1);
-    assert_eq!(opened[0].screen, "agenda.task");
+    assert_eq!(opened[0].screen, "reminders.task");
     assert!(chat.state().card_gone_line.is_empty());
     chat.driver.effects.clear();
 
@@ -380,7 +390,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
     let gone = chat.state().messages[1].cards[1].id.clone();
     for (n, action) in ["delete-task", "purge-task"].into_iter().enumerate() {
         let done = chat.driver.act(wire::ActRequest {
-            app: "agenda".to_owned(),
+            app: "reminders".to_owned(),
             action: action.to_owned(),
             input: [(
                 "id".to_owned(),
@@ -664,7 +674,7 @@ fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_r
         .install(script(&read_tasks()));
     let id = chat.driver.push(
         centraid_screens::chat::TAB,
-        centraid_screens::chat::routes::ask("Tell me about “tasks”", "agenda"),
+        centraid_screens::chat::routes::ask("Tell me about “tasks”", "reminders"),
     );
     // the shell's first event for any chat instance: it names the models directory
     chat.driver.send(
@@ -683,7 +693,7 @@ fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_r
             panic!()
         };
         if state.messages.len() == 2 && !state.streaming {
-            assert_eq!(state.scope_app, "agenda");
+            assert_eq!(state.scope_app, "reminders");
             assert_eq!(state.messages[0].text, "Tell me about “tasks”");
             return;
         }
@@ -725,4 +735,22 @@ fn a_conversation_found_by_search_opens_as_a_chat_page_with_its_messages() {
         }
     }
     panic!("the stored chat never opened");
+}
+
+#[test]
+fn the_pencil_is_drawn_only_inside_a_saved_chat_and_the_chats_page_closes_on_a_pick() {
+    let mut chat = with_history(&["first question", "second question"]);
+    // The second question's chat is the open one, so New chat is offered.
+    assert!(chat.state().can_new_chat);
+    // A fresh conversation has none.
+    chat.event(C::NewChat(wire::chat_event::NewChat {}));
+    assert!(!chat.state().can_new_chat && chat.state().thread_id.is_empty());
+    // The Chats page lists both; opening one closes the page and brings the pencil back.
+    toggle(&mut chat, true);
+    let state = chat.state();
+    assert!(state.drawer_open && state.threads.len() == 2 && !state.can_new_chat);
+    let id = state.threads[1].thread_id.clone();
+    open_thread(&mut chat, &id);
+    let state = chat.state();
+    assert!(!state.drawer_open && state.can_new_chat && state.thread_id == id);
 }

@@ -70,11 +70,7 @@ impl Vault {
         let limit = page.limit.min(ceiling);
         self.read(|connection| {
             let mut statement = connection.prepare(&page.sql)?;
-            let names: Vec<String> = statement
-                .column_names()
-                .into_iter()
-                .map(str::to_owned)
-                .collect();
+            let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
             let binds: Vec<&dyn rusqlite::ToSql> = page
                 .binds
                 .iter()
@@ -613,6 +609,54 @@ pub struct KeysetAnswer {
     pub next: Option<(String, String)>,
 }
 
+/// An SQLite authorizer on the vault's connection, removed when this drops, so a failing
+/// `prepare` (or a panic) cannot leave a policy installed on the one connection every later
+/// statement shares. rusqlite 0.41 takes `authorizer` on `&mut Connection`; the exclusive
+/// borrow is taken here, around install and remove only ([`crate::file::Held::with_exclusive`]).
+struct AuthorizerGuard<'v> {
+    vault: &'v Vault,
+    installed: bool,
+}
+
+impl<'v> AuthorizerGuard<'v> {
+    fn install<F>(vault: &'v Vault, policy: F) -> Result<Self>
+    where
+        F: FnMut(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization
+            + Send
+            + 'static,
+    {
+        vault.with_exclusive_connection(|connection| connection.authorizer(Some(policy)))?;
+        Ok(Self {
+            vault,
+            installed: true,
+        })
+    }
+
+    /// Remove the policy, reporting a failure. The success path ends here; `Drop` is the
+    /// fallback for a panic or an early return.
+    fn remove(mut self) -> Result<()> {
+        self.remove_now()
+    }
+
+    fn remove_now(&mut self) -> Result<()> {
+        if self.installed {
+            self.installed = false;
+            self.vault.with_exclusive_connection(|connection| {
+                connection.authorizer(
+                    None::<fn(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization>,
+                )
+            })?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for AuthorizerGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.remove_now();
+    }
+}
+
 impl Vault {
     /// Serve one keyset page whose predicate may read only `readable`.
     ///
@@ -661,32 +705,44 @@ impl Vault {
         let allowed: Vec<String> = readable.iter().map(|&table| table.to_owned()).collect();
         let refused: Arc<Mutex<Option<String>>> = Arc::default();
         let witness = Arc::clone(&refused);
-        let outcome = self.read(|connection| {
-            connection.authorizer(Some(move |context: AuthContext<'_>| {
-                let refusal = match context.action {
-                    AuthAction::Select | AuthAction::Function { .. } | AuthAction::Recursive => {
-                        None
-                    }
-                    AuthAction::Read { table_name, .. } => {
-                        (!allowed.iter().any(|table| table == table_name))
-                            .then(|| format!("reads `{table_name}`"))
-                    }
-                    other => Some(format!("asks for {other:?}")),
-                };
-                match refusal {
-                    None => Authorization::Allow,
-                    Some(why) => {
-                        if let Ok(mut slot) = witness.lock() {
-                            slot.get_or_insert(why);
+        let outcome = {
+            // The read scope first, then the authorizer: `PRAGMA query_only` is itself a
+            // statement the authorizer would refuse, so it must be neither installed while the
+            // pragma goes on nor still installed when it goes off (guards drop in reverse).
+            let scope = self.enter_read()?;
+            let prepared = {
+                let authorizer =
+                    AuthorizerGuard::install(self, move |context: AuthContext<'_>| {
+                        let refusal = match context.action {
+                            AuthAction::Select
+                            | AuthAction::Function { .. }
+                            | AuthAction::Recursive => None,
+                            AuthAction::Read { table_name, .. } => {
+                                (!allowed.iter().any(|table| table == table_name))
+                                    .then(|| format!("reads `{table_name}`"))
+                            }
+                            other => Some(format!("asks for {other:?}")),
+                        };
+                        match refusal {
+                            None => Authorization::Allow,
+                            Some(why) => {
+                                if let Ok(mut slot) = witness.lock() {
+                                    slot.get_or_insert(why);
+                                }
+                                Authorization::Deny
+                            }
                         }
-                        Authorization::Deny
-                    }
-                }
-            }))?;
-            let prepared = connection.prepare(&sql).map(drop);
-            connection.authorizer(None::<fn(AuthContext<'_>) -> Authorization>)?;
-            Ok(prepared)
-        })?;
+                    })?;
+                let prepared = {
+                    let connection = self.connection();
+                    connection.prepare(&sql).map(drop)
+                };
+                authorizer.remove()?;
+                prepared
+            };
+            scope.leave()?;
+            prepared
+        };
         let why = refused.lock().ok().and_then(|mut slot| slot.take());
         match (why, outcome) {
             (Some(why), _) => Err(VaultError::InvalidInput {
@@ -1089,6 +1145,41 @@ mod keyset_tests {
         vault
             .keyset_page_reading_only(&with("id NOT IN (SELECT to_id FROM edge)"), &readable)
             .expect("a subquery on a listed table answers");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// THE AUTHORIZER NEVER OUTLIVES THE CALL: after a refused predicate and after a
+    /// malformed one (a `prepare` that fails), a read of a table outside the list and a
+    /// commit both still work.
+    #[test]
+    fn the_authorizer_is_gone_after_a_refused_or_failed_prepare() {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let readable = ["entity", "edge"];
+        let with = |predicate: &str| KeysetPage {
+            predicate: Some(predicate.to_owned()),
+            ..page("entity", &["id"], "id", "id")
+        };
+        for predicate in ["EXISTS (SELECT 1 FROM locker_key)", "id = = ("] {
+            vault
+                .keyset_page_reading_only(&with(predicate), &readable)
+                .expect_err(predicate);
+            vault
+                .read(|connection| {
+                    Ok(
+                        connection.query_row("SELECT count(*) FROM locker_key", [], |row| {
+                            row.get::<_, i64>(0)
+                        })?,
+                    )
+                })
+                .expect("an ordinary read of a table outside the list");
+            vault
+                .commit(|tx| {
+                    tx.connection().execute_batch("SELECT 1")?;
+                    Ok(())
+                })
+                .expect("a commit");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

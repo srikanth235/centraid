@@ -53,17 +53,21 @@ const TZ: &str = "America/Los_Angeles";
 /// only as wide as the list it asks.
 fn covers(query: &Q) -> &'static str {
     match query {
-        Q::AgendaUpcoming(_) => "agenda.upcoming",
-        Q::AgendaDayContext(_) => "agenda.day_context",
-        Q::AgendaParties(_) => "agenda.parties",
-        Q::AgendaSearch(_) => "agenda.search",
-        Q::AgendaEvent(_) => "agenda.event",
-        Q::AgendaTaskBoard(_) => "agenda.task.board",
-        Q::AgendaTask(_) => "agenda.task.task",
-        Q::AgendaTaskProjects(_) => "agenda.task.projects",
-        Q::AgendaTaskSearch(_) => "agenda.task.search",
-        Q::AgendaTaskCatchUp(_) => "agenda.task.catch_up",
-        Q::AgendaTaskTrash(_) => "agenda.task.trash",
+        Q::AgendaUpcoming(_) => "calendar.upcoming",
+        Q::AgendaDayContext(_) => "calendar.day_context",
+        Q::AgendaParties(_) => "calendar.parties",
+        Q::AgendaSearch(_) => "calendar.search",
+        Q::AgendaEvent(_) => "calendar.event",
+        Q::AgendaTaskBoard(_) => "reminders.board",
+        Q::AgendaTask(_) => "reminders.task",
+        Q::AgendaTaskProjects(_) => "reminders.projects",
+        Q::AgendaTaskSearch(_) => "reminders.search",
+        Q::AgendaTaskCatchUp(_) => "reminders.catch_up",
+        Q::AgendaTaskReminders(_) => "reminders.reminders",
+        Q::AgendaTaskTrash(_) => "reminders.trash",
+        Q::AgendaTaskSmartCounts(_) => "reminders.smart-counts",
+        Q::AgendaTaskDueRows(_) => "reminders.due-rows",
+        Q::CalendarDatedReminders(_) => "calendar.dated-reminders",
         Q::DocsDrive(_) => "docs.drive",
         Q::DocsSearch(_) => "docs.search",
         Q::DocsDocument(_) => "docs.document",
@@ -81,6 +85,7 @@ fn covers(query: &Q) -> &'static str {
         Q::PeoplePerson(_) => "people.person",
         Q::PeopleSearch(_) => "people.search",
         Q::PeopleTrash(_) => "people.trash",
+        Q::PeopleLinks(_) => "people.links",
         Q::LockerItems(_) => "locker.items",
         Q::LockerItem(_) => "locker.item",
         Q::LockerSearch(_) => "locker.search",
@@ -151,6 +156,12 @@ fn requests(word: &str) -> Vec<Q> {
             task_id: some("task"),
             tz: tz(),
         }),
+        Q::CalendarDatedReminders(wire::CalendarDatedRemindersRequest {
+            from: "2025-06-01".to_owned(),
+            to: "2025-06-07".to_owned(),
+            tz: tz(),
+            overdue_before: "2025-06-07".to_owned(),
+        }),
         Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest { tz: tz() }),
         Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
             term: word.clone(),
@@ -158,7 +169,19 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest { tz: tz() }),
+        Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest { tz: tz(), limit: 0 }),
         Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest { tz: tz() }),
+        Q::AgendaTaskSmartCounts(wire::AgendaTaskSmartCountsRequest { tz: tz() }),
+        Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+            tz: tz(),
+            limit: 6,
+            window: wire::AgendaTaskDueWindow::Now as i32,
+        }),
+        Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+            tz: tz(),
+            limit: 12,
+            window: wire::AgendaTaskDueWindow::TimedAhead as i32,
+        }),
         Q::DocsSearch(wire::DocsSearchRequest {
             term: word.clone(),
             limit: 50,
@@ -206,6 +229,9 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::PeopleTrash(wire::PeopleTrashRequest { tz: tz() }),
+        Q::PeopleLinks(wire::PeopleLinksRequest {
+            entity_id: some("person"),
+        }),
         Q::LockerItem(wire::LockerItemRequest {
             item_id: some("locker"),
             tz: tz(),
@@ -483,6 +509,7 @@ fn requests(word: &str) -> Vec<Q> {
         for range in [
             wire::HealthRange::Week,
             wire::HealthRange::Month,
+            wire::HealthRange::SixMonths,
             wire::HealthRange::Year,
         ] {
             asked.push(Q::HealthSeries(wire::HealthSeriesRequest {
@@ -836,11 +863,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 58 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 62 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 58, "{asked:?}");
+    assert_eq!(asked.len(), 63, "{asked:?}");
 }

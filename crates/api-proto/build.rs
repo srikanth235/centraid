@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 49] = [
+const PROTOS: [&str; 52] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -81,6 +81,8 @@ const PROTOS: [&str; 49] = [
     "proto/centraid/core/v1/route.proto",
     "proto/centraid/core/v1/kit_screens.proto",
     "proto/centraid/core/v1/agenda_screens.proto",
+    // Agenda outside the app (#1173): the widgets' snapshot and the platform's asks.
+    "proto/centraid/core/v1/agenda_glance_screens.proto",
     // Photos' screens (#1135, lane D): the vocabulary every Photos screen shares
     // (the cell, the selection bar, the album sheet), then one file per worker.
     "proto/centraid/core/v1/photos_screens.proto",
@@ -103,6 +105,9 @@ const PROTOS: [&str; 49] = [
     "proto/centraid/core/v1/custody_screens.proto",
     "proto/centraid/core/v1/pair_screens.proto",
     "proto/centraid/core/v1/backup_screens.proto",
+    // Notifications (#1173, Agenda wave 1c): a leaf, imported by `passes_screens.proto`
+    // (the member's answer is a shell fact) and `screens.proto` (the effect).
+    "proto/centraid/core/v1/notify_screens.proto",
     "proto/centraid/core/v1/passes_screens.proto",
     // The vaults this phone holds (#1135, lane H2): the `holdings` query's
     // answer, imported by `app_query.proto`.
@@ -110,6 +115,7 @@ const PROTOS: [&str; 49] = [
     // The shell's own screens (#1135, lane H1): Home and its search.
     "proto/centraid/core/v1/shell_home_screens.proto",
     "proto/centraid/core/v1/shell_search_screens.proto",
+    "proto/centraid/core/v1/shell_settings_screens.proto",
     "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
@@ -147,6 +153,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.TodoDetailState.content.data")
         .boxed(".centraid.core.v1.BackupHomeState.body.data")
         .boxed(".centraid.core.v1.TodoProjectState.content.data")
+        .boxed(".centraid.core.v1.TodoProjectState.style")
+        .boxed(".centraid.core.v1.AgendaHomeState.style")
         .boxed(".centraid.core.v1.LockerHomeState.content.data")
         .boxed(".centraid.core.v1.LockerItemState.content.data")
         .boxed(".centraid.core.v1.LockerEditorState.content.data")

@@ -45,10 +45,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_nine_queries_and_seventeen_actions() {
+    fn it_declares_nine_queries_and_nineteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 9);
-        assert_eq!(manifest.actions.len(), 17);
+        assert_eq!(manifest.actions.len(), 19);
         for name in [
             "link-targets",
             "library",
@@ -177,7 +177,7 @@ mod tests {
     }
 
     /// NOTES' ACTIONS INVOKE ITS OWN `note` COMMANDS AND THE SHARED VERBS — and
-    /// the one command Agenda owes — and the table says so. What each command
+    /// the one command Reminders owes — and the table says so. What each command
     /// wrote is the commit's own census, not a list a manifest carries (V3).
     #[test]
     fn the_actions_invoke_the_note_commands_the_shared_verbs_and_agendas_task_add() {
@@ -193,17 +193,17 @@ mod tests {
         );
     }
 
-    /// TWENTY-SEVEN SCOPES: twelve reads over the vault's tables, and **fifteen
-    /// `act` scopes**, one per distinct command the seventeen actions invoke.
+    /// TWENTY-EIGHT SCOPES: thirteen reads over the vault's tables, and **fifteen
+    /// `act` scopes**, one per distinct command the nineteen actions invoke.
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed: a sixteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_seven_scopes_with_one_act_scope_per_command() {
+    fn it_declares_twenty_eight_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Notes declares its reach");
-        assert_eq!(vault.scopes.len(), 27);
+        assert_eq!(vault.scopes.len(), 30);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -242,14 +242,14 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, act_scope_tables());
-        assert_eq!(declared.len(), 15);
+        assert_eq!(declared.len(), 17);
 
         let reads = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 12);
+        assert_eq!(reads, 13);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone.

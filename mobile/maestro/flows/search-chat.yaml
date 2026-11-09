@@ -1,10 +1,10 @@
 # The member's chat history is searchable (#1097, R-1097-22, R-1097-24): a word
 # of a question they asked finds the chat from Home, a tap opens that thread in
-# the Chat tab, and the drawer's own search field finds it again, corrects a slip
+# the Chat tab, and the Chats page's own search field finds it again, corrects a slip
 # and says when nothing matches.
 #
 # iOS ONLY: Android has no Chat tab, so Home's search never offers a chat row
-# there (the machine drops the group) and there is no drawer.
+# there (the machine drops the group) and there is no Chats page.
 #
 # THIS FLOW NEEDS A MODEL ON THE PHONE, and it does not relaunch the app. A chat
 # is saved when a turn finishes, and the composer exists only once a model is
@@ -70,16 +70,16 @@ name: search-chat
       id: "chat-message-user"
     timeout: 10000
 - assertVisible: "Where is the quarzlux warranty letter"
-# 4. The drawer's search: the shared field, a slip corrected, an exact word, nothing.
-# The header's menu key, by its spoken label ("Chats"): Maestro does not match
-# the `chat-drawer` id on the icon key.
+# 4. The Chats page's search: the foot's key, then the shared field, a slip corrected, an exact
+# word, nothing. The header's Chats key, by its spoken label: Maestro does not match the
+# `chat-chats` id on the icon key.
 - tapOn: "Chats"
 - assertVisible:
-    id: "chat-drawer-search-open"
+    id: "band-search"
 - tapOn:
-    id: "chat-drawer-search-open"
+    id: "band-search"
 - tapOn:
-    id: "chat-drawer-search-field"
+    id: "chat-chats-search"
 - inputText: "quarzluk"
 - extendedWaitUntil:
     visible:
@@ -100,15 +100,15 @@ name: search-chat
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
-      id: "chat-drawer-empty"
+      id: "chat-chats-empty"
     timeout: 10000
 - assertVisible: "No chats match “zzqxv”."
 # 5. Closing the field puts the plain list back.
 - tapOn:
-    id: "chat-drawer-search-close"
+    id: "chat-chats-search-close"
 - extendedWaitUntil:
     visible:
-      id: "chat-drawer-search-open"
+      id: "band-search"
     timeout: 5000
 - assertVisible:
     id: "chat-thread-row"

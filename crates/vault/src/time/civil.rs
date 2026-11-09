@@ -17,11 +17,12 @@
 //! A wall time that does not exist (the spring-forward gap) is read with the
 //! offset in force just before the gap, which lands it at the same elapsed
 //! time after the change: 02:30 on a gap day reads as 03:30. A wall time that
-//! happens twice (the autumn fold) is the EARLIER of the two, as
-//! [`FireZone::resolve_wall_time`] says.
+//! happens twice (the autumn fold) is the EARLIER of the two. Both are
+//! [`FireZone::resolve_wall_time_forward`]'s, the one reading a series shares
+//! (RFC 5545 section 3.3.5).
 
 use super::recurrence::parse_instant_ms;
-use super::zone::{FireZone, parse_wall_iso, wall_epoch};
+use super::zone::{FireZone, parse_wall_iso};
 
 /// Whether a datetime text names its own zone: a `Z`, or a `+HH:MM` / `-HH:MM`
 /// after the `T`. A bare date has none, and is not a datetime.
@@ -42,13 +43,8 @@ pub fn parse_civil_ms(value: &str, zone: &FireZone) -> Option<i64> {
         return parse_instant_ms(value);
     }
     let wall = parse_wall_iso(value)?;
-    if let Some(resolved) = zone.resolve_wall_time(wall) {
-        return parse_instant_ms(&resolved.instant);
-    }
-    // THE GAP: no instant carries this wall clock. The offset a day earlier is
-    // the one in force before the change.
-    let naive = wall_epoch(wall);
-    Some(naive - i64::from(zone.offset_minutes(naive - 86_400_000)) * 60_000)
+    // A gap reads forward (RFC 5545), a fold takes the earlier instant.
+    parse_instant_ms(&zone.resolve_wall_time_forward(wall).instant)
 }
 
 #[cfg(test)]

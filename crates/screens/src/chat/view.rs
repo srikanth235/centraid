@@ -216,7 +216,7 @@ impl Chat {
             } else {
                 String::new()
             },
-            suggestions: if ready && empty {
+            suggestions: if ready && !self.running {
                 self.suggestions.clone()
             } else {
                 Vec::new()
@@ -243,7 +243,9 @@ impl Chat {
                 && self.asked.is_some()
                 && !empty
                 && !self.retry_loses_an_attachment(),
-            can_new_chat: ready && (!empty || !self.thread_id.is_empty()),
+            // NEW CHAT is the pencil, drawn only inside a chat already saved: a fresh conversation
+            // has nothing to start over from.
+            can_new_chat: ready && !self.thread_id.is_empty(),
             pending: if ready {
                 self.pending
                     .iter()
@@ -423,7 +425,14 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
     if held.destructive {
         parts.push(words::a11y_destructive(locale));
     }
-    parts.extend(held.steps.iter().map(|step| step.summary.clone()));
+    parts.extend(held.steps.iter().filter_map(|step| {
+        let said = if step.summary.is_empty() {
+            &step.title
+        } else {
+            &step.summary
+        };
+        (!said.is_empty()).then(|| said.clone())
+    }));
     if !more.is_empty() {
         parts.push(more.clone());
     }
@@ -446,11 +455,24 @@ fn proposal(held: &Proposal, locale: Locale) -> wire::ChatPending {
             .map(|step| wire::ChatPendingStep {
                 summary: step.summary.clone(),
                 destructive: step.destructive,
+                title: step.title.clone(),
+                subtitle: if step.title.is_empty() {
+                    String::new()
+                } else if !step.changes.is_empty() {
+                    step.changes.clone()
+                } else {
+                    super::confirm::subtitle(step.noun, &step.when, locale)
+                },
             })
             .collect(),
         more_line: more,
-        confirm_label: words::confirm(locale),
-        cancel_label: words::cancel(locale),
+        title: words::proposal_title(locale),
+        app: held.app().to_owned(),
+        confirm_label: super::confirm::label(
+            held.steps.iter().map(|step| (step.verb, step.noun)),
+            locale,
+        ),
+        cancel_label: words::not_now(locale),
         destructive: held.destructive,
         settled_line: held.line.clone(),
         accessibility_label: parts.join(". "),

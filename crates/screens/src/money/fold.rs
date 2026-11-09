@@ -58,6 +58,7 @@ pub fn figure(label: &str, amount: Option<&wire::MoneyAmount>, tone: Tone) -> wi
         label: label.to_owned(),
         amount: text(amount),
         tone: tone as i32,
+        positive: false,
     }
 }
 
@@ -68,6 +69,16 @@ pub fn choice(key: &str, label: &str, selected: bool, detail: &str) -> wire::Mon
         label: label.to_owned(),
         selected,
         detail: detail.to_owned(),
+        color_key: String::new(),
+    }
+}
+
+/// A category in a picker: its dot is its colour in the list palette.
+#[must_use]
+pub fn category_choice(key: &str, label: &str, selected: bool, group: &str) -> wire::MoneyChoice {
+    wire::MoneyChoice {
+        color_key: color_key(key),
+        ..choice(key, label, selected, group)
     }
 }
 
@@ -145,6 +156,56 @@ pub fn month_options(locale: Locale, through: &str, selected: &str) -> Vec<wire:
             choice(&month, &month_label(locale, &month), month == selected, "")
         })
         .collect()
+}
+
+// --- Colour ----------------------------------------------------------------------
+
+/// The list-palette key the categories that share a chart's rest are drawn in.
+pub const REST_COLOR_KEY: &str = "graphite";
+
+/// A category's colour in the one list palette (`blue`, `petrol` ...): stable for
+/// its id, because a category stores no colour of its own. Empty for none (a row
+/// with no category), which a shell draws as the dashed outline.
+#[must_use]
+pub fn color_key(category_id: &str) -> String {
+    if category_id.trim().is_empty() {
+        String::new()
+    } else {
+        centraid_design::list_color_key(category_id, None).to_owned()
+    }
+}
+
+/// A line said aloud: its words, then its amount.
+#[must_use]
+pub fn spoken(label: &str, amount: &str) -> String {
+    if amount.is_empty() {
+        label.to_owned()
+    } else {
+        format!("{label}, {amount}")
+    }
+}
+
+/// `October`: the month's name alone, for a sentence.
+#[must_use]
+pub fn month_name(locale: Locale, month: &str) -> String {
+    month_number(month)
+        .map(|number| civil::month_name(locale, number))
+        .unwrap_or_else(|| month.to_owned())
+}
+
+/// A day's net, finished and signed ("-₹2,450", "+₹1,41,401"), one amount per
+/// currency joined by " · "; and whether it is money in. Empty for no amounts.
+#[must_use]
+pub fn signed_total(totals: &[wire::MoneyAmount]) -> (String, bool) {
+    let text = totals
+        .iter()
+        .map(|amount| signed(Some(amount)))
+        .collect::<Vec<_>>()
+        .join(" · ");
+    (
+        text,
+        totals.iter().all(|a| a.minor > 0) && !totals.is_empty(),
+    )
 }
 
 // --- Days --------------------------------------------------------------------

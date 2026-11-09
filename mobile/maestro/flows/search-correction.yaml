@@ -29,14 +29,14 @@ name: search-correction
     timeout: 5000
 - assertVisible: "Including results for “circle”"
 - assertVisible:
-    id: "home-search-group-agenda"
+    id: "home-search-group-reminders"
 - assertVisible: "Tap the circle to finish me"
 # An exact term says nothing: no line over rows it did not correct.
 - eraseText: 6
 - inputText: "circle"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-agenda"
+      id: "home-search-group-reminders"
     timeout: 5000
 - assertNotVisible:
     id: "search-corrected"

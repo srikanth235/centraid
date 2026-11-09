@@ -42,12 +42,16 @@ pub mod editor;
 pub mod fold;
 pub mod home;
 pub mod person;
+pub mod sections;
+pub mod transfer;
 pub mod trash;
 
 pub const HOME: &str = "people.home";
 pub const PERSON: &str = "people.person";
 pub const EDITOR: &str = "people.editor";
 pub const TRASH: &str = "people.trash";
+pub const IMPORT: &str = "people.import";
+pub const EXPORT: &str = "people.export";
 
 /// The tab People's pages are pushed under.
 pub const TAB: &str = "people";
@@ -60,6 +64,8 @@ pub fn registry() -> Registry {
         .with(PERSON, person::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(IMPORT, transfer::build_import)
+        .with(EXPORT, transfer::build_export)
 }
 
 /// A runtime with People's screens and one tab, `people`, rooted at its home. The
@@ -128,6 +134,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }
@@ -179,6 +186,18 @@ pub mod routes {
             wire::route::Args::PeopleEditor(wire::PeopleEditorRoute {
                 party_id: String::new(),
                 is_new: true,
+            }),
+        )
+    }
+
+    /// The kit's transfer screen on People's vCards, either way; `back` names the page it was
+    /// pushed from.
+    #[must_use]
+    pub fn transfer(export: bool, back: &str) -> wire::Route {
+        route(
+            if export { super::EXPORT } else { super::IMPORT },
+            wire::route::Args::Transfer(wire::TransferRoute {
+                back_label: back.to_owned(),
             }),
         )
     }

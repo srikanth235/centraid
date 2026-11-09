@@ -1,0 +1,87 @@
+use super::*;
+
+#[test]
+fn an_id_names_its_vault_and_what_it_is_about() {
+    assert_eq!(
+        parse("task|v1|t-1|2026-11-10T09:00"),
+        Some(Target::Task {
+            vault: "v1".into(),
+            task_id: "t-1".into()
+        })
+    );
+    assert_eq!(
+        parse("event|v1|ev@2026-11-10T09:00|10"),
+        Some(Target::Event {
+            vault: "v1".into(),
+            instance_key: "ev@2026-11-10T09:00".into()
+        })
+    );
+    assert_eq!(
+        parse("receipt|v1|77"),
+        Some(Target::Receipt { vault: "v1".into() })
+    );
+    assert_eq!(parse("junk"), None);
+    assert_eq!(parse("what|v1|x|y"), None);
+    assert_eq!(parse("task|v1"), None);
+}
+
+#[test]
+fn a_snooze_is_an_hour_from_now_on_the_wall_clock() {
+    assert_eq!(
+        snooze_due("2026-11-10T08:15", "America/New_York").as_deref(),
+        Some("2026-11-10T09:15")
+    );
+    assert_eq!(
+        snooze_due("2026-11-10T23:30", "Asia/Tokyo").as_deref(),
+        Some("2026-11-11T00:30")
+    );
+    assert_eq!(snooze_due("2026-11-10T08:15", "Not/AZone"), None);
+}
+
+#[test]
+fn a_snooze_across_spring_forward_is_an_elapsed_hour() {
+    // 01:30 EST, and the next wall clock is 03:30 EDT: an hour later, not two.
+    assert_eq!(
+        snooze_due("2026-03-08T01:30", "America/New_York").as_deref(),
+        Some("2026-03-08T03:30")
+    );
+}
+
+#[test]
+fn a_snooze_inside_the_autumn_overlap_never_lands_in_the_past() {
+    // 01:30 the first time (EDT): an hour on is 01:30 again (EST), which the core
+    // reads as the earlier instant, so the snooze moves on to the next clean clock.
+    assert_eq!(
+        snooze_due("2026-11-01T01:30", "America/New_York").as_deref(),
+        Some("2026-11-01T02:30")
+    );
+}
+
+#[test]
+fn tomorrow_keeps_the_time_of_day() {
+    assert_eq!(
+        tomorrow_due("2026-11-10", "09:00").as_deref(),
+        Some("2026-11-11T09:00")
+    );
+    assert_eq!(
+        tomorrow_due("2026-12-31", "23:45").as_deref(),
+        Some("2027-01-01T23:45")
+    );
+    assert_eq!(
+        tomorrow_due("2026-11-10", "").as_deref(),
+        Some("2026-11-11")
+    );
+    assert_eq!(tomorrow_due("nope", "09:00"), None);
+}
+
+#[test]
+fn tomorrow_on_a_dst_day_is_written_as_the_wall_clock_the_core_places() {
+    // The 8th of March has no 02:30 in New York; the due is kept as the member
+    // wrote it and the core resolves it (a gap is read at the offset before it).
+    assert_eq!(
+        tomorrow_due("2026-03-07", "02:30").as_deref(),
+        Some("2026-03-08T02:30")
+    );
+    let zone = FireZone::named("America/New_York").unwrap();
+    assert!(parse_civil_ms("2026-03-08T02:30", &zone).is_some());
+}

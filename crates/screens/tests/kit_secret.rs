@@ -67,6 +67,7 @@ impl Screen for Probe {
 
 fn driver() -> Driver {
     let route = wire::Route {
+        sheet: false,
         screen: PROBE.to_owned(),
         args: Some(wire::route::Args::Counter(wire::CounterRoute {})),
     };

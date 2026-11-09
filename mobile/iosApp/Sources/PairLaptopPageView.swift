@@ -29,89 +29,146 @@ struct PairLaptopPageView: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                WordsHead(title: state.title, lead: state.body)
+        // THE LOOK (PairDevice, PairCheck): the words pages' frame, a round X to leave, a tinted
+        // badge over a centred title, and the answers pinned at the foot, a tonal scan over the ink.
+        WordsFrame(
+            closeLabel: state.secondaryLabel,
+            closeIdentifier: "pair-secondary",
+            onClose: { send(PairLaptopEvents.make { $0.secondary = .init() }) },
+            identifier: "pair-laptop",
+            dismissesKeyboard: true
+        ) {
+            VStack(spacing: 12) {
+                CentraidIconView(
+                    iconKey: state.safetyGroups.isEmpty ? "Monitor" : "Check",
+                    tint: AppAccent.shell.text,
+                    size: 28
+                )
+                .frame(width: 64, height: 64)
+                .background(AppAccent.shell.fill.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme), style: .continuous))
+                .accessibilityHidden(true)
+                WordsHead(title: state.title, lead: state.body, centered: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 12)
 
-                if !state.scanLabel.isEmpty {
-                    KitOutlineButton(label: state.scanLabel) {
-                        send(PairLaptopEvents.make { $0.scan = .init() })
+            // THE COMMAND TO RUN, drawn as the terminal line it is (PairDevice).
+            if !state.command.isEmpty {
+                HStack(spacing: 8) {
+                    Text("$")
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .accessibilityHidden(true)
+                    Text(state.command)
+                        .foregroundStyle(Color.white)
+                }
+                .centraidType("mono")
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .fill(Color(red: 0.11, green: 0.11, blue: 0.10))
+                )
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("pair-command")
+            }
+
+            if !state.payloadLabel.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(state.payloadLabel)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .accessibilityHidden(true)
+                    MachineTextField(placeholder: "", value: state.payload, axis: .vertical) { text in
+                        send(PairLaptopEvents.make { $0.typed = .with { $0.text = text } })
                     }
-                    .accessibilityIdentifier("pair-scan")
-                }
-
-                if !state.payloadLabel.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(state.payloadLabel)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .accessibilityHidden(true)
-                        MachineTextField(placeholder: "", value: state.payload, axis: .vertical) { text in
-                            send(PairLaptopEvents.make { $0.typed = .with { $0.text = text } })
-                        }
-                        .lineLimit(2...5)
-                        .keyboardType(.asciiCapable)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .centraidType("mono")
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                        )
-                        .accessibilityLabel(state.payloadLabel)
-                        .accessibilityIdentifier("pair-payload")
-                    }
-                }
-
-                if !state.safetyNumber.isEmpty {
-                    // EVERY DIGIT, IN THE GATEWAY'S OWN GROUPS: the comparison is
-                    // the member's, so it is drawn to be read, and never shortened.
-                    Text(state.safetyNumber)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                .fill(Theme.color("bgSunken", scheme))
-                        )
-                        .accessibilityIdentifier("pair-safety-number")
-                }
-
-                WordsNotice(notice: state.notice)
-
-                if !state.progress.isEmpty {
-                    KitSpinner(label: state.progress)
-                        .accessibilityIdentifier("pair-progress")
-                }
-
-                // THE WORDS DOOR AND THE PRIMARY ARE ALTERNATIVES: one stack.
-                KitChoiceStack {
-                    WordsControls(
-                        primary: state.primaryLabel,
-                        primaryEnabled: state.primaryEnabled,
-                        secondary: state.secondaryLabel,
-                        prefix: "pair",
-                        onPrimary: { send(PairLaptopEvents.make { $0.primary = .init() }) },
-                        onSecondary: { send(PairLaptopEvents.make { $0.secondary = .init() }) }
+                    .lineLimit(2...5)
+                    .keyboardType(.asciiCapable)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .centraidType("mono")
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .fill(Surface.card)
                     )
-                    if !state.wordsLabel.isEmpty {
-                        KitOutlineButton(label: state.wordsLabel) {
-                            send(PairLaptopEvents.make { $0.words = .init() })
-                        }
-                        .accessibilityIdentifier("pair-words")
-                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
+                    )
+                    .accessibilityLabel(state.payloadLabel)
+                    .accessibilityIdentifier("pair-payload")
                 }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !state.safetyGroups.isEmpty {
+                // EVERY DIGIT, IN THE GATEWAY'S OWN GROUPS: the comparison is the member's, so it
+                // is drawn to be read, and never shortened. Four groups to a row (PairCheck); the
+                // whole number is what a screen reader says.
+                VStack(spacing: 8) {
+                    if !state.safetyLabel.isEmpty {
+                        Text(state.safetyLabel)
+                            .centraidType("eyebrow")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
+                            .accessibilityHidden(true)
+                    }
+                    let rows = stride(from: 0, to: state.safetyGroups.count, by: 4).map {
+                        Array(state.safetyGroups[$0 ..< min($0 + 4, state.safetyGroups.count)])
+                    }
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        HStack(spacing: 16) {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, group in
+                                Text(group)
+                                    .centraidType("title")
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.color("text", scheme))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.6)
+                            }
+                        }
+                    }
+                    if !state.safetyHint.isEmpty {
+                        Text(state.safetyHint)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 4)
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .fill(Surface.card)
+                )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(state.safetyNumber)
+                .accessibilityIdentifier("pair-safety-number")
+            }
+
+            WordsNotice(notice: state.notice)
+
+            if !state.progress.isEmpty {
+                KitSpinner(label: state.progress)
+                    .accessibilityIdentifier("pair-progress")
+            }
+        } footer: {
+            if !state.scanLabel.isEmpty {
+                WordsTonalButton(label: state.scanLabel, iconKey: "Maximize", identifier: "pair-scan") {
+                    send(PairLaptopEvents.make { $0.scan = .init() })
+                }
+            }
+            if !state.wordsLabel.isEmpty {
+                WordsTonalButton(label: state.wordsLabel, identifier: "pair-words") {
+                    send(PairLaptopEvents.make { $0.words = .init() })
+                }
+            }
+            if !state.primaryLabel.isEmpty {
+                KitInkButton(label: state.primaryLabel) { send(PairLaptopEvents.make { $0.primary = .init() }) }
+                    .disabled(!state.primaryEnabled)
+                    .accessibilityIdentifier("pair-primary")
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .background(Theme.color("bg", scheme).ignoresSafeArea())
-        .accessibilityIdentifier("pair-laptop")
         .onChange(of: state.finished) { _, done in if done { onDone() } }
     }
 }

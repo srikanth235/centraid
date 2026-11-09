@@ -39,6 +39,7 @@ import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.TrashScreen
+import dev.centraid.android.kit.TransferScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
 import dev.centraid.android.screens.agenda.AgendaEventScreen
 import dev.centraid.android.screens.agenda.TodoCatchUpScreen
@@ -91,6 +92,8 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.core.Screens
 import dev.centraid.android.backup.MediaStoreDeleter
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalShellLine
@@ -245,6 +248,8 @@ internal class RustRoot(
                         made?.open_route?.let(::push)
                     },
                     onClose = { closed = sentence },
+                    leadingIcon = if (made?.running == true) "" else "Check",
+                    accentApp = made?.open_route?.screen.orEmpty().substringBefore('.'),
                 )
             }
         }
@@ -303,6 +308,25 @@ internal class RustRoot(
                 ScreenEvent(home = HomeEvent(phone_scheme_told = HomeEvent.PhoneSchemeTold(dark = phoneDark))),
             )
         }
+        // A SHEET ROUTE (`Route.sheet`) is drawn over the entry under it: that entry is what the
+        // member still sees, and the sheet's own screen composes its ModalBottomSheet on top.
+        val sheetOver = top.route?.sheet == true && entries.size > 1
+        val shown = if (sheetOver) entries[entries.size - 2] else top
+        ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
+        if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+    }
+
+    /** THE ENTRY THE MEMBER SEES: Home, another tab's root over the band, or a page. */
+    @Composable
+    private fun ShownEntry(
+        runtime: Screens,
+        navigation: centraid.core.v1.Navigation?,
+        views: Map<Long, centraid.core.v1.ViewState>,
+        top: centraid.core.v1.StackEntry,
+        root: centraid.core.v1.StackEntry,
+        inChat: Boolean,
+        homeRoot: Long?,
+    ) {
         // HOME IS ON SCREEN AGAIN after a cover was popped: the Locker's state and any tile may have
         // moved without a table changing.
         val atRoot = top.instance == root.instance && !inChat
@@ -357,6 +381,12 @@ internal class RustRoot(
         }
         val pickers = rememberDocsPickers(docsFiles)
         HostScreenEffects(open, pickers, health, deleter, openRoute = ::push)
+        // THE LAUNCHER SHORTCUT'S REQUESTS, delivered from here and not from the session's
+        // producer: its `OpenRoute` answer needs the performer `HostScreenEffects` attaches when
+        // this composition is applied, and a LaunchedEffect starts after the effects declared
+        // above it. Sent from the producer, a cold start's fact could beat the performer and be
+        // answered cancelled, so the bar never opened.
+        LaunchedEffect(runtime) { AgendaIntents.deliver(runtime) }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->
@@ -421,6 +451,7 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val transfer = view.transfer
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
         val lockerEditor = view.locker_editor
@@ -470,6 +501,7 @@ internal class RustRoot(
         val photosLightbox = view.photos_lightbox
         val photosEditor = view.photos_editor
         val homeSearch = view.home_search
+        val settings = view.settings
         val chat = view.chat
 
         when {
@@ -495,42 +527,54 @@ internal class RustRoot(
                 onOpen = open,
                 onHome = toHome,
             )
-            event != null -> AgendaEventScreen(
-                state = event,
-                onEvent = { send(ScreenEvent(agenda_event = it)) },
-                onOpen = open,
-                onBack = back,
-                onCall = { uri -> openCall(context, uri) },
-            )
-            editor != null -> AgendaEditorScreen(
-                state = editor,
-                onEvent = { send(ScreenEvent(agenda_editor = it)) },
-            )
-            list != null -> TodoListScreen(
-                state = list,
-                onEvent = { send(ScreenEvent(todo_list = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            project != null -> TodoProjectScreen(
-                state = project,
-                onEvent = { send(ScreenEvent(todo_project = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            detail != null -> TodoDetailScreen(
-                state = detail,
-                onEvent = { send(ScreenEvent(todo_detail = it)) },
-                onOpen = open,
-                // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
-                onClose = back,
-            )
-            catchUp != null -> TodoCatchUpScreen(
-                state = catchUp,
-                onEvent = { send(ScreenEvent(todo_catch_up = it)) },
-                onOpen = open,
-                onBack = back,
-            )
+            event != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
+                AgendaEventScreen(
+                    state = event,
+                    onEvent = { send(ScreenEvent(agenda_event = it)) },
+                    onOpen = open,
+                    onBack = back,
+                    onCall = { uri -> openCall(context, uri) },
+                )
+            }
+            editor != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
+                AgendaEditorScreen(
+                    state = editor,
+                    onEvent = { send(ScreenEvent(agenda_editor = it)) },
+                )
+            }
+            list != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
+                TodoListScreen(
+                    state = list,
+                    onEvent = { send(ScreenEvent(todo_list = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
+            project != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
+                TodoProjectScreen(
+                    state = project,
+                    onEvent = { send(ScreenEvent(todo_project = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
+            detail != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
+                TodoDetailScreen(
+                    state = detail,
+                    onEvent = { send(ScreenEvent(todo_detail = it)) },
+                    onOpen = open,
+                    // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
+                    onClose = back,
+                )
+            }
+            catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
+                TodoCatchUpScreen(
+                    state = catchUp,
+                    onEvent = { send(ScreenEvent(todo_catch_up = it)) },
+                    onOpen = open,
+                    onBack = back,
+                )
+            }
             lockerHome != null -> LockerHomeScreen(
                 state = lockerHome,
                 onEvent = { send(ScreenEvent(locker_home = it)) },
@@ -743,9 +787,22 @@ internal class RustRoot(
                 onOpen = open,
                 onCancel = back,
             )
+            // SETTINGS (#1173): a page pushed from Home.
+            settings != null -> SettingsScreen(
+                state = settings,
+                onEvent = { send(ScreenEvent(settings = it)) },
+                onOpen = open,
+                onBack = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
+                onBack = back,
+            )
+            // IMPORT AND EXPORT (#1173): Notes' Markdown and People's vCards.
+            transfer != null -> TransferScreen(
+                view = transfer,
+                onEvent = { send(ScreenEvent(transfer = it)) },
                 onBack = back,
             )
             // THE VAULT PLUMBING (#1135, lane H2): the backup, the 24 words and pairing a gateway.
@@ -815,7 +872,7 @@ internal class RustRoot(
         const val CHAT_TAB = "chat"
 
         /** The apps a chat can be scoped to (`chat::scopable_apps`), by the prefix of their screens. */
-        val CHAT_SCOPES = setOf("agenda", "docs", "health", "locker", "money", "notes", "people", "photos")
+        val CHAT_SCOPES = setOf("calendar", "docs", "health", "locker", "money", "notes", "people", "photos", "reminders")
     }
 }
 

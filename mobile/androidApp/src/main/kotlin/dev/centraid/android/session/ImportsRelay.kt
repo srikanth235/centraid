@@ -41,12 +41,25 @@ internal class ImportsRelay(
     /** The words.make instances whose made vault was already told. */
     private val madeTold = mutableSetOf<Long>()
 
+    /** The words.make instances seen, so one that vanishes is noticed. */
+    private val makes = mutableSetOf<Long>()
+
     fun start() {
         scope.launch {
             screens.views.collect { views ->
                 for ((instance, view) in views) {
                     val make = view.words_make ?: continue
+                    makes.add(instance)
                     if (!make.finished || make.made_line.isEmpty() || !madeTold.add(instance)) continue
+                    send(MADE, ScreenEvent(imports_made = ImportsMadeEvent(made = ImportsMadeEvent.Made(reminders = false))))
+                }
+                // A VAULT MADE IS A VAULT IN FRONT, AND THE CORE CLOSES EVERY SCREEN FOR IT: the
+                // make page goes with its `finished` view undelivered (the quiet make never shows
+                // one). A make page the core closed, which the shell did not pop, is the made vault.
+                val gone = makes.filter { it !in views }
+                makes.removeAll(gone.toSet())
+                for (instance in gone) {
+                    if (screens.wasPopped(instance) || !madeTold.add(instance)) continue
                     send(MADE, ScreenEvent(imports_made = ImportsMadeEvent(made = ImportsMadeEvent.Made(reminders = false))))
                 }
             }

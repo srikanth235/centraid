@@ -1,6 +1,16 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,15 +28,16 @@ import centraid.core.v1.AgendaTodo
 import centraid.core.v1.Route
 import centraid.core.v1.TodoChrome
 import centraid.core.v1.TodoNotice
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
-import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.theme.centraidColor
@@ -38,7 +49,7 @@ internal const val AGENDA_TASK_ROW: String = "agenda-task-row"
 /**
  * WHAT A TASK ROW ON AGENDA DOES (#1128, R-1128-2): its box checks it off in
  * place (an event), a tap opens it (the row's own route, pushed by the shell),
- * a long press offers "Move to project" (an event), and a group's quiet verb
+ * a swipe reveals Details, Flag and Delete (events; "Move to project" is a screen-reader action), and a group's quiet verb
  * (Overdue's "Reschedule") opens Catch up: the verb's key names the page and
  * the home's `catch_up` route is where it goes. [fileVerb] is the machine's
  * word for the long press (`TodoChrome.file_verb`); a row offers filing only
@@ -51,6 +62,7 @@ internal class AgendaTaskActions(
     val onFile: (String) -> Unit,
     val onVerb: (String) -> Unit,
     val fileVerb: String,
+    val menu: TodoRowMenu? = null,
 )
 
 internal fun agendaTaskActions(
@@ -65,6 +77,11 @@ internal fun agendaTaskActions(
         onFile = { onEvent(AgendaHomeEvent(file_requested = AgendaHomeEvent.FileRequested(task_id = it))) },
         onVerb = { key -> if (key == CATCH_UP) catchUp?.let(onOpen) },
         fileVerb = words.file_verb,
+        menu = TodoRowMenu(
+            words,
+            onFlag = { id, on -> onEvent(AgendaHomeEvent(task_flagged = AgendaHomeEvent.TaskFlagged(task_id = id, flagged = on))) },
+            onDelete = { id -> onEvent(AgendaHomeEvent(task_deleted = AgendaHomeEvent.TaskDeleted(task_id = id))) },
+        ),
     )
 
 /** The verb key (`TodoRowGroup.verb_key`, `TodoNotice.verb_key`) that opens Catch up. */
@@ -95,7 +112,8 @@ internal fun AgendaTodoPlace(
     val openNewProject = {
         onEvent(AgendaHomeEvent(sheet_opened = AgendaHomeEvent.SheetOpened(sheet = AgendaHomeState.Sheet.SHEET_NEW_PROJECT)))
     }
-    if (todo.groups.isEmpty() && todo.projects.isEmpty() && empty != null) {
+    // Nothing but the Inbox row in My Lists and an invitation to speak: the day-one screen.
+    if (todo.groups.isEmpty() && todo.projects.all { it.key == "inbox" } && empty != null && empty.headline.isNotEmpty()) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
@@ -118,6 +136,20 @@ internal fun AgendaTodoPlace(
         return
     }
     LazyColumn(Modifier.fillMaxSize().testTag("agenda-todo-list")) {
+        // THE REMINDERS HOME (#1173): the smart-list cards, then My Lists.
+        if (todo.smart_lists.isNotEmpty()) {
+            item(key = "smart") { AgendaSmartLists(todo.smart_lists, actions.onOpen) }
+        }
+        if (todo.my_lists_title.isNotEmpty() && todo.projects.isNotEmpty()) {
+            item(key = "my-lists") {
+                Text(
+                    todo.my_lists_title,
+                    style = kitTextStyle(KitType.Section),
+                    color = centraidColor("text"),
+                    modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 12.dp),
+                )
+            }
+        }
         todoGroups(
             todo.groups,
             onCheck = actions.onCheck,
@@ -126,13 +158,32 @@ internal fun AgendaTodoPlace(
             onFile = actions.onFile,
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
+            menu = actions.menu,
         )
         todo.projects.forEach { group ->
-            item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
+            if (group.title.isNotEmpty()) item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
             items(group.rows, key = { "project-${it.row?.id}" }) { project ->
                 project.row?.let { row ->
-                    Box(Modifier.testTag("agenda-project-${row.id}")) {
-                        CentraidRow(row) { project.route?.let(actions.onOpen) }
+                    // A LIST IS ITS COLOUR AND ITS OPEN COUNT (#1173).
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .clickable { project.route?.let(actions.onOpen) }
+                            .padding(horizontal = KitGeometry.GUTTER)
+                            .testTag("agenda-project-${row.id}")
+                            .clearAndSetSemantics { contentDescription = row.accessibility_label },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val listColor = agendaListColor(project.list_color_key) ?: centraidColor("textFaint")
+                        // A LIST'S OWN ICON (#1173 wave 2) replaces the dot, in the list's colour.
+                        if (project.icon_key.isNotEmpty()) {
+                            CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
+                        } else {
+                            Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                        }
+                        Text(row.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        Text(project.count, style = centraidType("body"), color = centraidColor("textSoft"))
                     }
                 }
             }
@@ -155,7 +206,7 @@ internal fun AgendaTodoPlace(
                 )
                 if (todo.new_project_label.isNotEmpty()) {
                     KitLink(
-                        label = todo.new_project_label,
+                        label = todo.add_list_label.ifEmpty { todo.new_project_label },
                         onClick = openNewProject,
                         modifier = Modifier.testTag("agenda-new-project").padding(horizontal = 8.dp),
                     )
@@ -196,20 +247,18 @@ internal fun AgendaTaskSheet(state: AgendaHomeState, words: TodoChrome, onEvent:
                 TodoChoiceRow(choice) { onEvent(AgendaHomeEvent(file_chosen = AgendaHomeEvent.FileChosen(key = it))) }
             }
         }
-        AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> SheetRoom(
-            title = words.new_project_title,
-            onDismiss = close,
-            primary = SheetPrimary(words.new_project_verb, enabled = state.new_project_can_submit) {
-                onEvent(AgendaHomeEvent(new_project_submitted = AgendaHomeEvent.NewProjectSubmitted()))
-            },
-        ) {
-            EditableFieldRow(
-                key = "",
-                value = state.new_project_name,
-                reload = state.new_project_name.takeIf { it.isEmpty() },
-                placeholder = words.new_project_placeholder,
-                onEdit = { onEvent(AgendaHomeEvent(new_project_name = AgendaHomeEvent.NewProjectNameChanged(name = it))) },
-                testTag = "tasks-new-project-field",
+        AgendaHomeState.Sheet.SHEET_NEW_PROJECT,
+        AgendaHomeState.Sheet.SHEET_NEW_CALENDAR,
+        AgendaHomeState.Sheet.SHEET_EDIT_CALENDAR,
+        -> state.style?.let { style ->
+            // ONE STYLE SHEET for a new list and a new or edited calendar (#1173 wave 2).
+            AgendaStyleSheetView(
+                style = style,
+                onName = { onEvent(AgendaHomeEvent(style_name = AgendaHomeEvent.StyleNameChanged(name = it))) },
+                onColor = { onEvent(AgendaHomeEvent(style_color = AgendaHomeEvent.StyleColorPicked(key = it))) },
+                onIcon = { onEvent(AgendaHomeEvent(style_icon = AgendaHomeEvent.StyleIconPicked(key = it))) },
+                onSubmit = { onEvent(AgendaHomeEvent(style_submitted = AgendaHomeEvent.StyleSubmitted())) },
+                onCancel = close,
             )
         }
         else -> Unit

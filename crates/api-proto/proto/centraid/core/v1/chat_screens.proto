@@ -34,7 +34,9 @@ message ChatState {
   repeated ChatMessage messages = 5;
   // One sentence, present only while the thread is empty and the model ready.
   string empty_line = 6;
-  // Up to three questions this vault can answer; a tap is a `Sent` carrying the text.
+  // Up to three questions this vault can answer; a tap is a `Sent` carrying the text. Drawn as
+  // the empty thread's list and, in a live thread, as chips above the composer; none while a
+  // turn runs.
   repeated string suggestions = 7;
   // A turn is running. The composer offers Stop instead of Send.
   bool streaming = 8;
@@ -52,7 +54,8 @@ message ChatState {
   string copy_label = 17;
   // The last turn is over and can be asked again.
   bool can_retry = 18;
-  // The thread has something in it: New chat is drawn.
+  // The chat is a saved one (it has a thread): New chat's pencil is drawn. A fresh
+  // conversation has no pencil.
   bool can_new_chat = 19;
   // What waits in the composer, oldest first.
   repeated ChatAttachment pending = 20;
@@ -67,6 +70,7 @@ message ChatState {
   ChatModelStep vision_step = 27;
   // The composer cannot send until the photo reader is fetched or the photo removed.
   bool vision_blocked = 28;
+  // The Chats page is showing (a page of its own, back to the chat); it was a drawer.
   bool drawer_open = 29;
   // Past chats, newest activity first, or the chats a search found.
   repeated ChatThreadItem threads = 30;
@@ -199,11 +203,18 @@ message ChatPending {
   State state = 2;
   repeated ChatPendingStep steps = 3;
   string more_line = 4;
+  // What the button does, in the card's own verb ("Add reminder"); "Confirm" when the steps
+  // disagree or name a verb the label table lacks.
   string confirm_label = 5;
   string cancel_label = 6;
   bool destructive = 7;
   string settled_line = 8;
   string accessibility_label = 9;
+  // "Proposed change": the card's label, drawn as a badge (#1173).
+  string title = 10;
+  // The app every step belongs to, whose colour draws the card; empty (the shell's
+  // own colour) when the steps span apps or the kind is no app's.
+  string app = 11;
 
   enum State {
     STATE_UNSPECIFIED = 0;
@@ -219,6 +230,11 @@ message ChatPending {
 message ChatPendingStep {
   string summary = 1;
   bool destructive = 2;
+  // The row's name, the step's title on the card ("Bring Chris a birthday card"), and the
+  // line under it ("Reminders · today, 10:45"). Both empty when the core did not name the
+  // row; the shell then draws `summary` (#1173).
+  string title = 3;
+  string subtitle = 4;
 }
 
 message ChatAttachment {

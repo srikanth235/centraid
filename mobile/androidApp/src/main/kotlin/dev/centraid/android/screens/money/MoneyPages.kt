@@ -1,8 +1,33 @@
 package dev.centraid.android.screens.money
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -72,35 +97,93 @@ internal fun MoneyImportScreen(
                 LazyColumn {
                     item(key = "lede") { MoneyNote(plan.lede) }
                     item(key = "file") {
-                        FieldRow(key = plan.file_label, value = plan.file_value, note = plan.file_note)
-                        if (plan.choose_label.isNotEmpty()) {
-                            OutlineButton(
-                                label = plan.choose_label,
-                                testTag = "money-import-choose",
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
-                            ) { onEvent(MoneyImportEvent(choose = MoneyImportEvent.ChooseTapped())) }
-                        }
-                    }
-                    if (plan.needs_account) {
-                        item(key = "account") {
-                            ChoiceFieldRow(
-                                key = plan.account_label,
-                                value = plan.account_value,
-                                testTag = "money-import-account",
-                                onTap = { onEvent(MoneyImportEvent(account_sheet_opened = MoneyImportEvent.AccountSheetOpened())) },
-                            )
+                        MoneyPageCard {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    KitText(plan.file_label, KitType.Meta, Surface.meta)
+                                    KitText(plan.file_value, KitType.Row, Surface.ink)
+                                    if (plan.file_note.isNotEmpty()) KitText(plan.file_note, KitType.Meta, Surface.meta)
+                                }
+                                if (plan.choose_label.isNotEmpty()) {
+                                    Box(
+                                        Modifier
+                                            .heightIn(min = KitGeometry.ROW_MIN)
+                                            .clickable { onEvent(MoneyImportEvent(choose = MoneyImportEvent.ChooseTapped())) }
+                                            .testTag("money-import-choose")
+                                            .semantics { role = Role.Button },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        androidx.compose.material3.Text(
+                                            plan.choose_label,
+                                            style = dev.centraid.android.kit.kitTextStyle(KitType.Meta),
+                                            color = appAccent("money").text,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                        )
+                                    }
+                                }
+                            }
+                            if (plan.needs_account) {
+                                MoneyHairline()
+                                ChoiceFieldRow(
+                                    key = plan.account_label,
+                                    value = plan.account_value,
+                                    testTag = "money-import-account",
+                                    onTap = { onEvent(MoneyImportEvent(account_sheet_opened = MoneyImportEvent.AccountSheetOpened())) },
+                                )
+                            }
                         }
                     }
                     if (plan.refusal.isNotEmpty()) item(key = "refusal") { MoneyNote(plan.refusal, ink = "net") }
                     plan.statements.forEach { statement ->
-                        item(key = "${statement.key}-head") { MoneySection(statement.title) }
                         item(key = "${statement.key}-body") {
                             MoneyNote(statement.refusal, ink = "net")
-                            MoneyNote(statement.span)
-                            statement.totals.forEach { MoneyFigureRow(it) }
-                            statement.counts.forEach { FieldRow(key = it.label, value = it.detail) }
+                            // THE STATEMENT'S CARD: its name and span, In, Out and the statement's own
+                            // balance, then the counts. A count that asks for a look wears its state.
+                            MoneyPageCard {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.material3.Text(
+                                            statement.title,
+                                            style = dev.centraid.android.kit.kitTextStyle(KitType.Row),
+                                            color = Surface.ink,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        KitText(statement.span, KitType.Meta, Surface.meta, maxLines = 1)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        (statement.totals + listOfNotNull(statement.checkpoint)).forEach { figure ->
+                                            Column(
+                                                Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
+                                            ) {
+                                                KitText(figure.label, KitType.Meta, Surface.meta, maxLines = 2)
+                                                KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
+                                            }
+                                        }
+                                    }
+                                }
+                                MoneyHairline()
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    statement.counts.forEach { fact ->
+                                        val ink = when (fact.tone) {
+                                            centraid.core.v1.StatusChip.Tone.TONE_NET -> StateColor.Red.text
+                                            centraid.core.v1.StatusChip.Tone.TONE_SEAM, centraid.core.v1.StatusChip.Tone.TONE_WARNING -> StateColor.Amber.text
+                                            else -> null
+                                        }
+                                        Column(
+                                            Modifier.weight(1f).clearAndSetSemantics { contentDescription = "${fact.label}, ${fact.detail}" },
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            KitText(fact.detail, KitType.Section, ink ?: Surface.ink, maxLines = 1)
+                                            KitText(fact.label, KitType.Meta, ink ?: Surface.meta, maxLines = 2)
+                                        }
+                                    }
+                                }
+                            }
                             statement.warnings.forEach { MoneyNote(it) }
-                            statement.checkpoint?.let { MoneyFigureRow(it) }
                             MoneyNote(statement.checkpoint_label)
                             statement.question?.let { question ->
                                 MoneyHeading(question.prompt)
@@ -135,7 +218,25 @@ internal fun MoneyImportScreen(
                                 }
                             }
                         }
-                        items(statement.rows, key = { "${statement.key}-${it.key}" }) { line ->
+                        // THE LINES ARE ONE CARD, as on iOS: the first row rounds the top, the
+                        // last the bottom, and a hairline stands between; each is its own lazy item.
+                        itemsIndexed(statement.rows, key = { _, it -> "${statement.key}-${it.key}" }) { index, line ->
+                            val radius = CentraidScale.cardRadius.dp
+                            val shape = RoundedCornerShape(
+                                topStart = if (index == 0) radius else 0.dp,
+                                topEnd = if (index == 0) radius else 0.dp,
+                                bottomStart = if (index == statement.rows.lastIndex) radius else 0.dp,
+                                bottomEnd = if (index == statement.rows.lastIndex) radius else 0.dp,
+                            )
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = KitGeometry.GUTTER)
+                                    .padding(top = if (index == 0) 6.dp else 0.dp, bottom = if (index == statement.rows.lastIndex) 6.dp else 0.dp)
+                                    .clip(shape)
+                                    .background(Surface.card),
+                            ) {
+                            if (index > 0) MoneyHairline()
                             CentraidRow(
                                 title = line.title.ifEmpty { line.line_label },
                                 meta = listOf(line.line_label.takeIf { line.title.isNotEmpty() }.orEmpty(), line.meta, line.reason)
@@ -145,6 +246,7 @@ internal fun MoneyImportScreen(
                                 a11y = spoken(line.accessibility_label, if (line.has_amount) line.amount else null),
                                 testTag = "money-import-${statement.key}-${line.key}",
                             )
+                            }
                         }
                         statement.more.forEach { more -> item(key = "${statement.key}-more-$more") { MoneyNote(more) } }
                     }
@@ -160,13 +262,17 @@ internal fun MoneyImportScreen(
                                     testTag = "money-import-publish",
                                     modifier = gutter,
                                 ) { onEvent(MoneyImportEvent(publish = MoneyImportEvent.Publish())) }
-                                MoneyNote(plan.publish_note)
+                                // CENTRED UNDER THE BUTTON IT EXPLAINS (MoneyImport).
+                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { MoneyNote(plan.publish_note) }
+                                // THE BOARD'S "START OVER" IS A CENTRED LINK, not a second button.
                                 if (plan.discard_label.isNotEmpty()) {
-                                    OutlineButton(
-                                        label = plan.discard_label,
-                                        testTag = "money-import-discard",
-                                        modifier = gutter,
-                                    ) { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) }
+                                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        KitLink(
+                                            label = plan.discard_label,
+                                            onClick = { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) },
+                                            modifier = Modifier.testTag("money-import-discard"),
+                                        )
+                                    }
                                 }
                             }
                         } else if (plan.discard_label.isNotEmpty()) {
@@ -190,9 +296,10 @@ internal fun MoneyImportScreen(
     }
     if (state.sheet == MoneyImportState.Sheet.SHEET_ACCOUNT) {
         val plan = state.data_
-        OptionSheet(
+        MoneyChoiceSheet(
             title = plan?.account_sheet_title.orEmpty(),
-            options = plan?.account_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            choices = plan?.account_options.orEmpty(),
+            tagPrefix = "money-import-account-option",
             onPick = { key -> onEvent(MoneyImportEvent(account_picked = MoneyImportEvent.AccountPicked(account_id = key))) },
             onDismiss = { onEvent(MoneyImportEvent(sheet_closed = MoneyImportEvent.SheetClosed())) },
         )
@@ -211,6 +318,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-account-add") { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) }
         },
@@ -228,35 +336,62 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                 LazyColumn {
                     if (accounts.net_worth.isNotEmpty()) {
                         item(key = "worth") {
-                            MoneySection(accounts.net_worth_label)
-                            accounts.net_worth.forEach { MoneyFigureRow(it) }
-                            MoneyNote(accounts.net_worth_note)
+                            MoneyPageCard {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    KitText(accounts.net_worth_label, KitType.Meta, Surface.meta)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                        accounts.net_worth.forEach { figure ->
+                                            Column(Modifier.clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) }) {
+                                                KitText(figure.label, KitType.Meta, Surface.meta)
+                                                KitText(figure.amount, KitType.Title, Surface.ink, maxLines = 1)
+                                            }
+                                        }
+                                    }
+                                    if (accounts.net_worth_note.isNotEmpty()) {
+                                        MoneyHairline(0.dp)
+                                        KitText(accounts.net_worth_note, KitType.Meta, Surface.meta)
+                                    }
+                                }
+                            }
                         }
                     }
                     accounts.sections.forEach { section ->
-                        item(key = "section-${section.title}") { MoneySection(section.title) }
-                        items(section.rows, key = { "a-${it.account_id}" }) { row ->
-                            CentraidRow(
-                                title = row.name,
-                                meta = listOf(row.meta, row.checkpoint_line).filter { it.isNotEmpty() }.joinToString(" · "),
-                                trailing = if (row.has_balance) money(row.balance) else row.balance_note,
-                                a11y = spoken(row.accessibility_label, if (row.has_balance) row.balance else null),
-                                testTag = "money-account-${row.account_id}",
-                                onTap = { onEvent(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountTapped(account_id = row.account_id))) },
-                            )
-                            if (row.has_delta) {
-                                MoneyFigureRow(
-                                    centraid.core.v1.MoneyFigure(
-                                        label = row.checkpoint_line,
-                                        amount = row.delta,
-                                        tone = row.checkpoint_tone,
-                                    ),
-                                )
+                        item(key = "section-${section.title}") {
+                            Column {
+                                MoneySection(section.title)
+                                MoneyPageCard {
+                                    section.rows.forEachIndexed { index, row ->
+                                        if (index > 0) MoneyHairline()
+                                        val warn = row.checkpoint_tone == centraid.core.v1.StatusChip.Tone.TONE_WARNING
+                                        Column(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onEvent(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountTapped(account_id = row.account_id))) }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                .testTag("money-account-${row.account_id}")
+                                                .semantics(mergeDescendants = true) {
+                                                    contentDescription = spoken(row.accessibility_label, if (row.has_balance) row.balance else null)
+                                                    role = Role.Button
+                                                },
+                                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                KitText(row.name, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 1)
+                                                KitText(if (row.has_balance) row.balance else row.balance_note, KitType.Row, Surface.ink, maxLines = 1)
+                                            }
+                                            if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
+                                            val check = if (row.has_delta) "${row.delta} ${row.checkpoint_line}" else row.checkpoint_line
+                                            if (check.isNotEmpty()) {
+                                                KitText(check, KitType.Meta, if (warn) StateColor.Amber.text else Surface.meta, maxLines = 2)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     items(accounts.definitions.size, key = { "def-$it" }) { index ->
-                        FieldRow(key = accounts.definitions[index].label, value = accounts.definitions[index].detail)
+                        MoneyNote("${accounts.definitions[index].label}. ${accounts.definitions[index].detail}")
                     }
                 }
             }
@@ -350,6 +485,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-rule-add") { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) }
         },
@@ -366,22 +502,25 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
             } else {
                 LazyColumn {
                     item(key = "limit") { MoneyNote(rules.limit_line) }
-                    items(rules.rows, key = { "r-${it.rule_id}" }) { row ->
-                        CentraidRow(
-                            title = row.title,
-                            meta = row.meta,
-                            a11y = row.accessibility_label,
-                            testTag = "money-rule-${row.rule_id}",
-                            onTap = { onEvent(MoneyRulesEvent(rule = MoneyRulesEvent.RuleTapped(rule_id = row.rule_id))) },
-                        )
+                    item(key = "rules") {
+                        MoneyPageCard {
+                            rules.rows.forEachIndexed { index, row ->
+                                if (index > 0) MoneyHairline()
+                                CentraidRow(
+                                    title = row.title,
+                                    meta = row.meta,
+                                    a11y = row.accessibility_label,
+                                    testTag = "money-rule-${row.rule_id}",
+                                    onTap = { onEvent(MoneyRulesEvent(rule = MoneyRulesEvent.RuleTapped(rule_id = row.rule_id))) },
+                                )
+                            }
+                        }
                     }
                     if (rules.apply_label.isNotEmpty()) {
                         item(key = "apply") {
-                            OutlineButton(
-                                label = rules.apply_label,
-                                testTag = "money-rules-apply",
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.Apply())) }
+                            MoneyTintedButton(rules.apply_label, "money-rules-apply") {
+                                onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.Apply()))
+                            }
                         }
                     }
                 }
@@ -391,16 +530,18 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
     val editor = state.editor
     if (editor != null && state.sheet != MoneyRulesState.Sheet.SHEET_NONE) {
         if (state.sheet == MoneyRulesState.Sheet.SHEET_CATEGORY) {
-            OptionSheet(
+            MoneyChoiceSheet(
                 title = data?.category_sheet_title.orEmpty(),
-                options = data?.category_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+                choices = data?.category_options.orEmpty(),
+                tagPrefix = "money-rule-category-option",
                 onPick = { key -> onEvent(MoneyRulesEvent(category = MoneyRulesEvent.CategoryPicked(category_id = key))) },
                 onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
             )
         } else if (state.sheet == MoneyRulesState.Sheet.SHEET_ACCOUNT) {
-            OptionSheet(
+            MoneyChoiceSheet(
                 title = data?.account_sheet_title.orEmpty(),
-                options = data?.account_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+                choices = data?.account_options.orEmpty(),
+                tagPrefix = "money-rule-account-option",
                 onPick = { key -> onEvent(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = key))) },
                 onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
             )
@@ -516,6 +657,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-category-add") { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) }
         },
@@ -532,16 +674,23 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
             } else {
                 LazyColumn {
                     categories.groups.forEach { group ->
-                        item(key = "g-${group.group_id}") { MoneySection(group.label) }
-                        items(group.rows, key = { "c-${it.category_id}" }) { row ->
-                            CentraidRow(
-                                title = row.label,
-                                meta = row.meta,
-                                dimmed = row.archived,
-                                a11y = row.accessibility_label,
-                                testTag = "money-category-row-${row.category_id}",
-                                onTap = { onEvent(MoneyCategoriesEvent(category = MoneyCategoriesEvent.CategoryTapped(category_id = row.category_id))) },
-                            )
+                        item(key = "g-${group.group_id}") {
+                            Column {
+                                MoneySection(group.label)
+                                MoneyPageCard {
+                                    group.rows.forEachIndexed { index, row ->
+                                        if (index > 0) MoneyHairline()
+                                        CentraidRow(
+                                            title = row.label,
+                                            meta = row.meta,
+                                            dimmed = row.archived,
+                                            a11y = row.accessibility_label,
+                                            testTag = "money-category-row-${row.category_id}",
+                                            onTap = { onEvent(MoneyCategoriesEvent(category = MoneyCategoriesEvent.CategoryTapped(category_id = row.category_id))) },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

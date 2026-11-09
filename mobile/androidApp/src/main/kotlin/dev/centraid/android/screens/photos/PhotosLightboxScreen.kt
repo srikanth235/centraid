@@ -7,6 +7,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.platform.testTag
+import androidx.compose.material3.TextFieldDefaults
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +30,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -103,10 +129,16 @@ public fun PhotosLightboxScreen(
     // unlabelled full-screen tap is not reachable at all under TalkBack.
     val chromeVisible = state.chrome_visible || screenReader || state.slideshow
 
+    if (!state.slideshow) {
+        // THE VIEWER IS A LIGHT PAGE (#1173): the photograph in a band, the cards under it.
+        LightViewer(state, photo, words, player, live, reduceMotion, onEvent, onOpen, onClose)
+        return
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // THE STAGE IS ITS OWN GROUND, the same value in both schemes.
+            // THE SLIDESHOW IS A MODE, AND A MODE IS THE STAGE: its own ground, the same value in
+            // both schemes.
             .background(centraidColor("stage")),
     ) {
         when {
@@ -156,6 +188,184 @@ public fun PhotosLightboxScreen(
     }
 }
 
+/**
+ * THE VIEWER, a light page (#1173, the Photo viewer board): the way out, the stamp and the menu
+ * across the top; the photograph in a band of its own, with every gesture it had; then the cards
+ * that say what the vault knows about it; and the floating bar of verbs.
+ */
+@Composable
+private fun LightViewer(
+    state: PhotosLightboxState,
+    photo: PhotosLightboxPhoto?,
+    words: PhotosLightboxWords,
+    player: LightboxPlayer?,
+    live: LightboxPlayer?,
+    reduceMotion: Boolean,
+    onEvent: (PhotosLightboxEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onClose: () -> Unit,
+) {
+    val failure = state.failure
+    val denied = state.denied
+    val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
+    Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Chip(icon = "ChevronLeft", label = words.close, onClick = onClose, light = true)
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
+                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
+            }
+            MoreMenu(state.menu, words.more, onEvent)
+        }
+        when {
+            failure != null -> ScreenFailure(
+                sentence = failure.sentence,
+                remedy = failure.remedy,
+                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
+            )
+            denied != null -> ScreenFailure(
+                sentence = denied.title,
+                remedy = denied.body,
+                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
+            )
+            else -> DetailsSheetHost(
+                open = infoOpen,
+                onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                details = { if (photo != null) InfoCards(state, photo, words, onEvent, onOpen) },
+            ) {
+                // THE PHOTOGRAPH ON THE LIGHT PAGE, no black letterbox, with what plays or loads over its foot.
+                Box(Modifier.fillMaxSize()) {
+
+                        LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                        if (photo != null && drawnPath(photo) == null) {
+                            // NEVER A BROKEN IMAGE. Each of these is a truthful state.
+                            Text(
+                                text = photo.stage_label,
+                                color = centraidColor("onStage"),
+                                textAlign = TextAlign.Center,
+                                style = centraidType("body"),
+                                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
+                            )
+                        } else if (photo == null && state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
+                            Text(
+                                text = words.opening,
+                                color = centraidColor("onStageSoft"),
+                                style = centraidType("small"),
+                                modifier = Modifier.align(Alignment.Center),
+                            )
+                        }
+                        if (photo != null) {
+                            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 4.dp)) {
+                                if (live != null) Box(Modifier.align(Alignment.CenterHorizontally)) { LiveChip(live, words) }
+                                val line = if (player != null) photo.status_line_playing else photo.status_line
+                                if (line.isNotEmpty() || photo.offers_fetch || photo.fetching) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (photo.fetching) StageSpinner()
+                                        if (line.isNotEmpty()) Text(text = line, color = centraidColor("onStageSoft"), style = centraidType("small"))
+                                        if (photo.offers_fetch) {
+                                            StageVerb(
+                                                label = words.load_original,
+                                                onClick = { onEvent(PhotosLightboxEvent(fetch_original = PhotosLightboxEvent.FetchTapped())) },
+                                            )
+                                        }
+                                    }
+                                }
+                                if (player != null) LightboxTransport(player, words)
+                            }
+                        }
+                                    }
+            }
+        }
+        // THE BAR IS THE PAGE'S LAST ROW: the photograph and the details are laid out above it, so
+        // it never covers the Place card's links.
+        if (photo != null) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
+                    .padding(bottom = 8.dp),
+            ) {
+                state.status?.takeIf { it.sentence.isNotEmpty() && !it.refused }?.let {
+                    KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.fillMaxWidth().padding(bottom = 4.dp).testTag("photos.lightbox.status"))
+                }
+                Box(Modifier.clip(CircleShape).background(Surface.card)) {
+                    Toolbar(state, words, photo.trashed, onEvent, onOpen, Surface.meta, light = true)
+                }
+            }
+        }
+        Sheets(state, photo, onEvent)
+    }
+}
+
+/**
+ * THE DETAILS UNDER THE PHOTOGRAPH, as an M3 bottom sheet (#1173): closed, the photograph has the whole
+ * page; open (the (i) key, a swipe up, or a drag of the sheet), the sheet rises from the foot and the
+ * photograph shrinks up to the room that is left above it. A drag down, (i) or Back closes it. Rust's
+ * `sheet` is the one truth: the sheet's own settling is reported back as the event.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailsSheetHost(
+    open: Boolean,
+    onOpenChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    details: @Composable () -> Unit,
+    photo: @Composable () -> Unit,
+) {
+    val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = true)
+    val scaffold = rememberBottomSheetScaffoldState(sheetState)
+    val reported by rememberUpdatedState(onOpenChanged)
+    LaunchedEffect(open) {
+        if (open && sheetState.currentValue != SheetValue.Expanded) sheetState.expand()
+        if (!open && sheetState.currentValue != SheetValue.PartiallyExpanded) sheetState.partialExpand()
+    }
+    LaunchedEffect(sheetState) {
+        snapshotFlow { sheetState.currentValue }.collect { value ->
+            val nowOpen = value == SheetValue.Expanded
+            if (nowOpen != open) reported(nowOpen)
+        }
+    }
+    val density = LocalDensity.current
+    val maxSheet = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+    var container by remember { mutableIntStateOf(0) }
+    BottomSheetScaffold(
+        scaffoldState = scaffold,
+        sheetPeekHeight = 0.dp,
+        sheetContainerColor = Surface.sheet,
+        sheetContent = {
+            Column(Modifier.heightIn(max = maxSheet).verticalScroll(rememberScrollState())) {
+                details()
+                Spacer(Modifier.height(16.dp))
+            }
+        },
+        containerColor = Surface.page,
+        modifier = modifier.onSizeChanged { container = it.height },
+    ) {
+        // THE PHOTOGRAPH SHRINKS UP: it keeps the room above the sheet's top edge.
+        val covered = if (container > 0) {
+            val offset = runCatching { sheetState.requireOffset() }.getOrDefault(container.toFloat())
+            with(density) { (container - offset).coerceAtLeast(0f).toDp() }
+        } else {
+            0.dp
+        }
+        Box(Modifier.fillMaxSize().padding(bottom = covered)) { photo() }
+    }
+}
+
 @Composable
 private fun Chrome(
     state: PhotosLightboxState,
@@ -194,15 +404,9 @@ private fun Chrome(
                 if (title.isNotEmpty()) Text(text = title, color = ink, style = centraidType("control"))
                 if (meta.isNotEmpty()) Text(text = meta, color = soft, style = centraidType("small"))
             }
-            if (state.slideshow) {
-                StageVerb(label = words.slideshow_leave, onClick = {
-                    onEvent(PhotosLightboxEvent(slideshow_left = PhotosLightboxEvent.SlideshowLeft()))
-                })
-            } else {
-                Chip(icon = "more", label = words.more) {
-                    onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_MORE))
-                }
-            }
+            StageVerb(label = words.slideshow_leave, onClick = {
+                onEvent(PhotosLightboxEvent(slideshow_left = PhotosLightboxEvent.SlideshowLeft()))
+            })
         }
 
         Box(modifier = Modifier.weight(1f))
@@ -259,14 +463,49 @@ private fun Chrome(
     }
 }
 
+/**
+ * THE "…" KEY IS THE PLATFORM'S OWN MENU, never a sheet (#1173): an M3 [DropdownMenu] of Rust's
+ * rows (`menu`). A refusal rides as the row's detail, not as a second phrasing of the same truth.
+ */
+@Composable
+private fun MoreMenu(menu: List<PhotosLightboxVerb>, label: String, onEvent: (PhotosLightboxEvent) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Chip(icon = "more", label = label, light = true) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Surface.card) {
+            menu.forEach { verb ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = if (verb.enabled || verb.why.isEmpty()) verb.label else "${verb.label} \u2014 ${verb.why}",
+                            style = centraidType("control"),
+                            color = when {
+                                !verb.enabled -> Surface.meta
+                                verb.destructive -> centraidColor("net")
+                                else -> Surface.ink
+                            },
+                        )
+                    },
+                    enabled = verb.enabled,
+                    onClick = {
+                        open = false
+                        onEvent(verbEvent(verb))
+                    },
+                    modifier = Modifier.testTag("photos.lightbox.menu.${verb.icon_key}"),
+                )
+            }
+        }
+    }
+}
+
 /** One round plate around one control, floating on the photograph. */
 @Composable
-private fun Chip(icon: String, label: String, onClick: () -> Unit) {
+private fun Chip(icon: String, label: String, light: Boolean = false, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clip(CircleShape)
-            .background(centraidColor("stageSunken"))
+            .background(if (light) Surface.card else centraidColor("stageSunken"))
             .clickable(onClick = onClick)
             .semantics {
                 role = Role.Button
@@ -274,7 +513,7 @@ private fun Chip(icon: String, label: String, onClick: () -> Unit) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        CentraidIcon(iconKey = icon, tint = centraidColor("onStage"), size = 20.dp)
+        CentraidIcon(iconKey = icon, tint = if (light) Surface.ink else centraidColor("onStage"), size = 20.dp)
     }
 }
 
@@ -297,6 +536,7 @@ private fun Toolbar(
     onEvent: (PhotosLightboxEvent) -> Unit,
     onOpen: (Route) -> Unit,
     soft: Color,
+    light: Boolean = false,
 ) {
     val reasons = state.toolbar.filter { !it.enabled && it.why.isNotEmpty() }.map { it.why }.distinct()
     val paged = state.previous_id.isNotEmpty() || state.next_id.isNotEmpty()
@@ -308,6 +548,7 @@ private fun Toolbar(
                     label = words.previous,
                     onClick = { onEvent(movedEvent(state.previous_id)) },
                     enabled = state.previous_id.isNotEmpty(),
+                    light = light,
                 )
             }
             state.toolbar.forEach { verb ->
@@ -323,6 +564,13 @@ private fun Toolbar(
                     on = verb.on,
                     showLabel = trashed,
                     destructive = verb.destructive,
+                    light = light,
+                    // INFO IS PRESSED WHILE ITS CARDS ARE ON THE PAGE, which is always.
+                    modifier = if (light && verb.kind == PhotosLightboxVerb.Kind.KIND_INFO) {
+                        Modifier.clip(CircleShape).background(Surface.fill)
+                    } else {
+                        Modifier
+                    },
                 )
             }
             if (paged) {
@@ -331,6 +579,7 @@ private fun Toolbar(
                     label = words.next,
                     onClick = { onEvent(movedEvent(state.next_id)) },
                     enabled = state.next_id.isNotEmpty(),
+                    light = light,
                 )
             }
         }
@@ -347,7 +596,7 @@ private fun Toolbar(
     }
 }
 
-/** The sheets: info, share, more, the place picker, the album choice, the delete question. */
+/** The sheets: share, the place picker, the album choice, the delete question. */
 @Composable
 private fun Sheets(
     state: PhotosLightboxState,
@@ -360,26 +609,11 @@ private fun Sheets(
     val close = { onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_NONE)) }
     if (photo != null) {
         when (state.sheet) {
-            PhotosLightboxState.Sheet.SHEET_INFO ->
-                SheetRoom(title = words.info_title, onDismiss = close) {
-                    InfoSheet(state, photo, words, onEvent)
-                }
+            // THE CARDS ARE ON THE PAGE, so Info presents nothing.
+            PhotosLightboxState.Sheet.SHEET_INFO -> Unit
 
             PhotosLightboxState.Sheet.SHEET_SHARE -> SheetRoom(title = words.share_title, onDismiss = close) {
                 state.share_choices.forEach { choice -> ShareRow(choice, onEvent) }
-            }
-
-            PhotosLightboxState.Sheet.SHEET_MORE -> SheetRoom(title = "", onDismiss = close) {
-                state.menu.forEach { verb ->
-                    SheetRow(
-                        label = verb.label,
-                        onTap = { onEvent(verbEvent(verb)) },
-                        iconKey = verb.icon_key,
-                        detail = verb.why,
-                        destructive = verb.destructive,
-                        enabled = verb.enabled,
-                    )
-                }
             }
 
             PhotosLightboxState.Sheet.SHEET_PLACE ->
@@ -391,6 +625,9 @@ private fun Sheets(
             PhotosLightboxState.Sheet.SHEET_UNSPECIFIED,
             -> Unit
         }
+    }
+    state.people_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(people = link)) }
     }
     val album = state.album_choice
     if (album != null && album.open_) {
@@ -456,139 +693,186 @@ private fun PlaceSheet(
 }
 
 /**
- * THE INFO SHEET: everything the vault knows about this photograph, and the four
- * things a member may change: the caption, the labels, the place, and a copy of
- * where it was taken. No destructive control here, ever: Trash lives on the bar
- * alone. A field the record lacks is omitted, never invented.
+ * THE CARDS UNDER THE PHOTOGRAPH: everything the vault knows about it, and the four things a
+ * member may change: the caption, the labels, the place, and a copy of where it was taken. No
+ * destructive control here, ever: Trash lives on the bar alone. A field the record lacks is
+ * omitted, never invented. The SwiftUI twin is `PhotosLightboxInfo`.
  */
 @Composable
-private fun InfoSheet(
+private fun InfoCards(
     state: PhotosLightboxState,
     photo: PhotosLightboxPhoto,
     words: PhotosLightboxWords,
     onEvent: (PhotosLightboxEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
-    val soft = centraidColor("textSoft")
-    val ink = centraidColor("text")
     var caption by remember(state.photo_id) { mutableStateOf(photo.caption) }
     var tag by remember(state.photo_id) { mutableStateOf("") }
     val commitCaption = {
         onEvent(PhotosLightboxEvent(caption = PhotosLightboxEvent.CaptionChanged(caption = caption)))
     }
+    val fieldColors = TextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+    )
     Column(
         modifier = Modifier
+            .fillMaxWidth()
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(top = 14.dp)
+            // THE CARDS' NAME is what a screen reader says on entering them.
+            .semantics { contentDescription = words.info_title },
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // A REFUSED EDIT IS SAID HERE, where the member made it.
         state.status?.takeIf { it.refused && it.sentence.isNotEmpty() }?.let {
-            Text(text = it.sentence, style = centraidType("small"), color = centraidColor("net"))
+            KitText(it.sentence, KitType.Meta, StateColor.Red.text)
         }
 
-        InfoLabel(words.caption_label)
-        TextField(
-            value = caption,
-            onValueChange = { caption = it },
-            placeholder = { Text(words.caption_placeholder) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { commitCaption() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = words.caption_label }
-                // COMMITTED WHEN THE FIELD IS LEFT: the typed text stays exactly
-                // where it is if the vault says no.
-                .onFocusChanged { if (!it.isFocused) commitCaption() },
-        )
-
-        photo.facts.forEach { fact ->
-            Column {
-                InfoLabel(fact.label)
-                Text(text = fact.text, style = centraidType("body"), color = ink)
-            }
-        }
-
-        // WHERE, in words — never a coordinate. "Copy exact location" puts it on
-        // the member's own clipboard because they asked.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoLabel(words.place_title)
-            Text(text = photo.place_phrase, style = centraidType("body"), color = ink)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                KitLink(
-                    label = if (photo.has_place) words.change else words.add_place,
-                    onClick = { onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_PLACE)) },
-                )
-                if (photo.has_place) {
-                    KitLink(label = words.remove, onClick = {
-                        onEvent(PhotosLightboxEvent(place_chosen = PhotosLightboxEvent.PlaceChosen(place_id = "")))
-                    })
-                }
-                if (photo.can_copy_location) {
-                    KitLink(label = words.copy_location, onClick = {
-                        onEvent(PhotosLightboxEvent(copy_location = PhotosLightboxEvent.CopyLocationTapped()))
-                    })
-                }
-            }
-        }
-
-        // LABELS, each with its own remove, and a field to add one.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoLabel(words.labels_title)
-            if (photo.labels_line.isNotEmpty()) {
-                Text(text = photo.labels_line, style = centraidType("small"), color = soft)
-            }
-            photo.labels.forEach { label ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .clip(photosTokenShape("md"))
-                        .background(centraidColor("bgSunken"))
-                        .padding(start = 10.dp),
-                ) {
-                    Text(text = label.label, style = centraidType("small"), color = ink)
-                    dev.centraid.android.kit.IconKey(
-                        iconKey = "X",
-                        label = label.remove_label,
-                        testTag = "lightbox-tag-remove",
-                        bordered = false,
-                        onPress = {
-                            onEvent(PhotosLightboxEvent(tag_removed = PhotosLightboxEvent.TagRemoved(tag_id = label.tag_id)))
-                        },
-                    )
-                }
-            }
+        // THE CAPTION, ITS OWN CARD.
+        Column(Modifier.fillMaxWidth().kitCard().padding(14.dp)) {
+            KitText(words.caption_label, KitType.Meta, Surface.meta)
             TextField(
-                value = tag,
-                onValueChange = { tag = it },
-                placeholder = { Text(words.add_label_placeholder) },
+                value = caption,
+                onValueChange = { caption = it },
+                placeholder = { Text(words.caption_placeholder) },
                 singleLine = true,
+                colors = fieldColors,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    if (tag.isNotBlank()) {
-                        onEvent(PhotosLightboxEvent(tag_added = PhotosLightboxEvent.TagAdded(label = tag)))
-                        tag = ""
-                    }
-                }),
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = words.add_label_placeholder },
+                keyboardActions = KeyboardActions(onDone = { commitCaption() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = words.caption_label }
+                    // COMMITTED WHEN THE FIELD IS LEFT: the typed text stays exactly
+                    // where it is if the vault says no.
+                    .onFocusChanged { if (!it.isFocused) commitCaption() },
             )
         }
 
+        // WHEN AND WITH WHAT, one card of rows.
+        if (photo.facts.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().kitCard()) {
+                photo.facts.forEachIndexed { at, fact ->
+                    Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CentraidIcon(
+                            iconKey = fact.icon_key,
+                            tint = appAccent("photos").text,
+                            size = 16.dp,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { }) {
+                            KitText(fact.label, KitType.Meta, Surface.meta)
+                            KitText(fact.text, KitType.Row, Surface.ink)
+                        }
+                    }
+                    if (at < photo.facts.size - 1) {
+                        Spacer(Modifier.padding(start = 14.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+                    }
+                }
+            }
+        }
+
+        // WHO IS IN IT, by hand: a section of its own (#1173).
+        photo.people?.let { people ->
+            dev.centraid.android.kit.LinkSectionView(
+                people,
+                { link -> onEvent(PhotosLightboxEvent(people = link)) },
+                onOpen,
+                padded = false,
+            )
+        }
+
+        // PLACE AND LABELS, one card. WHERE, in words, never a coordinate; "Copy exact location"
+        // puts it on the member's own clipboard because they asked.
+        Column(Modifier.fillMaxWidth().kitCard()) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                InfoHeading(words.place_title, "MapPin")
+                Text(text = photo.place_phrase, style = centraidType("body"), color = centraidColor("text"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KitLink(
+                        label = if (photo.has_place) words.change else words.add_place,
+                        onClick = { onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_PLACE)) },
+                    )
+                    if (photo.has_place) {
+                        KitLink(label = words.remove, onClick = {
+                            onEvent(PhotosLightboxEvent(place_chosen = PhotosLightboxEvent.PlaceChosen(place_id = "")))
+                        })
+                    }
+                    if (photo.can_copy_location) {
+                        KitLink(label = words.copy_location, onClick = {
+                            onEvent(PhotosLightboxEvent(copy_location = PhotosLightboxEvent.CopyLocationTapped()))
+                        })
+                    }
+                }
+            }
+            Spacer(Modifier.padding(start = 14.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
+            // LABELS, each with its own remove, and a field to add one.
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                InfoHeading(words.labels_title, "Tag")
+                if (photo.labels_line.isNotEmpty()) {
+                    KitText(photo.labels_line, KitType.Meta, Surface.meta)
+                }
+                photo.labels.forEach { label ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .clip(photosTokenShape("md"))
+                            .background(Surface.fill)
+                            .padding(start = 10.dp),
+                    ) {
+                        KitText(label.label, KitType.Meta, Surface.ink)
+                        dev.centraid.android.kit.IconKey(
+                            iconKey = "X",
+                            label = label.remove_label,
+                            testTag = "lightbox-tag-remove",
+                            bordered = false,
+                            onPress = {
+                                onEvent(PhotosLightboxEvent(tag_removed = PhotosLightboxEvent.TagRemoved(tag_id = label.tag_id)))
+                            },
+                        )
+                    }
+                }
+                TextField(
+                    value = tag,
+                    onValueChange = { tag = it },
+                    placeholder = { Text(words.add_label_placeholder) },
+                    singleLine = true,
+                    colors = fieldColors,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (tag.isNotBlank()) {
+                            onEvent(PhotosLightboxEvent(tag_added = PhotosLightboxEvent.TagAdded(label = tag)))
+                            tag = ""
+                        }
+                    }),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = words.add_label_placeholder },
+                )
+            }
+        }
+
         // WHERE THE BYTES ARE, in a sentence that says what fetching costs.
-        Text(text = photo.whereabouts, style = centraidType("small"), color = soft)
+        KitText(photo.whereabouts, KitType.Meta, Surface.meta)
         if (photo.trash_line.isNotEmpty()) {
-            Text(text = photo.trash_line, style = centraidType("small"), color = soft)
+            KitText(photo.trash_line, KitType.Meta, Surface.meta)
         }
         state.status?.takeIf { !it.refused && it.sentence.isNotEmpty() }?.let {
-            Text(text = it.sentence, style = centraidType("small"), color = soft)
+            KitText(it.sentence, KitType.Meta, Surface.meta)
         }
     }
 }
 
+/** A card's heading: the mark, then the word. */
 @Composable
-private fun InfoLabel(text: String) {
-    Text(text = text, style = centraidType("small"), color = centraidColor("textSoft"))
+private fun InfoHeading(text: String, iconKey: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) { },
+    ) {
+        CentraidIcon(iconKey = iconKey, tint = appAccent("photos").text, size = 14.dp)
+        KitText(text, KitType.Meta, Surface.meta)
+    }
 }
 
 /**

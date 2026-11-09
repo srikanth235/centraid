@@ -29,7 +29,7 @@ use std::collections::HashSet;
 use centraid_api_proto::core_v1 as wire;
 use wire::photo_tile::{Held, Kind};
 
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, fill, photos as words};
 
 /// The member's transfer rule and whether the link is metered: the two facts a
@@ -123,14 +123,20 @@ pub fn capture_day(taken_at: &str, offset_minutes: i64) -> String {
     })
 }
 
-/// The capture-local clock, `HH:MM` on 24 hours; empty when there is no capture
+/// The capture-local clock as the phone words it ([`civil::time_for`]); empty when there is no capture
 /// time. The same instant and offset as [`capture_day`], so the stamp's date and
 /// time cannot name two moments.
 #[must_use]
-pub fn capture_clock(taken_at: &str, offset_minutes: i64) -> String {
+pub fn capture_clock(
+    locale: Locale,
+    taken_at: &str,
+    offset_minutes: i64,
+    cycle: HourCycle,
+) -> String {
     epoch_minutes(taken_at).map_or_else(String::new, |instant| {
         let minute_of_day = (instant + offset_minutes).rem_euclid(MINUTES_PER_DAY);
-        format!("{:02}:{:02}", minute_of_day / 60, minute_of_day % 60)
+        let hhmm = format!("{:02}:{:02}", minute_of_day / 60, minute_of_day % 60);
+        civil::time_for(locale, &hhmm, cycle)
     })
 }
 

@@ -242,13 +242,12 @@ impl RestoreAnswer {
     }
 }
 
-/// What a restore asks with: the words (as typed), the seed this phone holds,
-/// or only the indices that stayed, from that seed. **Redacted.**
+/// What a restore asks with: the words (as typed) or the seed this phone holds.
+/// **Redacted.**
 #[derive(Clone)]
 pub enum Source {
     Words(Vec<String>),
     Seed(String),
-    Stayed(String, Vec<u32>),
 }
 
 impl fmt::Debug for Source {
@@ -273,12 +272,6 @@ pub fn restore_request(source: &Source, payload: &str) -> Option<wire::RestoreRe
         Source::Seed(seed) => wire::RestoreRequest {
             seed: Some(from_hex(seed)?),
             payload: payload.to_owned(),
-            ..wire::RestoreRequest::default()
-        },
-        Source::Stayed(seed, indices) => wire::RestoreRequest {
-            seed: Some(from_hex(seed)?),
-            payload: payload.to_owned(),
-            indices: indices.clone(),
             ..wire::RestoreRequest::default()
         },
     })

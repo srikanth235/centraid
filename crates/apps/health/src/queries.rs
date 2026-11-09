@@ -7,7 +7,7 @@
 //!
 //! | Answer | Reads | Folds |
 //! | --- | --- | --- |
-//! | [`Today`] | the 365 days to today, today's workouts | today's figure per metric, the typical and its range (R-1129-8) |
+//! | [`Today`] | the 365 days to today, today's workouts | today's figure per metric, the typical and its range (R-1129-8), the last 7 days, the 30-day change |
 //! | [`Series`] | one metric over the period and the one before | buckets, averages, best, total, days above typical |
 //! | [`Trends`] | all six over the period and the one before | per-metric average, previous, sparkline buckets |
 //! | [`Workouts`] | a page of workouts, every workout's kind | rows, kind counts |
@@ -28,6 +28,12 @@ use crate::figures::{self, Bucket, Days, Fold, Metric, Typical};
 pub const DATA_LOOKBACK_DAYS: i64 = 365;
 /// The days weight's latest is looked for in, today included.
 pub const WEIGHT_LOOKBACK_DAYS: i64 = 30;
+/// The days a Summary card's sparkline draws, today included.
+pub const SPARK_DAYS: i64 = 7;
+/// The days the highlight compares: the last 30 against the 30 before.
+pub const HIGHLIGHT_DAYS: i64 = 30;
+/// The runs a six-month series is cut into: 26 weeks of 7 days, the last ending today.
+pub const SIX_MONTH_WEEKS: i64 = 26;
 
 /// A metric's days, keyed by day count.
 fn by_metric(rows: &[DayRow]) -> BTreeMap<Metric, Days> {
@@ -147,6 +153,11 @@ pub struct TodayMetric {
     /// Today's figure (see [`today`]), and the day it is for.
     pub value: Option<(String, f64)>,
     pub typical: Option<Typical>,
+    /// The 7 days to today, one bucket a day, oldest first.
+    pub week: Vec<Bucket>,
+    /// The last 30 days' figure against the 30 days before, as a percentage of the earlier
+    /// ([`figures::difference`]).
+    pub month_change_pct: Option<f64>,
 }
 
 /// Today: the six metrics against the member's own typical, today's workouts, and what the
@@ -197,6 +208,17 @@ pub fn today(door: &dyn PageDoor, today: i64, day_start: &str, day_end: &str) ->
                 metric,
                 value: todays_figure(metric, days, today),
                 typical: figures::typical_before(days, today),
+                week: figures::day_buckets(metric, days, today - (SPARK_DAYS - 1), today),
+                month_change_pct: figures::difference(
+                    figures::period_figure(metric, days, today - (HIGHLIGHT_DAYS - 1), today),
+                    figures::period_figure(
+                        metric,
+                        days,
+                        today - (2 * HIGHLIGHT_DAYS - 1),
+                        today - HIGHLIGHT_DAYS,
+                    ),
+                )
+                .1,
             }
         })
         .collect();
@@ -231,6 +253,8 @@ pub enum Range {
     Week,
     /// The 30 days to today.
     Month,
+    /// The 26 weeks (182 days) to today, one bucket a week, the last ending today.
+    SixMonths,
     /// The 12 calendar months to today's.
     Year,
 }
@@ -245,6 +269,10 @@ pub struct Series {
     pub average: Option<f64>,
     pub previous_average: Option<f64>,
     pub typical: Option<f64>,
+    /// The 25th and 75th percentiles of the days a WEEK or MONTH `typical` read; none for the
+    /// longer ranges, whose typical is the period before's average.
+    pub typical_low: Option<f64>,
+    pub typical_high: Option<f64>,
     pub best: Option<Bucket>,
     pub total: Option<f64>,
     pub above_typical: usize,
@@ -265,6 +293,10 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
     let (first, previous_first) = match range {
         Range::Week => (today - 6, today - 13),
         Range::Month => (today - 29, today - 59),
+        Range::SixMonths => (
+            today - (SIX_MONTH_WEEKS * 7 - 1),
+            today - (SIX_MONTH_WEEKS * 14 - 1),
+        ),
         Range::Year => (
             month_start_shifted(today, -11),
             month_start_shifted(today, -23),
@@ -276,15 +308,21 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
         .unwrap_or_default();
     let buckets = match range {
         Range::Week | Range::Month => figures::day_buckets(metric, &days, first, today),
+        Range::SixMonths => figures::even_runs(first, today, SIX_MONTH_WEEKS)
+            .into_iter()
+            .map(|(start, end)| figures::bucket(metric, &days, start, end))
+            .collect(),
         Range::Year => figures::month_buckets(metric, &days, today, 12),
     };
     let average = figures::period_figure(metric, &days, first, today);
     let previous_average = figures::period_figure(metric, &days, previous_first, first - 1);
+    let usual = match range {
+        Range::Week | Range::Month => figures::typical_before(&days, today),
+        Range::SixMonths | Range::Year => None,
+    };
     let typical = match range {
-        Range::Week | Range::Month => {
-            figures::typical_before(&days, today).map(|typical| typical.typical)
-        }
-        Range::Year => previous_average,
+        Range::Week | Range::Month => usual.map(|usual| usual.typical),
+        Range::SixMonths | Range::Year => previous_average,
     };
     let (above_typical, counted) = figures::above(&buckets, typical);
     let (versus_typical, versus_typical_pct) = figures::difference(average, typical);
@@ -298,6 +336,8 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
         average,
         previous_average,
         typical,
+        typical_low: usual.map(|usual| usual.low),
+        typical_high: usual.map(|usual| usual.high),
         above_typical,
         counted,
         versus_typical,

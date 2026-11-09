@@ -73,6 +73,17 @@ struct TodoDetailView: View {
                 }
             }
         }
+        // THE CUSTOM REPEAT SHEET: the editor's own, over this task's rule; Done is Rust's.
+        .sheet(isPresented: Binding(
+            get: { hasCustomRepeat(state) },
+            set: { open in if !open, hasCustomRepeat(state) { send(event { $0.fieldClosed = .init() }) } }
+        )) {
+            if case let .data(detail)? = state.content, detail.hasCustomRepeat {
+                AgendaCustomRepeatSheetView(sheet: detail.customRepeat) { editorEvent in
+                    send(event { $0.customRepeat = editorEvent })
+                }
+            }
+        }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
             set: { open in if !open, state.hasConfirm { send(event { $0.dismissed = .init() }) } }
@@ -88,6 +99,11 @@ struct TodoDetailView: View {
         .onChange(of: state.finished) { _, finished in
             if finished { onClose() }
         }
+    }
+
+    private func hasCustomRepeat(_ state: Centraid_Core_V1_TodoDetailState) -> Bool {
+        if case let .data(detail)? = state.content { return detail.hasCustomRepeat }
+        return false
     }
 
     private func readContent(_ state: Centraid_Core_V1_TodoDetailState) -> ScreenContent<Centraid_Core_V1_TodoDetailData> {
@@ -141,10 +157,36 @@ struct TodoDetailView: View {
                         send(event { $0.notes = .with { $0.notes = typed } })
                     }
                 KitHairline()
-                ForEach(detail.fields, id: \.key) { field in
-                    fieldRow(field, today: detail.today)
+                // THE GROUPED CARDS (#1173): a field with a `group` opens a new card under that heading.
+                ForEach(Self.cards(detail.fields), id: \.id) { card in
+                    if !card.heading.isEmpty {
+                        SectionHeader(title: card.heading)
+                            .padding(.top, 12)
+                            .accessibilityIdentifier("tasks-detail-group-\(card.id)")
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(card.fields, id: \.key) { field in
+                            fieldRow(field, today: detail.today)
+                        }
+                    }
+                    .background(Surface.card)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                }
+                // THE TASK'S ADDRESS, as it is stored, opened by the core's own OpenUrl effect.
+                if detail.hasLink {
+                    linkRow(detail.link)
                 }
                 subtasks(detail)
+                if detail.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: detail.attachments,
+                        idPrefix: "agenda-detail-attachment",
+                        headIdentifier: "agenda-detail-attachments",
+                        open: open,
+                        send: { attachment in send(event { $0.attachment = attachment }) }
+                    )
+                }
                 HStack(spacing: 12) {
                     if !detail.deleteLabel.isEmpty {
                         KitOutlineButton(label: detail.deleteLabel, tone: "net") { send(event { $0.delete = .init() }) }
@@ -177,7 +219,23 @@ struct TodoDetailView: View {
     /// offers them, and a tag entry for Tags.
     @ViewBuilder
     private func fieldRow(_ field: Centraid_Core_V1_TodoField, today: String) -> some View {
-        if field.sheet {
+        if field.toggle {
+            // A SWITCH ROW (Flag): the tap is a choice, "on" or "off".
+            Toggle(isOn: Binding(
+                get: { field.on },
+                set: { on in send(event { $0.fieldChoice = .with { $0.field = field.key; $0.key = on ? "on" : "off" } }) }
+            )) {
+                Text(field.label)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color(field.enabled ? "text" : "textDisabled", scheme))
+            }
+            .kitToggle()
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .overlay(alignment: .bottom) { KitHairline() }
+            .disabled(!field.enabled)
+            .accessibilityIdentifier("tasks-field-\(field.key)")
+        } else if field.sheet {
             ChoiceFieldRow(key: field.label, value: field.value, identifier: "tasks-field-\(field.key)") {
                 send(event { $0.fieldOpened = .with { $0.field = field.key } })
             }
@@ -228,6 +286,51 @@ struct TodoDetailView: View {
             .disabled(!field.enabled)
             .accessibilityIdentifier("tasks-field-\(field.key)")
         }
+    }
+
+    /// The link row: its key, the address and the verb that opens it.
+    private func linkRow(_ link: Centraid_Core_V1_TodoLink) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(link.label)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                Text(link.url)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            KitLink(label: link.openLabel, identifier: "agenda-detail-link-open") {
+                send(event { $0.openLink = .init() })
+            }
+            .accessibilityLabel(link.accessibilityLabel.isEmpty ? link.openLabel : link.accessibilityLabel)
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .overlay(alignment: .bottom) { KitHairline() }
+        .accessibilityIdentifier("agenda-detail-link")
+    }
+
+    /// One card of fields: the heading its first field carries, and the id of that field.
+    private struct FieldCard {
+        let id: String
+        let heading: String
+        var fields: [Centraid_Core_V1_TodoField]
+    }
+
+    /// The fields cut into cards: a new one at each field whose `group` is not empty.
+    private static func cards(_ fields: [Centraid_Core_V1_TodoField]) -> [FieldCard] {
+        var cards: [FieldCard] = []
+        for field in fields {
+            if !field.group.isEmpty || cards.isEmpty {
+                cards.append(FieldCard(id: field.key, heading: field.group, fields: [field]))
+            } else {
+                cards[cards.count - 1].fields.append(field)
+            }
+        }
+        return cards
     }
 
     private func addTag() {

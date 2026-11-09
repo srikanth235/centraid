@@ -1,7 +1,31 @@
 package dev.centraid.android.screens.money
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.toggleableState
+import dev.centraid.android.kit.SheetPage
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.android.kit.rememberEditorText
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -42,6 +66,13 @@ import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.KitSegment
+import dev.centraid.android.kit.KitSegmented
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
@@ -63,7 +94,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 // ---------------------------------------------------------------------------
-// money.home: Spending · Activity · Cash flow, More as a sheet
+// money.home: Activity (home) · Spending · Cash flow, More as a sheet
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -127,12 +158,19 @@ internal fun MoneyHomeScreen(
             onRetry = { onEvent(MoneyHomeEvent(refreshed = MoneyHomeEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) { home ->
-            LazyColumn {
-                if (home.shows_month) item(key = "month") { MonthStepper(state, onEvent) }
-                when (state.destination) {
-                    MoneyHomeState.Destination.DESTINATION_ACTIVITY -> activity(state, onEvent, onOpen, addStatement)
-                    MoneyHomeState.Destination.DESTINATION_CASHFLOW -> cashflow(state, addStatement)
-                    else -> spending(state, onOpen, addStatement)
+            if (state.destination == MoneyHomeState.Destination.DESTINATION_CASHFLOW) {
+                LazyColumn { cashflow(state, addStatement) }
+            } else {
+                // ACTIVITY (home) AND SPENDING are pages of cards on the page colour.
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (state.destination == MoneyHomeState.Destination.DESTINATION_SPENDING) {
+                        spending(state, onEvent, onOpen, addStatement)
+                    } else {
+                        activity(state, onEvent, onOpen, addStatement)
+                    }
                 }
             }
         }
@@ -160,77 +198,103 @@ internal fun MoneyHomeScreen(
     }
 }
 
-@Composable
-private fun MonthStepper(state: MoneyHomeState, onEvent: (MoneyHomeEvent) -> Unit) {
-    val chrome = state.chrome
-    val home = state.data_ ?: return
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconKey("ChevronLeft", chrome?.previous_month_label.orEmpty(), "money-month-previous") {
-            onEvent(MoneyHomeEvent(month_stepped = MoneyHomeEvent.MonthStepped(months = -1)))
-        }
-        Text(
-            home.month_label,
-            style = centraidType("smallStrong"),
-            color = centraidColor("text"),
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { heading() },
-        )
-        IconKey("ChevronRight", chrome?.next_month_label.orEmpty(), "money-month-next", enabled = home.can_step_next) {
-            onEvent(MoneyHomeEvent(month_stepped = MoneyHomeEvent.MonthStepped(months = 1)))
-        }
-    }
-}
-
-private fun LazyListScope.spending(state: MoneyHomeState, onOpen: (Route) -> Unit, addStatement: () -> Unit) {
+/**
+ * SPENDING: the chart card (spent so far, Week / Day, the bars and the sentence under the
+ * selected one), the categories with their progress, then the notes and the recurring row.
+ */
+private fun LazyListScope.spending(
+    state: MoneyHomeState,
+    onEvent: (MoneyHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    addStatement: () -> Unit,
+) {
     val spending = state.data_?.spending ?: return
     val empty = spending.empty
     if (empty != null) {
         item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
-    items(spending.heroes.size, key = { "hero-$it" }) { index -> MoneyHeroView(spending.heroes[index]) }
-    item(key = "days") { MoneyNote(spending.days_left_label) }
-    items(spending.in_out_net.size, key = { "net-$it" }) { index ->
-        MoneyFigureCard(spending.in_out_net[index].figures)
+    items(spending.bars.size, key = { "bars-$it" }) { index ->
+        val bars = spending.bars[index]
+        val hero = spending.heroes.getOrNull(index) ?: spending.heroes.firstOrNull()
+        Column(Modifier.fillMaxWidth().kitCard().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (bars.heading.isNotEmpty()) KitText(bars.heading, KitType.Group, Surface.meta)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Column(
+                    Modifier.weight(1f).semantics(mergeDescendants = true) {}.testTag("money-hero"),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    KitText(hero?.spent_label.orEmpty(), KitType.Meta, Surface.meta)
+                    KitText(hero?.spent.orEmpty(), KitType.Title, Surface.ink, maxLines = 1)
+                }
+                KitSegmented(
+                    segments = bars.modes.map { KitSegment(id = it.key, label = it.label, selected = it.selected) },
+                    modifier = Modifier.width(140.dp),
+                    testTag = "money-bars-mode",
+                    onPick = { key -> onEvent(MoneyHomeEvent(bars_mode_picked = MoneyHomeEvent.BarsModePicked(key = key))) },
+                )
+            }
+            MoneyBarsChart(bars) { picked ->
+                onEvent(MoneyHomeEvent(bar_picked = MoneyHomeEvent.BarPicked(index = picked)))
+            }
+        }
     }
     spending.tables.forEach { table ->
         item(key = "table-${table.currency}") {
-            // THE COLUMN HEADS are the table's own words, drawn once above its lines.
-            Column {
-                MoneySection(table.heading)
-                MoneyCategoryHeader(planned = table.planned_label, spent = table.spent_label, left = table.left_label)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (table.heading.isNotEmpty()) KitText(table.heading, KitType.Group, Surface.meta, Modifier.padding(horizontal = 4.dp))
+                MoneyCardStack {
+                    table.rows.forEachIndexed { index, line ->
+                        if (index > 0) MoneyHairline()
+                        MoneyCategoryProgressRow(line) { line.route?.let(onOpen) }
+                    }
+                    table.more?.let { more ->
+                        MoneyHairline()
+                        MoneyRestRow(more, pending = false, testTag = "money-categories-more") {
+                            onEvent(MoneyHomeEvent(categories_expanded = MoneyHomeEvent.CategoriesExpanded()))
+                        }
+                    }
+                    table.uncategorised?.let { none ->
+                        MoneyHairline()
+                        MoneyRestRow(none, pending = true, testTag = "money-needs-category") {
+                            onEvent(MoneyHomeEvent(category_picked = MoneyHomeEvent.CategoryPicked(key = none.key)))
+                        }
+                    }
+                }
             }
         }
-        items(table.rows, key = { "c-${table.currency}-${it.route?.money_target?.category_id}" }) { line ->
-            // Planned, spent and left across the page; a line with no plan has only what was spent.
-            MoneyCategoryRow(
-                line = line,
-                accessibility = spoken(line.accessibility_label, if (line.has_plan) line.left else line.spent),
-                testTag = "money-category-${line.route?.money_target?.category_id}",
-                onTap = { line.route?.let(onOpen) },
-            )
-        }
     }
-    spending.notes.forEach { note -> item(key = "note-$note") { MoneyNote(note) } }
     if (spending.recurring_label.isNotEmpty()) {
         item(key = "recurring") {
-            CentraidRow(
-                title = spending.recurring_label,
-                meta = spending.recurring_meta,
-                testTag = "money-recurring",
-                onTap = { spending.recurring_route?.let(onOpen) },
-            )
+            MoneyCardStack {
+                CentraidRow(
+                    title = spending.recurring_label,
+                    meta = spending.recurring_meta,
+                    testTag = "money-recurring",
+                    onTap = { spending.recurring_route?.let(onOpen) },
+                )
+            }
         }
+    }
+    spending.notes.forEach { note ->
+        item(key = "note-$note") { KitText(note, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp)) }
     }
     items(spending.definitions.size, key = { "def-$it" }) { index ->
         val fact = spending.definitions[index]
-        FieldRow(key = fact.label, value = fact.detail)
+        Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            KitText(fact.label, KitType.Meta, Surface.body)
+            KitText(fact.detail, KitType.Meta, Surface.meta)
+        }
     }
-    item(key = "window") { MoneyNote(spending.window_note) }
+    if (spending.window_note.isNotEmpty()) {
+        item(key = "window") { KitText(spending.window_note, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp)) }
+    }
 }
 
+/**
+ * ACTIVITY, home: the month's overview card, the review banner, then each day's rows in a card
+ * under its heading and what it came to.
+ */
 private fun LazyListScope.activity(
     state: MoneyHomeState,
     onEvent: (MoneyHomeEvent) -> Unit,
@@ -243,23 +307,40 @@ private fun LazyListScope.activity(
         item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
         return
     }
-    if (activity.needs_label.isNotEmpty()) {
+    items(activity.heroes.size, key = { "hero-$it" }) { index ->
+        MoneyOverviewCard(activity.heroes[index], activity.days_left_label, activity.in_out_net.getOrNull(index))
+    }
+    if (activity.needs_title.isNotEmpty()) {
         item(key = "needs") {
             // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
-            MoneyNeedsRow(label = activity.needs_label, figures = activity.needs_category) {
+            MoneyReviewBanner(
+                count = activity.needs_count,
+                title = activity.needs_title,
+                review = activity.review_label,
+                spokenLabel = activity.needs_label,
+            ) {
                 onEvent(MoneyHomeEvent(category_picked = MoneyHomeEvent.CategoryPicked(key = activity.needs_key)))
             }
         }
     }
     activity.sections.forEach { section ->
-        item(key = "day-${section.day}") { MoneySection(section.heading) }
-        items(section.rows, key = { "t-${it.txn_id}" }) { row ->
-            MoneyRowView(row) { row.route?.let(onOpen) }
+        item(key = "day-${section.day}") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MoneyDayHeading(section)
+                MoneyCardStack {
+                    section.rows.forEachIndexed { index, row ->
+                        if (index > 0) MoneyHairline(inset = 64.dp)
+                        MoneyTxnRow(row) { row.route?.let(onOpen) }
+                    }
+                }
+            }
         }
     }
     item(key = "window") {
-        MoneyNote(activity.window)
-        ShowMoreFooter(visible = activity.more, loading = false, onMore = { onEvent(MoneyHomeEvent(show_more = MoneyHomeEvent.ShowMore())) })
+        Column {
+            if (activity.window.isNotEmpty()) KitText(activity.window, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp))
+            ShowMoreFooter(visible = activity.more, loading = false, onMore = { onEvent(MoneyHomeEvent(show_more = MoneyHomeEvent.ShowMore())) })
+        }
     }
 }
 
@@ -312,33 +393,35 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         ) { tx ->
             LazyColumn {
                 item(key = "head") {
-                    Text(
-                        tx.direction_label,
-                        style = centraidType("annotLabel"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                    )
-                    Text(
-                        money(tx.amount),
-                        style = centraidType("display"),
-                        color = toneInk(tx.amount_tone, neutral = "text"),
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
-                    )
-                    Text(
-                        tx.title,
-                        style = centraidType("title"),
-                        color = centraidColor("text"),
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).semantics { heading() },
-                    )
-                    Row(Modifier.padding(horizontal = KitGeometry.GUTTER)) { tx.chips.forEach { StatusChipView(it, Modifier.padding(end = 6.dp)) } }
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        KitText(tx.title, KitType.Title, Surface.ink, Modifier.semantics { heading() })
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            KitText(tx.amount, KitType.Title, moneyInk(tx.amount_positive, tx.amount_tone), maxLines = 1)
+                            KitText(tx.direction_label, KitType.Meta, Surface.meta, Modifier.padding(bottom = 4.dp))
+                        }
+                        Row { tx.chips.forEach { StatusChipView(it, Modifier.padding(end = 6.dp)) } }
+                    }
                 }
-                items(tx.facts.size, key = { "fact-$it" }) { index -> FieldRow(key = tx.facts[index].label, value = tx.facts[index].detail) }
+                item(key = "facts") {
+                    MoneyPageCard {
+                        tx.facts.forEachIndexed { index, fact ->
+                            if (index > 0) MoneyHairline()
+                            FieldRow(key = fact.label, value = fact.detail)
+                        }
+                    }
+                }
                 tx.notes.forEach { note -> item(key = "note-$note") { MoneyNote(note) } }
                 tx.transfer_offer?.let { offer ->
                     item(key = "offer-transfer") { OfferCard(offer, "transfer", onEvent) }
                 }
                 tx.rule_offer?.let { offer ->
                     item(key = "offer-rule") { OfferCard(offer, "rule", onEvent) }
+                }
+                tx.with_offer?.let { offer ->
+                    item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
                 }
                 items(tx.actions, key = { "act-${it.key}" }) { action ->
                     CentraidRow(
@@ -356,10 +439,14 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         }
     }
     val data2 = state.data_
+    state.with_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(with_link = link)) }
+    }
     when (state.sheet) {
-        MoneyTransactionState.Sheet.SHEET_CATEGORY -> OptionSheet(
+        MoneyTransactionState.Sheet.SHEET_CATEGORY -> MoneyChoiceSheet(
             title = data2?.category_sheet_title.orEmpty(),
-            options = data2?.category_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            choices = data2?.category_options.orEmpty(),
+            tagPrefix = "money-category-option",
             onPick = { key -> onEvent(MoneyTransactionEvent(category = MoneyTransactionEvent.CategoryPicked(category_id = key))) },
             onDismiss = { onEvent(MoneyTransactionEvent(sheet_closed = MoneyTransactionEvent.SheetClosed())) },
         )
@@ -393,15 +480,25 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
 /** An offer the app proposes: words, and the member's two choices. Nothing is written until Accept. */
 @Composable
 private fun OfferCard(offer: centraid.core.v1.MoneyOffer, key: String, onEvent: (MoneyTransactionEvent) -> Unit) {
-    MoneySection(offer.title)
-    MoneyNote(offer.body, ink = "text")
-    MoneyNote(offer.detail)
-    Row(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
-        OutlineButton(label = offer.accept_label, testTag = "money-offer-accept-$key") {
-            onEvent(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = key)))
-        }
-        OutlineButton(label = offer.dismiss_label, testTag = "money-offer-dismiss-$key", modifier = Modifier.padding(start = 8.dp)) {
-            onEvent(MoneyTransactionEvent(offer_dismissed = MoneyTransactionEvent.OfferDismissed(key = key)))
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(dev.centraid.design.CentraidScale.cardRadius.dp))
+            .background(StateColor.Amber.tint)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        KitText(offer.title, KitType.Row, Surface.ink)
+        if (offer.body.isNotEmpty()) KitText(offer.body, KitType.Row, Surface.ink)
+        if (offer.detail.isNotEmpty()) KitText(offer.detail, KitType.Meta, Surface.meta)
+        Row {
+            OutlineButton(label = offer.accept_label, testTag = "money-offer-accept-$key") {
+                onEvent(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = key)))
+            }
+            OutlineButton(label = offer.dismiss_label, testTag = "money-offer-dismiss-$key", modifier = Modifier.padding(start = 8.dp)) {
+                onEvent(MoneyTransactionEvent(offer_dismissed = MoneyTransactionEvent.OfferDismissed(key = key)))
+            }
         }
     }
 }
@@ -410,15 +507,47 @@ private fun OfferCard(offer: centraid.core.v1.MoneyOffer, key: String, onEvent: 
 // money.target
 // ---------------------------------------------------------------------------
 
+/**
+ * `money.target` as a SHEET over Money (`Route.sheet`), the way MoneyTarget.dc.html draws it: the
+ * X, the title, the figures, the amount with "Use average" inside the field, the carry switch, the
+ * next month's effect, and Save pinned at the foot with Remove under it.
+ */
 @Composable
 internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEvent) -> Unit, onBack: () -> Unit) {
     val chrome = state.chrome
     val data = state.data_
-    PushedPage(
-        title = data?.title.orEmpty().ifEmpty { chrome?.title.orEmpty() },
-        parentTitle = chrome?.back_label.orEmpty(),
-        onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+    // SAVED OR REMOVED: Rust says the screen is done, the sheet closes.
+    LaunchedEffect(state.finished) { if (state.finished) onBack() }
+    SheetPage(
+        title = chrome?.title.orEmpty(),
+        onDismiss = onBack,
+        foot = {
+            if (state.status != null) StatusLine(state.status?.sentence.orEmpty())
+            if (data != null) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    InkButton(
+                        label = data.save_label,
+                        enabled = data.can_save,
+                        testTag = "money-target-save",
+                    ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
+                    if (data.remove_label.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 50.dp)
+                                .clickable { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
+                                .testTag("money-target-remove"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(data.remove_label, style = centraidType("sheetKey"), color = StateColor.Red.text)
+                        }
+                    }
+                }
+            }
+        },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -426,59 +555,101 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) { target ->
             LazyColumn {
-                item(key = "month") { MoneyNote(target.month_label) }
+                item(key = "head") {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 8.dp)) {
+                        KitText(target.title, KitType.Section, Surface.ink, maxLines = 2)
+                        KitText(target.month_label, KitType.Row, Surface.meta)
+                    }
+                }
+                item(key = "figures") { MoneyFigureCard(target.figures) }
                 item(key = "amount") {
-                    EditableFieldRow(
-                        key = "${target.amount_label} · ${target.currency_label}",
-                        value = state.amount_text,
-                        reload = "${state.month}-${state.category_id}",
-                        testTag = "money-target-amount",
-                        onEdit = { onEvent(MoneyTargetEvent(amount = MoneyTargetEvent.AmountEdited(text = it))) },
-                    )
+                    TargetAmountField(state, target, onEvent)
                     MoneyNote(target.issue, ink = "net")
                     MoneyNote(target.exponent_hint)
                 }
-                items(target.figures.size, key = { "fig-$it" }) { index -> MoneyFigureRow(target.figures[index]) }
-                item(key = "average") {
-                    OutlineButton(
-                        label = target.use_average_label,
-                        testTag = "money-target-average",
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
-                    ) { onEvent(MoneyTargetEvent(use_average = MoneyTargetEvent.UseAverage())) }
-                }
-                item(key = "carry") {
-                    MoneyToggleRow(target.carry_label, state.carry, "money-target-carry") {
-                        onEvent(MoneyTargetEvent(carry = MoneyTargetEvent.CarryToggled()))
-                    }
-                    MoneyNote(target.carry_note)
-                }
+                item(key = "carry") { TargetCarryCard(target, state.carry, onEvent) }
                 item(key = "preview") {
-                    MoneyHeading(target.preview_label)
-                    MoneyFigureRow(centraid.core.v1.MoneyFigure(label = target.preview_label, amount = target.preview))
+                    MoneyFigureCard(listOf(centraid.core.v1.MoneyFigure(label = target.preview_label, amount = target.preview)))
                     MoneyNote(target.preview_note)
-                }
-                item(key = "save") {
-                    // SAVE AND REMOVE ARE ALTERNATIVES: one stack.
-                    val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
-                    ChoiceStack(Modifier.padding(vertical = 8.dp)) {
-                        InkButton(
-                            label = target.save_label,
-                            enabled = target.can_save,
-                            testTag = "money-target-save",
-                            modifier = gutter,
-                        ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
-                        if (target.remove_label.isNotEmpty()) {
-                            OutlineButton(
-                                label = target.remove_label,
-                                ink = "net",
-                                testTag = "money-target-remove",
-                                modifier = gutter,
-                            ) { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
-                        }
-                    }
                 }
             }
         }
+    }
+}
+
+/** THE AMOUNT, on a card with the accent's ring: the currency, the figure, and "Use average" inside. */
+@Composable
+private fun TargetAmountField(state: MoneyTargetState, target: centraid.core.v1.MoneyTargetData, onEvent: (MoneyTargetEvent) -> Unit) {
+    val accent = appAccent()
+    val editor = rememberEditorText(state.amount_text, "${state.month}-${state.category_id}")
+    val text = editor.text
+    val label = "${target.amount_label} · ${target.currency_label}"
+    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
+        KitText(target.amount_label, KitType.Meta, Surface.meta, Modifier.padding(start = 4.dp, bottom = 6.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(KitGeometry.RADIUS))
+                .background(Surface.card)
+                .border(1.5.dp, accent.fill, RoundedCornerShape(KitGeometry.RADIUS))
+                .padding(start = 14.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            KitText(target.currency_label, KitType.Row, Surface.meta)
+            BasicTextField(
+                value = text.value,
+                onValueChange = { next ->
+                    if (editor.edited(next)) onEvent(MoneyTargetEvent(amount = MoneyTargetEvent.AmountEdited(text = next)))
+                },
+                singleLine = true,
+                textStyle = centraidType("title").copy(color = Surface.ink),
+                cursorBrush = SolidColor(Surface.ink),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("money-target-amount")
+                    .semantics { contentDescription = label },
+            )
+            Box(
+                Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable { onEvent(MoneyTargetEvent(use_average = MoneyTargetEvent.UseAverage())) }
+                    .padding(horizontal = 6.dp)
+                    .testTag("money-target-average"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(target.use_average_label, style = centraidType("sheetKey"), color = accent.text)
+            }
+        }
+    }
+}
+
+/** THE CARRY SWITCH, with its sentence under the label, on a card. */
+@Composable
+private fun TargetCarryCard(target: centraid.core.v1.MoneyTargetData, carry: Boolean, onEvent: (MoneyTargetEvent) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .kitCard()
+            .clickable { onEvent(MoneyTargetEvent(carry = MoneyTargetEvent.CarryToggled())) }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .testTag("money-target-carry")
+            .semantics(mergeDescendants = true) {
+                role = Role.Switch
+                toggleableState = if (carry) ToggleableState.On else ToggleableState.Off
+                contentDescription = target.carry_label
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            KitText(target.carry_label, KitType.Row, Surface.ink)
+            KitText(target.carry_note, KitType.Meta, Surface.meta)
+        }
+        Switch(checked = carry, onCheckedChange = null, colors = kitSwitchColors())
     }
 }
 
@@ -500,18 +671,23 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
                 EmptyStateView(empty, onAction = null)
             } else {
                 LazyColumn {
-                    items(recurring.rows, key = { it.key }) { row ->
-                        CentraidRow(
-                            title = row.merchant,
-                            meta = listOf(row.meta, row.detail).filter { it.isNotEmpty() }.joinToString(" · "),
-                            trailing = money(row.amount),
-                            chips = row.chips.map { it },
-                            a11y = spoken(row.accessibility_label, row.amount),
-                            testTag = "money-recurring-${row.key}",
-                        )
+                    item(key = "rows") {
+                        MoneyPageCard {
+                            recurring.rows.forEachIndexed { index, row ->
+                                if (index > 0) MoneyHairline()
+                                CentraidRow(
+                                    title = row.merchant,
+                                    meta = listOf(row.meta, row.detail).filter { it.isNotEmpty() }.joinToString(" · "),
+                                    trailing = money(row.amount),
+                                    chips = row.chips.map { it },
+                                    a11y = spoken(row.accessibility_label, row.amount),
+                                    testTag = "money-recurring-${row.key}",
+                                )
+                            }
+                        }
                     }
                     items(recurring.definitions.size, key = { "def-$it" }) { index ->
-                        FieldRow(key = recurring.definitions[index].label, value = recurring.definitions[index].detail)
+                        MoneyNote("${recurring.definitions[index].label}. ${recurring.definitions[index].detail}")
                     }
                     item(key = "window") { MoneyNote(recurring.window_note) }
                 }
@@ -552,10 +728,20 @@ internal fun MoneySearchScreen(
                                 SearchAskRow(search.ask, onOpen)
                             }
                         } else {
-                            LazyColumn {
-                                item(key = "count") { StatusLine(search.count_label) }
-                                items(search.rows, key = { "t-${it.txn_id}" }) { row ->
-                                    MoneyRowView(row) { row.route?.let(onOpen) }
+                            LazyColumn(
+                                contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                item(key = "count") {
+                                    KitText(search.count_label, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp).testTag("money-search-count"))
+                                }
+                                item(key = "rows") {
+                                    MoneyCardStack {
+                                        search.rows.forEachIndexed { index, row ->
+                                            if (index > 0) MoneyHairline(inset = 64.dp)
+                                            MoneyTxnRow(row) { row.route?.let(onOpen) }
+                                        }
+                                    }
                                 }
                                 // THE ASK ROW closes the answer (#1097).
                                 item(key = "ask") { SearchAskRow(search.ask, onOpen) }

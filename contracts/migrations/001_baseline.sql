@@ -67,7 +67,7 @@ CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
 CREATE TABLE edge (
   from_id    TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   rel        TEXT NOT NULL CHECK (rel IN
-               ('contains','tagged','about','links','attached','attendee','with','related')),
+               ('contains','tagged','about','links','attached','attendee','with','related','depicts')),
   to_id      TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   label_id   TEXT REFERENCES entity(id) ON DELETE CASCADE,
   position   REAL,
@@ -107,6 +107,9 @@ CREATE TABLE concept (
   kind      TEXT NOT NULL CHECK (kind IN ('tag','flag','category','workout_kind','activity_kind','relation')),
   key       TEXT NOT NULL,
   parent_id TEXT REFERENCES concept(id),
+  -- A label's colour: one key of the design palette ([list] in design/tokens.toml). Tags only.
+  color     TEXT CHECK (color IS NULL OR (kind = 'tag' AND color IN
+              ('blue','mustard','violet','petrol','indigo','graphite','raspberry','orchid'))),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (kind, key)
 ) STRICT;
@@ -117,6 +120,8 @@ CREATE TABLE container (
   kind      TEXT NOT NULL CHECK (kind IN ('notebook','folder','album','list','project','section','area','calendar')),
   parent_id TEXT REFERENCES container(id),
   color     TEXT,
+  -- A key of `design/icons.toml`; the command boundary says which keys a list or calendar may wear.
+  icon      TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover     TEXT REFERENCES blob(hash),
   position  REAL NOT NULL DEFAULT 0,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -346,6 +351,8 @@ CREATE TABLE event (
   place_id       TEXT REFERENCES place(id),
   url            TEXT,
   reminders      TEXT CHECK (reminders IS NULL OR json_valid(reminders)),
+  -- Minutes of travel the member allows before it starts.
+  travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (calendar_id, calendar_kind) REFERENCES entity(id, kind),
@@ -389,6 +396,7 @@ CREATE TABLE task (
   zone              TEXT,
   series_id         TEXT REFERENCES task(id),
   remind_before_min INTEGER CHECK (remind_before_min IS NULL OR remind_before_min >= 0),
+  url               TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
   effort_min        INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   parent_id         TEXT REFERENCES task(id) CHECK (parent_id IS NULL OR parent_id <> id),
   project_id        TEXT,
@@ -785,7 +793,14 @@ INSERT INTO edge_shape (rel, from_kind, to_kind) VALUES
   ('attached', '*', 'photo'),
   ('attendee', 'event', 'person'),
   ('with', 'activity', 'person'),
-  ('related', 'person', 'person');
+  ('related', 'person', 'person'),
+  ('with', 'txn', 'person'),
+  ('about', 'document', 'person'),
+  ('depicts', 'photo', 'person'),
+  ('about', 'locker_item', 'account'),
+  ('about', 'locker_item', 'place'),
+  ('about', 'locker_item', 'person'),
+  ('with', 'locker_item', 'person');
 
 INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES
   ('flag:starred', 'flag', 'Starred', '2026-10-21T00:00:00.000Z', '2026-10-21T00:00:00.000Z'),

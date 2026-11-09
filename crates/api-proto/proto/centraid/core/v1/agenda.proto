@@ -1,6 +1,6 @@
 // AGENDA'S FIVE QUERIES, AS THE CORE ANSWERS THEM (#1046, #1029).
 //
-// `crates/apps/agenda` runs `upcoming`, `day-context`, `parties` and `search`
+// `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs `upcoming`, `day-context`, `parties` and `search`
 // over the vault — six-plus tables joined and every repeating series expanded by
 // the one recurrence engine (D-1020-S1) — and these are its answers, typed. A
 // shell reaches them through `app_query.proto`'s `AppQueryRequest`, and draws
@@ -10,7 +10,7 @@
 // TYPED, NOT JSON. `commonMain` has no JSON dependency and Wire and
 // SwiftProtobuf already decode everything else the core says, so the answers
 // are messages. Every message here mirrors one Rust struct in
-// `crates/apps/agenda/src/queries.rs`, field for field; `crates/core`'s
+// `crates/apps/calendar/src/queries.rs` and `crates/apps/reminders/src/queries.rs`, field for field; `crates/core`'s
 // `app_query` module is the one conversion, and a field that moved moves there.
 //
 // Instants are the vault's own text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`, and days
@@ -22,7 +22,7 @@
 // groups by the member's local day, draws a now line and prints "08:15". So a
 // request states `tz`, and the answer carries the local readings — every
 // occurrence's `local_start`, `local_end` and `local_days`, and the answer's
-// `today` and `now_local` — computed by `crates/apps/agenda`'s `local` module
+// `today` and `now_local` — computed by `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks)'s `local` module
 // against the bundled zone database. A shell reads those strings and does no
 // zone arithmetic; the only civil arithmetic left to it is a weekday from a
 // `YYYY-MM-DD`, which is pure.
@@ -129,9 +129,9 @@ message AgendaEvent {
   // surface draws no clock time for it (#1046, a v0 defect not carried).
   optional string recurrence_semantics = 9;
   // THE RULE, FOR AN EDITOR AND NEVER FOR A MEMBER. An editor reads it to show
-  // which repeat preset is set; what a member reads is `recurrence_summary`,
-  // and a raw RRULE on a screen is the defect that field exists to prevent
-  // (#834).
+  // which repeat preset is set; what a member reads is the core's sentence
+  // for it, and a raw RRULE on a screen is the defect that sentence exists to
+  // prevent (#834).
   optional string rrule = 10;
   // `supported` or `unsupported`. An unsupported rule — only an import can
   // store one; a command refuses it — expands to nothing and the anchor stays
@@ -152,12 +152,13 @@ message AgendaEvent {
   repeated AgendaAttachment attachments = 21;
   // THE OWNER FIRST, so RSVP controls lead (#337); then by name.
   repeated AgendaAttendee attendees = 22;
-  // The ONE member-facing recurrence sentence, resolved by the core. Absent
-  // on an event that does not repeat.
-  optional string recurrence_summary = 23;
+  // The sentence for the rule is built in the core strings from `rrule`
+  // (owner decision, #1173); the field that carried it is retired.
+  reserved 23;
+  reserved "recurrence_summary";
   // True on an occurrence the expansion moved off the series' own start, and
   // FALSE on the occurrence AT it — the anchor. So this is not "does this
-  // repeat": `recurrence_summary` present is.
+  // repeat": `rrule` present is.
   bool is_recurrence_instance = 24;
   // THE LIST'S KEY, NEVER THE ROW'S IDENTITY: the event id for a one-off, and
   // `<event_id>:<wall clock>` for every occurrence of a series, the anchor
@@ -214,6 +215,13 @@ message AgendaEvent {
   string next_original_start_local = 35;
   // That occurrence's start in the request's `tz`, spelled as `local_start`.
   string next_local_start = 36;
+
+  // --- Wave 2 (#1173). ---
+  // Whether the event blocks its time; `false` is the member's "free". A row
+  // that does not say is busy, as the column's default is.
+  bool busy = 37;
+  // Minutes of travel the member allows before it starts. Absent for none.
+  optional int64 travel_min = 38;
 }
 
 // One reminder: how long before the start it fires.
@@ -263,6 +271,8 @@ message AgendaCalendar {
   string calendar_id = 1;
   optional string name = 3;
   optional string color = 4;
+  // A key of `design/icons.toml`, when the member chose one (#1173).
+  optional string icon = 7;
 }
 
 // One birthday inside the range.
@@ -354,6 +364,83 @@ message AgendaEventDetail {
   // name it. ABSENT when there is no event, the event names no calendar, or
   // the calendar is gone.
   optional AgendaCalendar calendar = 4;
+  // THE GUESTS THE PHONE'S CALENDAR STATES for an event the vault follows
+  // (#1173): a read-only list, the phone's own word. A guest that is a person
+  // here is also in `AgendaEvent.attendees`; the rest are only listed here.
+  repeated AgendaFollowedGuest followed_guests = 5;
+}
+
+// One guest a followed phone calendar states for an event.
+message AgendaFollowedGuest {
+  optional string name = 1;
+  optional string email = 2;
+  // `needs-action`, `accepted`, `declined` or `tentative`.
+  string state = 3;
+}
+
+// `calendar.dated-reminders`: the dated reminders that fall due on the local days of a window, open and
+// ticked, every occurrence of a repeating one among them, and (when asked) the overdue ones (rounds 10
+// and 12 of #1173: Calendar shows a reminder on its day, ticks it there with Reminders' own action and
+// opens it in Reminders).
+message CalendarDatedRemindersRequest {
+  // The first and the last local day of the window, `YYYY-MM-DD`.
+  string from = 1;
+  string to = 2;
+  // The zone the days are read in (the file header's rule).
+  string tz = 3;
+  // When set, the open reminders due on a day before it are answered too, oldest first, marked
+  // `overdue`: Day on today asks with today.
+  string overdue_before = 4;
+}
+
+message CalendarDatedReminders {
+  // The day the vault clock names in `tz`, `YYYY-MM-DD`.
+  string today = 1;
+  repeated CalendarDatedReminder reminders = 2;
+}
+
+// A reminder on its day: its title, due day, due time, state and nothing else.
+message CalendarDatedReminder {
+  string task_id = 1;
+  string title = 2;
+  // `YYYY-MM-DD`.
+  string due_day = 3;
+  // `HH:MM`, or empty for a date-only due.
+  string due_time = 4;
+  // Ticked off.
+  bool done = 5;
+  // Part of a repeating series.
+  bool repeats = 6;
+  // A later occurrence the series' rule names: `task_id` is the series' open row, not this day's, so
+  // there is nothing to tick on it.
+  bool projected = 7;
+  // Open and due before the request's `overdue_before`.
+  bool overdue = 8;
+}
+
+// `calendar.attachments` and `reminders.attachments`: one page of what an event or a task has attached (#1173).
+message AgendaAttachments {
+  repeated AgendaAttachmentRow attachments = 1;
+  // The cursor of the next page, as the request's `after` spells it; absent
+  // when the attachments ended.
+  optional string next = 2;
+}
+
+// One attachment of an event or a task: a document or a photo.
+message AgendaAttachmentRow {
+  // The attached document's or photo's id (what `detach` takes as `to`).
+  string attachment_id = 1;
+  // `document` or `photo`.
+  string kind = 2;
+  optional string title = 3;
+  string content_id = 4;
+  string media_type = 5;
+  int64 byte_size = 6;
+  // When it was attached, as stored.
+  optional string attached_at = 7;
+  // The file that draws a thumbnail, when this phone holds one and it may be
+  // drawn inline. Empty: draw the kind's icon.
+  string thumbnail_path = 8;
 }
 
 message AgendaSearch {
@@ -375,7 +462,7 @@ message AgendaSearch {
 // ===========================================================================
 // THE TASKS ARE AGENDA'S (#1128): the board (a bounded window of open work plus
 // the logbook, families nested and the promotion rule applied), one task, the
-// projects, search, catch-up and the trash. `crates/apps/agenda` runs them
+// projects, search, catch-up and the trash. `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs them
 // (`task/queries.rs`) and these are its answers, typed; a shell nests no family,
 // collapses no missed period and groups no place, because each of those in
 // Kotlin or Swift is a second copy of a rule v0 already drifted on.
@@ -455,6 +542,41 @@ message AgendaTaskCatchUpRequest {
   string tz = 1;
 }
 
+// `agenda.task.reminders`: the open tasks that carry a reminder and a due, nearest
+// stored due first, answered as an `AgendaTaskBoard` (view `REMINDERS`, one group).
+message AgendaTaskRemindersRequest {
+  // The zone (the file header's rule).
+  string tz = 1;
+  // The window's size. ZERO IS THE DEFAULT (500); any other value is clamped to
+  // 20…500. The answer's `truncated` says more reminders exist beyond it.
+  uint32 limit = 2;
+}
+
+// `agenda.task.smart-counts`: the Today, Overdue and Flagged counts of every open task, at any
+// vault size.
+message AgendaTaskSmartCountsRequest {
+  // The zone the day is read in (the file header's rule).
+  string tz = 1;
+}
+
+// `agenda.task.due-rows`: the earliest-due open tasks of one window, at any vault size.
+message AgendaTaskDueRowsRequest {
+  // The zone the days are read in (the file header's rule).
+  string tz = 1;
+  // How many rows at most: 1...12; zero is 6.
+  uint32 limit = 2;
+  AgendaTaskDueWindow window = 3;
+}
+
+// Which tasks `agenda.task.due-rows` reads.
+enum AgendaTaskDueWindow {
+  AGENDA_TASK_DUE_WINDOW_UNSPECIFIED = 0;
+  // Overdue first, then due today: each by due, then the member's order.
+  AGENDA_TASK_DUE_WINDOW_NOW = 1;
+  // Tasks with a time due today or tomorrow (none overdue), by due.
+  AGENDA_TASK_DUE_WINDOW_TIMED_AHEAD = 2;
+}
+
 // `agenda.task.trash`: the trashed tasks, most recently trashed first.
 message AgendaTaskTrashRequest {
   // The zone the rows' days are read in: the stated IANA name, else the vault's;
@@ -499,9 +621,11 @@ message AgendaTask {
   // --- the recurrence, as facts (#834), plus the rule for the picker ------
   // The task repeats.
   bool repeats = 19;
-  // The one summariser's sentence ("Daily", "Every 2 weeks on Monday"), built
-  // in Rust. Absent on a one-off.
-  optional string recurrence_summary = 20;
+  // The sentence for the rule ("Every day", "Every 2 weeks on Monday") is
+  // built in the core strings from `rrule` (owner decision, #1173); the field
+  // that carried it is retired.
+  reserved 20;
+  reserved "recurrence_summary";
   // Unactioned periods, collapsed into a count: a repeating task never stacks.
   uint32 missed = 21;
   // The next open period, as the engine spells it; absent on a one-off.
@@ -544,12 +668,17 @@ message AgendaTask {
   // The stored RFC 5545 rule, verbatim; absent on a one-off. For the editor's
   // repeat picker ONLY — to pre-select a preset and send the rule back
   // through `task.edit`. A shell never expands, summarises or dates
-  // from it: `recurrence_summary`, `next_due` and `missed` are those answers
+  // from it: the core's sentence, `next_due` and `missed` are those answers
   // (#834's rule, which this field does not relax).
   optional string rrule = 38;
   // `created_at`'s civil day (`YYYY-MM-DD`) in the request zone — what
   // "sitting since" names. EMPTY when there is no `created_at`.
   string created_local_day = 39;
+  // The task carries Agenda's Flag (the vault's starred flag, a `tagged` edge):
+  // it is in the Flagged list (#1173).
+  bool flagged = 40;
+  // The task's address, as stored (#1173). Absent for none.
+  optional string url = 41;
 }
 
 message AgendaTaskTag {
@@ -591,6 +720,8 @@ message AgendaTaskProject {
   int64 sort_order = 5;
   // Open ROOTS filed here, in the board window read.
   uint32 open_count = 6;
+  // A key of `design/icons.toml`, when the member chose one (#1173).
+  optional string icon = 7;
 }
 
 message AgendaTaskSection {
@@ -674,6 +805,32 @@ message AgendaTaskBoard {
   bool truncated = 9;
   // The window actually read, after the clamp.
   uint32 window = 10;
+}
+
+// THE TRUE COUNTS (#1173): one aggregate over the vault's open tasks, never over a board's window,
+// so a vault with more open work than any window holds still says its real numbers. They count the
+// open ROOTS exactly as the board draws them (a subtask of an open parent is its parent's, an
+// unfinished child of a closed or trashed parent is a root) and read each due as the board does
+// (`next_due` of a repeating task, a due in the request's zone).
+message AgendaTaskSmartCounts {
+  // Open roots due today and not overdue.
+  uint32 today = 1;
+  // Open roots due on a day before today.
+  uint32 overdue = 2;
+  // Open roots carrying the Flag.
+  uint32 flagged = 3;
+  // The day `today` and `overdue` are counted against, `YYYY-MM-DD`: the vault clock's day in `tz`.
+  string today_day = 4;
+}
+
+// THE EARLIEST-DUE ROWS (#1173): a bounded read in due order over every open task, never a board's
+// window of the newest, so the widget's rows are the ones due soonest at any vault size. They are
+// the open roots the board draws, each placed as the board places it (a repeating task by its next
+// period). `tasks` are single rows: no families.
+message AgendaTaskDueRows {
+  // The day the rows were placed against, `YYYY-MM-DD`: the vault clock's day in `tz`.
+  string today_day = 1;
+  repeated AgendaTask tasks = 2;
 }
 
 message AgendaTaskDetail {

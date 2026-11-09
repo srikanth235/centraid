@@ -42,6 +42,49 @@ fn an_item_shows_metadata_plainly_and_a_secret_as_a_sealed_row_with_a_verb() {
 }
 
 #[test]
+fn the_hero_names_the_type_and_when_it_was_last_used_and_the_menu_holds_the_verbs() {
+    let (mut d, id) = opened_item();
+    let data = item_data(&d, id);
+    // NEVER OPENED: the hero says so under the title.
+    assert_eq!(data.subtitle, "Login · never used");
+    // THE HERO TILE draws the title's first letter, not the type's two-letter chip.
+    assert_eq!(
+        data.hero_initial,
+        data.title
+            .chars()
+            .next()
+            .unwrap()
+            .to_uppercase()
+            .to_string()
+    );
+    assert!(!data.type_chip.is_empty());
+    assert!(!data.starred && data.star_label.is_empty());
+    assert_eq!(item(&d, id).chrome.unwrap().menu_label, "More actions");
+    let keys: Vec<&str> = data.actions.iter().map(|a| a.key.as_str()).collect();
+    assert_eq!(keys, ["add_field", "star", "archive", "trash"]);
+
+    // A star is spoken, and it shows once the change lands.
+    d.send(
+        id,
+        E::LockerItem(wire::LockerItemEvent {
+            kind: Some(I::Action(wire::locker_item_event::ActionTapped {
+                key: "star".into(),
+            })),
+        }),
+    );
+    d.pump(Duration::from_millis(300));
+    let data = item_data(&d, id);
+    assert!(data.starred);
+    assert_eq!(data.star_label, "Starred");
+
+    // OPENING A SECRET STAMPS IT: the hero says it was last used today.
+    verb(&mut d, id, "password", "reveal");
+    d.pump(Duration::from_millis(300));
+    let data = item_data(&d, id);
+    assert_eq!(data.subtitle, "Login · last used today");
+}
+
+#[test]
 fn a_reveal_lives_its_window_stamps_the_item_and_is_gone_at_the_end() {
     let (mut d, id) = opened_item();
     // An item nobody has opened says so, in the Details it already has (#1146).
@@ -458,4 +501,58 @@ fn the_compromised_flag_is_sent_only_when_it_changed() {
     // The vault's rule: a rotation answers the flag set in the same save.
     assert!(editor(&d, id).finished);
     let _ = Duration::from_secs(0);
+}
+
+#[test]
+fn an_item_is_linked_to_an_account_a_place_and_a_person_behind_the_wall() {
+    use wire::link_event as le;
+    let (mut d, id) = opened_item();
+    let person = {
+        let response = arrange(
+            &d,
+            act::people::AddPerson {
+                title: "Maya Rao".into(),
+                ..Default::default()
+            },
+        );
+        serde_json::from_slice::<serde_json::Value>(&response.output).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let section = |d: &centraid_screens::testing::Driver| {
+        item_data(d, id).links.expect("a Linked to section")
+    };
+    let link = |kind: le::Kind| I::Link(wire::LinkEvent { kind: Some(kind) });
+    let first = section(&d);
+    assert_eq!(first.title, "Linked to");
+    let adds: Vec<&str> = first.adds.iter().map(|a| a.label.as_str()).collect();
+    assert_eq!(adds, ["Add account", "Add place", "Add person"]);
+    assert!(first.rows.is_empty());
+    item_event(
+        &mut d,
+        id,
+        link(le::Kind::Add(le::AddTapped {
+            key: "person".into(),
+        })),
+    );
+    let picker = item(&d, id).link_picker.unwrap();
+    assert!(picker.open && picker.candidates.iter().any(|c| c.id == person));
+    item_event(
+        &mut d,
+        id,
+        link(le::Kind::Pick(le::Picked { id: person.clone() })),
+    );
+    assert!(!item(&d, id).link_picker.unwrap().open);
+    let linked = section(&d);
+    assert_eq!(linked.rows.len(), 1);
+    assert_eq!(linked.rows[0].meta, "Person");
+    assert_eq!(linked.rows[0].title, "Maya Rao");
+    // Nothing sealed rides in the link: the row is a name and a kind.
+    item_event(
+        &mut d,
+        id,
+        link(le::Kind::Remove(le::RemoveTapped { id: person })),
+    );
+    assert!(section(&d).rows.is_empty());
 }

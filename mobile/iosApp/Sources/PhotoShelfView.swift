@@ -48,6 +48,9 @@ struct PhotoShelfView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                // THE TITLE AT 34 with its count under it (#1173); Empty trash and the
+                // selection's count sit beside the count line.
+                KitHeader(title: "", meta: countLabel)
                 header
                     .padding(.horizontal, CentraidGeometry.pageMargin)
 
@@ -74,14 +77,18 @@ struct PhotoShelfView: View {
                     )) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(state.keepOriginals.title)
-                                .centraidType("body")
-                                .foregroundStyle(Theme.color("text", scheme))
+                                .kitType(.row)
+                                .foregroundStyle(Surface.ink)
                             Text(state.keepOriginals.meta)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
                         }
                     }
                     .kitToggle()
+                    // A WHITE CARD under the switch, the card radius (#1173).
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .kitCard()
                     .disabled(!state.keepOriginals.ready)
                     .accessibilityLabel(state.keepOriginals.label)
                     .accessibilityHint(state.keepOriginals.meta)
@@ -149,9 +156,12 @@ struct PhotoShelfView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.bottom, 24, for: .scrollContent)
-        // THE LIBRARY'S GROUND: the page colour, the photographs edge to edge.
-        .background(Theme.color("bg", scheme))
+        // THE PAGE'S GROUND: the card page, the photographs edge to edge.
+        .background(Surface.page.ignoresSafeArea())
+        .appAccent("photos")
+        // THE TITLE IS INLINE IN THE BAR'S TOP ROW beside the back chevron (#1173, round 9).
         .navigationTitle(state.title)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if state.hasAlbum, !state.album.trashed {
                 ToolbarItem(placement: .primaryAction) {
@@ -236,7 +246,6 @@ struct PhotoShelfView: View {
                     shelf { $0.locationChosen = .with { $0.exact = true } }
                 }
             }
-            .presentationDetents([.height(220)])
         }
         .sheet(isPresented: Binding(
             get: { state.hasRename },
@@ -284,9 +293,6 @@ struct PhotoShelfView: View {
     /// The count, and the way into and out of selection.
     private var header: some View {
         HStack {
-            Text(countLabel)
-                .centraidType("control")
-                .foregroundStyle(Theme.color("textSoft", scheme))
             Spacer()
             if selecting {
                 Text(selection.title)

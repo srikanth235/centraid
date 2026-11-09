@@ -556,14 +556,14 @@ mod tests {
             key: "k",
             thread: None,
             replace_last: false,
-            scope: Some(App::Agenda),
+            scope: Some(App::Calendar),
             question: "what is due?",
             attachments: &[],
             said: &said,
             record: None,
         };
         let fresh = command_input(&turned, None, false);
-        assert_eq!(fresh["scope_app"], "agenda");
+        assert_eq!(fresh["scope_app"], "calendar");
         assert!(fresh.get("thread_id").is_none());
         let again = command_input(&turned, Some("t-1"), true);
         assert_eq!(again["thread_id"], "t-1");

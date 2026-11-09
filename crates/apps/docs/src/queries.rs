@@ -193,6 +193,9 @@ pub struct LabelEntry {
     /// The tag concept's id: the key a chip is drawn under.
     pub tag_id: String,
     pub label: String,
+    /// The palette colour the label wears (`concept.color`); `None` for a label
+    /// minted before labels had colours.
+    pub color: Option<String>,
 }
 
 /// One drive row.
@@ -376,6 +379,18 @@ fn fold(
     .iter()
     .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
     .collect();
+    let colors: BTreeMap<String, String> = read_of(
+        door,
+        "docs.rows.tag_colors",
+        "concept",
+        "id, color",
+        "id",
+        &concept_ids,
+        Some(("kind = ?", text("tag"))),
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "color")?)))
+    .collect();
     let mut starred: BTreeSet<String> = BTreeSet::new();
     let mut tags: BTreeMap<String, Vec<LabelEntry>> = BTreeMap::new();
     for edge in &tag_edges {
@@ -386,6 +401,7 @@ fn fold(
             starred.insert(from);
         } else if let Some(label) = labels.get(&to) {
             tags.entry(from).or_default().push(LabelEntry {
+                color: colors.get(&to).cloned(),
                 tag_id: to,
                 label: label.clone(),
             });

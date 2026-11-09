@@ -25,6 +25,12 @@ pub struct CardStep {
     pub title: String,
     /// The whole line, composed from the copy.
     pub summary: String,
+    /// When the row is, as the card spells it (`today 10:45`): what the kind's date moved to, or
+    /// empty when the step moves none (the board's second line, `Reminders · today, 10:45`).
+    pub when: String,
+    /// What moved on the row, spelled (`name "A" → "B", priority cleared`): the card's second
+    /// line for an edit. Empty when the step names no field.
+    pub changes: String,
     /// This step deletes or removes, cancels, or settles money.
     pub destructive: bool,
 }
@@ -105,11 +111,24 @@ pub fn step_of(change: &RowChange) -> CardStep {
             &[("step", &summary), ("changes", &moved.join(", "))],
         );
     }
+    let changes = if which == Say::StepEdit || change.verb == "reschedule" {
+        moved.join(", ")
+    } else {
+        String::new()
+    };
+    let when = change
+        .fields
+        .iter()
+        .find(|moved| moved.field == change.date_label)
+        .and_then(|moved| moved.to.clone())
+        .unwrap_or_default();
     CardStep {
         verb: change.verb.to_owned(),
         kind: change.kind.to_owned(),
         title: change.title.clone(),
         summary,
+        when,
+        changes,
         destructive: destructive_verb(change.verb),
     }
 }
@@ -128,6 +147,7 @@ mod tests {
             created: false,
             fields: Vec::new(),
             links: Vec::new(),
+            date_label: "due",
         }
     }
 
@@ -169,6 +189,8 @@ mod tests {
             step_of(&change).summary,
             "Reschedule task \"Call plumber\": due tomorrow → Fri 9 Oct"
         );
+        assert_eq!(step_of(&change).changes, "due tomorrow → Fri 9 Oct");
+        assert_eq!(step_of(&row("complete")).changes, "");
         let mut change = row("edit");
         change.fields = vec![
             moved(
@@ -205,6 +227,8 @@ mod tests {
             step_of(&change).summary,
             "Add task \"Call plumber\": due tomorrow"
         );
+        assert_eq!(step_of(&change).when, "tomorrow");
+        assert_eq!(step_of(&row("complete")).when, "");
     }
 
     #[test]

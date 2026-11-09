@@ -2,6 +2,20 @@ package dev.centraid.android.screens.locker
 
 import dev.centraid.android.kit.SecureWindow
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.KitCardGrid
+import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.screens.docs.docsListColor
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,7 +29,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +47,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -67,6 +84,7 @@ import centraid.core.v1.LockerEditorState
 import centraid.core.v1.LockerFieldRow
 import centraid.core.v1.LockerFieldSheet
 import centraid.core.v1.LockerGenerator
+import centraid.core.v1.LockerCategory
 import centraid.core.v1.LockerHomeData
 import centraid.core.v1.LockerHomeEvent
 import centraid.core.v1.LockerHomeState
@@ -137,22 +155,24 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
             .semantics { contentDescription = wall.accessibility_label },
     ) {
         item(key = "mark") {
+            // THE LOCK SCREEN (#1173): the lock on a wash of Locker's graphite, the one sentence,
+            // what unlocking does, and the one ink button in Locker's fill.
+            val accent = appAccent("locker")
+            CompositionLocalProvider(LocalAppAccentId provides "locker") {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 24.dp)) {
-                AppMark(appId = "locker", size = 40.dp, modifier = Modifier.clearAndSetSemantics { })
-                Text(
-                    wall.title,
-                    style = centraidType("title"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.padding(top = 16.dp).semantics { heading() },
-                )
+                Box(
+                    Modifier.size(64.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center,
+                ) { CentraidIcon(iconKey = "Lock", tint = accent.text, size = 28.dp) }
+                KitText(wall.title, KitType.Section, Surface.ink, Modifier.padding(top = 16.dp).semantics { heading() })
                 if (wall.body.isNotEmpty()) {
-                    Text(wall.body, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(top = 8.dp))
+                    Text(wall.body, style = kitTextStyle(KitType.Row), color = Surface.body, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (wall.notice.isNotEmpty()) {
                     Text(
                         wall.notice,
-                        style = centraidType("annotLabel"),
-                        color = centraidColor(if (failing) "net" else "textSoft"),
+                        style = kitTextStyle(KitType.Meta),
+                        color = if (failing) StateColor.Red.text else Surface.meta,
                         modifier = Modifier.padding(top = 12.dp).testTag("locker-wall-notice"),
                     )
                 }
@@ -160,7 +180,7 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
                 if (wall.unlock_label.isNotEmpty() || wall.words_label.isNotEmpty()) {
                     ChoiceStack(Modifier.padding(top = 20.dp)) {
                         if (wall.unlock_label.isNotEmpty()) {
-                            InkButton(label = wall.unlock_label, testTag = "locker-unlock", onPress = onUnlock)
+                            InkButton(label = wall.unlock_label, testTag = "locker-unlock", iconKey = wall.unlock_icon, onPress = onUnlock)
                         }
                         if (wall.words_label.isNotEmpty()) {
                             if (wall.unlock_label.isEmpty()) {
@@ -171,6 +191,7 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -233,6 +254,37 @@ internal fun LockerHomeScreen(
 ) {
     SecureWindow(state.secure)
     val chrome = state.chrome
+    val wall = state.wall
+    if (wall != null) {
+        // A LOCKED LOCKER KEEPS ITS WHOLE BAND: Home, the plate of places dimmed, no search. A place
+        // pressed starts the unlock (as the button does) and lands there once it opens.
+        dev.centraid.android.kit.AppPlace(
+            app = "locker",
+            title = chrome?.title.orEmpty(),
+            band = if (state.band.isEmpty()) {
+                null
+            } else {
+                {
+                    AppBand(
+                        app = "locker",
+                        tabs = state.band.map {
+                            AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
+                        },
+                        onSelect = { key -> onEvent(LockerHomeEvent(band = LockerHomeEvent.BandPicked(key = key))) },
+                        onHome = onHome,
+                        locked = state.band_locked,
+                    )
+                }
+            },
+        ) {
+            LockerWallView(
+                wall,
+                onUnlock = { sendWall(LockerWallEvent(unlock = LockerWallEvent.UnlockTapped())) },
+                onWords = onWords,
+            )
+        }
+        return
+    }
     LockerCovered(state.wall, chrome?.title.orEmpty(), onHome, sendWall, onWords) {
         val data = state.data_
         val generating = state.destination == LockerDestination.LOCKER_DESTINATION_GENERATE
@@ -242,6 +294,10 @@ internal fun LockerHomeScreen(
             title = chrome?.title.orEmpty(),
             trailing = chrome?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
                 RoomAction("Plus", label, "locker-add") { chrome.add_route?.let(onOpen) }
+            },
+            // THE LOCK KEY (#1173): cover every item now, Rust's own event.
+            lead = chrome?.lock_label?.takeIf { it.isNotEmpty() && state.denied == null }?.let { label ->
+                RoomAction("Lock", label, "locker-lock") { onEvent(LockerHomeEvent(lock_requested = LockerHomeEvent.LockRequested())) }
             },
             // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab.
             search = if (state.denied == null) {
@@ -292,6 +348,9 @@ internal fun LockerHomeScreen(
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
             ) { home ->
+                BackHandler(enabled = home.list_title.isNotEmpty()) {
+                    onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
+                }
                 if (generating) {
                     val generator = home.generator
                     if (generator != null) LockerGeneratorBody(generator, onEvent, onOpen)
@@ -300,7 +359,7 @@ internal fun LockerHomeScreen(
                         when (state.destination) {
                             LockerDestination.LOCKER_DESTINATION_REVIEW -> reviewTab(home, onOpen)
                             LockerDestination.LOCKER_DESTINATION_SEARCH -> searchTab(state, home, onOpen)
-                            else -> itemsTab(home, chrome?.add_route, onOpen)
+                            else -> itemsTab(home, chrome?.add_route, onOpen, onEvent)
                         }
                     }
                 }
@@ -326,7 +385,75 @@ internal fun LockerHomeScreen(
     }
 }
 
-private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (Route) -> Unit) {
+private fun LazyListScope.itemsTab(
+    home: LockerHomeData,
+    add: Route?,
+    onOpen: (Route) -> Unit,
+    onEvent: (LockerHomeEvent) -> Unit,
+) {
+    if (home.list_title.isNotEmpty()) {
+        listOfCategory(home, add, onOpen, onEvent)
+        return
+    }
+    // THE LANDING: the six category cards, then Starred and Recently used.
+    val empty = home.items_empty
+    if (home.status_line.isNotEmpty()) item(key = "landing-note") { LockerNote(home.status_line) }
+    if (empty != null) {
+        item(key = "empty") {
+            Box(Modifier.heightIn(min = 320.dp)) {
+                EmptyStateView(empty, onAction = add?.let { route -> { onOpen(route) } })
+            }
+        }
+    }
+    if (home.categories.isNotEmpty()) {
+        item(key = "categories") {
+            KitCardGrid(
+                items = home.categories,
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+            ) { category ->
+                LockerCategoryCard(category) {
+                    val route = category.route
+                    if (route != null) {
+                        onOpen(route)
+                    } else {
+                        onEvent(LockerHomeEvent(category_picked = LockerHomeEvent.CategoryPicked(key = category.key)))
+                    }
+                }
+            }
+        }
+    }
+    if (home.starred.isNotEmpty()) {
+        item(key = "starred") { LockerRowGroup(home.starred_title, home.starred, onOpen) }
+    }
+    if (home.recent.isNotEmpty()) {
+        item(key = "recent") { LockerRowGroup(home.recent_title, home.recent, onOpen) }
+    }
+}
+
+/** ONE CATEGORY'S LIST: the chevron back (also the system back) returns to the landing. */
+private fun LazyListScope.listOfCategory(
+    home: LockerHomeData,
+    add: Route?,
+    onOpen: (Route) -> Unit,
+    onEvent: (LockerHomeEvent) -> Unit,
+) {
+    item(key = "list-head") {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
+                    .padding(horizontal = 10.dp)
+                    .testTag("locker-category-back")
+                    .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
+            KitText(home.list_title, KitType.Section, Surface.ink)
+        }
+    }
     val empty = home.items_empty
     if (home.rows.isEmpty() && empty != null) {
         item(key = "empty") {
@@ -337,6 +464,45 @@ private fun LazyListScope.itemsTab(home: LockerHomeData, add: Route?, onOpen: (R
     }
     items(home.rows, key = { "i-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
     if (home.window.isNotEmpty()) item(key = "window") { LockerNote(home.window) }
+}
+
+/** A WHITE CARD OF ROWS under a group head: Starred, Recently used. */
+@Composable
+private fun LockerRowGroup(title: String, rows: List<LockerRow>, onOpen: (Route) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        if (title.isNotEmpty()) {
+            KitText(
+                title,
+                KitType.Group,
+                Surface.meta,
+                Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
+            )
+        }
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER).kitCard()) {
+            rows.forEach { row -> LockerRowView(row) { row.route?.let(onOpen) } }
+        }
+    }
+}
+
+/** ONE CATEGORY CARD: a tile in a list-palette colour, the count, the word. */
+@Composable
+private fun LockerCategoryCard(category: LockerCategory, onTap: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .kitCard()
+            .clickable(onClick = onTap)
+            .padding(12.dp)
+            .testTag("locker-category-${category.key}")
+            .clearAndSetSemantics { contentDescription = category.accessibility_label },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            KitTile(category.icon_key, size = 30.dp, fill = docsListColor(category.color_key))
+            KitText(category.count.toString(), KitType.Title, Surface.ink)
+        }
+        KitText(category.label, KitType.Row, Surface.ink)
+    }
 }
 
 private fun LazyListScope.reviewTab(home: LockerHomeData, onOpen: (Route) -> Unit) {
@@ -372,11 +538,11 @@ private fun LazyListScope.searchTab(state: LockerHomeState, home: LockerHomeData
     items(home.hits, key = { "h-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
 }
 
-/** THE ITEM ROW: the type chip, the one kit row, and the star. */
+/** THE ITEM ROW: the type chip, the one kit row, and the star in the app's colour. */
 @Composable
 internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onTap).padding(start = KitGeometry.GUTTER),
+        Modifier.fillMaxWidth().clickable(onClick = onTap).padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TypeChip(row.type_chip)
@@ -390,9 +556,10 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
             onTap = onTap,
         )
         if (row.starred) {
+            // AMBER ONLY MEANS A STATE: the star wears the app's colour.
             CentraidIcon(
                 iconKey = "Star",
-                tint = centraidColor("textSoft"),
+                tint = appAccent("locker").text,
                 size = 14.dp,
                 modifier = Modifier.padding(end = KitGeometry.GUTTER).clearAndSetSemantics { },
             )
@@ -400,19 +567,35 @@ internal fun LockerRowView(row: LockerRow, onTap: () -> Unit) {
     }
 }
 
-/** The type's two letters on the rose wash. */
+/** The type's two letters in the app's fill, white on it. */
 @Composable
-private fun TypeChip(letters: String, modifier: Modifier = Modifier) {
+private fun TypeChip(letters: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 32.dp) {
     if (letters.isEmpty()) return
     Box(
         modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .background(centraidColor("cRose").copy(alpha = 0.14f))
+            .size(size)
+            .clip(RoundedCornerShape((size.value * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+            .background(appAccent("locker").fill)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(letters, style = centraidType("eyebrow"), color = centraidColor("cRose"))
+        KitText(letters, if (size.value > 40f) KitType.Title else KitType.Badge, androidx.compose.ui.graphics.Color.White)
+    }
+}
+
+/** THE ITEM'S HERO TILE: the first letter of the title (Rust's `hero_initial`) in white on ink; the ink stays ink in dark. */
+@Composable
+private fun HeroTile(letter: String, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 64.dp) {
+    if (letter.isEmpty()) return
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape((size.value * dev.centraid.design.CentraidGeometry.ICON_CHIP_RADIUS_RATIO).dp))
+            .background(Surface.tile)
+            .clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        KitText(letter, KitType.Title, androidx.compose.ui.graphics.Color.White)
     }
 }
 
@@ -422,8 +605,8 @@ internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String
     if (text.isEmpty()) return
     Text(
         text,
-        style = centraidType("annotLabel"),
-        color = centraidColor(ink),
+        style = kitTextStyle(KitType.Meta),
+        color = if (ink == "net") StateColor.Red.text else Surface.meta,
         modifier = modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
     )
 }
@@ -585,14 +768,19 @@ internal fun LockerItemScreen(
 ) {
     SecureWindow(state.secure)
     val chrome = state.chrome
+    var menuOpen by remember { mutableStateOf(false) }
     LockerCovered(state.wall, chrome?.back_label.orEmpty(), onBack, sendWall, onWords) {
         val data = state.data_
         PushedPage(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
+            // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
+            more = data?.takeIf { it.gone == null && it.actions.isNotEmpty() }?.let {
+                RoomAction("MoreHoriz", chrome?.menu_label.orEmpty(), "locker-item-menu") { menuOpen = true }
+            },
             trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
-                RoomAction("Pencil", label, "locker-edit") { chrome.edit_route?.let(onOpen) }
+                RoomAction("Pencil", label, "locker-item-edit") { chrome.edit_route?.let(onOpen) }
             },
             statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
         ) {
@@ -608,31 +796,65 @@ internal fun LockerItemScreen(
                 }
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-item")) {
                     item(key = "head") {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with
+                        // its star beside it, and the type with when it was last used under that.
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("locker-item-head"),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            TypeChip(item.type_chip)
-                            Text(
-                                item.type_label,
-                                style = centraidType("annotLabelOn"),
-                                color = centraidColor("textSoft"),
-                                modifier = Modifier.padding(start = 10.dp).weight(1f),
-                            )
-                            if (item.starred) CentraidIcon(iconKey = "Star", tint = centraidColor("textSoft"), size = 16.dp)
-                            item.chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+                            HeroTile(item.hero_initial)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    item.title,
+                                    style = kitTextStyle(KitType.Hero),
+                                    color = Surface.ink,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                                if (item.star_label.isNotEmpty()) {
+                                    Box(Modifier.testTag("locker-item-star").semantics { contentDescription = item.star_label }) {
+                                        CentraidIcon(iconKey = "Star", tint = appAccent("locker").text, size = 18.dp, solid = true)
+                                    }
+                                }
+                            }
+                            Text(item.subtitle, style = kitTextStyle(KitType.Meta), color = Surface.meta, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            if (item.chips.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    item.chips.forEach { chip -> StatusChipView(chip) }
+                                }
+                            }
                         }
                         LockerNote(item.trashed_note, ink = "net")
                         LockerNote(item.status_line)
                     }
                     item.sections.forEachIndexed { index, section ->
                         item(key = "sec-$index") { if (section.title.isNotEmpty()) SectionHeader(SectionHead(title = section.title)) }
-                        items(section.rows, key = { "f-$index-" + it.key }) { row ->
-                            LockerFieldView(row) { verb ->
-                                onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
+                        // EACH SECTION IS A WHITE CARD OF ROWS; the verification code is the first.
+                        item(key = "card-$index") {
+                            Column(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).kitCard()) {
+                                section.rows.forEach { row ->
+                                    LockerFieldView(row) { verb ->
+                                        onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
+                                    }
+                                }
                             }
                         }
                         if (section.note.isNotEmpty()) item(key = "sec-note-$index") { LockerNote(section.note) }
+                        val change = item.change_password
+                        if (change != null && section.rows.any { it.key == "password" }) {
+                            item(key = "change-password") {
+                                Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+                                    OutlineButton(change.label, testTag = "locker-item-action-change_password") {
+                                        onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = change.key)))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item.links?.let { links ->
+                        item(key = "links") {
+                            dev.centraid.android.kit.LinkSectionView(links, { link -> onEvent(LockerItemEvent(link = link)) }, onOpen)
+                        }
                     }
                     if (item.tags.isNotEmpty()) {
                         item(key = "tags") {
@@ -671,25 +893,22 @@ internal fun LockerItemScreen(
                             }
                         }
                     }
-                    if (item.actions.isNotEmpty()) {
-                        item(key = "actions") {
-                            FlowRow(
-                                Modifier.fillMaxWidth().padding(KitGeometry.GUTTER),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                item.actions.forEach { action ->
-                                    OutlineButton(
-                                        action.label,
-                                        testTag = "locker-action-${action.key}",
-                                        ink = if (action.destructive) "net" else "text",
-                                    ) { onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = action.key))) }
-                                }
-                            }
-                        }
-                    }
                 }
             }
+        }
+        if (menuOpen && data != null) {
+            OptionSheet(
+                title = chrome?.menu_label.orEmpty(),
+                options = data.actions.map { SheetOption(key = it.key, label = it.label, destructive = it.destructive) },
+                onPick = { key ->
+                    menuOpen = false
+                    onEvent(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = key)))
+                },
+                onDismiss = { menuOpen = false },
+            )
+        }
+        state.link_picker?.takeIf { it.open_ }?.let { picker ->
+            dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(LockerItemEvent(link = link)) }
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(
@@ -825,7 +1044,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
-            .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 6.dp, bottom = 6.dp)
+            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             .testTag("locker-field-${row.key}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -840,7 +1059,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
                     },
                 ),
         ) {
-            Text(row.label, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
+            KitText(row.label, KitType.Meta, Surface.meta)
             val concealed = row.sealed_ && !row.revealed
             val shown = if (concealed) row.mask else row.value_
             val mono = row.monospace || concealed
@@ -848,7 +1067,7 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
                 Text(
                     shown,
                     style = if (mono) {
-                        centraidType("body").copy(
+                        (if (row.key == "otp_seed") kitTextStyle(KitType.Title).copy(fontSize = 28.sp) else centraidType("body")).copy(
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                             letterSpacing = if (concealed) androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp) else androidx.compose.ui.unit.TextUnit.Unspecified,
                         )
@@ -865,8 +1084,25 @@ internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
             }
         }
         row.verbs.forEach { verb ->
-            OutlineButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
-                onVerb(verb.key)
+            if (verb.pill) {
+                // THE CODE CARD'S COPY: a green pill, as the board draws it.
+                Text(
+                    verb.label,
+                    style = centraidType("smallStrong"),
+                    color = StateColor.Green.text,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .heightIn(min = 36.dp)
+                        .clip(CircleShape)
+                        .background(StateColor.Green.tint)
+                        .clickable { onVerb(verb.key) }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                        .testTag("locker-verb-${row.key}-${verb.key}"),
+                )
+            } else {
+                OutlineButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
+                    onVerb(verb.key)
+                }
             }
         }
     }
@@ -940,24 +1176,38 @@ internal fun LockerEditorScreen(
                             }
                         }
                     }
-                    items(editor.inputs, key = { "in-" + state.item_id + "-" + it.key }) { input -> LockerInputView(input, onEvent) }
-                    item(key = "tags-" + state.item_id) {
-                        val text = rememberSentText(editor.tags_text)
-                        LockerTextField(
-                            text = text.first,
-                            label = editor.tags_label,
-                            placeholder = editor.tags_hint,
-                            testTag = "locker-editor-tags",
-                            onEdit = {
-                                text.second(it)
-                                onEvent(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = it)))
-                            },
-                        )
-                    }
-                    if (editor.compromised_label.isNotEmpty()) {
-                        item(key = "compromised") {
-                            LockerCompromisedRow(editor.compromised_label, editor.compromised, editor.compromised_note) { on ->
-                                onEvent(LockerEditorEvent(compromised = LockerEditorEvent.CompromisedToggled(on = on)))
+                    // THE FIELDS ARE ONE WHITE CARD, as on iOS: each input, the tags, the compromised
+                    // flag, a hairline under each.
+                    item(key = "fields-" + state.item_id) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = KitGeometry.GUTTER)
+                                .padding(top = 8.dp)
+                                .kitCard(),
+                        ) {
+                            editor.inputs.forEach { input ->
+                                key("in-" + state.item_id + "-" + input.key) {
+                                    LockerInputView(input, onEvent)
+                                    LockerHairline()
+                                }
+                            }
+                            val text = rememberSentText(editor.tags_text)
+                            LockerTextField(
+                                text = text.first,
+                                label = editor.tags_label,
+                                placeholder = editor.tags_hint,
+                                testTag = "locker-editor-tags",
+                                onEdit = {
+                                    text.second(it)
+                                    onEvent(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = it)))
+                                },
+                            )
+                            if (editor.compromised_label.isNotEmpty()) {
+                                LockerHairline()
+                                LockerCompromisedRow(editor.compromised_label, editor.compromised, editor.compromised_note) { on ->
+                                    onEvent(LockerEditorEvent(compromised = LockerEditorEvent.CompromisedToggled(on = on)))
+                                }
                             }
                         }
                     }
@@ -972,6 +1222,14 @@ internal fun LockerEditorScreen(
             )
         }
     }
+}
+
+/** The hairline between the rows of a card. */
+@Composable
+internal fun LockerHairline() {
+    androidx.compose.foundation.layout.Spacer(
+        Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line),
+    )
 }
 
 /** ONE INPUT. A secret is a masked entry on the password keyboard, which the IME neither autocorrects, suggests from nor learns. */

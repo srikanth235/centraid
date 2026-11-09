@@ -1,5 +1,25 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import dev.centraid.android.kit.ChoiceRow
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +45,6 @@ import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
@@ -57,7 +76,8 @@ internal fun AgendaEventScreen(
 ) {
     val chrome = state.chrome
     PushedPage(
-        title = chrome?.title.orEmpty(),
+        // THE EVENT'S OWN NAME IS THE TITLE, in the top row beside the chevron (round 9).
+        title = state.data_?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         status = state.status?.sentence.orEmpty(),
@@ -110,19 +130,28 @@ private fun EventBody(
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
-            Text(
-                data.title,
-                style = centraidType("title"),
-                color = centraidColor(if (data.is_past) "textSoft" else "text"),
-                modifier = Modifier.semantics { heading() },
-            )
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            if (data.calendar_name.isNotEmpty()) {
+                Row(Modifier.padding(top = 4.dp).testTag("agenda-event-calendar"), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(gridHue(data.calendar_hue_key)))
+                    Text(
+                        data.calendar_name,
+                        style = centraidType("annotLabel"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
         }
-        if (data.calendar_name.isNotEmpty()) {
-            CentraidRow(title = data.calendar_name, hueKey = data.calendar_hue_key, testTag = "agenda-event-calendar")
+        // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
+        if (data.facts.isNotEmpty()) {
+            AgendaGroupCard(Modifier.testTag("agenda-event-facts")) {
+                data.facts.forEachIndexed { index, fact ->
+                    AgendaFactRow(fact.label, fact.detail, divider = index < data.facts.lastIndex)
+                }
+            }
         }
-        data.facts.forEach { FieldRow(key = it.label, value = it.detail) }
         if (data.call_uri.isNotEmpty() && data.call_label.isNotEmpty()) {
             OutlineButton(
                 label = data.call_label,
@@ -143,15 +172,29 @@ private fun EventBody(
         if (rsvp != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
                 Text(rsvp.question, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
-                Row(Modifier.padding(top = 8.dp)) {
+                // THE BOARD'S THREE EQUAL KEYS: the answer given filled in Agenda's blue.
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     rsvp.choices.forEach { choice ->
-                        OutlineButton(
-                            label = choice.label,
-                            testTag = "agenda-rsvp-${choice.partstat}",
-                            ink = if (choice.selected) "accent" else if (choice.enabled) "text" else "textFaint",
-                            modifier = Modifier.padding(end = 8.dp),
+                        val shape = RoundedCornerShape(percent = 50)
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clip(shape)
+                                .background(if (choice.selected) appAccent("calendar").fill else Surface.card, shape)
+                                .then(if (choice.selected) Modifier else Modifier.border(1.dp, Surface.line, shape))
+                                .clickable(enabled = choice.enabled) {
+                                    onEvent(AgendaEventEvent(rsvp = AgendaEventEvent.RsvpPicked(partstat = choice.partstat)))
+                                }
+                                .testTag("agenda-rsvp-${choice.partstat}")
+                                .semantics { role = Role.RadioButton; selected = choice.selected },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            if (choice.enabled) onEvent(AgendaEventEvent(rsvp = AgendaEventEvent.RsvpPicked(partstat = choice.partstat)))
+                            Text(
+                                choice.label,
+                                style = centraidType(if (choice.selected) "smallStrong" else "small"),
+                                color = if (choice.selected) Color.White else centraidColor(if (choice.enabled) "text" else "textFaint"),
+                            )
                         }
                     }
                 }
@@ -162,23 +205,50 @@ private fun EventBody(
         }
         if (data.guests.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.guest_heading))
-            data.guests.forEach { guest ->
-                CentraidRow(
-                    title = guest.name,
-                    meta = guest.reply_label,
-                    hueKey = guest.hue_key,
-                    a11y = guest.accessibility_label,
-                    testTag = "agenda-guest-${guest.party_id}",
-                )
+            AgendaGroupCard(Modifier.padding(top = 0.dp)) {
+                data.guests.forEach { guest ->
+                    CentraidRow(
+                        title = guest.name,
+                        meta = guest.reply_label,
+                        hueKey = guest.hue_key,
+                        a11y = guest.accessibility_label,
+                        testTag = "agenda-guest-${guest.party_id}",
+                    )
+                }
             }
         }
-        Row(Modifier.padding(KitGeometry.GUTTER)) {
+        // THE GUESTS OF A FOLLOWED CALENDAR'S EVENT (#1173): names and replies the phone's calendar holds.
+        if (data.followed_guests.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().testTag("agenda-event-followed")) {
+                SectionHeader(SectionHead(title = data.followed_heading))
+                data.followed_guests.forEachIndexed { index, guest ->
+                    CentraidRow(
+                        title = guest.name,
+                        meta = listOf(guest.detail, guest.reply_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                        hueKey = guest.hue_key,
+                        a11y = guest.accessibility_label,
+                        testTag = "agenda-event-followed-guest-$index",
+                    )
+                }
+            }
+        }
+        data.attachments?.let { section ->
+            AgendaAttachmentsView(
+                section = section,
+                prefix = "agenda-event",
+                onEvent = { onEvent(AgendaEventEvent(attachment = it)) },
+                onOpen = onOpen,
+            )
+        }
+        // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share the
+        // width, Cancel in the red outline.
+        ChoiceRow(Modifier.padding(KitGeometry.GUTTER)) {
             data.actions.forEach { action ->
                 OutlineButton(
                     label = action.label,
                     testTag = "agenda-action-${action.key}",
                     ink = if (!action.enabled) "textFaint" else if (action.destructive) "net" else "text",
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     // A BUTTON THAT OPENS A PAGE (Edit) carries its route; Cancel is an event.
                     val route = action.route

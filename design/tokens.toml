@@ -1,0 +1,1206 @@
+# design/tokens.toml: THE ONE SOURCE OF DESIGN VALUES (#1173).
+#
+# Values only, no logic. `cargo xtask design` reads this file (and
+# `design/icons.toml`, `design/fonts/` and the light screens in
+# `design/mockups/`) and writes every design artifact from it:
+#
+#   mobile/iosApp/Design/{Theme,Catalog,Words,DesignScale}.swift
+#   mobile/iosApp/Resources/Assets.xcassets/Colors/*.colorset
+#   mobile/iosApp/Resources/Fonts/*.ttf
+#   mobile/androidApp/src/main/kotlin/dev/centraid/android/design/{Tokens,Catalog,Words}.kt
+#   mobile/androidApp/src/main/res/values/{colors,dimens}.xml
+#   mobile/androidApp/src/main/res/values-night/colors.xml
+#   mobile/androidApp/src/main/res/font/*.ttf
+#   scripts/{docs-site,home-site}/public/assets/centraid-tokens.css and fonts/
+#   design/mockups/XDark.dc.html (every dark screen, from its light one)
+#
+# `cargo xtask design --check` regenerates into memory and fails on any file
+# that differs; the gate's `design` step runs the same check. The model, the
+# parser and the validation (every role in both schemes, hex well-formed, every
+# app with its dark fill and dark text, contrast floors) are
+# `crates/design/src/tokens.rs`; a value that fails a floor is a failing test.
+#
+# Three layers live here, on purpose (the third, `site.*`, is at the end):
+#
+#   1. THE REDESIGN (#1173): the values in `design/mockups/DesignRules.dc.html`.
+#      Sections `surface`, `text`, `shell`, `app`, `state`, `list`, `type`,
+#      `radius`. Dark fill and dark text pairs are read off that board.
+#   2. THE LEGACY NATIVE LOWERING (`native.*`): the 55-role theme, the app
+#      catalogue and the geometry the shells draw today, transcribed verbatim
+#      so that regeneration changes no pixel. The Phase 4 screen PRs move the
+#      shells onto layer 1 and then delete layer 2.
+
+# ---------------------------------------------------------------------------
+# 1. The redesign
+# ---------------------------------------------------------------------------
+
+# Surfaces. Two page colours (pages of cards, plain lists) and white cards.
+# `line` is the 1px rule between rows inside a card; `border` is a card's edge.
+[surface.light]
+page = "#F4F2EE"
+plain_page = "#FBFAF8"
+card = "#FFFFFF"
+sheet = "#F4F2EE"
+sheet_card = "#FFFFFF"
+fill = "#F2EFEA"
+line = "#EEEBE5"
+border = "#E4E0D8"
+# A tile of ink under a white letter or glyph (the Locker item's hero): it keeps its ink in dark.
+tile = "#1C1B19"
+
+# Dark is designed, not inverted: sheets sit one level up (sheet, sheet_card).
+[surface.dark]
+page = "#0E0D0C"
+plain_page = "#0E0D0C"
+card = "#1F1E1C"
+sheet = "#1A1918"
+sheet_card = "#2B2927"
+fill = "#2A2826"
+line = "#2C2A27"
+border = "#3A3733"
+tile = "#1C1B19"
+
+# Text. The light values are the ones the Design rules board draws with.
+[text.light]
+ink = "#1C1B19"
+body = "#4A4741"
+meta = "#6F6B64"
+
+[text.dark]
+ink = "#F2EFEA"
+body = "#C9C4BA"
+meta = "#A39E95"
+
+# Colour has one job each. Every accent has three values: `light` (the
+# accent on the light page, text and fill alike), `dark_fill` (a fill under
+# white glyphs, 4.5:1 or more) and `dark_text` (text and icons on dark, lighter).
+# The dark pairs are read off the Design rules board
+# (`design/mockups/DesignRules.dc.html`, "Each accent gets two dark values").
+
+# The shell's own colour: Welcome, Home, Chat, Backup.
+[shell]
+light = "#1F4A45"
+dark_fill = "#2E7268"
+dark_text = "#7FC4B8"
+
+# The eight apps. `tint` and `dark_tint` are the accent chip's ground (a status chip in the app's
+# own good news: `TONE_ACCENT`), read off the Money boards (`#ECEAF6` under `#27388B`) and made
+# the same way for the others. `tile` is the bright colour on tiles and icons where it is
+# not the accent (Notes: Apple Notes yellow, content, so it does not change in
+# dark).
+[app.calendar]
+light = "#266FC4"
+dark_fill = "#3077CD"
+dark_text = "#569EF7"
+tint = "#EEF3FA"
+dark_tint = "#202F41"
+
+# Reminders (round 10): a pine teal. Not red, amber or green (overdue, soon and done are state
+# colours in this app), and a hue clear of Docs' petrol and the shell's deep teal.
+[app.reminders]
+light = "#087668"
+dark_fill = "#12806F"
+dark_text = "#4FD1BE"
+tint = "#E6F3F0"
+dark_tint = "#17302C"
+
+[app.notes]
+light = "#8C6802"
+dark_fill = "#967002"
+dark_text = "#BF9738"
+tint = "#F6F3EB"
+dark_tint = "#372E14"
+tile = "#F5C431"
+
+[app.people]
+light = "#7638AD"
+dark_fill = "#935BCB"
+dark_text = "#BA82F5"
+tint = "#F4EFF8"
+dark_tint = "#362940"
+
+[app.docs]
+light = "#087990"
+dark_fill = "#01819B"
+dark_text = "#30A9C6"
+tint = "#EBF4F6"
+dark_tint = "#163136"
+
+[app.money]
+light = "#27388B"
+dark_fill = "#536EDC"
+dark_text = "#7C97F4"
+tint = "#ECEAF6"
+dark_tint = "#241D44"
+
+[app.locker]
+light = "#454E58"
+dark_fill = "#6A7888"
+dark_text = "#939DA8"
+tint = "#F0F1F2"
+dark_tint = "#2D2F31"
+
+[app.health]
+light = "#BB365C"
+dark_fill = "#CB4669"
+dark_text = "#F76E8E"
+tint = "#FAEFF2"
+dark_tint = "#42242B"
+
+[app.photos]
+light = "#A8398A"
+dark_fill = "#BB4C9C"
+dark_text = "#E573C3"
+tint = "#F8EFF6"
+dark_tint = "#3F2636"
+
+# States. In words and badges red, amber and green only ever mean a state.
+[state.red]
+light = "#C8392F"
+dark_fill = "#CD483D"
+dark_text = "#F27A6D"
+tint = "#FDEDEB"
+dark_tint = "#44221D"
+
+[state.amber]
+light = "#874300"
+dark_fill = "#964C04"
+dark_text = "#F2A64F"
+tint = "#FFF6E8"
+dark_tint = "#44351D"
+
+[state.green]
+light = "#2B7B51"
+dark_fill = "#2F8556"
+dark_text = "#62D092"
+tint = "#E8F2EC"
+dark_tint = "#1B3A29"
+
+# One palette for lists, calendars and categories: the eight app hues, lighter.
+# They reach 3:1 on the light page and on dark cards, so they do not change in
+# dark. Dots, bars, tiles and big titles only; never small text.
+[list]
+blue = "#468DE5"
+mustard = "#B08505"
+violet = "#AA71E3"
+petrol = "#1399B5"
+indigo = "#6785F5"
+graphite = "#808C9A"
+raspberry = "#E55D7E"
+orchid = "#D462B2"
+
+# The four brand colours of the app mark (`design/mockups/QuartersIcon.dc.html`):
+# a squared circle of four quarters around an open square heart. One family at
+# even brightness, brighter than the in-app colours, which stay dark enough for
+# text. Brand colours, not app keys: they draw the mark (the assistant's avatar
+# in Chat, the app icon) and nothing else. They do not change in dark.
+[brand]
+teal = "#00AA98"
+orange = "#F48E04"
+blue = "#5698F8"
+pink = "#F83F6E"
+
+# The app icon (`design/mockups/QuartersIcon.dc.html`): the tiles the mark sits
+# on, and the two quiet variants. `cargo xtask design` draws every icon file from
+# these and `[brand]` (design/icon/, the iOS AppIcon set, the Android adaptive
+# icon). `light_edge` is the hairline round the white tile, drawn in the master
+# SVG only (iOS and Android mask their own edge). `tinted_*` is iOS's tinted
+# appearance, which the system recolours: ONE neutral grey for the mark (the system
+# maps luminance to its tint, so a second step would only be recoloured oddly); the
+# cuts between the quarters keep them apart. `light_tile`/`light_tile_bottom` and
+# `dark_ground_top`/`dark_ground_bottom` are the two grounds of the layered iOS 26 icon
+# (`AppIcon.icon`): the system adds the glass, rim and shadows, the artwork is only
+# flat colour. The flat PNGs use `light_tile` and `dark_tile`. `themed_*` is Android's themed icon: one
+# flat glyph colour, which the system repaints from the wallpaper; the board's
+# colours stand in for the preview.
+[icon]
+light_tile = "#FFFFFF"
+light_edge = "#E4E0D8"
+light_tile_bottom = "#ECF0F8"
+dark_tile = "#1C1B19"
+dark_ground_top = "#2E3A63"
+dark_ground_bottom = "#04060D"
+tinted_tile = "#1B1B1B"
+tinted_mark = "#D9D9D9"
+themed_tile = "#DCE5EE"
+themed_glyph = "#22374A"
+# The mark's disc as a share of the iOS tile's width: 0.76 is an outer radius of 45.6
+# on the 120 grid, today's proportions (inner edge and cuts included) scaled uniformly.
+# It matches Apple's Watch icon, measured on the iOS 26 home screen: its artwork spans
+# 76% of the tile tall (70% wide with the side button), a margin of about 12%. 91% and
+# 82% left too little white gap once iOS masked the tile and added its glass rim. The
+# masters and the three flat AppIcon PNGs (the pre-iOS-26 fallback) follow it, and so
+# does the layered iOS 26 icon `AppIcon.icon`; Android's adaptive icon keeps its own
+# rule, the 66dp safe zone.
+ios_mark_share = 0.76
+
+# Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
+[type.title]
+size = 34
+weight = 700
+
+# The hero title: the Locker item's and the Person's centred hero, one rung under the page title.
+[type.hero]
+size = 24
+weight = 700
+
+[type.section]
+size = 20
+weight = 700
+
+[type.row]
+size = 16
+weight = 400
+
+[type.meta]
+size = 13
+weight = 400
+
+[type.group]
+size = 12
+weight = 600
+caps = true
+
+[type.badge]
+size = 11
+weight = 700
+caps = true
+
+# Radii, in points. Only floating glass casts a shadow.
+[radius]
+card = 16
+
+# ---------------------------------------------------------------------------
+# 2. The legacy native lowering (what the shells draw today)
+# ---------------------------------------------------------------------------
+
+[native.faces]
+# Which .ttf draws each ramp weight. The 400 key resolves to a 470 face on
+# purpose: the phone's touch step makes a true 400 read thin. `design/fonts/`
+# holds the files; the PostScript name is read from each file's `name` table.
+
+sans = [
+  { weight = 400, file = "InstrumentSans_470Book.ttf", android_resource = "instrument_sans_book" },
+  { weight = 600, file = "InstrumentSans-SemiBold.ttf", android_resource = "instrument_sans_semibold" },
+]
+
+[native.spacing]
+1 = 4
+2 = 8
+3 = 12
+4 = 16
+5 = 24
+6 = 32
+
+[native.radii]
+xs = 0
+sm = 4
+md = 7
+lg = 12
+pill = 999
+
+[native.type.display]
+family = "sans"
+font_size = 27.0
+line_height = 31.0
+weight = 600
+
+[native.type.title]
+family = "sans"
+font_size = 20.0
+line_height = 26.0
+weight = 600
+
+[native.type.reading]
+family = "sans"
+font_size = 17.0
+line_height = 28.0
+weight = 400
+
+[native.type.body]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 400
+
+[native.type.bodyStrong]
+family = "sans"
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[native.type.labelOn]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 600
+
+[native.type.small]
+family = "sans"
+font_size = 15.0
+line_height = 22.0
+weight = 400
+
+[native.type.smallStrong]
+family = "sans"
+font_size = 15.0
+line_height = 21.0
+weight = 600
+
+[native.type.sheetKey]
+family = "sans"
+font_size = 16.0
+line_height = 22.0
+weight = 600
+
+[native.type.control]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[native.type.eyebrow]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[native.type.mono]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 400
+
+[native.type.annotLabel]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 400
+
+[native.type.annotLabelOn]
+family = "sans"
+font_size = 13.0
+line_height = 18.0
+weight = 600
+
+[native.type.band]
+family = "sans"
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[native.colors.light]
+accent = "#141414"
+accentDeep = "#141414"
+accentDeepHover = "#000000"
+accentFill = "#141414"
+accentInkHover = "#2E2E2D"
+accentLight = "#3D3D3B"
+accentSoft = "rgba(20,20,20,.08)"
+accentText = "#141414"
+appIdentityText = "#141414"
+attention = "#8A6520"
+bg = "#FDFDFC"
+bgChrome = "#F5F4F2"
+bgElev = "#F5F4F2"
+bgHover = "#f1f1f0"
+bgPress = "#e8e8e7"
+bgSel = "rgba(45,75,168,.12)"
+bgSunken = "#F9F8F6"
+cAmber = "#904e46"
+cForest = "#397247"
+cIndigo = "#635a93"
+cOchre = "#845922"
+cOlive = "#666723"
+cRose = "#8c4c61"
+cSlate = "#3e6596"
+cTeal = "#00707e"
+cViolet = "#7a5283"
+danger = "#9a3b2e"
+focusRingColor = "#4A67C8"
+line = "#EFEEEB"
+lineSel = "rgba(45,75,168,.42)"
+lineStrong = "#E5E4E1"
+link = "#2D4BA8"
+net = "#9A3B2E"
+netHover = "#7F3026"
+netWash = "rgba(154,59,46,.07)"
+onAccent = "#FDFDFC"
+onStage = "#EDEDEC"
+onStageSoft = "#9A9A98"
+scrim = "rgba(26,24,21,0.3)"
+seam = "#B4441F"
+shadowLg = "0 24px 48px -16px rgba(20,20,20,.16)"
+shadowMd = "0 8px 24px -8px rgba(20,20,20,.10)"
+shadowSm = "0 1px 2px rgba(20,20,20,.06)"
+skel = "#E4E3E0"
+stage = "#0B0B0B"
+stageLine = "#2A2A29"
+stageSunken = "#1A1A19"
+success = "#3a6540"
+text = "#141414"
+textDisabled = "#9C9C99"
+textFaint = "#6C6C69"
+textGhost = "#888885"
+textInv = "#FDFDFC"
+textSoft = "#5A5A58"
+warning = "#7c5619"
+
+[native.colors.dark]
+accent = "#EDEDEC"
+accentDeep = "#EDEDEC"
+accentDeepHover = "#FFFFFF"
+accentFill = "#EDEDEC"
+accentInkHover = "#D2D2D1"
+accentLight = "#C8C8C6"
+accentSoft = "rgba(237,237,236,.08)"
+accentText = "#EDEDEC"
+appIdentityText = "#EDEDEC"
+attention = "#D8A64E"
+bg = "#0E0E0E"
+bgChrome = "#121211"
+bgElev = "#171716"
+bgHover = "#191919"
+bgPress = "#222222"
+bgSel = "rgba(157,176,240,.12)"
+bgSunken = "#121211"
+cAmber = "#d78f85"
+cForest = "#7bb587"
+cIndigo = "#a39bda"
+cOchre = "#c99b65"
+cOlive = "#a8aa66"
+cRose = "#d48da2"
+cSlate = "#7ea7dc"
+cTeal = "#58b4c4"
+cViolet = "#be92c8"
+danger = "#e08878"
+focusRingColor = "#8098E8"
+line = "#1B1B1A"
+lineSel = "rgba(157,176,240,.42)"
+lineStrong = "#232322"
+link = "#9DB0F0"
+net = "#E08878"
+netHover = "#EC9C8D"
+netWash = "rgba(224,136,120,.11)"
+onAccent = "#0E0E0E"
+onStage = "#EDEDEC"
+onStageSoft = "#9A9A98"
+scrim = "rgba(0,0,0,0.62)"
+seam = "#E0864F"
+shadowLg = "0 30px 70px -24px rgba(0,0,0,.7)"
+shadowMd = "0 12px 30px -14px rgba(0,0,0,.6)"
+shadowSm = "0 1px 0 rgba(0,0,0,.4)"
+skel = "#1E1E1D"
+stage = "#0B0B0B"
+stageLine = "#2A2A29"
+stageSunken = "#1A1A19"
+success = "#7fb588"
+text = "#EDEDEC"
+textDisabled = "#565654"
+textFaint = "#878785"
+textGhost = "#656563"
+textInv = "#0E0E0E"
+textSoft = "#9A9A98"
+warning = "#d9a75b"
+
+[native.geometry]
+# Geometry both shells need that the token table does not carry.
+appMarkSmallStroke = 1.75
+appMarkStroke = 1.6
+appMarkViewBox = 24
+durationOne = 140
+durationTwo = 280
+hairline = 1
+iconChipRadiusRatio = 0.26
+iconChipTintDark = 0.2
+iconChipTintLight = 0.13
+pageMargin = 18
+targetMinCoarse = 44
+targetMinFine = 34
+
+[[native.app]]
+id = "notes"
+name = "Notes"
+desc = "Notes, notebooks and a journal."
+icon_key = "Book"
+color_key = "slate"
+light_hue = "#3e6596"
+light_chip = "#e4e9ef"
+light_mark = "#3a5e8b"
+dark_hue = "#7ea7dc"
+dark_chip = "#242d37"
+dark_mark = "#7ea7dc"
+
+[[native.app]]
+id = "people"
+name = "People"
+desc = "Contacts and relationships."
+icon_key = "AddressBook"
+color_key = "violet"
+light_hue = "#7a5283"
+light_chip = "#ece7ec"
+light_mark = "#744e7d"
+dark_hue = "#be92c8"
+dark_chip = "#312833"
+dark_mark = "#be92c8"
+
+[[native.app]]
+id = "photos"
+name = "Photos"
+desc = "Browse and back up your photos."
+icon_key = "Camera"
+color_key = "amber"
+light_hue = "#904e46"
+light_chip = "#efe6e4"
+light_mark = "#894a43"
+dark_hue = "#d78f85"
+dark_chip = "#362826"
+dark_mark = "#d78f85"
+
+[[native.app]]
+id = "locker"
+name = "Locker"
+desc = "Private items behind a lock."
+icon_key = "Lock"
+color_key = "rose"
+light_hue = "#8c4c61"
+light_chip = "#eee6e8"
+light_mark = "#894a5f"
+dark_hue = "#d48da2"
+dark_chip = "#36272c"
+dark_mark = "#d48da2"
+
+[[native.app]]
+id = "docs"
+name = "Docs"
+desc = "Read and organize your documents."
+icon_key = "Folder"
+color_key = "teal"
+light_hue = "#00707e"
+light_chip = "#dcebec"
+light_mark = "#006774"
+dark_hue = "#58b4c4"
+dark_chip = "#1d2f32"
+dark_mark = "#58b4c4"
+
+[[native.app]]
+id = "calendar"
+name = "Calendar"
+desc = "Your events and invites."
+icon_key = "Calendar"
+color_key = "forest"
+light_hue = "#397247"
+light_chip = "#e4ebe4"
+light_mark = "#346841"
+dark_hue = "#7bb587"
+dark_chip = "#242f26"
+dark_mark = "#7bb587"
+
+[[native.app]]
+id = "reminders"
+name = "Reminders"
+desc = "Your tasks and lists."
+icon_key = "Todo"
+color_key = "pine"
+light_hue = "#087668"
+light_chip = "#dff0ec"
+light_mark = "#0a7365"
+dark_hue = "#4fd1be"
+dark_chip = "#17302c"
+dark_mark = "#4fd1be"
+
+[[native.app]]
+id = "money"
+name = "Money"
+desc = "Spending, targets and cash flow."
+icon_key = "Coin"
+color_key = "indigo"
+light_hue = "#635a93"
+light_chip = "#e9e8ee"
+light_mark = "#5f568d"
+dark_hue = "#a39bda"
+dark_chip = "#2c2a37"
+dark_mark = "#a39bda"
+
+[[native.app]]
+id = "health"
+name = "Health"
+desc = "Daily totals and workouts from your phone."
+icon_key = "Activity"
+color_key = "olive"
+light_hue = "#666723"
+light_chip = "#e9eae0"
+light_mark = "#5e5f20"
+dark_hue = "#a8aa66"
+dark_chip = "#2d2d20"
+dark_mark = "#a8aa66"
+
+# Dark mockups. `[mockups.dark]` is read by `cargo xtask design`
+# (crates/xtask/src/design_dark.rs), which writes every `XDark.dc.html` in
+# design/mockups from the light `X.dc.html` (#1173). Never edit a dark screen.
+# The dark value of every app, state and shell colour, surface and text colour
+# here is the same value as its `dark_fill`, `dark_text` or dark half above; a
+# test (`the_dark_mockups_and_the_apps_agree`) fails when one drifts.
+
+[mockups.dark]
+# Appended to the <title> of a dark screen.
+title_suffix = " (dark)"
+
+# One entry per light colour that changes. The dark value depends on the role
+# the colour plays: `text` is CSS `color`; `ink` is SVG `fill`/`stroke` (the
+# text value when absent); `fill` is `background*`, gradient stops and SVG
+# `stop-color`; `line` is `border*` and `outline*`; `shadow` is `box-shadow`
+# and `text-shadow`. A role left out keeps the light value.
+colors = [
+  { light = "#00AA98", ink = "#00F6DC" },
+  { light = "#087990", text = "#30A9C6", fill = "#01819B" },
+  { light = "#1C1B19", text = "#F2EFEA", fill = "#3A3733", line = "#F2EFEA" },
+  { light = "#1E4C80", text = "#2D71BE" },
+  { light = "#1F4A36", text = "#A2D8BF" },
+  { light = "#1F4A45", text = "#7FC4B8", fill = "#2E7268", line = "#7FC4B8" },
+  { light = "#087668", text = "#4FD1BE", fill = "#12806F", line = "#4FD1BE" },
+  { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
+  { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
+  { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
+  { light = "#2F6FB5", text = "#5C96D5" },
+  { light = "#3D638F", text = "#5E89BA" },
+  { light = "#3E6B55", text = "#5A9B7B" },
+  { light = "#454E58", text = "#939DA8", fill = "#6A7888" },
+  { light = "#4A4741", text = "#C9C4BA", fill = "#3A3733" },
+  { light = "#4E3C86", text = "#705AB5" },
+  { light = "#5698F8", ink = "#85B4FA" },
+  { light = "#5A3200", text = "#E4C195" },
+  { light = "#6A5A99", text = "#9487B8" },
+  { light = "#6E6B66", fill = "#5F5B55" },
+  { light = "#6F6B64", text = "#A39E95" },
+  { light = "#7638AD", text = "#BA82F5", fill = "#935BCB", line = "#BA82F5" },
+  { light = "#85807A", text = "#75716A", line = "#75716A" },
+  { light = "#874300", text = "#F2A64F", fill = "#964C04" },
+  { light = "#8A6A1F", text = "#C89A2D" },
+  { light = "#8C6802", text = "#BF9738", fill = "#967002", line = "#BF9738" },
+  { light = "#8E897F", text = "#5C5852", fill = "#5C5852", line = "#5C5852" },
+  { light = "#8E8A84", fill = "#5F5B55" },
+  { light = "#8FA6C4", ink = "#ABBDD3" },
+  { light = "#9C9C99", text = "#565654", ink = "#565654" },
+  { light = "#A8398A", text = "#E573C3", fill = "#BB4C9C", line = "#E573C3" },
+  { light = "#AFC1D9", ink = "#A9BCD6" },
+  { light = "#BB365C", text = "#F76E8E", fill = "#CB4669", line = "#F76E8E" },
+  { light = "#C8392F", text = "#F27A6D", fill = "#CD483D", line = "#F27A6D" },
+  { light = "#CFCAC1", fill = "#4A4741", line = "#4A4741" },
+  { light = "#D7D4CE", fill = "#3A3733" },
+  { light = "#D8D3CA", line = "#C9C2B6" },
+  { light = "#D9E6DF", fill = "#263A30" },
+  { light = "#DCE8F4", fill = "#1D3044" },
+  { light = "#DDEDE3", fill = "#223F2D" },
+  { light = "#E1E3F0", fill = "#202541" },
+  { light = "#E1F0F3", fill = "#1D3D44" },
+  { light = "#D7D3CC", fill = "#3A3733" },
+  { light = "#DDF0F2", fill = "#1D4044" },
+  { light = "#E1F1F2", ink = "#1D4144", fill = "#1D4144" },
+  { light = "#E2DED7", fill = "#3A3733" },
+  { light = "#E2EEF8", fill = "#1D3244" },
+  { light = "#E3EEEB", fill = "#253C36" },
+  { light = "#E3F0F2", fill = "#1F3D42" },
+  { light = "#E3F1E8", fill = "#20412C" },
+  { light = "#E4E0D8", fill = "#3A3733", line = "#3A3733" },
+  { light = "#E6ECF3", fill = "#1F2F41" },
+  { light = "#E6EEF8", fill = "#1D2E44" },
+  { light = "#E8E4DC", text = "#3A3426" },
+  { light = "#E8E4DD", fill = "#3A3327" },
+  { light = "#E8F0EA", fill = "#263B2B" },
+  { light = "#E8F2EC", fill = "#233E2E", line = "#233E2E" },
+  { light = "#E9E1F3", fill = "#2E1D44" },
+  { light = "#E9E5F4", fill = "#271D44" },
+  { light = "#EBD3E5", fill = "#431E3A" },
+  { light = "#EBEDF0", fill = "#2A2F37" },
+  { light = "#ECE8F3", fill = "#2C2140" },
+  { light = "#ECE9E4", fill = "#2A2826" },
+  { light = "#ECEAE5", fill = "#2A2826" },
+  { light = "#ECEAF6", fill = "#241D44" },
+  { light = "#EDEAE5", fill = "#0E0D0C" },
+  { light = "#EEEAF6", fill = "#2A1D44" },
+  { light = "#EEEBE5", fill = "#2C2A27", line = "#2C2A27" },
+  { light = "#EFE7D8", fill = "#2A2826" },
+  { light = "#EFEDE8", fill = "#393428" },
+  { light = "#F0C3CF", fill = "#5C2A38" },
+  { light = "#F0ECF7", fill = "#2B1D44" },
+  { light = "#F2EFEA", fill = "#2A2826" },
+  { light = "#F3EFF8", fill = "#2E1D43" },
+  { light = "#F48E04", ink = "#FCB048" },
+  { light = "#F4F2EE", fill = "#0E0D0C" },
+  { light = "#F6E3D6", fill = "#442D1D" },
+  { light = "#F6EFD8", fill = "#443B1D" },
+  { light = "#F83F6E", ink = "#FB84A2" },
+  { light = "#F8E4EA", fill = "#441D29" },
+  { light = "#FBE7E4", fill = "#44221D" },
+  { light = "#FBE7ED", fill = "#441D29" },
+  { light = "#FBFAF8", fill = "#0E0D0C" },
+  { light = "#FFF6E8", fill = "#44351D" },
+  { light = "#FFFFFF", fill = "#1F1E1C" },
+]
+
+# Content colours: list colours, photos and tints, document pages, the app
+# icon, switch knobs. They keep their value in every role not listed above. A
+# light colour that is in neither `colors` nor here is an error, so a new
+# colour in a light screen forces a decision about its dark value.
+keep = [
+  "#1399B5",
+  "#2E4F2A",
+  "#2E6A60",
+  "#2F5577",
+  "#2F5A2B",
+  "#2F6B4F",
+  "#2F7D4F",
+  "#35507A",
+  "#3A3936",
+  "#3A6FD8",
+  "#3D5A80",
+  "#3D5AA8",
+  "#3D5E7A",
+  "#3E6B36",
+  "#468DE5",
+  "#4A3F66",
+  "#4A3F7A",
+  "#4C7A3E",
+  "#4E7A3E",
+  "#4E9A8C",
+  "#5A3A2A",
+  "#5A8CB0",
+  "#5E4A8E",
+  "#5F8F4A",
+  "#6B5A40",
+  "#6785F5",
+  "#6E8DB5",
+  "#7A6AB0",
+  "#7FA3C0",
+  "#7FA866",
+  "#808C9A",
+  "#8D8170",
+  "#8E3B52",
+  "#8F7A57",
+  "#9A6A22",
+  "#9DBF8A",
+  "#9EC3D9",
+  "#A08560",
+  "#A39E95",
+  "#A84A3A",
+  "#A85A12",
+  "#A8D0C8",
+  "#AA71E3",
+  "#B0602A",
+  "#B08505",
+  "#B9B2D8",
+  "#B9D3A0",
+  "#C2366B",
+  "#C46A4A",
+  "#C8473B",
+  "#C9D6E8",
+  "#CFC6B8",
+  "#D462B2",
+  "#D8CBA6",
+  "#D9784E",
+  "#D9A23A",
+  "#D9C7A7",
+  "#E0A060",
+  "#E55D7E",
+  "#E8A3C0",
+  "#E9F5F6",
+  "#F0B23E",
+  "#F0B86A",
+  "#F2A93B",
+  "#F2C9A0",
+  "#F2D57A",
+  "#F3E8B8",
+  "#F3EDE2",
+]
+
+# A document page is content, so it and everything inside it stay light: a
+# white `background`, at least `min_height` px tall, with a radius no larger
+# than `max_radius` px.
+[mockups.dark.paper]
+background = "#FFFFFF"
+min_height = 100
+max_radius = 8
+
+# An iOS switch thumb stays white: an absolutely positioned `size` px circle.
+[mockups.dark.knob]
+background = "#FFFFFF"
+size = 26
+
+# An app tile keeps its ink fill: a square, centred flex box holding a white
+# glyph.
+[mockups.dark.tile]
+background = "#1C1B19"
+
+# Translucent white (glass) becomes translucent `to`, never less opaque than
+# `min_alpha`.
+[mockups.dark.glass]
+from = [255, 255, 255]
+to = [44, 42, 39]
+min_alpha = "0.72"
+
+# Black shadows and scrims are never lighter than `min_alpha`.
+[mockups.dark.shade]
+min_alpha = "0.5"
+
+# The Centraid brand icon swaps its white for the dark ground. The 120-wide
+# app-icon tile (`tile_view_box`) also keeps its quarter colours and drops its
+# hairline.
+[mockups.dark.icon]
+white = "#FFFFFF"
+ground = "#1C1B19"
+tile_view_box = "0 0 120 120"
+# ---------------------------------------------------------------------------
+# 3. The public sites (#1173)
+# ---------------------------------------------------------------------------
+#
+# `cargo xtask design` lowers the product's tokens onto `centraid-tokens.css`,
+# the one stylesheet the landing page and the docs site share. Most of that
+# sheet is already above: the colour roles are `[native.colors.*]`, spacing and
+# radii are `[native.spacing]` and `[native.radii]`, the touch type scale is
+# `[native.type.*]`. This section is only what the sites need and the shells do
+# not: the desktop (fine-pointer) overrides, the page-scale values, the font
+# subsets, and a handful of colours the native roles do not carry. The order of
+# the custom properties is the generator's (design_site.rs), not this file's.
+
+[site.fonts]
+family = "Instrument Sans"
+weights = [400, 600]
+# One entry per subset, in the order the faces are written. `unicode_range`
+# is the browser's cue to fetch the subset only when a glyph needs it.
+subsets = [
+  { name = "latin", unicode_range = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" },
+  { name = "latin-ext", unicode_range = "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF" },
+]
+
+# Fixed values, in the order they are written: after the radii and spacing steps
+# (head), after the type scale (tail).
+[site.root]
+head = [
+  [
+    "--sp-gutter",
+    "2px",
+  ],
+  [
+    "--sp-hair",
+    "1px",
+  ],
+  [
+    "--sp-chip",
+    "3px",
+  ],
+  [
+    "--ease",
+    "cubic-bezier(0.3, 0, 0.4, 1)",
+  ],
+  [
+    "--ease-entry",
+    "cubic-bezier(0.2, 0.7, 0.2, 1)",
+  ],
+  [
+    "--target-min",
+    "44px",
+  ],
+  [
+    "--o-disabled",
+    "0.45",
+  ],
+  [
+    "--dur-1",
+    "140ms",
+  ],
+  [
+    "--dur-2",
+    "280ms",
+  ],
+  [
+    "--h-control",
+    "34px",
+  ],
+  [
+    "--h-row",
+    "44px",
+  ],
+  [
+    "--h-segmented",
+    "28px",
+  ],
+  [
+    "--w-stem",
+    "240px",
+  ],
+  [
+    "--w-key-col",
+    "110px",
+  ],
+  [
+    "--page-margin",
+    "18px",
+  ],
+  [
+    "--density-row",
+    "44px",
+  ],
+  [
+    "--density-pad",
+    "16px",
+  ],
+  [
+    "--font-code",
+    "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+  ],
+  [
+    "--font-sans",
+    "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
+  ],
+]
+tail = [
+  [
+    "--t-display-tracking",
+    "-0.02em",
+  ],
+  [
+    "--t-title-tracking",
+    "-0.01em",
+  ],
+  [
+    "--t-eyebrow-tracking",
+    "0.06em",
+  ],
+  [
+    "--t-eyebrow-transform",
+    "uppercase",
+  ],
+  [
+    "--t-mono-numeric",
+    "tabular-nums",
+  ],
+  [
+    "--t-mono-direction",
+    "ltr",
+  ],
+  [
+    "--t-mono-bidi",
+    "isolate",
+  ],
+  [
+    "--tile-row-badge-w",
+    "116px",
+  ],
+  [
+    "--tile-shelf-max",
+    "1560px",
+  ],
+  [
+    "--tile-shelf-pad-x",
+    "56px",
+  ],
+  [
+    "--tile-bg",
+    "color-mix(in srgb, var(--text) 2.5%, transparent)",
+  ],
+  [
+    "--tile-bg-hover",
+    "color-mix(in srgb, var(--text) 5%, transparent)",
+  ],
+  [
+    "--tile-gap",
+    "11px",
+  ],
+  [
+    "--tile-h",
+    "248px",
+  ],
+  [
+    "--tile-icon",
+    "44px",
+  ],
+  [
+    "--tile-icon-radius",
+    "11.44px",
+  ],
+  [
+    "--tile-pad",
+    "15px 16px",
+  ],
+  [
+    "--tile-radius",
+    "12px",
+  ],
+]
+
+# `@media (pointer: fine)`: a pointer can hit a smaller target and read a
+# denser scale. The properties here replace the ones above.
+[site.fine]
+props = [
+  [
+    "--page-margin",
+    "32px",
+  ],
+  [
+    "--target-min",
+    "34px",
+  ],
+  [
+    "--w-key-col",
+    "150px",
+  ],
+]
+
+# The fine-pointer type scale, by the role's name in `[native.type.*]`.
+[site.fine.type.display]
+font_size = 32.0
+line_height = 36.0
+weight = 600
+
+[site.fine.type.title]
+font_size = 20.0
+line_height = 26.0
+weight = 600
+
+[site.fine.type.reading]
+font_size = 17.0
+line_height = 28.0
+weight = 400
+
+[site.fine.type.body]
+font_size = 13.0
+line_height = 19.0
+weight = 400
+
+[site.fine.type.bodyStrong]
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[site.fine.type.labelOn]
+font_size = 13.0
+line_height = 19.0
+weight = 600
+
+[site.fine.type.small]
+font_size = 13.0
+line_height = 19.0
+weight = 400
+
+[site.fine.type.smallStrong]
+font_size = 13.0
+line_height = 18.0
+weight = 600
+
+[site.fine.type.control]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.eyebrow]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.mono]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[site.fine.type.annotLabel]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+[site.fine.type.annotLabelOn]
+font_size = 11.0
+line_height = 15.0
+weight = 600
+
+[site.fine.type.band]
+font_size = 11.0
+line_height = 15.0
+weight = 400
+
+# Colours the native roles do not carry, light scheme.
+[site.light]
+"--bg-app" = "#F0EFED"
+"--bg-hud" = "rgba(253,253,252,.94)"
+"--bg-wall" = "#F0EFED"
+"--device-wall" = "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), linear-gradient(180deg, #EAE9E6 0%, #E1E0DC 100%)"
+"--glass-sheen" = "none"
+"--c-amber-text" = "#894a43"
+"--c-forest-text" = "#346841"
+"--c-indigo-text" = "#5f568d"
+"--c-ochre-text" = "#7c5420"
+"--c-olive-text" = "#5e5f20"
+"--c-rose-text" = "#894a5f"
+"--c-slate-text" = "#3a5e8b"
+"--c-teal-text" = "#006774"
+"--c-violet-text" = "#744e7d"
+
+# Colours the native roles do not carry, dark scheme.
+[site.dark]
+"--bg-app" = "#060606"
+"--bg-hud" = "rgba(14,14,14,.94)"
+"--bg-wall" = "#060606"
+"--device-wall" = "repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.022) 23px 24px), var(--bg-wall)"
+"--glass-sheen" = "none"
+"--c-amber-text" = "#d78f85"
+"--c-forest-text" = "#7bb587"
+"--c-indigo-text" = "#a39bda"
+"--c-ochre-text" = "#c99b65"
+"--c-olive-text" = "#a8aa66"
+"--c-rose-text" = "#d48da2"
+"--c-slate-text" = "#7ea7dc"
+"--c-teal-text" = "#58b4c4"
+"--c-violet-text" = "#be92c8"
+
+# The density tiers, comfortable first.
+[[site.density]]
+tier = "comfortable"
+pad = 16
+row = 44
+
+[[site.density]]
+tier = "compact"
+pad = 12
+row = 38
+
+[[site.density]]
+tier = "dense"
+pad = 8
+row = 34
+
+# Page-scale values, in groups. `comment` is the CSS comment above the group
+# (a line break in it is a line break in the sheet).
+[[site.layer]]
+comment = "Long-form measure. The reading role's contract is 66ch at the consumer;\nthese are that contract spelled once for both sites."
+props = [["--measure-reading", "66ch"], ["--measure-lede", "52ch"]]
+
+[[site.layer]]
+comment = "Section rhythm. The spacing scale tops out at 32px because that is the\nlargest rhythm step INSIDE a product screen; a scrolling page stacks the\ntop rung rather than inventing a bigger one."
+props = [
+  [
+    "--sp-band",
+    "calc(var(--sp-6) * 2)",
+  ],
+  [
+    "--sp-band-lg",
+    "calc(var(--sp-6) * 3)",
+  ],
+  [
+    "--sp-band-xl",
+    "calc(var(--sp-6) * 4)",
+  ],
+]
+
+[[site.layer]]
+comment = "The marketing display step: the display ROLE, scaled. Same face, same\nweight, same tracking — only the size moves, and it moves as a multiple\nof the role's own published size token rather than as a second scale."
+props = [
+  [
+    "--t-hero-size",
+    "clamp(\n    calc(var(--t-display-size) * 1.35),\n    6vw,\n    calc(var(--t-display-size) * 2.25)\n  )",
+  ],
+  [
+    "--t-chapter-size",
+    "clamp(\n    calc(var(--t-display-size) * 1.15),\n    4.4vw,\n    calc(var(--t-display-size) * 1.6)\n  )",
+  ],
+]
+

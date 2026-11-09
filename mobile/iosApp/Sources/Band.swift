@@ -86,7 +86,7 @@ private struct BandTab: View {
                         iconKey: iconKey,
                         // Inactive is `textFaint` — never the label's token,
                         // never an app's hue. The band carries no identity.
-                        tint: Theme.color(selected ? "text" : "textFaint", scheme),
+                        tint: selected ? Surface.ink : Surface.meta,
                         size: BandMetrics.iconSize,
                         strokeWidth: CentraidGeometry.appMarkStroke
                     )
@@ -97,7 +97,7 @@ private struct BandTab: View {
                     // the strip, and it HOLDS at every text size: `control`
                     // scales elsewhere, so the active half says `scales: false`.
                     .centraidType(selected ? "control" : "band", scales: false)
-                    .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
+                    .foregroundStyle(selected ? Surface.ink : Surface.meta)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
             }
@@ -115,7 +115,7 @@ private struct BandTab: View {
     }
 }
 
-/// AN APP'S BAND — the `AppPlace` room's band (DESIGN.md, "The seven rooms"),
+/// AN APP'S BAND — the `AppPlace` room's band (product-intuition/references/design-behaviour.md § Rooms),
 /// copied from v0's (`apps/mobile/src/apps/photos/PhotosBand.tsx`,
 /// `kit/band/BandCapsule.tsx`, `kit/band-surface.ts`).
 ///
@@ -131,7 +131,7 @@ private struct BandTab: View {
 /// the held pair (`band` 400 → `control` 600, same rung, so nothing reflows),
 /// the ink step (`textFaint` mark and `textSoft` label → full `text`), and the
 /// rule. v0 said it with ink and the rule alone and set every label at 600,
-/// which left four grey bold words and a hairline to hunt for; DESIGN.md's held
+/// which left four grey bold words and a hairline to hunt for; the held (design/mockups/DesignRules.dc.html)
 /// pair is what makes the lit tab legible at a glance.
 ///
 /// **THE RULE SLIDES, AND IT SITS INSIDE THE PLATE.** Drawn on the plate's
@@ -169,6 +169,9 @@ struct AppBand: View {
     /// back, and a pick of a place puts the control back.
     var segments: [BandSegment] = []
     var onSegment: (String) -> Void = { _ in }
+    /// The places are behind a lock (a locked Locker): drawn in the disabled ink with no place lit,
+    /// and still tappable — a tap is the member's way to start the unlock.
+    var locked: Bool = false
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -194,6 +197,7 @@ struct AppBand: View {
                 iconKey: "Home",
                 spoken: KitWords.BAND_HOME,
                 identifier: "\(app)-band-home",
+                flat: !folded && tabs.isEmpty && onMore == nil && searchKey == nil,
                 action: onHome
             )
 
@@ -209,14 +213,15 @@ struct AppBand: View {
                 BandSegmented(segments: segments, onPick: onSegment)
             } else if !tabs.isEmpty || onMore != nil {
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
-            // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
-            // is a control that does nothing.
+            // AT ALL with no tabs: an empty capsule is a control that does nothing. (A locked
+            // Locker keeps its plate, dimmed: its places start the unlock.)
             HStack(spacing: BandMetrics.groupGutter) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
                         iconKey: tab.iconKey,
                         label: tab.label,
-                        selected: tab.selected,
+                        selected: tab.selected && !locked,
+                        locked: locked,
                         rule: rule,
                         identifier: "\(app)-band-\(tab.key.isEmpty ? tab.label.lowercased() : tab.key)",
                         onPress: {
@@ -301,12 +306,12 @@ struct BandSegmented: View {
                 Button { onPick(segment.id) } label: {
                     Text(segment.label)
                         .centraidType(segment.selected ? "control" : "band", scales: false)
-                        .foregroundStyle(Theme.color(segment.selected ? "text" : "textSoft", scheme))
+                        .foregroundStyle(segment.selected ? Surface.ink : Surface.meta)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
                         .background(
-                            Capsule().fill(segment.selected ? Theme.color("bgSunken", scheme) : .clear)
+                            Capsule().fill(segment.selected ? Surface.fill : .clear)
                         )
                         .contentShape(Capsule())
                 }
@@ -330,6 +335,11 @@ struct BandKey: View {
     let iconKey: String
     let spoken: String
     let identifier: String
+    /// A key standing ALONE (a page that ends with no plate and no search; a locked Locker keeps its
+    /// dimmed plate and is not one): glass has nothing to
+    /// sit beside and over a flat page reads as a heavy ring, so it is the board's soft card
+    /// disc with a faint hairline and a soft shadow.
+    var flat: Bool = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -337,11 +347,11 @@ struct BandKey: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        let liquid = BandMetrics.usesLiquidGlass(reduceTransparency: reduceTransparency, contrast: contrast)
+        let liquid = !flat && BandMetrics.usesLiquidGlass(reduceTransparency: reduceTransparency, contrast: contrast)
         Button(action: action) {
             CentraidIconView(
                 iconKey: iconKey,
-                tint: Theme.color("textSoft", scheme),
+                tint: Surface.ink,
                 size: BandMetrics.iconSize,
                 strokeWidth: CentraidGeometry.appMarkStroke
             )
@@ -349,9 +359,26 @@ struct BandKey: View {
             .contentShape(Circle())
         }
         .buttonStyle(BandPress(inset: 0, paints: !liquid))
-        .bandGround(Circle(), solid: "bg", interactive: true)
+        .modifier(BandKeyGround(flat: flat))
         .accessibilityLabel(spoken)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A round key's ground: the band's glass, or (alone) the flat card disc.
+private struct BandKeyGround: ViewModifier {
+    let flat: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        if flat {
+            content
+                .background(Circle().fill(Surface.card))
+                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.08), radius: 10, y: 6)
+        } else {
+            content.bandGround(Circle(), solid: "bg", interactive: true)
+        }
     }
 }
 
@@ -362,6 +389,7 @@ private struct AppBandTab: View {
     let iconKey: String
     let label: String
     let selected: Bool
+    var locked: Bool = false
     let rule: Namespace.ID
     let identifier: String
     let onPress: () -> Void
@@ -369,14 +397,15 @@ private struct AppBandTab: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let ink = locked ? Theme.color("textDisabled", scheme) : (selected ? Surface.ink : Surface.meta)
         Button(action: onPress) {
             VStack(spacing: BandMetrics.labelGap) {
                 CentraidIconView(
                     iconKey: iconKey,
                     // Inactive is `textFaint`, as on the Home band: the mark
                     // recedes further than the word, so the lit tab's mark is
-                    // the one ink shape in the strip.
-                    tint: Theme.color(selected ? "text" : "textFaint", scheme),
+                    // the one ink shape in the strip. A locked band is all disabled ink.
+                    tint: ink,
                     size: BandMetrics.iconSize,
                     strokeWidth: CentraidGeometry.appMarkStroke
                 )
@@ -385,7 +414,7 @@ private struct AppBandTab: View {
                     // THE HELD PAIR: one rung, two weights, no reflow — and it
                     // holds at every text size (`control` scales elsewhere).
                     .centraidType(selected ? "control" : "band", scales: false)
-                    .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
+                    .foregroundStyle(ink)
                     .lineLimit(1)
             }
             .padding(.top, BandMetrics.tabTop)
@@ -398,7 +427,7 @@ private struct AppBandTab: View {
                     // a darker stretch of the border. Mark-wide, it is plainly
                     // a marker for the one ink shape under it.
                     Capsule()
-                        .fill(Theme.color("text", scheme))
+                        .fill(Surface.ink)
                         .frame(width: BandMetrics.markSize, height: BandMetrics.activeRule)
                         // At the tab's top, which is `platePad` inside the
                         // plate's edge — clear of its hairline, and still
@@ -418,7 +447,7 @@ private struct AppBandTab: View {
 
 /// THE BAND'S PRESS: `bgPress` under the finger, on the pill rung like the
 /// plate it sits in, eased on the state-change curve. A ground and not a
-/// scale, a dim or an opacity — DESIGN.md refuses all three — so the tab stays
+/// scale, a dim or an opacity — product-intuition/references/design-behaviour.md § Controls refuses all three — so the tab stays
 /// exactly where it was and only its floor answers.
 private struct BandPress: ButtonStyle {
     /// How far the pressed ground stands in from the tab's top and bottom, so
@@ -432,7 +461,7 @@ private struct BandPress: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         // THE RESTING GROUND IS THE PLATE'S (`BandGround`), so the style paints only the press.
-        let fill: Color = configuration.isPressed && paints ? Theme.color("bgPress", scheme) : .clear
+        let fill: Color = configuration.isPressed && paints ? Surface.fill : .clear
         return configuration.label
             .background(
                 Capsule()
@@ -448,7 +477,7 @@ private struct BandPress: ButtonStyle {
     }
 }
 
-/// THE BAND'S GROUND, ONCE FOR EVERY BAND (DESIGN.md, "Elevation & Depth"): the platform's own
+/// THE BAND'S GROUND, ONCE FOR EVERY BAND (design/mockups/DesignRules.dc.html): the platform's own
 /// glass over whatever the page scrolls under it, or the paper it falls back to. This is the ONE
 /// place the shell asks which OS it is on; no band, key or bar decides that for itself.
 ///
@@ -485,11 +514,11 @@ struct BandGround<S: InsettableShape>: ViewModifier {
                     if BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
                         shape.fill(.thinMaterial)
                     } else {
-                        shape.fill(Theme.color(solid, scheme))
+                        shape.fill(Surface.card)
                     }
                 }
                 .overlay(
-                    shape.strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                    shape.strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
                 )
         }
     }
@@ -523,7 +552,7 @@ struct BandStrip: ViewModifier {
     func body(content: Content) -> some View {
         content.background {
             if !BandMetrics.isGlass(reduceTransparency: reduceTransparency, contrast: contrast) {
-                Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom)
+                Surface.page.ignoresSafeArea(edges: .bottom)
             }
         }
     }

@@ -31,6 +31,11 @@
       },
       {
         "schema": "vault",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "revision",
         "verbs": "read"
       },
@@ -105,6 +110,11 @@
         "verbs": "act"
       },
       {
+        "schema": "tag",
+        "table": "color",
+        "verbs": "act"
+      },
+      {
         "schema": "document",
         "table": "edit",
         "verbs": "act"
@@ -122,6 +132,16 @@
       {
         "schema": "container",
         "table": "create",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
         "verbs": "act"
       }
     ]
@@ -610,7 +630,7 @@
         "label the tax return finance",
         "add the tag travel to my itinerary doc"
       ],
-      "description": "Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.",
+      "description": "Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it. A new label wears the colour asked for, else the palette colour fewest labels wear.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -623,6 +643,18 @@
             "type": "string",
             "minLength": 1,
             "aliases": ["label"]
+          },
+          "color": {
+            "enum": [
+              "blue",
+              "mustard",
+              "violet",
+              "petrol",
+              "indigo",
+              "graphite",
+              "raspberry",
+              "orchid"
+            ]
           }
         },
         "required": ["id", "label"],
@@ -671,6 +703,58 @@
           }
         },
         "required": ["id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "recolor-label",
+      "verb": "edit",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "command": "tag.color",
+      "phrasings": [
+        "make the taxes label blue",
+        "change the colour of the travel label to orchid",
+        "give the receipts label a raspberry colour"
+      ],
+      "description": "Change the colour a label wears through tag.color. The colour is one key of the design palette; the label is the same everywhere it is used.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "enum": [
+              "blue",
+              "mustard",
+              "violet",
+              "petrol",
+              "indigo",
+              "graphite",
+              "raspberry",
+              "orchid"
+            ]
+          }
+        },
+        "required": ["label", "color"],
         "additionalProperties": false
       },
       "output": {
@@ -960,6 +1044,102 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-about",
+      "verb": "link",
+      "kind": "document",
+      "inverse": "remove-about",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "this lease is about Maya",
+        "the school form is about Ravi",
+        "mark the lease as about Maya"
+      ],
+      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-about",
+      "verb": "unlink",
+      "kind": "document",
+      "inverse": "add-about",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "the lease is no longer about Maya",
+        "take Ravi off the school form",
+        "the lease is not about Maya"
+      ],
+      "description": "Take a person off a document through edge.remove (rel about).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {

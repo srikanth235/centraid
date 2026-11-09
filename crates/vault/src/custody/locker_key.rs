@@ -309,7 +309,7 @@ impl crate::file::Vault {
                     .to_owned(),
             });
         }
-        if let Some(live) = live_locker_key_id(self.connection())? {
+        if let Some(live) = live_locker_key_id(&self.connection())? {
             return Ok(live);
         }
         // THROUGH THE COMMIT GUARD AND NOWHERE ELSE (#1047 R3). This insert

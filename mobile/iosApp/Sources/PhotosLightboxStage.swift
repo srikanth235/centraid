@@ -14,7 +14,7 @@ import UIKit
 /// - **A pinch, or a double tap, zooms**, from fit to 2.5× and up to 5×, and a
 ///   one-finger drag pans a zoomed photograph. A zoomed photograph does not
 ///   page — the drag that would have paged is the drag that pans it.
-/// - **A swipe down closes**, the `StageRoom`'s own way out (DESIGN.md); the
+/// - **A swipe down closes**, the `StageRoom`'s own way out (product-intuition/references/design-behaviour.md § Rooms); the
 ///   close control in the chrome is the same act.
 ///
 /// One bare tap toggles the chrome, a long press plays a Live Photo's movie.
@@ -28,6 +28,10 @@ struct PhotosLightboxStage: View {
     let live: LightboxPlayer?
     let send: (PhotosLightboxSend) -> Void
     let onClose: () -> Void
+    /// THE DETAILS UNDER THE PHOTOGRAPH are open (the light viewer). A swipe up opens them and a
+    /// swipe down closes them before it ever closes the viewer; `onInfo` is the same act as (i).
+    var infoOpen = false
+    var onInfo: (Bool) -> Void = { _ in }
 
     /// THE PHOTOGRAPH THE STAGE IS DRAWING, which leads the state by one frame
     /// on a swipe: the incoming frame is already under the member's finger
@@ -170,7 +174,7 @@ struct PhotosLightboxStage: View {
                     let edge = (dx > 0 && previous == nil) || (dx < 0 && next == nil)
                     pageX = edge ? dx / 3 : dx
                 case .vertical:
-                    dismissY = max(0, value.translation.height)
+                    dismissY = infoOpen ? 0 : max(0, value.translation.height)
                 case nil:
                     break
                 }
@@ -196,7 +200,15 @@ struct PhotosLightboxStage: View {
                         send(.moved(.with { $0.photoID = target }))
                     })
                 case .vertical:
-                    if dismissY > dismissDistance || value.predictedEndTranslation.height > dismissDistance * 2 {
+                    let up = value.translation.height < -dismissDistance / 2
+                        || value.predictedEndTranslation.height < -dismissDistance
+                    let down = value.translation.height > dismissDistance / 2
+                    if infoOpen {
+                        // THE DETAILS CLOSE BEFORE THE VIEWER DOES.
+                        if down { onInfo(false) }
+                    } else if up && !state.slideshow {
+                        onInfo(true)
+                    } else if dismissY > dismissDistance || value.predictedEndTranslation.height > dismissDistance * 2 {
                         onClose()
                     } else {
                         settle { dismissY = 0 }
@@ -501,7 +513,7 @@ struct PlayerSurface: UIViewRepresentable {
 
 /// THE TRANSPORT — play, pause and the scrub strip (v0's `Transport`).
 ///
-/// Determinate, always: a position over a length, never a spinner (DESIGN.md
+/// Determinate, always: a position over a length, never a spinner (product-intuition/references/design-behaviour.md § Status line
 /// §5). The strip is a track the member drags or taps to seek; the time beside
 /// it is the clock the strip is drawing.
 struct LightboxTransport: View {

@@ -22,7 +22,10 @@ fn made(shell: &mut Shell, reminders: bool) {
         instance,
         wire::screen_event::Kind::ImportsMade(wire::ImportsMadeEvent {
             kind: Some(wire::imports_made_event::Kind::Made(
-                wire::imports_made_event::Made { reminders },
+                wire::imports_made_event::Made {
+                    reminders,
+                    include_completed: false,
+                },
             )),
         }),
     );
@@ -101,6 +104,7 @@ fn calendar(titles: &[&str]) -> O {
             source_title: "Google".to_owned(),
             title: "Work".to_owned(),
             color: "#34C759".to_owned(),
+            ..wire::PhoneCalendar::default()
         }],
         events: titles
             .iter()
@@ -127,6 +131,7 @@ fn reminders(items: &[(&str, &str, &str)]) -> O {
                 title: (*title).to_owned(),
                 notes: (*notes).to_owned(),
                 due: (*due).to_owned(),
+                ..wire::PhoneReminder::default()
             })
             .collect(),
     })
@@ -147,9 +152,9 @@ fn open_tasks(shell: &Shell) -> u32 {
     shell.d.with_ctx(|ctx| {
         match read::read(
             ctx,
-            load::agenda::Board {
+            load::reminders::Board {
                 limit: 500,
-                ..load::agenda::Board::default()
+                ..load::reminders::Board::default()
             },
             |answer| match answer {
                 Answer::AgendaTaskBoard(board) => board.counts.map(|counts| counts.open),
@@ -242,7 +247,7 @@ fn reminders_become_ordinary_tasks_with_their_notes_and_due_day_and_a_duplicate_
         ]),
     );
     assert_eq!(view(&shell).summary, "2 tasks imported");
-    assert_eq!(view(&shell).open_label, "Open Agenda");
+    assert_eq!(view(&shell).open_label, "Open Reminders");
     // The tasks are the vault's: the open count grew by the two that were not duplicates.
     assert_eq!(open_tasks(&shell), opened + 2);
 }

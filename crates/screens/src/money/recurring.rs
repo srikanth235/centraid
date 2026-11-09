@@ -67,7 +67,7 @@ impl Recurring {
                     amount: fold::text(line.amount.as_ref()),
                     chips: match Status::try_from(line.status).unwrap_or(Status::Unspecified) {
                         Status::Late => vec![chip(words::chip_late(locale), Tone::Warning)],
-                        Status::Paid => vec![chip(words::chip_paid(locale), Tone::Seam)],
+                        Status::Paid => vec![chip(words::chip_paid(locale), Tone::Accent)],
                         Status::Due => vec![chip(words::chip_due(locale), Tone::Neutral)],
                         Status::Unspecified => Vec::new(),
                     },

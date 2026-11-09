@@ -151,18 +151,24 @@ pub(super) fn lock_cell(cell: &Cell) -> std::sync::MutexGuard<'_, Option<Session
 }
 
 pub(super) fn state_of(cell: &Cell, now_ms: i64) -> wire::LockerSessionResponse {
-    let remaining = lock_cell(cell)
+    let guard = lock_cell(cell);
+    let timeout_ms = guard
+        .as_ref()
+        .map_or(super::SESSION_TIMEOUT_MS, Session::timeout_ms);
+    let remaining = guard
         .as_ref()
         .and_then(|session| match session.state(now_ms) {
             super::SessionState::Unlocked { remaining_ms } => Some(remaining_ms),
             super::SessionState::Locked => None,
         });
+    drop(guard);
     wire::LockerSessionResponse {
         state: match remaining {
             Some(_) => wire::LockerSessionState::Unlocked,
             None => wire::LockerSessionState::Locked,
         } as i32,
         remaining_ms: remaining.and_then(|ms| u64::try_from(ms).ok()).unwrap_or(0),
+        idle_timeout_ms: u64::try_from(timeout_ms).unwrap_or(0),
         ..wire::LockerSessionResponse::default()
     }
 }
@@ -307,7 +313,7 @@ fn with_failures(
         .ok();
     let wall = at
         .zip(zone)
-        .and_then(|(at, zone)| centraid_apps_agenda::local::now_local(&zone, at));
+        .and_then(|(at, zone)| centraid_apps_kit::civil::now_local(&zone, at));
     if let Some((day, time)) = wall.as_deref().and_then(|wall| wall.split_once('T')) {
         answer.failed_unlock_local_day = day.to_owned();
         answer.failed_unlock_local_time = time.to_owned();

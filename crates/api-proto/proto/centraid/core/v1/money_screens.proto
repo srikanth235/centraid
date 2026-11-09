@@ -34,6 +34,9 @@ message MoneyChoice {
   bool selected = 3;
   // A note beside the label ("Groceries" under a group's name); empty for none.
   string detail = 4;
+  // The category's colour in the one list palette (`blue`, `petrol` ...); empty
+  // for a choice that is not a category, and for "No category".
+  string color_key = 5;
 }
 
 // A label beside a finished amount: Planned, Left, In, Out, Net.
@@ -44,6 +47,8 @@ message MoneyFigure {
   string amount = 2;
   // NET is money out or over plan; NEUTRAL is ink; SEAM is "not counted".
   StatusChip.Tone tone = 3;
+  // Money in: drawn in the state green, wherever the tone is neutral.
+  bool positive = 4;
 }
 
 message MoneyFact {
@@ -74,6 +79,14 @@ message MoneyRow {
   bool dimmed = 9;
   // Where a tap goes: the transaction's page.
   Route route = 10;
+  // The category's colour in the list palette; empty with no category.
+  string color_key = 11;
+  // The first letter of the title, for the tile.
+  string initial = 12;
+  // `Swap` for a transfer, empty for every other row: the tile's glyph.
+  string tile_icon = 13;
+  // Money in: the amount is drawn green.
+  bool positive = 14;
 }
 
 message MoneyDaySection {
@@ -82,6 +95,12 @@ message MoneyDaySection {
   // "Today", "Yesterday", "Mon 12 October".
   string heading = 2;
   repeated MoneyRow rows = 3;
+  // What the day came to, finished and signed: "-₹2,450", "+₹1,41,401"; one per
+  // currency, joined by " · ". Empty when no row of the day counts, and until
+  // the page that completes the day is read.
+  string total = 4;
+  // The day came to money in.
+  bool total_positive = 5;
 }
 
 message MoneyAction {
@@ -93,7 +112,7 @@ message MoneyAction {
 }
 
 // ---------------------------------------------------------------------------
-// money.home: Spending · Activity · Cash flow, and More as a sheet
+// money.home: Activity (home) · Spending · Cash flow, and More as a sheet
 // ---------------------------------------------------------------------------
 
 message MoneyHomeState {
@@ -122,7 +141,8 @@ message MoneyHomeState {
   // sections, no sort. Activity only; unset elsewhere and while denied.
   optional FilterMenu filter_menu = 15;
   // THE MONTH IN VIEW, under the app's name: a tap opens the month sheet
-  // (`MonthTapped`). Activity only; unset elsewhere.
+  // (`MonthTapped`), the one way to change month. Activity and Spending; unset
+  // on Cash flow, which reads twelve months at once.
   optional HeaderSubtitle subtitle = 16;
 
   enum Destination {
@@ -169,8 +189,10 @@ message MoneyHomeChrome {
   // The search bar under the title. It never opens in place: a tap pushes
   // `search_route`.
   string search_placeholder = 6;
-  string previous_month_label = 7;
-  string next_month_label = 8;
+  // 7 and 8 were the month stepper's labels: the month under the title, which
+  // opens the month sheet, is the one way to change month.
+  reserved 7, 8;
+  reserved "previous_month_label", "next_month_label";
   string month_sheet_title = 9;
   // 10 and 11 were the account and category sheets' titles: the filter menu's
   // section titles are its own.
@@ -187,10 +209,9 @@ message MoneyHomeData {
   string today = 1;
   // "October 2026".
   string month_label = 2;
-  // False when the month shown is the one today falls in.
-  bool can_step_next = 3;
-  // The month stepper is drawn on Spending and Activity.
-  bool shows_month = 4;
+  // 3 and 4 were the month stepper's: the subtitle replaced it.
+  reserved 3, 4;
+  reserved "can_step_next", "shows_month";
   MoneySpendingData spending = 5;
   MoneyActivityData activity = 6;
   MoneyCashflowData cashflow = 7;
@@ -215,6 +236,60 @@ message MoneySpendingData {
   string recurring_meta = 9;
   Route recurring_route = 10;
   string window_note = 11;
+  // The month by week or by day, one chart per currency.
+  repeated MoneyBars bars = 12;
+}
+
+// THE SPENDING CHART: stacked bars, one per week (or day) of the month, each cut
+// by category; the three biggest categories of the month wear their own colour
+// and the rest share the neutral one.
+message MoneyBars {
+  string currency = 1;
+  // The currency code when more than one currency is drawn; empty otherwise.
+  string heading = 2;
+  // Week, Day: one is selected (`BarsModePicked` sends its key).
+  repeated MoneyChoice modes = 3;
+  repeated MoneyBar bars = 4;
+  // Where the plan's pace falls on the bars' scale, basis points of the chart's
+  // height; 0 with no plan. `pace_label` names the line.
+  uint32 pace_bp = 5;
+  string pace_label = 6;
+  // The selected bar in words: "15-21 Oct · ₹21,040 · Eating out was the biggest share".
+  string caption = 7;
+}
+
+message MoneyBar {
+  // "1-7", "8-14"; in day mode a tick on every seventh day and empty between.
+  string label = 1;
+  // Height as basis points of the chart's height (the tallest bar or the pace,
+  // whichever is higher, is full): drawing, not a figure.
+  uint32 height_bp = 2;
+  // Bottom to top.
+  repeated MoneyBarSegment segments = 3;
+  // Nothing is dated here yet (after today): outlined, not drawn as zero.
+  bool upcoming = 4;
+  bool selected = 5;
+  string accessibility_label = 6;
+}
+
+message MoneyBarSegment {
+  // A list palette key; `graphite` for the categories that share the rest.
+  string color_key = 1;
+  // Basis points of the bar's own height.
+  uint32 share_bp = 2;
+}
+
+// One line under the chart that is not one category: "4 more categories" and
+// "No category".
+message MoneyRestLine {
+  string label = 1;
+  string amount = 2;
+  string accessibility_label = 3;
+  // The list palette key of its dot; empty draws the dashed outline.
+  string color_key = 4;
+  // The category filter a tap applies in Activity (`uncategorised`); empty for a row that opens
+  // the rest of the list instead.
+  string key = 5;
 }
 
 message MoneyHero {
@@ -243,21 +318,32 @@ message MoneyCategoryTable {
   string currency = 2;
   repeated MoneyCategoryLine rows = 3;
   // The column heads.
-  string planned_label = 4;
-  string spent_label = 5;
-  string left_label = 6;
+  // 4 to 6 were the column heads (Planned, Spent, Left): a line is a bar and a sentence now.
+  reserved 4, 5, 6;
+  reserved "planned_label", "spent_label", "left_label";
+  // What the categories past the first three come to, until tapped open.
+  optional MoneyRestLine more = 7;
+  // Rows with no category this month; a tap lists them in Activity.
+  optional MoneyRestLine uncategorised = 8;
 }
 
 message MoneyCategoryLine {
   string label = 1;
   bool has_plan = 2;
-  string planned = 3;
+  // 3 and 5 were `planned` and `left`: the caption says them.
+  reserved 3, 5;
+  reserved "planned", "left";
   string spent = 4;
-  string left = 5;
   bool over = 6;
   string accessibility_label = 7;
   // The target page for this category and month.
   Route route = 8;
+  // The category's colour in the list palette.
+  string color_key = 9;
+  // Spent over planned, basis points, clamped to 10000; 0 with no plan.
+  uint32 progress_bp = 10;
+  // "of ₹22,500 · ₹4,300 left", "₹2,850 over the ₹12,000 plan", "No plan".
+  string caption = 11;
 }
 
 message MoneyActivityData {
@@ -267,7 +353,9 @@ message MoneyActivityData {
   reserved "account_options", "category_options";
   // "Needs a category · 3" and what it comes to, per currency.
   string needs_label = 3;
-  repeated MoneyFigure needs_category = 4;
+  // 4 was `needs_category`, the banner's amounts per currency: `needs_title` says them.
+  reserved 4;
+  reserved "needs_category";
   repeated MoneyDaySection sections = 5;
   // "Showing 50"; empty when every row is drawn.
   string window = 6;
@@ -276,6 +364,16 @@ message MoneyActivityData {
   // The category filter that lists the rows `needs_label` counts; empty while
   // there are none. A tap on the Needs row sends it as `category_picked`.
   string needs_key = 9;
+  // THE MONTH'S OVERVIEW CARD (the same figures Spending opens with): spent and
+  // what is left of the plan, then in, out and net. One per currency.
+  repeated MoneyHero heroes = 10;
+  repeated MoneyInOutNet in_out_net = 11;
+  string days_left_label = 12;
+  // THE REVIEW BANNER: "Need a category · ₹4,310", the count in its badge, and
+  // the word on its button. `needs_label` is what it says aloud.
+  string needs_title = 13;
+  string needs_count = 14;
+  string review_label = 15;
 }
 
 message MoneyCashflowData {
@@ -322,7 +420,6 @@ message MoneyHomeEvent {
     // The failure state's retry, and pull to refresh: read again.
     Refreshed refreshed = 30;
     BandPicked band = 3;
-    MonthStepped month_stepped = 4;
     MonthPicked month_picked = 5;
     CategoryPicked category_picked = 8;
     SheetClosed sheet_closed = 9;
@@ -331,6 +428,12 @@ message MoneyHomeEvent {
     MoreOpened more_opened = 16;
     // The subtitle's month was tapped: opens the month sheet.
     MonthTapped month_tapped = 31;
+    // The Spending chart's Week / Day switch.
+    BarsModePicked bars_mode_picked = 34;
+    // A bar of the chart was tapped (its index in the series).
+    BarPicked bar_picked = 35;
+    // "N more categories" was tapped: every category is listed.
+    CategoriesExpanded categories_expanded = 36;
     // ---- The header's filter menu ----
     FilterMenuPicked filter_menu_picked = 32;
     FilterMenuCleared filter_menu_cleared = 33;
@@ -339,14 +442,12 @@ message MoneyHomeEvent {
   // the category's are `filter_menu_picked`) and 7 was `account_picked`.
   reserved 6, 7;
   reserved "chip", "account_picked";
+  // 4 was `month_stepped`: the month changes through the month sheet only.
+  reserved 4;
+  reserved "month_stepped";
 
   message BandPicked {
     string key = 1;
-  }
-
-  // -1 is the previous month, 1 the next.
-  message MonthStepped {
-    int32 months = 1;
   }
 
   message MonthPicked {
@@ -354,6 +455,17 @@ message MoneyHomeEvent {
   }
 
   message MonthTapped {}
+
+  // `week` or `day`.
+  message BarsModePicked {
+    string key = 1;
+  }
+
+  message BarPicked {
+    uint32 index = 1;
+  }
+
+  message CategoriesExpanded {}
 
   // The Needs row: `uncategorised`, the filter that lists its rows. The menu's
   // picks are `FilterMenuPicked`.
@@ -384,6 +496,8 @@ message MoneyTransactionState {
   }
   optional Confirm confirm = 8;
   Sheet sheet = 9;
+  // THE "WITH" PICKER (#1173): who the line was with, picked by name. Open while the sheet is up.
+  LinkPicker with_picker = 13;
   // The name being typed in the name sheet.
   string name_draft = 10;
   MoneyPageChrome chrome = 11;
@@ -411,6 +525,9 @@ message MoneyTransactionData {
   repeated StatusChip chips = 6;
   optional MoneyOffer transfer_offer = 7;
   optional MoneyOffer rule_offer = 8;
+  // The person the payee is, PROPOSED ("With Priya?"): written only when the member confirms
+  // (#1173). Its `key` is `with`.
+  optional MoneyOffer with_offer = 20;
   // "Seen 6 times", "Repeats every month".
   repeated string notes = 9;
   repeated MoneyAction actions = 10;
@@ -425,6 +542,8 @@ message MoneyTransactionData {
   // 18 was `is_transfer`: nothing read it (#1152).
   reserved 18;
   reserved "is_transfer";
+  // Money in: the amount is drawn green. Money out is ink.
+  bool amount_positive = 19;
 }
 
 // An offer the app PROPOSES and never applies on its own.
@@ -452,6 +571,8 @@ message MoneyTransactionEvent {
     OfferDismissed offer_dismissed = 9;
     ConfirmAccepted confirm_accepted = 10;
     ConfirmDismissed confirm_dismissed = 11;
+    // The "With" picker's own events (#1173).
+    LinkEvent with_link = 31;
   }
 
   message ActionPicked {

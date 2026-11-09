@@ -9,7 +9,7 @@
 //! ([`super::zone_of`]'s rule).
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_locker::phone::{self, ItemData, Listed};
 use centraid_vault::Vault;
@@ -29,7 +29,7 @@ fn answered<T>(
     match loaded {
         Err(KitError::Door(message)) => settle(
             door,
-            Ok(((), Some(centraid_apps_agenda::denial_of(message)))),
+            Ok(((), Some(centraid_apps_kit::denial_of(message)))),
             |()| unreachable!("a denial carries no data"),
         ),
         other => settle(door, other.map(|value| (value, None)), data),
@@ -79,6 +79,7 @@ fn row(listed: Listed, zone: &FireZone) -> wire::LockerItemRow {
         tags: listed.tags,
         compromised: item.compromised,
         archived,
+        has_code: item.has_code,
     }
 }
 
@@ -116,6 +117,7 @@ pub(crate) fn items(
                 trashed_count: data.trashed_count.map(count),
                 tags: data.tags,
                 today,
+                recent_ids: data.recent,
             })
         },
     )
@@ -211,6 +213,16 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
             credential_id: passkey.credential_id.unwrap_or_default(),
             algorithm: passkey.algorithm.unwrap_or_default(),
         }),
+        links: data
+            .links
+            .into_iter()
+            .map(|link| wire::LockerLink {
+                id: link.id,
+                kind: link.kind,
+                title: link.title,
+                relation: link.relation,
+            })
+            .collect(),
     }
 }
 

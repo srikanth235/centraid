@@ -1,6 +1,30 @@
 package dev.centraid.android.screens.notes
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.android.kit.AboutChips
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.LocalAppAccentId
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
@@ -32,7 +56,10 @@ import centraid.core.v1.NotesEditorEvent
 import centraid.core.v1.NotesEditorState
 import centraid.core.v1.NotesHistoryEvent
 import centraid.core.v1.NotesHistoryState
+import centraid.core.v1.NotesLinkChipKind
+import centraid.core.v1.NotesLinkResolution
 import centraid.core.v1.NotesLinkSheet
+import centraid.core.v1.StatusLine as StatusLineMessage
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
@@ -81,17 +108,22 @@ public fun NotesEditorScreen(
     val chrome = state.chrome
     val clean = state.autosave?.refused != true && state.autosave?.edit_seq == state.autosave?.saved_seq
     val reload: Any? = if (clean) state.note_id else null
-    // THE SPLICE SIGNAL: each time the link sheet closes, the body takes Rust's
-    // value once (a pick wrote `[[title]]` into it there).
-    val linkCloses = remember(state.note_id) { mutableIntStateOf(0) }
-    val wasOpen = remember(state.note_id) { booleanArrayOf(false) }
+    // A CORE EDIT (a checklist tap, Return, Undo, a pick) is on its way back: the body field may
+    // take the core's body even while it has the keyboard.
+    val pending = remember(state.note_id) { CoreEditPending() }
+    val bodyFocused = remember(state.note_id) { mutableStateOf(false) }
     val linkOpen = state.link != null
-    LaunchedEffect(linkOpen) {
-        if (wasOpen[0] && !linkOpen) linkCloses.intValue += 1
-        wasOpen[0] = linkOpen
+    val send: (NotesEditorEvent) -> Unit = { event ->
+        if (event.checklist_requested != null || event.checklist_toggled != null || event.return_pressed != null ||
+            event.status_acted != null || event.link_picked != null
+        ) {
+            pending.value = true
+        }
+        onEvent(event)
     }
-    val bodyReload: Any? = reload ?: linkCloses.intValue.takeIf { it > 0 }?.let { Pair(state.note_id, it) }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
+    CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
         title = chrome?.title.orEmpty(),
         status = state.autosave,
@@ -107,7 +139,15 @@ public fun NotesEditorScreen(
             null
         },
     ) {
-        StatusLine(chrome?.status.orEmpty())
+        // THE ONE STATUS LINE: the core's sentence, with its one verb (Undo) while it has one.
+        if (chrome != null && chrome.status_action.isNotEmpty()) {
+            StatusLine(
+                line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action),
+                actTag = "notes-editor-status-action",
+            ) { send(NotesEditorEvent(status_acted = NotesEditorEvent.StatusActed())) }
+        } else {
+            StatusLine(chrome?.status.orEmpty())
+        }
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, draft),
             onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },
@@ -115,6 +155,21 @@ public fun NotesEditorScreen(
             skeleton = { RowSkeleton(rows = 4, meta = false) },
         ) { note ->
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
+                AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
+                // THE LINE OVER THE TITLE: the pin when pinned, then "Travel · Edited Wed 4 November".
+                if (state.meta.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (note.pinned) {
+                            CentraidIcon(iconKey = "Pin", tint = appAccent().text, size = 12.dp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        KitText(state.meta, KitType.Meta, Surface.meta, maxLines = 1, modifier = Modifier.testTag("notes-editor-meta"))
+                    }
+                }
                 EditableFieldRow(
                     key = "",
                     value = note.title,
@@ -125,19 +180,47 @@ public fun NotesEditorScreen(
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
                 TagsRow(state, onEvent)
-                EditableFieldRow(
-                    key = "",
+                NotesRichBody(
                     value = note.body,
-                    reload = bodyReload,
+                    rich = state.rich,
+                    selection = state.selection,
+                    follows = !bodyFocused.value || pending.value || linkOpen,
+                    pending = pending,
                     placeholder = chrome?.body_placeholder.orEmpty(),
-                    style = "reading",
-                    singleLine = false,
-                    testTag = "notes-body",
-                    modifier = Modifier.padding(top = 4.dp),
                     onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
+                    onFocus = { bodyFocused.value = it },
+                    onReturn = { caret -> send(NotesEditorEvent(return_pressed = NotesEditorEvent.ReturnPressed(caret = caret))) },
+                    onToggle = { at -> send(NotesEditorEvent(checklist_toggled = NotesEditorEvent.ChecklistToggled(at = at))) },
+                    onLink = { chip, at ->
+                        val route = chip.route
+                        if (chip.kind == NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE &&
+                            chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED && route != null
+                        ) {
+                            onOpen(route)
+                        } else {
+                            send(NotesEditorEvent(link_opened = NotesEditorEvent.LinkOpened(at = at)))
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 4.dp),
                 )
+                // THE TOOLS under the words: checklist and link are Rust's events.
+                if (chrome != null) {
+                    Row(
+                        Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
+                            send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
+                        }
+                        IconKey("Link", chrome.link_label, "notes-tool-link") {
+                            onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                        }
+                        IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
+                    }
+                }
             }
         }
+    }
     }
     if (menuOpen && chrome != null && draft != null) {
         val options = buildList {
@@ -161,7 +244,7 @@ public fun NotesEditorScreen(
             onDismiss = { menuOpen = false },
         )
     }
-    state.link?.let { sheet -> LinkSheet(sheet, onEvent) }
+    state.link?.let { sheet -> LinkSheet(sheet, send) }
 }
 
 /**
@@ -172,17 +255,29 @@ public fun NotesEditorScreen(
 @Composable
 private fun TagsRow(state: NotesEditorState, onEvent: (NotesEditorEvent) -> Unit) {
     val placeholder = state.chrome?.tag_placeholder.orEmpty()
-    state.tags.forEach { tag ->
-        CentraidRow(
-            title = tag.label,
-            testTag = "notes-tag-${tag.concept_id}",
-        ) {
-            IconKey(
-                iconKey = "X",
-                label = tag.remove_label,
-                testTag = "notes-tag-remove-${tag.concept_id}",
-                bordered = false,
-            ) { onEvent(NotesEditorEvent(tag_removed = NotesEditorEvent.TagRemoved(tag.label))) }
+    @OptIn(ExperimentalLayoutApi::class)
+    FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        state.tags.forEach { tag ->
+            Row(
+                Modifier
+                    .padding(vertical = 2.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Surface.fill)
+                    .padding(start = 12.dp)
+                    .testTag("notes-tag-${tag.concept_id}"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                KitText(tag.label, KitType.Meta, Surface.body, maxLines = 1)
+                IconKey(
+                    iconKey = "X",
+                    label = tag.remove_label,
+                    testTag = "notes-tag-remove-${tag.concept_id}",
+                    bordered = false,
+                ) { onEvent(NotesEditorEvent(tag_removed = NotesEditorEvent.TagRemoved(tag.label))) }
+            }
         }
     }
     if (placeholder.isNotEmpty()) {
@@ -262,6 +357,7 @@ public fun NotesHistoryScreen(
     onEvent: (NotesHistoryEvent) -> Unit,
     onBack: () -> Unit,
 ) {
+    CompositionLocalProvider(LocalAppAccentId provides "notes") {
     PushedPage(
         title = state.title,
         parentTitle = state.back,
@@ -278,27 +374,37 @@ public fun NotesHistoryScreen(
             if (data.rows.size <= 1 && empty != null) {
                 EmptyStateView(empty, onAction = null)
             } else {
-                LazyColumn(Modifier.testTag("notes-history")) {
-                    items(data.rows, key = { it.content_id }) { row ->
-                        CentraidRow(
-                            title = row.label,
-                            meta = row.preview,
-                            dimmed = row.current,
-                            a11y = row.accessibility_label,
-                            testTag = "notes-version-${row.content_id}",
+                // NOTHING IS DIMMED: the current version says "Current" and has no Restore.
+                Column(
+                    Modifier.padding(horizontal = KitGeometry.GUTTER).kitCard().testTag("notes-history"),
+                ) {
+                    data.rows.forEach { row ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("notes-version-${row.content_id}"),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Column(Modifier.weight(1f)) {
+                                KitText(row.label, KitType.Row, Surface.ink, maxLines = 1)
+                                KitText(row.preview, KitType.Meta, Surface.body, maxLines = 1)
+                            }
                             if (row.restore_label.isNotEmpty() && !row.current) {
-                                OutlineButton(
+                                Text(
                                     row.restore_label,
-                                    testTag = "notes-restore-${row.content_id}",
-                                    modifier = Modifier.padding(start = 8.dp),
-                                ) { onEvent(NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(row.content_id))) }
+                                    style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                                    color = appAccent().text,
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .clickable { onEvent(NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(row.content_id))) }
+                                        .padding(vertical = 12.dp)
+                                        .testTag("notes-restore-${row.content_id}"),
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
     }
 }
 

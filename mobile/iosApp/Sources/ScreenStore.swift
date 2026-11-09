@@ -66,6 +66,10 @@ final class ScreenStore: ObservableObject {
     /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
     /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
     private var windowWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
+    /// A NOTIFICATION BUTTON waits here for Rust's answer to be performed (the next
+    /// `ScheduleNotifications`, with its receipt), so iOS does not suspend the app before it is.
+    private var notifyWaiter: (token: UInt64, continuation: CheckedContinuation<Void, Never>)?
+    private var notifyTokens: UInt64 = 0
     /// The UIKit grace held while the app leaves the screen and Rust runs its pass; released
     /// on `PassWindowDone` for the background entry (or by iOS taking it back).
     #if os(iOS)
@@ -80,6 +84,9 @@ final class ScreenStore: ObservableObject {
     private var running: Set<UInt64> = []
     /// The `words.make` instances whose made vault the made-vault imports were told of.
     private var madeTold: Set<UInt64> = []
+    /// The instances the SHELL popped (a Cancel or a back): a `words.make` the core closed
+    /// instead was closed by the vault it made coming to the front.
+    private var shellPopped: Set<UInt64> = []
 
     init(core: any ScreenCore) {
         self.core = core
@@ -142,6 +149,37 @@ final class ScreenStore: ObservableObject {
         Task { await request(.shellFact(shell)) }
     }
 
+    /// A NOTIFICATION'S BUTTON OR TAP (#1173): tell Rust, and return once the core has it, so a
+    /// background action's completion handler is not called before the answer is in.
+    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb) async {
+        var answered = Centraid_Core_V1_NotificationAnswered()
+        answered.notificationID = id
+        answered.verb = verb
+        var shell = Centraid_Core_V1_ShellFact()
+        shell.fact = .notificationAnswered(answered)
+        // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and
+        // its Undo, the reminder gone), and the delegate's return lets iOS suspend the app. Rust
+        // answers within the same call; the bound only covers a performer that never runs.
+        notifyTokens += 1
+        let token = notifyTokens
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            notifyWaiter?.continuation.resume()
+            notifyWaiter = (token, continuation)
+            Task { await request(.shellFact(shell)) }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                self?.notifyPerformed(token: token)
+            }
+        }
+    }
+
+    /// Release the button that waits (only `token`'s, when one is named).
+    private func notifyPerformed(token: UInt64? = nil) {
+        guard let waiter = notifyWaiter, token == nil || waiter.token == token else { return }
+        notifyWaiter = nil
+        waiter.continuation.resume()
+    }
+
     /// A BACKGROUND WINDOW THE OS GRANTED: tell Rust, then wait for the pass it runs to end.
     /// Answers whether every held vault's spool emptied (what `setTaskCompleted(success:)` takes).
     func windowGranted(_ name: String, budgetMs: UInt64) async -> Bool {
@@ -163,15 +201,20 @@ final class ScreenStore: ObservableObject {
         report(.expired(expired))
     }
 
-    /// Report the device's locale, zone and OS, and that Photos deletes from the
-    /// library behind its own confirmation; Rust formats from them and offers
-    /// "Free up space" only where the platform can.
+    /// Report the device's locale, zone, OS and 12 or 24 hour setting, and that
+    /// Photos deletes from the library behind its own confirmation; Rust formats
+    /// from them and offers "Free up space" only where the platform can.
     func reportEnvironment() {
         var environment = Centraid_Core_V1_Environment()
         environment.locale = Locale.current.identifier
         environment.zone = TimeZone.current.identifier
         environment.platform = "ios"
         environment.libraryDeletes = true
+        // The "j" template resolves to the phone's own hour cycle: "h a" (12-hour)
+        // carries an AM/PM marker, "HH" does not.
+        environment.hourCycle12 = DateFormatter
+            .dateFormat(fromTemplate: "j", options: 0, locale: .current)?
+            .contains("a") ?? false
         Task { await request(.environment(environment)) }
     }
 
@@ -224,6 +267,7 @@ final class ScreenStore: ObservableObject {
     /// The shell popped a screen it opened (a back control or a swipe); Rust drops it.
     func popped(tab: String, instance: UInt64) {
         claimed.remove(instance)
+        shellPopped.insert(instance)
         var popped = Centraid_Core_V1_NavPopped()
         popped.tab = tab
         popped.instance = instance
@@ -281,6 +325,15 @@ final class ScreenStore: ObservableObject {
             navigation = update.navigation
         }
         for id in update.closed {
+            // A VAULT MADE IS A VAULT IN FRONT, AND THE CORE CLOSES EVERY SCREEN FOR IT: the
+            // `words.make` page goes with its `finished` view undelivered (the quiet make never
+            // shows one at all). A make page the core closed, which the shell did not pop, is the
+            // made vault the imports are told of.
+            if case .wordsMake? = views[id]?.kind, !shellPopped.contains(id), madeTold.insert(id).inserted {
+                var made = Centraid_Core_V1_ImportsMadeEvent()
+                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
+                sendRoot(RustScreens.madeTab, .importsMade(made))
+            }
             closed.insert(id)
             views[id] = nil
             queues[id] = nil
@@ -305,7 +358,7 @@ final class ScreenStore: ObservableObject {
                 madeTold.insert(view.instance).inserted
             {
                 var made = Centraid_Core_V1_ImportsMadeEvent()
-                made.made = .with { $0.reminders = true }
+                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
                 sendRoot(RustScreens.madeTab, .importsMade(made))
             }
         }
@@ -314,6 +367,12 @@ final class ScreenStore: ObservableObject {
 
     /// Queue `request` behind what its screen asked before, and run the queue.
     private func enqueue(_ request: Centraid_Core_V1_EffectRequest) {
+        // A WITHDRAWN PROMPT JUMPS THE QUEUE: it exists to end the owner check the queue is
+        // waiting on, so it cannot wait behind it.
+        if case .ownerCheck(let check)? = request.effect.kind, check.cancel {
+            Task { await perform(request) }
+            return
+        }
         queues[request.instance, default: []].append(request)
         drain(request.instance)
     }
@@ -442,6 +501,15 @@ final class ScreenStore: ObservableObject {
             #else
             answer(request, .failed(Self.failure("no background windows on this platform")))
             #endif
+        // NOTIFICATIONS (#1173, `agenda.notify`): Rust sends the whole desired set; this makes the
+        // OS hold it and answers the permission and the count.
+        case .scheduleNotifications(let schedule)?:
+            #if os(iOS)
+            answer(request, .notificationsScheduled(await Notifications.schedule(schedule)))
+            notifyPerformed()
+            #else
+            answer(request, .failed(Self.failure("no notifications on this platform")))
+            #endif
         case .passWindowDone(let finished)?:
             #if os(iOS)
             if finished.window == "entered-background" {
@@ -483,6 +551,9 @@ final class ScreenStore: ObservableObject {
             }
         case .calendarRead(let read)?:
             answer(request, await PhoneCalendar.snapshot(read))
+        // TWO-WAY SYNC (#1173): what Rust asks written to the phone's calendars, one answer per item.
+        case .calendarWrite(let write)?:
+            answer(request, await PhoneCalendarWrite.perform(write))
         case .contactsRead(let read)?:
             answer(request, await PhoneContacts.snapshot(read))
             if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
@@ -502,6 +573,15 @@ final class ScreenStore: ObservableObject {
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
             answer(request, done)
+        // AGENDA'S WIDGET SNAPSHOT (#1173): kept in the App Group container for the widgets
+        // and Siri, then the widgets reload. A missing container or a failed write is a failure.
+        case .agendaGlance(let glance)?:
+            do {
+                try AgendaGlanceWriter.keep(glance)
+                answer(request, done)
+            } catch {
+                answer(request, .failed(Self.failure(String(describing: error))))
+            }
         case .vaultCommand(let command)?:
             // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
             // notification grant or a low disk).
@@ -518,6 +598,12 @@ final class ScreenStore: ObservableObject {
         case .pickFile(let pick)?:
             DocsFiles.shared.pick(pick.kind, core: core) { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
+            }
+        case .shareFile(let share)?:
+            if DocsShare.present(share) {
+                answer(request, done)
+            } else {
+                answer(request, .failed(Self.failure("the file could not be read")))
             }
         case .followFolder?:
             DocsFollow.shared.request { outcome in

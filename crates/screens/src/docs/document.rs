@@ -21,15 +21,16 @@ use wire::docs_document_state::Asking;
 use wire::screen_event::Kind as E;
 
 use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, KEY_RESTORE};
-use super::fold::{KEY_STAR, KEY_TRASH, KEY_UNSTAR};
+use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
 use super::{Phase, denied, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, docs as words, shared};
+use crate::strings::{Locale, docs as words, links as link_words, shared};
 
 /// `docs.drive`'s smallest window: the rail is whole whatever the window.
 const RAIL_WINDOW: u32 = 20;
@@ -39,6 +40,9 @@ const RAIL_WINDOW: u32 = 20;
 struct Answered {
     document: wire::DocsDocument,
     drive: Option<wire::DocsDrive>,
+    /// The people the document is about (`people.links`); a read that does not land leaves the
+    /// section out rather than the page.
+    about: Option<Vec<wire::PeopleLinked>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,6 +71,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         rename: None,
         dismissed: false,
+        links: Links::new(&[Kind::Person]),
     }))
 }
 
@@ -83,6 +88,8 @@ struct Document {
     rename: Option<Rename>,
     /// The document was deleted forever here: the shell pops.
     dismissed: bool,
+    /// The About section's picker (#1173).
+    links: Links,
 }
 
 impl Document {
@@ -111,6 +118,7 @@ impl Document {
                 _ => None,
             },
         );
+        let about = links::read_people(ctx, &self.document_id);
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
                 document,
@@ -118,10 +126,50 @@ impl Document {
                     Reading::Data(drive) => Some(drive),
                     _ => None,
                 },
+                about: match about {
+                    Reading::Data(people) => Some(people),
+                    _ => None,
+                },
             }),
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
+    }
+
+    /// The ids of the people the document is about now.
+    fn about_ids(&self) -> Vec<String> {
+        self.phase
+            .data()
+            .and_then(|answered| answered.about.as_ref())
+            .map(|people| people.iter().map(|p| p.party_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// One event of the About section or its picker.
+    fn about_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.about_ids();
+        let id = self.document_id.clone();
+        match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id: person, .. } => {
+                self.write(
+                    ctx,
+                    act::docs::AddAbout {
+                        from: id,
+                        to: person,
+                    },
+                );
+            }
+            Outcome::Remove { id: person } => {
+                self.write(
+                    ctx,
+                    act::docs::RemoveAbout {
+                        from: id,
+                        to: person,
+                    },
+                );
+            }
+            Outcome::Moved => {}
+        }
     }
 
     fn row(&self) -> Option<&wire::DocsDocumentRow> {
@@ -140,20 +188,47 @@ impl Document {
         settled.committed
     }
 
-    fn action(&mut self, ctx: &Ctx, key: &str) {
+    /// Hand the document's file to the platform's share sheet: the bytes are a
+    /// file in the store, so nothing is read here. A document whose bytes are
+    /// not on this phone says so on the status line.
+    fn share(&mut self, ctx: &Ctx, row: &wire::DocsDocumentRow) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        let path = self
+            .phase
+            .data()
+            .map(|answered| answered.document.bytes_path.clone())
+            .unwrap_or_default();
+        if path.is_empty() {
+            self.status = Some(refusal(words::share_missing(locale)));
+            return Vec::new();
+        }
+        self.status = None;
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::ShareFile(wire::ShareFile {
+                path,
+                name: row.title.clone(),
+                media_type: row.media_type.clone(),
+                chooser_title: words::share_title(locale),
+            })),
+        }]
+    }
+
+    fn action(&mut self, ctx: &Ctx, key: &str) -> Vec<wire::Effect> {
         let Some(row) = self.row().cloned() else {
-            return;
+            return Vec::new();
         };
         // Only what the head offers is done: a key for a verb this document
         // does not have (restore on a live one, trash on a trashed one) is nothing.
         let offered = fold::head_actions(ctx.locale(), &row)
             .into_iter()
+            .chain(fold::bar_actions(ctx.locale(), &row))
             .any(|action| action.key == key && action.enabled);
         if !offered {
-            return;
+            return Vec::new();
         }
         let id = row.document_id.clone();
         match key {
+            KEY_SHARE => return self.share(ctx, &row),
             KEY_STAR => {
                 self.write(ctx, act::docs::Star { document_id: id });
             }
@@ -167,7 +242,7 @@ impl Document {
                 if self.rename.is_some() {
                     self.close_rename(ctx);
                     if self.rename.is_some() {
-                        return;
+                        return Vec::new();
                     }
                 }
                 self.rename = Some(Rename::open(&id, &row.title));
@@ -179,6 +254,7 @@ impl Document {
             // `edit` is a route the shell pushes (the action carries it).
             _ => {}
         }
+        Vec::new()
     }
 
     fn choice(&mut self, ctx: &Ctx, key: &str) {
@@ -218,6 +294,7 @@ impl Document {
             act::docs::Tag {
                 document_id: row.document_id,
                 label,
+                color: None,
             },
         );
     }
@@ -269,7 +346,7 @@ impl Document {
         }
     }
 
-    fn event(&mut self, event: wire::DocsDocumentEvent, ctx: &Ctx) {
+    fn event(&mut self, event: wire::DocsDocumentEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(D::Refreshed(_)) => self.reload(ctx),
             // THE VERBS SHEET: every verb the head offers, as a list.
@@ -288,7 +365,7 @@ impl Document {
                         self.sheet = Sheet::More;
                     }
                 } else {
-                    self.action(ctx, &picked.key);
+                    return self.action(ctx, &picked.key);
                 }
             }
             Some(D::Choice(picked)) => self.choice(ctx, &picked.key),
@@ -308,8 +385,10 @@ impl Document {
             }
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
+            Some(D::About(link)) => self.about_event(&link, ctx),
             None => {}
         }
+        Vec::new()
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
@@ -350,6 +429,11 @@ impl Document {
             .as_ref()
             .map(|drive| drive.labels.as_slice())
             .unwrap_or_default();
+        let rail_entries = answered
+            .drive
+            .as_ref()
+            .map(|drive| drive.label_entries.as_slice())
+            .unwrap_or_default();
         let (kind, title, body) = match &self.sheet {
             Sheet::None => return none,
             Sheet::Move => (
@@ -362,7 +446,13 @@ impl Document {
             Sheet::Labels(draft) => (
                 Kind::Labels,
                 words::labels_title(locale),
-                Body::Labels(fold::labels_sheet(locale, row, rail_labels, draft)),
+                Body::Labels(fold::labels_sheet(
+                    locale,
+                    row,
+                    rail_labels,
+                    rail_entries,
+                    draft,
+                )),
             ),
             Sheet::More => (
                 Kind::More,
@@ -417,7 +507,7 @@ impl Screen for Document {
                     let _ = rename.close(ctx);
                 }
             }
-            Some(E::DocsDocument(event)) => self.event(event, ctx),
+            Some(E::DocsDocument(event)) => return self.event(event, ctx),
             _ => {}
         }
         Vec::new()
@@ -431,7 +521,23 @@ impl Screen for Document {
             Phase::Failed => (Content::Failure(read::failure(locale)), None),
             Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
             Phase::Ready(answered) => {
-                let mut data = fold::document(locale, &answered.document, answered.drive.as_ref());
+                let mut data = fold::document(
+                    locale,
+                    ctx.hour_cycle(),
+                    &answered.document,
+                    answered.drive.as_ref(),
+                );
+                // THE ABOUT SECTION (#1173): who the document is about, on a live document.
+                if let (Some(people), Some(row)) = (answered.about.as_ref(), data.row.as_ref())
+                    && !row.trashed
+                {
+                    data.about = Some(self.links.section(
+                        locale,
+                        link_words::section_about(locale),
+                        links::person_rows(locale, people),
+                        String::new(),
+                    ));
+                }
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id
@@ -456,6 +562,7 @@ impl Screen for Document {
                     sheet,
                     chrome: Some(self.chrome(locale)),
                     dismissed: self.dismissed,
+                    about_picker: Some(self.links.picker(locale, &self.about_ids())),
                 },
             )),
             ..wire::ViewState::default()

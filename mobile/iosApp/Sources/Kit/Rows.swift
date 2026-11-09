@@ -23,6 +23,9 @@ struct CentraidRow: View {
     var pendingLabel: String = KitWords.PENDING
     var accessibility: String = ""
     var identifier: String = ""
+    /// The row's own rule under it. A card that draws its rules BETWEEN rows (`KitHairline`) turns
+    /// this off, so the last row never trails a line past the card's corner and no rule doubles.
+    var divider: Bool = true
     var onTap: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
@@ -57,6 +60,7 @@ struct CentraidRow: View {
         pendingLabel: String = KitWords.PENDING,
         accessibility: String = "",
         identifier: String = "",
+        divider: Bool = true,
         onTap: (() -> Void)? = nil
     ) {
         self.title = title
@@ -70,6 +74,7 @@ struct CentraidRow: View {
         self.pendingLabel = pendingLabel
         self.accessibility = accessibility
         self.identifier = identifier
+        self.divider = divider
         self.onTap = onTap
     }
 
@@ -86,28 +91,41 @@ struct CentraidRow: View {
         .modifier(OptionalIdentifier(identifier: identifier))
     }
 
+    private var trailingText: some View {
+        Text(trailing)
+            .centraidType("smallStrong")
+            .monospacedDigit()
+            .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
+            .lineLimit(1)
+    }
+
     private var row: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(dimmed ? "textFaint" : "text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(dimmed ? Surface.meta : Surface.ink)
                     .lineLimit(2)
                 if !meta.isEmpty || pending {
                     Text(pending ? (meta.isEmpty ? pendingLabel : "\(meta) · \(pendingLabel)") : meta)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color(dimmed ? "textFaint" : "textSoft", scheme))
-                        .lineLimit(1)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .lineLimit(2)
                 }
             }
             Spacer(minLength: 8)
-            ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
-            if !trailing.isEmpty {
-                Text(trailing)
-                    .centraidType("smallStrong")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
-                    .lineLimit(1)
+            // THE TRAILING COLUMN, AS THE MONEY BOARDS DRAW IT: the figure with its state chip UNDER
+            // it, right-aligned; a chip alone stays beside the title's line.
+            if !trailing.isEmpty, !chips.isEmpty {
+                VStack(alignment: .trailing, spacing: 4) {
+                    trailingText
+                    HStack(spacing: 6) {
+                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                    }
+                }
+            } else {
+                ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                if !trailing.isEmpty { trailingText }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -123,10 +141,12 @@ struct CentraidRow: View {
             }
         }
         .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Theme.color("line", scheme))
-                .frame(height: CentraidGeometry.hairline)
-                .padding(.leading, CentraidGeometry.pageMargin)
+            if divider {
+                Rectangle()
+                    .fill(Surface.line)
+                    .frame(height: CentraidGeometry.hairline)
+                    .padding(.leading, CentraidGeometry.pageMargin)
+            }
         }
         .contentShape(Rectangle())
     }
@@ -138,7 +158,7 @@ struct KitRowPress: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(configuration.isPressed ? Theme.color("bgPress", scheme) : Color.clear)
+            .background(configuration.isPressed ? Surface.fill : Color.clear)
     }
 }
 
@@ -149,7 +169,7 @@ private struct OptionalLabel: ViewModifier {
     }
 }
 
-private struct OptionalIdentifier: ViewModifier {
+struct OptionalIdentifier: ViewModifier {
     let identifier: String
     func body(content: Content) -> some View {
         if identifier.isEmpty { content } else { content.accessibilityIdentifier(identifier) }
@@ -163,10 +183,9 @@ struct StatusChipView: View {
     let chip: Centraid_Core_V1_StatusChip
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     init(_ chip: Centraid_Core_V1_StatusChip) { self.chip = chip }
-
-    private var tone: String { Self.ink(chip.tone, neutral: "textSoft") }
 
     /// A tone's ink role. `neutral` is what NEUTRAL and UNSPECIFIED draw — soft
     /// ink on a chip, plain ink on a row's trailing figure.
@@ -175,20 +194,35 @@ struct StatusChipView: View {
         case .seam: return "seam"
         case .net: return "net"
         case .warning: return "warning"
-        case .neutral, .unspecified, .UNRECOGNIZED: return neutral
+        case .neutral, .accent, .unspecified, .UNRECOGNIZED: return neutral
         }
     }
 
+    /// THE ONE BADGE SHAPE (#1173): 11pt capitals on a pale tint. A tone that says a state wears
+    /// that state's colour (not yet and caution are amber, owe and leaves are red); a plain chip
+    /// is quiet ink on the fill.
     var body: some View {
-        Text(chip.label)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color(tone, scheme))
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .overlay(
-                Capsule().strokeBorder(Theme.color(tone == "textSoft" ? "line" : tone, scheme), lineWidth: CentraidGeometry.hairline)
-            )
+        switch chip.tone {
+        case .seam, .warning: KitBadge(label: chip.label, state: .amber)
+        case .net: KitBadge(label: chip.label, state: .red)
+        case .accent:
+            // THE APP'S OWN GOOD NEWS: the accent's chip ground under the accent's text.
+            Text(chip.label)
+                .kitType(.badge)
+                .foregroundStyle(accent.text)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(accent.tint ?? accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        case .neutral, .unspecified, .UNRECOGNIZED:
+            Text(chip.label)
+                .kitType(.badge)
+                .foregroundStyle(Surface.meta)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Surface.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
     }
 }
 
@@ -207,33 +241,41 @@ struct SectionHeader: View {
     var onVerb: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
-    init(_ head: KitSectionHead, onVerb: (() -> Void)? = nil) {
+    /// A head the board sets in sentence case (Catch up's piles): the row rung in semibold, the
+    /// count in meta, instead of the 12pt capitals every other head wears.
+    var sentenceCase = false
+
+    init(_ head: KitSectionHead, sentenceCase: Bool = false, onVerb: (() -> Void)? = nil) {
         self.head = head
+        self.sentenceCase = sentenceCase
         self.onVerb = onVerb
     }
 
-    init(title: String, count: UInt32? = nil, verb: String = "", onVerb: (() -> Void)? = nil) {
-        self.init(KitSectionHead(title: title, count: count, verbLabel: verb), onVerb: onVerb)
+    init(title: String, count: UInt32? = nil, verb: String = "", sentenceCase: Bool = false, onVerb: (() -> Void)? = nil) {
+        self.init(KitSectionHead(title: title, count: count, verbLabel: verb), sentenceCase: sentenceCase, onVerb: onVerb)
     }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(head.title)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(sentenceCase ? .row : .group)
+                .fontWeight(sentenceCase ? .semibold : nil)
+                .foregroundStyle(Surface.meta)
                 .accessibilityAddTraits(.isHeader)
             if let count = head.count {
                 Text("\(count)")
-                    .centraidType("eyebrow")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .kitType(sentenceCase ? .meta : .group)
+                    .foregroundStyle(Surface.meta)
             }
             Spacer(minLength: 0)
             if !head.verbLabel.isEmpty, let onVerb {
                 Button(action: onVerb) {
                     Text(head.verbLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
+                        .kitType(.meta)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(accent.text)
                         .frame(minHeight: CentraidGeometry.targetMinFine)
                         .contentShape(Rectangle())
                 }
@@ -336,6 +378,8 @@ struct EditableFieldRow: View {
 struct ChoiceFieldRow: View {
     let key: String
     let value: String
+    /// A dot of this hue before the value (a task's list); empty draws none.
+    var hueKey: String = ""
     var identifier: String = ""
     let onTap: () -> Void
 
@@ -349,6 +393,11 @@ struct ChoiceFieldRow: View {
                     .centraidType("body")
                     .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
                 Spacer(minLength: 8)
+                if !hueKey.isEmpty {
+                    Circle()
+                        .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
+                        .frame(width: 8, height: 8)
+                }
                 Text(value)
                     .centraidType("body")
                     .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
@@ -375,7 +424,7 @@ struct KitHairline: View {
 
     var body: some View {
         Rectangle()
-            .fill(Theme.color("line", scheme))
+            .fill(Surface.line)
             .frame(height: CentraidGeometry.hairline)
             .padding(.leading, inset)
     }
@@ -389,7 +438,7 @@ enum KitHue {
     static func role(_ key: String) -> String? {
         guard !key.isEmpty else { return nil }
         if centraidColorRoles.contains(key) { return key }
-        let wheel = "c" + key.prefix(1).uppercased() + key.dropFirst()
+        let wheel = "c" + String(key.prefix(1)).uppercased() + String(key.dropFirst())
         return centraidColorRoles.contains(wheel) ? wheel : nil
     }
 }
@@ -405,32 +454,38 @@ struct SearchContainerRow: View {
     let container: Centraid_Core_V1_SearchContainer
     let onOpen: (Centraid_Core_V1_Route) -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
+    /// A matched container is one pill above the rows (#1173): its glyph in the app's colour,
+    /// the kind in meta, then its name.
     var body: some View {
         Button {
             guard container.hasRoute else { return }
             onOpen(container.route)
         } label: {
-            HStack(spacing: 12) {
-                CentraidIconView(iconKey: container.iconKey, tint: Theme.color("textSoft", scheme), size: 18)
+            HStack(spacing: 6) {
+                CentraidIconView(iconKey: container.iconKey, tint: accent.text, size: 16)
+                Text(container.kindLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .lineLimit(1)
                 Text(container.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 8)
-                Text(container.kindLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .frame(minHeight: CentraidGeometry.targetMinFine)
+            .background(Surface.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+            .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .overlay(alignment: .bottom) { KitHairline() }
             .contentShape(Rectangle())
         }
-        .buttonStyle(KitRowPress())
+        .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(container.accessibilityLabel)
         .accessibilityAddTraits(.isButton)

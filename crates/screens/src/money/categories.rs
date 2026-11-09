@@ -173,9 +173,12 @@ impl Categories {
     }
 
     fn data(&self, locale: Locale, answer: &wire::MoneyCategories) -> wire::MoneyCategoriesData {
+        // A GROUP WITH NO CATEGORY IN IT IS NOT A HEADING OVER NOTHING (the board draws none); the
+        // add sheet still offers it as a group to file under (`group_options`).
         let groups: Vec<wire::MoneyCategoryGroup> = answer
             .groups
             .iter()
+            .filter(|group| !group.categories.is_empty())
             .map(|group| wire::MoneyCategoryGroup {
                 group_id: group.group_id.clone(),
                 label: group.label.clone(),

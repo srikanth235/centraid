@@ -17,7 +17,7 @@ import XCTest
 /// what turns that crash into a red test instead of a red screenshot.** It
 /// fails for each of the three ways the chain can break: the emitter did not
 /// copy the `.ttf` into `Resources/Fonts`, `xcodegen generate` was not re-run
-/// after `UIAppFonts` changed, or `packages/design/fonts` gained a face the
+/// after `UIAppFonts` changed, or `design/fonts` gained a face the
 /// plist does not name.
 ///
 /// ## THIS TEST HAS NEVER RUN IN CI
@@ -57,8 +57,8 @@ final class FontRegistrationTests: XCTestCase {
     ///
     /// The modifier crashes on a role whose (family, weight) pair is missing, so
     /// the pair table and the type table have to cover each other. A weight added
-    /// in `packages/design/src/typography.ts` with no file beside it in
-    /// `packages/design/fonts` reds HERE rather than on the screen that first
+    /// in `design/tokens.toml` with no file beside it in
+    /// `design/fonts` reds HERE rather than on the screen that first
     /// uses that rung.
     func testEveryTypeRoleHasAFace() {
         for theme in [CentraidTokens.light, CentraidTokens.dark] {
@@ -102,8 +102,8 @@ final class FontRegistrationTests: XCTestCase {
         XCTAssertEqual(
             centraidTypeFaces["sans"]?[400], "InstrumentSans-Book",
             "the sans 400 register is no longer lowered to the 470 face — see "
-                + "the FACES table in "
-                + "contracts/tools/export-native-theme.ts"
+                + "the [native.faces] table in "
+                + "design/tokens.toml"
         )
         XCTAssertTrue(
             centraidFontFiles.contains("InstrumentSans_470Book.ttf"),
@@ -141,7 +141,7 @@ final class FontRegistrationTests: XCTestCase {
 
     /// NOTHING IN THE RAMP NAMES A 470.
     ///
-    /// The companion to the test above, and the reason it is safe. DESIGN.md
+    /// The companion to the test above, and the reason it is safe. design/mockups/DesignRules.dc.html
     /// specifies two weights; the 470 exists only as a file and a PostScript
     /// name, never as a rung. A role emitted at weight 470 would mean the
     /// lowering had leaked upward into the token table, where it would reach the

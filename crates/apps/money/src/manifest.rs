@@ -51,7 +51,7 @@ mod tests {
     fn it_declares_twelve_queries_and_twenty_three_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 12);
-        assert_eq!(manifest.actions.len(), 23);
+        assert_eq!(manifest.actions.len(), 25);
         for name in [
             "spending",
             "activity",
@@ -131,7 +131,8 @@ mod tests {
                     "category",
                     "follow",
                     "entity",
-                    "flag"
+                    "flag",
+                    "edge"
                 ]
                 .contains(&schema),
                 "{} invokes {}, which is outside Money's reach",

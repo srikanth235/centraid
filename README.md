@@ -19,7 +19,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 ## What it does
 
-- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda, Tasks, Money and Health, one crate each under [`crates/apps`](crates/apps). Tasks has no tile of its own: Agenda draws its screens, and `tasks` is the vault domain the member opens in Agenda. They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
+- **First-party apps** — Docs, Photos, Notes, People, Locker, Calendar, Reminders, Money and Health, one crate each under [`crates/apps`](crates/apps). Calendar keeps events and Reminders keeps tasks; each has a tile, and `tasks` is the vault domain Reminders opens. They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
 - **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
 - **Backed up to hardware you own** — every gateway you pair holds a sealed copy of the vault and of every photograph, video and file in it, and can open none of it: no key, no plaintext, no schema. The phone reaches it over HTTPS straight to the machine, pinning the certificate the gateway's QR names; on an iPhone the system keeps uploading while Centraid is closed. Pair by scanning a QR the gateway prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.
@@ -33,8 +33,8 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  ┌───────────────────────── the vault, and its only writer ─────────────────────┐
  │  vault: vault.db, the one writable connection, typed commands,            │
  │         custody, and the backup plane — snapshot, ranges, ledger, spool      │
- │  apps: photos · notes · docs · people · locker · agenda · tasks · money ·    │
- │        health                                                                │
+ │  apps: photos · notes · docs · people · locker · calendar · reminders · money │
+ │        · health                                                              │
  │  blobs: the content store       identity: 24 words → every key               │
  └──────────────────────────────────────────────────────────────────────────────┘
         │  uploads sealed parts: it DIALS, and accepts nothing
@@ -52,7 +52,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 ## Get started
 
-Prereqs: a Rust toolchain (the version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml)); [Bun](https://bun.sh) for `packages/design` and repository tooling; a JDK and the Android SDK or Xcode for the mobile shells ([mobile/README.md](mobile/README.md)).
+Prereqs: a Rust toolchain (the version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml)); [Bun](https://bun.sh) for the repository tooling (release scripts, the docs and home sites, the product lints); a JDK and the Android SDK or Xcode for the mobile shells ([mobile/README.md](mobile/README.md)).
 
 ```sh
 # the gateway: mints its identity, listens on 8443, and prints a pairing QR
@@ -71,8 +71,9 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 | `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. |
 | `contracts/` | The layer every language reads: the DDL of a new vault and the list of its commands, the migration ladder, the screen fixtures, the crypto vectors and the down-only ledgers. |
 | `mobile/` | The C ABI binding, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. **The only shell.** |
-| `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
-| `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |
+| `packages/test-kit` | Shared TypeScript test helpers. |
+| `design/` | The design source: `tokens.toml` (every value), `icons.toml`, the fonts and the mockups. `cargo xtask design` generates the shells' tables, the sites' sheet and the dark mockups from it, and the gate fails on drift. |
+| `copy/` | Emitted artifacts: one copy leaf per app, written by one command and gated against drift. |
 | `deploy/` | The container images, the OS service units and the installer. |
 
 ## Gateway install
@@ -130,7 +131,7 @@ bun install
 
 iOS needs an Apple toolchain and is an owner hand-off — the exact commands are in [`mobile/README.md`](mobile/README.md).
 
-Formatting, linting and the TypeScript that remains (`packages/design`, `packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`.
+Formatting, linting and the TypeScript that remains (`packages/test-kit` and the tooling under `scripts/`) run through the root scripts: `bun run format`, `bun run lint`, `bun run typecheck`, and `bun run check` for all of them plus the tests. Enable the commit hooks once per clone with `git config core.hooksPath .githooks`.
 
 ## Documentation
 

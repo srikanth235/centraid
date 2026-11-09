@@ -68,6 +68,21 @@ internal fun PairLaptopPage(
     NoAutofill()
     WordsPage(testTag = "pair-laptop", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
+        // THE COMMAND TO RUN, drawn as the terminal line it is (PairDevice).
+        if (state.command.isNotEmpty()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(centraidColor("bgSunken"), RoundedCornerShape(KitGeometry.RADIUS))
+                    .padding(16.dp)
+                    .testTag("pair-command")
+                    .semantics(mergeDescendants = true) { },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("$", style = centraidType("mono"), color = centraidColor("textFaint"), modifier = Modifier.clearAndSetSemantics { })
+                Text(state.command, style = centraidType("mono"), color = centraidColor("text"))
+            }
+        }
         if (state.scan_label.isNotEmpty()) {
             OutlineButton(label = state.scan_label, testTag = "pair-scan") {
                 onEvent(PairLaptopEvent(scan = PairLaptopEvent.ScanTapped()))
@@ -78,19 +93,42 @@ internal fun PairLaptopPage(
                 onEvent(PairLaptopEvent(typed = PairLaptopEvent.PayloadTyped(text = text)))
             }
         }
-        if (state.safety_number.isNotEmpty()) {
+        if (state.safety_groups.isNotEmpty()) {
             // EVERY DIGIT, IN THE GATEWAY'S OWN GROUPS: the comparison is the
-            // member's, so it is drawn to be read, and never shortened.
-            Text(
-                state.safety_number,
-                style = centraidType("mono"),
-                color = centraidColor("text"),
-                modifier = Modifier
+            // member's, so it is drawn to be read, and never shortened. Four
+            // groups to a row (PairCheck); the whole number is what a screen
+            // reader says.
+            Column(
+                Modifier
                     .fillMaxWidth()
                     .background(centraidColor("bgSunken"), RoundedCornerShape(KitGeometry.RADIUS))
                     .padding(16.dp)
-                    .testTag("pair-safety-number"),
-            )
+                    .testTag("pair-safety-number")
+                    .semantics { contentDescription = state.safety_number },
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (state.safety_label.isNotEmpty()) {
+                    Text(
+                        state.safety_label,
+                        style = centraidType("eyebrow"),
+                        color = centraidColor("textFaint"),
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                }
+                state.safety_groups.chunked(4).forEach { row ->
+                    Row(
+                        Modifier.clearAndSetSemantics { },
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        row.forEach { group ->
+                            Text(group, style = centraidType("title"), color = centraidColor("text"), maxLines = 1)
+                        }
+                    }
+                }
+            }
+            if (state.safety_hint.isNotEmpty()) {
+                Text(state.safety_hint, style = centraidType("small"), color = centraidColor("textSoft"))
+            }
         }
         WordsNotice(state.notice)
         if (state.progress.isNotEmpty()) {

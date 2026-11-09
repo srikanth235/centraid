@@ -41,11 +41,16 @@ pub(super) fn app_of(kind: &str) -> &'static str {
     match kind {
         "person" => "people",
         "note" | "notebook" => "notes",
-        "event" | "calendar" | "task" | "project" | "section" | "area" => "agenda",
+        "event" | "calendar" => "calendar",
+        "task" | "project" | "section" | "area" => "reminders",
         "photo" | "album" => "photos",
         "document" | "folder" => "docs",
         "thread" => CHAT,
         "locker_item" => LOCKER,
+        // A transaction opens in Money; a workout (an activity of a workout kind) in Health
+        // (#1173, item 11).
+        "txn" => "money",
+        "activity" => "health",
         _ => "",
     }
 }

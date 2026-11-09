@@ -20,9 +20,7 @@ cargo test -p centraid-screens
 cargo xtask rules
 cargo xtask screens-catalog --check   # only when a manifest changed
 bun run lint:product                  # copy, native controls, journey ledger
-bun contracts/tools/export-native-theme.ts
-bun run format
-git diff --exit-code -- design mobile # confirms generated outputs are current
+cargo xtask design --check            # generated design outputs are current (cargo xtask design writes them)
 buf lint                              # and buf breaking against the PR base, when installed
 cargo xtask gate --profile pr
 cargo build -p centraid-core-ffi

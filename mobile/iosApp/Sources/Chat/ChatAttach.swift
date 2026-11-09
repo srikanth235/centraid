@@ -191,7 +191,7 @@ struct ChatDocumentSheet: View {
                             .buttonStyle(KitRowPress())
                             .accessibilityIdentifier("chat-document-\(index)")
                             Rectangle()
-                                .fill(Theme.color("line", scheme))
+                                .fill(Surface.line)
                                 .frame(height: CentraidGeometry.hairline)
                         }
                     }

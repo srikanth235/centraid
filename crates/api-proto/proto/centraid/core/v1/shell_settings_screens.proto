@@ -1,0 +1,105 @@
+// THE SHELL'S SETTINGS (#1173): the appearance the member chooses, where the
+// vault, the backup and the recovery key stand, and the version. Rust words
+// every row and chooses where a tap goes; the shells draw `SettingsState`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+import "centraid/core/v1/shell_home_screens.proto";
+
+// One of the three appearances: System, Light, Dark.
+message SettingsChoice {
+  // "system", "light" or "dark".
+  string id = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+message SettingsAppearance {
+  string title = 1;
+  repeated SettingsChoice choices = 2;
+  // "System follows your phone. Text follows your phone's text size."
+  string note = 3;
+}
+
+// One row of a section. A row with a route opens a page; one without is read.
+message SettingsRow {
+  string id = 1;
+  string title = 2;
+  string meta = 3;
+  string icon_key = 4;
+  optional Route route = 5;
+  string accessibility_label = 6;
+  // How the row's leading tile is drawn: "" the page's colour (the shell's) under a white
+  // glyph, "amber" the state-amber fill (the recovery key), "initial" the vault's round
+  // avatar carrying `initial`, "neutral" a grey fill under a white glyph, "add" the shell's
+  // tint under the shell's glyph, with the title in the shell's colour (a row that makes
+  // something).
+  string tile = 7;
+  string initial = 8;
+  // The row's current value, drawn at the trailing edge before the chevron ("Wi-Fi only").
+  string value = 9;
+  // A row with no page behind it that is still pressed: the tap is `RowPressed` with this `id`,
+  // and the row draws its chevron as a row with a route does (the vault row, which opens
+  // Home's vault switcher).
+  bool pressable = 10;
+}
+
+message SettingsSection {
+  string key = 1;
+  string title = 2;
+  repeated SettingsRow rows = 3;
+}
+
+message SettingsData {
+  SettingsAppearance appearance = 1;
+  repeated SettingsSection sections = 2;
+  // The About section's one line: "Version" and its number.
+  string version_title = 3;
+  string version = 4;
+  string about_title = 5;
+}
+
+message SettingsState {
+  string title = 1;
+  string back_label = 2;
+  oneof content {
+    Loading loading = 3;
+    SettingsData data = 4;
+  }
+  // The page handed its job to Home (the vault switcher is Home's sheet): the shell pops it.
+  bool finished = 5;
+  // THE DOWNLOAD SETTINGS SHEET, set while it is open (the "Download settings" row): the
+  // member's one transfer rule, the same three choices Home's gear and the Backup page draw,
+  // from the same store.
+  optional HomeTransferSheet transfer_sheet = 6;
+}
+
+message SettingsEvent {
+  oneof kind {
+    AppearancePicked appearance_picked = 1;
+    RowPressed row_pressed = 2;
+    // A choice in the sheet (`BackupRuleChoice.stored`): kept, the pass service told, the sheet closes.
+    TransferRuleChosen transfer_rule_chosen = 3;
+    TransferRulesClosed transfer_rules_closed = 4;
+  }
+
+  message TransferRuleChosen {
+    string stored = 1;
+  }
+
+  message TransferRulesClosed {}
+
+  // A `SettingsRow.id` of a row with `pressable` set.
+  message RowPressed {
+    string id = 1;
+  }
+
+  message AppearancePicked {
+    // A `SettingsChoice.id`.
+    string id = 1;
+  }
+}

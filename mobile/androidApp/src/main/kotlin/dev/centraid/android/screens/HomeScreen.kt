@@ -71,6 +71,7 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.VaultHeader
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
@@ -101,7 +102,7 @@ import dev.centraid.android.screens.words.FirstLaunchScreen
  * **EVERY VALUE HERE IS A TOKEN OR A STATED GEOMETRY.** The card's ground, its
  * one hairline, the tile floor, the mosaic's bleed and every type rung come from
  * the emitted table or from the constants below, which carry v0's own names and
- * reasons — the two shells were drawn from one `packages/design`, and a number
+ * reasons — the two shells are drawn from one `design/tokens.toml`, and a number
  * typed into a view is a number nobody chose.
  */
 @Composable
@@ -140,15 +141,11 @@ public fun HomeScreen(
     // THE BACKUP LINE'S DOOR: the backup tab, which Rust selects.
     val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
     val search: () -> Unit = { bar?.search_route?.let(onOpen) }
-    val appearance: () -> Unit = { onEvent(HomeEvent(appearance = HomeEvent.AppearancePressed())) }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(centraidColor("bg")),
-    ) {
-        // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
-        // drawn above the three-branch switch on purpose: a Home that failed to
-        // read still has to say which vault failed.
+    val settings: (() -> Unit)? = state.bar?.settings_route?.let { route -> { onOpen(route) } }
+    // AT THE LARGEST TEXT THE LOCKUP IS TALL: it scrolls with the page (the first thing in it)
+    // instead of staying pinned and taking a third of the screen.
+    val scrolling = rememberLargestText()
+    val lockup: @Composable () -> Unit = {
         if (bar != null) {
             VaultHeader(
                 bar = bar,
@@ -163,9 +160,19 @@ public fun HomeScreen(
                 // a tap pushes the search over every app. Not on the
                 // Backup tab, which is the backup's and not the springboard's.
                 onSearch = search,
-                onAppearance = appearance,
+                onSettings = settings,
             )
         }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(centraidColor("bg")),
+    ) {
+        // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
+        // drawn above the three-branch switch on purpose: a Home that failed to
+        // read still has to say which vault failed.
+        if (!scrolling) lockup()
         StatusRibbon(state.status, onEvent)
         val data = state.data_
         // THE PAGE TAKES THE SLACK, THE BAND TAKES ITS OWN HEIGHT. The band is
@@ -174,14 +181,18 @@ public fun HomeScreen(
         // it is a flex peer.
         Box(Modifier.weight(1f)) {
             when {
-                failure != null -> FailureBody(failure)
-                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen)
+                // A HOME THAT FAILED STILL NAMES ITS VAULT, scrolled or pinned.
+                failure != null -> Column {
+                    if (scrolling) lockup()
+                    FailureBody(failure)
+                }
+                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null)
                 data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
-                    DayOne(data, state.loading_label, onOpen)
-                else -> SpringboardGrid(data, state.loading_label, onOpen)
+                    DayOne(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
+                else -> SpringboardGrid(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
             }
         }
-        // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+        // THE IMPORT'S LINE, on the band (product-intuition/references/design-behaviour.md § Status line).
         LocalShellLine.current?.invoke()
         Band(band, onSelectTab)
     }
@@ -488,8 +499,6 @@ private fun StatusRibbon(
             text = status.copy,
             style = centraidType(if (loud) "small" else "mono"),
             color = if (loud) centraidColor("text") else centraidColor("textFaint"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (status.action.isNotEmpty()) {
@@ -530,645 +539,20 @@ private fun FailureBody(failure: Failure) {
     }
 }
 
-// ── the grid's stated geometry, with v0's names and v0's reasons ───────────
-
 /** `R.margin.m` — the phone's page margin, emitted beside the tokens. */
 private val PAGE_MARGIN = CentraidGeometry.PAGE_MARGIN.dp
 
-/** A FLOOR, never a height: a fixed height slices bodies at 150% text. */
-private val TILE_MIN_HEIGHT = 152.dp
-
-/** `R.gap.m`. The mosaic's bleed cancels exactly this, which is why it is one name. */
-private val TILE_PAD = 12.dp
-
-/** The gutter between slots — v0's two 4pt half-gutters, added up. */
-private val TILE_GAP = 8.dp
-
-/** The container rung. */
-private val TILE_RADIUS = 12.dp
-
-/** The one sub-control rung, for a detail nested inside a control. */
-private val SUB_RADIUS = 4.dp
-
-/** The control rung. */
-private val CONTROL_RADIUS = 7.dp
-
-/** One row, fixed count — only the cell CONTENTS change, never the count. */
-private const val MOSAIC_SLOTS = 4
-
-/**
- * A FLOOR AND NOT A HEIGHT. `mosaicCss` is `flex:1;min-height:0` over
- * `grid-auto-rows:1fr`, so the strip STRETCHES into whatever the card's 152
- * floor leaves over and this is only the rung below which it will not go. It is
- * STATED rather than derived for the reason it always was: a percentage-width
- * cell has no intrinsic height of its own and can resolve to zero.
- */
-private val MOSAIC_CELL_HEIGHT = 88.dp
-
-private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
-
-/**
- * THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
- *
- * Rust (`crates/screens/src/shell/tiles.rs`) decides WHICH of the eight a face gets and puts
- * the answer on the wire; this is the eight-row spelling that turns that key
- * into a `NativeTheme` role, and `HomeView.swift` carries the same eight. It is
- * a map and not `"c" + key.replaceFirstChar(…)` because the string form would
- * hand any key at all to `centraidColor`, which fails loudly and correctly for
- * a role that does not exist — the wrong failure for a launcher tile drawing
- * whatever a producer sent. `PartyHueWheelSpec` asserts every key here has a
- * role in `NATIVE_COLOR_ROLES` and that both view trees name all eight.
- */
-private val PARTY_HUE_ROLES: Map<String, String> = mapOf(
-    "rose" to "cRose",
-    "amber" to "cAmber",
-    "ochre" to "cOchre",
-    "forest" to "cForest",
-    "teal" to "cTeal",
-    "slate" to "cSlate",
-    "indigo" to "cIndigo",
-    "violet" to "cViolet",
-)
-
-/**
- * A NEGATIVE MARGIN, which Compose has no token for.
- *
- * The mosaic bleeds to the card's edge, so it must be [amount] wider than its
- * parent's content box on each side and shifted left by the same. Compose
- * refuses negative padding, so the child is measured against widened
- * constraints and placed at the offset — the standard idiom, spelled once here
- * rather than at the call site.
- *
- * [toFloor] is the THIRD margin of the same rule — `mosaicCss` is
- * `margin: R.gap.s -R.gap.m -R.gap.m`, so the strip cancels the card's bottom
- * padding exactly as it cancels its sides. Downward there is nothing to
- * offset: the child is measured [amount] TALLER than the slot it was given and
- * the slot is reported back unchanged, so it draws past its own bottom and the
- * card's `clip` is what shapes it. The reference drops this half in the
- * waiting state (`grey ? '0' : '-' + R.gap.m`) because the sentence under the
- * strip needs the 12 back, and a line of type bled past the card's edge is
- * clipped rather than merely tight.
- */
-private fun Modifier.bleed(amount: Dp, toFloor: Boolean): Modifier = this
-    .layout { measurable, constraints ->
-        val extra = amount.roundToPx() * 2
-        val down = if (toFloor) amount.roundToPx() else 0
-        val widened = constraints.copy(
-            maxWidth = constraints.maxWidth + extra,
-            minWidth = (constraints.minWidth + extra).coerceAtMost(constraints.maxWidth + extra),
-            maxHeight = if (constraints.maxHeight == Constraints.Infinity) {
-                constraints.maxHeight
-            } else {
-                constraints.maxHeight + down
-            },
-            minHeight = if (constraints.minHeight == 0) 0 else constraints.minHeight + down,
-        )
-        val placeable = measurable.measure(widened)
-        layout(placeable.width, (placeable.height - down).coerceAtLeast(0)) {
-            placeable.place(0, 0)
-        }
-    }
-    .offset(x = -amount)
-
+/** THE WIDGET GRID in the page's scroll (`WidgetGrid`), with the board's margin. */
 @Composable
-private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
-    // WHICH tiles are drawn and in WHICH rows both arrive decided: `grid_rows`
-    // is the machine's packing over every tile, so this
-    // file looks each id up and draws it. Nothing here is allowed to disagree
-    // with `HomeView.swift`, because neither of them chooses.
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = PAGE_MARGIN)
-            .padding(top = 10.dp, bottom = 24.dp),
-    ) {
-        TileGrid(data, loading, onOpen)
-    }
-}
-
-/**
- * EVERY APP IS A TILE (R-ONBOARD-11), in the rows the machine packed: an app
- * with nothing in it draws what to do, so Docs, Agenda and People are
- * always here to open. Shared by the springboard and day one.
- */
-@Composable
-private fun TileGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
-    val byId = data.tiles.associateBy { it.app_id }
-    Column(
-        Modifier.fillMaxWidth().testTag("home-grid"),
-        verticalArrangement = Arrangement.spacedBy(TILE_GAP),
-    ) {
-        for (row in data.grid_rows) {
-            val tiles = row.app_ids.mapNotNull { byId[it] }
-            if (tiles.isEmpty()) continue
-            Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-                for (tile in tiles) {
-                    TileCard(tile, Modifier.weight(1f), loading, onOpen)
-                }
-                // A lone small keeps its column rather than stretching over
-                // both: a tile that changed width with its neighbours'
-                // arrival would be layout overruling the body rule that
-                // chose its size.
-                if (tiles.size == 1 && !tiles[0].wide) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-/**
- * One tile: THE HEADER IS INVARIANT — icon chip, name, count, in that order.
- *
- * It is what makes eight unlike bodies read as one grid. Home itself takes no
- * identity hue; the hue belongs to the app a tile previews, and it appears on
- * the chip alone.
- */
-@Composable
-private fun TileCard(tile: HomeTile, modifier: Modifier, loading: String, onOpen: (Route) -> Unit) {
-    val name = tile.name
-    val count = countText(tile)
-    // The em dash is a glyph; a screen reader gets `accessibility_label`.
-    Column(
-        modifier
-            .heightIn(min = TILE_MIN_HEIGHT)
-            .clip(RoundedCornerShape(TILE_RADIUS))
-            .background(centraidColor("bgElev"))
-            .border(HAIRLINE, centraidColor("line"), RoundedCornerShape(TILE_RADIUS))
-            // WHERE A TAP GOES is the tile's own route; Kotlin names no destination.
-            // A TILE WITH NO ROUTE (it is still reading, or could not be) is not a control.
-            .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
-            .padding(TILE_PAD)
-            // Keyed on the app id. The label carries the live count, so it
-            // changes with the vault; the id does not.
-            .testTag("home-tile-${tile.app_id}")
-            .semantics { contentDescription = tile.accessibility_label },
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AppMark(appId = tile.app_id, size = 22.dp)
-            Text(
-                name,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Text(count, style = centraidType("mono"), color = centraidColor("textFaint"))
-        }
-        TileBodyView(tile, loading)
-    }
-}
-
-/**
- * A count a read ACTUALLY RETURNED, or the withheld glyph.
- *
- * The em dash is the honest half: Locker withholds its count by design, and a
- * `0` there would be a lie about how many secrets a member holds. A capped count
- * says `N+` rather than printing its ceiling as a fact.
- */
-private fun countText(tile: HomeTile): String {
-    val count = tile.count ?: return "—"
-    return if (count.capped) "${count.value_}+" else "${count.value_}"
-}
-
-@Composable
-private fun ColumnScope.TileBodyView(tile: HomeTile, loading: String) {
-    val body = tile.body
-    // Locker's body is a STATE and not a query result, and Photos draws its own
-    // waiting state cell by cell — neither falls through to the generic skeleton
-    // or to the invitation, because for both of them the generic answer is
-    // wrong rather than merely plain.
-    when {
-        body?.locker != null || body?.photos != null -> FilledBody(body)
-        tile.status == HomeTileStatus.HOME_TILE_STATUS_LOADING -> Skeleton(body, loading)
-        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT -> Text(
-            // What to DO, never what is missing. A quiet tile is an invitation.
-            tile.empty_copy,
-            style = centraidType("control"),
-            color = centraidColor("textFaint"),
-            modifier = Modifier.weight(1f, fill = true),
-        )
-        body != null -> FilledBody(body)
-    }
-}
-
-/**
- * NOTES' SHELF (`HomeNotesTile`): the notebooks holding notes in soft ink, each
- * with its count, and the newest note's title alone at the foot. A vault with
- * nothing filed draws its newest notes instead, and no foot — the first of them
- * IS the newest. Quiet on purpose: two inks and air, every line one line.
- * Matches SwiftUI's `NotesShelf`, which says why.
- */
-@Composable
-private fun NotesShelf(notes: HomeTileBody.Notes, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (notes.notebooks.isEmpty()) {
-            notes.recent.forEach { note ->
-                Text(
-                    note.title,
-                    style = centraidType("small"),
-                    color = centraidColor("text"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            return@Column
-        }
-        notes.notebooks.forEach { notebook ->
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    notebook.name,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    notebook.note_count.toString(),
-                    style = centraidType("mono"),
-                    color = centraidColor("textFaint"),
-                )
-            }
-        }
-        // Pinned to the foot: the shelf leaves its slack above.
-        Spacer(Modifier.weight(1f))
-        Text(
-            notes.title,
-            style = centraidType("smallStrong"),
-            color = centraidColor("text"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun ColumnScope.FilledBody(body: HomeTileBody) {
-    val column = Modifier.weight(1f, fill = true).fillMaxWidth()
-    val photos = body.photos
-    val docs = body.docs
-    val notes = body.notes
-    val agenda = body.agenda
-    val people = body.people
-    val locker = body.locker
-    val spent = body.money
-    val health = body.health
-    when {
-        photos != null -> {
-            val cells = photos.cells
-            // `thumbnail_path` is OPTIONAL in the schema, and absent is not
-            // the same as empty: absent means the asset exists and its bytes
-            // are not addressable on this device yet.
-            val waiting = cells.isNotEmpty() && cells.all { it.thumbnail_path.isNullOrEmpty() }
-            Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        // NO TOP OF ITS OWN. `mosaicCss`'s `R.gap.s` is not an
-                        // extra 8 — it is the half this tile does not otherwise
-                        // get. Every other body is wrapped in `bodyWrapCss`
-                        // (`padding-top: R.gap.s`); the mosaic is a DIRECT
-                        // child of the tile wrap. Both therefore read 16 under
-                        // the head, and our `spacedBy(16.dp)` already spends
-                        // both halves at once. Matches SwiftUI's `PhotoMosaic`.
-                        // THE STRIP IS THE CARD'S SLACK-TAKER (`mosaicCss` is
-                        // `flex:1;min-height:0`), and this is the weight that
-                        // says so: whatever the card's 152 floor leaves over
-                        // after the head goes to the photographs, never to a
-                        // band of card ground beneath them.
-                        .weight(1f)
-                        // The CELLS are the mosaic: no ground, no min height.
-                        // The bleed cancels `TILE_PAD` on the sides AND on the
-                        // floor, so the strip is flush with the card's edge.
-                        .bleed(TILE_PAD, toFloor = !waiting),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    repeat(MOSAIC_SLOTS) { index ->
-                        val cell = cells.getOrNull(index)
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                // A FLOOR, NEVER A HEIGHT: the strip stretches
-                                // (`grid-auto-rows:1fr`) and 88 is only the
-                                // rung below which a cell will not go — which
-                                // it needs, because a percentage-width cell has
-                                // no intrinsic height and can resolve to zero.
-                                .heightIn(min = MOSAIC_CELL_HEIGHT)
-                                .fillMaxHeight()
-                                // THE GROUND UNDER THE PHOTOGRAPH, and the whole
-                                // cell when there is none. A cell with no
-                                // addressable bytes is STILL A CELL: dropping it
-                                // reflows ten photographs as one blank under a
-                                // "10", and keeping the slot is what stops the
-                                // mosaic reflowing as thumbnails land.
-                                .background(
-                                    centraidColor(if (cell == null) "skel" else "bgSunken"),
-                                ),
-                        ) {
-                            val path = cell?.thumbnail_path
-                            if (!path.isNullOrEmpty()) {
-                                ContentImage(path)
-                            }
-                        }
-                    }
-                }
-                // Grey squares with no explanation read as a failed render.
-                if (waiting && photos.absent_line.isNotEmpty()) {
-                    // IT DOES NOT NAME THE GATEWAY any more, and did before:
-                    // with the byte door built, a vault placed on the device
-                    // holds its own photographs, and "these fill in when it is
-                    // back" was a sentence about a connection that is not the
-                    // reason. What is true in every case is that the bytes are
-                    // not here yet.
-                    Text(
-                        photos.absent_line,
-                        style = centraidType("mono"),
-                        color = centraidColor("textFaint"),
-                    )
-                }
-            }
-        }
-
-        docs != null -> Column(column) {
-            // RULED ROWS — Docs is a file list, and the rule is what says so.
-            docs.rows.forEachIndexed { index, row ->
-                if (index > 0) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(HAIRLINE)
-                            .background(centraidColor("line")),
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        row.name,
-                        style = centraidType("small"),
-                        color = centraidColor("text"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // No recorded size renders NOTHING, never a zero.
-                    if (row.size.isNotEmpty()) {
-                        Text(
-                            row.size,
-                            style = centraidType("mono"),
-                            color = centraidColor("textFaint"),
-                        )
-                    }
-                }
-            }
-        }
-
-        notes != null -> NotesShelf(notes, column)
-
-        agenda != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (agenda.at.isNotEmpty()) {
-                Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
-            }
-            Text(
-                agenda.title,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // Pinned to the foot: the sparse tiles leave their slack above.
-            Spacer(Modifier.weight(1f))
-            // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a round
-            // mark. INK, never the app's hue — a hue-filled circle is a second identity.
-            if (agenda.due_count > 0) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(13.dp)
-                            .clip(CircleShape)
-                            .border(HAIRLINE, centraidColor("lineStrong"), CircleShape),
-                    )
-                    Text(
-                        agenda.due_label,
-                        style = centraidType("small"),
-                        color = centraidColor("text"),
-                        maxLines = 1,
-                    )
-                    Text(
-                        agenda.due_title,
-                        style = centraidType("small"),
-                        color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            if (agenda.after.isNotEmpty()) {
-                Text(
-                    agenda.after,
-                    style = centraidType("small"),
-                    color = centraidColor("textFaint"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-
-        people != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy((-7).dp),
-            ) {
-                // SATURATED discs, overlapping by a LOGICAL inset so the stack
-                // mirrors under RTL rather than stacking the wrong way.
-                people.faces.forEach { face ->
-                    // THE PARTY'S OWN HUE, not a grey disc. `face.color` is the
-                    // key Rust already resolved with the one port of the
-                    // identity wheel; all this does is spell the emitted role.
-                    // An unrecognised key draws the neutral disc rather than
-                    // reaching `centraidColor`, which fails LOUDLY by design —
-                    // a tile is not the place to take a shell down over a hue.
-                    val hue = face.color?.let { PARTY_HUE_ROLES[it] }
-                    Box(
-                        Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["pill"] ?: 0).dp))
-                            .background(centraidColor(hue ?: "bgSunken"))
-                            .border(1.5.dp, centraidColor("bgElev"), RoundedCornerShape((LocalCentraidTokens.current.radii["pill"] ?: 0).dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // THE INITIALS STAY INSIDE THEIR OWN DISC (iOS's
-                        // `HomeView` twin): inset by the 7dp the next disc
-                        // covers ON BOTH SIDES, one line, shrunk to fit — two
-                        // letters at their natural width ran under the next
-                        // disc and read as one word ("GRMACO").
-                        val initialsStyle = centraidType("smallStrong")
-                        androidx.compose.foundation.text.BasicText(
-                            face.initials,
-                            // `textInv` is the SOLVED foreground for a filled
-                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
-                            // in the hand-off's role map). Ink on a saturated
-                            // fill is the contrast failure this tile had.
-                            style = initialsStyle.copy(
-                                color = centraidColor(if (hue != null) "textInv" else "text"),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            ),
-                            maxLines = 1,
-                            softWrap = false,
-                            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
-                                minFontSize = initialsStyle.fontSize * 0.5f,
-                                maxFontSize = initialsStyle.fontSize,
-                            ),
-                            modifier = Modifier.padding(horizontal = 7.dp),
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                // The machine's words for `more` (off the header total).
-                people.more_label,
-                style = centraidType("small"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        // THIS MONTH'S SPENDING, one figure per currency and never a sum across them.
-        // The amounts are the core's and the caption is the machine's.
-        spent != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            spent.amounts.forEach { amount ->
-                Text(
-                    amount,
-                    style = centraidType("mono"),
-                    color = centraidColor("text"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                spent.caption,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        // TODAY'S STEPS AND LAST NIGHT'S SLEEP (#1129). The figure is the machine's, in text ink:
-        // Health's hue stays on its mark (R-1129-10). No figure is an empty string, never a 0.
-        health != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (health.figure.isNotEmpty()) {
-                Text(health.figure, style = centraidType("title"), color = centraidColor("text"), maxLines = 1)
-            }
-            Text(
-                health.caption,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.weight(1f))
-            if (health.line.isNotEmpty()) {
-                Text(
-                    health.line,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-
-        locker != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // No lock glyph beside "Locked" — that says it twice. A STATE
-            // label, not a control, so the chip is an outline and not a fill.
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(CONTROL_RADIUS))
-                    .border(
-                        HAIRLINE,
-                        centraidColor("lineStrong"),
-                        RoundedCornerShape(CONTROL_RADIUS),
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                // THE MACHINE'S WORD (R-1047-L7): "Locked" / "Open".
-                Text(
-                    locker.state_label,
-                    style = centraidType("eyebrow"),
-                    color = appHue("locker"),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                // Instructional, and the machine's — never a title from inside.
-                locker.line,
-                style = centraidType("small"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/**
- * The one place an app's hue appears in a BODY, and it is a word.
- *
- * Locker's chip label is the state itself; everywhere else the hue stays on the
- * mark, because a second hue-bearing element is a second identity.
- */
-@Composable
-private fun appHue(appId: String): Color {
-    val marks = if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
-    return marks[appId]?.let { Color(it.hue) } ?: centraidColor("text")
-}
-
-/**
- * STATIC BARS, NEVER A SPINNER.
- *
- * A read in flight holds its slot at full geometry, and the bars stand where the
- * lines will: a spinner over a tile that is about to hold three lines of prose
- * is motion that tells a member nothing and then relayouts under them.
- */
-@Composable
-private fun ColumnScope.Skeleton(body: HomeTileBody?, loading: String) {
-    // Key by POSITION, not width — People's skeleton is two bars of the SAME width.
-    val widths = if (body?.people != null) listOf(0.46f, 0.46f) else listOf(0.88f, 0.70f, 0.54f)
-    Column(
-        Modifier
-            .weight(1f, fill = true)
-            .fillMaxWidth()
-            .padding(top = 4.dp)
-            .semantics { contentDescription = loading },
-        verticalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        widths.forEach { fraction ->
-            Box(
-                Modifier
-                    .fillMaxWidth(fraction)
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(SUB_RADIUS))
-                    .background(centraidColor("bgSunken")),
-            )
+private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
+    // WHICH widgets are drawn and in WHICH rows both arrive decided: `grid_rows`
+    // is the machine's packing over every widget, so this file looks each id up
+    // and draws it. Nothing here is allowed to disagree with `HomeView.swift`,
+    // because neither of them chooses.
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        header?.invoke()
+        Column(Modifier.padding(horizontal = PAGE_MARGIN).padding(top = 10.dp, bottom = 24.dp)) {
+            WidgetGrid(data, loading, onOpen)
         }
     }
 }
@@ -1181,22 +565,21 @@ private fun ColumnScope.Skeleton(body: HomeTileBody?, loading: String) {
  * about the vault, and an unanswered read has not earned it.
  */
 @Composable
-private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(PAGE_MARGIN)
-            .testTag("home-day-one"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
-        Text(
-            data.day_one_body,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
-        )
-        TileGrid(data, loading, onOpen)
+private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("home-day-one")) {
+        header?.invoke()
+        Column(
+            Modifier.padding(PAGE_MARGIN),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
+            Text(
+                data.day_one_body,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+            )
+            WidgetGrid(data, loading, onOpen)
+        }
     }
 }
 

@@ -42,7 +42,7 @@ message NotesHomeState {
   reserved "chips";
   // Search is the field under the title; its answer replaces the shelf.
   NotesSearchState search = 12;
-  // More holds Trash alone.
+  // More holds Import, Export and Trash.
   repeated NotesMoreRow more_rows = 13;
   NotesSheet sheet = 14;
   // The sheet's content, by which sheet is open.
@@ -121,6 +121,11 @@ message NotesHomeChrome {
   string close = 17;
   // The header's one action in the Notes place.
   string new_note = 18;
+  // A row's own actions (long press, swipe): Pin or Unpin by the row's `pinned`,
+  // File into notebook, and `trash_label`'s Trash. Each acts on that row.
+  string pin_label = 19;
+  string unpin_label = 20;
+  string file_label = 21;
 }
 
 message NotesMoreRow {
@@ -170,6 +175,20 @@ message NotesNoteRow {
   string notebook_id = 9;
   // Where a tap goes: the editor on this note.
   Route route = 10;
+  // What the note is about, as chips ("About · Maya"): empty for a plain note.
+  repeated NotesAboutChip about = 11;
+}
+
+// One subject of a note, drawn as a chip on its card and over the note. A tap opens the
+// subject in its own app.
+message NotesAboutChip {
+  string id = 1;
+  // `person`, `event`, `task`, `document`: the shell picks the glyph.
+  string kind = 2;
+  // "About · Maya".
+  string label = 3;
+  string accessibility_label = 4;
+  Route route = 5;
 }
 
 message NotesLibrarySection {
@@ -440,6 +459,17 @@ message NotesEditorState {
   optional Route send_to_agenda = 10;
   // The note's tags, each removable; empty before the note exists.
   repeated NotesEditorTag tags = 11;
+  // The line over the title: the notebook it is filed in, then "Edited Wed 4
+  // November" ("Travel · Edited Wed 4 November"). Empty before the note exists.
+  string meta = 12;
+  // THE BODY, DRAWN: the draft body's blocks and spans. Absent while there is
+  // no draft.
+  NotesRichText rich = 13;
+  // Where the caret goes after a core edit (Return); a shell applies a `seq`
+  // once.
+  optional NotesEditorSelection selection = 14;
+  // What the note is about, above its words (#1173): chips that open the subject.
+  repeated NotesAboutChip about = 15;
 }
 
 message NotesEditorTag {
@@ -447,6 +477,97 @@ message NotesEditorTag {
   string label = 2;
   // "Remove tag", said for a screen reader.
   string remove_label = 3;
+}
+
+// The body drawn. Every range is in UTF-16 code units, half-open [start, end):
+// NSString's unit on iOS and Kotlin's Char on Android, so both shells index
+// the body directly. A shell whose text length differs from `body_length`
+// draws the body plain until the next state.
+message NotesTextRange {
+  uint32 start = 1;
+  uint32 end = 2;
+}
+
+message NotesRichText {
+  repeated NotesRichBlock blocks = 1;
+  repeated NotesRichSpan spans = 2;
+  // A bound was hit (a very large note): past it the body is plain.
+  bool truncated = 3;
+  // The UTF-16 length of the body these ranges are of.
+  uint32 body_length = 4;
+}
+
+enum NotesRichBlockKind {
+  NOTES_RICH_BLOCK_KIND_UNSPECIFIED = 0;
+  NOTES_RICH_BLOCK_KIND_PARAGRAPH = 1;
+  NOTES_RICH_BLOCK_KIND_HEADING = 2;
+  NOTES_RICH_BLOCK_KIND_CHECKLIST = 3;
+  NOTES_RICH_BLOCK_KIND_BULLET = 4;
+  NOTES_RICH_BLOCK_KIND_QUOTE = 5;
+}
+
+message NotesRichBlock {
+  NotesRichBlockKind kind = 1;
+  // The line, without its terminator.
+  NotesTextRange range = 2;
+  // The checklist "[ ]" / "[x]", the bullet character, the heading hashes or
+  // the quote ">"; absent for a paragraph.
+  NotesTextRange marker = 3;
+  // The words after the marker.
+  NotesTextRange content = 4;
+  // Heading 1-6; a list's indent depth.
+  uint32 level = 5;
+  bool checked = 6;
+  // What a screen reader says for a checklist circle ("Checked" / "Not
+  // checked"); empty otherwise.
+  string accessibility_label = 7;
+}
+
+enum NotesRichStyle {
+  NOTES_RICH_STYLE_UNSPECIFIED = 0;
+  NOTES_RICH_STYLE_EMPHASIS = 1;
+  NOTES_RICH_STYLE_STRONG = 2;
+  NOTES_RICH_STYLE_STRIKE = 3;
+  NOTES_RICH_STYLE_CODE = 4;
+  // Markdown punctuation the shell draws faint.
+  NOTES_RICH_STYLE_SYNTAX = 5;
+  NOTES_RICH_STYLE_LINK = 6;
+}
+
+message NotesRichSpan {
+  NotesRichStyle style = 1;
+  NotesTextRange range = 2;
+  // A LINK span's chip.
+  optional NotesLinkChip chip = 3;
+}
+
+enum NotesLinkChipKind {
+  NOTES_LINK_CHIP_KIND_UNSPECIFIED = 0;
+  NOTES_LINK_CHIP_KIND_URL = 1;
+  NOTES_LINK_CHIP_KIND_NOTE = 2;
+}
+
+enum NotesLinkResolution {
+  NOTES_LINK_RESOLUTION_UNSPECIFIED = 0;
+  NOTES_LINK_RESOLUTION_RESOLVED = 1;
+  NOTES_LINK_RESOLUTION_MISSING = 2;
+  NOTES_LINK_RESOLUTION_TRASHED = 3;
+}
+
+message NotesLinkChip {
+  NotesLinkChipKind kind = 1;
+  // What the chip shows: a resolved note's title, the link's words, or the URL.
+  string label = 2;
+  NotesLinkResolution resolution = 3;
+  // A resolved note: where a tap goes (the shell opens it, as it does
+  // `history`).
+  optional Route route = 4;
+  string accessibility_label = 5;
+}
+
+message NotesEditorSelection {
+  uint32 caret = 1;
+  uint64 seq = 2;
 }
 
 message NotesEditorDraft {
@@ -473,6 +594,12 @@ message NotesEditorChrome {
   string retry = 12;
   // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
   string tag_placeholder = 13;
+  // The toolbar's checklist key: starts a checklist line at the end of the note.
+  string checklist_label = 14;
+  // The toolbar's keyboard key.
+  string keyboard_label = 15;
+  // The status line's verb after a checklist tap: "Undo", or empty.
+  string status_action = 16;
 }
 
 message NotesLinkSheet {
@@ -524,7 +651,33 @@ message NotesEditorEvent {
     Saved save = 9;
     TagAdded tag_added = 10;
     TagRemoved tag_removed = 11;
+    // The toolbar's checklist key: a new "- [ ]" line at the end of the body.
+    ChecklistRequested checklist_requested = 12;
+    // A tap on a checklist item's circle: `at` is any UTF-16 offset on its line.
+    ChecklistToggled checklist_toggled = 13;
+    // A tap on a link chip: `at` is the chip's range start (UTF-16).
+    LinkOpened link_opened = 14;
+    // Return pressed with the caret at `caret` (UTF-16); the core edits the body.
+    ReturnPressed return_pressed = 15;
+    // The status line's verb (Undo).
+    StatusActed status_acted = 16;
   }
+
+  message ChecklistToggled {
+    uint32 at = 1;
+  }
+
+  message LinkOpened {
+    uint32 at = 1;
+  }
+
+  message ReturnPressed {
+    uint32 caret = 1;
+  }
+
+  message StatusActed {}
+
+  message ChecklistRequested {}
 
   message TagAdded {
     string label = 1;

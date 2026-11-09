@@ -1,11 +1,12 @@
-//! MONEY'S HOME (`money.home`): Spending · Activity · Cash flow, and More as a
-//! sheet. One screen, the tab a parameter.
+//! MONEY'S HOME (`money.home`): Activity · Spending · Cash flow, and More as a
+//! sheet. One screen, the tab a parameter. Activity is home.
 //!
-//! Roots are places only. Search is the bar under the title and pushes
-//! `money.search`; the header's one trailing action is the Plus glyph, spoken
-//! "Import statement"; Activity's header holds the filter menu (account and
-//! category, no sort) and the month under the title, which opens the month sheet;
-//! More's rows are routes.
+//! Roots are places only. Search is the band's key and pushes `money.search`;
+//! the header's one trailing action is the Plus glyph, spoken "Import
+//! statement"; Activity's header holds the filter menu (account and category, no
+//! sort); the month is the title's second line on Activity and Spending, and a
+//! tap opens the month sheet: the ONE way to change month. More's rows are
+//! routes.
 //!
 //! EACH TAB READS ITS OWN QUERY, and a change of tab, month or filter reads
 //! again (a read is local and synchronous, so nothing is held over from the
@@ -49,9 +50,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     };
     let destination = match wire::MoneyDestination::try_from(args.destination) {
-        Ok(wire::MoneyDestination::Activity) => Destination::Activity,
+        Ok(wire::MoneyDestination::Spending) => Destination::Spending,
         Ok(wire::MoneyDestination::Cashflow) => Destination::Cashflow,
-        _ => Destination::Spending,
+        _ => Destination::Activity,
     };
     Some(Box::new(Home {
         destination,
@@ -60,19 +61,26 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         category_filter: String::new(),
         shown: PAGE,
         sheet: Sheet::None,
+        bars: Bars::Week,
+        bar: None,
+        categories_open: false,
         phase: Phase::Loading,
     }))
 }
 
 /// What the tab on screen read.
 enum Loaded {
-    Spending(wire::MoneySpending),
+    // Boxed: the three answers are very different sizes.
+    Spending(Box<wire::MoneySpending>),
     Activity {
-        activity: wire::MoneyActivity,
-        accounts: wire::MoneyAccounts,
-        categories: wire::MoneyCategories,
+        activity: Box<wire::MoneyActivity>,
+        accounts: Box<wire::MoneyAccounts>,
+        categories: Box<wire::MoneyCategories>,
+        /// The month's overview card reads Spending's answer. A month that will
+        /// not read leaves the card out; it never fails the list.
+        overview: Option<Box<wire::MoneySpending>>,
     },
-    Cashflow(wire::MoneyCashflow),
+    Cashflow(Box<wire::MoneyCashflow>),
 }
 
 impl Loaded {
@@ -94,6 +102,25 @@ impl Loaded {
     }
 }
 
+/// What the Spending chart cuts the month into.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Bars {
+    Week,
+    Day,
+}
+
+impl Bars {
+    const fn key(self) -> &'static str {
+        match self {
+            Self::Week => "week",
+            Self::Day => "day",
+        }
+    }
+}
+
+/// The category lines Spending draws before the rest fold into one row.
+const CATEGORIES_SHOWN: usize = 3;
+
 struct Home {
     destination: Destination,
     /// `YYYY-MM`; empty until an answer names the month today falls in.
@@ -102,6 +129,11 @@ struct Home {
     category_filter: String,
     shown: u32,
     sheet: Sheet,
+    bars: Bars,
+    /// The bar the caption reads; none is the one today falls in.
+    bar: Option<usize>,
+    /// "N more categories" was tapped: every category is listed.
+    categories_open: bool,
     phase: Phase<Loaded>,
 }
 
@@ -154,15 +186,29 @@ impl Home {
                     Answer::MoneyCategories(x) => Some(x),
                     _ => None,
                 });
+                let overview = match read::read(
+                    ctx,
+                    load::money::Spending {
+                        month: self.month.clone(),
+                    },
+                    |a| match a {
+                        Answer::MoneySpending(x) => Some(x),
+                        _ => None,
+                    },
+                ) {
+                    read::Reading::Data(x) => Some(Box::new(x)),
+                    _ => None,
+                };
                 match (activity, accounts, categories) {
                     (
                         read::Reading::Data(activity),
                         read::Reading::Data(accounts),
                         read::Reading::Data(categories),
                     ) => Phase::Ready(Loaded::Activity {
-                        activity,
-                        accounts,
-                        categories,
+                        activity: Box::new(activity),
+                        accounts: Box::new(accounts),
+                        categories: Box::new(categories),
+                        overview,
                     }),
                     (read::Reading::Denied(_), ..) => Phase::Denied,
                     _ => Phase::Failed,
@@ -178,7 +224,7 @@ impl Home {
                     _ => None,
                 },
             ))
-            .map(Loaded::Cashflow),
+            .map(|answer| Loaded::Cashflow(Box::new(answer))),
             _ => Phase::of(read::read(
                 ctx,
                 load::money::Spending {
@@ -189,7 +235,7 @@ impl Home {
                     _ => None,
                 },
             ))
-            .map(Loaded::Spending),
+            .map(|answer| Loaded::Spending(Box::new(answer))),
         }
     }
 
@@ -216,15 +262,9 @@ impl Home {
         };
         self.sheet = Sheet::None;
         self.shown = PAGE;
+        self.bar = None;
+        self.categories_open = false;
         self.reload(ctx);
-    }
-
-    fn step_month(&mut self, months: i32, ctx: &Ctx) {
-        if self.month.is_empty() || months == 0 {
-            return;
-        }
-        let next = fold::shift_month(&self.month, i64::from(months));
-        self.set_month(&next, ctx);
     }
 
     /// A filter changed: what Activity held no longer answers it.
@@ -243,7 +283,6 @@ impl Home {
                 "more" => self.sheet = Sheet::More,
                 _ => {}
             },
-            Some(H::MonthStepped(step)) => self.step_month(step.months, ctx),
             Some(H::MonthPicked(picked)) => self.set_month(&picked.month, ctx),
             Some(H::MonthTapped(_)) => self.sheet = Sheet::Month,
             Some(H::FilterMenuPicked(picked)) => {
@@ -268,10 +307,25 @@ impl Home {
                 self.refilter(ctx);
             }
             // The Needs row: the filter that lists the rows it counts.
+            // From Spending's "No category" row the filter lists them in Activity.
             Some(H::CategoryPicked(picked)) => {
                 self.category_filter = picked.key;
+                self.destination = Destination::Activity;
                 self.refilter(ctx);
             }
+            Some(H::BarsModePicked(picked)) => {
+                let to = if picked.key == Bars::Day.key() {
+                    Bars::Day
+                } else {
+                    Bars::Week
+                };
+                if to != self.bars {
+                    self.bars = to;
+                    self.bar = None;
+                }
+            }
+            Some(H::BarPicked(picked)) => self.bar = Some(picked.index as usize),
+            Some(H::CategoriesExpanded(_)) => self.categories_open = true,
             Some(H::SheetClosed(_) | H::MoreOpened(_)) => self.sheet = Sheet::None,
             // A bigger window: the rows on screen stay while the read lands.
             Some(H::ShowMore(_)) => {
@@ -297,21 +351,18 @@ impl Home {
         let base = wire::MoneyHomeData {
             today: today.to_owned(),
             month_label: fold::month_label(locale, month),
-            can_step_next: !month.is_empty() && month < fold::month_of(today).as_str(),
-            // THE STEPPER IS SPENDING'S AND ACTIVITY'S. Cash flow reads twelve
-            // months at once, so a month to step through there would move
-            // nothing it draws.
-            shows_month: self.destination != Destination::Cashflow,
             month_options: fold::month_options(locale, &fold::month_of(today), month),
             ..wire::MoneyHomeData::default()
         };
         match loaded {
             Loaded::Spending(answer) => wire::MoneyHomeData {
-                spending: Some(spending(locale, answer)),
+                spending: Some(spending(locale, answer, self)),
                 ..base
             },
-            Loaded::Activity { activity, .. } => wire::MoneyHomeData {
-                activity: Some(self.activity(locale, activity)),
+            Loaded::Activity {
+                activity, overview, ..
+            } => wire::MoneyHomeData {
+                activity: Some(self.activity(locale, activity, overview.as_deref())),
                 ..base
             },
             Loaded::Cashflow(answer) => wire::MoneyHomeData {
@@ -321,7 +372,12 @@ impl Home {
         }
     }
 
-    fn activity(&self, locale: Locale, answer: &wire::MoneyActivity) -> wire::MoneyActivityData {
+    fn activity(
+        &self,
+        locale: Locale,
+        answer: &wire::MoneyActivity,
+        overview: Option<&wire::MoneySpending>,
+    ) -> wire::MoneyActivityData {
         let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
         let needs_count: u32 = answer.needs_category.iter().map(|c| c.count).sum();
         let shown = u32::try_from(answer.rows.len()).unwrap_or(u32::MAX);
@@ -340,27 +396,55 @@ impl Home {
                 }
             }
         });
+        // THE REVIEW BANNER: the count in its badge, "Need a category · ₹4,310".
+        let needs_amounts = answer
+            .needs_category
+            .iter()
+            .filter(|counted| counted.count > 0)
+            .map(|counted| fold::text(counted.amount.as_ref()))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let overview = overview.filter(|o| !o.empty);
         wire::MoneyActivityData {
+            heroes: overview.map_or_else(Vec::new, |o| {
+                heroes(
+                    locale,
+                    o,
+                    &fill(
+                        &words::spent_in(locale),
+                        &[("month", &fold::month_name(locale, &o.month))],
+                    ),
+                )
+            }),
+            in_out_net: overview.map_or_else(Vec::new, |o| in_out_net(locale, o)),
+            days_left_label: overview.map_or_else(String::new, |o| days_left_label(locale, o)),
+            needs_title: if needs_count > 0 {
+                fill(&words::needs_banner(locale), &[("amount", &needs_amounts)])
+            } else {
+                String::new()
+            },
+            needs_count: if needs_count > 0 {
+                needs_count.to_string()
+            } else {
+                String::new()
+            },
+            review_label: if needs_count > 0 {
+                words::review(locale)
+            } else {
+                String::new()
+            },
             needs_label: if needs_count > 0 {
-                fill(
-                    &words::needs_category(locale),
-                    &[("n", &needs_count.to_string())],
+                fold::with_n(
+                    if needs_count == 1 {
+                        words::note_needs_one(locale)
+                    } else {
+                        words::note_needs_many(locale)
+                    },
+                    needs_count,
                 )
             } else {
                 String::new()
             },
-            needs_category: answer
-                .needs_category
-                .iter()
-                .filter(|counted| counted.count > 0)
-                .map(|counted| {
-                    figure(
-                        counted.amount.as_ref().map_or("", |a| a.currency.as_str()),
-                        counted.amount.as_ref(),
-                        Tone::Neutral,
-                    )
-                })
-                .collect(),
             // THE FILTER THAT LISTS THOSE ROWS is the Needs row's tap.
             needs_key: if needs_count > 0 {
                 FILTER_UNCATEGORISED.to_owned()
@@ -370,6 +454,7 @@ impl Home {
             sections: rows::sections(
                 locale,
                 &answer.rows,
+                &answer.days,
                 &answer.today,
                 &words::app_title(locale),
             ),
@@ -424,10 +509,11 @@ impl Home {
         ))
     }
 
-    /// THE MONTH IN VIEW, under the app's name: a tap opens the month sheet. Where
-    /// the month chip stood (Activity, once read); the band's stepper still steps.
+    /// THE MONTH IN VIEW, under the app's name: a tap opens the month sheet, the
+    /// one way to change month. Activity and Spending, once read; Cash flow
+    /// reads twelve months at once, so it has no month to change.
     fn subtitle(&self, locale: Locale) -> Option<wire::HeaderSubtitle> {
-        let Phase::Ready(Loaded::Activity { .. }) = &self.phase else {
+        let Phase::Ready(Loaded::Activity { .. } | Loaded::Spending(_)) = &self.phase else {
             return None;
         };
         let label = if self.month.is_empty() {
@@ -453,16 +539,16 @@ impl Home {
         };
         vec![
             tab(
-                "spending",
-                words::band_spending(locale),
-                "Coin",
-                self.destination == Destination::Spending,
-            ),
-            tab(
                 "activity",
                 words::band_activity(locale),
                 "List",
                 self.destination == Destination::Activity,
+            ),
+            tab(
+                "spending",
+                words::band_spending(locale),
+                "Coin",
+                self.destination == Destination::Spending,
             ),
             tab(
                 "cashflow",
@@ -515,8 +601,6 @@ impl Home {
                 ),
             ],
             search_placeholder: words::search_placeholder(locale),
-            previous_month_label: words::previous_month(locale),
-            next_month_label: words::next_month(locale),
             month_sheet_title: words::month_sheet_title(locale),
             close_label: words::close(locale),
             import_route: Some(routes::import(&title)),
@@ -533,20 +617,16 @@ fn day_one(locale: Locale) -> wire::EmptyState {
     }
 }
 
-fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpendingData {
-    if answer.empty {
-        return wire::MoneySpendingData {
-            empty: Some(day_one(locale)),
-            ..Default::default()
-        };
-    }
+/// One hero per currency: spent so far, the plan's bar and what is left of it.
+/// `spent_label` is what the amount is called ("Spent in October").
+fn heroes(locale: Locale, answer: &wire::MoneySpending, spent_label: &str) -> Vec<wire::MoneyHero> {
     let current_month = answer.month == fold::month_of(&answer.today);
     let tick_bp = if answer.days_in_month > 0 {
         i64::from(answer.day_of_month) * BP / i64::from(answer.days_in_month)
     } else {
         0
     };
-    let heroes = answer
+    answer
         .per_currency
         .iter()
         .map(|line| {
@@ -574,7 +654,7 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
             let progress = line.progress_bp.unwrap_or(0);
             wire::MoneyHero {
                 spent: fold::text(line.spent.as_ref()),
-                spent_label: words::spent(locale),
+                spent_label: spent_label.to_owned(),
                 figures,
                 has_bar: planned.is_some(),
                 fill_bp: u32::try_from(progress.clamp(0, BP)).unwrap_or(0),
@@ -598,8 +678,12 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
                 },
             }
         })
-        .collect();
-    let in_out_net = answer
+        .collect()
+}
+
+/// In, out and net, one line per currency.
+fn in_out_net(locale: Locale, answer: &wire::MoneySpending) -> Vec<wire::MoneyInOutNet> {
+    answer
         .in_out_net
         .iter()
         .map(|line| wire::MoneyInOutNet {
@@ -614,14 +698,58 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
                     line.outgoing.as_ref(),
                     Tone::Neutral,
                 ),
-                figure(
-                    &words::net(locale),
-                    line.net.as_ref(),
-                    fold::sign_tone(line.net.as_ref()),
-                ),
+                wire::MoneyFigure {
+                    // A gain is green and shows its "+"; a loss is the net tone.
+                    positive: line.net.as_ref().is_some_and(|n| n.minor > 0),
+                    amount: fold::signed(line.net.as_ref()),
+                    ..figure(
+                        &words::net(locale),
+                        line.net.as_ref(),
+                        fold::sign_tone(line.net.as_ref()),
+                    )
+                },
             ],
         })
-        .collect();
+        .collect()
+}
+
+/// "9 days left" while the month in view is the one today falls in.
+fn days_left_label(locale: Locale, answer: &wire::MoneySpending) -> String {
+    if answer.month == fold::month_of(&answer.today) && answer.days_left > 0 {
+        fold::with_n(
+            if answer.days_left == 1 {
+                words::days_left_one(locale)
+            } else {
+                words::days_left_many(locale)
+            },
+            answer.days_left,
+        )
+    } else {
+        String::new()
+    }
+}
+
+fn spending(locale: Locale, answer: &wire::MoneySpending, view: &Home) -> wire::MoneySpendingData {
+    if answer.empty {
+        return wire::MoneySpendingData {
+            empty: Some(day_one(locale)),
+            ..Default::default()
+        };
+    }
+    let current_month = answer.month == fold::month_of(&answer.today);
+    let heroes = heroes(
+        locale,
+        answer,
+        &if current_month {
+            words::spent_so_far(locale)
+        } else {
+            fill(
+                &words::spent_in(locale),
+                &[("month", &fold::month_name(locale, &answer.month))],
+            )
+        },
+    );
+    let in_out_net = in_out_net(locale, answer);
     let mut currencies: Vec<&str> = Vec::new();
     for category in &answer.categories {
         if !currencies.contains(&category.currency.as_str()) {
@@ -630,46 +758,65 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
     }
     let tables = currencies
         .iter()
-        .map(|currency| wire::MoneyCategoryTable {
-            heading: if currencies.len() > 1 {
-                (*currency).to_owned()
-            } else {
-                String::new()
-            },
-            currency: (*currency).to_owned(),
-            planned_label: words::planned(locale),
-            spent_label: capitalised(&words::spent(locale)),
-            left_label: words::left(locale),
-            rows: answer
+        .map(|currency| {
+            let lines: Vec<&wire::money_spending::SpendingCategory> = answer
                 .categories
                 .iter()
                 .filter(|line| line.currency == *currency)
-                .map(|line| wire::MoneyCategoryLine {
-                    label: line.label.clone(),
-                    has_plan: line.planned.is_some(),
-                    planned: fold::text(line.planned.as_ref()),
-                    spent: fold::text(line.spent.as_ref()),
-                    left: fold::text(line.left.as_ref()),
-                    over: line.over,
-                    accessibility_label: [
-                        line.label.clone(),
-                        if line.over {
-                            words::over_plan(locale)
-                        } else {
-                            String::new()
-                        },
-                    ]
-                    .into_iter()
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                    route: Some(routes::target(
-                        &answer.month,
-                        &line.category_id,
-                        &line.currency,
-                    )),
-                })
-                .collect(),
+                .collect();
+            // PAST THE FIRST THREE the rest fold into one row until it is tapped;
+            // the core says what they come to.
+            let folded = !view.categories_open && lines.len() > CATEGORIES_SHOWN;
+            let tail = answer.tail.iter().find(|t| t.currency == *currency);
+            let drawn = if folded {
+                &lines[..CATEGORIES_SHOWN]
+            } else {
+                &lines[..]
+            };
+            wire::MoneyCategoryTable {
+                heading: if currencies.len() > 1 {
+                    (*currency).to_owned()
+                } else {
+                    String::new()
+                },
+                currency: (*currency).to_owned(),
+                rows: drawn
+                    .iter()
+                    .map(|line| category_line(locale, answer, line))
+                    .collect(),
+                more: tail.filter(|_| folded).map(|tail| {
+                    let label = if tail.count == 1 {
+                        words::more_categories_one(locale)
+                    } else {
+                        fold::with_n(words::more_categories_many(locale), tail.count)
+                    };
+                    let amount = fold::text(tail.spent.as_ref());
+                    wire::MoneyRestLine {
+                        accessibility_label: fold::spoken(&label, &amount),
+                        label,
+                        amount,
+                        color_key: fold::REST_COLOR_KEY.to_owned(),
+                        key: String::new(),
+                    }
+                }),
+                uncategorised: answer
+                    .uncategorised
+                    .iter()
+                    .find(|u| {
+                        u.count > 0 && u.amount.as_ref().is_some_and(|a| a.currency == *currency)
+                    })
+                    .map(|u| {
+                        let label = words::no_category(locale);
+                        let amount = fold::text(u.amount.as_ref());
+                        wire::MoneyRestLine {
+                            accessibility_label: fold::spoken(&label, &amount),
+                            label,
+                            amount,
+                            color_key: String::new(),
+                            key: FILTER_UNCATEGORISED.to_owned(),
+                        }
+                    }),
+            }
         })
         .collect();
     let sum = |counted: &[wire::MoneyCounted]| counted.iter().map(|c| c.count).sum::<u32>();
@@ -680,13 +827,8 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
     );
     let note = |n: u32, one: String, many: String| fold::with_n(if n == 1 { one } else { many }, n);
     let mut notes = Vec::new();
-    if needs > 0 {
-        notes.push(note(
-            needs,
-            words::note_needs_one(locale),
-            words::note_needs_many(locale),
-        ));
-    }
+    // "N rows need a category" is the "No category" row's job on this page.
+    let _ = needs;
     if transfers > 0 {
         notes.push(note(
             transfers,
@@ -727,19 +869,9 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
     }
     wire::MoneySpendingData {
         heroes,
-        days_left_label: if current_month && answer.days_left > 0 {
-            fold::with_n(
-                if answer.days_left == 1 {
-                    words::days_left_one(locale)
-                } else {
-                    words::days_left_many(locale)
-                },
-                answer.days_left,
-            )
-        } else {
-            String::new()
-        },
+        days_left_label: days_left_label(locale, answer),
         in_out_net,
+        bars: bars(locale, answer, view),
         tables,
         notes,
         definitions: fold::definitions(locale, &answer.definitions),
@@ -753,6 +885,263 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
         },
         ..Default::default()
     }
+}
+
+/// One category: its dot, spent, progress against the plan and the sentence under.
+fn category_line(
+    locale: Locale,
+    answer: &wire::MoneySpending,
+    line: &wire::money_spending::SpendingCategory,
+) -> wire::MoneyCategoryLine {
+    let planned_minor = line.planned.as_ref().map(|a| a.minor);
+    // A BAR'S LENGTH IS DRAWING, NOT A FIGURE.
+    let progress_bp = planned_minor
+        .filter(|planned| *planned > 0)
+        .and_then(|planned| {
+            let spent = line.spent.as_ref().map_or(0, |a| a.minor);
+            u32::try_from((spent.max(0) * BP / planned).clamp(0, BP)).ok()
+        })
+        .unwrap_or(0);
+    let caption = match (&line.planned, &line.left) {
+        (Some(planned), Some(left)) if line.over => fill(
+            &words::progress_over(locale),
+            &[
+                (
+                    "over",
+                    &fold::text(Some(&wire::MoneyAmount {
+                        minor: -left.minor,
+                        ..left.clone()
+                    })),
+                ),
+                ("planned", &fold::text(Some(planned))),
+            ],
+        ),
+        (Some(planned), Some(left)) => fill(
+            &words::progress_of(locale),
+            &[
+                ("planned", &fold::text(Some(planned))),
+                ("left", &fold::text(Some(left))),
+            ],
+        ),
+        _ => words::progress_no_plan(locale),
+    };
+    wire::MoneyCategoryLine {
+        label: line.label.clone(),
+        has_plan: line.planned.is_some(),
+        spent: fold::text(line.spent.as_ref()),
+        over: line.over,
+        color_key: fold::color_key(&line.category_id),
+        progress_bp,
+        accessibility_label: [
+            line.label.clone(),
+            fold::text(line.spent.as_ref()),
+            caption.clone(),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(", "),
+        caption,
+        route: Some(routes::target(
+            &answer.month,
+            &line.category_id,
+            &line.currency,
+        )),
+    }
+}
+
+/// THE SPENDING CHART, one per currency: weeks (or days) of the month as stacked
+/// bars. The month's three biggest categories wear their own colour and the rest
+/// share the neutral one. Heights are drawing (basis points of the tallest bar
+/// or of the plan's pace); the amounts and the pace are the core's.
+fn bars(locale: Locale, answer: &wire::MoneySpending, view: &Home) -> Vec<wire::MoneyBars> {
+    let series = match view.bars {
+        Bars::Week => &answer.weekly,
+        Bars::Day => &answer.daily,
+    };
+    let multiple = series.len() > 1;
+    series
+        .iter()
+        .map(|series| {
+            let top: Vec<&wire::money_spending::SpendingCategory> = answer
+                .categories
+                .iter()
+                .filter(|c| {
+                    c.currency == series.currency
+                        && c.spent.as_ref().is_some_and(|spent| spent.minor > 0)
+                })
+                .take(CATEGORIES_SHOWN)
+                .collect();
+            let minor = |amount: &Option<wire::MoneyAmount>| amount.as_ref().map_or(0, |a| a.minor);
+            let pace = series.pace.as_ref().map_or(0, |a| a.minor);
+            let scale = series
+                .buckets
+                .iter()
+                .map(|b| minor(&b.spent))
+                .max()
+                .unwrap_or(0)
+                .max(pace)
+                .max(1);
+            let share = |part: i64, whole: i64| {
+                u32::try_from((part * BP / whole.max(1)).clamp(0, BP)).unwrap_or(0)
+            };
+            // The bar the caption reads: the one chosen, else today's, else the
+            // last that holds any spending.
+            let today_bar = series
+                .buckets
+                .iter()
+                .position(|b| {
+                    answer.day_of_month >= b.first_day && answer.day_of_month <= b.last_day
+                })
+                .filter(|_| answer.day_of_month > 0);
+            let last_spent = series.buckets.iter().rposition(|b| minor(&b.spent) > 0);
+            let selected = view
+                .bar
+                .filter(|index| *index < series.buckets.len())
+                .or(today_bar)
+                .or(last_spent)
+                .unwrap_or(0);
+            let range = |bucket: &wire::money_spending::SpendBucket| {
+                let month = fold::month_short(locale, &answer.month);
+                if bucket.first_day == bucket.last_day {
+                    fill(
+                        &words::bar_range_day(locale),
+                        &[("day", &bucket.first_day.to_string()), ("month", &month)],
+                    )
+                } else {
+                    fill(
+                        &words::bar_range(locale),
+                        &[
+                            ("from", &bucket.first_day.to_string()),
+                            ("to", &bucket.last_day.to_string()),
+                            ("month", &month),
+                        ],
+                    )
+                }
+            };
+            let bars: Vec<wire::MoneyBar> = series
+                .buckets
+                .iter()
+                .enumerate()
+                .map(|(index, bucket)| {
+                    let spent = minor(&bucket.spent);
+                    let upcoming = answer.day_of_month < bucket.first_day;
+                    let mut segments: Vec<wire::MoneyBarSegment> = top
+                        .iter()
+                        .filter_map(|category| {
+                            let part = bucket
+                                .parts
+                                .iter()
+                                .find(|p| p.category_id == category.category_id)
+                                .map_or(0, |p| minor(&p.spent));
+                            (part > 0).then(|| wire::MoneyBarSegment {
+                                color_key: fold::color_key(&category.category_id),
+                                share_bp: share(part, spent),
+                            })
+                        })
+                        .collect();
+                    let named: u32 = segments.iter().map(|s| s.share_bp).sum();
+                    if spent > 0 && named < u32::try_from(BP).unwrap_or(0) {
+                        segments.push(wire::MoneyBarSegment {
+                            color_key: fold::REST_COLOR_KEY.to_owned(),
+                            share_bp: u32::try_from(BP).unwrap_or(0) - named,
+                        });
+                    }
+                    let label = match view.bars {
+                        Bars::Week if bucket.first_day == bucket.last_day => {
+                            bucket.first_day.to_string()
+                        }
+                        Bars::Week => format!("{}–{}", bucket.first_day, bucket.last_day),
+                        Bars::Day if bucket.first_day % 7 == 1 => bucket.first_day.to_string(),
+                        Bars::Day => String::new(),
+                    };
+                    let words_of = range(bucket);
+                    wire::MoneyBar {
+                        label,
+                        height_bp: share(spent, scale),
+                        segments,
+                        upcoming,
+                        selected: index == selected,
+                        accessibility_label: if upcoming {
+                            fill(&words::bar_upcoming(locale), &[("range", &words_of)])
+                        } else {
+                            fill(
+                                &words::chart_bar_spoken(locale),
+                                &[
+                                    ("range", &words_of),
+                                    ("amount", &fold::text(bucket.spent.as_ref())),
+                                ],
+                            )
+                        },
+                    }
+                })
+                .collect();
+            let caption = series.buckets.get(selected).map_or_else(String::new, |b| {
+                let range = range(b);
+                let amount = fold::text(b.spent.as_ref());
+                if answer.day_of_month < b.first_day {
+                    return range;
+                }
+                // The biggest share: the category that spent most in the bar.
+                let biggest = b
+                    .parts
+                    .iter()
+                    .filter(|p| !p.category_id.is_empty())
+                    .max_by_key(|p| minor(&p.spent))
+                    .and_then(|p| {
+                        answer
+                            .categories
+                            .iter()
+                            .find(|c| c.category_id == p.category_id)
+                    });
+                let caption = fill(
+                    &words::bar_caption(locale),
+                    &[("range", &range), ("amount", &amount)],
+                );
+                match biggest {
+                    // "15–21 Oct · ₹21,040 · Eating out was the biggest share"
+                    Some(category) => format!(
+                        "{caption} · {}",
+                        fill(
+                            &words::bar_biggest(locale),
+                            &[("category", &category.label)]
+                        )
+                    ),
+                    None => caption,
+                }
+            });
+            wire::MoneyBars {
+                currency: series.currency.clone(),
+                heading: if multiple {
+                    series.currency.clone()
+                } else {
+                    String::new()
+                },
+                modes: vec![
+                    fold::choice(
+                        Bars::Week.key(),
+                        &words::bars_week(locale),
+                        view.bars == Bars::Week,
+                        "",
+                    ),
+                    fold::choice(
+                        Bars::Day.key(),
+                        &words::bars_day(locale),
+                        view.bars == Bars::Day,
+                        "",
+                    ),
+                ],
+                bars,
+                pace_bp: if pace > 0 { share(pace, scale) } else { 0 },
+                pace_label: if pace > 0 {
+                    words::planned_pace(locale)
+                } else {
+                    String::new()
+                },
+                caption,
+            }
+        })
+        .collect()
 }
 
 /// The Account section's options, and the name of the one checked (None for all).
@@ -961,14 +1350,6 @@ impl Screen for Home {
             ..wire::ViewState::default()
         }
     }
-}
-
-fn capitalised(word: &str) -> String {
-    let mut chars = word.chars();
-    chars
-        .next()
-        .map(|first| first.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
 }
 
 fn rate_label_of(locale: Locale, rate: Option<i64>) -> String {

@@ -1,10 +1,10 @@
 //! THE KIT'S ONE TRASH SCREEN (#1015 D1: Empty trash everywhere an app can
-//! destroy), the app a [`TrashSpec`] (law 2): Agenda's `agenda.trash` and every
+//! destroy), the app a [`TrashSpec`] (law 2): Reminders' `reminders.trash` and every
 //! other app's `<app>.trash` are this machine over their own spec.
 //!
 //! A list of deleted rows the spec's `load` reads, restore as a write with no
 //! confirm, and purge / empty behind a destructive confirm with full sentences
-//! (DESIGN.md). A spec with no `purge` has NO destroy path (Docs today): the
+//! (product-intuition/references/design-behaviour.md § Controls). A spec with no `purge` has NO destroy path (Docs today): the
 //! screen offers restore only — no "Delete forever" and no "Empty trash" — and
 //! says nothing it cannot do. A refused write keeps the list and says the
 //! core's sentence; the vault's own change event reloads the list after a
@@ -149,7 +149,7 @@ impl TrashCopy {
 
 /// ONE APP'S TRASH, as the parameter the one trash screen takes.
 pub struct TrashSpec {
-    /// `agenda`: the app, and the prefix of the screen name `agenda.trash`.
+    /// `reminders`: the app, and the prefix of the screen name `reminders.trash`.
     pub app: &'static str,
     /// The kit's glyph for a row.
     pub icon_key: &'static str,
@@ -340,12 +340,18 @@ impl Screen for Trash {
                 empty: Some(wire::EmptyState {
                     headline: self.spec.copy.empty_headline(locale),
                     body: self.spec.copy.empty_state_body(locale),
+                    icon_key: "Trash".to_owned(),
                     ..wire::EmptyState::default()
                 }),
                 empty_label: if self.spec.empty.is_some() && !items.is_empty() {
                     self.spec.copy.empty_action(locale)
                 } else {
                     String::new()
+                },
+                count_label: if items.is_empty() {
+                    String::new()
+                } else {
+                    shared::trash_count(locale, items.len() as u64)
                 },
             }),
         };

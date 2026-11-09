@@ -163,6 +163,7 @@ fn import_plans_a_file_row_by_row_and_adds_only_on_publish() {
             name: "export.csv".to_owned(),
             media_type: "text/csv".to_owned(),
             content: csv.as_bytes().to_vec(),
+            ..Default::default()
         },
     ));
     let state = import_state(&d, id);
@@ -207,6 +208,7 @@ fn a_file_that_is_not_a_password_manager_export_is_refused_in_words() {
             name: "x.bin".to_owned(),
             media_type: String::new(),
             content: vec![0, 1, 2, 3],
+            ..Default::default()
         },
     ));
     let state = import_state(&d, id);

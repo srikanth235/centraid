@@ -154,17 +154,13 @@ message WordsEnterState {
   string secondary_label = 12;
   // WORKING: what is happening.
   string progress = 13;
-  // DONE after a restore: one line per vault, each with its safety number.
-  repeated RestoredVaultLine restored = 14;
+  // 14 was `restored` and 17 `stayed`, 18 `retry_label`: a restore ends the
+  // screen instead of listing its vaults.
+  reserved 14, 17, 18;
+  reserved "restored", "stayed", "retry_label";
   string accessibility_label = 15;
   // A re-key's door, kept through DONE.
   WordsEnterOrigin origin = 16;
-  // DONE after a restore: one sentence per vault that stayed with the other
-  // phone or has no backup (R-1047-R5).
-  repeated string stayed = 17;
-  // DONE with any vault that stayed: the control that asks again for those
-  // alone (`Retry`, R-1047-R6). Empty hides it.
-  string retry_label = 18;
   // ENTERING a held-seed restore: the control that sends `UseWords` and draws
   // the grid instead. Empty hides it.
   string words_label = 19;
@@ -181,6 +177,14 @@ message WordsEnterState {
   string photo_label = 24;
   // The flow is over; the shell pops the screen.
   bool finished = 25;
+  // ENTERING a held-seed restore: the card that says the key is already here
+  // ("Recovery key found") and where it came from ("In iCloud Keychain"; empty
+  // where the platform has no place to name).
+  string held_found = 26;
+  string held_place = 27;
+  // What the pairing-code field says while it is empty ("Pairing code"); the
+  // longer `endpoint_label` sits above it.
+  string endpoint_placeholder = 28;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -211,24 +215,16 @@ message WordEntry {
   }
 }
 
-message RestoredVaultLine {
-  // "Vault 1: 1,204 rows." for this vault, by index.
-  string line = 1;
-  // The safety number to compare with the gateway's, grouped; empty when the
-  // phone could not compute one, never shown as "it matched".
-  string safety_number = 2;
-  string safety_label = 3;
-}
-
 message WordsEnterEvent {
+  // 6 was `retry` (a restore that left vaults behind): gone with that page.
+  reserved 6;
+  reserved "retry";
   oneof kind {
     WordsWordTyped typed = 1;
     WordsSuggestionPicked picked = 2;
     WordsEndpointTyped endpoint = 3;
     WordsPrimary primary = 4;
     WordsSecondary secondary = 5;
-    // `retry_label`'s control: restore the vaults that stayed, on their own.
-    WordsRetry retry = 6;
     // `words_label`'s control: leave the held seed and type the 24 words.
     WordsUseWords use_words = 7;
     // `scan_label`'s answer: the square's text. It fills `endpoint` as a paste
@@ -257,7 +253,6 @@ message WordsEndpointTyped {
   string text = 1;
 }
 
-message WordsRetry {}
 message WordsUseWords {}
 message WordsPhotoUnread {}
 

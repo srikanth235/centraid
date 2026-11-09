@@ -38,6 +38,9 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 /// One reason, several rows.
+const CALENDAR_OWED: &str = "`shell.calendar-owed` is read by Rust only: core/app_query/imports.rs builds the answer and agenda/calendar_push.rs reads it, then hands the shells `CalendarWriteFields`";
+
+/// One reason, several rows.
 const AGENDA_DRAFT: &str = "the editor holds its draft as this wire message and reads it back (agenda/editor.rs); the shells draw the choices' `selected` flags instead";
 
 /// One reason, several rows.
@@ -101,13 +104,6 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Android, DOCS_TRANSPORT),
     ),
     (
-        "ExportOriginals.chooser_title",
-        platform(
-            Shell::Android,
-            "Android titles its share chooser; the iOS share sheet has no title",
-        ),
-    ),
-    (
         "HealthSnapshot.installable",
         platform(
             Shell::Android,
@@ -141,10 +137,39 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
+        "ScheduleNotifications.channel_name",
+        platform(
+            Shell::Android,
+            "a notification channel is Android; iOS's notification centre has no channel to name",
+        ),
+    ),
+    (
         "RollAsset.changed_in_place",
         platform(Shell::Android, EDITED_IN_PLACE),
     ),
     // Platform, iOS only: Android has no such thing.
+    // Agenda's "Import reminders" More row and its option sheet: only where the platform has a
+    // Reminders store (`Ctx::reminders_source`), so Android's More draws no such row.
+    (
+        "AgendaHomeEvent.import_reminders_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaHomeEvent.import_reminders_submitted",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaHomeState.import_reminders",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaImportRemindersSheet.completed_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "AgendaImportRemindersSheet.completed_on",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("Announce.topic", platform(Shell::Ios, CERT_PIN)),
     ("Announced.topic", platform(Shell::Ios, CERT_PIN)),
     (
@@ -162,7 +187,41 @@ pub const REGISTER: &[Entry] = &[
             "an original that lives only in iCloud; Android's media store holds what is on the device",
         ),
     ),
+    (
+        "ImportsMadeEvent.reminders_requested",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeEvent.Made.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeEvent.RemindersRequested.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeState.completed_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "ImportsMadeState.reminders_label",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "PhoneReminder.alarm_minutes_before",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
+        "PhoneReminder.completed_at",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("PhoneReminder.due", platform(Shell::Ios, REMINDERS)),
+    ("PhoneReminder.due_time", platform(Shell::Ios, REMINDERS)),
+    ("PhoneReminder.list_color", platform(Shell::Ios, REMINDERS)),
+    (
+        "RemindersRead.include_completed",
+        platform(Shell::Ios, REMINDERS),
+    ),
     ("ShellFact.settled", platform(Shell::Ios, OS_UPLOADS)),
     (
         "UploadSettled.http_status",
@@ -217,12 +276,12 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.guest_ids", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.repeat_key", rust_only(AGENDA_DRAFT)),
-    (
-        "AgendaEventRow.instance_key",
-        rust_only(
-            "the Agenda fold reads its own wire rows back to count the distinct occurrences it drew (agenda/home/fold.rs); the shells open a row by its route",
-        ),
-    ),
+    ("AgendaDraft.repeat_rule", rust_only(AGENDA_DRAFT)),
+    ("AgendaDraft.second_reminder_key", rust_only(AGENDA_DRAFT)),
+    ("AgendaDraft.travel_min", rust_only(AGENDA_DRAFT)),
+    ("ImportsOwedPush.fields_json", rust_only(CALENDAR_OWED)),
+    ("ImportsOwedPush.origin_ref", rust_only(CALENDAR_OWED)),
+    ("ImportsOwedPush.stated_json", rust_only(CALENDAR_OWED)),
     (
         "Autosave.remote_changed",
         rust_only(
@@ -295,6 +354,12 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     ("HomeEvent.backup_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeEvent.appearance_chosen",
+        rust_only(
+            "Settings tells Home the appearance by name (`Ctx::post`, shell/settings.rs to shell/home.rs); no shell sends it",
+        ),
+    ),
     ("HomeEvent.outcome_told", rust_only(VAULT_TELLS_HOME)),
     ("HomeEvent.vaults_told", rust_only(VAULT_TELLS_HOME)),
     (
@@ -378,6 +443,8 @@ pub const REGISTER: &[Entry] = &[
     ("ScreenEvent.data_changed", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.environment_changed", runtime(RUNTIME_EVENT)),
     ("ScreenEvent.off_thread_done", runtime(RUNTIME_EVENT)),
+    ("ScreenEvent.left", runtime(RUNTIME_EVENT)),
+    ("ScreenEvent.tab_hidden", runtime(RUNTIME_EVENT)),
     (
         "ScreenEvent.roll_reported",
         runtime(

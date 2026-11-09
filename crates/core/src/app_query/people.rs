@@ -16,7 +16,7 @@
 //! those are `person.*` and the shared verbs.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_people as people;
 use centraid_apps_people::dates::CivilDate;
 use centraid_apps_people::phone::{self, RosterFilter, RosterSort};
@@ -101,6 +101,12 @@ pub(crate) fn roster(
             count_all: count(counts.all),
             count_starred: count(counts.starred),
             count_due: count(counts.due),
+            owner: data.owner.map(|card| wire::PeopleCard {
+                party_id: card.party_id,
+                name: card.name,
+                role: card.role,
+                days_over: None,
+            }),
         })
     })
 }
@@ -185,6 +191,27 @@ pub(crate) fn person(
             Answer::PeoplePerson(wire::PeoplePerson {
                 sheet: data.person.map(|person| sheet_to_wire(person, &clock)),
                 today: clock.today.clone(),
+            })
+        },
+    )
+}
+
+/// `people.links`: the people one transaction, document or photograph is joined to by hand
+/// (#1173), through the same graph read People's "In your vault" uses.
+pub(crate) fn links(door: &VaultDoor<'_>, asked: &wire::PeopleLinksRequest) -> Result<Answer> {
+    settle(
+        door,
+        people::roster::load_links(door, &asked.entity_id),
+        |linked| {
+            Answer::PeopleLinks(wire::PeopleLinks {
+                people: linked
+                    .into_iter()
+                    .map(|person| wire::PeopleLinked {
+                        party_id: person.party_id,
+                        name: person.name,
+                        is_owner: person.is_owner,
+                    })
+                    .collect(),
             })
         },
     )
@@ -477,6 +504,35 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                     == centraid_apps_people::person::RelationDirection::Incoming,
             })
             .collect(),
+        vault_more: count(person.vault.more),
+        vault: person
+            .vault
+            .items
+            .into_iter()
+            .map(|item| {
+                let all_day = item.timing.as_deref() == Some("all-day");
+                let local_start = match (item.starts.as_deref(), item.timing.as_deref()) {
+                    (Some(starts), Some("zoned")) => {
+                        local::now_local(&clock.zone, starts).unwrap_or_default()
+                    }
+                    (Some(starts), Some("all-day")) => {
+                        starts.get(..10).unwrap_or(starts).to_owned()
+                    }
+                    (Some(starts), _) => starts.get(..16).unwrap_or(starts).to_owned(),
+                    (None, _) => String::new(),
+                };
+                wire::PeopleVaultItem {
+                    created_local_day: clock.local_day(&item.created_at),
+                    kind: item.kind.key().to_owned(),
+                    id: item.id,
+                    title: item.title,
+                    local_start,
+                    all_day,
+                    via: item.via.unwrap_or_default(),
+                }
+            })
+            .collect(),
+        is_me: person.is_me,
         touches: person
             .touches
             .into_iter()
@@ -699,9 +755,21 @@ mod tests {
         assert_eq!(touch.count_all, 0);
 
         assert!(scratch.trash().people.is_empty());
-        for id in [&owner, &pet, "no-such-person"] {
+        for id in [&pet, "no-such-person"] {
             assert!(scratch.person(id).sheet.is_none(), "{id} has no sheet");
         }
+        // MY CARD (#1173): the owner is not a row of the circle, but is a sheet, and the roster
+        // names them for the card above the list.
+        let mine = scratch.person(&owner).sheet.expect("the owner's own sheet");
+        assert!(mine.is_me && mine.vault.is_empty());
+        assert_eq!(
+            roster.owner.as_ref().map(|card| card.party_id.as_str()),
+            Some(owner.as_str())
+        );
+        assert!(
+            !scratch.person(&pet).sheet.is_some_and(|sheet| sheet.is_me),
+            "only the owner's sheet is My card"
+        );
         assert!(scratch.search("Rex").people.is_empty());
     }
 

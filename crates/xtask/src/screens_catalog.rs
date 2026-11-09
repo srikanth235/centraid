@@ -6,7 +6,7 @@
 //! time. This emitter writes the one file that holds them as types instead:
 //!
 //! ```text
-//! act::agenda::Propose { title, starts, ..Default::default() }  -> ActRequest
+//! act::calendar::Propose { title, starts, ..Default::default() }  -> ActRequest
 //! load::tasks::Board { view, ..Default::default() }             -> LoadRequest
 //! ```
 //!
@@ -497,6 +497,6 @@ mod tests {
     fn agenda_has_its_typed_builders() {
         let file = generate(&root()).unwrap();
         assert!(file.contains("pub struct Propose {"));
-        assert!(file.contains("pub mod agenda {"));
+        assert!(file.contains("pub mod calendar {"));
     }
 }

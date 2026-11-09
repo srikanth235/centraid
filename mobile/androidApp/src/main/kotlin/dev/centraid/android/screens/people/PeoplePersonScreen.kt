@@ -1,5 +1,28 @@
 package dev.centraid.android.screens.people
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import centraid.core.v1.PeopleHeroAction
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.kitCard
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -68,12 +91,8 @@ public fun PeoplePersonScreen(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        trailing = if (data != null) {
-            RoomAction("Star", data.star_label, "people-person-star") {
-                onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled()))
-            }
-        } else {
-            null
+        trailing = state.edit?.takeIf { data != null && !chrome?.edit.isNullOrEmpty() }?.let { route ->
+            RoomAction("Pencil", chrome?.edit.orEmpty(), "people-person-edit") { onOpen(route) }
         },
         status = state.status?.sentence.orEmpty(),
     ) {
@@ -110,54 +129,11 @@ private fun PersonBody(
 ) {
     val chrome = state.chrome
     LazyColumn(Modifier.testTag("people-person")) {
-        item(key = "head") {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(person.avatar, size = 48)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    if (person.role.isNotEmpty()) {
-                        Text(person.role, style = centraidType("body"), color = centraidColor("text"))
-                    }
-                    if (person.cadence_line.isNotEmpty()) {
-                        Text(person.cadence_line, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-                    }
-                }
-                person.due_chip?.let { chip ->
-                    StatusChipView(
-                        StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED),
-                    )
-                }
-            }
-        }
-        if (chrome != null) {
-            item(key = "acts") {
-                // THE VERB STRIP names the four writes the sheets below open, as iOS's strip does; the
-                // section headers keep their own doors. Edit has no toolbar slot here (the star holds
-                // it), so it stays at the strip's foot, outside the scroll, and is never pushed off.
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        listOf(
-                            Triple(chrome.log_touch, Which.WHICH_LOG_TOUCH, "people-person-log-touch"),
-                            Triple(chrome.add_note, Which.WHICH_NOTE, "people-person-add-note"),
-                            Triple(chrome.add_date, Which.WHICH_DATE, "people-person-add-date"),
-                            Triple(chrome.add_channel, Which.WHICH_CHANNEL, "people-person-add-channel"),
-                        ).filter { it.first.isNotEmpty() }.forEach { (label, which, tag) ->
-                            OutlineButton(label, testTag = tag) { open(which) }
-                        }
-                    }
-                    state.edit?.let { route ->
-                        OutlineButton(chrome.edit, testTag = "people-person-edit", modifier = Modifier.padding(start = 8.dp)) {
-                            onOpen(route)
-                        }
-                    }
+        item(key = "hero") { Hero(person) }
+        if (person.hero.isNotEmpty()) {
+            item(key = "hero-actions") {
+                HeroActions(person.hero) { key ->
+                    onEvent(PeoplePersonEvent(hero = PeoplePersonEvent.HeroTapped(key)))
                 }
             }
         }
@@ -233,6 +209,10 @@ private fun PersonBody(
             }
         }
 
+        if (person.vault.isNotEmpty()) {
+            item(key = "vault") { VaultCard(person, onOpen) }
+        }
+
         person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }
         if (person.notes.isEmpty() && person.notes_empty.isNotEmpty()) {
             item(key = "notes-empty") { RailEmpty(person.notes_empty) }
@@ -241,13 +221,13 @@ private fun PersonBody(
             CentraidRow(title = note.text, meta = note.when_label, testTag = "people-note-${note.annotation_id}")
         }
 
-        person.touches_head?.let { head ->
+        person.touches_head?.takeIf { !person.is_me }?.let { head ->
             item(key = "touches-head") { SectionHeader(head.toKit()) { open(Which.WHICH_LOG_TOUCH) } }
         }
-        if (person.touches.isEmpty() && person.touches_empty.isNotEmpty()) {
+        if (!person.is_me && person.touches.isEmpty() && person.touches_empty.isNotEmpty()) {
             item(key = "touches-empty") { RailEmpty(person.touches_empty) }
         }
-        items(person.touches, key = { "t-" + it.interaction_id }) { touch ->
+        items(if (person.is_me) emptyList() else person.touches, key = { "t-" + it.interaction_id }) { touch ->
             CentraidRow(
                 title = listOf(touch.kind_label, touch.text).filter { it.isNotEmpty() }.joinToString(" · "),
                 meta = touch.when_label,
@@ -256,9 +236,16 @@ private fun PersonBody(
             )
         }
 
-        if (chrome != null) {
+        if (chrome != null && !person.is_me) {
             item(key = "foot") {
                 Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
+                    SheetRow(
+                        person.star_label,
+                        iconKey = "Star",
+                        selected = person.starred,
+                        testTag = "people-person-star",
+                        onTap = { onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled())) },
+                    )
                     SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-person-merge", onTap = { open(Which.WHICH_MERGE) })
                     SheetRow(
                         chrome.move_to_trash,
@@ -269,6 +256,119 @@ private fun PersonBody(
                     )
                 }
             }
+        }
+    }
+}
+
+/** THE HERO: a centred avatar, the name, the role and the cadence line; the owner's own card says "My card". */
+@Composable
+private fun Hero(person: PeoplePersonData) {
+    val accent = appAccent("people")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(listOf(accent.wash(centraidDark()), Color.Transparent)),
+            )
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Avatar(person.avatar, size = 96)
+        KitText(
+            person.name,
+            KitType.Hero,
+            Surface.ink,
+            modifier = Modifier.padding(top = 10.dp).semantics { heading() },
+        )
+        if (person.role.isNotEmpty()) KitText(person.role, KitType.Row, Surface.body)
+        val line = if (person.is_me) person.my_card_label else person.cadence_line
+        if (line.isNotEmpty()) KitText(line, KitType.Meta, Surface.meta, modifier = Modifier.padding(top = 4.dp))
+        person.due_chip?.let { chip ->
+            Box(Modifier.padding(top = 6.dp)) {
+                StatusChipView(
+                    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * MESSAGE, CALL, MAIL, LOG TOUCH: round keys over their small lower-case words. Rust sent only the
+ * ones the person's data allows; Log a touch is the one filled in the app's colour.
+ */
+@Composable
+private fun HeroActions(actions: List<PeopleHeroAction>, onTap: (String) -> Unit) {
+    val accent = appAccent("people")
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+    ) {
+        actions.forEach { action ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(if (action.primary) accent.fill else Surface.card)
+                        .then(if (action.primary) Modifier else Modifier.border(KitGeometry.HAIRLINE, Surface.border, CircleShape))
+                        .clickable { onTap(action.key) }
+                        .testTag("people-person-hero-${action.key}")
+                        .clearAndSetSemantics {
+                            contentDescription = action.accessibility_label
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CentraidIcon(iconKey = action.icon_key, tint = if (action.primary) Color.White else Surface.ink, size = 20.dp)
+                }
+                KitText(action.label, KitType.Meta, Surface.body, modifier = Modifier.padding(top = 4.dp).clearAndSetSemantics { })
+            }
+        }
+    }
+}
+
+/** IN YOUR VAULT: what else is about this person, each kind word in its own app's colour. */
+@Composable
+private fun VaultCard(person: PeoplePersonData, onOpen: (Route) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)
+            .kitCard()
+            .padding(bottom = 8.dp)
+            .testTag("people-vault"),
+    ) {
+        KitText(
+            person.vault_head?.title.orEmpty(),
+            KitType.Meta,
+            Surface.meta,
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp).semantics { heading() },
+        )
+        person.vault.forEach { row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { row.route?.let(onOpen) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .testTag("people-vault-${row.id}")
+                    .clearAndSetSemantics {
+                        contentDescription = row.accessibility_label
+                        role = Role.Button
+                    },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                KitText(row.kind_label, KitType.Row, appAccent(row.app_key).text)
+                KitText(
+                    listOf(row.title, row.when_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                    KitType.Row,
+                    Surface.ink,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        if (person.vault_more.isNotEmpty()) {
+            KitText(person.vault_more, KitType.Meta, Surface.meta, modifier = Modifier.padding(start = 14.dp, top = 2.dp))
         }
     }
 }

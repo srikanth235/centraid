@@ -19,7 +19,7 @@ Use [the mobile command and capability reference](references/mobile-commands.md)
 
 ## Invariants and common traps
 
-- Generated theme, catalogue, and kit-word files come from their source. Re-emit them with `bun contracts/tools/export-native-theme.ts`, format, and commit generated results; never edit outputs by hand.
+- Generated theme, catalogue, and kit-word files come from their source. Re-emit them with `cargo xtask design` (`--check` to compare) and commit generated results; never edit outputs by hand.
 - The iOS Xcode project is generated from `mobile/iosApp/project.yml`. Regenerate it after adding a Swift source or proto file. Swift protobuf sources themselves are generated in the Xcode build.
 - `mobile-jvm` loads the built real cdylib and fails if it is absent. It tests the JVM binding, not Compose, Kotlin/Native, SwiftUI, or a device.
 - Android's application module is included only with `-Pcentraid.android=true`; that build needs the Android SDK and JDK 21. Apple builds and simulator runs need macOS and Xcode.

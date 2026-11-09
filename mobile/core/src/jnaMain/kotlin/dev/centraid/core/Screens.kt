@@ -56,6 +56,9 @@ public class Screens(
     /** Instances Rust closed: a late push for one must not bring it back. */
     private val closedInstances = mutableSetOf<Long>()
 
+    /** Instances the shell reported popped. */
+    private val shellPopped: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     /** The route stack per tab and the selected tab, or `null` before [start]. */
     public val navigation: StateFlow<Navigation?> = navigationState.asStateFlow()
 
@@ -79,22 +82,29 @@ public class Screens(
         request(ScreenRequest(send = InstanceEvent(instance = instance, event = event)))
 
     /** Report a tap on a link or a back-swipe; Rust moves the stack. */
-    public suspend fun navigate(event: NavEvent): CoreOutcome<Unit> =
-        request(ScreenRequest(nav = event))
+    public suspend fun navigate(event: NavEvent): CoreOutcome<Unit> {
+        event.popped?.let { shellPopped.add(it.instance) }
+        return request(ScreenRequest(nav = event))
+    }
+
+    /** Whether the shell itself popped [instance] (a back or a Cancel), as opposed to the core closing it. */
+    public fun wasPopped(instance: Long): Boolean = instance in shellPopped
 
     /**
      * Report the device's locale and zone (Rust formats from them), the platform, and whether it
-     * deletes from its photo library behind its own confirmation (Free up space is offered only then).
+     * deletes from its photo library behind its own confirmation (Free up space is offered only then),
+     * and whether it keeps 12-hour time (`hourCycle12`; Rust words every time by it).
      */
     public suspend fun environment(
         locale: String,
         zone: String,
         platform: String = "android",
         libraryDeletes: Boolean = false,
+        hourCycle12: Boolean = false,
     ): CoreOutcome<Unit> =
         request(
             ScreenRequest(
-                environment = Environment(locale = locale, zone = zone, platform = platform, library_deletes = libraryDeletes),
+                environment = Environment(locale = locale, zone = zone, platform = platform, library_deletes = libraryDeletes, hour_cycle_12 = hourCycle12),
             ),
         )
 

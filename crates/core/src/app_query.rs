@@ -34,7 +34,7 @@
 //!
 //! A shell's shared layer has no calendar (`agenda.proto`'s header), so every
 //! local reading — an occurrence's wall clock and days, today, now — is
-//! computed here, in the request's `tz`, by `crates/apps/agenda`'s `local`
+//! computed here, in the request's `tz`, by `crates/apps/calendar`'s `local`
 //! module. [`zone_of`] is the rule: the stated IANA name, else the vault's own
 //! ([`Vault::time_zone`]), else a refusal. It is never the host's clock and
 //! never UTC by default — the same two tiers, and no third, that
@@ -52,8 +52,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
-use centraid_apps_agenda::queries as agenda;
+use centraid_apps_calendar::queries as agenda;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageCursor, PageRequest};
 use centraid_apps_kit::reads::PageDoor;
@@ -88,8 +88,12 @@ pub(crate) mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
 // and the correction.
 pub(crate) mod photos;
-// Tasks' arm (#1046): its conversions and tests, beside this one.
-pub(crate) mod agenda_task;
+// Reminders' arm (#1046): its conversions and tests, beside this one.
+pub(crate) mod reminders;
+// What an event or a task has attached, with its thumbnails (#1173).
+pub(crate) mod attachments;
+// The reminders a Calendar day shows (rounds 10 and 12).
+pub(crate) mod calendar_dated;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -118,11 +122,11 @@ pub(crate) fn answer_recording(
     let now = vault.clock().now_text();
     let door = VaultDoor::new(vault);
     let answer = match query {
-        Q::AgendaUpcoming(asked) => agenda_upcoming(vault, &door, &now, asked)?,
-        Q::AgendaDayContext(asked) => agenda_day_context(vault, &door, &now, asked)?,
-        Q::AgendaParties(_) => agenda_parties(&door)?,
-        Q::AgendaEvent(asked) => agenda_event(vault, &door, &now, asked)?,
-        Q::AgendaSearch(asked) => agenda_search(vault, &door, &now, asked)?,
+        Q::AgendaUpcoming(asked) => calendar_upcoming(vault, &door, &now, asked)?,
+        Q::AgendaDayContext(asked) => calendar_day_context(vault, &door, &now, asked)?,
+        Q::AgendaParties(_) => calendar_parties(&door)?,
+        Q::AgendaEvent(asked) => calendar_event(vault, &door, &now, asked)?,
+        Q::AgendaSearch(asked) => calendar_search(vault, &door, &now, asked)?,
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
         Q::DocsSearch(asked) => docs::search(vault, &door, &now, asked)?,
         Q::DocsDocument(asked) => docs::document(vault, &door, &now, asked)?,
@@ -131,6 +135,7 @@ pub(crate) fn answer_recording(
         Q::PeoplePerson(asked) => people::person(vault, &door, &now, asked)?,
         Q::PeopleSearch(asked) => people::search(vault, &door, &now, asked)?,
         Q::PeopleTrash(asked) => people::trash(vault, &door, asked)?,
+        Q::PeopleLinks(asked) => people::links(&door, asked)?,
         Q::NotesLibrary(asked) => notes::library(vault, &door, asked)?,
         Q::NotesNotebooks(_) => notes::notebooks(&door)?,
         Q::NotesJournal(asked) => notes::journal(vault, &door, &now, asked)?,
@@ -140,12 +145,16 @@ pub(crate) fn answer_recording(
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
         Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
         Q::NotesAbout(asked) => notes::about(vault, &door, asked)?,
-        Q::AgendaTaskBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
-        Q::AgendaTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
-        Q::AgendaTaskProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
-        Q::AgendaTaskSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
-        Q::AgendaTaskCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
-        Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
+        Q::AgendaTaskBoard(asked) => reminders::board(vault, &door, &now, asked)?,
+        Q::AgendaTask(asked) => reminders::task(vault, &door, &now, asked)?,
+        Q::AgendaTaskProjects(asked) => reminders::projects(vault, &door, &now, asked)?,
+        Q::AgendaTaskSearch(asked) => reminders::search(vault, &door, &now, asked)?,
+        Q::AgendaTaskCatchUp(asked) => reminders::catch_up(vault, &door, &now, asked)?,
+        Q::AgendaTaskReminders(asked) => reminders::reminders(vault, &door, &now, asked)?,
+        Q::AgendaTaskTrash(asked) => reminders::trash(vault, &door, asked)?,
+        Q::AgendaTaskSmartCounts(asked) => reminders::smart_counts(vault, &door, &now, asked)?,
+        Q::AgendaTaskDueRows(asked) => reminders::due_rows(vault, &door, &now, asked)?,
+        Q::CalendarDatedReminders(asked) => calendar_dated::dated(vault, &door, &now, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -187,7 +196,7 @@ pub(crate) fn answer_recording(
 type Answer = wire::app_query_response::Answer;
 
 /// `agenda.upcoming`: the window's events, placed on the member's calendar.
-pub(crate) fn agenda_upcoming(
+pub(crate) fn calendar_upcoming(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -209,7 +218,7 @@ pub(crate) fn agenda_upcoming(
 }
 
 /// `agenda.day-context`: the facts that decorate a calendar day.
-pub(crate) fn agenda_day_context(
+pub(crate) fn calendar_day_context(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -231,7 +240,7 @@ pub(crate) fn agenda_day_context(
 }
 
 /// `agenda.parties`: the pickable people of the invite picker.
-pub(crate) fn agenda_parties(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn calendar_parties(door: &VaultDoor<'_>) -> Result<Answer> {
     use wire::app_query_response::Answer as A;
     settle(door, agenda::load_parties(door), |data| {
         A::AgendaParties(parties_to_wire(data))
@@ -239,7 +248,7 @@ pub(crate) fn agenda_parties(door: &VaultDoor<'_>) -> Result<Answer> {
 }
 
 /// One event, or one occurrence of a repeating one (the screens' detail read).
-pub(crate) fn agenda_event(
+pub(crate) fn calendar_event(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -249,7 +258,7 @@ pub(crate) fn agenda_event(
     let zone = zone_of(vault, &asked.tz)?;
     settle(
         door,
-        centraid_apps_agenda::load_event(
+        centraid_apps_calendar::load_event(
             door,
             &asked.event_id,
             non_empty(&asked.instance_key),
@@ -261,13 +270,22 @@ pub(crate) fn agenda_event(
                 now_local: local::now_local(&zone, now).unwrap_or_default(),
                 event: data.event.map(|event| event_to_wire(event, &zone)),
                 calendar: data.calendar.map(calendar_to_wire),
+                followed_guests: data
+                    .followed_guests
+                    .into_iter()
+                    .map(|guest| wire::AgendaFollowedGuest {
+                        name: guest.name,
+                        email: guest.email,
+                        state: guest.state,
+                    })
+                    .collect(),
             }))
         },
     )
 }
 
 /// `agenda.search`: events by their words, with the occurrence a hit opens.
-pub(crate) fn agenda_search(
+pub(crate) fn calendar_search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -291,7 +309,7 @@ pub(crate) fn agenda_search(
             let next = if denial.is_none() {
                 data.events
                     .iter()
-                    .map(|event| centraid_apps_agenda::next_occurrence(door, event, now))
+                    .map(|event| centraid_apps_calendar::next_occurrence(door, event, now))
                     .collect::<KitResult<Vec<_>>>()?
             } else {
                 Vec::new()
@@ -299,30 +317,10 @@ pub(crate) fn agenda_search(
             Ok(((data, next, corrected), denial))
         },
     );
-    let answer = settle(door, loaded, |(data, next, corrected)| {
+    // CALENDAR SEARCHES EVENTS ONLY (round 10): the tasks a term finds are Reminders' `search`.
+    settle(door, loaded, |(data, next, corrected)| {
         A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
-    })?;
-    // THE TASKS THE TERM FINDS ride the same answer (#1128): Agenda searches events and tasks
-    // through the one index, and a screen draws one list.
-    let A::AgendaSearch(mut found) = answer else {
-        return Ok(answer);
-    };
-    let tasks = agenda_task::search(
-        vault,
-        door,
-        now,
-        &wire::AgendaTaskSearchRequest {
-            term: asked.term.clone(),
-            limit: asked.limit,
-            tz: asked.tz.clone(),
-        },
-    )?;
-    if let A::AgendaTaskSearch(tasks) = tasks
-        && (!tasks.tasks.is_empty() || !tasks.containers.is_empty())
-    {
-        found.tasks = Some(tasks);
-    }
-    Ok(A::AgendaSearch(found))
+    })
 }
 
 /// An empty string on the wire is the loader's `None`: proto3 has no absent
@@ -770,7 +768,7 @@ fn cell_of(value: Value) -> Cell {
 }
 
 // ---------------------------------------------------------------------------
-// The conversion: `crates/apps/agenda`'s rows as `agenda.proto` spells them.
+// The conversion: `crates/apps/calendar`'s rows as `agenda.proto` spells them.
 // ONE place, so a field that moved is one edit.
 // ---------------------------------------------------------------------------
 
@@ -807,7 +805,7 @@ fn search_to_wire(
             .map(|event| {
                 let mut hit = event_to_wire(event, zone);
                 if let Some(occurrence) = next.next().flatten() {
-                    hit.next_local_start = local::place(&occurrence, zone)
+                    hit.next_local_start = centraid_apps_calendar::local::place(&occurrence, zone)
                         .map(|placed| placed.local_start)
                         .unwrap_or_default();
                     hit.next_original_start_local =
@@ -824,7 +822,7 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
     // WHERE IT FALLS, before the row is taken apart: the one placement, in the
     // request's zone. A start that does not parse is placed nowhere.
     let all_day = event.semantics() == centraid_vault::time::recurrence::Semantics::AllDay;
-    let placed = local::place(&event, zone).unwrap_or_default();
+    let placed = centraid_apps_calendar::local::place(&event, zone).unwrap_or_default();
     wire::AgendaEvent {
         local_start: placed.local_start,
         local_end: placed.local_end,
@@ -875,12 +873,13 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
                 is_you: attendee.is_you,
             })
             .collect(),
-        recurrence_summary: event.recurrence_summary,
         is_recurrence_instance: event.is_recurrence_instance,
         instance_key: event.instance_key,
         original_start_local: event.original_start_local,
         recurrence_overlap: event.recurrence_overlap,
         snippet: event.snippet,
+        busy: event.busy,
+        travel_min: event.travel_min,
         // `search` only, and filled there (`search_to_wire`).
         next_instance_key: String::new(),
         next_original_start_local: String::new(),
@@ -893,6 +892,7 @@ fn calendar_to_wire(calendar: agenda::CalendarRow) -> wire::AgendaCalendar {
         calendar_id: calendar.calendar_id,
         name: calendar.name,
         color: calendar.color,
+        icon: calendar.icon,
     }
 }
 
@@ -1117,7 +1117,7 @@ mod tests {
         for run in &runs {
             assert!(run.instance_key.starts_with(&format!("{series}:")));
             assert!(run.original_start_local.is_some());
-            assert_eq!(run.recurrence_summary.as_deref(), Some("Weekly"));
+            assert_eq!(run.rrule.as_deref(), Some("FREQ=WEEKLY"));
             assert_eq!(
                 run.reminders,
                 vec![wire::AgendaReminder { minutes_before: 10 }]
@@ -1130,7 +1130,7 @@ mod tests {
             .expect("the one-off is on the agenda");
         assert_eq!(dentist.instance_key, one_off);
         assert!(!dentist.is_recurrence_instance);
-        assert_eq!(dentist.recurrence_summary, None);
+        assert_eq!(dentist.rrule, None);
     }
 
     /// WHERE EACH OCCURRENCE FALLS, IN THE DEVICE'S ZONE. A zoned call that
@@ -1159,8 +1159,8 @@ mod tests {
         }
         match scratch.upcoming("2099-06-01T00:00:00.000Z", "2099-12-01T00:00:00.000Z") {
             Err(CoreError::ReadBoundReached { query, cap }) => {
-                assert_eq!(query, "agenda.upcoming.expansion");
-                assert_eq!(cap, centraid_apps_agenda::MAX_TOTAL_INSTANCES);
+                assert_eq!(query, "calendar.upcoming.expansion");
+                assert_eq!(cap, centraid_apps_calendar::MAX_TOTAL_INSTANCES);
             }
             other => panic!("a window past the bound answers a bound, not {other:?}"),
         }
@@ -1574,7 +1574,7 @@ mod tests {
             .expect("the vault is open");
     }
 
-    /// `agenda_event` (#1029): one occurrence by its key, placed in `tz`, with
+    /// `calendar_event` (#1029): one occurrence by its key, placed in `tz`, with
     /// the `today`/`now_local` a detail draws beside it; an unknown id answers
     /// an absent event, never an error.
     #[test]
@@ -1597,10 +1597,10 @@ mod tests {
                     tz: TZ.to_owned(),
                 },
             ))
-            .expect("agenda_event answers")
+            .expect("calendar_event answers")
         {
             wire::app_query_response::Answer::AgendaEvent(detail) => detail,
-            other => panic!("agenda_event answered as {other:?}"),
+            other => panic!("calendar_event answered as {other:?}"),
         };
         let detail = ask(&series, &format!("{series}:2099-06-08T07:00:00"));
         let event = detail.event.expect("the occurrence is there");

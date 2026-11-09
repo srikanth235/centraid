@@ -3,7 +3,7 @@
 //! The model writes a call, and at most the question of an `ask`. Everything else a member reads at
 //! the end of a native turn (how many rows were found, what a value is, why a request was declined)
 //! is a sentence of the chat's copy, filled from the step's effect. No second generation, so the
-//! same effect always reads the same, and the copy rulebook (`DESIGN.md` § Copy) governs every word.
+//! same effect always reads the same, and the copy rulebook (`product-intuition/references/design-behaviour.md` § Wording) governs every word.
 //!
 //! The sentences live in `copy/chat.json`, under the
 //! `SAID_` prefix, and are compiled in from there: this module owns the key names and the fill

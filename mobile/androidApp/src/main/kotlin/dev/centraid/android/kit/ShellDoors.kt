@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
@@ -24,7 +25,7 @@ import dev.centraid.android.theme.centraidColor
 public val LocalShellLine: ProvidableCompositionLocal<(@Composable () -> Unit)?> = compositionLocalOf { null }
 
 /**
- * THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback
+ * THE IMPORT'S STATUS LINE (product-intuition/references/design-behaviour.md § Status line
  * channel … docked to the bottom of the frame … no floating overlay, no
  * auto-dismiss"): an import's progress and outcome, above the band, on Home
  * and on every app. One fragment, at most one action ([actionLabel], "Open
@@ -40,8 +41,10 @@ public fun ShellBanner(
     tag: String,
     onAct: () -> Unit,
     onClose: () -> Unit,
+    leadingIcon: String = "",
+    accentApp: String = "",
 ) {
-    // ENTRY AND SETTLE AT 280MS (DESIGN.md's one motion grammar).
+    // ENTRY AND SETTLE AT 280MS (design/tokens.toml (motion)).
     AnimatedVisibility(
         visible = sentence.isNotEmpty(),
         enter = slideInVertically(tween(ENTER_MS)) { it } + fadeIn(tween(ENTER_MS)),
@@ -49,6 +52,8 @@ public fun ShellBanner(
     ) {
         Column(Modifier.fillMaxWidth().background(centraidColor("bg")).testTag("$tag-banner")) {
             Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(centraidColor("line")))
+            // THE ACTION WEARS THE COLOUR OF THE APP IT OPENS ("Open People" is People's).
+            CompositionLocalProvider(LocalAppAccentId provides accentApp) {
             ProgressStatusLine(
                 sentence = sentence,
                 actionLabel = actionLabel,
@@ -56,7 +61,9 @@ public fun ShellBanner(
                 closeLabel = closeLabel,
                 onClose = onClose,
                 testTag = "$tag-line",
+                leadingIcon = leadingIcon,
             )
+            }
         }
     }
 }

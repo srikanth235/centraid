@@ -215,6 +215,172 @@ pub fn spending(rows: &[TxnRow], month: &str, ctx: &Context<'_>) -> Vec<Currency
 }
 
 // ---------------------------------------------------------------------------
+// Spending over the month, in buckets.
+// ---------------------------------------------------------------------------
+
+/// A week on the Spending chart is seven days of the month, counted from its
+/// first: 1-7, 8-14, 15-21, 22-28, then what is left (29-31, 29-30 or 29). A
+/// bucket never crosses a month, so the lookback's neighbouring months land in
+/// none.
+pub const WEEK_DAYS: u32 = 7;
+
+/// One category's share of a bucket (`None` is the uncategorised line).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BucketPart {
+    pub category_id: Option<String>,
+    pub spent_minor: i64,
+}
+
+/// A run of `first_day..=last_day` of the month and what was spent in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpendBucket {
+    pub first_day: u32,
+    pub last_day: u32,
+    /// The sum of `parts`.
+    pub spent_minor: i64,
+    /// Largest first, the uncategorised part last; categories with nothing
+    /// spent in the bucket are not listed.
+    pub parts: Vec<BucketPart>,
+}
+
+/// Every bucket of the month in one currency, empty ones included, so a chart
+/// has no holes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrencyBuckets {
+    pub currency: String,
+    pub buckets: Vec<SpendBucket>,
+}
+
+/// The month's spending in buckets of `bucket_days` days, per currency, by the
+/// rules [`spending`] counts by (on budget, posted, not a transfer, not dated
+/// after today, not income, no uncategorised credit).
+///
+/// A category's share of a bucket is its purchases less its refunds *in that
+/// bucket*, and never below zero: a refund that lands in a later bucket than
+/// its purchase lowers its own bucket down to nothing and is not carried back.
+/// So the buckets sum to [`spending`]'s figure when no refund crosses a bucket,
+/// and to a little more when one does.
+#[must_use]
+pub fn spend_buckets(
+    rows: &[TxnRow],
+    month: &str,
+    bucket_days: u32,
+    ctx: &Context<'_>,
+) -> Vec<CurrencyBuckets> {
+    let bucket_days = bucket_days.max(1);
+    let length = civil::month_length(month);
+    let count = length.div_ceil(bucket_days);
+    // (currency, bucket, category) -> debits - credits
+    let mut nets: BTreeMap<(String, u32, Option<String>), i64> = BTreeMap::new();
+    for row in rows {
+        if civil::month_of(&row.posted_on) != month
+            || !ctx.counts(row)
+            || row.posted_on.as_str() > ctx.today
+        {
+            continue;
+        }
+        let Some(day) = civil::day_of_month(&row.posted_on) else {
+            continue;
+        };
+        let category = row.category_concept_id.clone();
+        if category.as_deref().is_some_and(|id| ctx.is_income(id)) {
+            continue;
+        }
+        if category.is_none() && row.direction == Direction::Credit {
+            continue;
+        }
+        let bucket = (day - 1) / bucket_days;
+        *nets
+            .entry((row.currency.clone(), bucket, category))
+            .or_default() += row.direction.signed(-row.amount_minor);
+    }
+    let currencies: BTreeSet<&String> = nets.keys().map(|(currency, ..)| currency).collect();
+    currencies
+        .into_iter()
+        .map(|currency| CurrencyBuckets {
+            currency: currency.clone(),
+            buckets: (0..count)
+                .map(|index| {
+                    let mut parts: Vec<BucketPart> = nets
+                        .iter()
+                        .filter(|((c, b, _), net)| c == currency && *b == index && **net > 0)
+                        .map(|((_, _, category), net)| BucketPart {
+                            category_id: category.clone(),
+                            spent_minor: *net,
+                        })
+                        .collect();
+                    parts.sort_by(|a, b| {
+                        a.category_id
+                            .is_none()
+                            .cmp(&b.category_id.is_none())
+                            .then(b.spent_minor.cmp(&a.spent_minor))
+                            .then(a.category_id.cmp(&b.category_id))
+                    });
+                    SpendBucket {
+                        first_day: index * bucket_days + 1,
+                        last_day: ((index + 1) * bucket_days).min(length),
+                        spent_minor: parts.iter().map(|p| p.spent_minor).sum(),
+                        parts,
+                    }
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Activity's day groups.
+// ---------------------------------------------------------------------------
+
+/// What one day of a page of Activity came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DayTotal {
+    /// `YYYY-MM-DD`.
+    pub day: String,
+    /// Signed net per currency (credits in, debits out), only for the rows that
+    /// count; empty when none does. Currencies are never added together.
+    pub totals: Vec<(String, i64)>,
+    /// False for the last day of a page that has another after it: the rows
+    /// the next page holds are not in the sum, so no total is drawn yet.
+    pub complete: bool,
+}
+
+/// The days of `rows` (newest first, one page of Activity), each with its net.
+/// A row counts by [`Context::counts`] and is not dated after today; a
+/// transfer's two halves, a void, an off-budget account's row and a `later` row
+/// are on the page but not in the day's figure. `more_after` says the page has a
+/// next one.
+#[must_use]
+pub fn day_totals(rows: &[TxnRow], ctx: &Context<'_>, more_after: bool) -> Vec<DayTotal> {
+    let mut days: Vec<DayTotal> = Vec::new();
+    for row in rows {
+        if days.last().is_none_or(|last| last.day != row.posted_on) {
+            days.push(DayTotal {
+                day: row.posted_on.clone(),
+                totals: Vec::new(),
+                complete: true,
+            });
+        }
+        if !ctx.counts(row) || row.posted_on.as_str() > ctx.today {
+            continue;
+        }
+        if let Some(day) = days.last_mut() {
+            match day.totals.iter_mut().find(|(c, _)| *c == row.currency) {
+                Some((_, net)) => *net += row.signed_minor(),
+                None => day.totals.push((row.currency.clone(), row.signed_minor())),
+            }
+        }
+    }
+    if more_after && let Some(last) = days.last_mut() {
+        last.complete = false;
+    }
+    for day in &mut days {
+        day.totals.sort();
+    }
+    days
+}
+
+// ---------------------------------------------------------------------------
 // Cash flow.
 // ---------------------------------------------------------------------------
 
@@ -746,5 +912,350 @@ mod tests {
         assert_eq!(ratio_bp(-1, 3), Some(-3333));
         assert_eq!(ratio_bp(5, 0), None);
         assert_eq!(ratio_bp(1, 20_000), Some(1)); // 0.5 bp rounds up
+    }
+
+    // --- Buckets and day totals ---------------------------------------------
+
+    fn account(id: &str, on_budget: bool) -> AccountRow {
+        AccountRow {
+            account_id: id.to_owned(),
+            name: id.to_owned(),
+            kind: "checking".to_owned(),
+            on_budget,
+            opening_minor: 0,
+            opening_on: None,
+            closed_on: None,
+            currency: "INR".to_owned(),
+            external_ref: None,
+        }
+    }
+
+    fn category(id: &str, parent: Option<&str>) -> CategoryRow {
+        CategoryRow {
+            concept_id: id.to_owned(),
+            notation: id.to_owned(),
+            label: id.to_owned(),
+            parent: parent.map(str::to_owned),
+            archived: false,
+        }
+    }
+
+    fn txn(
+        id: &str,
+        day: &str,
+        direction: Direction,
+        minor: i64,
+        category: Option<&str>,
+    ) -> TxnRow {
+        TxnRow {
+            txn_id: id.to_owned(),
+            account_id: "hdfc".to_owned(),
+            posted_on: day.to_owned(),
+            amount_minor: minor,
+            currency: "INR".to_owned(),
+            direction,
+            status: "posted".to_owned(),
+            description: id.to_owned(),
+            category_concept_id: category.map(str::to_owned),
+            external_id: None,
+            transfer_id: None,
+            display_name: None,
+            display_name_source: None,
+            memo: None,
+            check_number: None,
+            bank_type: None,
+            imported_from: None,
+        }
+    }
+
+    use Direction::{Credit, Debit};
+
+    struct World {
+        accounts: Vec<AccountRow>,
+        categories: Vec<CategoryRow>,
+        linked: BTreeSet<String>,
+    }
+
+    impl World {
+        fn new() -> Self {
+            Self {
+                accounts: vec![account("hdfc", true), account("wise", false)],
+                categories: vec![
+                    category("cat:food", None),
+                    category("cat:groceries", Some("cat:food")),
+                    category("cat:eating", Some("cat:food")),
+                    category(INCOME_GROUP, None),
+                    category("cat:salary", Some(INCOME_GROUP)),
+                ],
+                linked: BTreeSet::new(),
+            }
+        }
+
+        fn ctx<'a>(&'a self, today: &'a str) -> Context<'a> {
+            Context {
+                accounts: &self.accounts,
+                categories: &self.categories,
+                linked: &self.linked,
+                today,
+            }
+        }
+    }
+
+    fn sizes(series: &CurrencyBuckets) -> Vec<(u32, u32, i64)> {
+        series
+            .buckets
+            .iter()
+            .map(|b| (b.first_day, b.last_day, b.spent_minor))
+            .collect()
+    }
+
+    #[test]
+    fn a_month_is_cut_into_sevens_of_its_days_and_the_last_bucket_is_short() {
+        let world = World::new();
+        let rows = [txn("a", "2026-10-02", Debit, 100, Some("cat:groceries"))];
+        let october = spend_buckets(&rows, "2026-10", WEEK_DAYS, &world.ctx("2026-10-31"));
+        assert_eq!(
+            sizes(&october[0]),
+            vec![
+                (1, 7, 100),
+                (8, 14, 0),
+                (15, 21, 0),
+                (22, 28, 0),
+                (29, 31, 0)
+            ]
+        );
+        let rows = [txn("a", "2026-02-02", Debit, 100, Some("cat:groceries"))];
+        let february = spend_buckets(&rows, "2026-02", WEEK_DAYS, &world.ctx("2026-02-28"));
+        assert_eq!(
+            february[0].buckets.len(),
+            4,
+            "a 28-day month has four weeks"
+        );
+        assert_eq!(february[0].buckets[3].last_day, 28);
+        let leap = spend_buckets(&rows, "2028-02", WEEK_DAYS, &world.ctx("2028-02-29"));
+        assert!(leap.is_empty(), "rows of another month are in no bucket");
+        let rows = [txn("a", "2028-02-29", Debit, 100, Some("cat:groceries"))];
+        let leap = spend_buckets(&rows, "2028-02", WEEK_DAYS, &world.ctx("2028-02-29"));
+        assert_eq!(
+            leap[0]
+                .buckets
+                .last()
+                .map(|b| (b.first_day, b.last_day, b.spent_minor)),
+            Some((29, 29, 100)),
+            "29 February is a bucket of one day"
+        );
+    }
+
+    #[test]
+    fn rows_of_the_neighbouring_months_land_in_no_bucket() {
+        let world = World::new();
+        let rows = [
+            txn(
+                "last-of-september",
+                "2026-09-30",
+                Debit,
+                700,
+                Some("cat:groceries"),
+            ),
+            txn("first", "2026-10-01", Debit, 100, Some("cat:groceries")),
+            txn("last", "2026-10-31", Debit, 200, Some("cat:groceries")),
+            txn(
+                "first-of-november",
+                "2026-11-01",
+                Debit,
+                900,
+                Some("cat:groceries"),
+            ),
+        ];
+        let series = spend_buckets(&rows, "2026-10", WEEK_DAYS, &world.ctx("2026-11-15"));
+        assert_eq!(series.len(), 1);
+        let total: i64 = series[0].buckets.iter().map(|b| b.spent_minor).sum();
+        assert_eq!(
+            total, 300,
+            "nothing is lost at the edges and nothing leaks in"
+        );
+        assert_eq!(series[0].buckets[0].spent_minor, 100);
+        assert_eq!(series[0].buckets[4].spent_minor, 200);
+    }
+
+    #[test]
+    fn buckets_sum_to_the_months_spending_and_count_by_the_same_rules() {
+        let mut world = World::new();
+        world.linked.insert("transfer-out".to_owned());
+        let mut void = txn("void", "2026-10-03", Debit, 5_000, Some("cat:eating"));
+        void.status = "void".to_owned();
+        let mut off_budget = txn("wise", "2026-10-03", Debit, 6_000, Some("cat:eating"));
+        off_budget.account_id = "wise".to_owned();
+        let rows = vec![
+            txn("g1", "2026-10-02", Debit, 1_000, Some("cat:groceries")),
+            txn("g2", "2026-10-09", Debit, 2_000, Some("cat:groceries")),
+            txn("e1", "2026-10-09", Debit, 500, Some("cat:eating")),
+            txn("u1", "2026-10-16", Debit, 300, None),
+            txn("uc", "2026-10-16", Credit, 4_000, None),
+            txn("salary", "2026-10-16", Credit, 90_000, Some("cat:salary")),
+            txn("transfer-out", "2026-10-17", Debit, 25_000, None),
+            txn("later", "2026-10-30", Debit, 8_000, Some("cat:eating")),
+            void,
+            off_budget,
+        ];
+        let ctx = world.ctx("2026-10-20");
+        let weekly = spend_buckets(&rows, "2026-10", WEEK_DAYS, &ctx);
+        let daily = spend_buckets(&rows, "2026-10", 1, &ctx);
+        let month = spending(&rows, "2026-10", &ctx);
+        assert_eq!(weekly.len(), 1);
+        assert_eq!(month[0].spent_minor, 3_800);
+        assert_eq!(
+            weekly[0].buckets.iter().map(|b| b.spent_minor).sum::<i64>(),
+            month[0].spent_minor
+        );
+        assert_eq!(daily[0].buckets.len(), 31);
+        assert_eq!(
+            daily[0].buckets.iter().map(|b| b.spent_minor).sum::<i64>(),
+            month[0].spent_minor,
+            "a day is a bucket of one"
+        );
+        // The second week: groceries 2000, then eating out 500.
+        assert_eq!(
+            weekly[0].buckets[1].parts,
+            vec![
+                BucketPart {
+                    category_id: Some("cat:groceries".to_owned()),
+                    spent_minor: 2_000
+                },
+                BucketPart {
+                    category_id: Some("cat:eating".to_owned()),
+                    spent_minor: 500
+                },
+            ]
+        );
+        // The uncategorised part is its own, and the credit with no category is not in it.
+        assert_eq!(
+            weekly[0].buckets[2].parts,
+            vec![BucketPart {
+                category_id: None,
+                spent_minor: 300
+            }]
+        );
+    }
+
+    #[test]
+    fn a_refund_in_the_same_bucket_nets_and_one_in_a_later_bucket_stops_at_zero() {
+        let world = World::new();
+        let ctx = world.ctx("2026-10-31");
+        let same = [
+            txn("buy", "2026-10-02", Debit, 1_000, Some("cat:eating")),
+            txn("refund", "2026-10-04", Credit, 400, Some("cat:eating")),
+        ];
+        let series = spend_buckets(&same, "2026-10", WEEK_DAYS, &ctx);
+        assert_eq!(series[0].buckets[0].spent_minor, 600);
+        // The refund lands two weeks after the purchase: the purchase's bucket
+        // keeps its bar, the refund's own bucket is not drawn below nothing, and
+        // so the buckets add up to more than the month's net.
+        let later = [
+            txn("buy", "2026-10-02", Debit, 1_000, Some("cat:eating")),
+            txn("refund", "2026-10-16", Credit, 400, Some("cat:eating")),
+        ];
+        let series = spend_buckets(&later, "2026-10", WEEK_DAYS, &ctx);
+        assert_eq!(series[0].buckets[0].spent_minor, 1_000);
+        assert_eq!(series[0].buckets[2].spent_minor, 0);
+        assert!(series[0].buckets[2].parts.is_empty());
+        assert_eq!(spending(&later, "2026-10", &ctx)[0].spent_minor, 600);
+    }
+
+    #[test]
+    fn two_currencies_are_two_series() {
+        let world = World::new();
+        let mut usd = txn("usd", "2026-10-02", Debit, 1_234, Some("cat:eating"));
+        usd.currency = "USD".to_owned();
+        let rows = [
+            txn("inr", "2026-10-02", Debit, 100, Some("cat:eating")),
+            usd,
+        ];
+        let series = spend_buckets(&rows, "2026-10", WEEK_DAYS, &world.ctx("2026-10-31"));
+        let currencies: Vec<&str> = series.iter().map(|s| s.currency.as_str()).collect();
+        assert_eq!(currencies, ["INR", "USD"]);
+        assert_eq!(series[0].buckets[0].spent_minor, 100);
+        assert_eq!(series[1].buckets[0].spent_minor, 1_234);
+    }
+
+    #[test]
+    fn a_day_totals_what_counts_and_leaves_a_transfer_a_void_and_a_later_row_out() {
+        let mut world = World::new();
+        world.linked.insert("to-savings".to_owned());
+        let mut void = txn("void", "2026-10-07", Debit, 9_999, Some("cat:eating"));
+        void.status = "void".to_owned();
+        let mut wise = txn("wise", "2026-10-07", Debit, 7_777, Some("cat:eating"));
+        wise.account_id = "wise".to_owned();
+        let rows = vec![
+            txn("later", "2026-10-08", Debit, 1_111, Some("cat:eating")),
+            txn(
+                "groceries",
+                "2026-10-07",
+                Debit,
+                184_000,
+                Some("cat:groceries"),
+            ),
+            txn("coffee", "2026-10-07", Debit, 61_000, Some("cat:eating")),
+            txn("to-savings", "2026-10-07", Debit, 2_500_000, None),
+            void,
+            wise,
+            txn("refund", "2026-10-07", Credit, 1_000, Some("cat:eating")),
+            txn(
+                "salary",
+                "2026-10-06",
+                Credit,
+                14_200_000,
+                Some("cat:salary"),
+            ),
+            txn("amzn", "2026-10-06", Debit, 59_900, None),
+        ];
+        let ctx = world.ctx("2026-10-07");
+        let days = day_totals(&rows, &ctx, false);
+        let expected = [
+            ("2026-10-08", Vec::new()),
+            ("2026-10-07", vec![("INR".to_owned(), -244_000)]),
+            ("2026-10-06", vec![("INR".to_owned(), 14_140_100)]),
+        ];
+        assert_eq!(days.len(), expected.len());
+        for (day, (name, totals)) in days.iter().zip(expected) {
+            assert_eq!(day.day, name);
+            assert_eq!(day.totals, totals, "{name}");
+            assert!(day.complete);
+        }
+    }
+
+    #[test]
+    fn a_day_with_two_currencies_has_two_totals_and_no_sum() {
+        let world = World::new();
+        let mut usd = txn("usd", "2026-10-07", Debit, 500, Some("cat:eating"));
+        usd.currency = "USD".to_owned();
+        let rows = [
+            txn("inr", "2026-10-07", Debit, 100, Some("cat:eating")),
+            usd,
+        ];
+        let days = day_totals(&rows, &world.ctx("2026-10-07"), false);
+        assert_eq!(
+            days[0].totals,
+            vec![("INR".to_owned(), -100), ("USD".to_owned(), -500)]
+        );
+    }
+
+    #[test]
+    fn the_last_day_of_a_page_with_a_next_page_has_no_total_yet() {
+        let world = World::new();
+        let rows = [
+            txn("a", "2026-10-07", Debit, 100, Some("cat:eating")),
+            txn("b", "2026-10-06", Debit, 200, Some("cat:eating")),
+            txn("c", "2026-10-06", Debit, 300, Some("cat:eating")),
+        ];
+        let ctx = world.ctx("2026-10-07");
+        let paged = day_totals(&rows, &ctx, true);
+        assert_eq!(
+            paged.iter().map(|d| d.complete).collect::<Vec<_>>(),
+            [true, false]
+        );
+        let whole = day_totals(&rows, &ctx, false);
+        assert!(whole.iter().all(|d| d.complete));
+        assert_eq!(whole[1].totals, vec![("INR".to_owned(), -500)]);
     }
 }

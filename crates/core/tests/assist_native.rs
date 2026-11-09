@@ -175,10 +175,10 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     let first = &answer.cards[0];
     assert_eq!(
         (first.app.as_str(), first.entity.as_str()),
-        ("agenda", "task")
+        ("reminders", "task")
     );
     assert_eq!(first.title, "Rotate the tires before the drive");
-    assert!(answer.cards.iter().all(|card| card.app == "agenda"));
+    assert!(answer.cards.iter().all(|card| card.app == "reminders"));
 
     // THE EVENTS, in order: one Activity per looking step, the cards, then the answer. The same
     // queue and the same wire every turn uses.
@@ -186,8 +186,8 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     assert_eq!(
         story(&events),
         [
-            "activity:agenda/find",
-            "activity:agenda/answer",
+            "activity:reminders/find",
+            "activity:reminders/answer",
             "cards:6",
             "answer"
         ]
@@ -252,11 +252,11 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_op
     // One `answer kind=…` turn each, in one chat. (app, entity) per kind, from the kind table.
     let kinds = [
         ("person", "people", "person"),
-        ("event", "agenda", "event"),
+        ("event", "calendar", "event"),
         ("album", "photos", "album"),
         ("notebook", "notes", "notebook"),
         ("folder", "docs", "folder"),
-        ("list", "agenda", "project"),
+        ("list", "reminders", "project"),
         ("note", "notes", "note"),
         ("document", "docs", "document"),
         ("photo", "photos", "photo"),
@@ -534,8 +534,8 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
     assert_eq!(
         story(&sample.drain_assist_events()),
         [
-            "activity:agenda/find",
-            "activity:agenda/do",
+            "activity:reminders/find",
+            "activity:reminders/do",
             "pending:1",
             "answer"
         ],
@@ -1252,31 +1252,20 @@ fn night_call_in(tz: &str) -> (String, String) {
 fn an_event_question_in_another_zone_is_answered_on_that_zones_days() {
     let (day, in_utc) = night_call_in("Etc/UTC");
     let (_, in_auckland) = night_call_in("Pacific/Auckland");
-    // UTC: that evening, 22:30
-    assert!(in_utc.ends_with(&format!("{day} 22:30")), "{in_utc}");
+    // The card reads "<day> · <start> – <end>", as the Chat board draws it.
+    // UTC: that evening, 22:30 to 23:30
+    assert!(in_utc.ends_with(" · 22:30 – 23:30"), "{in_utc}");
     // Auckland (UTC+13 in October): the next morning, 11:30 on the NEXT local day
-    let next = ymd(days_of(&day) + 1);
     assert!(
-        in_auckland.ends_with(&format!("{next} 11:30")),
+        in_auckland.ends_with(" · 11:30 – 12:30"),
         "{in_auckland} (day {day})"
     );
-}
-
-/// Days since 1970-01-01 of a `YYYY-MM-DD`.
-fn days_of(day: &str) -> i64 {
-    let mut parts = day.split('-').map(|part| part.parse::<i64>().unwrap());
-    let (year, month, date) = (
-        parts.next().unwrap(),
-        parts.next().unwrap(),
-        parts.next().unwrap(),
+    // the cards name the day in words, so the zone's day shows as a different one
+    assert_ne!(
+        in_utc.trim_end_matches(" · 22:30 – 23:30"),
+        in_auckland.trim_end_matches(" · 11:30 – 12:30"),
+        "{in_utc} vs {in_auckland}"
     );
-    let y = year - i64::from(month <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y.rem_euclid(400);
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + date - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 // ---------------------------------------------------------------------------

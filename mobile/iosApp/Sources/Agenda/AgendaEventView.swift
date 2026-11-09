@@ -26,7 +26,8 @@ struct AgendaEventView: View {
 
     var body: some View {
         let chrome = state.chrome
-        PushedPage(title: chrome.title, parentTitle: chrome.back, onBack: onBack) {
+        // THE EVENT'S OWN NAME IS THE TITLE, inline in the top row beside the chevron (round 9).
+        PushedPage(title: { if case let .data(d)? = state.content { return d.title } else { return "" } }(), parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             if case let .gone(gone)? = state.content {
@@ -109,8 +110,14 @@ struct AgendaEventView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header(detail)
-                ForEach(Array(detail.facts.enumerated()), id: \.offset) { _, fact in
-                    FieldRow(key: fact.label, value: fact.detail)
+                // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
+                if !detail.facts.isEmpty {
+                    AgendaGroupCard {
+                        ForEach(Array(detail.facts.enumerated()), id: \.offset) { index, fact in
+                            AgendaFactRow(label: fact.label, value: fact.detail, divider: index < detail.facts.count - 1)
+                        }
+                    }
+                    .accessibilityIdentifier("agenda-event-facts")
                 }
                 // THE JOINING LINK, OPENED BY THE OS under Rust's verb
                 // ("Join call"); empty with no link.
@@ -135,9 +142,30 @@ struct AgendaEventView: View {
                 }
                 if !detail.guests.isEmpty {
                     SectionHeader(title: detail.guestHeading)
-                    ForEach(detail.guests, id: \.partyID) { guest in
-                        guestRow(guest)
+                    AgendaGroupCard {
+                        ForEach(Array(detail.guests.enumerated()), id: \.element.partyID) { index, guest in
+                            guestRow(guest, last: index == detail.guests.count - 1)
+                        }
                     }
+                    .padding(.top, 0)
+                }
+                // GUESTS THE PHONE'S CALENDAR HOLDS, read only: a name (else the address), the address
+                // under a name, and the guest's answer.
+                if !detail.followedGuests.isEmpty {
+                    SectionHeader(title: detail.followedHeading)
+                        .accessibilityIdentifier("agenda-event-followed")
+                    ForEach(Array(detail.followedGuests.enumerated()), id: \.offset) { index, guest in
+                        followedRow(guest, index: index)
+                    }
+                }
+                if detail.hasAttachments {
+                    AgendaAttachmentsView(
+                        section: detail.attachments,
+                        idPrefix: "agenda-event-attachment",
+                        headIdentifier: "agenda-event-attachments",
+                        open: open,
+                        send: { attachment in send(event { $0.attachment = attachment }) }
+                    )
                 }
                 let sentence = writeSentence(state)
                 if !sentence.isEmpty, state.sheet != .cancelScope {
@@ -148,7 +176,9 @@ struct AgendaEventView: View {
                         .padding(.top, 12)
                         .accessibilityIdentifier("agenda-event-status")
                 }
-                KitChoiceStack {
+                // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share
+                // the width, Cancel in the red outline.
+                KitChoiceRow {
                     ForEach(detail.actions, id: \.key) { action in
                         KitOutlineButton(label: action.label, tone: action.destructive ? "net" : "text") {
                             // `edit` opens the editor on this occurrence (a route the shell
@@ -172,13 +202,6 @@ struct AgendaEventView: View {
 
     private func header(_ detail: Centraid_Core_V1_AgendaEventData) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(detail.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-            }
             Text(detail.dateLabel)
                 .centraidType("body")
                 .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
@@ -188,7 +211,7 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color(detail.isPast ? "textFaint" : "textSoft", scheme))
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
+                    .fill(agendaHue(detail.calendarHueKey, scheme))
                     .frame(width: 8, height: 8)
                 Text(detail.calendarName)
                     .centraidType("annotLabel")
@@ -197,12 +220,6 @@ struct AgendaEventView: View {
         }
         .padding(CentraidGeometry.pageMargin)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
-                .frame(width: 2)
-                .padding(.vertical, 12)
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(detail.accessibilityLabel)
         .accessibilityIdentifier("agenda-event-head")
@@ -213,18 +230,31 @@ struct AgendaEventView: View {
             Text(rsvp.question)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("text", scheme))
-            // A CHOICE AMONG SEVERAL, each answer able to be unavailable on its
-            // own: chips (a selected one is never accent).
+            // THE BOARD'S THREE EQUAL KEYS: Going, Maybe, Not going share the width, the
+            // answer given filled in Agenda's blue, the others a plain capsule.
             HStack(spacing: 8) {
                 ForEach(rsvp.choices, id: \.partstat) { choice in
-                    KitChip(
-                        label: choice.label,
-                        selected: choice.selected,
-                        identifier: "agenda-rsvp-\(choice.partstat)"
-                    ) {
+                    Button {
                         send(event { $0.rsvp = .with { $0.partstat = choice.partstat } })
+                    } label: {
+                        Text(choice.label)
+                            .centraidType(choice.selected ? "smallStrong" : "small")
+                            .foregroundStyle(choice.selected ? Color.white : Theme.color(choice.enabled ? "text" : "textDisabled", scheme))
+                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                            .background {
+                                if choice.selected {
+                                    Capsule().fill(AppAccent("calendar").fill)
+                                } else {
+                                    Capsule().fill(Surface.card)
+                                    Capsule().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline)
+                                }
+                            }
+                            .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
                     .disabled(!choice.enabled)
+                    .accessibilityAddTraits(choice.selected ? .isSelected : [])
+                    .accessibilityIdentifier("agenda-rsvp-\(choice.partstat)")
                 }
             }
             if !rsvp.note.isEmpty {
@@ -236,7 +266,39 @@ struct AgendaEventView: View {
         .padding(CentraidGeometry.pageMargin)
     }
 
-    private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow) -> some View {
+    private func followedRow(_ guest: Centraid_Core_V1_AgendaFollowedGuestRow, index: Int) -> some View {
+        HStack(spacing: 10) {
+            Text(guest.initial)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("onAccent", scheme))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(guest.name)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(1)
+                if !guest.detail.isEmpty {
+                    Text(guest.detail)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(guest.replyLabel)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+        .overlay(alignment: .bottom) { KitHairline() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(guest.accessibilityLabel)
+        .accessibilityIdentifier("agenda-event-followed-guest-\(index)")
+    }
+
+    private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow, last: Bool) -> some View {
         HStack(spacing: 10) {
             Text(guest.initial)
                 .centraidType("smallStrong")
@@ -254,7 +316,8 @@ struct AgendaEventView: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
-        .overlay(alignment: .bottom) { KitHairline() }
+        // A HAIRLINE BETWEEN GUESTS, NONE UNDER THE LAST: it would draw along the card's rounded foot.
+        .overlay(alignment: .bottom) { if !last { KitHairline() } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(guest.accessibilityLabel)
         .accessibilityIdentifier("agenda-guest-\(guest.partyID)")

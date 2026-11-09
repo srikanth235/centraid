@@ -34,6 +34,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.CentraidScale
 
 /**
  * THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
@@ -51,7 +52,7 @@ import dev.centraid.design.CentraidGeometry
  *
  * One trailing verb, and only when there is something to say: Settings, the
  * door to the transfer rules, drawn beside the originals-waiting line. A key
- * with no destination is not drawn (DESIGN.md, HomeRoom).
+ * with no destination is not drawn (product-intuition/references/design-behaviour.md § Rooms).
  */
 @Composable
 public fun VaultHeader(
@@ -71,7 +72,7 @@ public fun VaultHeader(
      */
     onSearch: (() -> Unit)? = null,
     /** THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light and dark. */
-    onAppearance: (() -> Unit)? = null,
+    onSettings: (() -> Unit)? = null,
 ) {
     val vault = bar.vault
     val name = vault?.name.orEmpty()
@@ -134,7 +135,8 @@ public fun VaultHeader(
                     name,
                     style = centraidType("smallStrong"),
                     color = centraidColor("text"),
-                    maxLines = 1,
+                    // AT THE LARGEST TEXT THE NAME WRAPS and is never cut (#1173).
+                    maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (status.isNotEmpty()) {
@@ -167,8 +169,6 @@ public fun VaultHeader(
                             status,
                             style = centraidType("mono"),
                             color = centraidColor(if (loud) "text" else "textFaint"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 } else if (line.isNotEmpty()) {
@@ -176,8 +176,6 @@ public fun VaultHeader(
                         line,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (waiting.isNotEmpty()) {
@@ -185,8 +183,6 @@ public fun VaultHeader(
                         waiting,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("home-originals-waiting"),
                     )
                 }
@@ -212,8 +208,8 @@ public fun VaultHeader(
             if (onSearch != null) {
                 IconKey(iconKey = "Search", label = bar.search_label, testTag = "home-search-open", onPress = onSearch)
             }
-            if (onAppearance != null) {
-                IconKey(iconKey = bar.appearance_icon, label = bar.appearance_label, testTag = "home-appearance", onPress = onAppearance)
+            if (onSettings != null) {
+                IconKey(iconKey = "Settings", label = bar.settings_label, testTag = "home-settings-open", onPress = onSettings)
             }
         }
     }
@@ -223,7 +219,7 @@ public fun VaultHeader(
  * A vault's own hue, and the one wash that is not emitted.
  *
  * Every APP hue is resolved and composited by
- * `contracts/tools/export-native-catalog.ts`, because the eight apps are known
+ * `cargo xtask design`, because the eight apps are known
  * at build time. A vault's colour is the MEMBER's, chosen at runtime, so it
  * cannot be in that table — and this is the one place the blend is computed
  * rather than read. It uses the same tint share the emitter uses, from the same
@@ -278,20 +274,32 @@ public fun TransferRulesSheet(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    SheetRoom(title = sheet.title, onDismiss = onDismiss) {
+    SheetRoom(
+        title = sheet.title,
+        onDismiss = onDismiss,
+        primary = SheetPrimary(label = KitWords.DONE, onPress = onDismiss),
+    ) {
         Text(
             sheet.subtitle,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
         )
-        sheet.choices.forEach { choice ->
-            SheetRow(
-                label = choice.sentence,
-                selected = choice.picked,
-                testTag = "transfer-rule-" + choice.stored,
-                onTap = { onPick(choice.stored) },
-            )
+        // THE CHOICES ARE ONE CARD ON THE SHEET, as the Download settings board draws them.
+        Column(
+            Modifier
+                .padding(horizontal = KitGeometry.GUTTER)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                .background(Surface.sheetCard),
+        ) {
+            sheet.choices.forEach { choice ->
+                SheetRow(
+                    label = choice.sentence,
+                    selected = choice.picked,
+                    testTag = "transfer-rule-" + choice.stored,
+                    onTap = { onPick(choice.stored) },
+                )
+            }
         }
     }
 }

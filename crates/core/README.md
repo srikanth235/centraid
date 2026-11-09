@@ -41,8 +41,9 @@ A stall that happens with the queue full of change events is **reported late**, 
 
 | Range | App | Arms | Where |
 | --- | --- | --- | --- |
-| 1–9 | Agenda | `upcoming`, `day_context`, `parties`, `search`, `event` | `app_query.rs` |
-| 10–19 | Tasks | `board`, `task`, `projects`, `search`, `catch_up` | `app_query/tasks.rs` |
+| 1–5 | Agenda's events | `upcoming`, `day_context`, `parties`, `search`, `event` | `app_query.rs` |
+| 6–9, 17–19 | Agenda's tasks | `board`, `task`, `projects`, `search`, `catch_up`, `trash`, `reminders` | `app_query/agenda_task.rs` |
+| 10–14, 16 | — | reserved: the `tasks_*` arms before Tasks folded into Agenda, never reused |  |
 | 15 | — | `denied`, in the answer only; no query takes it |  |
 | 20–29 | People | `roster`, `touch`, `person`, `search`, `trash` | `app_query/people.rs` |
 | 30–39 | Docs | `drive`, `search`, `document`, `activity` | `app_query/docs.rs` |

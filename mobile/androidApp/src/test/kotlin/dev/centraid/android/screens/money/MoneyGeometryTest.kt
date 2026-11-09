@@ -51,11 +51,11 @@ class MoneyGeometryTest {
     @Test
     fun aLineWithAPlanDrawsAllThreeAndOneWithoutDrawsDashes() {
         assertEquals(
-            MoneyGeometry.CategoryFigures(planned = "\$300.00", spent = "\$120.00", left = "\$180.00"),
+            MoneyGeometry.CategoryFigures(planned = "\$300.00", spent = "\$120.00", remaining = "\$180.00"),
             MoneyGeometry.categoryFigures(true, "\$300.00", "\$120.00", "\$180.00"),
         )
         assertEquals(
-            MoneyGeometry.CategoryFigures(planned = "—", spent = "\$75.00", left = "—"),
+            MoneyGeometry.CategoryFigures(planned = "—", spent = "\$75.00", remaining = "—"),
             MoneyGeometry.categoryFigures(false, "\$0.00", "\$75.00", "\$0.00"),
         )
     }

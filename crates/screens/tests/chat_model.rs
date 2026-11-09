@@ -243,7 +243,15 @@ fn the_scopes_are_the_assistants_apps_in_menu_order_and_an_id_that_is_no_app_sco
     assert_eq!(
         scopes,
         [
-            "agenda", "docs", "health", "locker", "money", "notes", "people", "photos"
+            "calendar",
+            "docs",
+            "health",
+            "locker",
+            "money",
+            "notes",
+            "people",
+            "photos",
+            "reminders"
         ]
     );
     for app in &scopes {

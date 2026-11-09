@@ -1,0 +1,1381 @@
+//! Tasks' arm, through `Handle::call` — the door a shell uses.
+
+use super::super::*;
+use crate::config::CoreConfig;
+use crate::handle::{Core, Handle};
+
+/// The vault clock, stopped: 02:00Z on 2 June is still 1 June, 22:00, in New
+/// York — so a test that reads "today" in UTC gets a different answer.
+const NOW: &str = "2099-06-02T02:00:00.000Z";
+const TZ: &str = "America/New_York";
+
+type Q = wire::app_query_request::Query;
+type A = wire::app_query_response::Answer;
+
+struct Scratch {
+    dir: std::path::PathBuf,
+    handle: Handle,
+    /// The vault clock, held so a test can move it (#1090).
+    clock: std::sync::Arc<centraid_vault::clock::FixedClock>,
+    writes: std::cell::Cell<u32>,
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+impl Scratch {
+    fn founded() -> Self {
+        Self::founded_at(NOW)
+    }
+
+    /// Founded with the vault clock stopped at `now` — the way to stand inside
+    /// the hours a run happened to miss (#1090).
+    fn founded_at(now: &str) -> Self {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
+        let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));
+        let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
+            clock.clone(),
+            std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(
+                clock.clone(),
+            ))),
+        ))
+        .expect("it opens");
+        handle
+            .with_vault(|vault| Ok(vault.found("Tasks", "Owner")?))
+            .expect("it founds");
+        Self {
+            dir,
+            handle,
+            clock,
+            writes: std::cell::Cell::new(0),
+        }
+    }
+
+    fn advance_minutes(&self, minutes: i64) {
+        self.clock.advance_ms(minutes * 60_000);
+    }
+
+    /// The vault clock, as the vault writes it.
+    fn now_text(&self) -> String {
+        use centraid_vault::clock::Clock;
+        centraid_vault::clock::format_iso_ms(self.clock.now_ms())
+    }
+
+    fn ask(&self, query: Q) -> Result<A> {
+        match self.handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::AppQuery(wire::AppQueryRequest {
+                query: Some(query),
+            })),
+        })? {
+            wire::Response {
+                kind: Some(wire::response::Kind::AppQuery(answer)),
+            } => Ok(answer.answer.expect("an app query is answered")),
+            other => panic!("an app query answered as {other:?}"),
+        }
+    }
+
+    fn run(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
+        self.writes.set(self.writes.get() + 1);
+        let outcome = self
+            .handle
+            .command(
+                name,
+                &input,
+                &format!("tasks-query-test-{}", self.writes.get()),
+            )
+            .unwrap_or_else(|error| panic!("{name} refused: {error}"));
+        assert_eq!(
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
+            outcome.reason
+        );
+        outcome.output
+    }
+
+    fn add(&self, input: serde_json::Value) -> String {
+        self.run("task.add", input)["id"]
+            .as_str()
+            .expect("a task id")
+            .to_owned()
+    }
+
+    fn titled(&self, title: &str, due: Option<&str>) -> String {
+        let mut input = serde_json::json!({ "title": title });
+        if let Some(due) = due {
+            input["due"] = serde_json::json!(due);
+        }
+        self.add(input)
+    }
+
+    fn board(&self, view: wire::AgendaTaskView) -> wire::AgendaTaskBoard {
+        self.board_for(view, "")
+    }
+
+    fn board_for_limit(&self, limit: u32) -> wire::AgendaTaskBoard {
+        match self
+            .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
+                tz: TZ.to_owned(),
+                limit,
+                view: wire::AgendaTaskView::All as i32,
+                project_id: String::new(),
+            }))
+            .expect("the board answers")
+        {
+            A::AgendaTaskBoard(board) => board,
+            other => panic!("the board answered as {other:?}"),
+        }
+    }
+
+    fn board_for(&self, view: wire::AgendaTaskView, project_id: &str) -> wire::AgendaTaskBoard {
+        match self
+            .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
+                tz: TZ.to_owned(),
+                limit: 0,
+                view: view as i32,
+                project_id: project_id.to_owned(),
+            }))
+            .expect("the board answers")
+        {
+            A::AgendaTaskBoard(board) => board,
+            other => panic!("the board answered as {other:?}"),
+        }
+    }
+
+    fn reminders(&self, limit: u32) -> wire::AgendaTaskBoard {
+        match self
+            .ask(Q::AgendaTaskReminders(wire::AgendaTaskRemindersRequest {
+                tz: TZ.to_owned(),
+                limit,
+            }))
+            .expect("the reminders answer")
+        {
+            A::AgendaTaskReminders(board) => board,
+            other => panic!("the reminders answered as {other:?}"),
+        }
+    }
+
+    fn detail(&self, task_id: &str) -> wire::AgendaTaskDetail {
+        match self
+            .ask(Q::AgendaTask(wire::AgendaTaskRequest {
+                task_id: task_id.to_owned(),
+                tz: TZ.to_owned(),
+            }))
+            .expect("the task answers")
+        {
+            A::AgendaTask(detail) => *detail,
+            other => panic!("the task answered as {other:?}"),
+        }
+    }
+
+    fn smart_counts(&self) -> wire::AgendaTaskSmartCounts {
+        match self
+            .ask(Q::AgendaTaskSmartCounts(
+                wire::AgendaTaskSmartCountsRequest { tz: TZ.to_owned() },
+            ))
+            .expect("the counts answer")
+        {
+            A::AgendaTaskSmartCounts(counts) => counts,
+            other => panic!("the counts answered as {other:?}"),
+        }
+    }
+
+    fn due_rows(&self, window: wire::AgendaTaskDueWindow, limit: u32) -> wire::AgendaTaskDueRows {
+        match self
+            .ask(Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+                tz: TZ.to_owned(),
+                limit,
+                window: window as i32,
+            }))
+            .expect("the due rows answer")
+        {
+            A::AgendaTaskDueRows(rows) => rows,
+            other => panic!("the due rows answered as {other:?}"),
+        }
+    }
+
+    fn flag(&self, id: &str) {
+        self.run(
+            "flag.set",
+            serde_json::json!({ "id": id, "flag": "starred" }),
+        );
+    }
+
+    fn catch_up(&self) -> wire::AgendaTaskCatchUp {
+        match self
+            .ask(Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest {
+                tz: TZ.to_owned(),
+            }))
+            .expect("catch up answers")
+        {
+            A::AgendaTaskCatchUp(piles) => piles,
+            other => panic!("catch up answered as {other:?}"),
+        }
+    }
+}
+
+/// Whole civil days from one `YYYY-MM-DD` to another, counted on the calendar.
+fn civil_days(from: &str, to: &str) -> i64 {
+    use centraid_vault::time::zone::{parse_wall_iso, wall_epoch};
+    let day = |text: &str| wall_epoch(parse_wall_iso(text).expect("a date"));
+    (day(to) - day(from)) / 86_400_000
+}
+
+fn titles(group: &wire::AgendaTaskGroup) -> Vec<&str> {
+    group.tasks.iter().map(|task| task.title.as_str()).collect()
+}
+
+fn every_id(board: &wire::AgendaTaskBoard) -> Vec<String> {
+    fn walk(task: &wire::AgendaTask, out: &mut Vec<String>) {
+        out.push(task.task_id.clone());
+        for child in &task.children {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    for group in &board.groups {
+        for task in &group.tasks {
+            walk(task, &mut out);
+        }
+    }
+    out
+}
+
+/// TODAY IS THE DEVICE'S DAY: 01:00Z on the 2nd is 21:00 on the 1st in New
+/// York, so it is due TODAY, and a UTC reading would call it tomorrow. The
+/// overdue group leads, and Upcoming is keyed by the local day.
+#[test]
+fn the_board_groups_today_in_the_request_zone() {
+    let scratch = Scratch::founded();
+    scratch.titled("Late", Some("2099-05-30"));
+    scratch.titled("Tonight", Some("2099-06-02T01:00:00.000Z"));
+    scratch.titled("Tomorrow", Some("2099-06-02"));
+    scratch.titled("Someday", None);
+
+    let today = scratch.board(wire::AgendaTaskView::Today);
+    assert_eq!(today.today, "2099-06-01");
+    assert_eq!(today.now_local, "2099-06-01T22:00");
+    assert_eq!(today.groups.len(), 2);
+    assert_eq!(
+        today.groups[0].kind,
+        wire::AgendaTaskGroupKind::Overdue as i32
+    );
+    assert_eq!(titles(&today.groups[0]), ["Late"]);
+    assert_eq!(titles(&today.groups[1]), ["Tonight"]);
+    let tonight = &today.groups[1].tasks[0];
+    assert_eq!(tonight.due_local, "2099-06-01T21:00");
+    assert_eq!(tonight.due_time, "21:00");
+    assert!(tonight.lands_today && !tonight.overdue);
+    assert_eq!(today.groups[0].tasks[0].days_from_today, Some(-2));
+
+    let upcoming = scratch.board(wire::AgendaTaskView::Upcoming);
+    assert_eq!(upcoming.groups.len(), 1);
+    assert_eq!(upcoming.groups[0].day, "2099-06-02");
+    assert_eq!(titles(&upcoming.groups[0]), ["Tomorrow"]);
+
+    let counts = today.counts.expect("counts");
+    assert_eq!(
+        (
+            counts.overdue,
+            counts.today,
+            counts.upcoming,
+            counts.anytime
+        ),
+        (1, 1, 1, 1)
+    );
+    assert_eq!(counts.inbox, 4, "nothing is filed");
+    assert_eq!(today.window, 500, "zero is the manifest's default window");
+    assert!(!today.truncated);
+}
+
+/// THE TRASH IS NOT THE BOARD. `entity.trash` trashes a task and its
+/// subtasks; before #1046 every board statement brought them back — on the
+/// open board, in the logbook, and as a promoted orphan.
+#[test]
+fn a_trashed_task_and_its_family_are_on_no_place() {
+    let scratch = Scratch::founded();
+    let kept = scratch.titled("Kept", None);
+    let parent = scratch.titled("Trashed parent", Some("2099-06-05"));
+    let child = scratch.add(serde_json::json!({ "title": "Its child", "parent_id": parent }));
+    let done = scratch.titled("Done then trashed", None);
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    scratch.run("entity.trash", serde_json::json!({ "id": parent }));
+    scratch.run("entity.trash", serde_json::json!({ "id": done }));
+
+    let all = scratch.board(wire::AgendaTaskView::All);
+    let logbook = scratch.board(wire::AgendaTaskView::Logbook);
+    let seen: Vec<String> = every_id(&all)
+        .into_iter()
+        .chain(every_id(&logbook))
+        .collect();
+    assert_eq!(seen, std::slice::from_ref(&kept));
+    for gone in [&parent, &child, &done] {
+        assert!(!seen.contains(gone));
+        assert!(
+            scratch.detail(gone).task.is_none(),
+            "the detail does not open the trash"
+        );
+    }
+    let counts = all.counts.expect("counts");
+    assert_eq!((counts.open, counts.closed), (1, 0));
+}
+
+/// THE REMINDERS READ IS ITS OWN BOUNDED STATEMENT, not the board's newest-N
+/// window: the oldest-created task still answers when more open tasks than the
+/// limit sit after it, and what is not a live open reminder is absent.
+#[test]
+fn the_reminders_read_reaches_the_oldest_task_past_the_boards_window() {
+    let scratch = Scratch::founded();
+    let oldest = scratch.add(serde_json::json!({
+        "title": "Oldest", "due": "2099-06-10T14:00:00.000Z", "remind_before_min": 30,
+    }));
+    // More open tasks than the smallest window, all newer than `oldest` (the
+    // stopped clock is moved so creation order is not a tie).
+    for n in 0..25 {
+        scratch.advance_minutes(1);
+        scratch.titled(&format!("Newer {n}"), Some("2099-07-01"));
+    }
+    let earlier = scratch.add(serde_json::json!({
+        "title": "Earlier", "due": "2099-06-05T14:00:00.000Z", "remind_before_min": 15,
+    }));
+    let repeating = scratch.add(serde_json::json!({
+        "title": "Daily", "due": "2099-05-20T14:00:00.000Z", "rule": "FREQ=DAILY",
+        "remind_before_min": 60,
+    }));
+    let done = scratch.add(serde_json::json!({
+        "title": "Done", "due": "2099-06-06T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    let trashed = scratch.add(serde_json::json!({
+        "title": "Trashed", "due": "2099-06-07T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    scratch.add(serde_json::json!({
+        "title": "No reminder", "due": "2099-06-08T14:00:00.000Z",
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Long past", "due": "2099-05-01T14:00:00.000Z", "remind_before_min": 5,
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Subtask", "parent_id": earlier, "due": "2099-06-11T14:00:00.000Z",
+        "remind_before_min": 10,
+    }));
+
+    // The board's window of 20 does not hold the oldest task...
+    let board = scratch.board_for_limit(20);
+    assert!(!every_id(&board).contains(&oldest));
+    // ...and the reminders read does.
+    let answer = scratch.reminders(20);
+    assert_eq!(answer.view, wire::AgendaTaskView::Reminders as i32);
+    assert_eq!(answer.groups.len(), 1);
+    assert_eq!(
+        titles(&answer.groups[0]),
+        ["Daily", "Earlier", "Oldest", "Subtask"]
+    );
+    assert!(!answer.truncated);
+    assert_eq!(answer.window, 20);
+    let tasks = &answer.groups[0].tasks;
+    assert_eq!(tasks[0].task_id, repeating);
+    assert!(tasks[0].repeats);
+    assert_eq!(
+        tasks[0].next_due.as_deref(),
+        Some("2099-06-02T14:00:00.000Z")
+    );
+    assert_eq!(tasks[0].remind_at_local, "2099-06-02T09:00");
+    assert_eq!(tasks[1].task_id, earlier);
+    assert_eq!(tasks[1].remind_at_local, "2099-06-05T09:45");
+    assert_eq!(tasks[2].task_id, oldest);
+    assert_eq!(tasks[3].remind_before_min, Some(10));
+    assert!(
+        tasks
+            .iter()
+            .all(|task| task.task_id != done && task.task_id != trashed)
+    );
+    assert!(answer.today == "2099-06-01" && !answer.now_local.is_empty());
+}
+
+/// A WINDOW THAT FILLS SAYS SO, nearest due first.
+#[test]
+fn a_full_reminders_window_is_truncated_and_ordered_by_due() {
+    let scratch = Scratch::founded();
+    for n in (0..21).rev() {
+        scratch.add(serde_json::json!({
+            "title": format!("Reminder {n:02}"),
+            "due": format!("2099-07-{:02}T14:00:00.000Z", n + 1),
+            "remind_before_min": 10,
+        }));
+    }
+    let answer = scratch.reminders(20);
+    assert!(answer.truncated);
+    let wanted: Vec<String> = (0..20).map(|n| format!("Reminder {n:02}")).collect();
+    assert_eq!(titles(&answer.groups[0]), wanted);
+    assert!(!scratch.reminders(0).truncated);
+}
+
+/// THE FOLD ACROSS DST, AND THE REMINDER. The same UTC hour reads 09:00 in
+/// January (EST) and 10:00 in July (EDT); the reminder's lead time is read
+/// back — v0 never read it — and its wall clock is the due less the lead.
+#[test]
+fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
+    let scratch = Scratch::founded();
+    scratch.add(serde_json::json!({
+        "title": "Winter", "due": "2100-01-15T14:00:00.000Z", "remind_before_min": 30,
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Summer", "due": "2099-07-15T14:00:00.000Z", "remind_before_min": 90,
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Dated only", "due": "2099-07-20", "remind_before_min": 15,
+    }));
+    let all = scratch.board(wire::AgendaTaskView::All);
+    let dated = &all.groups[0];
+    assert_eq!(dated.kind, wire::AgendaTaskGroupKind::Dated as i32);
+    assert_eq!(titles(dated), ["Summer", "Dated only", "Winter"]);
+    let summer = &dated.tasks[0];
+    assert_eq!(summer.due_time, "10:00");
+    assert_eq!(summer.remind_before_min, Some(90));
+    assert_eq!(summer.remind_at_local, "2099-07-15T08:30");
+    let winter = &dated.tasks[2];
+    assert_eq!(winter.due_time, "09:00");
+    assert_eq!(winter.remind_at_local, "2100-01-15T08:30");
+    let dated_only = &dated.tasks[1];
+    assert_eq!(dated_only.due_local, "2099-07-20");
+    assert_eq!(dated_only.due_time, "");
+    assert_eq!(dated_only.remind_at_local, "", "a date has no moment");
+
+    let reminders = scratch.board(wire::AgendaTaskView::Reminders);
+    assert_eq!(titles(&reminders.groups[0]).len(), 3);
+    assert_eq!(reminders.counts.expect("counts").reminders, 3);
+}
+
+/// A REPEATING TASK CARRIES ITS RULE, which the screens say in words (the core
+/// strings, `crates/screens`; v0's phone drew "—" for every cadence) and
+/// the editor's repeat picker reads (to pre-select and send back); a shell
+/// never expands it.
+#[test]
+fn a_repeating_task_carries_its_rule_and_next_period() {
+    let scratch = Scratch::founded();
+    let daily = scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
+    }));
+    let detail = scratch.detail(&daily);
+    let task = detail.task.expect("the task");
+    assert!(task.repeats);
+    assert_eq!(task.rrule.as_deref(), Some("FREQ=DAILY"));
+    assert!(task.missed > 0, "the unactioned days collapse into a count");
+    assert!(task.next_due.is_some());
+    assert!(
+        !task.overdue,
+        "the next period stands in for the stored due"
+    );
+}
+
+/// A DATE-ONLY REPEATING TASK IS DUE ON THE DEVICE'S DAY, ALL OF IT (#1090).
+///
+/// A due of `2026-10-03` is a whole civil day, the same in every zone. Its
+/// periods were expanded as UTC midnights, so each one "passed" at 00:00Z and
+/// the next read as the previous evening in New York: the daily task left
+/// Today at 20:00 local every night (and on a vault in UTC it was never on
+/// Today at all). The clock here walks two New York days in half hours.
+#[test]
+fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
+    // 04:00Z is midnight in New York (EDT) on 7 October.
+    let scratch = Scratch::founded_at("2026-10-07T04:00:00.000Z");
+    let daily = scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2026-10-03", "rule": "FREQ=DAILY",
+    }));
+    let mut problems: Vec<String> = Vec::new();
+    for _ in 0..96 {
+        let board = scratch.board(wire::AgendaTaskView::Today);
+        let at = format!("{} ({} in New York)", scratch.now_text(), board.now_local);
+        let found = board.groups.iter().find_map(|group| {
+            group
+                .tasks
+                .iter()
+                .find(|task| task.task_id == daily)
+                .map(|task| (group, task))
+        });
+        match found {
+            None => problems.push(format!("{at}: the daily task is not on Today")),
+            Some((group, row)) => {
+                let behind = civil_days("2026-10-03", &board.today);
+                let wrong = group.kind != wire::AgendaTaskGroupKind::Today as i32
+                    || row.due_day != board.today
+                    || !row.due_time.is_empty()
+                    || row.days_from_today != Some(0)
+                    || !row.lands_today
+                    || row.overdue
+                    || row.next_due.as_deref() != Some(board.today.as_str())
+                    || i64::from(row.missed) != behind;
+                if wrong {
+                    problems.push(format!(
+                        "{at}: due {} {:?}, next {:?}, missed {} (want {behind}), in group {}",
+                        row.due_day, row.due_time, row.next_due, row.missed, group.kind
+                    ));
+                }
+            }
+        }
+        scratch.advance_minutes(30);
+    }
+    assert!(
+        problems.is_empty(),
+        "{} of 96 half hours went wrong, the first few:\n{}",
+        problems.len(),
+        problems
+            .iter()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// THE ROUND-TRIP SPEC'S OWN HOURS. `TasksQueryRoundTripSpec` adds a daily
+/// task due four days before the device's today and expects it on Today; it
+/// failed at 03:25Z and 03:38Z, which are 23:25 and 23:38 in New York.
+#[test]
+fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
+    for now in ["2026-10-08T03:25:00.000Z", "2026-10-08T03:38:00.000Z"] {
+        let scratch = Scratch::founded_at(now);
+        let before = scratch.board(wire::AgendaTaskView::Today);
+        let due = {
+            use centraid_vault::time::zone::{add_wall_days, parse_wall_iso, wall_iso};
+            let today = parse_wall_iso(&before.today).expect("a date");
+            wall_iso(add_wall_days(today, -4), false)
+        };
+        let daily = scratch.add(serde_json::json!({
+            "title": "Tasks spec daily", "due": due, "rule": "FREQ=DAILY",
+        }));
+        let board = scratch.board(wire::AgendaTaskView::Today);
+        let row = board
+            .groups
+            .iter()
+            .flat_map(|group| &group.tasks)
+            .find(|task| task.task_id == daily)
+            .unwrap_or_else(|| {
+                panic!(
+                    "at {now} ({}) the daily task is not on Today",
+                    board.now_local
+                )
+            });
+        assert!(!row.overdue && row.repeats, "{now}");
+        assert_eq!(row.rrule.as_deref(), Some("FREQ=DAILY"));
+        assert!(row.next_due.is_some());
+    }
+}
+
+/// COMPLETING A DATE-ONLY OCCURRENCE KEEPS THE SERIES A DATE (#1090). The
+/// successor's due was an instant — `2026-10-04T00:00:00.000Z` — which New
+/// York reads as the evening of the 3rd, so the series left the calendar the
+/// moment it was first ticked. It is asked at 23:25 on the 7th, an hour the
+/// UTC reading gets wrong.
+#[test]
+fn completing_a_date_only_occurrence_leaves_the_successor_on_the_calendar() {
+    let scratch = Scratch::founded_at("2026-10-08T03:25:00.000Z");
+    let daily = scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2026-10-03", "rule": "FREQ=DAILY",
+    }));
+    let done = scratch.run("task.complete", serde_json::json!({ "id": daily }));
+    assert_eq!(done["next_due"], serde_json::json!("2026-10-04"));
+    let successor = done["next_id"].as_str().expect("a successor");
+
+    let board = scratch.board(wire::AgendaTaskView::Today);
+    assert_eq!(board.today, "2026-10-07", "23:25 on the 7th in New York");
+    let row = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .find(|task| task.task_id == successor)
+        .expect("the successor is on Today");
+    assert_eq!(row.due_day, "2026-10-07");
+    assert!(row.lands_today && !row.overdue);
+    assert_eq!(row.next_due.as_deref(), Some("2026-10-07"));
+}
+
+/// ONE TASK, WHEREVER IT IS: its family, its parent, its project and section.
+#[test]
+fn the_detail_answers_the_family_and_the_filing() {
+    let scratch = Scratch::founded();
+    let project = scratch.run(
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "House" }),
+    )["id"]
+        .as_str()
+        .expect("a project")
+        .to_owned();
+    let section = scratch.run(
+        "container.create",
+        serde_json::json!({ "kind": "section", "title": "Kitchen", "parent": project }),
+    )["id"]
+        .as_str()
+        .expect("a section")
+        .to_owned();
+    let parent = scratch.titled("Paint the kitchen", Some("2099-06-10"));
+    scratch.run(
+        "task.organize",
+        serde_json::json!({
+            "id": parent, "project_id": project, "section_id": section, "position": 1,
+            "zone": "Europe/London",
+        }),
+    );
+    let open_child = scratch.add(serde_json::json!({ "title": "Buy paint", "parent_id": parent }));
+    let done_child = scratch.add(serde_json::json!({ "title": "Tape edges", "parent_id": parent }));
+    scratch.run("task.complete", serde_json::json!({ "id": done_child }));
+
+    let detail = scratch.detail(&parent);
+    let task = detail.task.expect("the task");
+    assert_eq!(task.children.len(), 2);
+    assert_eq!(task.done_children, 1);
+    assert_eq!(
+        task.tz.as_deref(),
+        Some("Europe/London"),
+        "organize-task's `tz` lands"
+    );
+    // THE DAY IT WAS MADE, in the request zone (#1047): the stopped clock's
+    // 02:00Z on 2 June is 1 June in New York.
+    assert_eq!(task.created_local_day, "2099-06-01");
+    assert_eq!(detail.project.expect("filed").name, "House");
+    assert_eq!(detail.section.expect("sectioned").name, "Kitchen");
+    assert!(detail.parent.is_none());
+
+    let child = scratch.detail(&open_child);
+    assert_eq!(child.parent.expect("a parent").task_id, parent);
+
+    let unknown = scratch.detail("no-such-task");
+    assert!(unknown.task.is_none());
+    assert_eq!(unknown.today, "2099-06-01");
+
+    // THE PROJECT PLACE answers every section, and the projects list counts.
+    let board = scratch.board_for(wire::AgendaTaskView::Project, &project);
+    assert_eq!(board.groups.len(), 1);
+    assert_eq!(
+        board.groups[0].kind,
+        wire::AgendaTaskGroupKind::Section as i32
+    );
+    assert_eq!(
+        board.groups[0].section_id.as_deref(),
+        Some(section.as_str())
+    );
+    let A::AgendaTaskProjects(projects) = scratch
+        .ask(Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest {
+            tz: TZ.to_owned(),
+        }))
+        .expect("projects answer")
+    else {
+        panic!("projects answered as something else");
+    };
+    assert_eq!(projects.projects[0].open_count, 1);
+    assert_eq!(projects.sections[0].open_count, 1);
+    assert_eq!(projects.inbox_count, 0);
+    // A PROJECT PLACE NAMING NO PROJECT is the request's fault.
+    let refused = scratch
+        .ask(Q::AgendaTaskBoard(wire::AgendaTaskBoardRequest {
+            tz: TZ.to_owned(),
+            view: wire::AgendaTaskView::Project as i32,
+            ..wire::AgendaTaskBoardRequest::default()
+        }))
+        .expect_err("no project is refused");
+    assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+}
+
+/// SEARCH, THROUGH THE FTS DOOR AND THE PAGE DOOR, with the trash left out
+/// and a zero limit refused.
+#[test]
+fn search_answers_ranked_live_tasks() {
+    let scratch = Scratch::founded();
+    // The title alone is a hit without an excerpt; the words about it are the snippet.
+    let cabin = scratch.add(serde_json::json!({
+        "title": "Book the cabin", "due": "2099-06-03", "description": "the cabin by the lake",
+    }));
+    let trashed = scratch.titled("Cabin deposit", None);
+    scratch.titled("Dentist", None);
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    let search = |limit: u32| {
+        scratch.ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
+            term: "cabin".to_owned(),
+            limit,
+            tz: TZ.to_owned(),
+        }))
+    };
+    let A::AgendaTaskSearch(found) = search(10).expect("search answers") else {
+        panic!("search answered as something else");
+    };
+    let ids: Vec<&str> = found
+        .tasks
+        .iter()
+        .map(|task| task.task_id.as_str())
+        .collect();
+    assert_eq!(ids, [cabin.as_str()]);
+    assert_eq!(found.tasks[0].due_day, "2099-06-03");
+    assert!(
+        found.tasks[0]
+            .snippet
+            .as_deref()
+            .is_some_and(|s| s.contains('⟦'))
+    );
+    assert_eq!(
+        search(0).expect_err("zero is refused").code(),
+        wire::ErrorCode::InvalidRequest
+    );
+}
+
+/// A TYPO FINDS THE ROW AND SAYS WHAT WAS SEARCHED (#1097, R4, R8): the exact
+/// term answers as before, and only an empty exact answer is corrected.
+#[test]
+fn a_typo_finds_the_task_and_says_what_it_searched() {
+    let scratch = Scratch::founded();
+    // The title alone is a hit without an excerpt; the words about it are the snippet.
+    let cabin = scratch.add(serde_json::json!({
+        "title": "Book the cabin", "due": "2099-06-03", "description": "the cabin by the lake",
+    }));
+    scratch.titled("Dentist", None);
+    let search = |term: &str| {
+        let A::AgendaTaskSearch(found) = scratch
+            .ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+                tz: TZ.to_owned(),
+            }))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let slipped = search("cabni");
+    let ids: Vec<&str> = slipped
+        .tasks
+        .iter()
+        .map(|task| task.task_id.as_str())
+        .collect();
+    assert_eq!(ids, [cabin.as_str()]);
+    assert_eq!(slipped.corrected, "cabin");
+    assert!(
+        slipped.tasks[0]
+            .snippet
+            .as_deref()
+            .is_some_and(|snippet| snippet.contains('⟦')),
+        "the snippet marks the corrected word"
+    );
+    let exact = search("cabin");
+    assert_eq!(exact.tasks.len(), 1);
+    assert!(exact.corrected.is_empty(), "an exact hit is not corrected");
+    let nothing = search("zeppelin");
+    assert!(nothing.tasks.is_empty() && nothing.corrected.is_empty());
+}
+
+/// CATCH UP: each overdue row in one pile, and a week away named.
+#[test]
+fn catch_up_names_a_long_absence() {
+    let scratch = Scratch::founded();
+    scratch.titled("Ten days late", Some("2099-05-22"));
+    scratch.titled("Yesterday", Some("2099-05-31"));
+    scratch.titled("Undated and fresh", None);
+    let piles = scratch.catch_up();
+    let late: Vec<&str> = piles.dated.iter().map(|task| task.title.as_str()).collect();
+    assert_eq!(late, ["Ten days late", "Yesterday"]);
+    assert!(piles.repeating.is_empty());
+    // `sitting` is not asserted here: `task.add` stamps `created_at`
+    // from SQLite's own clock, not the vault clock this test stops in 2099, so
+    // every task made here "sat" since today's real date (an owner question in
+    // the crate README). `views`' own tests cover the pile.
+    assert_eq!((piles.away_days, piles.overdue), (10, 2));
+    assert!(piles.absent);
+}
+
+/// AN EMPTY VAULT is an answer on every place, not a refusal.
+#[test]
+fn an_empty_vault_answers_every_place_empty() {
+    let scratch = Scratch::founded();
+    for view in [
+        wire::AgendaTaskView::Unspecified,
+        wire::AgendaTaskView::Today,
+        wire::AgendaTaskView::Upcoming,
+        wire::AgendaTaskView::Inbox,
+        wire::AgendaTaskView::Anytime,
+        wire::AgendaTaskView::All,
+        wire::AgendaTaskView::Logbook,
+        wire::AgendaTaskView::Reminders,
+    ] {
+        let board = scratch.board(view);
+        assert!(board.groups.is_empty(), "{view:?}");
+        assert_eq!(board.counts, Some(wire::AgendaTaskCounts::default()));
+        assert_eq!(board.view, view as i32);
+    }
+    let piles = scratch.catch_up();
+    assert!(piles.dated.is_empty() && !piles.absent);
+    assert_eq!(piles.today, "2099-06-01");
+}
+
+/// THE ZONE RULE: an unknown name is refused, never demoted to UTC.
+#[test]
+fn an_unknown_zone_is_refused() {
+    let scratch = Scratch::founded();
+    let refused = scratch
+        .ask(Q::AgendaTaskCatchUp(wire::AgendaTaskCatchUpRequest {
+            tz: "Mars/Olympus_Mons".to_owned(),
+        }))
+        .expect_err("refused");
+    assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+}
+
+/// A DENIAL IS A STATE: Tasks' `Denial` reaches the wire as the `denied` arm,
+/// field for field.
+#[test]
+fn a_tasks_denial_is_answered_as_the_denied_arm() {
+    let scratch = Scratch::founded();
+    scratch
+        .handle
+        .with_vault(|vault| {
+            let door = VaultDoor::new(vault);
+            let denial = centraid_apps_reminders::Denial {
+                code: Some("revoked".to_owned()),
+                message: Some("Tasks may not read".to_owned()),
+                revoked_at: None,
+            };
+            let settled = settle(&door, Ok((0_u8, Some(denial))), |_| {
+                unreachable!("a denial carries no data")
+            })
+            .expect("a denial is not an error");
+            let A::Denied(denied) = settled else {
+                panic!("answered as {settled:?}");
+            };
+            assert_eq!(denied.code.as_deref(), Some("revoked"));
+            assert_eq!(denied.message.as_deref(), Some("Tasks may not read"));
+            Ok(())
+        })
+        .expect("the vault is open");
+}
+
+/// A PROJECT IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name
+/// finds it beside the tasks, it opens by its own id, and a slip in a word only
+/// a project holds is corrected to it.
+#[test]
+fn a_project_is_found_by_name_beside_the_tasks() {
+    let scratch = Scratch::founded();
+    let project = scratch.run(
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "Kitchen refit" }),
+    )["id"]
+        .as_str()
+        .expect("a project id")
+        .to_owned();
+    let task = scratch.titled("Kitchen tiles", None);
+    let search = |term: &str| {
+        let A::AgendaTaskSearch(found) = scratch
+            .ask(Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+                tz: TZ.to_owned(),
+            }))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let found = search("kitchen");
+    assert_eq!(found.tasks.len(), 1);
+    assert_eq!(found.tasks[0].task_id, task);
+    assert_eq!(found.containers.len(), 1);
+    let hit = &found.containers[0];
+    assert_eq!(
+        (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()),
+        ("project", project.as_str(), "reminders")
+    );
+    assert_eq!(hit.title, "Kitchen refit");
+
+    // A WORD ONLY THE PROJECT HOLDS, slipped: corrected, and the project found.
+    scratch.run(
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "Wombat shelter" }),
+    );
+    let slipped = search("womabt");
+    assert_eq!(slipped.corrected, "wombat");
+    assert!(slipped.tasks.is_empty() && slipped.containers.len() == 1);
+    assert!(search("wombat").corrected.is_empty());
+}
+
+/// PRIORITY IS ONE SCALE, AND EVERY SURFACE SAYS WHICH (Q-1047-10): 0 is unset
+/// and 1..9 run HIGHER MORE URGENT — Todoist's, ruled by D-1020-S5 — not RFC
+/// 5545's 1-is-highest. The question arrived believing the vault followed RFC
+/// 5545 and the proto and the phone's mapping were the outliers; the vault, the
+/// open order, the proto and !, !!, !!! are all one scale, and the
+/// outlier was the assistant's own sentence about the vault. This is the open
+/// order's half of the agreement, over the real vault: the number goes in as
+/// sent, comes out as sent, and a task's subtasks — the one place the phone's
+/// answer is ordered by priority — put the larger one first. (A place's groups
+/// order by due date and then title, as v0's `byDue` does; priority is a label
+/// on their rows.)
+#[test]
+fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
+    let scratch = Scratch::founded();
+    let parent = scratch.titled("Parent", None);
+    let child = |title: &str, priority: Option<i64>| {
+        let mut input = serde_json::json!({ "title": title, "parent_id": parent });
+        if let Some(priority) = priority {
+            input["priority"] = serde_json::json!(priority);
+        }
+        scratch.add(input)
+    };
+    let none = child("Unset", None);
+    let low = child("Low", Some(1));
+    let high = child("High", Some(9));
+    let middle = child("Middle", Some(3));
+
+    // THE ORDER IS PRIORITY DESC, UNSET LAST (not creation order, not title).
+    let all = scratch.board(wire::AgendaTaskView::All);
+    let family = all
+        .groups
+        .iter()
+        .flat_map(|group| group.tasks.iter())
+        .find(|task| task.task_id == parent)
+        .expect("the parent is on the board");
+    let order: Vec<&str> = family
+        .children
+        .iter()
+        .map(|task| task.title.as_str())
+        .collect();
+    assert_eq!(order, ["High", "Middle", "Low", "Unset"]);
+
+    // THE WIRE CARRIES IT AS STORED: nothing here translates a scale.
+    let stored = |task_id: &String| scratch.detail(task_id).task.expect("a task").priority;
+    assert_eq!([&none, &low, &middle, &high].map(stored), [0, 1, 3, 9]);
+
+    // THE ASSISTANT'S SENTENCE ABOUT THE VAULT SAYS THE SAME: it once said
+    // "1 highest", and a model believing it filed its most urgent task as the
+    // app's least urgent.
+    assert!(
+        centraid_assist::native::meta::PRIORITY_SCALE.starts_with("9 highest..1 lowest"),
+        "{}",
+        centraid_assist::native::meta::PRIORITY_SCALE
+    );
+}
+
+/// THE TRASH SHELF is the entity's: the trashed tasks and the subtasks that went with
+/// them, each day read in the request zone, and a restore empties it.
+#[test]
+fn the_trash_shelf_lists_what_was_trashed_with_its_days_in_the_request_zone() {
+    let scratch = Scratch::founded();
+    let parent = scratch.titled("Move house", None);
+    let child = scratch.add(serde_json::json!({ "title": "Pack the books", "parent_id": parent }));
+    scratch.titled("Kept", None);
+    let shelf = || {
+        let A::AgendaTaskTrash(shelf) = scratch
+            .ask(Q::AgendaTaskTrash(wire::AgendaTaskTrashRequest {
+                tz: TZ.to_owned(),
+            }))
+            .expect("the shelf answers")
+        else {
+            panic!("the shelf answered as something else");
+        };
+        shelf
+    };
+    assert!(shelf().tasks.is_empty());
+    scratch.run("entity.trash", serde_json::json!({ "id": parent }));
+    let trashed = shelf();
+    let mut titles: Vec<&str> = trashed.tasks.iter().map(|row| row.title.as_str()).collect();
+    titles.sort_unstable();
+    assert_eq!(titles, ["Move house", "Pack the books"]);
+    let row = trashed
+        .tasks
+        .iter()
+        .find(|row| row.task_id == child)
+        .expect("the subtask is a row of its own");
+    assert_eq!(
+        row.deleted_local_day, "2099-06-01",
+        "22:00 on the 1st in New York"
+    );
+    assert_eq!(row.purge_local_day, "2099-07-01", "thirty days on");
+    scratch.run("entity.restore", serde_json::json!({ "id": parent }));
+    assert!(shelf().tasks.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The true counts (#1173): one aggregate over every open task.
+// ---------------------------------------------------------------------------
+
+fn counts_of(counts: &wire::AgendaTaskSmartCounts) -> (u32, u32, u32) {
+    (counts.today, counts.overdue, counts.flagged)
+}
+
+/// THE DEFINITIONS ARE THE BOARD'S: overdue is a civil day before today, today is
+/// the rest of what lands today, flagged is the star; a closed, cancelled or trashed
+/// task is in none; a subtask of an open parent is its parent's and an unfinished
+/// child of a closed parent is a root; a repeating task is dated by its next period.
+/// On a small vault the board's own partition agrees, number for number.
+#[test]
+fn the_counts_follow_the_boards_definitions() {
+    let scratch = Scratch::founded();
+    // 2099-06-01 is today (22:00 in New York).
+    scratch.titled("Late", Some("2099-05-30"));
+    scratch.titled("Late at night", Some("2099-05-31T23:59:00.000Z"));
+    scratch.titled("Today by date", Some("2099-06-01"));
+    scratch.titled("Today by instant", Some("2099-06-01T14:00:00.000Z"));
+    scratch.titled("Today by wall clock", Some("2099-06-01T09:00"));
+    scratch.titled("Tomorrow", Some("2099-06-02"));
+    scratch.titled("Someday", None);
+    let starred = scratch.titled("Starred and undated", None);
+    scratch.flag(&starred);
+    let starred_late = scratch.titled("Starred and late", Some("2099-05-01"));
+    scratch.flag(&starred_late);
+    // A repeating task is dated by its next period: a daily one is today.
+    scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
+    }));
+    // Closed and trashed work is counted nowhere.
+    let done = scratch.titled("Done", Some("2099-05-29"));
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    let cancelled = scratch.titled("Cancelled", Some("2099-05-29"));
+    scratch.run("task.cancel", serde_json::json!({ "id": cancelled }));
+    let trashed = scratch.titled("Trashed", Some("2099-05-29"));
+    scratch.flag(&trashed);
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    let closed_flag = scratch.titled("Closed and starred", Some("2099-05-29"));
+    scratch.flag(&closed_flag);
+    scratch.run("task.complete", serde_json::json!({ "id": closed_flag }));
+    // A subtask of an OPEN parent belongs to its parent, however late or starred.
+    let parent = scratch.titled("Parent", Some("2099-06-01"));
+    let nested = scratch.add(serde_json::json!({
+        "title": "Nested late", "parent_id": parent, "due": "2099-05-01",
+    }));
+    scratch.flag(&nested);
+    // An unfinished child of a CLOSED parent is promoted to a root of its own.
+    let finished = scratch.titled("Finished parent", None);
+    scratch.add(serde_json::json!({
+        "title": "Promoted", "parent_id": finished, "due": "2099-05-02",
+    }));
+    scratch.run("task.complete", serde_json::json!({ "id": finished }));
+
+    let counts = scratch.smart_counts();
+    // Overdue: Late, Late at night, Starred and late, Promoted.
+    // Today: by date, by instant, by wall clock, Parent, the daily one.
+    // Flagged: Starred and undated, Starred and late.
+    assert_eq!(counts_of(&counts), (5, 4, 2), "{counts:?}");
+    assert_eq!(counts.today_day, "2099-06-01", "the day is the device's");
+
+    // THE BOARD AGREES, where its window holds every task.
+    let board = scratch.board(wire::AgendaTaskView::All);
+    assert!(!board.truncated);
+    let figures = board.counts.as_ref().expect("the board counts");
+    assert_eq!(
+        (figures.today, figures.overdue),
+        (counts.today, counts.overdue)
+    );
+    let flagged_on_board = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .filter(|task| task.flagged)
+        .count();
+    assert_eq!(flagged_on_board as u32, counts.flagged);
+}
+
+/// A DAY IS THE ZONE'S, NOT UTC'S: it is 22:00 on 1 June in New York, so
+/// 23:30 tonight (03:30Z) is today and 00:30 (04:30Z) is tomorrow, and the
+/// instant of local midnight (04:00Z on the 1st) is today and the minute
+/// before it is yesterday. The same instants as wall clocks read the same.
+#[test]
+fn a_task_near_local_midnight_is_counted_on_the_right_day() {
+    let scratch = Scratch::founded();
+    scratch.titled("Last minute of yesterday", Some("2099-06-01T03:59:00.000Z"));
+    scratch.titled("First minute of today", Some("2099-06-01T04:00:00.000Z"));
+    scratch.titled("23:30 tonight", Some("2099-06-02T03:30:00.000Z"));
+    scratch.titled("00:30 tomorrow", Some("2099-06-02T04:30:00.000Z"));
+    scratch.titled("Wall 23:30 tonight", Some("2099-06-01T23:30"));
+    scratch.titled("Wall 00:30 tomorrow", Some("2099-06-02T00:30"));
+    let counts = scratch.smart_counts();
+    assert_eq!(counts_of(&counts), (3, 1, 0), "{counts:?}");
+    // The board says the same of the same rows.
+    let today = scratch.board(wire::AgendaTaskView::Today);
+    assert_eq!(
+        today
+            .groups
+            .iter()
+            .map(|group| group.tasks.len())
+            .sum::<usize>(),
+        4,
+        "overdue and today together"
+    );
+
+    // Three hours on it is 01:00 on the 2nd: tonight's 23:30 is now yesterday's
+    // and the two 00:30s are today's.
+    scratch.advance_minutes(180);
+    let later = scratch.smart_counts();
+    assert_eq!(later.today_day, "2099-06-02");
+    assert_eq!(counts_of(&later), (2, 4, 0), "{later:?}");
+}
+
+/// AT ANY VAULT SIZE: 1,500 open tasks are counted exactly where the board's
+/// window (500) holds a third of them, and the aggregate's answer is the figures
+/// and nothing else.
+#[test]
+fn a_vault_of_fifteen_hundred_open_tasks_is_counted_exactly() {
+    use centraid_apps_kit::fixtures::{Year3TasksShape, year3_tasks};
+    let scratch = Scratch::founded();
+    let shape = Year3TasksShape {
+        open: 1_500,
+        done: 40,
+        cancelled: 10,
+        trashed: 20,
+        projects: 2,
+        sections: 2,
+        dated: 1_200,
+        repeating: 0,
+        subtasks: 0,
+        tagged: 0,
+    };
+    scratch
+        .handle
+        .with_vault(|vault| {
+            let seeded = vault.commit(|tx| {
+                Ok(year3_tasks(tx.connection(), shape, 7).expect("the tasks are written"))
+            })?;
+            assert_eq!(seeded.value.open, 1_500);
+            assert_eq!(seeded.value.dated, 1_200);
+            Ok(())
+        })
+        .expect("the corpus lands");
+    // Today's, and a star, on top of the seeded ones (all dated in 2024-2026,
+    // so every seeded dated task is long overdue by the stopped clock).
+    for n in 0..30 {
+        scratch.titled(&format!("Due today {n}"), Some("2099-06-01"));
+    }
+    let starred = scratch.titled("Starred", None);
+    scratch.flag(&starred);
+
+    let counts = scratch.smart_counts();
+    assert_eq!(counts_of(&counts), (30, 1_200, 1), "{counts:?}");
+
+    // The window the board reads is a third of it: counting the board undercounts.
+    let board = scratch.board(wire::AgendaTaskView::All);
+    assert!(board.truncated, "1,531 open tasks do not fit a 500 window");
+    let figures = board.counts.as_ref().expect("the board counts");
+    assert!(
+        figures.overdue + figures.today < counts.overdue + counts.today,
+        "the window's own counts say {figures:?}"
+    );
+}
+
+/// A MOVED CLOCK MOVES THE DAY: the figures are the vault's clock's, in the
+/// request's zone, never the host's.
+#[test]
+fn the_counts_read_the_vault_clock() {
+    let scratch = Scratch::founded();
+    scratch.titled("Due the second", Some("2099-06-02"));
+    assert_eq!(counts_of(&scratch.smart_counts()), (0, 0, 0));
+    scratch.advance_minutes(24 * 60);
+    let counts = scratch.smart_counts();
+    assert_eq!(counts.today_day, "2099-06-02");
+    assert_eq!(counts_of(&counts), (1, 0, 0));
+}
+
+/// A denial or a bad zone is the read's own, as for every agenda query.
+#[test]
+fn the_counts_refuse_an_unknown_zone() {
+    let scratch = Scratch::founded();
+    let refused = scratch.ask(Q::AgendaTaskSmartCounts(
+        wire::AgendaTaskSmartCountsRequest {
+            tz: "Not/AZone".to_owned(),
+        },
+    ));
+    assert!(refused.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// The earliest-due rows (#1173): the widget's rows at any vault size.
+// ---------------------------------------------------------------------------
+
+fn titles_of(rows: &wire::AgendaTaskDueRows) -> Vec<&str> {
+    rows.tasks.iter().map(|task| task.title.as_str()).collect()
+}
+
+/// THE EARLIEST DUE IS ROW ONE, WHEN IT IS THE OLDEST CREATED: with 561 open tasks
+/// the board's window of the newest 500 does not hold it at all, and the due-ordered
+/// read puts it first.
+#[test]
+fn the_earliest_due_is_the_first_row_in_a_vault_larger_than_the_boards_window() {
+    use wire::AgendaTaskDueWindow as W;
+    // 10:00 on 1 June in New York: the minutes the test spends stay on the day.
+    let scratch = Scratch::founded_at("2099-06-01T14:00:00.000Z");
+    // Created first, so the oldest by creation, and due before everything else.
+    scratch.titled("Earliest due, oldest made", Some("2099-04-01"));
+    for n in 0..558 {
+        scratch.advance_minutes(1);
+        scratch.titled(&format!("Filler {n}"), None);
+    }
+    scratch.advance_minutes(1);
+    scratch.titled("Later overdue", Some("2099-05-20"));
+    scratch.advance_minutes(1);
+    scratch.titled("Today", Some("2099-06-01"));
+    scratch.advance_minutes(1);
+    let board = scratch.board(wire::AgendaTaskView::All);
+    assert!(board.truncated, "561 open tasks do not fit a 500 window");
+    assert!(
+        !board
+            .groups
+            .iter()
+            .flat_map(|group| &group.tasks)
+            .any(|task| task.title == "Earliest due, oldest made"),
+        "the board's window of the newest does not hold the oldest"
+    );
+
+    let rows = scratch.due_rows(W::Now, 6);
+    assert_eq!(rows.today_day, "2099-06-01");
+    assert_eq!(
+        titles_of(&rows),
+        ["Earliest due, oldest made", "Later overdue", "Today"],
+        "overdue first by due, then today"
+    );
+    assert!(rows.tasks[0].overdue && !rows.tasks[2].overdue);
+}
+
+/// ORDER AND BOUNDS: overdue first by due, then today's by day, time and the
+/// member's order; a limit is clamped to 12 and zero is 6; closed, trashed and
+/// nested work and the future are no row; a flag is carried.
+#[test]
+fn the_due_rows_are_ordered_bounded_and_the_boards_roots() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    // 2099-06-01 is today (22:00 in New York).
+    scratch.titled("Today, timed", Some("2099-06-01T09:00"));
+    scratch.titled("Today, by date", Some("2099-06-01"));
+    scratch.titled("Today, by instant", Some("2099-06-01T14:00:00.000Z"));
+    let late = scratch.titled("Late 2", Some("2099-05-30"));
+    scratch.flag(&late);
+    scratch.titled("Late 1", Some("2099-05-29"));
+    // 03:00Z on the 30th is 23:00 on the 29th in New York: overdue, after the date-only 29th.
+    scratch.titled("Late 1.5", Some("2099-05-30T03:00:00.000Z"));
+    // 03:30Z on the 2nd is 23:30 tonight; 04:30Z is tomorrow.
+    scratch.titled("Tonight, by instant", Some("2099-06-02T03:30:00.000Z"));
+    scratch.titled("Tomorrow, by instant", Some("2099-06-02T04:30:00.000Z"));
+    scratch.titled("Tomorrow", Some("2099-06-02"));
+    scratch.titled("Someday", None);
+    let done = scratch.titled("Done", Some("2099-05-01"));
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    let trashed = scratch.titled("Trashed", Some("2099-05-01"));
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
+    let parent = scratch.titled("Parent", Some("2099-06-01T20:00"));
+    scratch.add(serde_json::json!({
+        "title": "Nested, very late", "parent_id": parent, "due": "2099-04-01",
+    }));
+
+    let rows = scratch.due_rows(W::Now, 0);
+    assert_eq!(
+        titles_of(&rows),
+        [
+            // Overdue by due.
+            "Late 1",
+            "Late 1.5",
+            "Late 2",
+            // Today: the date-only first, then by time.
+            "Today, by date",
+            "Today, timed",
+            "Today, by instant",
+        ],
+        "the default is six rows"
+    );
+    assert!(rows.tasks[2].flagged && !rows.tasks[0].flagged);
+    assert_eq!(rows.tasks[2].task_id, late);
+
+    let twelve = scratch.due_rows(W::Now, 99);
+    assert_eq!(
+        titles_of(&twelve),
+        [
+            "Late 1",
+            "Late 1.5",
+            "Late 2",
+            "Today, by date",
+            "Today, timed",
+            "Today, by instant",
+            "Parent",
+            "Tonight, by instant",
+        ],
+        "every wanted row, never the future, the closed, the trashed or the nested"
+    );
+    assert_eq!(scratch.due_rows(W::Now, 2).tasks.len(), 2);
+}
+
+/// THE TIMED WINDOW: tasks with a time due today or tomorrow, by due; never an
+/// overdue one, a date-only one or the day after.
+#[test]
+fn the_timed_window_is_todays_and_tomorrows_timed_tasks() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    scratch.titled("Overdue, timed", Some("2099-05-31T09:00"));
+    scratch.titled("Today, date only", Some("2099-06-01"));
+    scratch.titled("Today evening", Some("2099-06-01T20:00"));
+    scratch.titled("Tonight, by instant", Some("2099-06-02T03:30:00.000Z"));
+    scratch.titled("Tomorrow, by instant", Some("2099-06-02T04:30:00.000Z"));
+    scratch.titled("Tomorrow morning", Some("2099-06-02T08:00"));
+    scratch.titled("Tomorrow, date only", Some("2099-06-02"));
+    scratch.titled("The day after", Some("2099-06-03T08:00"));
+    scratch.titled("Undated", None);
+    let rows = scratch.due_rows(W::TimedAhead, 12);
+    assert_eq!(
+        titles_of(&rows),
+        [
+            "Today evening",
+            "Tonight, by instant",
+            "Tomorrow, by instant",
+            "Tomorrow morning",
+        ]
+    );
+}
+
+/// A REPEATING TASK IS DATED BY ITS NEXT PERIOD and merged with the one-offs by
+/// due: a daily one is today's and one whose first period is ahead is no row.
+#[test]
+fn a_repeating_task_is_placed_by_its_next_period() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    scratch.titled("One-off, late", Some("2099-05-25"));
+    scratch.add(serde_json::json!({
+        "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
+    }));
+    scratch.add(serde_json::json!({
+        "title": "Starts next month", "due": "2099-07-01", "rule": "FREQ=DAILY",
+    }));
+    let rows = scratch.due_rows(W::Now, 6);
+    assert_eq!(titles_of(&rows), ["One-off, late", "Water the plants"]);
+    assert!(rows.tasks[1].repeats && rows.tasks[1].lands_today);
+    assert_eq!(
+        rows.tasks[1].next_due.as_deref().map(|due| &due[..10]),
+        Some("2099-06-01")
+    );
+}
+
+/// A BAD ZONE is the read's own refusal, as for every agenda query.
+#[test]
+fn the_due_rows_refuse_an_unknown_zone() {
+    let scratch = Scratch::founded();
+    let refused = scratch.ask(Q::AgendaTaskDueRows(wire::AgendaTaskDueRowsRequest {
+        tz: "Not/AZone".to_owned(),
+        limit: 6,
+        window: 1,
+    }));
+    assert!(refused.is_err());
+}
+
+/// THE INDEX'S ORDER IS NOT THE ZONE'S DAY: an instant on the 30th at 03:00Z is the
+/// 29th, 23:00 in New York, so it is due before every date-only 30th the index lists
+/// ahead of it. The walk reads past a page of them to find it.
+#[test]
+fn an_instant_the_index_lists_late_is_still_the_earliest_by_the_local_day() {
+    use wire::AgendaTaskDueWindow as W;
+    let scratch = Scratch::founded();
+    for n in 0..30 {
+        scratch.titled(&format!("Date only {n}"), Some("2099-05-30"));
+    }
+    scratch.titled(
+        "Local evening of the 29th",
+        Some("2099-05-30T03:00:00.000Z"),
+    );
+    let rows = scratch.due_rows(W::Now, 1);
+    assert_eq!(titles_of(&rows), ["Local evening of the 29th"]);
+}

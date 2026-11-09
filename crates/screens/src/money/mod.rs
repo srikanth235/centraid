@@ -7,7 +7,7 @@
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Spending · Activity · Cash flow, with More | [`HOME`] | [`home`] |
+//! | Activity (home) · Spending · Cash flow, with More | [`HOME`] | [`home`] |
 //! | One transaction | [`TRANSACTION`] | [`transaction`] |
 //! | A category's plan for a month | [`TARGET`] | [`target`] |
 //! | Search | [`SEARCH`] | [`search`] |
@@ -79,7 +79,7 @@ pub fn runtime() -> crate::Runtime {
         registry(),
         vec![(
             TAB.to_owned(),
-            routes::home(wire::MoneyDestination::Spending),
+            routes::home(wire::MoneyDestination::Activity),
         )],
     )
 }
@@ -92,6 +92,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }
@@ -126,17 +127,20 @@ pub mod routes {
         )
     }
 
-    /// A category's plan for `month` (`YYYY-MM`) in `currency`.
+    /// A category's plan for `month` (`YYYY-MM`) in `currency`, presented as a sheet.
     #[must_use]
     pub fn target(month: &str, category_id: &str, currency: &str) -> wire::Route {
-        route(
+        let mut sheet = route(
             TARGET,
             wire::route::Args::MoneyTarget(wire::MoneyTargetRoute {
                 month: month.to_owned(),
                 category_id: category_id.to_owned(),
                 currency: currency.to_owned(),
             }),
-        )
+        );
+        // A SHEET over Money, as the board draws it, not a page on the stack.
+        sheet.sheet = true;
+        sheet
     }
 
     #[must_use]

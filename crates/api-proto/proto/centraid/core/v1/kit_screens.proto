@@ -40,7 +40,7 @@ message Denied {
 }
 
 // A list with nothing in it, said once: one sentence and at most one action
-// (DESIGN.md's copy table). `action_label` empty means no action; the action
+// (product-intuition/references/design-behaviour.md § Wording). `action_label` empty means no action; the action
 // itself is the screen's own event.
 message EmptyState {
   string headline = 1;
@@ -56,6 +56,10 @@ message EmptyState {
   // of use, never as an up-front permission wall — and a shell that cannot
   // draws `action_label` as before. The app's own add stays in its header.
   ImportSource import_source = 5;
+  // The catalogue glyph on the card's wash. Empty means the app's own glyph
+  // (day one); a trash's empty state says "Trash", so Locker's empty trash does
+  // not wear a lock.
+  string icon_key = 6;
 }
 
 // A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import
@@ -155,7 +159,7 @@ message Autosave {
 }
 
 // A decision the member confirms. Full sentences, because only a destructive
-// confirm earns them (DESIGN.md); `destructive` draws the outlined `net` action.
+// confirm earns them (product-intuition/references/design-behaviour.md § Controls); `destructive` draws the outlined `net` action.
 message Confirm {
   string title = 1;
   string body = 2;
@@ -164,7 +168,10 @@ message Confirm {
 }
 
 // A row's status as a finished label and a tone. `seam` is "not yet", `net`
-// is owe/leaves (DESIGN.md).
+// is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
+// `accent` is the app's own colour for a state that is the app's good news
+// ("New" on an import row, "Paid" on a bill): a wash of the app accent with the
+// accent's text.
 message StatusChip {
   string label = 1;
   Tone tone = 2;
@@ -175,6 +182,7 @@ message StatusChip {
     TONE_SEAM = 2;
     TONE_NET = 3;
     TONE_WARNING = 4;
+    TONE_ACCENT = 5;
   }
 }
 
@@ -193,12 +201,12 @@ message ListRow {
   string accessibility_label = 7;
   bool dimmed = 8;
   bool pending = 9;
-  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (DESIGN.md).
+  // How `trailing` is inked: NEUTRAL is ink, NET is owe/leaves (product-intuition/references/design-behaviour.md § Colour).
   // UNSPECIFIED is ink too, so a row with a plain count sets nothing.
   StatusChip.Tone trailing_tone = 10;
 }
 
-// THE ONE FILTER AND SORT MENU (DESIGN.md, "AppPlace"): the header's filter
+// THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots): the header's filter
 // button opens this, in every app that filters or sorts, in place of the chip
 // row that stood under the header. Rust makes the whole menu: every section,
 // option, count and checkmark, the words, and whether anything is narrowing the
@@ -274,7 +282,7 @@ message HeaderSubtitle {
   bool tappable = 5;
 }
 
-// THE ONE STATUS LINE (DESIGN.md: no toast). One clause, at most one verb.
+// THE ONE STATUS LINE (product-intuition/references/design-behaviour.md § Status line). One clause, at most one verb.
 // A screen carries it where it says what a write did — "Task done" with
 // Undo — and `action_label` empty is a line with no verb. What the verb does
 // is the screen's own event (`StatusActed`).
@@ -307,6 +315,53 @@ message TrashData {
   EmptyState empty = 2;
   // "Empty trash"; empty when the app cannot empty its trash, or has nothing in it.
   string empty_label = 3;
+  // The scope line under the title ("Trash · 3"); empty when there is nothing in it.
+  string count_label = 4;
+}
+
+// THE TRANSFER SCREEN (#1173): bring something in from a file, or write something out to one,
+// in the app's own words. Rust decides every line; the shell draws the rows and the buttons and
+// sends back the key of whichever was tapped. `<app>.import` reads a file or folder, shows what
+// it holds as rows, and waits for the member's tap on the primary action; `<app>.export` lists
+// what can go out as tappable rows.
+message TransferView {
+  string app_id = 1;
+  // "Import notes", and the back control's words.
+  string title = 2;
+  string back_label = 3;
+  // What is happening, in a line ("Ready to import", "Imported 12 notes").
+  string headline = 4;
+  // One sentence of what the page does.
+  string lede = 5;
+  // What the file holds (label and count), or what can be exported (tappable).
+  repeated TransferRow rows = 6;
+  repeated TransferAction actions = 7;
+  // A read or a write is under way: the rows and buttons are drawn but do nothing.
+  bool busy = 8;
+  StatusLine status = 9;
+}
+
+message TransferRow {
+  string key = 1;
+  string label = 2;
+  // A count or a short fact; empty for a tappable scope row.
+  string value = 3;
+  bool tappable = 4;
+  string icon_key = 5;
+  string accessibility_label = 6;
+}
+
+message TransferAction {
+  string key = 1;
+  string label = 2;
+  // The one filled button of the page.
+  bool primary = 3;
+  bool enabled = 4;
+}
+
+// A tap on an action or a row: its key.
+message TransferEvent {
+  string key = 1;
 }
 
 // What a trash screen shows. The screen name (`<app>.trash`) says which app.
@@ -359,4 +414,87 @@ message TrashEvent {
   message Confirmed {}
 
   message Dismissed {}
+}
+
+// LINKS, SET BY HAND (#1173, O3): a transaction is With someone, a document is About someone, a
+// photograph shows someone, a Locker item is linked to an account, a place or a person. Rust makes
+// every word and row; the shell draws a section of rows and one picker sheet, the same in all four.
+//
+// One linked thing, or one thing the picker offers.
+message LinkRow {
+  // A person's party id, an account's or a place's.
+  string id = 1;
+  string title = 2;
+  // A small label over the title where a section mixes kinds ("Account", "Place", "Person"), and
+  // "You" on the owner. Empty draws nothing.
+  string meta = 3;
+  // Opens the thing: a person's page. Absent for what no page opens.
+  optional Route route = 4;
+  // "Remove Priya": the remove key's spoken name. Empty draws no key.
+  string remove_label = 5;
+  // On a picker row: the thing is linked now, so a tap takes the link off.
+  bool selected = 6;
+}
+
+// A way to add a link: the label of the row, and the kind of thing it picks.
+message LinkAdd {
+  // `person`, `account` or `place`.
+  string key = 1;
+  // "Add person".
+  string label = 2;
+}
+
+// A titled section of links.
+message LinkSection {
+  string title = 1;
+  repeated LinkRow rows = 2;
+  repeated LinkAdd adds = 3;
+  // What the section says with no row ("No one"); empty draws nothing.
+  string empty = 5;
+  reserved 4;
+  reserved "offer";
+}
+
+// THE PICKER SHEET: search by name, tap a row to link it, tap a linked one to unlink it.
+message LinkPicker {
+  bool open = 1;
+  string title = 2;
+  // What the member has typed.
+  string query = 3;
+  string placeholder = 4;
+  repeated LinkRow candidates = 5;
+  // What the list says when nothing matches or nothing exists.
+  string empty = 6;
+  bool loaded = 7;
+}
+
+message LinkEvent {
+  oneof kind {
+    // A `LinkAdd.key`: opens the picker for that kind.
+    AddTapped add = 1;
+    // A `LinkRow.id` from the section's remove key.
+    RemoveTapped remove = 2;
+    // A `LinkRow.id` from the picker.
+    Picked pick = 3;
+    QueryChanged query = 4;
+    PickerClosed closed = 5;
+  }
+
+  message AddTapped {
+    string key = 1;
+  }
+
+  message RemoveTapped {
+    string id = 1;
+  }
+
+  message Picked {
+    string id = 1;
+  }
+
+  message QueryChanged {
+    string text = 1;
+  }
+
+  message PickerClosed {}
 }

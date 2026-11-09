@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -34,7 +37,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -46,6 +52,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -57,7 +64,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
- * THE ROOMS (DESIGN.md "The seven rooms"; K5, #1029).
+ * THE ROOMS (product-intuition/references/design-behaviour.md § Rooms; K5, #1029).
  *
  * A screen is one of these and supplies content and copy; the room owns the
  * header, the back or close control, search, the status host and the band
@@ -74,6 +81,10 @@ public data class RoomAction(
     val iconKey: String,
     val label: String,
     val testTag: String = "room-action",
+    /** Drawn as the accent pill with the label in white (an editor's Save), not as an icon key. */
+    val pill: Boolean = false,
+    /** A pill that cannot be pressed yet is drawn quiet. */
+    val enabled: Boolean = true,
     val onPress: () -> Unit,
 )
 
@@ -168,6 +179,8 @@ public fun AppPlace(
     meta: String = "",
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
+    /** A KEY BEFORE THE FILTER (#1173): the tonal lock key of Locker's header; null elsewhere. */
+    lead: RoomAction? = null,
     /**
      * THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
      * app's one trailing action. Null where the app has nothing to filter or sort.
@@ -175,28 +188,60 @@ public fun AppPlace(
     filter: RoomFilter? = null,
     /** The scope the page is in, under the app's name (Notes' notebook, Money's month). */
     subtitle: RoomSubtitle? = null,
+    /**
+     * A BAR OF THE PLACE'S OWN (#1173): the Calendar's header. [barLeading] stands at the start of
+     * the key row and the page draws no title; [barActions] sit before the app's keys.
+     */
+    barLeading: (@Composable () -> Unit)? = null,
+    barActions: (@Composable () -> Unit)? = null,
+    /** Reminders' board keeps its big title under the same bar; the Calendar's has none. */
+    barShowsTitle: Boolean = false,
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
     contentUnderBand: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.fillMaxSize().testTag("$app-place")) {
+    CompositionLocalProvider(LocalAppAccentId provides app) {
+    Column(modifier.fillMaxSize().background(Surface.page).testTag("$app-place")) {
+        // THE HEADER (#1173, round 9): THE TITLE SITS IN THE TOP ROW, large at the leading edge
+        // with the scope under it, and at most two keys at the trailing end (the tonal filter
+        // key, then the filled accent `+`). A place's own bar (the Calendar's month chip) is one
+        // control row under the title.
+        val showsTitle = barLeading == null || barShowsTitle
         Row(
-            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = 8.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            AppMark(appId = app, size = 28.dp, modifier = Modifier.clearAndSetSemantics { })
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                RoomTitle(title)
-                if (meta.isNotEmpty()) {
-                    Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-                }
-                if (subtitle != null) RoomSubtitleLine(subtitle)
+            if (!showsTitle && barLeading != null) {
+                // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
+                // stands in the top row, where the title would.
+                barLeading.invoke()
+                Spacer(Modifier.weight(1f))
             }
-            // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
-            if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (showsTitle) Column(Modifier.weight(1f).padding(top = 2.dp)) {
+                RoomTitle(title)
+                if (showsTitle && meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, Surface.meta)
+                }
+                if (showsTitle && subtitle != null) RoomSubtitleLine(subtitle)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                barActions?.invoke()
+                if (lead != null) HeaderVerb(lead)
+                if (filter != null) FilterMenuButton(app, filter)
+                if (trailing != null) HeaderVerb(trailing)
+            }
+        }
+        if (barLeading != null && showsTitle) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                barLeading.invoke()
+            }
         }
         BandStage(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -205,7 +250,7 @@ public fun AppPlace(
                 Column(Modifier.fillMaxWidth()) {
                     // THE LINES STAND ON THE PAGE'S COLOUR: they are text, and text over a
                     // photograph is not legible. The floating pill is the band's alone.
-                    Column(Modifier.fillMaxWidth().background(centraidColor("bg"))) {
+                    Column(Modifier.fillMaxWidth().background(Surface.page)) {
                         StatusLine(status)
                         statusLine?.invoke()
                         // THE SHELL'S LINE SITS ON THE BAND, never under it.
@@ -236,6 +281,7 @@ public fun AppPlace(
             content = content,
         )
     }
+    }
 }
 
 /**
@@ -254,6 +300,8 @@ public fun PushedPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
+    /** A second key before the trailing one: the "…" that opens a page's verbs (a Locker item). */
+    more: RoomAction? = null,
     /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
     filter: RoomFilter? = null,
     /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
@@ -261,44 +309,56 @@ public fun PushedPage(
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
+    /** A scope line under the title (Trash's "3 items"): the machine's, empty for none. */
+    meta: String = "",
+    /** The title in a colour of the page's own (a smart list's, a list's), with its glyph before it. */
+    titleColor: androidx.compose.ui.graphics.Color? = null,
+    titleIcon: String = "",
+    titleTag: String? = null,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.fillMaxSize().testTag("pushed-page")) {
+    CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
+    Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
+        // THE TITLE IS IN THE TOP ROW (#1173, round 9): the back chevron, the title inline beside
+        // it, the page's keys at the end; the scope line, if any, under the title.
         Row(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clip(RoundedCornerShape(KitGeometry.RADIUS))
-                    .clickable(onClick = onBack)
-                    .padding(horizontal = 8.dp)
-                    .testTag("room-back")
-                    .clearAndSetSemantics {
-                        contentDescription = backSpoken ?: KitWords.backTo(parentTitle)
-                        role = Role.Button
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CentraidIcon(iconKey = "ChevronLeft", tint = centraidColor("textSoft"), size = 18.dp)
-                Text(
-                    parentTitle,
-                    style = centraidType("annotLabelOn"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            // THE BACK KEY IS A CHEVRON (#1173): a drill-in page is the only place one appears.
+            // The parent's name is what a screen reader says.
+            IconKey(
+                "ChevronLeft",
+                backSpoken ?: KitWords.backTo(parentTitle),
+                "room-back",
+                onPress = onBack,
+            )
+            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (titleIcon.isNotEmpty() && titleColor != null) {
+                        CentraidIcon(titleIcon, tint = titleColor, size = 20.dp, modifier = Modifier.padding(end = 6.dp))
+                    }
+                    KitText(
+                        title,
+                        KitType.Section,
+                        titleColor ?: Surface.ink,
+                        modifier = Modifier.semantics { heading() }.let { if (titleTag != null) it.testTag(titleTag) else it },
+                        maxLines = 1,
+                    )
+                }
+                if (meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, Surface.meta, Modifier.testTag("page-meta"))
+                }
             }
-            Spacer(Modifier.weight(1f))
             if (filter != null) FilterMenuButton(app, filter)
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (more != null) HeaderVerb(more)
+            if (trailing != null) HeaderVerb(trailing)
         }
-        RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
         LocalShellLine.current?.invoke()
+    }
     }
 }
 
@@ -344,11 +404,18 @@ public fun EditorRoom(
                 }
                 AutosaveStatus(status)
             }
-            if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            if (trailing != null && trailing.pill) {
+                KitPillButton(trailing.label, trailing.onPress, testTag = trailing.testTag, enabled = trailing.enabled)
+            } else if (trailing != null) {
+                IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+            }
         }
         Column(Modifier.weight(1f).fillMaxWidth(), content = content)
     }
 }
+
+/** A sheet's full-width keys (the ink button and the text key under it): the boards draw them 50 tall. */
+private val SHEET_KEY_HEIGHT = 50.dp
 
 /** The one ink button a [SheetRoom] may carry. */
 public data class SheetPrimary(
@@ -369,6 +436,10 @@ public data class SheetOutline(
     val label: String,
     val testTag: String,
     val ink: String = "text",
+    /** Drawn as a centred text key in the link ink, no outline (the style sheets' Cancel). */
+    val link: Boolean = false,
+    /** With [link]: the word is the page's ink, not the app's (the confirm's Cancel). */
+    val pageInk: Boolean = false,
     val onPress: () -> Unit,
 )
 
@@ -388,8 +459,9 @@ public data class SheetOutline(
  * dialog window, and the activity's flag does not reach one made before it was
  * set, so a sheet holding the 24 words carries the flag itself.
  *
- * **[expanded] true opens at full height** and skips the half detent, for a
- * screen that is a page in a sheet. Defaults leave a sheet as Material draws it.
+ * **[expanded] true skips the half detent**: the sheet opens at the height of its content (a
+ * list of rows, #1173) and at full height when the content is taller, which is also what a
+ * screen that is a page in a sheet wants. Defaults leave a sheet as Material draws it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -403,6 +475,8 @@ public fun SheetRoom(
     swipeable: Boolean = true,
     secure: Boolean = false,
     expanded: Boolean = false,
+    /** A pill in the title row (a large sheet's Done), drawn quiet while it is not enabled. */
+    headerAction: SheetPrimary? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val canLeave by rememberUpdatedState(swipeable)
@@ -414,7 +488,7 @@ public fun SheetRoom(
         onDismissRequest = { if (canLeave) onDismiss() },
         sheetState = sheetState,
         sheetGesturesEnabled = swipeable,
-        containerColor = centraidColor("bg"),
+        containerColor = Surface.sheet,
         properties = ModalBottomSheetProperties(
             securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
             shouldDismissOnBackPress = swipeable,
@@ -428,7 +502,17 @@ public fun SheetRoom(
                 .semantics { testTagsAsResourceId = true }
                 .testTag("sheet-room"),
         ) {
-            if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
+            if (headerAction != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoomTitle(title, Modifier.weight(1f))
+                    KitPillButton(headerAction.label, headerAction.onPress, testTag = headerAction.testTag, enabled = headerAction.enabled)
+                }
+            } else if (title.isNotEmpty()) {
+                RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
+            }
             content()
             StatusLine(status)
             if (primary != null || outlines.isNotEmpty()) {
@@ -443,9 +527,78 @@ public fun SheetRoom(
                         )
                     }
                     outlines.forEach { outline ->
-                        OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
+                        if (outline.link) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = SHEET_KEY_HEIGHT)
+                                    .clickable(onClick = outline.onPress)
+                                    .testTag(outline.testTag),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    outline.label,
+                                    style = centraidType("sheetKey"),
+                                    color = if (outline.pageInk) Surface.ink else appAccent().text,
+                                )
+                            }
+                        } else {
+                            OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A ROUTED SCREEN THAT IS A SHEET (`Route.sheet`: Money's target, Photos' picker), as the boards
+ * draw it: the X (Cancel) at the leading edge, the title centred, the page under it and, when the
+ * screen has one, a [foot] pinned to the bottom edge for its verbs. The X, the scrim, a drag down
+ * and back all call [onDismiss]; the shell then pops the screen's entry, which closes the sheet.
+ * It opens at full height: it is a page in a sheet, not a half-sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+public fun SheetPage(
+    title: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    cancelLabel: String = KitWords.CANCEL,
+    foot: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Surface.sheet,
+    ) {
+        // A SHEET IS ITS OWN WINDOW (see [SheetRoom]): Maestro's `id:` selectors need the flag again.
+        Column(
+            modifier.fillMaxSize().navigationBarsPadding().imePadding()
+                .semantics { testTagsAsResourceId = true }
+                .testTag("sheet-page"),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconKey("X", cancelLabel, "sheet-cancel", onPress = onDismiss)
+                Text(
+                    title,
+                    style = centraidType("sheetKey"),
+                    color = Surface.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { heading() },
+                )
+                Spacer(Modifier.size(KitGeometry.ROW_MIN))
+            }
+            Column(Modifier.weight(1f).fillMaxWidth(), content = content)
+            if (foot != null) {
+                Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), content = foot)
             }
         }
     }
@@ -466,20 +619,29 @@ public fun InkButton(
     destructive: Boolean = false,
     testTag: String = "kit-ink-button",
     enabled: Boolean = true,
+    /** A glyph before the label (the lock wall's face or fingerprint); empty for none. */
+    iconKey: String = "",
     onPress: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    // THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label; a
+    // destructive one is the outlined state-red pill at the same width. Disabled is still drawn.
+    val shape = RoundedCornerShape(percent = 50)
+    val accent = appAccent()
+    val red = StateColor.Red.text
+    val fill = Surface.fill
+    val border = Surface.border
+    val meta = Surface.meta
     Box(
         modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = SHEET_KEY_HEIGHT)
             .clip(shape)
             .then(
                 when {
-                    !enabled && destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("textDisabled"), shape)
-                    !enabled -> Modifier.background(centraidColor("bgSunken"))
-                    destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("net"), shape)
-                    else -> Modifier.background(centraidColor("accent"))
+                    !enabled && destructive -> Modifier.border(1.5.dp, border, shape)
+                    !enabled -> Modifier.background(fill)
+                    destructive -> Modifier.border(1.5.dp, red, shape)
+                    else -> Modifier.background(accent.fill)
                 },
             )
             .clickable(enabled = enabled, onClick = onPress)
@@ -490,30 +652,29 @@ public fun InkButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            style = centraidType("control"),
-            color = centraidColor(
-                when {
-                    !enabled -> "textDisabled"
-                    destructive -> "net"
-                    else -> "onAccent"
-                },
-            ),
-        )
+        val ink = when {
+            !enabled -> meta
+            destructive -> red
+            else -> Color.White
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (iconKey.isNotEmpty()) {
+                Box(Modifier.clearAndSetSemantics { }) { CentraidIcon(iconKey = iconKey, tint = ink, size = 20.dp) }
+            }
+            Text(label, style = centraidType("sheetKey"), color = ink)
+        }
     }
 }
 
 /** A room's title: the `title` rung, a heading to a screen reader. */
 @Composable
 internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
-    Text(
+    KitText(
         title,
-        style = centraidType("title"),
-        color = centraidColor("text"),
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
+        KitType.Title,
+        Surface.ink,
         modifier = modifier.semantics { heading() },
+        maxLines = 2,
     )
 }
 
@@ -521,15 +682,31 @@ internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
 @Composable
 public fun StatusLine(status: String, modifier: Modifier = Modifier) {
     if (status.isEmpty()) return
-    Text(
-        status,
-        style = centraidType("annotLabel"),
-        color = centraidColor("textSoft"),
-        modifier = modifier
+    Box(
+        modifier
             .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .kitStatusPill()
             .testTag("room-status"),
-    )
+    ) {
+        KitText(status, KitType.Row, Surface.ink)
+    }
+}
+
+/**
+ * THE ONE STATUS LINE'S SHAPE (#1173): a single pill on the card colour with a hairline edge,
+ * docked above the band. It casts no shadow; state is a sentence in the pill, never a toast.
+ */
+@Composable
+public fun Modifier.kitStatusPill(): Modifier {
+    // THE BOARDS DRAW THE LINE AS A PILL (StatusLine, FirstImports): fully round.
+    val shape = RoundedCornerShape(50)
+    return padding(vertical = 4.dp)
+        .heightIn(min = KitGeometry.ROW_MIN)
+        .clip(shape)
+        .background(Surface.card)
+        .border(KitGeometry.HAIRLINE, Surface.border, shape)
+        .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
 }
 
 /**
@@ -550,18 +727,29 @@ public fun StatusLine(
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .kitStatusPill()
             .testTag("room-status-line"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        KitText(
             line.sentence,
-            style = centraidType("annotLabel"),
-            color = centraidColor(if (line.refused) "net" else "textSoft"),
+            KitType.Row,
+            if (line.refused) StateColor.Red.text else Surface.ink,
             modifier = Modifier.weight(1f),
         )
         if (line.action_label.isNotEmpty()) {
-            OutlineButton(line.action_label, testTag = actTag, onPress = onAct)
+            Text(
+                line.action_label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = appAccent().text,
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = onAct)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag(actTag)
+                    .semantics { role = Role.Button },
+            )
         }
     }
 }
@@ -584,20 +772,55 @@ public fun ProgressStatusLine(
     closeLabel: String = "",
     onClose: () -> Unit = {},
     testTag: String = "room-progress-line",
+    leadingIcon: String = "",
 ) {
     if (sentence.isEmpty()) return
-    Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag(testTag)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).kitStatusPill().testTag(testTag)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            // A mark before the sentence (FirstImports draws a green check once the work is done).
+            if (leadingIcon.isNotEmpty()) {
+                CentraidIcon(iconKey = leadingIcon, tint = StateColor.Green.text, size = 18.dp)
+                Spacer(Modifier.width(10.dp))
+            }
+            KitText(
                 sentence,
-                style = centraidType("annotLabel"),
-                color = centraidColor(if (refused) "net" else "textSoft"),
+                KitType.Row,
+                if (refused) StateColor.Red.text else Surface.ink,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (actionLabel.isNotEmpty()) OutlineButton(actionLabel, testTag = "$testTag-act", onPress = onAct)
-            if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
+            if (actionLabel.isNotEmpty()) {
+                Text(
+                    actionLabel,
+                    style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                    color = appAccent().text,
+                    modifier = Modifier
+                        .heightIn(min = KitGeometry.ROW_MIN)
+                        .clickable(onClick = onAct)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("$testTag-act")
+                        .semantics { role = Role.Button },
+                )
+            }
+            if (closeLabel.isNotEmpty()) {
+                // THE CLOSE KEY IS A FILLED CIRCLE ON THE BOARDS (FirstImports).
+                Box(
+                    Modifier
+                        .size(KitGeometry.ROW_MIN)
+                        .clip(CircleShape)
+                        .clickable(onClick = onClose)
+                        .testTag("$testTag-close")
+                        .clearAndSetSemantics {
+                            contentDescription = closeLabel
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Surface.fill), contentAlignment = Alignment.Center) {
+                        CentraidIcon(iconKey = "X", tint = Surface.meta, size = 12.dp)
+                    }
+                }
+            }
         }
         if (permille != null) {
             KitProgressBar(
@@ -623,10 +846,15 @@ public fun IconKey(
     enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
+    // A KEY IS A TONAL CIRCLE (#1173): Material 3 Expressive draws elevation as tone, so the key
+    // is the card colour on a hairline, never a shadow.
+    val card = Surface.card
+    val border = Surface.border
+    val ink = if (enabled) Surface.ink else Surface.meta
     Box(
         modifier
             .size(KitGeometry.ROW_MIN)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
+            .clip(CircleShape)
             .clickable(enabled = enabled, onClick = onPress)
             .testTag(testTag)
             .clearAndSetSemantics {
@@ -638,18 +866,48 @@ public fun IconKey(
     ) {
         Box(
             Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .then(
                     if (bordered) {
-                        Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
+                        Modifier.clip(CircleShape).background(card).border(KitGeometry.HAIRLINE, border, CircleShape)
                     } else {
                         Modifier
                     },
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor(if (enabled) "textSoft" else "textDisabled"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = ink, size = 18.dp)
         }
+    }
+}
+
+/**
+ * THE HEADER'S VERB (#1173): the app's create verb ("Plus") is a filled key in the app's accent,
+ * a white glyph on its fill, the one filled element in the header; any other verb (Photos'
+ * Select) is the plain tonal key.
+ */
+@Composable
+internal fun HeaderVerb(action: RoomAction) {
+    if (action.iconKey == "Plus") {
+        val fill = appAccent().fill
+        Box(
+            Modifier
+                .size(KitGeometry.ROW_MIN)
+                .clip(CircleShape)
+                .clickable(onClick = action.onPress)
+                .testTag(action.testTag)
+                .clearAndSetSemantics {
+                    contentDescription = action.label
+                    role = Role.Button
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
+                CentraidIcon(iconKey = action.iconKey, tint = Color.White, size = 18.dp)
+            }
+        }
+    } else {
+        IconKey(action.iconKey, action.label, action.testTag, onPress = action.onPress)
     }
 }
 

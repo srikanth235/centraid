@@ -1131,3 +1131,103 @@ fn a_copy_that_ran_commands_after_the_head_still_takes_its_vault_over() {
         "the head is its vault, row for row, the note written last included"
     );
 }
+
+/// **THE SAME PHONE REPLACES ITS OLDER COPY AND IS NEVER FROZEN** (#1173, item
+/// 22). A phone that holds an older copy of a vault the gateway has a newer head
+/// for restores it: the head is laid down over the copy, the vault is claimed,
+/// and the copy gives way. The "moved to your other phone" freeze is for a real
+/// move to a phone that is not this one, so this phone backs up afterwards.
+#[test]
+fn restoring_onto_a_phone_that_holds_an_older_copy_replaces_it_and_freezes_nothing() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the copy");
+    drain(&old, at_home());
+
+    // The phone restores once and holds the copy.
+    let here = tempfile::tempdir().expect("a directory");
+    let first = restore(here.path(), &gateway);
+    let held = PathBuf::from(&first.vaults[0].path);
+    let backup = tempfile::tempdir().expect("a directory");
+    let older = backup.path().join("vault.db");
+    std::fs::copy(&held, &older).expect("the copy");
+    let older_ledger = centraid_vault::backup::ledger::Ledger::path_for(&older);
+    std::fs::copy(
+        centraid_vault::backup::ledger::Ledger::path_for(&held),
+        &older_ledger,
+    )
+    .expect("the ledger");
+
+    // It goes on, writes and backs up: the gateway holds a newer head.
+    let phone_now = reopen(&held);
+    note(&phone_now, "After", "written after the copy");
+    assert!(drain(&phone_now, at_home()).acked_at_ms.is_some());
+    let newer_rows = rows(&held);
+    drop(phone_now);
+
+    // The older copy comes back over the newer file, as a restored device
+    // backup would put it there.
+    for suffix in ["", "-wal", "-shm"] {
+        let mut gone = held.clone().into_os_string();
+        gone.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(gone));
+    }
+    std::fs::copy(&older, &held).expect("the older copy is back");
+    std::fs::copy(
+        &older_ledger,
+        centraid_vault::backup::ledger::Ledger::path_for(&held),
+    )
+    .expect("its ledger");
+    assert_ne!(rows(&held), newer_rows, "the held copy is the older one");
+
+    let again = restore(here.path(), &gateway);
+    assert_eq!(
+        again.vaults.len(),
+        1,
+        "the held vault is restored: {again:?}"
+    );
+    assert_eq!(PathBuf::from(&again.vaults[0].path), held);
+    assert_eq!(rows(&held), newer_rows, "the older copy was replaced");
+    let phone_after = reopen(&held);
+    assert!(
+        !status(&phone_after).frozen,
+        "the same phone is not told it moved"
+    );
+    note(&phone_after, "Later", "written after the replacement");
+    let next = drain(&phone_after, at_home());
+    assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
+}
+
+/// **A COPY THAT RAN WRITES ITS BACKUP LACKS IS NOT REPLACED** (#1173, item 22). The ruling
+/// replaces an OLDER copy; one this phone has written to since its last backup is the newer, and a
+/// restore over it would lose those writes. It is left as it is and answered as unclaimed, and the
+/// gateway's writer is not moved.
+#[test]
+fn restoring_onto_a_phone_whose_copy_is_newer_than_the_backup_leaves_that_copy_alone() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before");
+    drain(&old, at_home());
+
+    let here = tempfile::tempdir().expect("a directory");
+    let first = restore(here.path(), &gateway);
+    let held = PathBuf::from(&first.vaults[0].path);
+    let epoch = gateway.writer(&vault_id()).0;
+
+    // The phone writes and does not back up.
+    let phone_now = reopen(&held);
+    note(&phone_now, "Unbacked", "written since the last backup");
+    drop(phone_now);
+    let with_the_note = rows(&held);
+
+    let again = restore(here.path(), &gateway);
+    assert!(again.vaults.is_empty(), "nothing was replaced: {again:?}");
+    assert_eq!(again.unclaimed.len(), 1, "{again:?}");
+    assert!(again.unclaimed[0].reason.contains("newer"), "{again:?}");
+    assert_eq!(rows(&held), with_the_note, "the copy kept its writes");
+    assert_eq!(gateway.writer(&vault_id()).0, epoch, "no claim was made");
+}

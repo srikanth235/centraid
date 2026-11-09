@@ -50,19 +50,158 @@ struct Search {
     term: String,
     recent: Vec<String>,
     phase: Phase,
+    /// The one app this search answers for (`health.search`), or none for Home's.
+    scope: Option<&'static str>,
 }
 
-/// The registry factory.
+/// The registry factory for Home's search.
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Search {
-        term: String::new(),
-        recent: Vec::new(),
-        phase: Phase::Resting,
-    }))
+    Some(Box::new(Search::over(None)))
+}
+
+/// The registry factory for Health's search page (#1173, item 11): the same search with the
+/// Health group alone, and the metrics found by name.
+#[must_use]
+pub fn build_health(_route: &wire::Route) -> Option<Box<dyn Screen>> {
+    Some(Box::new(Search::over(Some("health"))))
+}
+
+/// The month a word names (`nov`, `November`), 1 to 12.
+fn month_of(word: &str) -> Option<u32> {
+    const NAMES: [&str; 12] = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ];
+    let word = word.trim_end_matches(['.', ',']).to_lowercase();
+    if word.len() < 3 {
+        return None;
+    }
+    NAMES
+        .iter()
+        .position(|name| name.starts_with(word.as_str()))
+        .and_then(|at| u32::try_from(at + 1).ok())
+}
+
+/// A date a term names, as `(month, day)` with either unknown: `2026-03-04`, `4 March`,
+/// `March 4`, `march`. A workout is found by its date when its local day matches every part
+/// that is known.
+fn date_of(term: &str) -> Option<(Option<u32>, Option<u32>, Option<u32>)> {
+    let words: Vec<&str> = term.split_whitespace().collect();
+    if let [one] = words.as_slice()
+        && let Some((year, rest)) = one.split_once('-')
+        && let Some((month, day)) = rest.split_once('-')
+    {
+        return Some((year.parse().ok(), month.parse().ok(), day.parse().ok()));
+    }
+    let (mut month, mut day, mut year) = (None, None, None);
+    for word in &words {
+        if let Some(m) = month_of(word) {
+            month = Some(m);
+        } else if let Ok(n) = word
+            .trim_end_matches(['.', ',', 's', 't', 'n', 'd', 'r', 'h'])
+            .parse::<u32>()
+        {
+            if n > 31 {
+                year = Some(n);
+            } else {
+                day = Some(n);
+            }
+        } else {
+            return None;
+        }
+    }
+    (month.is_some()).then_some((year, month, day))
+}
+
+/// The workouts whose local day is the date `term` names (Health's page only).
+fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
+    let Some((year, month, day)) = date_of(term) else {
+        return Vec::new();
+    };
+    let Reading::Data(workouts) = read::read(
+        ctx,
+        load::health::Workouts {
+            limit: 200,
+            after: None,
+            kind_concept_id: None,
+        },
+        |answer| match answer {
+            Answer::HealthWorkouts(workouts) => Some(workouts),
+            _ => None,
+        },
+    ) else {
+        return Vec::new();
+    };
+    workouts
+        .workouts
+        .into_iter()
+        .filter(|workout| {
+            let mut parts = workout.local_start.get(..10).unwrap_or_default().split('-');
+            let (y, m, d): (Option<u32>, Option<u32>, Option<u32>) = (
+                parts.next().and_then(|p| p.parse().ok()),
+                parts.next().and_then(|p| p.parse().ok()),
+                parts.next().and_then(|p| p.parse().ok()),
+            );
+            year.is_none_or(|want| Some(want) == y)
+                && month.is_none_or(|want| Some(want) == m)
+                && day.is_none_or(|want| Some(want) == d)
+        })
+        .map(|workout| wire::VaultSearchHit {
+            app_id: "health".to_owned(),
+            entity: "workout".to_owned(),
+            id: workout.activity_id,
+            title: workout.kind_label,
+            ..wire::VaultSearchHit::default()
+        })
+        .collect()
+}
+
+/// The metrics whose name holds every word of `term`, as hits that open that metric.
+fn metric_hits(locale: Locale, term: &str) -> Vec<wire::VaultSearchHit> {
+    let words: Vec<String> = term.split_whitespace().map(str::to_lowercase).collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    crate::health::Metric::ALL
+        .iter()
+        .filter_map(|metric| {
+            let label = crate::health::figures::label(locale, *metric);
+            let folded = label.to_lowercase();
+            words
+                .iter()
+                .all(|word| folded.contains(word.as_str()))
+                .then(|| wire::VaultSearchHit {
+                    app_id: "health".to_owned(),
+                    entity: "metric".to_owned(),
+                    id: metric.key().to_owned(),
+                    title: label,
+                    ..wire::VaultSearchHit::default()
+                })
+        })
+        .collect()
 }
 
 impl Search {
+    fn over(scope: Option<&'static str>) -> Self {
+        Self {
+            term: String::new(),
+            recent: Vec::new(),
+            phase: Phase::Resting,
+            scope,
+        }
+    }
+
     fn asked(&self) -> &str {
         self.term.trim()
     }
@@ -82,7 +221,25 @@ impl Search {
                 _ => None,
             },
         ) {
-            Reading::Data(found) => Phase::Ready(found),
+            Reading::Data(mut found) => {
+                // A metric is found by its name, which no index holds: Health's group lists it
+                // first (it is what the name asks for), then the workouts the index found.
+                let mut hits = metric_hits(ctx.locale(), self.asked());
+                if self.scope.is_some() {
+                    // A workout is also found by its date, which the index does not hold.
+                    for dated in date_hits(ctx, self.asked()) {
+                        if !found.hits.iter().any(|hit| hit.id == dated.id) {
+                            hits.push(dated);
+                        }
+                    }
+                }
+                hits.append(&mut found.hits);
+                found.hits = hits;
+                if let Some(scope) = self.scope {
+                    found.hits.retain(|hit| hit.app_id == scope);
+                }
+                Phase::Ready(found)
+            }
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
@@ -151,7 +308,7 @@ impl Screen for Search {
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HomeSearch(Box::new(
                 wire::HomeSearchState {
-                    chrome: Some(chrome(locale)),
+                    chrome: Some(chrome(locale, self.scope)),
                     term: self.term.clone(),
                     content: Some(content),
                     recent: self.recent.clone(),
@@ -162,10 +319,16 @@ impl Screen for Search {
     }
 }
 
-fn chrome(locale: Locale) -> wire::HomeSearchChrome {
+fn chrome(locale: Locale, scope: Option<&str>) -> wire::HomeSearchChrome {
     wire::HomeSearchChrome {
-        placeholder: words::home_search_placeholder(locale),
-        scope_label: words::home_search_scope_label(locale),
+        placeholder: match scope {
+            Some("health") => words::health_search_placeholder(locale),
+            _ => words::home_search_placeholder(locale),
+        },
+        scope_label: match scope {
+            Some(app) => app_label(locale, app),
+            None => words::home_search_scope_label(locale),
+        },
         cancel: shared::kit_cancel(locale),
         close_label: shared::kit_close_search(locale),
         loading: words::home_search_loading(locale),
@@ -195,6 +358,9 @@ fn kind_label(locale: Locale, entity: &str) -> String {
         "document" => words::search_kind_document(locale),
         "locker_item" => words::search_kind_locker_item(locale),
         "thread" => words::search_kind_chat(locale),
+        "transaction" => words::search_kind_transaction(locale),
+        "workout" => words::search_kind_workout(locale),
+        "metric" => words::search_kind_metric(locale),
         _ => String::new(),
     }
 }
@@ -204,7 +370,7 @@ fn container_kind(locale: Locale, entity: &str, app: &str) -> Option<(String, &'
     Some(match (entity, app) {
         ("notebook", "notes") => (shared::search_kind_notebook(locale), "Book"),
         ("album", "photos") => (shared::search_kind_album(locale), "Image"),
-        ("project", "agenda") => (shared::search_kind_project(locale), "List"),
+        ("project", "reminders") => (shared::search_kind_project(locale), "List"),
         ("folder", "docs") => (shared::search_kind_folder(locale), "Folder"),
         _ => return None,
     })
@@ -221,7 +387,8 @@ fn spoken(parts: &[&str]) -> String {
 
 fn app_label(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::app_agenda(locale),
+        "calendar" => words::app_calendar(locale),
+        "reminders" => words::app_reminders(locale),
         "docs" => words::app_docs(locale),
         "health" => words::app_health(locale),
         "locker" => words::app_locker(locale),
@@ -391,8 +558,8 @@ mod tests {
         let answer = data(vec![
             hit("person", "p1", "Maya", "people"),
             hit("note", "n1", "Cabin list", "notes"),
-            hit("task", "t1", "Book the cabin", "agenda"),
-            hit("event", "e1", "Cabin weekend", "agenda"),
+            hit("task", "t1", "Book the cabin", "reminders"),
+            hit("event", "e1", "Cabin weekend", "calendar"),
             hit("document", "d1", "Lease", "docs"),
         ]);
         let groups: Vec<(&str, u32)> = answer
@@ -402,15 +569,26 @@ mod tests {
             .collect();
         assert_eq!(
             groups,
-            [("docs", 1), ("agenda", 2), ("notes", 1), ("people", 1)]
+            [
+                ("docs", 1),
+                ("calendar", 1),
+                ("reminders", 1),
+                ("notes", 1),
+                ("people", 1)
+            ]
         );
-        let agenda = &answer.groups[1];
-        assert_eq!(agenda.label, "Agenda");
-        assert_eq!(agenda.accessibility_label, "Agenda, 2 results");
+        let calendar = &answer.groups[1];
+        assert_eq!(calendar.label, "Calendar");
+        assert_eq!(calendar.accessibility_label, "Calendar, 1 result");
         assert_eq!(answer.groups[0].accessibility_label, "Docs, 1 result");
-        assert_eq!(agenda.rows[0].kind_label, "Task");
-        assert_eq!(agenda.rows[0].accessibility_label, "Task, Book the cabin");
-        assert_eq!(agenda.rows[1].kind_label, "Event");
+        assert_eq!(calendar.rows[0].kind_label, "Event");
+        let reminders = &answer.groups[2];
+        assert_eq!(reminders.label, "Reminders");
+        assert_eq!(reminders.rows[0].kind_label, "Task");
+        assert_eq!(
+            reminders.rows[0].accessibility_label,
+            "Task, Book the cabin"
+        );
     }
 
     #[test]
@@ -531,5 +709,52 @@ mod tests {
         );
         assert_eq!(app_label(Locale::En, "weather"), "Weather");
         assert_eq!(app_label(Locale::En, ""), "");
+    }
+
+    #[test]
+    fn a_metric_is_found_by_its_name_and_money_and_health_are_groups_of_their_own() {
+        let locale = Locale::En;
+        let metrics = metric_hits(locale, "sleep");
+        assert_eq!(
+            metrics
+                .iter()
+                .map(|m| (m.app_id.as_str(), m.entity.as_str(), m.id.as_str()))
+                .collect::<Vec<_>>(),
+            [("health", "metric", "sleep_min")]
+        );
+        assert!(metric_hits(locale, "zeppelin").is_empty());
+        let mut hits = metrics;
+        hits.push(hit("workout", "w1", "Morning run", "health"));
+        hits.push(hit("transaction", "t1", "Quokka Coffee", "money"));
+        let answer = fold(locale, "run", &found(hits));
+        let groups: Vec<(&str, Vec<(&str, &str)>)> = answer
+            .groups
+            .iter()
+            .map(|group| {
+                (
+                    group.app_id.as_str(),
+                    group
+                        .rows
+                        .iter()
+                        .map(|row| {
+                            (
+                                row.kind_label.as_str(),
+                                row.route.as_ref().map_or("", |r| r.screen.as_str()),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                ("money", vec![("Payment", "money.transaction")]),
+                (
+                    "health",
+                    vec![("Metric", "health.metric"), ("Workout", "health.workout")]
+                ),
+            ]
+        );
     }
 }

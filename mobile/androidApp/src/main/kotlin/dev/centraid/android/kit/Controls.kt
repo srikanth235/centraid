@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -37,8 +38,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -122,10 +125,10 @@ public fun KitChip(
 }
 
 /**
- * A SEGMENTED CONTROL: one of two to four views, in the band plate's grammar
- * (Band.kt) so a view switch and a place switch read as the same family. A
- * `bgElev` plate on a `lineStrong` edge, the held `band` -> `control` pair for
- * the label, and a rule under the lit one. [options] are (key, label) pairs.
+ * A SEGMENTED CONTROL, as the boards draw it (the iOS `KitSegmented`'s twin): a pale track
+ * (`Surface.fill`), the lit segment a card on it in the `row` rung's semibold and the ink, the
+ * others the meta ink in the regular weight. The two weights share a size, so a tap never
+ * reflows the track. [options] are (key, label) pairs; the segments share the whole line.
  */
 @Composable
 public fun KitSegmented(
@@ -134,47 +137,41 @@ public fun KitSegmented(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
+    val track = RoundedCornerShape(12.dp)
+    val chip = RoundedCornerShape(10.dp)
     Row(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(centraidColor("bgElev"))
-            .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), shape)
-            .padding(BandPolicy.BAND_PLATE_PAD.dp)
+            .clip(track)
+            .background(Surface.fill)
+            .padding(3.dp)
             .semantics { role = Role.Tab },
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         options.forEach { (key, label) ->
             val lit = key == selected
-            Column(
+            Box(
                 Modifier
                     .weight(1f)
-                    .heightIn(min = 36.dp)
-                    .bandPress({ onSelect(key) })
-                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                    .heightIn(min = 40.dp)
+                    .clip(chip)
+                    .background(if (lit) Surface.card else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable(onClick = { onSelect(key) })
+                    .padding(horizontal = 6.dp)
                     .testTag("kit-segment-$key")
                     .semantics {
                         role = Role.Tab
                         this.selected = lit
                     },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     label,
-                    // THE HELD PAIR: one rung, two weights, no reflow.
-                    style = centraidType(if (lit) "control" else "band", scales = false),
-                    color = centraidColor(if (lit) "text" else "textSoft"),
+                    style = kitTextStyle(KitType.Row).copy(fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (lit) Surface.ink else Surface.meta,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                )
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .size(width = 20.dp, height = 2.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(if (lit) centraidColor("text") else androidx.compose.ui.graphics.Color.Transparent),
                 )
             }
         }
@@ -290,14 +287,14 @@ public fun KitCheckBox(
 }
 
 /**
- * THE SWITCH'S COLOURS: `accent` when on, a `bgSunken` track with a
+ * THE SWITCH'S COLOURS: the app's colour when on, a `bgSunken` track with a
  * `lineStrong` edge when off. A disabled switch goes to `textDisabled`.
  */
 @Composable
 public fun kitSwitchColors(): SwitchColors = SwitchDefaults.colors(
     checkedThumbColor = centraidColor("onAccent"),
-    checkedTrackColor = centraidColor("accent"),
-    checkedBorderColor = centraidColor("accent"),
+    checkedTrackColor = appAccent().fill,
+    checkedBorderColor = appAccent().fill,
     uncheckedThumbColor = centraidColor("textSoft"),
     uncheckedTrackColor = centraidColor("bgSunken"),
     uncheckedBorderColor = centraidColor("lineStrong"),
@@ -365,13 +362,17 @@ public fun KitProgressBar(
     modifier: Modifier = Modifier,
     ink: String = "accent",
     onStage: Boolean = false,
+    /** A fill that is no token (the chat's download wears the shell's teal), over [ink]. */
+    fill: Color? = null,
+    /** 2dp is the rule of a progress line; a status card's bar (Backup's run) is 6dp. */
+    height: Dp = 2.dp,
 ) {
     val clamped = fraction.coerceIn(0f, 1f)
     val shape = controlRadius("sm")
     Box(
         modifier
             .fillMaxWidth()
-            .height(2.dp)
+            .height(height)
             .clip(shape)
             .background(centraidColor(if (onStage) "onStageSoft" else "bgSunken"))
             .semantics { progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f) },
@@ -380,7 +381,7 @@ public fun KitProgressBar(
             Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(clamped)
-                .background(centraidColor(if (onStage) "onStage" else ink)),
+                .background(fill ?: centraidColor(if (onStage) "onStage" else ink)),
         )
     }
 }
@@ -404,8 +405,17 @@ public fun StageKey(
     /** The label is drawn under the mark (a trashed photograph's Restore and Delete forever). */
     showLabel: Boolean = false,
     destructive: Boolean = false,
+    /** On the light viewer page: the page's ink and the app's text colour, not the stage's. */
+    light: Boolean = false,
 ) {
-    val ink = centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    // A LIT TOGGLE (the favourite) wears the app's colour, never amber: amber only means a state.
+    val ink = if (enabled && on && !destructive) {
+        if (light) appAccent("photos").text else appAccent("photos").tile
+    } else if (light) {
+        if (!enabled) Surface.meta else if (destructive) centraidColor("net") else Surface.ink
+    } else {
+        centraidColor(if (!enabled) "onStageSoft" else if (destructive) "net" else "onStage")
+    }
     Column(
         modifier
             .defaultMinSize(minWidth = KitGeometry.ROW_MIN, minHeight = KitGeometry.ROW_MIN)

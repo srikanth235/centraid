@@ -1,5 +1,6 @@
 #if os(iOS)
 import UIKit
+import UserNotifications
 
 /// THE TWO LAUNCH-TIME DUTIES A SwiftUI `App` CANNOT PERFORM ITSELF (#1080).
 ///
@@ -20,6 +21,9 @@ final class CentraidAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // THE NOTIFICATION CENTRE'S DELEGATE, before launch finishes (#1173): a cold launch from
+        // a notification, or a button pressed while the app was gone, is delivered to it.
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
         BackgroundUploader.shared.reconnect()
         return true
     }

@@ -25,12 +25,16 @@ pub mod editor;
 pub mod fold;
 pub mod history;
 pub mod home;
+pub(crate) mod rich;
+pub mod transfer;
 pub mod trash;
 
 pub const HOME: &str = "notes.home";
 pub const EDITOR: &str = "notes.editor";
 pub const HISTORY: &str = "notes.history";
 pub const TRASH: &str = "notes.trash";
+pub const IMPORT: &str = "notes.import";
+pub const EXPORT: &str = "notes.export";
 
 /// The tab Notes' pages are pushed under.
 pub const TAB: &str = "notes";
@@ -43,6 +47,8 @@ pub fn registry() -> Registry {
         .with(EDITOR, editor::build)
         .with(HISTORY, history::build)
         .with(TRASH, trash::build)
+        .with(IMPORT, transfer::build_import)
+        .with(EXPORT, transfer::build_export)
 }
 
 /// A runtime with Notes' screens and one tab, `notes`, rooted at its home. The
@@ -103,27 +109,71 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HISTORY, HOME, TRASH, wire};
+    use super::{EDITOR, EXPORT, HISTORY, HOME, IMPORT, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }
     }
 
-    /// Agenda's To-do quick add with `title` waiting in it: the "Send to
-    /// Agenda" door. Built as the wire route Agenda's home registers under
-    /// (`agenda.home`), because a screen never names another app's module.
+    /// Reminders' quick add with `title` waiting in it: the "Send to
+    /// Reminders" door. Built as the wire route Reminders' home registers under
+    /// (`reminders.home`), because a screen never names another app's module.
     #[must_use]
-    pub fn send_to_agenda(title: &str) -> wire::Route {
+    pub fn send_to_reminders(title: &str) -> wire::Route {
         route(
-            "agenda.home",
+            "reminders.home",
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: wire::AgendaDestination::Todo as i32,
                 quick_add_title: title.to_owned(),
+                open_quick_add: false,
             }),
         )
+    }
+
+    /// A subject a note is about, opened in its own app: a person, an event, a task or a
+    /// document. An event opens on the day of its first start (`starts`, its card's subtitle). Built as the wire route that app registers under, because a screen never
+    /// names another app's module. None for a kind that has no page of its own.
+    #[must_use]
+    pub fn subject(kind: &str, id: &str, title: &str, starts: &str) -> Option<wire::Route> {
+        let (screen, args) = match kind {
+            "person" => (
+                "people.person",
+                wire::route::Args::PeoplePerson(wire::PeoplePersonRoute {
+                    party_id: id.to_owned(),
+                    name: title.to_owned(),
+                    log_touch: false,
+                }),
+            ),
+            "event" => (
+                "calendar.event",
+                wire::route::Args::AgendaEvent(wire::AgendaEventRoute {
+                    event_id: id.to_owned(),
+                    instance_key: String::new(),
+                    original_start_local: None,
+                    day: starts.get(..10).unwrap_or_default().to_owned(),
+                }),
+            ),
+            "task" => (
+                "reminders.task",
+                wire::route::Args::TodoDetail(wire::TodoDetailRoute {
+                    task_id: id.to_owned(),
+                }),
+            ),
+            "document" => (
+                "docs.document",
+                wire::route::Args::DocsDocument(wire::DocsDocumentRoute {
+                    document_id: id.to_owned(),
+                    title: title.to_owned(),
+                    parent: String::new(),
+                }),
+            ),
+            _ => return None,
+        };
+        Some(route(screen, args))
     }
 
     /// Notes' home on `place`; a notebook id (or `unfiled_only`) filters the
@@ -178,6 +228,18 @@ pub mod routes {
             wire::route::Args::NotesHistory(wire::NotesHistoryRoute {
                 note_id: note_id.to_owned(),
                 note_title: note_title.to_owned(),
+            }),
+        )
+    }
+
+    /// The kit's transfer screen on Notes' Markdown, either way; `back` names the page it was
+    /// pushed from.
+    #[must_use]
+    pub fn transfer(export: bool, back: &str) -> wire::Route {
+        route(
+            if export { EXPORT } else { IMPORT },
+            wire::route::Args::Transfer(wire::TransferRoute {
+                back_label: back.to_owned(),
             }),
         )
     }

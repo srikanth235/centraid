@@ -1,0 +1,25 @@
+# An app root has no back chevron, and a swipe in from its leading edge returns to Home (#1173,
+# iOS: the root's own edge swipe; Android: the system back gesture). Agenda and Photos stand for
+# every app: both draw the same `AppPlace` room.
+#
+# A VAULT-HOLDING INSTALL, as `home.yaml`.
+appId: dev.centraid.Centraid
+name: app-root-edge-swipe
+---
+- launchApp
+- tapOn:
+    id: "home-tile-calendar"
+- assertVisible:
+    id: "calendar-band-calendar"
+- swipe:
+    start: "1%,50%"
+    end: "70%,50%"
+- assertVisible:
+    id: "home-tile-calendar"
+- tapOn:
+    id: "home-tile-photos"
+- swipe:
+    start: "1%,50%"
+    end: "70%,50%"
+- assertVisible:
+    id: "home-tile-photos"

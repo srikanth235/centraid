@@ -80,6 +80,38 @@ fn versions_newest_first_the_current_one_unrestorable_and_restore_is_a_write() {
 }
 
 #[test]
+fn only_the_current_version_says_current_and_none_is_dimmed() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "first words");
+    edit(&d, &id, "second words");
+    edit(&d, &id, "third words");
+    let i = d.push(notes::TAB, routes::history(&id, "Plans"));
+    let versions = rows(d.view(i)).clone();
+    // Exactly one row says "Current", it is the newest, and it is the one with no Restore.
+    let saying_current: Vec<usize> = versions
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.label.contains("Current"))
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(saying_current, [0]);
+    assert_eq!(
+        versions.iter().filter(|row| row.current).count(),
+        1,
+        "one current version"
+    );
+    let without_restore: Vec<usize> = versions
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.restore_label.is_empty())
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(without_restore, [0]);
+    // The older rows are dated, not worded as current.
+    assert!(versions[1..].iter().all(|row| row.label.contains(" · ")));
+}
+
+#[test]
 fn a_note_with_one_version_says_there_is_nothing_earlier() {
     let mut d = driver();
     let id = note(&d, "Once", "only words");

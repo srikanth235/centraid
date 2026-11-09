@@ -21,13 +21,13 @@
 //! it is an instant, and [`purge_in_days`] counts elapsed days to it.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use centraid_vault::time::recurrence::parse_instant_ms;
 use centraid_vault::time::zone::{FireZone, WallTime, wall_iso};
 
 use crate::kind::{TypeFilter, kind_of};
-use crate::queries::{ArmCount, ArmData, DocumentRow, DriveData, ShelfArm};
+use crate::queries::{ArmCount, ArmData, DocumentRow, DriveData, LabelEntry, ShelfArm};
 
 /// "Recently added" is a WINDOW, not a filter: v0's phone drew the fifty
 /// newest-added live documents (`RecentlyChanged.tsx`'s `RECENT_WINDOW`).
@@ -84,6 +84,9 @@ pub struct ShelfData {
     pub folder_counts: BTreeMap<String, usize>,
     /// Every label on a live document, sorted — from the unfiltered set.
     pub labels: Vec<String>,
+    /// The same labels with the colour each wears, in the same order: the label
+    /// chips' dots.
+    pub label_entries: Vec<LabelEntry>,
     pub all_count: usize,
     pub unfiled_count: usize,
     pub starred_count: usize,
@@ -118,11 +121,10 @@ pub fn shelve(
             *count += 1;
         }
     }
-    let labels: Vec<String> = live
+    let label_entries = label_entries_of(live.iter().copied());
+    let labels: Vec<String> = label_entries
         .iter()
-        .flat_map(|row| row.tags.iter().map(|tag| tag.label.clone()))
-        .collect::<BTreeSet<String>>()
-        .into_iter()
+        .map(|entry| entry.label.clone())
         .collect();
 
     let mut documents: Vec<DocumentRow> = match &view.shelf {
@@ -175,11 +177,26 @@ pub fn shelve(
         documents,
         folder_counts,
         labels,
+        label_entries,
         all_count: live.len(),
         unfiled_count: live.iter().filter(|row| row.folder_id.is_none()).count(),
         starred_count: live.iter().filter(|row| row.starred).count(),
         trash_count: drive.documents.len() - live.len(),
     }
+}
+
+/// One entry per label wearing a live document, sorted by label (the first
+/// colour seen wins: a label has one colour in the vault).
+fn label_entries_of<'a>(rows: impl Iterator<Item = &'a DocumentRow>) -> Vec<LabelEntry> {
+    dedup_labels(rows.flat_map(|row| row.tags.iter().cloned()).collect())
+}
+
+fn dedup_labels(entries: Vec<LabelEntry>) -> Vec<LabelEntry> {
+    let mut by_label: BTreeMap<String, LabelEntry> = BTreeMap::new();
+    for entry in entries {
+        by_label.entry(entry.label.clone()).or_insert(entry);
+    }
+    by_label.into_values().collect()
 }
 
 /// What the three own-read shelves add to a truncated drive (Q-1047-7).
@@ -246,13 +263,13 @@ pub fn shelve_with_arms(
         };
         let cut = shelve(&own_drive, view, zone, today, now_ms);
         shelf.documents = cut.documents;
+        let mut entries = shelf.label_entries.clone();
+        entries.extend(cut.label_entries);
+        shelf.label_entries = dedup_labels(entries);
         shelf.labels = shelf
-            .labels
+            .label_entries
             .iter()
-            .chain(&cut.labels)
-            .cloned()
-            .collect::<BTreeSet<String>>()
-            .into_iter()
+            .map(|entry| entry.label.clone())
             .collect();
     }
     if let Some(count) = arms.starred {

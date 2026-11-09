@@ -58,12 +58,14 @@
          (`screens/people/ContactsImporter.kt`). Read once, written into the
          member's vault as their own people; nothing is synced back. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <!-- Calendar, for Agenda's one-tap import only: asked for when the member taps
+    <!-- Calendar, for Agenda's calendar follow: asked for when the member taps
          "Import calendar" on Agenda's day one, never at launch
-         (`screens/agenda/CalendarImporter.kt`). The window's occurrences are
-         read once and written into the member's vault as their own events;
-         nothing is synced back. -->
+         (`screens/agenda/CalendarImporter.kt`). Read access brings the phone's
+         events in; write access (the same permission group, so one prompt) lets
+         the core send the member's own changes back to the calendars they
+         follow (`screens/agenda/CalendarWriter.kt`). -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
          Connect page and for exactly the types chosen there, never at launch
@@ -101,6 +103,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- AGENDA'S REMINDERS AND ALERTS (#1173; `notify/Notify.kt`). POST_NOTIFICATIONS
+         above is asked for at the first reminder that would fire (never at launch).
+         SCHEDULE_EXACT_ALARM and NOT USE_EXACT_ALARM: Play restricts USE_EXACT_ALARM to
+         apps whose core function is an alarm clock or a calendar, and Centraid is a
+         vault whose Agenda is one app among many, so claiming it risks the listing.
+         SCHEDULE_EXACT_ALARM is a user-revocable grant (on by default on 31 and 32, off
+         on 33 and up); when it is not held the reminder is set inexact, a few minutes
+         late at worst, and the member is never sent to settings for it. The boot
+         receiver re-arms every alarm a reboot cleared. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- WHAT HEALTH ASKS THE PACKAGE MANAGER ABOUT (#1129): Health Connect
          itself (Android 9 to 13, where it is an app), and the apps that write
          to it — each declares one of the two rationale intents below — so a
@@ -121,7 +135,9 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/full_backup_content"
+        android:icon="@mipmap/ic_launcher"
         android:label="Centraid"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Centraid"
         android:usesCleartextTraffic="false">
@@ -133,7 +149,49 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcut
+                 sends `dev.centraid.action.ADD_REMINDER` and a widget's rows, body and button send
+                 `dev.centraid.action.AGENDA_OPEN` with one opaque key, both aimed at this activity,
+                 which hands them to the core (`glance/AgendaIntents.kt`). There is no filter for
+                 them, but the activity is exported, so ANY app may send either: nothing here is
+                 trusted. The core opens only a page the snapshot's own table names for that key,
+                 and Agenda's home for any other, and an add writes nothing until the member taps
+                 Add. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- AGENDA'S TWO HOME-SCREEN WIDGETS (#1173). Framework providers over RemoteViews
+             (`glance/`): they draw the one snapshot file Rust's `agenda.glance` service keeps
+             (`filesDir/agenda-glance.json`) and never open the vault. Exported because the launcher
+             binds a widget's provider; the only broadcasts they act on are the platform's update and
+             the app's own redraw request, and both only redraw what is already on disk. The label
+             and the description come from the generated strings, which the launcher reads before any
+             code runs. Privacy ruling: titles never show on a locked phone, so both providers are
+             `home_screen` only (never `keyguard`) and the app adds no lock-screen surface. -->
+        <receiver
+            android:name="dev.centraid.android.glance.UpNextWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_up_next_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_up_next_info" />
+        </receiver>
+        <receiver
+            android:name="dev.centraid.android.glance.RemindersWidget"
+            android:exported="true"
+            android:label="@string/glance_widget_reminders_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_reminders_info" />
+        </receiver>
 
         <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
              shows an app's permissions only when it declares where its
@@ -171,6 +229,27 @@
             android:name="dev.centraid.android.backup.BackupForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- AGENDA'S NOTIFICATIONS (#1173). None is exported. The boot receiver hears
+             the system's own broadcasts (reboot, a new time or zone, this app updated,
+             the exact-alarm grant changing) and re-arms every recorded alarm. -->
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyActionReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="dev.centraid.android.notify.NotifyBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- "Send a copy" (#816): the copies `PhotoHandOff` writes, and
              nothing else. Not exported; a receiving app reads one copy

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
+// THE FOUR READ SHAPES, DRAWN ONCE (K5; product-intuition/references/design-behaviour.md § Rooms).
 //
 // The room owns the empty, loading and error states; the app supplies the
 // words. A screen that draws its own spinner, its own failure lines or its own
@@ -95,7 +95,7 @@ struct RowSkeleton: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .frame(minHeight: meta ? 56 : CentraidGeometry.targetMinCoarse)
                 Rectangle()
-                    .fill(Theme.color("line", scheme))
+                    .fill(Surface.line)
                     .frame(height: CentraidGeometry.hairline)
                     .padding(.leading, CentraidGeometry.pageMargin)
             }
@@ -130,12 +130,12 @@ struct FailureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(sentence)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.row)
+                .foregroundStyle(Surface.ink)
             if !remedy.isEmpty {
                 Text(remedy)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
             if let onRetry {
                 KitOutlineButton(label: retryLabel, action: onRetry)
@@ -160,7 +160,7 @@ struct ScreenFailureView: View {
     }
 }
 
-/// NOTHING HERE, AND WHY — one sentence and at most one action (DESIGN.md
+/// NOTHING HERE, AND WHY — one sentence and at most one action (product-intuition/references/design-behaviour.md § Wording
 /// copy table). The strings are finished in the machine; the action is the
 /// screen's own event, so the view takes a closure.
 struct EmptyStateView: View {
@@ -187,26 +187,40 @@ struct EmptyStateView: View {
         self.init(empty, onAction: onAction)
     }
 
+    @Environment(\.appAccent) private var accent
+
+    /// THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
+    /// colour, the one sentence, the reason, and at most one action as the app's pill.
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
+            if let glyph = empty.iconKey.isEmpty ? CentraidCatalog.byID[accent.appId]?.iconKey : empty.iconKey {
+                CentraidIconView(iconKey: glyph, tint: accent.text, size: 22)
+                    .frame(width: 52, height: 52)
+                    .background(accent.wash(dark: scheme == .dark), in: Circle())
+                    .padding(.bottom, 4)
+                    .accessibilityHidden(true)
+            }
             Text(empty.headline)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
                 .multilineTextAlignment(.center)
             if !empty.body.isEmpty {
                 Text(empty.body)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
                     .multilineTextAlignment(.center)
             }
             if !empty.actionLabel.isEmpty, let onAction {
-                KitOutlineButton(label: empty.actionLabel, action: onAction)
+                KitPillButton(label: empty.actionLabel, action: onAction)
                     .accessibilityIdentifier(actionIdentifier)
-                    .padding(.top, 4)
+                    .padding(.top, 6)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
+        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .kitCard()
+        .padding(.vertical, 12)
         .padding(.horizontal, CentraidGeometry.pageMargin)
         // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands
         // `kit-empty` down to the import and action buttons, over their own.
@@ -248,6 +262,7 @@ struct SearchAskRow: View {
     var inset: Bool = true
 
     @Environment(\.askChat) private var askChat
+    @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -256,12 +271,24 @@ struct SearchAskRow: View {
                 onAsk?()
                 press()
             } label: {
-                Text(ask.label)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("link", scheme))
-                    .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                    .contentShape(Rectangle())
+                // THE BOARD'S ASK ROW (Search): a pale round mark with the sparkle, the words in
+                // semibold, a chevron at the trailing edge.
+                HStack(spacing: 12) {
+                    CentraidIconView(iconKey: "Sparkle", tint: accent.text, size: 16)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(accent.tint ?? accent.wash(dark: scheme == .dark)))
+                        .accessibilityHidden(true)
+                    Text(ask.label)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(accent.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 14)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, inset ? CentraidGeometry.pageMargin : 0)
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search-ask-about")
@@ -294,13 +321,13 @@ struct DeniedGate: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(denied.title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
             if !denied.body.isEmpty {
                 Text(denied.body)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
             }
             if !denied.receipt.isEmpty {
                 Text(denied.receipt)
@@ -341,6 +368,8 @@ struct KitOutlineButton: View {
     @Environment(\.isEnabled) private var enabled
     /// Set by the nearest `KitChoiceStack`: the stack's width, not the label's.
     @Environment(\.inChoiceStack) private var stacked
+    /// Set by a `KitChoiceRow`: the keys share one line, so the label gets the room.
+    @Environment(\.inChoiceRow) private var inRow
 
     var body: some View {
         let ink = enabled ? tone : "textDisabled"
@@ -350,15 +379,21 @@ struct KitOutlineButton: View {
                     CentraidIconView(iconKey: iconKey, tint: Theme.color(ink, scheme), size: 16)
                 }
                 Text(label)
-                    .centraidType("smallStrong")
+                    .kitType(.row)
+                    .fontWeight(.semibold)
                     .foregroundStyle(Theme.color(ink, scheme))
+                    .lineLimit(inRow ? 1 : nil)
+                    .minimumScaleFactor(inRow ? 0.8 : 1)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, inRow ? 8 : 16)
             .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a `KitChoiceRow` the
+            // outline sits on a card fill, so the three read as keys on the page.
+            .background(inRow ? Surface.card : Color.clear, in: Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                Capsule()
                     .strokeBorder(
-                        Theme.color(enabled ? (tone == "text" ? "lineStrong" : tone) : "textDisabled", scheme),
+                        enabled ? (tone == "text" ? Surface.border : StateColor.red.text) : Surface.fill,
                         lineWidth: CentraidGeometry.hairline
                     )
             )
@@ -379,6 +414,34 @@ extension EnvironmentValues {
     var inChoiceStack: Bool {
         get { self[InChoiceStackKey.self] }
         set { self[InChoiceStackKey.self] = newValue }
+    }
+}
+
+private struct InChoiceRowKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True inside a `KitChoiceRow`, where the outline buttons share one line.
+    var inChoiceRow: Bool {
+        get { self[InChoiceRowKey.self] }
+        set { self[InChoiceRowKey.self] = newValue }
+    }
+}
+
+/// A SHORT SET OF ACTIONS ON ONE LINE (#1173): the event page's Open in Maps, Edit and Cancel.
+/// Every button takes an equal share of the width, in the stack's full-width look, with 10
+/// between them.
+struct KitChoiceRow<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 10) {
+            content()
+        }
+        .frame(maxWidth: .infinity)
+        .environment(\.inChoiceStack, true)
+        .environment(\.inChoiceRow, true)
     }
 }
 

@@ -14,16 +14,16 @@ import UIKit
 /// band still at the foot, and a card pushes the real row's route onto the
 /// shell's stack, so back returns here.
 ///
-/// **THE HEADER IS THE CHAT'S OWN** (R-CHAT-2): the drawer's control on the
-/// left, the open chat's title with the vault beside it in the middle, and a
-/// menu on the right (New chat, Rename, Delete). It replaces the vault lockup
-/// this tab used to stack above a "Chat" title — the vault is named on the second
-/// line, and switching it is Home's.
+/// **THE HEADER IS THE CHAT'S OWN** (R-CHAT-2): the open chat's title with the
+/// vault beside it, the Chats key at the trailing edge and, only inside a chat
+/// already begun, New chat's pencil beside it. The tab opens to a ready new
+/// conversation. It replaces the vault lockup this tab used to stack above a
+/// "Chat" title — the vault is named on the second line, and switching it is Home's.
 ///
-/// **THE DRAWER** slides in from the left over the thread and the composer and
-/// stops short of the band, so Home is always one press away and the Chat tab
-/// pressed again only shuts it. Past chats are newest first with how long ago;
-/// the open one is marked; a swipe reveals Delete, which asks first.
+/// **THE CHATS PAGE** is a page of its own, a chevron back to the chat, drawn in
+/// place of the thread and the composer with no band under it (so nothing overlaps
+/// it). Past chats are newest first with how long ago; the open one is marked; a swipe
+/// reveals Delete, which asks first; search is the foot's key, as in every app.
 ///
 /// **ONE FILLED INK ELEMENT.** The composer's Send (Stop while a turn runs) is
 /// the only one. Everything else is ink over paper: outlined actions, raised
@@ -52,6 +52,9 @@ struct ChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft = ""
     @FocusState private var focused: Bool
+    /// The on-screen keyboard is up. Focus alone is not enough: with a hardware
+    /// keyboard the field has focus and no keyboard shows, so the band stays.
+    @State private var keyboardUp = false
     /// A chat the member is renaming, with the name being typed.
     @State private var renaming = false
     @State private var renameText = ""
@@ -75,7 +78,7 @@ struct ChatView: View {
                 ChatHeader(
                     state: state,
                     onBack: onBack,
-                    onDrawer: {
+                    onChats: {
                         focused = false
                         chat.toggleDrawer(true)
                     },
@@ -100,17 +103,13 @@ struct ChatView: View {
                     Spacer(minLength: 0)
                 }
             }
-            // Behind the drawer the chat is not there for a screen reader.
+            // Behind the Chats page the chat is not there for a screen reader.
             .accessibilityHidden(state.drawerOpen)
 
             if state.drawerOpen {
-                ChatDrawer(
+                ChatsPage(
                     state: state,
-                    onClose: { chat.toggleDrawer(false) },
-                    onNewChat: {
-                        draft = ""
-                        chat.newChat()
-                    },
+                    onBack: { chat.toggleDrawer(false) },
                     onOpen: { chat.openThread($0.threadID, title: $0.title) },
                     onDelete: { deleting = DeleteTarget(id: $0.threadID, title: $0.title) },
                     onDeleteAll: { deletingAll = true },
@@ -118,13 +117,22 @@ struct ChatView: View {
                     onSearchTerm: { chat.drawerSearch($0) },
                     onSearchClose: { chat.closeDrawerSearch() }
                 )
-                .transition(reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
                 .zIndex(1)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .animation(reduceMotion ? nil : ChatMotion.entry, value: state.drawerOpen)
-        .onChange(of: focused) { _, now in typing = now }
+        // THE BAND STEPS ASIDE while the on-screen keyboard is up and while the Chats page is up.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardUp = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardUp = false
+        }
+        .onChange(of: keyboardUp) { _, up in typing = (up && focused) || state.drawerOpen }
+        .onChange(of: focused) { _, now in typing = (now && keyboardUp) || state.drawerOpen }
+        .onChange(of: state.drawerOpen) { _, open in typing = (focused && keyboardUp) || open }
         .onDisappear { typing = false }
         .accessibilityIdentifier("chat")
         // A RENAME IS A SHEET HOLDING THE FIELD, Save its one ink button.
@@ -284,6 +292,18 @@ struct ChatView: View {
                     .transition(.opacity)
                     .accessibilityIdentifier("chat-activity")
             }
+            // THE NEXT QUESTIONS, as chips above the composer in a live thread (#1173): the
+            // empty thread lists them in the page itself. A tap asks, like any sent line.
+            if !state.messages.isEmpty, !state.suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(state.suggestions.enumerated()), id: \.offset) { index, text in
+                            ChatSuggestionChip(text: text, identifier: "chat-suggestion-\(index)") { send(text) }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("chat-suggestion-chips")
+            }
             ChatComposerCard(
                 chat: chat,
                 state: state,
@@ -323,9 +343,37 @@ struct ChatView: View {
     }
 }
 
+// MARK: - Suggestion chips
+
+/// A NEXT QUESTION, small: the board's pill in the meta size (13 on the board), white with the
+/// strong hairline, 7 over 12 of padding, sitting just above the composer.
+private struct ChatSuggestionChip: View {
+    let text: String
+    let identifier: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: action) {
+            Text(verbatim: text)
+                .font(.system(size: CentraidScale.metaSize))
+                .foregroundStyle(Theme.color("text", scheme))
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(Theme.color("bgElev", scheme)))
+                .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 // MARK: - Motion
 
-/// DESIGN.md invariant 5, lowered for this screen: entry at 280 ms on the entry
+/// design/tokens.toml (motion), lowered for this screen: entry at 280 ms on the entry
 /// curve, a state change at 140 ms. Reduced motion drops both at the call site.
 enum ChatMotion {
     static let entry = Animation.timingCurve(0.2, 0.7, 0.2, 1, duration: 0.28)
@@ -340,38 +388,32 @@ private struct DeleteTarget: Identifiable {
     let title: String
 }
 
-/// THE CHAT'S HEADER: the drawer's control on the left, the open chat's title
-/// and where it runs in the middle, and a menu on the right. Ink on paper and
+/// THE CHAT'S HEADER: the open chat's title and where it runs in the middle, the
+/// Chats key and, inside a chat begun, New chat at the trailing edge. Ink on paper and
 /// outlined, never filled: the composer's Send is this screen's one filled
 /// element.
 private struct ChatHeader: View {
     let state: Centraid_Core_V1_ChatState
     let onBack: (() -> Void)?
-    let onDrawer: () -> Void
+    let onChats: () -> Void
     let onNewChat: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    private var hasMenu: Bool { state.canNewChat || state.canManageThread }
-
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
+        // THE BOARD'S HEADER (Chat.dc.html): the title and the vault line, round glass keys at the
+        // trailing edge, and no rule under it. Rename and Delete are a long press on the title.
+        HStack(alignment: .center, spacing: 10) {
             if let onBack {
                 KitIconKey(
                     iconKey: "ChevronLeft",
                     label: state.closeLabel,
+                    glass: true,
                     identifier: "chat-back",
                     action: onBack
                 )
             }
-            KitIconKey(
-                iconKey: "Menu",
-                label: state.drawerLabel,
-                identifier: "chat-drawer",
-                action: onDrawer
-            )
-
             VStack(alignment: .center, spacing: 0) {
                 Text(verbatim: state.title)
                     .centraidType("smallStrong")
@@ -380,138 +422,100 @@ private struct ChatHeader: View {
                     .truncationMode(.tail)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("chat-title")
-                Text(verbatim: state.subtitle)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .accessibilityIdentifier("chat-subtitle")
+                // THE ASSISTANT'S AVATAR is the bare app mark (#1173), small, before the line.
+                HStack(spacing: 5) {
+                    CentraidMark(size: 16)
+                    Text(verbatim: state.subtitle)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .accessibilityIdentifier("chat-subtitle")
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
-
-            Menu {
-                if state.canNewChat {
-                    Button(state.newChatLabel, action: onNewChat)
-                        .accessibilityIdentifier("chat-menu-new")
-                }
+            .contextMenu {
                 if state.canManageThread {
                     Button(state.renameLabel, action: onRename)
                         .accessibilityIdentifier("chat-menu-rename")
                     Button(state.deleteLabel, role: .destructive, action: onDelete)
                         .accessibilityIdentifier("chat-menu-delete")
                 }
-            } label: {
-                // THE MENU WEARS THE ICON KEY'S FACE: a Menu's label cannot be
-                // a Button, so the 44 target and the disabled ink are stated
-                // here exactly as `KitIconKey` states them.
-                CentraidIconView(
-                    iconKey: "MoreVert",
-                    tint: Theme.color(hasMenu ? "text" : "textDisabled", scheme),
-                    size: 18
-                )
-                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                .contentShape(Rectangle())
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .disabled(!hasMenu)
-            .accessibilityLabel(state.menuLabel)
-            .accessibilityIdentifier("chat-menu")
+
+            // CHATS, then NEW CHAT only inside a chat already begun: a fresh conversation has
+            // nothing to start over from.
+            KitIconKey(
+                iconKey: "History",
+                label: state.drawerLabel,
+                glass: true,
+                identifier: "chat-chats",
+                action: onChats
+            )
+            if state.canNewChat {
+                KitIconKey(
+                    iconKey: "PenLine",
+                    label: state.newChatLabel,
+                    glass: true,
+                    identifier: "chat-new",
+                    action: onNewChat
+                )
+            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin - 8)
         .padding(.top, 8)
         .padding(.bottom, 4)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Theme.color("line", scheme))
-                .frame(height: CentraidGeometry.hairline)
-        }
     }
 }
 
-// MARK: - The drawer
+// MARK: - The Chats page
 
-/// THE PAST CHATS, sliding in from the left over the thread.
-///
-/// Width is the lesser of 320 and 84% of the screen, so a sliver of the chat
-/// stays to tap away to; the scrim is the system's own `scrim` role. The new-chat
-/// row is outlined, the open chat is marked by an ink rule and a sunken ground,
-/// and Delete is a swipe away and asks first. Entry is the 280 ms curve, which
-/// the caller's transition and animation own and reduced motion replaces with a
-/// fade.
-private struct ChatDrawer: View {
+/// THE PAST CHATS, a page of their own over the thread: a chevron back to the chat, the list
+/// newest first, and the search key at the foot where every app keeps it. No band is drawn
+/// under it, so nothing overlaps; the open chat is marked by an ink rule and a sunken ground,
+/// and Delete is a swipe away and asks first.
+private struct ChatsPage: View {
     let state: Centraid_Core_V1_ChatState
-    let onClose: () -> Void
-    let onNewChat: () -> Void
+    let onBack: () -> Void
     let onOpen: (Centraid_Core_V1_ChatThreadItem) -> Void
     let onDelete: (Centraid_Core_V1_ChatThreadItem) -> Void
     let onDeleteAll: () -> Void
-    /// The drawer's search (#1097): the opener, the field's terms, its close.
     let onSearchOpen: () -> Void
     let onSearchTerm: (String) -> Void
     let onSearchClose: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = min(320, proxy.size.width * 0.84)
-            ZStack(alignment: .leading) {
-                Theme.color("scrim", scheme)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onClose)
-                    .accessibilityHidden(true)
-                panel(width: width)
-            }
-        }
-    }
-
-    private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(verbatim: state.drawerLabel)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-                .accessibilityAddTraits(.isHeader)
-
-            KitOutlineButton(label: state.newChatLabel, iconKey: "Plus", action: onNewChat)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-                .accessibilityIdentifier("chat-drawer-new")
-
-            // THE SHARED SEARCH FIELD, above the list and not in it: the line
-            // that says what was corrected lives inside the field, so rows that
-            // arrive below it never move what the member is reading (#1097).
-            Group {
-                if state.drawerSearch.open {
-                    CentraidSearchField(
-                        field: state.drawerSearch.kitField,
-                        placeholder: state.drawerSearchPlaceholder,
-                        identifier: "chat-drawer-search",
-                        onTerm: onSearchTerm,
-                        onClose: onSearchClose
-                    )
-                } else {
-                    SearchOpener(
-                        placeholder: state.drawerSearchPlaceholder,
-                        identifier: "chat-drawer-search-open",
-                        onOpen: onSearchOpen
-                    )
-                }
+            HStack(spacing: 10) {
+                KitIconKey(
+                    iconKey: "ChevronLeft",
+                    label: state.closeLabel,
+                    glass: true,
+                    identifier: "chat-chats-back",
+                    action: onBack
+                )
+                // THE TITLE IS IN THE TOP ROW beside the chevron (#1173, round 9).
+                Text(state.drawerLabel)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("kit-header-title")
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, CentraidGeometry.pageMargin - 8)
+            .padding(.top, 8)
             .padding(.bottom, 8)
 
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .padding(.horizontal, 16)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 8)
-                    .accessibilityIdentifier("chat-drawer-empty")
+                    .accessibilityIdentifier("chat-chats-empty")
                 Spacer(minLength: 0)
             } else {
                 List {
@@ -537,43 +541,45 @@ private struct ChatDrawer: View {
                             .accessibilityAction(named: state.deleteLabel) { onDelete(row) }
                             .accessibilityIdentifier("chat-thread-row")
                     }
+                    if state.canDeleteAll {
+                        Button(action: onDeleteAll) {
+                            Text(verbatim: state.deleteAllLabel)
+                                .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                                .foregroundStyle(StateColor.red.text)
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("chat-chats-delete-all")
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .accessibilityIdentifier("chat-drawer-list")
-
-                if state.canDeleteAll {
-                    Button(action: onDeleteAll) {
-                        Text(verbatim: state.deleteAllLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("net", scheme))
-                            .padding(.horizontal, 12)
-                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(Theme.color("line", scheme))
-                            .frame(height: CentraidGeometry.hairline)
-                    }
-                    .accessibilityIdentifier("chat-drawer-delete-all")
-                }
+                .accessibilityIdentifier("chat-chats-list")
             }
         }
-        .frame(width: width, alignment: .leading)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .top))
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Theme.color("line", scheme))
-                .frame(width: CentraidGeometry.hairline)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Surface.plainPage.ignoresSafeArea())
+        // THE SEARCH KEY AT THE FOOT, as a pushed page keeps it: the field takes its place.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SearchFoot(
+                search: SearchSlot(
+                    field: state.drawerSearch.kitField,
+                    placeholder: state.drawerSearchPlaceholder,
+                    onOpen: onSearchOpen,
+                    onTerm: onSearchTerm,
+                    onClose: onSearchClose
+                ),
+                identifier: "chat-chats-search"
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .accessibilityIdentifier("chat-drawer-panel")
+        .accessibilityIdentifier("chat-chats-page")
     }
 }
 
@@ -582,33 +588,32 @@ private struct ChatDrawer: View {
 private struct ChatThreadRow: View {
     let row: Centraid_Core_V1_ChatThreadItem
     let currentLabel: String
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(row.current ? Theme.color("text", scheme) : Color.clear)
+                .fill(row.current ? Surface.ink : Color.clear)
                 .frame(width: 2)
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: row.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                    .foregroundStyle(Surface.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 if !row.ago.isEmpty {
                     Text(verbatim: row.ago)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
         }
-        .background(row.current ? Theme.color("bgSunken", scheme) : Color.clear)
+        .background(row.current ? Surface.fill : Color.clear)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
         }
     }
@@ -686,16 +691,15 @@ private struct ChatMessageRow: View {
                     }
                     Text(verbatim: message.text)
                         .chatType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        // THE MEMBER'S WORDS ARE AN INK PILL (#1173): ink fill, the page's colour as text.
+                        // In the dark it is the raised grey of the border role with white text, not the
+                        // light ink inverted (ChatDark.dc.html).
+                        .foregroundStyle(scheme == .dark ? Color.white : Color(CentraidAsset.surfacePage))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                                .fill(Theme.color("bgElev", scheme))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                            RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 1.25, style: .continuous)
+                                .fill(Color(scheme == .dark ? CentraidAsset.surfaceBorder : CentraidAsset.textInk))
                         )
                 }
                 .accessibilityElement(children: .ignore)
@@ -704,7 +708,9 @@ private struct ChatMessageRow: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                if !message.text.isEmpty {
+                // A PROPOSED WRITE IS TOLD BY ITS CARD: the board draws no sentence over it, and the
+                // sentence ("Proposed: …") says what the card's rows say.
+                if !message.text.isEmpty, !(message.hasPending && !message.streaming) {
                     // THE ANSWER'S MARKDOWN as styling, never as its markers.
                     ChatMarkdownText(
                         text: message.text,
@@ -747,25 +753,30 @@ private struct ChatMessageRow: View {
         }
     }
 
+    /// COPY AND TRY AGAIN, QUIET: the board's thread draws no buttons under an answer, so these are
+    /// two small icon keys in the faint ink (the words are their spoken labels), 44 to press.
     private var actions: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             if !message.text.isEmpty {
-                ChatActionButton(
-                    iconKey: "Copy",
+                KitIconKey(
+                    iconKey: copied ? "Check" : "Copy",
                     label: copied ? copiedLabel : state.copyLabel,
+                    tint: "textFaint",
                     identifier: "chat-copy",
                     action: onCopy
                 )
             }
             if isLast, state.canRetry {
-                ChatActionButton(
+                KitIconKey(
                     iconKey: "Refresh",
                     label: state.retryLabel,
+                    tint: "textFaint",
                     identifier: "chat-retry",
                     action: onRetry
                 )
             }
         }
+        .padding(.leading, -12)
     }
 
     private var copiedLabel: String { state.copiedLabel }
@@ -805,9 +816,10 @@ private struct ChatErrorLine: View {
 
 // MARK: - Result cards
 
-/// ONE ROW THE ANSWER FOUND, drawn compactly: the app's mark, the row's title,
-/// its subtitle and meta, and the trailing arrow that says it opens. Raised
-/// paper, darker than the page in light; the app's hue lives in the mark alone.
+/// ONE ROW THE ANSWER FOUND (#1173), drawn in the colour of the app it is from: a white
+/// card with a bar down its left edge in that app's colour, the row's title in ink, its
+/// subtitle and meta under it, and the app's name in the app's colour at the right. Anything
+/// shown from another app uses that app's colour.
 private struct ChatCardRow: View {
     let card: Centraid_Core_V1_ChatCard
     let state: Centraid_Core_V1_ChatState
@@ -816,6 +828,11 @@ private struct ChatCardRow: View {
 
     private var appName: String { state.scopes.first { $0.app == card.app }?.name ?? "" }
 
+    /// The first letters of the first two words of a name.
+    private static func initials(_ name: String) -> String {
+        String(name.split(separator: " ").prefix(2).compactMap(\.first)).uppercased()
+    }
+
     private var spoken: String {
         [card.title, card.subtitle, card.meta, appName].filter { !$0.isEmpty }.joined(separator: ", ")
     }
@@ -823,40 +840,59 @@ private struct ChatCardRow: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
-                AppMark(appID: card.app, size: 32)
-                VStack(alignment: .leading, spacing: 0) {
+                if card.app == "people" {
+                    // A PERSON WEARS INITIALS, as the board's card does, in the app's colour.
+                    Text(verbatim: Self.initials(card.title))
+                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .foregroundStyle(AppAccent(card.app).text)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(AppAccent(card.app).fill.opacity(0.16)))
+                        .accessibilityHidden(true)
+                } else {
+                    Capsule()
+                        .fill(AppAccent(card.app).fill)
+                        .frame(width: 4)
+                        .padding(.vertical, 2)
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: card.title)
-                        .chatType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                        .foregroundStyle(Color(CentraidAsset.textInk))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !card.subtitle.isEmpty {
                         Text(verbatim: card.subtitle)
-                            .chatType("mono")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
                     if !card.meta.isEmpty {
                         Text(verbatim: card.meta)
-                            .chatType("mono")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 16)
+                if !appName.isEmpty {
+                    Text(verbatim: appName)
+                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .foregroundStyle(AppAccent(card.app).text)
+                        .lineLimit(1)
+                }
             }
-            .padding(12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .fill(Theme.color("bgElev", scheme))
+                RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                    .fill(Color(CentraidAsset.surfaceCard))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                    .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
+                RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                    .strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: CentraidGeometry.hairline)
             )
-            .contentShape(RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+            .contentShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         }
         .buttonStyle(ChatCardPress())
         .accessibilityElement(children: .ignore)
@@ -879,12 +915,14 @@ private struct ChatCardPress: ButtonStyle {
 
 // MARK: - A proposed write
 
-/// A WRITE THE MODEL PROPOSED, as the confirm card under its answer: one line
-/// for each row it changes, in the core's words, then Confirm and Cancel; once
-/// answered, the one clause that says how it ended. Nothing the model wrote
-/// reaches the vault before Confirm. Both buttons are outlined (Send is the
-/// screen's one filled element), and a card that asks twice outlines Confirm in
-/// `net`. There is no toast and no Undo: an applied card says "Done." and stays.
+/// A WRITE THE MODEL PROPOSED (#1173), as the "Proposed change" card under its answer: a badge,
+/// one line for each row it changes in the core's words, then the way to say yes and "Not now";
+/// once answered, the one clause that says how it ended. The card wears the colour of the app
+/// whose row it changes (`pending.app`; the shell's teal when it spans apps). NOTHING the model
+/// wrote reaches the vault before the member confirms: Rust holds the write until
+/// `PendingConfirmed`, and this card only sends the event. A card that asks twice draws its
+/// confirm in the red state colour. There is no toast and no Undo: an applied card says "Done."
+/// and stays.
 private struct ChatPendingCard: View {
     let pending: Centraid_Core_V1_ChatPending
     let onConfirm: () -> Void
@@ -895,54 +933,91 @@ private struct ChatPendingCard: View {
     private var asking: Bool { pending.state == .waiting || pending.state == .working }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
-                    Text(verbatim: step.summary)
-                        .chatType("smallStrong")
-                        .foregroundStyle(Theme.color(step.destructive ? "net" : "text", scheme))
-                        .multilineTextAlignment(.leading)
+        HStack(alignment: .top, spacing: 0) {
+            // THE BOARD'S CARD IS NEUTRAL: a grey "PROPOSED CHANGE", then each row with the empty ring
+            // of a thing not yet done in front of it; the app's colour is in the row it names.
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(verbatim: pending.title)
+                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                        .foregroundStyle(Color(CentraidAsset.textMeta))
+                    ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
+                        HStack(alignment: .center, spacing: 10) {
+                            Circle()
+                                .strokeBorder(Theme.color("textFaint", scheme), lineWidth: 1.6)
+                                .frame(width: 20, height: 20)
+                            // THE ROW'S NAME, then its second line ("Reminders · today, 10:45"); a step
+                            // the core did not name by title keeps its composed sentence.
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: step.title.isEmpty ? step.summary : step.title)
+                                    .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                    .foregroundStyle(step.destructive ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textInk))
+                                    .multilineTextAlignment(.leading)
+                                if !step.subtitle.isEmpty {
+                                    Text(verbatim: step.subtitle)
+                                        .font(.system(size: CentraidScale.metaSize))
+                                        .foregroundStyle(Color(CentraidAsset.textMeta))
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
+                        }
+                    }
+                    if !pending.moreLine.isEmpty {
+                        Text(verbatim: pending.moreLine)
+                            .font(.system(size: CentraidScale.metaSize))
+                            .foregroundStyle(Color(CentraidAsset.textMeta))
+                    }
                 }
-                if !pending.moreLine.isEmpty {
-                    Text(verbatim: pending.moreLine)
-                        .chatType("mono")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // ONE ELEMENT FOR THE LINES, read as the core's label. NO IDENTIFIER ON THE CARD
-            // ITSELF: one on a container replaces its children's (#1047), the buttons' included.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(pending.accessibilityLabel)
-            .accessibilityIdentifier("chat-pending")
-            if asking {
-                HStack(spacing: 8) {
-                    KitOutlineButton(label: pending.cancelLabel, action: onCancel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // ONE ELEMENT FOR THE LINES, read as the core's label. NO IDENTIFIER ON THE CARD
+                // ITSELF: one on a container replaces its children's (#1047), the buttons' included.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(pending.accessibilityLabel)
+                .accessibilityIdentifier("chat-pending")
+                if asking {
+                    HStack(spacing: 8) {
+                        Button(action: onConfirm) {
+                            Text(verbatim: pending.confirmLabel)
+                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                .background(
+                                    Capsule().fill(Color(pending.destructive ? CentraidAsset.stateRed : CentraidAsset.shell))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("chat-pending-confirm")
+                        Button(action: onCancel) {
+                            Text(verbatim: pending.cancelLabel)
+                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .foregroundStyle(Color(CentraidAsset.textInk))
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                                .overlay(Capsule().strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("chat-pending-cancel")
-                    KitOutlineButton(
-                        label: pending.confirmLabel,
-                        tone: pending.destructive ? "net" : "text",
-                        action: onConfirm
-                    )
-                    .accessibilityIdentifier("chat-pending-confirm")
+                    }
+                    .disabled(pending.state == .working)
+                } else if !pending.settledLine.isEmpty {
+                    Text(verbatim: pending.settledLine)
+                        .font(.system(size: CentraidScale.metaSize))
+                        .foregroundStyle(Color(CentraidAsset.textMeta))
+                        .accessibilityIdentifier("chat-pending-settled")
                 }
-                .disabled(pending.state == .working)
-            } else if !pending.settledLine.isEmpty {
-                Text(verbatim: pending.settledLine)
-                    .chatType("mono")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .accessibilityIdentifier("chat-pending-settled")
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .fill(Theme.color("bgElev", scheme))
+            RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                .fill(Color(CentraidAsset.surfaceCard))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .strokeBorder(Theme.color(pending.destructive ? "net" : "line", scheme), lineWidth: CentraidGeometry.hairline)
+            RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                .strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: CentraidGeometry.hairline)
         )
     }
 }
@@ -970,7 +1045,7 @@ private struct ChatComposerCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let radius: CGFloat = 20
+    private static let radius: CGFloat = 28
 
     var body: some View {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -991,26 +1066,25 @@ private struct ChatComposerCard: View {
             if state.hasVisionStep {
                 ChatVisionBanner(step: state.visionStep, onDownload: { chat.visionDownloadTapped() })
             }
-            TextField(
-                text: $draft,
-                prompt: Text(state.composerPlaceholder).foregroundStyle(Theme.color("textGhost", scheme)),
-                axis: .vertical
-            ) {
-                Text(state.composerPlaceholder)
-            }
-            .focused(focused)
-            .lineLimit(1...4)
-            .chatType("body")
-            .foregroundStyle(Theme.color("text", scheme))
-            .tint(Theme.color("text", scheme))
-            .padding(.horizontal, 4)
-            .frame(minHeight: 28, alignment: .topLeading)
-            .accessibilityIdentifier("chat-field")
-
-            HStack(spacing: 8) {
+            // THE BOARD'S ONE PILL ROW: attach, the field, the scope chip and Send, on a line.
+            HStack(spacing: 6) {
                 attachMenu
+                TextField(
+                    text: $draft,
+                    prompt: Text(state.composerPlaceholder).foregroundStyle(Theme.color("textGhost", scheme)),
+                    axis: .vertical
+                ) {
+                    Text(state.composerPlaceholder)
+                }
+                .focused(focused)
+                .lineLimit(1...4)
+                .chatType("body")
+                .foregroundStyle(Theme.color("text", scheme))
+                .tint(Theme.color("text", scheme))
+                .padding(.leading, 4)
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                .accessibilityIdentifier("chat-field")
                 ChatScopePill(app: state.scopeApp, state: state, onSetScope: onSetScope)
-                Spacer(minLength: 0)
                 if state.streaming {
                     ChatSendButton(
                         iconKey: "Stop",
@@ -1021,7 +1095,7 @@ private struct ChatComposerCard: View {
                     )
                 } else {
                     ChatSendButton(
-                        iconKey: "PaperPlaneTilt",
+                        iconKey: "ArrowUp",
                         spoken: state.sendLabel,
                         filled: !trimmed.isEmpty && !state.visionBlocked,
                         identifier: "chat-send",
@@ -1031,16 +1105,15 @@ private struct ChatComposerCard: View {
                 }
             }
         }
-        .padding(12)
+        .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .fill(Theme.color("bgElev", scheme))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-        )
+        // THE COMPOSER FLOATS (#1173): Liquid Glass on iOS 26, the solid card before it and under
+        // Reduce Transparency or Increase Contrast, by the band's one ground.
+        .modifier(BandGround(
+            shape: RoundedRectangle(cornerRadius: Self.radius, style: .continuous),
+            solid: "bgElev",
+            interactive: false
+        ))
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.pending.count)
         .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
         .sheet(isPresented: Binding(
@@ -1068,15 +1141,14 @@ private struct ChatComposerCard: View {
             Button(state.attachDocumentLabel) { chat.openDocuments() }
                 .accessibilityIdentifier("chat-attach-document")
         } label: {
-            // DISABLED IS THE INK, not a faded container.
+            // DISABLED IS THE INK, not a faded container. The board's key is a filled sunken circle.
             CentraidIconView(
                 iconKey: "Plus",
                 tint: Theme.color(state.canAttach ? "text" : "textDisabled", scheme),
-                size: 18
+                size: 20
             )
-                .frame(width: 36, height: 36)
-                .overlay(Circle().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
                 .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                .background(Circle().fill(Theme.color("bgSunken", scheme)))
                 .contentShape(Circle())
         }
         .menuStyle(.button)
@@ -1113,13 +1185,13 @@ private struct ChatScopePill: View {
                     AppMark(appID: app, size: 20)
                 }
                 Text(name(app))
-                    .centraidType("smallStrong")
+                    .font(.system(size: CentraidScale.metaSize, weight: .semibold))
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(1)
-                CentraidIconView(iconKey: "ChevronDown", tint: Theme.color("textSoft", scheme), size: 14)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .frame(height: 32)
+            .background(Capsule().fill(Theme.color("bgElev", scheme)))
             .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
             .contentShape(Capsule())
@@ -1203,15 +1275,15 @@ private struct ChatVisionBanner: View {
                     // attempt stopped, and the one action.
                     Text(step.statusLine.isEmpty ? step.sizeLine : step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(step.statusLine.isEmpty ? "textSoft" : "net", scheme))
+                        .foregroundStyle(Theme.color("textSoft", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("chat-vision-line")
-                    KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)
+                    ChatDownloadButton(label: step.actionLabel, action: onDownload)
                     .accessibilityIdentifier("chat-vision-download")
                 } else {
                     Text(step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(step.progressKnown || step.statusLine.hasPrefix("Download") ? "net" : "textSoft", scheme))
+                        .foregroundStyle(Theme.color("textSoft", scheme))
                         .accessibilityIdentifier("chat-vision-status")
                     Spacer(minLength: 0)
                 }
@@ -1247,20 +1319,14 @@ private struct ChatSendButton: View {
 
     var body: some View {
         Button(action: action) {
-            CentraidIconView(
-                iconKey: iconKey,
-                tint: Theme.color(filled ? "onAccent" : "textDisabled", scheme),
-                size: 20
-            )
-            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-            .background(Circle().fill(filled ? Theme.color("accent", scheme) : Color.clear))
-            .overlay(
-                Circle().strokeBorder(
-                    filled ? Color.clear : Theme.color("lineStrong", scheme),
-                    lineWidth: CentraidGeometry.hairline
-                )
-            )
-            .contentShape(Circle())
+            // THE BOARD'S SEND: a round dark-teal key with a white up arrow. With nothing to send
+            // it is a quiet disc with a legible soft arrow (never the filled key faded: the white
+            // arrow vanished into the pale disc), so it still reads as Send, and the filled key
+            // stays the one filled element.
+            CentraidIconView(iconKey: iconKey, tint: filled ? Color.white : Theme.color("textSoft", scheme), size: 18)
+                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                .background(Circle().fill(filled ? Color(CentraidAsset.shell) : Theme.color("lineStrong", scheme)))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(spoken)
@@ -1304,12 +1370,12 @@ private struct ChatModelStepView: View {
                         .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-error")
                 }
-                KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)
+                ChatDownloadButton(label: step.actionLabel, action: onDownload)
                     .accessibilityIdentifier("chat-download")
             case .downloading:
                 Text(step.statusLine)
                     .chatType("labelOn")
-                    .foregroundStyle(Theme.color("net", scheme))
+                    .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityIdentifier("chat-model-status")
                 ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
                     .animation(reduceMotion ? nil : ChatMotion.state, value: step.progress)
@@ -1341,6 +1407,26 @@ private struct ChatModelStepView: View {
 
 /// A hairline-thin track with a `net` fill: how much of the file has arrived.
 /// Unknown size draws the empty track; the status line carries the words.
+/// THE DOWNLOAD'S ONE ACTION, in the shell's teal as the composer's send is: red is the error
+/// colour and a download is no error (#1173).
+private struct ChatDownloadButton: View {
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(verbatim: label)
+                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 20)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .background(Capsule().fill(Color(CentraidAsset.shell)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct ProgressTrack: View {
     let fraction: Double?
     @Environment(\.colorScheme) private var scheme
@@ -1350,7 +1436,7 @@ private struct ProgressTrack: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.color("bgSunken", scheme))
                 Capsule()
-                    .fill(Theme.color("net", scheme))
+                    .fill(Color(CentraidAsset.shell))
                     .frame(width: proxy.size.width * CGFloat(min(max(fraction ?? 0, 0), 1)))
             }
         }

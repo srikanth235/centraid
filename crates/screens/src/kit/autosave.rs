@@ -22,6 +22,7 @@
 //! in flight" cannot exist. The phase is still part of the wire
 //! ([`wire::autosave::Phase`]) and its label ("Saving…") is still said.
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -74,6 +75,9 @@ pub struct Autosave<D: Draft> {
     /// The refusal's sentence, while the phase is REFUSED.
     failure: Option<String>,
     remote_changed: bool,
+    /// The tables this editor's committed saves wrote since a screen last
+    /// took them ([`Autosave::take_written`]).
+    written: BTreeSet<String>,
 }
 
 impl<D: Draft> Default for Autosave<D> {
@@ -94,7 +98,21 @@ impl<D: Draft> Autosave<D> {
             saving_seq: 0,
             failure: None,
             remote_changed: false,
+            written: BTreeSet::new(),
         }
+    }
+
+    /// The draft as the vault last had it.
+    #[must_use]
+    pub fn baseline(&self) -> Option<&D> {
+        self.baseline.as_ref()
+    }
+
+    /// The tables this editor's own committed saves wrote since the last call,
+    /// emptied by it. A screen that must tell the core's change for its own
+    /// commit from a foreign one marks these (the act's `tables`).
+    pub fn take_written(&mut self) -> BTreeSet<String> {
+        std::mem::take(&mut self.written)
     }
 
     /// The draft, once the vault's row has arrived.
@@ -202,6 +220,7 @@ impl<D: Draft> Autosave<D> {
             self.failure = Some(settled.refusal);
             return false;
         }
+        self.written.extend(settled.tables.iter().cloned());
         let mut draft = draft;
         draft.committed(&settled.output);
         self.draft = Some(draft.clone());

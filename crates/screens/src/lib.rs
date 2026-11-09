@@ -5,6 +5,7 @@
 
 pub mod agenda;
 pub mod backup;
+pub mod calendar;
 pub mod catalog;
 pub mod chat;
 pub mod custody;
@@ -22,6 +23,7 @@ pub mod people;
 pub mod photos;
 pub mod proof;
 pub mod registry;
+pub mod reminders;
 pub mod runtime;
 pub mod screen;
 pub mod shell;
@@ -60,6 +62,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
             .with(proof::NAME, proof::build)
             .merge(shell::registry(&secrets))
             .merge(agenda::registry())
+            .merge(agenda::glance::registry())
             .merge(locker::registry())
             .merge(money::registry())
             .merge(docs::registry())
@@ -89,7 +92,16 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         .concat(),
     )
     .with_band(shell::band::view)
-    .with_services([passes::services(), custody::services(), vault::services()].concat());
+    .with_services(
+        [
+            passes::services(),
+            custody::services(),
+            vault::services(),
+            agenda::notify::services(),
+            agenda::glance::services(),
+        ]
+        .concat(),
+    );
     (runtime, shelf)
 }
 

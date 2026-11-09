@@ -9,14 +9,14 @@ Notes is 6 queries and 17 actions over the vault's one model ([#1135](https://gi
 | `derive` | The preview and the checklist tally. ONE copy. |
 | `journal` | The memo set — every note that is about something — read once and excluded four ways. |
 | `cards` | The far end of a link, as the shelf draws it: one read of `entity`, plus one of the kind's own table for the few kinds that add a subtitle or a thumbnail. |
-| `commands` | The seventeen actions as invocations, `invoke_key` mandatory. |
+| `commands` | The nineteen actions as invocations, `invoke_key` mandatory. |
 | `shelves` | The phone's shelves over the library fold: sort and filters (pinned, notebook, unfiled, tags), the trash shelf on its own, and the notebook spine with live-note counts. |
 | `editor` | The editor's note: the whole body, the pin and the notebook. |
 | `local` | The Journal grouped by the local day of `created_at`, in the zone the request states, through `centraid_vault::time`'s one zone engine. |
 
 ## What is Notes' and what is shared
 
-Notes does not wrap a shared verb. What only a note has is `note.create`, `note.edit` (title, body, format), `note.move` (into a notebook, or out of one) and `note.restore_version`; every other action names the shared verb directly — `entity.trash` and `entity.restore` for a note or a notebook, `entity.retitle` to rename a notebook, `container.create` for a notebook, `flag.set` / `flag.clear` for a pin, `tag.add` / `tag.remove`, `edge.add` / `edge.remove` for a link or an attachment. `send-to-tasks` is the one action making two invocations: Agenda's `task.add`, then `edge.add` joining the task to the note with an `about` edge.
+Notes does not wrap a shared verb. What only a note has is `note.create`, `note.edit` (title, body, format), `note.move` (into a notebook, or out of one) and `note.restore_version`; every other action names the shared verb directly — `entity.trash` and `entity.restore` for a note or a notebook, `entity.retitle` to rename a notebook, `container.create` for a notebook, `flag.set` / `flag.clear` for a pin, `tag.add` / `tag.remove`, `edge.add` / `edge.remove` for a link or an attachment. `send-to-tasks` is the one action making two invocations: Reminders' `task.add`, then `edge.add` joining the task to the note with an `about` edge.
 
 An edit that changes the body writes the words it replaced as a `revision`; a restore swaps one in and keeps what it replaced; an edit or a restore that lands on the words already there writes nothing. A body over 64 KiB is refused.
 

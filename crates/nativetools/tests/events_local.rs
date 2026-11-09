@@ -1,7 +1,7 @@
 //! The runtime reads events on the person's own days (#1088, R-1088-8).
 //!
 //! `World` reads the events of the days around today through Agenda's own read
-//! (`centraid_apps_agenda::occurrences`, by `Door::events`): placed in the person's zone, a repeating
+//! (`centraid_apps_calendar::occurrences`, by `Door::events`): placed in the person's zone, a repeating
 //! series as one row per occurrence. A stored event the zone does not move reads as it is stored,
 //! so the harness (`Etc/UTC`) reads what it always has.
 

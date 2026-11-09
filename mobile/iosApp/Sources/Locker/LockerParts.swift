@@ -24,33 +24,38 @@ struct LockerWallView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// THE LOCK SCREEN (#1173): the lock on a wash of Locker's graphite, the one sentence, what
+    /// unlocking does, when it locks itself, and the one ink button in Locker's fill.
     var body: some View {
+        let accent = AppAccent("locker")
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                CentraidIconView(iconKey: "Lock", tint: Theme.color("text", scheme), size: 28)
+                CentraidIconView(iconKey: "Lock", tint: accent.text, size: 28)
+                    .frame(width: 64, height: 64)
+                    .background(accent.wash(dark: scheme == .dark), in: Circle())
                     .accessibilityHidden(true)
                     .padding(.top, 24)
                 Text(wall.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("locker-wall-title")
                 if !wall.body.isEmpty {
                     Text(wall.body)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.body)
                 }
                 if !wall.notice.isEmpty {
                     Text(wall.notice)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color(wall.phase == .failed ? "net" : "textSoft", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(wall.phase == .failed ? StateColor.red.text : Surface.meta)
                         .accessibilityIdentifier("locker-wall-notice")
                 }
                 // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
                 if !wall.unlockLabel.isEmpty || !wall.wordsLabel.isEmpty {
                     KitChoiceStack {
                         if !wall.unlockLabel.isEmpty {
-                            KitInkButton(label: wall.unlockLabel) {
+                            KitInkButton(label: wall.unlockLabel, iconKey: wall.unlockIcon) {
                                 send(LockerWallEvents.make { $0.unlock = .init() })
                             }
                             .accessibilityIdentifier("locker-unlock")
@@ -73,6 +78,7 @@ struct LockerWallView: View {
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .environment(\.appAccent, accent)
         .accessibilityIdentifier("locker-wall")
     }
 }
@@ -135,7 +141,8 @@ struct LockerCovered<Content: View>: View {
                 LockerWallView(wall: wall, send: send, onWords: onWords)
             }
         } else {
-            content()
+            // EVERY LOCKER PAGE WEARS THE APP'S GRAPHITE, pushed ones included.
+            content().environment(\.appAccent, AppAccent("locker"))
         }
     }
 }
@@ -162,7 +169,7 @@ struct LockerRowView: View {
     let row: Centraid_Core_V1_LockerRow
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
         Button(action: onTap) {
@@ -170,26 +177,27 @@ struct LockerRowView: View {
                 LockerTypeChip(letters: row.typeChip)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                     if !row.meta.isEmpty {
                         Text(row.meta)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
                 if row.starred {
-                    CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 14)
+                    // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
+                    CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
                 }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .overlay(alignment: .bottom) { KitHairline() }
+            .overlay(alignment: .bottom) { KitHairline().padding(.leading, 58) }
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
@@ -200,21 +208,20 @@ struct LockerRowView: View {
     }
 }
 
-/// Two letters on the app's rose wash.
+/// Two letters in the app's graphite, white on its fill.
 struct LockerTypeChip: View {
     let letters: String
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
+    /// 32 in a row; the item's hero draws it at 64.
+    var side: CGFloat = 32
 
     var body: some View {
         Text(letters)
-            .centraidType("annotLabelOn")
-            .foregroundStyle(Theme.color("cRose", scheme))
-            .frame(width: 32, height: 32)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                    .fill(Theme.color("cRose", scheme).opacity(scheme == .dark ? CentraidGeometry.iconChipTintDark : CentraidGeometry.iconChipTintLight))
-            )
+            .kitType(side > 40 ? .title : .badge)
+            .foregroundStyle(Color.white)
+            .frame(width: side, height: side)
+            .background(accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }
 }
@@ -252,8 +259,8 @@ struct LockerNote: View {
     var body: some View {
         if !text.isEmpty {
             Text(text)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 8)
@@ -301,4 +308,78 @@ func lockerContent<Value>(
     if let failure { return .failed(failure) }
     if let denied { return .gated(denied) }
     return .loading(true)
+}
+
+/// A WHITE CARD OF ROWS under an optional group head: Starred, Recently used, a category's list.
+struct LockerRowGroup: View {
+    let title: String
+    let rows: [Centraid_Core_V1_LockerRow]
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !title.isEmpty {
+                Text(title).kitType(.group).foregroundStyle(Surface.meta)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 10)
+            }
+            VStack(spacing: 0) {
+                ForEach(rows, id: \.itemID) { row in
+                    LockerRowView(row: row) { open(row.route) }
+                }
+            }
+            .kitCard()
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+        }
+    }
+}
+
+/// ONE CATEGORY CARD: a glyph tile in a list-palette colour, the count, the word.
+struct LockerCategoryCard: View {
+    let category: Centraid_Core_V1_LockerCategory
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    KitTile(iconKey: category.iconKey, size: 30, fill: AgendaPalette.list(category.colorKey))
+                    Spacer(minLength: 0)
+                    Text("\(category.count)").kitType(.title).foregroundStyle(Surface.ink)
+                }
+                Text(category.label).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kitCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(category.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("locker-category-\(category.key)")
+    }
+}
+
+extension Centraid_Core_V1_LockerCategory: Identifiable {
+    public var id: String { key }
+}
+
+/// THE ITEM'S HERO TILE (the LockerItem board): the first letter of the title in white on ink,
+/// which Rust supplies (`hero_initial`). The ink stays ink in dark; the list rows keep the
+/// type's two-letter chip.
+struct LockerHeroTile: View {
+    let letter: String
+    var side: CGFloat = 64
+
+    var body: some View {
+        Text(letter)
+            .kitType(.title)
+            .foregroundStyle(Color.white)
+            .frame(width: side, height: side)
+            .background(Surface.tile, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+            .accessibilityHidden(true)
+    }
 }

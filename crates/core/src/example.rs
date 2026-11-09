@@ -4,6 +4,24 @@
 //! calendar, a camera roll with real bytes, and an uneven expense ledger — a
 //! corpus that reads like somebody's life rather than like `Item 1, Item 2`.
 //!
+//! **TWO DEPTHS, ONE SCENARIO.** [`seed`] writes the classic scenario above, the
+//! exact rows the chat's and the screens' tests were written against.
+//! [`seed_demo`] writes the same scenario RICHER, which is what the dev binary
+//! seeds, so every revamped screen can be checked against its mockup (#1173).
+//!
+//! **What the demo adds.** Each app seeds what its revamped screens draw: Health's
+//! 120 days and a dozen workouts
+//! ([`health`]); people with numbers, a birthday, a cadence one of them is past,
+//! the edges "In your vault" lists and the owner's own card ([`people`]); a
+//! document with three versions, coloured labels, a PDF and an image, a starred
+//! file and three folders; a note pinned, a checklist note and a note with three
+//! versions; ~47 photographs over fourteen months and a dozen places, the extras
+//! drawn deterministically ([`synth`]); a week with overlapping and all-day
+//! events, flagged and overdue tasks in four coloured lists, and two invitations
+//! to answer; and a ledger with a refund, accepted transfers and unfiled lines.
+//! `tests/demo_scenario.rs` asserts the counts. Everything is a function of
+//! `now`, with no randomness, so the same day seeds the same vault.
+//!
 //! **One scenario, two kinds of caller, and neither is a member's found.** The
 //! dev binary `seed-demo-vault` (`crates/centraid`) seeds these rows through
 //! [`seed`] into a fixture vault and adds its own Locker on top; the chat's
@@ -36,9 +54,46 @@ use serde_json::{Value, json};
 
 use crate::error::Result;
 
+mod health;
+mod people;
+mod synth;
+
+pub use health::{HEALTH_DAYS, WORKOUT_COUNT};
+
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
-pub const APPS: [&str; 6] = ["people", "notes", "docs", "photos", "agenda", "money"];
+/// [`seed_demo`] also seeds `health` ([`DEMO_APPS`]).
+pub const APPS: [&str; 7] = [
+    "people",
+    "notes",
+    "docs",
+    "photos",
+    "calendar",
+    "reminders",
+    "money",
+];
+
+/// The apps [`seed_demo`] seeds: [`APPS`] and Health, which only the demo has.
+pub const DEMO_APPS: [&str; 8] = [
+    "people",
+    "notes",
+    "docs",
+    "photos",
+    "calendar",
+    "reminders",
+    "money",
+    "health",
+];
+
+/// HOW FAR BEFORE "NOW" THE DEMO'S CALLER STARTS THE VAULT'S CLOCK, so the people
+/// the scenario "last spoke to" weeks ago were written weeks ago.
+///
+/// A touch is stamped by the vault's clock (`person.log_interaction` takes no
+/// date), and "overdue to reconnect" is an ELAPSED-time question, so a person
+/// can only be overdue if a touch was written long enough ago. The caller that
+/// owns a movable clock (the dev binary) starts it this far back and hands
+/// [`seed_demo`] a hook that moves it forward to "now".
+pub const REWIND_MS: i64 = 75 * DAY_MS;
 
 /// What a seeding pass did not do.
 ///
@@ -88,31 +143,86 @@ pub fn seed(
     wanted: &dyn Fn(&str) -> bool,
     now_ms: i64,
 ) -> Result<Report> {
+    seed_scenario(vault, registry, principal, wanted, now_ms, None)
+}
+
+/// THE DEMO VAULT: the scenario [`seed`] writes, richer, so every revamped screen
+/// has its data (#1173). See the module header for what is added.
+///
+/// The classic scenario stays what [`seed`] writes because the chat's and the
+/// screens' tests are written against its exact rows (twelve tasks, four
+/// people); the demo is the one that is "rich enough to look at", and it is
+/// asserted on its own (`tests/demo_scenario.rs`).
+///
+/// `elapse` is called with [`REWIND_MS`] after the people phase, which is the only
+/// one that needs the past: the caller's clock started that far back, and this
+/// moves it forward to "now". A caller on the wall clock passes a no-op, and
+/// nobody is overdue.
+///
+/// # Errors
+///
+/// As [`seed`].
+pub fn seed_demo(
+    vault: &Vault,
+    registry: &Registry,
+    principal: &Principal,
+    wanted: &dyn Fn(&str) -> bool,
+    now_ms: i64,
+    elapse: &dyn Fn(i64),
+) -> Result<Report> {
+    seed_scenario(vault, registry, principal, wanted, now_ms, Some(elapse))
+}
+
+/// `Some(elapse)` is the demo; `None` is the classic scenario.
+fn seed_scenario(
+    vault: &Vault,
+    registry: &Registry,
+    principal: &Principal,
+    wanted: &dyn Fn(&str) -> bool,
+    now_ms: i64,
+    demo: Option<&dyn Fn(i64)>,
+) -> Result<Report> {
     let mut seeder = Seeder {
         vault,
         registry,
         principal,
         report: Report::default(),
     };
-    if wanted("people") {
-        seed_people(&mut seeder, now_ms);
-    }
+    let rich = demo.is_some();
+    let circle = match demo {
+        Some(elapse) if wanted("people") => people::seed_people(&mut seeder, now_ms, elapse),
+        Some(elapse) => {
+            elapse(REWIND_MS);
+            people::Circle::default()
+        }
+        None => {
+            if wanted("people") {
+                people::seed_classic(&mut seeder, now_ms);
+            }
+            people::Circle::default()
+        }
+    };
     if wanted("notes") {
-        seed_notes(&mut seeder);
+        seed_notes(&mut seeder, rich);
     }
     if wanted("docs") {
-        seed_docs(&mut seeder, now_ms);
+        seed_docs(&mut seeder, now_ms, rich);
     }
     if wanted("photos") {
-        seed_photos(&mut seeder, now_ms);
+        seed_photos(&mut seeder, now_ms, rich);
     }
-    // THE TASKS ARE AGENDA'S (#1128): one app, so one name to seed them under.
-    if wanted("agenda") {
-        seed_tasks(&mut seeder, now_ms);
-        seed_agenda(&mut seeder, now_ms);
+    // EVENTS ARE CALENDAR'S AND TASKS ARE REMINDERS' (round 10 of #1173): two apps, two names.
+    if wanted("reminders") {
+        seed_tasks(&mut seeder, now_ms, rich);
+    }
+    if wanted("calendar") {
+        seed_agenda(&mut seeder, now_ms, &circle, rich);
     }
     if wanted("money") {
-        seed_money(&mut seeder, now_ms);
+        seed_money(&mut seeder, now_ms, rich);
+    }
+    if rich && wanted("health") {
+        health::seed_health(&mut seeder, now_ms);
     }
     Ok(seeder.report)
 }
@@ -128,6 +238,14 @@ fn at(now: i64, days: i64, hour: i64, minute: i64) -> String {
     let midnight = (now / DAY_MS) * DAY_MS + days * DAY_MS;
     let millis = midnight + hour * 3_600_000 + minute * 60_000;
     iso(millis)
+}
+
+/// The same moment as a wall clock, `YYYY-MM-DDTHH:MM:SS`, with no zone and no `Z`: a FLOATING
+/// time, "19:00 wherever the member is". A seeded event is this and never an instant in a zone,
+/// because the zone a seed would name is not the one the phone it lands on is in, and an event
+/// in a zone other than the phone's reads at one hour in the grid and at another in the editor.
+fn wall(now: i64, days: i64, hour: i64, minute: i64) -> String {
+    at(now, days, hour, minute)[..19].to_owned()
 }
 
 /// The date alone, `YYYY-MM-DD`, `days` from the anchor.
@@ -274,7 +392,7 @@ fn money_rows(
         .collect()
 }
 
-fn seed_money(seeder: &mut Seeder, now: i64) {
+fn seed_money(seeder: &mut Seeder, now: i64, rich: bool) {
     for (id, name, kind, reference) in [
         (
             "demo-money-everyday",
@@ -349,6 +467,11 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
             -(3_800 + (night * 541) % 4_700),
             "SQ *CORNER BISTRO",
         ));
+    }
+    // A REFUND: money back on the card for a fill-up (the "SHELL OIL" rule files it
+    // under fuel, as a credit, which is how a refund reads in Spending).
+    if rich {
+        visa.push(line(14, 3_150, "SHELL OIL 574441 REFUND"));
     }
     // Two lines no rule files, so Activity has something to ask about.
     visa.push(line(9, -6_480, "AMZN MKTP US*2K4LM1"));
@@ -433,83 +556,45 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
             }),
         );
     }
+
+    if rich {
+        link_older_transfers(seeder);
+    }
 }
 
-// ---------------------------------------------------------------------------
-// People.
-//
-// "A small living circle — people with contact cadences, logged interactions,
-// birthdays and canonical gift tasks."
-// ---------------------------------------------------------------------------
-
-/// The four people.
-fn seed_people(seeder: &mut Seeder, now: i64) {
-    let mut ids = Vec::new();
-    for (name, role, cadence) in [
-        ("Maya Alvarez", "College friend", 30),
-        ("Jake Bennett", "Old roommate from Portland", 45),
-        ("Grandpa Ray", "Grandfather", 7),
-        ("Chris Okafor", "Design lead, ex-colleague", 60),
-    ] {
-        let output = seeder.run(
-            "person.add",
-            json!({ "title": name, "role": role, "cadence_days": cadence }),
-        );
-        if let Some(party) = Seeder::id(output.as_ref(), "id") {
-            ids.push(party);
-        }
-    }
-    let (maya, grandpa, chris) = match ids.as_slice() {
-        [maya, _, grandpa, chris] => (maya.clone(), grandpa.clone(), chris.clone()),
-        _ => return,
+/// ACCEPT THE OLDER TRANSFERS, and leave the newest to the member.
+///
+/// A move between Everyday and Rainy day is two lines, one on each account, and
+/// the member accepts the pair as a transfer. Two of the three months' pairs are
+/// linked here (so Activity shows linked transfers, out of Spending), and the
+/// newest pair stays unlinked, so the "is this a transfer?" suggestion has
+/// something to offer. The ids are minted by the import, so they are read back
+/// through Money's own ledger loader, the door a screen reads through.
+fn link_older_transfers(seeder: &mut Seeder) {
+    let door = crate::app_query::VaultDoor::new(seeder.vault);
+    let ledger = |account: &str| {
+        centraid_apps_money::queries::load_ledger(&door, account)
+            .map(|held| held.value)
+            .unwrap_or_default()
     };
-
-    for (party, kind, text) in [
-        (
-            &maya,
-            "call",
-            "Caught up about her Denver move; she wants the Tahoe dates.",
-        ),
-        (
-            &grandpa,
-            "visit",
-            "Sunday lunch. Blood pressure is under control again; he beat me at cribbage twice.",
-        ),
-        (
-            &chris,
-            "message",
-            "Sent the portfolio feedback he asked for.",
-        ),
-    ] {
-        seeder.run(
-            "person.log_interaction",
-            json!({ "id": party, "kind": kind, "text": text }),
-        );
-    }
-
-    // Birthdays recur yearly, so they are a month-day: Maya's falls inside
-    // Agenda's 45-day window and Grandpa's outside it, whatever today is.
-    for (party, label, days, reminder) in [
-        (&grandpa, "Birthday", 120, true),
-        (&maya, "Birthday", 12, false),
-    ] {
-        let month_day = day(now, days)[5..].to_owned();
-        seeder.run(
-            "person.add_date",
-            json!({
-                "id": party,
-                "label": label,
-                "month_day": month_day,
-                "reminder_on": reminder,
-            }),
-        );
-    }
-
-    for (party, text) in [
-        (&grandpa, "Large-print edition of Lonesome Dove"),
-        (&chris, "Fountain pen ink sampler"),
-    ] {
-        seeder.run("person.add_gift", json!({ "id": party, "text": text }));
+    let (out, back) = (ledger("demo-money-everyday"), ledger("demo-money-rainy"));
+    let mut pairs: Vec<(String, String, String)> = out
+        .iter()
+        .filter(|line| line.signed_minor() == -50_000)
+        .filter_map(|line| {
+            let other = back.iter().find(|other| {
+                other.signed_minor() == 50_000 && other.posted_on == line.posted_on
+            })?;
+            Some((
+                line.posted_on.clone(),
+                line.txn_id.clone(),
+                other.txn_id.clone(),
+            ))
+        })
+        .collect();
+    pairs.sort();
+    for (_, from, into) in pairs.into_iter().take(2) {
+        seeder.run("txn.link_transfer", json!({ "id": from, "other_id": into }));
     }
 }
 
@@ -520,7 +605,7 @@ fn seed_people(seeder: &mut Seeder, now: i64) {
 // scratch note."
 // ---------------------------------------------------------------------------
 
-fn seed_notes(seeder: &mut Seeder) {
+fn seed_notes(seeder: &mut Seeder, rich: bool) {
     let travel = Seeder::id(
         seeder
             .run(
@@ -577,7 +662,73 @@ fn seed_notes(seeder: &mut Seeder) {
         if let Some(notebook) = notebook {
             input["notebook_id"] = json!(notebook);
         }
-        seeder.run("note.create", input);
+        let made = Seeder::id(seeder.run("note.create", input).as_ref(), "id");
+        let Some(note) = made else { continue };
+        if !rich {
+            continue;
+        }
+        match title {
+            // PINNED: the chili sits above the shelf's recents.
+            "Mom's chili, written down properly" => {
+                seeder.run("flag.set", json!({ "id": note, "flag": "pinned" }));
+            }
+            // THREE VERSIONS, so the history sheet has two older ones to walk:
+            // the shortlist grows a budget, then a decision.
+            "Drive vs fly" => {
+                seeder.run(
+                    "note.edit",
+                    json!({ "id": note, "body": "I-80 is four hours clean, six if we leave Friday after five. Reno flight lands 09:40 but door-to-door is a wash. Book by Thursday either way.\n\nGas both ways is about $90; the flight is $240 for two plus a rental." }),
+                );
+                seeder.run(
+                    "note.edit",
+                    json!({ "id": note, "body": "DECIDED: drive. Leave Friday at 13:00 to beat the traffic and the chain control.\n\nI-80 is four hours clean, six if we leave after five. Gas both ways is about $90; the flight was $240 for two plus a rental." }),
+                );
+            }
+            _ => {}
+        }
+    }
+    // A CHECKLIST: `- [x]` and `- [ ]` lines, so the shelf draws a tally and the
+    // editor draws boxes. Its title shares no word with a task's, on purpose: the
+    // chat's repair for a verb on the wrong kind ("did you mean") would otherwise
+    // read it as a near-miss for one.
+    if rich {
+        seeder.run(
+            "note.create",
+            json!({
+                "title": "Lake house checklist",
+                "body": "## Before we leave\n- [x] Book the cabin\n- [x] Chains in the trunk\n- [ ] Rain shell and boots\n- [ ] Groceries for two nights\n- [ ] Download offline maps\n- [ ] Charge the headlamp",
+                "format": "markdown",
+                "notebook_id": travel,
+            }),
+        );
+        // LINKS (#1173): a note whose body links to a live note, a trashed one and none at all,
+        // and holds a web address, so the editor's link chips draw every state they have.
+        let old_plans = Seeder::id(
+            seeder
+                .run(
+                    "note.create",
+                    json!({
+                        "title": "Old plans",
+                        "body": "Superseded by the shortlist.",
+                        "format": "plain",
+                        "notebook_id": travel,
+                    }),
+                )
+                .as_ref(),
+            "id",
+        );
+        if let Some(id) = old_plans {
+            seeder.run("entity.trash", json!({ "id": id }));
+        }
+        seeder.run(
+            "note.create",
+            json!({
+                "title": "Trip hub",
+                "body": "Start with [[Drive vs fly]], then see [[Old plans]]. Still to write: [[Packing ideas]].\n\nCabin listing: https://example.com/tahoe-cabin",
+                "format": "markdown",
+                "notebook_id": travel,
+            }),
+        );
     }
 }
 
@@ -590,7 +741,7 @@ fn seed_notes(seeder: &mut Seeder) {
 // finds it by.
 // ---------------------------------------------------------------------------
 
-fn seed_docs(seeder: &mut Seeder, now: i64) {
+fn seed_docs(seeder: &mut Seeder, now: i64, rich: bool) {
     let travel = Seeder::id(
         seeder
             .run(
@@ -638,8 +789,22 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
             "document.edit",
             json!({ "id": packing, "body_text": revised }),
         );
+        // A SECOND EDIT in the demo, so the history has three versions: the
+        // sheet's list shows two older ones and the current.
+        if rich {
+            seeder.run(
+                "document.edit",
+                json!({ "id": packing,
+                        "body_text": format!("{revised}- Snacks for the lift line\n- Phone chargers (two)\n") }),
+            );
+        }
         seeder.run("flag.set", json!({ "id": packing, "flag": "starred" }));
-        seeder.run("tag.add", json!({ "id": packing, "label": "tahoe" }));
+        // LABELS WEAR COLOURS, the palette keys (`tag.add` takes one for a new label).
+        let mut tag = json!({ "id": packing, "label": "tahoe" });
+        if rich {
+            tag["color"] = json!("petrol");
+        }
+        seeder.run("tag.add", tag);
     }
 
     // "(sample)" IN THE TITLE, which is v0's own rule: a rental agreement and an
@@ -672,7 +837,98 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
     if let Some(home) = home.as_ref() {
         insurance_input["folder_id"] = json!(home);
     }
-    seeder.run("document.create_text", insurance_input);
+    let policy = Seeder::id(
+        seeder.run("document.create_text", insurance_input).as_ref(),
+        "id",
+    );
+    // EVERYTHING BELOW IS THE DEMO'S (#1173).
+    if !rich {
+        return;
+    }
+    if let Some(policy) = policy.as_ref() {
+        seeder.run(
+            "tag.add",
+            json!({ "id": policy, "label": "important", "color": "raspberry" }),
+        );
+    }
+
+    // A THIRD FOLDER AND TWO FILES WITH BYTES, so the drive draws a PDF and an
+    // image thumbnail beside the text documents. The bytes are generated
+    // (`synth`), a few KB each, and "(sample)" is in every title for the same
+    // reason it is above.
+    let receipts = Seeder::id(
+        seeder
+            .run(
+                "container.create",
+                json!({ "kind": "folder", "title": "Receipts" }),
+            )
+            .as_ref(),
+        "id",
+    );
+    let itinerary = synth::text_pdf(
+        "Reno flight itinerary (sample)",
+        &[
+            "This is sample demo data, not a real booking.",
+            "Confirmation: SAMPLE1",
+            "Outbound: Fri 13:05  SFO to RNO  (1h 05m)",
+            "Return:   Mon 18:40  RNO to SFO",
+            "Passengers: 2    Total: $240.00",
+        ],
+    );
+    let floor_plan = synth::gradient_png(7, 160, 120);
+    for (title, bytes, media_type, folder, tag) in [
+        (
+            "Reno flight itinerary (sample)",
+            &itinerary,
+            "application/pdf",
+            travel.as_ref(),
+            Some(("tahoe", "petrol")),
+        ),
+        (
+            "Cabin floor plan (sample)",
+            &floor_plan,
+            "image/png",
+            travel.as_ref(),
+            None,
+        ),
+    ] {
+        let Some(blob) = seeder.spill(bytes) else {
+            continue;
+        };
+        let mut input = json!({
+            "title": title, "blob": blob, "media_type": media_type, "size": bytes.len(),
+        });
+        if let Some(folder) = folder {
+            input["folder_id"] = json!(folder);
+        }
+        let Some(document) = Seeder::id(seeder.run("document.add", input).as_ref(), "id") else {
+            continue;
+        };
+        if media_type == "application/pdf" {
+            seeder.run("flag.set", json!({ "id": document, "flag": "starred" }));
+        }
+        if let Some((label, color)) = tag {
+            seeder.run(
+                "tag.add",
+                json!({ "id": document, "label": label, "color": color }),
+            );
+        }
+    }
+    let mut dentist = json!({
+        "title": "Dentist receipt (sample)",
+        "body_text": "# Dentist receipt (sample)\n\nThis is sample demo data, not a real receipt.\n\n- Cleaning and exam: $185.00\n- Insurance paid: $148.00\n- You paid: $37.00\n",
+        "media_type": "text/markdown",
+    });
+    if let Some(receipts) = receipts.as_ref() {
+        dentist["folder_id"] = json!(receipts);
+    }
+    let dentist = Seeder::id(seeder.run("document.create_text", dentist).as_ref(), "id");
+    if let Some(dentist) = dentist.as_ref() {
+        seeder.run(
+            "tag.add",
+            json!({ "id": dentist, "label": "receipts", "color": "mustard" }),
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1054,7 +1310,7 @@ fn frame_input(frame: &Frame, now: i64, blob: &str, size: usize) -> Value {
 /// store (`Vault::with_blobs`) and filed by `photo.add`, which claims them by
 /// hash and size: v0's scenario entire — the same frames, the same places, the
 /// same two favourites, the same shortlist album.
-fn seed_photos(seeder: &mut Seeder, now: i64) {
+fn seed_photos(seeder: &mut Seeder, now: i64, rich: bool) {
     let mut photo_by_file: std::collections::BTreeMap<&str, String> =
         std::collections::BTreeMap::new();
     // STRICTLY IN ORDER, as v0 runs them: ids are minted per invocation, so a
@@ -1106,6 +1362,163 @@ fn seed_photos(seeder: &mut Seeder, now: i64) {
     }
 
     seed_album(seeder, &photo_by_file);
+    if rich {
+        seed_older_roll(seeder, now);
+    }
+}
+
+/// A trip or a stretch of the year: where, how long ago it began, the hour of
+/// day, and a title for each frame.
+type Stretch = (
+    &'static str,
+    (f64, f64),
+    i64,
+    &'static [(&'static str, i64)],
+);
+
+/// THE OLDER ROLL: ~30 more frames across the last fourteen months, in six
+/// places, so Library has years and months to scroll, Places has pins that are
+/// not all in California, and the viewer has neighbours to swipe between.
+///
+/// The bytes are generated (`synth::gradient_png`): photographs are
+/// content-addressed, so each frame needs its own bytes, and the index is the
+/// whole recipe. One more album, "Lisbon", gathers the first stretch.
+const STRETCHES: [Stretch; 6] = [
+    (
+        "Lisbon",
+        (38.7139, -9.1394),
+        420,
+        &[
+            ("Tram 28 on the hill", 10),
+            ("Alfama rooftops", 12),
+            ("Pastel de nata, still warm", 9),
+            ("Miradouro at sunset", 19),
+            ("Tiles on the Rua Augusta", 15),
+            ("Night walk home", 22),
+        ],
+    ),
+    (
+        "Big Sur",
+        (36.2704, -121.8081),
+        255,
+        &[
+            ("Bixby Bridge, fog lifting", 8),
+            ("McWay Falls", 11),
+            ("Pull-off on Highway 1", 14),
+            ("Elephant seals at San Simeon", 16),
+            ("Campfire", 21),
+        ],
+    ),
+    (
+        "Denver",
+        (39.7392, -104.9903),
+        160,
+        &[
+            ("Maya's new place", 15),
+            ("Red Rocks, empty", 9),
+            ("Larimer Square at dusk", 19),
+            ("Coffee with Maya", 10),
+            ("Boxes everywhere", 13),
+        ],
+    ),
+    (
+        "Portland",
+        (45.5152, -122.6784),
+        104,
+        &[
+            ("Jake's old street", 11),
+            ("Powell's, second floor", 14),
+            ("Rain on the Hawthorne", 17),
+            ("Food carts", 12),
+        ],
+    ),
+    (
+        "Yosemite",
+        (37.8651, -119.5383),
+        64,
+        &[
+            ("Tunnel View", 9),
+            ("Half Dome from the meadow", 11),
+            ("Mist Trail", 13),
+            ("Valley floor at golden hour", 18),
+            ("Stars over Glacier Point", 23),
+        ],
+    ),
+    (
+        "Home",
+        HOME_BACKYARD,
+        31,
+        &[
+            ("Sunday on the porch", 11),
+            ("Tomatoes, finally", 15),
+            ("The new bookshelf", 18),
+        ],
+    ),
+];
+
+fn seed_older_roll(seeder: &mut Seeder, now: i64) {
+    let mut index = 100_u32;
+    let mut lisbon = Vec::new();
+    for (stretch, (place, (lat, lon), began, frames)) in STRETCHES.iter().enumerate() {
+        for (frame, (title, hour)) in frames.iter().enumerate() {
+            index += 1;
+            // Every fifth frame is a portrait: the grid has both shapes.
+            let portrait = index.is_multiple_of(5);
+            let (width, height) = if portrait { (64, 96) } else { (96, 64) };
+            let bytes = synth::gradient_png(index, width, height);
+            let Some(blob) = seeder.spill(&bytes) else {
+                continue;
+            };
+            let frame_day = i64::try_from(frame).unwrap_or(0);
+            let mut input = json!({
+                "blob": blob,
+                "size": bytes.len(),
+                "media_type": "image/png",
+                "title": title,
+                "taken_at": at(now, -(began - frame_day / 2), *hour, 0),
+                "offset_min": if *place == "Lisbon" { 0 } else { TZ_OFFSET_MIN },
+                "width": width,
+                "height": height,
+                "lat": lat,
+                "lon": lon,
+            });
+            // A frame in three has no coordinates, which is a camera roll's honest shape.
+            if (stretch + frame) % 7 == 3 {
+                let object = input.as_object_mut().expect("the input is an object");
+                object.remove("lat");
+                object.remove("lon");
+            }
+            let Some(photo) = Seeder::id(seeder.run("photo.add", input).as_ref(), "id") else {
+                continue;
+            };
+            if frame == 1 && *place != "Home" {
+                seeder.run("flag.set", json!({ "id": photo, "flag": "starred" }));
+            }
+            if *place == "Lisbon" {
+                lisbon.push(photo);
+            }
+        }
+    }
+    let Some(album) = Seeder::id(
+        seeder
+            .run(
+                "container.create",
+                json!({ "kind": "album", "title": "Lisbon" }),
+            )
+            .as_ref(),
+        "id",
+    ) else {
+        return;
+    };
+    for photo in &lisbon {
+        seeder.run(
+            "edge.add",
+            json!({ "from": album, "rel": "contains", "to": photo }),
+        );
+    }
+    if let Some(cover) = lisbon.get(3) {
+        seeder.run("album.set_cover", json!({ "id": album, "photo_id": cover }));
+    }
 }
 
 /// The shortlist, as an album with a cover.
@@ -1148,7 +1561,7 @@ fn seed_album(seeder: &mut Seeder, photo_by_file: &std::collections::BTreeMap<&s
 // section, so the project place is reachable (#1047).
 // ---------------------------------------------------------------------------
 
-fn seed_tasks(seeder: &mut Seeder, now: i64) {
+fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
     let add = |seeder: &mut Seeder, input: Value| -> Option<String> {
         let output = seeder.run("task.add", input);
         Seeder::id(output.as_ref(), "id")
@@ -1182,7 +1595,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
         seeder
             .run(
                 "container.create",
-                json!({ "kind": "project", "title": "Tahoe trip", "color": "steelblue", "position": 1 }),
+                json!({ "kind": "project", "title": "Tahoe trip", "color": if rich { "petrol" } else { "blue" }, "position": 1 }),
             )
             .as_ref(),
         "id",
@@ -1237,6 +1650,71 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
         seeder,
         json!({ "title": "Learn to make sourdough", "priority": 1 }),
     );
+
+    if !rich {
+        return;
+    }
+    // THE DEMO'S: LISTS THAT WEAR A COLOUR (the palette's keys), each with a few reminders
+    // in it: Reminders' "My Lists" and a list's own screen both have something to draw.
+    // Overdue ones carry a due day in the past; FLAGGED ones carry the starred flag.
+    for (position, (title, color, tasks)) in [
+        (
+            "Home",
+            "mustard",
+            &[
+                ("Replace the hallway bulb", Some(-3_i64), false),
+                ("Ask the landlord about the heater", Some(-1), true),
+                ("Descale the kettle", Some(6), false),
+            ][..],
+        ),
+        (
+            "Work",
+            "violet",
+            &[
+                ("Send the design review notes", Some(0), true),
+                ("Book the offsite room", Some(4), false),
+                ("Expense the October train pass", Some(-6), false),
+                ("Prep the Friday demo", Some(2), true),
+            ][..],
+        ),
+        (
+            "Errands",
+            "raspberry",
+            &[
+                ("Renew the car registration", Some(-5), true),
+                ("Return the cabin keys deposit form", Some(9), false),
+                ("Pick up the prescription", Some(1), false),
+            ][..],
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let list = Seeder::id(
+            seeder
+                .run(
+                    "container.create",
+                    json!({ "kind": "project", "title": title, "color": color,
+                            "position": position + 2 }),
+                )
+                .as_ref(),
+            "id",
+        );
+        let Some(list) = list else { continue };
+        for (index, (name, due, flagged)) in tasks.iter().enumerate() {
+            let mut input = json!({ "title": name, "project_id": list, "position": index + 1,
+                                    "priority": 3 });
+            if let Some(due) = due {
+                input["due"] = json!(at(now, *due, 9, 0));
+            }
+            let Some(task) = add(seeder, input) else {
+                continue;
+            };
+            if *flagged {
+                seeder.run("flag.set", json!({ "id": task, "flag": "starred" }));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1252,10 +1730,10 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
 // names her in the summary instead.
 // ---------------------------------------------------------------------------
 
-fn seed_agenda(seeder: &mut Seeder, now: i64) {
+fn seed_agenda(seeder: &mut Seeder, now: i64, circle: &people::Circle, rich: bool) {
     let slot = |days: i64, hour: i64, minute: i64, minutes: i64| {
-        let start = at(now, days, hour, minute);
-        let end = at(now, days, hour, minute + minutes);
+        let start = wall(now, days, hour, minute);
+        let end = wall(now, days, hour, minute + minutes);
         (start, end)
     };
     /// One seeded event: title, description, `(starts_at, ends_at)`, rrule.
@@ -1292,7 +1770,7 @@ fn seed_agenda(seeder: &mut Seeder, now: i64) {
             "title": summary,
             "starts": dtstart,
             "ends": dtend,
-            "zone": "Etc/UTC",
+            "timing": "floating",
         });
         if let Some(description) = description {
             input["description"] = json!(description);
@@ -1300,6 +1778,197 @@ fn seed_agenda(seeder: &mut Seeder, now: i64) {
         if let Some(rrule) = rrule {
             input["rule"] = json!(rrule);
         }
+        let dinner = summary == "Dinner with Maya";
+        if dinner && let Some(maya) = circle.get("Maya") {
+            input["attendees"] = json!([maya]);
+        }
+        let id = Seeder::id(seeder.run("event.propose", input).as_ref(), "id");
+        if dinner && let (Some(id), Some(maya)) = (id.clone(), circle.get("Maya")) {
+            seeder.run(
+                "event.respond",
+                json!({ "id": id, "person_id": maya, "state": "accepted" }),
+            );
+        }
+        // ATTACHMENTS (#1173): the dinner carries a document, so the event page draws its
+        // attachments section with a row and not only the Add keys.
+        if rich
+            && dinner
+            && let Some(event) = id
+            && let Some(menu) = Seeder::id(
+                seeder
+                    .run(
+                        "document.create_text",
+                        json!({
+                            "title": "Thai menu (sample)",
+                            "body_text": "# Thai menu (sample)\n\nThis is sample demo data, not a real menu.\n\n- Green curry\n- Pad see ew\n- Mango sticky rice\n",
+                            "media_type": "text/markdown",
+                        }),
+                    )
+                    .as_ref(),
+                "id",
+            )
+        {
+            seeder.run(
+                "edge.add",
+                json!({ "from": event, "rel": "attached", "to": menu }),
+            );
+        }
+    }
+    if rich {
+        seed_busy_week(seeder, now, circle);
+    }
+}
+
+/// A timed event of the busy week: title, `(day, hour, minute, minutes)`, whether
+/// it blocks the calendar, and the guests by name (`"owner"` is the member).
+type Slot = (
+    &'static str,
+    (i64, i64, i64, i64),
+    bool,
+    &'static [&'static str],
+);
+
+/// THE WEEK THE DAY AND WEEK GRIDS ARE CHECKED AGAINST (#1173).
+///
+/// `event.propose` refuses a BUSY event that overlaps another busy one, and a
+/// grid with no overlaps proves nothing about its column layout, so the
+/// overlapping half of each pair is a FREE event (`busy: false`), which is also
+/// what a "maybe" on a real calendar is. Beside them: an all-day span, two
+/// events in the past, and TWO INVITATIONS, where the member is a guest who has
+/// not answered, which is what the Invites place lists.
+const BUSY_WEEK: [Slot; 15] = [
+    ("Design review", (0, 10, 0, 60), true, &[]),
+    ("Team standup", (0, 10, 30, 30), false, &[]),
+    ("Lunch with Chris", (0, 12, 30, 60), true, &["Chris"]),
+    ("Gym", (0, 12, 45, 30), false, &[]),
+    ("Focus block", (0, 14, 0, 120), true, &[]),
+    ("Sync with Priya", (0, 15, 0, 30), false, &["Priya"]),
+    ("Sprint planning", (1, 14, 0, 60), true, &[]),
+    ("1:1 with Jake", (1, 14, 30, 45), false, &["Jake"]),
+    ("Climbing with Priya", (4, 18, 0, 90), true, &["Priya"]),
+    ("Board games", (4, 18, 30, 90), false, &[]),
+    ("Cabin check-in", (5, 16, 0, 60), true, &[]),
+    (
+        "Cabin walkthrough with Alpine Rentals",
+        (5, 11, 0, 60),
+        true,
+        &["owner"],
+    ),
+    (
+        "Chris's design crit",
+        (6, 15, 0, 60),
+        true,
+        &["owner", "Chris"],
+    ),
+    ("Sprint demo", (7, 16, 0, 60), true, &[]),
+    ("Kayak lesson", (9, 10, 0, 120), true, &["Dana"]),
+];
+
+/// Two more calendars beside the vault's own, so the grids draw more than one
+/// colour: the titles of the busy week that go on each.
+const WORK_EVENTS: [&str; 6] = [
+    "Design review",
+    "Team standup",
+    "Focus block",
+    "Sprint planning",
+    "1:1 with Jake",
+    "Sprint demo",
+];
+const FAMILY_EVENTS: [&str; 4] = [
+    "Lunch with Chris",
+    "Climbing with Priya",
+    "Board games",
+    "Kayak lesson",
+];
+
+fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
+    let mut calendar = |title: &str, color: &str, position: i64| {
+        Seeder::id(
+            seeder
+                .run(
+                    "container.create",
+                    json!({ "kind": "calendar", "title": title, "color": color, "position": position }),
+                )
+                .as_ref(),
+            "id",
+        )
+    };
+    let work = calendar("Work", "blue", 1);
+    let family = calendar("Family", "violet", 2);
+    // The lunch has a place, so the event card has a third part to say ("Café Lume").
+    let cafe = Seeder::id(
+        seeder
+            .run("place.add", json!({ "title": "Café Lume" }))
+            .as_ref(),
+        "id",
+    );
+    for (title, (days, hour, minute, minutes), busy, guests) in BUSY_WEEK {
+        let calendar_id = if WORK_EVENTS.contains(&title) {
+            work.clone()
+        } else if FAMILY_EVENTS.contains(&title) {
+            family.clone()
+        } else {
+            None
+        };
+        let guests: Vec<&str> = guests
+            .iter()
+            .filter_map(|name| {
+                if *name == "owner" {
+                    circle.owner.as_deref()
+                } else {
+                    circle.get(name)
+                }
+            })
+            .collect();
+        let mut input = json!({
+            "title": title,
+            "starts": wall(now, days, hour, minute),
+            "ends": wall(now, days, hour, minute + minutes),
+            "timing": "floating",
+            "busy": busy,
+            "attendees": guests,
+            "reminders": [15],
+        });
+        if let Some(calendar_id) = calendar_id {
+            input["calendar_id"] = json!(calendar_id);
+        }
+        if let (Some(cafe), "Lunch with Chris") = (&cafe, title) {
+            input["place_id"] = json!(cafe);
+        }
         seeder.run("event.propose", input);
     }
+    // The two that already happened, so "earlier this week" has a row.
+    for (title, days, hour) in [("Team retro", -1, 15), ("Haircut", -2, 12)] {
+        seeder.run(
+            "event.propose",
+            json!({
+                "title": title,
+                "starts": wall(now, days, hour, 0),
+                "ends": wall(now, days, hour, 45),
+                "timing": "floating",
+            }),
+        );
+    }
+    // An all-day event TODAY, so the Calendar header's all-day lane has a chip.
+    let mut offsite = json!({
+        "title": "Company offsite",
+        "starts": day(now, 0),
+        "ends": day(now, 0),
+        "timing": "all-day",
+    });
+    if let Some(work) = work {
+        offsite["calendar_id"] = json!(work);
+    }
+    seeder.run("event.propose", offsite);
+    // The long weekend, as ONE ALL-DAY SPAN: `ends` is the LAST day, inclusive.
+    seeder.run(
+        "event.propose",
+        json!({
+            "title": "Tahoe long weekend",
+            "starts": day(now, 3),
+            "ends": day(now, 5),
+            "timing": "all-day",
+            "description": "Cabin on the south shore.",
+        }),
+    );
 }

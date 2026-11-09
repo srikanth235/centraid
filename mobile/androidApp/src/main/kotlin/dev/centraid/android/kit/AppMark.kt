@@ -20,7 +20,7 @@ import dev.centraid.design.NativeAppMark
  *
  * A quiet hue wash over the page with the single-tone shared icon stroke on it.
  * Both colours arrive already composited from
- * `contracts/tools/export-native-catalog.ts`, because `color-mix()` exists on
+ * `cargo xtask design`, because `color-mix()` exists on
  * neither Compose nor SwiftUI and a blend computed twice is two blends.
  *
  * THE RADIUS IS A SHARE OF THE SIZE, not a token: an identity mark is a rounded

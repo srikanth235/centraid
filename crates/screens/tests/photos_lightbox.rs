@@ -1252,3 +1252,104 @@ fn copy_exact_location_is_a_copy_the_member_asked_for_and_only_then() {
         "Exact location copied."
     );
 }
+
+#[test]
+fn the_viewer_opens_photo_only_and_info_toggles_the_details() {
+    let mut d = driver();
+    let shelf = shelf_of(&d, 2, "info");
+    let at = open(&mut d, &shelf[0], &shelf, "");
+    let info_on = |d: &Driver| {
+        view(d, at)
+            .toolbar
+            .iter()
+            .find(|verb| verb.kind == V::Info as i32)
+            .is_some_and(|verb| verb.on)
+    };
+    // Closed every time it opens: the photograph alone.
+    assert_eq!(view(&d, at).sheet, Sheet::None as i32);
+    assert!(!info_on(&d));
+    // (i) opens the details and is drawn pressed; the same key closes them.
+    tap(&mut d, at, V::Info);
+    assert_eq!(view(&d, at).sheet, Sheet::Info as i32);
+    assert!(info_on(&d));
+    tap(&mut d, at, V::Info);
+    assert_eq!(view(&d, at).sheet, Sheet::None as i32);
+    assert!(!info_on(&d));
+    // The "…" menu holds the four rows, and no sheet stands for it.
+    let kinds: Vec<i32> = view(&d, at).menu.iter().map(|verb| verb.kind).collect();
+    assert_eq!(
+        kinds,
+        [V::Slideshow, V::AddToAlbum, V::AdjustLocation, V::Download].map(|k| k as i32)
+    );
+}
+
+// -----------------------------------------------------------------------------
+// People in this photo (#1173): tagged by hand, nothing recognises a face
+// -----------------------------------------------------------------------------
+
+#[test]
+fn people_in_a_photo_are_picked_by_name_added_and_removed_by_hand() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let id = photo(&d, Shot::new("lb-people"));
+    let response = d.act(
+        act::people::AddPerson {
+            title: "Maya Rao".into(),
+            ..Default::default()
+        }
+        .request()
+        .keyed(format!("lb:{}", kit_act::fresh())),
+    );
+    let maya = serde_json::from_slice::<serde_json::Value>(&response.output).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
+    let people = |d: &Driver| {
+        photo_of(&view(d, at))
+            .people
+            .clone()
+            .expect("a people section")
+    };
+    let link = |kind: le::Kind| ev::Kind::People(wire::LinkEvent { kind: Some(kind) });
+    let section = people(&d);
+    assert_eq!(section.title, "People in this photo");
+    assert!(section.rows.is_empty());
+    assert_eq!(section.adds[0].label, "Add person");
+    send(
+        &mut d,
+        at,
+        link(le::Kind::Add(le::AddTapped {
+            key: "person".into(),
+        })),
+    );
+    let picker = view(&d, at).people_picker.clone().unwrap();
+    assert!(picker.open);
+    assert!(picker.candidates.iter().any(|c| c.id == maya));
+    send(
+        &mut d,
+        at,
+        link(le::Kind::Pick(le::Picked { id: maya.clone() })),
+    );
+    assert!(!view(&d, at).people_picker.clone().unwrap().open);
+    let section = people(&d);
+    assert_eq!(section.rows.len(), 1);
+    assert_eq!(section.rows[0].title, "Maya Rao");
+    // The same photograph read again shows the same person: the link is the vault's.
+    let again = open(&mut d, &id, std::slice::from_ref(&id), "");
+    assert_eq!(
+        photo_of(&view(&d, again))
+            .people
+            .clone()
+            .unwrap()
+            .rows
+            .len(),
+        1
+    );
+    send(
+        &mut d,
+        at,
+        link(le::Kind::Remove(le::RemoveTapped { id: maya })),
+    );
+    assert!(people(&d).rows.is_empty());
+}

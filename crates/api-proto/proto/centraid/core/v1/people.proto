@@ -169,6 +169,9 @@ message PeopleRoster {
   uint32 count_all = 6;
   uint32 count_starred = 7;
   uint32 count_due = 8;
+  // MY CARD (#1173): the vault owner's own card, which the circle leaves out. ABSENT when the
+  // vault names no owner.
+  optional PeopleCard owner = 9;
 }
 
 // One person as a dashboard rail draws them.
@@ -262,6 +265,34 @@ message PeopleSheet {
   repeated PeopleTouchEntry touches = 8;
   // Who this person is related to, both directions, by name (#1146 D8).
   repeated PeopleRelation relations = 10;
+  // IN YOUR VAULT (#1173): what else in the vault is about this person, newest first within
+  // each kind, at most `VAULT_PER_KIND` of a kind (the Rust cap) and the kinds in the order
+  // events, tasks, notes, documents (about the person, or attached to them or to one of their
+  // events or tasks), payments (a transaction `with` them) and photos (a photograph `depicts`
+  // them). Locker is never here. Yearly dates are not here (they are `dates`), and neither are the
+  // notes written about the person in People (they are `notes`): these are the notes that
+  // link to them from Notes.
+  repeated PeopleVaultItem vault = 11;
+  // Items beyond the cap, over every kind: "and 3 more".
+  uint32 vault_more = 12;
+  // THIS IS THE OWNER'S OWN CARD (My card): no star, merge, trash or touch log.
+  bool is_me = 13;
+}
+
+// One thing in the vault that is about a person, from another app.
+message PeopleVaultItem {
+  string id = 1;
+  // `event`, `task`, `note`, `document`, `txn` or `photo`.
+  string kind = 2;
+  string title = 3;
+  // An event's start in the request's zone (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), and whether it
+  // is an all-day one. Empty on a recurring event, a task and a note.
+  string local_start = 4;
+  bool all_day = 5;
+  // The row's creation civil day (`YYYY-MM-DD`) in the request's zone.
+  string created_local_day = 6;
+  // A document attached to an event or task rather than to the person: that item's title.
+  string via = 7;
 }
 
 // One `related` edge, read from the sheet's person. The edge is labelled by what its target is
@@ -310,4 +341,24 @@ message PeopleTrash {
   repeated PeopleTrashRow people = 1;
   // The shelf is longer than its 500-row window.
   bool truncated = 2;
+}
+
+// `people.links`: the people ONE thing is joined to, by hand (#1173): a transaction is `with`
+// them, a document is `about` them, a photograph `depicts` them. A Locker item's links are
+// Locker's own read, behind its wall, and are never answered here.
+message PeopleLinksRequest {
+  // The transaction, document or photograph.
+  string entity_id = 1;
+}
+
+message PeopleLinks {
+  // In name order; a person in the trash is not here.
+  repeated PeopleLinked people = 1;
+}
+
+message PeopleLinked {
+  string party_id = 1;
+  string name = 2;
+  // The vault's owner: the person the vault is about.
+  bool is_owner = 3;
 }

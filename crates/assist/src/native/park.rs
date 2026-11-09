@@ -160,6 +160,9 @@ pub struct RowChange {
     pub created: bool,
     pub fields: Vec<FieldChange>,
     pub links: Vec<LinkChange>,
+    /// The name the kind's one date goes by in `fields` (`due`, `starts`...): the card reads
+    /// its "when" from that field.
+    pub date_label: &'static str,
 }
 
 /// Whether a verb deletes, removes or cancels: the writes a card asks twice for.
@@ -770,7 +773,7 @@ fn tag_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
     Ok(ok(json!({"changed": true})))
 }
 
-/// An edge the model reads: a photograph in an album (`contains`), what a note, task or event is
+/// An edge the model reads: a photograph in an album (`contains`) or of a person (`depicts`), a line with a person (`with`), what a note, task, event or document is
 /// `about`, and who attends an event.
 fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, String> {
     let (from, to) = (
@@ -780,6 +783,8 @@ fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, Strin
     let via = match text(input, "rel") {
         Some("contains") => Via::Entry,
         Some("about") => Via::About,
+        Some("with") => Via::With,
+        Some("depicts") => Via::Depicts,
         Some("attendee") => Via::Attendee,
         other => return Err(format!("error: park has no patch for an edge of {other:?}")),
     };
@@ -932,6 +937,7 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     if let Some(rule) = text(input, "rule") {
         row.extra.insert("rrule", rule.to_owned());
     }
+    row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
     if let Some(parent) = text(input, "parent_id") {
         edge(

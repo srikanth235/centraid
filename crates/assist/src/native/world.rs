@@ -386,7 +386,7 @@ impl World {
         let flags = Flags::load(door)?;
         world.load_people(door, &flags)?;
         world.load_events(door, at)?;
-        world.load_tasks(door)?;
+        world.load_tasks(door, &flags)?;
         world.load_photos(door, &flags)?;
         world.load_notes(door, &flags)?;
         world.load_containers(door)?;
@@ -418,7 +418,7 @@ impl World {
         let entities = entities(door, "person")?;
         let people = door.table(
             "person",
-            "id, form, role, nickname, met, cadence_days",
+            "id, form, role, nickname, met, birthday, cadence_days",
             "id",
             "id",
         )?;
@@ -443,11 +443,16 @@ impl World {
                     .map(Val::Num),
             );
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
-            self.insert(Row {
+            let mut row = Row {
                 kind: Kind::Person,
                 date: touched.get(&id).and_then(|at| Stamp::parse(at)),
                 ..Row::of(Kind::Person, &id, entity, fields)
-            });
+            };
+            // the birthday is the card's second fact (`MM-DD` or a full date), never the model's
+            if let Some(birthday) = text(person, "birthday").filter(|day| !day.is_empty()) {
+                row.extra.insert("birthday", birthday);
+            }
+            self.insert(row);
         }
         Ok(())
     }
@@ -456,10 +461,12 @@ impl World {
         let entities = entities(door, "event")?;
         let events = door.table(
             "event",
-            "id, starts, ends, timing, zone, rule, status, description",
+            "id, starts, ends, timing, zone, rule, status, place_id, description",
             "id",
             "id",
         )?;
+        // the place's name is the card's third part (`Café Lume`), never the model's
+        let places = self::entities(door, "place")?;
         let spec = Kind::Event.spec();
         for event in &events {
             let id = text(event, "id").unwrap_or_default();
@@ -492,6 +499,13 @@ impl World {
                 if let Some(value) = text(event, column) {
                     row.extra.insert(name, value);
                 }
+            }
+            if let Some(name) = text(event, "place_id")
+                .and_then(|place| places.get(&place))
+                .and_then(|place| text(place, "title"))
+                .filter(|name| !name.trim().is_empty())
+            {
+                row.extra.insert("place", name);
             }
             let all_day = row.extra.get("timing").map(String::as_str) == Some("all-day");
             if all_day {
@@ -637,7 +651,7 @@ impl World {
         }
     }
 
-    fn load_tasks(&mut self, door: &dyn Door) -> Result<(), String> {
+    fn load_tasks(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
         let entities = entities(door, "task")?;
         let tasks = door.table(
             "task",
@@ -678,6 +692,7 @@ impl World {
                 "description",
                 nonempty(text(task, "description")),
             );
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let mut row = Row::of(Kind::Task, &id, entity, fields);
             row.date = stamp(text(task, "due"));
             if let Some(rule) = text(task, "rule") {
@@ -1316,11 +1331,17 @@ impl World {
             .keys()
             .map(|(kind, id)| (id.clone(), *kind))
             .collect();
-        for (from, to) in pairs(door, "about")? {
-            let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
-                continue;
-            };
-            self.edge((*from_kind, from), (*to_kind, to), Via::About);
+        for (rel, via) in [
+            ("about", Via::About),
+            ("with", Via::With),
+            ("depicts", Via::Depicts),
+        ] {
+            for (from, to) in pairs(door, rel)? {
+                let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
+                    continue;
+                };
+                self.edge((*from_kind, from), (*to_kind, to), via);
+            }
         }
         Ok(())
     }

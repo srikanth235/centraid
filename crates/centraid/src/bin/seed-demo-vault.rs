@@ -13,12 +13,12 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,agenda` draws People, Notes
+//! springboard — a vault seeded `--only docs,calendar` draws People, Notes
 //! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across eight apps** — agenda, docs, locker, money, notes,
-//! people, photos and agenda: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! **One scenario across nine apps** — calendar, reminders, docs, locker, money, notes,
+//! people, photos and money: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
@@ -82,6 +82,33 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::Registry;
 use centraid_vault::{Principal, Vault};
 use serde_json::{Value, json};
+
+/// The wall clock, shifted by an offset the scenario moves toward zero.
+///
+/// It starts [`centraid_core::example::REWIND_MS`] in the past and only ever
+/// moves forward, so every stamp is monotonic and the last of them is "now".
+struct DemoClock {
+    offset_ms: std::sync::atomic::AtomicI64,
+}
+
+impl DemoClock {
+    fn rewound(by_ms: i64) -> Self {
+        Self {
+            offset_ms: std::sync::atomic::AtomicI64::new(-by_ms),
+        }
+    }
+
+    fn advance(&self, ms: i64) {
+        self.offset_ms
+            .fetch_add(ms, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl centraid_vault::Clock for DemoClock {
+    fn now_ms(&self) -> i64 {
+        centraid_core::example::now_ms() + self.offset_ms.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
 
 /// Which apps this run seeds.
 ///
@@ -228,8 +255,20 @@ fn main() {
 
     // WITH THE DEMO WORDS' SEED, so Locker has a `K` to seal under (D-6).
     // Index 0: the one vault the demo words' owner holds.
+    //
+    // ON A CLOCK THAT STARTS 75 DAYS BACK and is moved forward by the scenario
+    // (`example::seed_demo`), so the people it "last spoke to" weeks ago were
+    // written weeks ago and exactly one of them is overdue to reconnect.
+    let clock = std::sync::Arc::new(DemoClock::rewound(centraid_core::example::REWIND_MS));
     let handle = centraid_core::Core::open(
-        centraid_core::CoreConfig::new(&vault_path).with_seed(demo_seed(), 0),
+        centraid_core::CoreConfig::new(&vault_path)
+            .with_seed(demo_seed(), 0)
+            .with_clock(
+                clock.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(
+                    clock.clone(),
+                ))),
+            ),
     )
     .expect("a core opens");
 
@@ -253,7 +292,14 @@ fn main() {
             vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
             let principal = Principal::owner("demo-device");
-            centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
+            centraid_core::example::seed_demo(
+                vault,
+                &registry,
+                &principal,
+                &|app| wanted.has(app),
+                now,
+                &|ms| clock.advance(ms),
+            )
         })
         .expect("the scenario seeds");
     // LOCKER THROUGH THE CORE'S SEALING PATH, not `Vault::execute`: sealing is
@@ -337,8 +383,11 @@ fn main() {
 /// self id is the predicate's one bind). Locker
 /// counts live, unarchived items, as its tile does; the trashed demo item is
 /// not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 9] = [
     ("photos", "photo", "id", None),
+    // HEALTH COUNTS ITS WORKOUTS: the day totals are keyed by (person, day, metric)
+    // and have no `id` for a page to sort by; the library's tests count those.
+    ("health", "workout", "id", None),
     ("docs", "document", "id", None),
     (
         "notes",
@@ -346,12 +395,18 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
         "id",
         Some("kind = 'note' AND deleted_at IS NULL"),
     ),
-    // THE TASKS ARE AGENDA'S (#1128): its events and its tasks are one app's rows.
+    // EVENTS ARE CALENDAR'S AND TASKS ARE REMINDERS' (round 10 of #1173): two apps, two counts.
     (
-        "agenda",
+        "calendar",
         "entity",
         "id",
-        Some("kind IN ('event', 'task') AND deleted_at IS NULL"),
+        Some("kind = 'event' AND deleted_at IS NULL"),
+    ),
+    (
+        "reminders",
+        "entity",
+        "id",
+        Some("kind = 'task' AND deleted_at IS NULL"),
     ),
     (
         "people",

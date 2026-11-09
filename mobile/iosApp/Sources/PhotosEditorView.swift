@@ -18,6 +18,7 @@ import UIKit
 /// (`RenderEdit`, performed by `PhotoEffects`).
 struct PhotosEditorView: View {
     @Environment(\.colorScheme) private var scheme
+    private let accent = AppAccent("photos")
 
     let state: Centraid_Core_V1_PhotosEditorState
     let send: (Centraid_Core_V1_PhotosEditorEvent.OneOf_Kind) -> Void
@@ -43,13 +44,13 @@ struct PhotosEditorView: View {
 
     var body: some View {
         ZStack {
-            Theme.color("stage", scheme).ignoresSafeArea()
+            Surface.page.ignoresSafeArea()
             switch state.content {
             case .loading?, nil:
                 // A STAGE'S OWN WORD, not a spinner: this ground is the stage.
                 Text(state.words.loading)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Surface.meta)
             case let .denied(denied)?:
                 DeniedGate(denied)
             case let .failure(failure)?:
@@ -60,7 +61,7 @@ struct PhotosEditorView: View {
                     } label: {
                         Text(state.words.cancel)
                             .centraidType("control")
-                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .foregroundStyle(Surface.ink)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
@@ -75,6 +76,7 @@ struct PhotosEditorView: View {
         // Cancel is, because Cancel asks first when there is something to lose.
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .appAccent("photos")
         .sheet(
             isPresented: Binding(
                 get: { state.hasDiscard },
@@ -106,14 +108,12 @@ struct PhotosEditorView: View {
                 barButton(state.words.cancel, identifier: "photos.editor.cancel", live: isEditing) {
                     send(.cancel(.init()))
                 }
-                VStack(spacing: 2) {
-                    Text(state.title).centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
-                    Text(data.meta).centraidType("small")
-                        .foregroundStyle(Theme.color("onStageSoft", scheme))
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
+                Text(state.title)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
                 commit
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -123,7 +123,16 @@ struct PhotosEditorView: View {
                 stage(in: geometry.size)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .padding(CentraidGeometry.pageMargin)
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
+
+            // THE BOARD'S LINE UNDER THE STAGE: how the crop is moved and resized.
+            Text(state.words.cropHint)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
 
             editBar
         }
@@ -156,7 +165,7 @@ struct PhotosEditorView: View {
                 space: space
             )
             cropAccessibility(
-                cropStage(preview, geometry: geometry)
+                cropStage(preview, geometry: geometry, space: space)
             )
             .accessibilityIdentifier("photos.editor.stage")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -164,7 +173,7 @@ struct PhotosEditorView: View {
             Text(state.saveRefusal.isEmpty ? state.words.loading : state.saveRefusal)
                 .centraidType("small")
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .foregroundStyle(Surface.meta)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         #else
@@ -184,13 +193,23 @@ struct PhotosEditorView: View {
             .accessibilityHidden(true)
     }
 
-    private func cropStage(_ preview: UIImage, geometry: PhotoEditGeometry) -> some View {
-        Color.clear
+    private func cropStage(_ preview: UIImage, geometry: PhotoEditGeometry, space: CGSize) -> some View {
+        // A STRAIGHTEN TURNS THE PHOTOGRAPH AND LEAVES WEDGES OF NOTHING AT THE CORNERS, so the stage
+        // is rescaled until the frame the photograph still fills takes the whole space, as the board
+        // draws it. Layout only: the crop itself is Rust's.
+        let zoom = geometry.fillZoom(
+            sourceRatio: preview.size.width / preview.size.height,
+            quarters: Int(plan.quarters),
+            straighten: Int(plan.straighten),
+            space: space
+        )
+        return Color.clear
             .frame(width: geometry.frame.width, height: geometry.frame.height)
             .overlay { stageImage(preview, geometry: geometry) }
             .overlay { cropOverlay }
             .contentShape(Rectangle())
             .gesture(cropGesture(frame: geometry.frame), including: isEditing ? .all : .none)
+            .scaleEffect(zoom)
     }
     #endif
 
@@ -272,59 +291,98 @@ struct PhotosEditorView: View {
 
     // MARK: - The bar
 
+    private func straightenCard(editing: Bool) -> some View {
+        let limit = Double(max(state.straightenLimit, 1))
+        let angle = Binding<Double>(
+            get: { Double(plan.straighten) },
+            set: { value in
+                let degrees = Int32(value.rounded())
+                guard editing, degrees != plan.straighten else { return }
+                send(.straighten(.with { $0.degrees = degrees }))
+            }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(state.straightenLabel)
+                .kitType(.row)
+                .foregroundStyle(editing ? Surface.ink : Surface.meta)
+            straightenSlider(angle, limit: limit)
+                .tint(accent.fill)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .disabled(!editing)
+                .accessibilityLabel(state.straightenLabel)
+                .accessibilityIdentifier("photos.editor.straighten")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+    }
+
+    /// THE STRAIGHTEN SLIDER fills from zero toward the thumb, as the board draws it, where the
+    /// system slider of iOS 26 has a neutral value; before it, the plain slider fills from the left.
+    @ViewBuilder
+    private func straightenSlider(_ angle: Binding<Double>, limit: Double) -> some View {
+        if #available(iOS 26, *) {
+            Slider(value: angle, in: -limit...limit, step: 1, neutralValue: 0) { EmptyView() }
+        } else {
+            Slider(value: angle, in: -limit...limit, step: 1)
+        }
+    }
+
     private var editBar: some View {
         let editing = isEditing
-        return VStack(alignment: .leading, spacing: 8) {
-            // TWO ORDERLY ROWS, every tool the same width: what to do, then what shape.
-            HStack(spacing: 6) {
-                // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in,
-                // and pressing it returns the crop to the whole frame.
-                tool(state.words.crop, selected: true, enabled: editing) {
-                    send(.ratio(.with {
-                        $0.ratio = .original
-                        $0.frameRatio = 0
-                    }))
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            // THE SHAPE, as the board draws it: one segmented control (Original, Square, 3 : 2),
+            // the chosen one raised, and the sentence saying what the photograph is now.
+            KitSegmented(
+                options: state.ratios.map { (key: $0.ratio, label: $0.label) },
+                selected: state.ratios.first(where: \.selected)?.ratio ?? .original,
+                identifier: "photos.editor.ratio",
+                fills: true
+            ) { ratio in
+                guard editing else { return }
+                send(.ratio(.with {
+                    $0.ratio = ratio
+                    $0.frameRatio = frameRatio
+                }))
+            }
+            .disabled(!editing)
+            if !state.statusLine.isEmpty {
+                Text(state.statusLine)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityIdentifier("photos.editor.status")
+            }
+            // STRAIGHTEN IS A SLIDER on a card of its own, as the board draws it: the angle in
+            // whole degrees either side of level, to the limit Rust states. Every whole degree
+            // is one `straighten` event carrying the angle; Rust clamps and keeps it.
+            straightenCard(editing: editing)
+            // THE THREE KEYS, equal and white: turn, mirror, start over.
+            HStack(spacing: 8) {
                 tool(state.words.rotate, enabled: editing) { send(.rotate(.init())) }
-                tool(state.straightenLabel, enabled: editing) { send(.straighten(.init())) }
                 tool(state.flipLabel, selected: plan.flip != .unspecified, enabled: editing) {
                     send(.flip(.init()))
-                }
-            }
-            HStack(spacing: 6) {
-                ForEach(state.ratios, id: \.ratio.rawValue) { ratio in
-                    // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the
-                    // absence of a ratio.
-                    tool(
-                        ratio.label,
-                        selected: ratio.selected && ratio.ratio != .original,
-                        enabled: editing
-                    ) {
-                        send(.ratio(.with {
-                            $0.ratio = ratio.ratio
-                            $0.frameRatio = frameRatio
-                        }))
-                    }
                 }
                 tool(state.words.reset, enabled: editing && state.edited) { send(.reset(.init())) }
             }
             Text(state.words.saveExplanation)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+            // WHERE IT CAME FROM, the board's last line.
+            if case let .data(data)? = state.content, !data.meta.isEmpty {
+                Text(data.meta)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
             // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and
             // a save that did not land says so in the same place.
             if let refusal = refusalLine {
                 Text(refusal)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStage", scheme))
+                    .foregroundStyle(Surface.ink)
                     .accessibilityIdentifier("photos.editor.refusal")
-            }
-            // THE ONE STATUS LINE, drawn when there is something to say.
-            if !state.statusLine.isEmpty {
-                Text(state.statusLine)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
-                    .accessibilityIdentifier("photos.editor.status")
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -342,18 +400,17 @@ struct PhotosEditorView: View {
 
     private var commit: some View {
         let live = isEditing && state.saveRefusal.isEmpty
-        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
         return Button {
             guard live else { return }
             send(.save(.init()))
         } label: {
             Text(state.words.save)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "stage" : "onStageSoft", scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(live ? Color.white : Surface.meta)
                 .padding(.horizontal, 16)
                 .frame(minHeight: 44)
-                .background(live ? Theme.color("onStage", scheme) : Color.clear, in: shape)
-                .overlay(shape.strokeBorder(Theme.color(live ? "onStage" : "stageLine", scheme), lineWidth: 1))
+                .background(live ? accent.fill : Surface.fill, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!live)
@@ -362,18 +419,19 @@ struct PhotosEditorView: View {
         .accessibilityIdentifier("photos.editor.save")
     }
 
-    /// A WORD IN THE TOP BAR: Cancel, with the commit's target and none of its plate.
+    /// THE WAY OUT: a round key with an X in glass, Cancel's word for a screen reader. Cancel
+    /// asks first when there is something to lose, so it is the same event.
     private func barButton(_ label: String, identifier: String, live: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(live ? "onStage" : "onStageSoft", scheme))
-                .padding(.horizontal, 4)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+            CentraidIconView(iconKey: "X", tint: live ? Surface.ink : Surface.meta, size: 18)
+                .frame(width: 44, height: 44)
+                .background(Surface.card, in: Circle())
+                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!live)
+        .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
 
@@ -383,24 +441,20 @@ struct PhotosEditorView: View {
         enabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
         return Button {
             guard enabled else { return }
             action()
         } label: {
             Text(label)
-                .centraidType("control")
-                .foregroundStyle(Theme.color(enabled ? "onStage" : "onStageSoft", scheme))
+                .kitType(.meta)
+                .fontWeight(.semibold)
+                .foregroundStyle(selected ? Color.white : (enabled ? Surface.ink : Surface.meta))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .padding(.horizontal, 6)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(
-                    shape.strokeBorder(
-                        Theme.color(selected ? "onStage" : "stageLine", scheme),
-                        lineWidth: 1
-                    )
-                )
+                .background(selected ? accent.fill : Surface.card, in: shape)
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -461,6 +515,22 @@ struct PhotoEditGeometry {
         let boxWidth = Self.rotatedBox(width: Double(sourceRatio), height: 1, degrees: rotation).0
         let scale = boxWidth > 0 ? frame.width / CGFloat(boxWidth) : 0
         image = CGSize(width: sourceRatio * scale, height: scale)
+    }
+
+    /// HOW FAR THE STAGE IS SCALED UP so the photograph's own frame (the largest centred rectangle of
+    /// its shape that stays inside the turned photograph, `inscribed_crop` in Rust) fills the space.
+    /// 1 when the photograph is not straightened.
+    func fillZoom(sourceRatio: CGFloat, quarters: Int, straighten: Int, space: CGSize) -> CGFloat {
+        guard straighten != 0, sourceRatio > 0, space.width > 0, space.height > 0 else { return 1 }
+        let ratio = Double(quarters % 2 == 0 ? sourceRatio : 1 / sourceRatio)
+        let radians = Double(straighten) * .pi / 180
+        let c = abs(cos(radians)), s = abs(sin(radians))
+        let k = min(ratio / (ratio * c + s), 1 / (ratio * s + c))
+        let box = Self.rotatedBox(width: ratio, height: 1, degrees: straighten)
+        guard box.0 > 0, box.1 > 0, frame.width > 0, frame.height > 0 else { return 1 }
+        let cropWidth = CGFloat(k * ratio / box.0) * frame.width
+        let cropHeight = CGFloat(k / box.1) * frame.height
+        return max(1, min(space.width / cropWidth, space.height / cropHeight))
     }
 
     static func rotatedBox(width: Double, height: Double, degrees: Int) -> (Double, Double) {

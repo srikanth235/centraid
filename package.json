@@ -25,8 +25,7 @@
     "gateway:install": "bash scripts/install-gateway.sh",
     "lint": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings .",
     "lint:fix": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings --fix .",
-    "lint:product": "node scripts/lint-copy.mjs && node scripts/lint-native-controls.mjs && node scripts/lint-journey-ledger.mjs && bun scripts/site-tokens.mjs",
-    "lint:site-tokens": "bun scripts/site-tokens.mjs",
+    "lint:product": "node scripts/lint-copy.mjs && node scripts/lint-native-controls.mjs && node scripts/lint-journey-ledger.mjs",
     "release:classify": "node scripts/release/classify.mjs",
     "release:matrix": "node scripts/release/matrix.mjs",
     "release:prepare": "node scripts/release/prepare.mjs",
@@ -35,7 +34,6 @@
     "release:sync-versions": "node scripts/release/sync-versions.mjs",
     "release:verify-secrets": "node scripts/release/verify-secrets.mjs",
     "scripts:test": "node node_modules/vitest/vitest.mjs run --config scripts/release/vitest.config.ts && node --test scripts/release/surfaces.test.mjs scripts/ci/*.test.mjs scripts/lint-*.test.mjs",
-    "site:tokens": "bun scripts/site-tokens.mjs --write",
     "test": "bun run --filter '*' test",
     "typecheck": "bun run --filter '*' typecheck && tsc -p tsconfig.tooling.json"
   },

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// THE CONTROLS (DESIGN.md "The controls (mobile)").
+// THE CONTROLS (product-intuition/references/design-behaviour.md § Controls).
 //
 // Chrome is the platform's; content is the kit's. The navigation bar draws its
 // own back, title and trailing verb; everything under it is one of these, so
@@ -29,6 +29,8 @@ struct KitIconKey: View {
     /// Glass on iOS 26 — in place of the hairline frame.
     var glass: Bool = false
     var tint: String = "text"
+    /// The glyph is filled in its ink (a toggle that is on).
+    var solid: Bool = false
     var identifier: String = ""
     let action: () -> Void
 
@@ -54,7 +56,8 @@ struct KitIconKey: View {
                 CentraidIconView(
                     iconKey: iconKey,
                     tint: Theme.color(enabled ? tint : Self.disabledToken, scheme),
-                    size: 18
+                    size: 18,
+                    solid: solid
                 )
             }
             .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
@@ -76,6 +79,8 @@ struct KitIconKey: View {
 struct KitLink: View {
     let label: String
     var dense: Bool = false
+    /// A link that wears the surrounding page's colour (the words pages' teal) instead of the link blue.
+    var tint: Color? = nil
     var identifier: String = ""
     let action: () -> Void
 
@@ -86,7 +91,7 @@ struct KitLink: View {
         Button(action: action) {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
-                .foregroundStyle(Theme.color(enabled ? "link" : "textDisabled", scheme))
+                .foregroundStyle(enabled ? (tint ?? Theme.color("link", scheme)) : Theme.color("textDisabled", scheme))
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .contentShape(Rectangle())
         }
@@ -175,29 +180,37 @@ struct KitChip: View {
 
 // MARK: - Segmented
 
-/// ONE OF TWO TO FOUR VIEWS OF THE SAME THING, in the band plate's grammar:
-/// one `bgElev` capsule with a `lineStrong` hairline, the lit segment in `text`
-/// at the `control` rung with a mark-wide rule over it, the others `textSoft`
-/// at `band`. The two rungs share a size, so a tap never reflows the plate.
-/// The caller places it (centre, margin); the plate owns nothing outside
-/// itself.
+/// ONE OF TWO TO FOUR VIEWS OF THE SAME THING, drawn as the boards draw it (HealthMetric,
+/// MoneySpending, Settings' appearance): a pale track, the lit segment a white card on it in the
+/// `row` rung's semibold, the others `meta`. The two weights share a size, so a tap never reflows
+/// the track. The caller places it (centre, margin); `fills` stretches the segments to equal
+/// widths across the whole line (Health's four ranges), else it hugs its words. A filling track
+/// stacks its segments once the text reflows (`Theme.reflowSize`), so no word is cut.
+///
+/// THE ONE SEGMENTED CONTROL (#1173): every page draws it through this view, Settings' appearance
+/// choice included. Only the band's own plate (Photos' zoom) is a different control.
 struct KitSegmented<Key: Hashable>: View {
     let options: [(key: Key, label: String)]
     let selected: Key
     var identifier: String = ""
+    var fills = false
+    /// The id a segment carries after the track's own: the label, lower-cased, unless the caller
+    /// has a stabler word (a machine key).
+    var segmentID: (Key, String) -> String = { _, label in label.lowercased() }
     let onSelect: (Key) -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: BandMetrics.groupGutter) {
+        let stacked = fills && dynamicTypeSize >= Theme.reflowSize
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
+        layout {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 segment(option.key, option.label)
             }
         }
-        .padding(BandMetrics.platePad)
-        .background(Theme.color("bgElev", scheme), in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        .padding(3)
+        .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
@@ -206,25 +219,20 @@ struct KitSegmented<Key: Hashable>: View {
         let active = key == selected
         return Button { onSelect(key) } label: {
             Text(label)
-                .centraidType(active ? "control" : "band", scales: false)
-                .foregroundStyle(Theme.color(active ? "text" : "textSoft", scheme))
+                .kitType(.row)
+                .fontWeight(active ? .semibold : .regular)
+                .foregroundStyle(active ? Surface.ink : Surface.meta)
                 .lineLimit(1)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(alignment: .top) {
-                    if active {
-                        Capsule()
-                            .fill(Theme.color("text", scheme))
-                            .frame(width: BandMetrics.markSize, height: BandMetrics.activeRule)
-                            .padding(.top, CentraidGeometry.hairline)
-                    }
-                }
-                .contentShape(Capsule())
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: fills ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+                .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
-        .accessibilityIdentifier(identifier.isEmpty ? "" : "\(identifier)-\(label.lowercased())")
+        .accessibilityIdentifier(identifier.isEmpty ? "" : "\(identifier)-\(segmentID(key, label))")
     }
 }
 
@@ -327,16 +335,16 @@ struct KitCheckBox: View {
 // MARK: - Switch
 
 private struct KitToggleStyle: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     func body(content: Content) -> some View {
-        content.tint(Theme.color("accent", scheme))
+        content.tint(accent.fill)
     }
 }
 
 extension View {
-    /// A SWITCH IN `accent` WHEN ON. The system switch's green is nobody's
-    /// palette; accent is the one "on" in the kit.
+    /// A SWITCH IN THE APP'S COLOUR WHEN ON, as every board draws it (the Money carry switch is navy,
+    /// the Photos one magenta). The system switch's green is nobody's palette.
     func kitToggle() -> some View {
         modifier(KitToggleStyle())
     }
@@ -449,6 +457,10 @@ struct KitSpinner: View {
 struct KitProgressBar: View {
     let fraction: Double
     var onStage: Bool = false
+    /// 2 is the rule of a progress line; a status card's bar (Backup's run) is 6.
+    var height: CGFloat = 2
+    /// A fill that is no token (Backup's run wears the shell's teal), over the accent.
+    var fill: Color? = nil
 
     @Environment(\.colorScheme) private var scheme
 
@@ -459,11 +471,11 @@ struct KitProgressBar: View {
             ZStack(alignment: .leading) {
                 shape.fill(Theme.color(onStage ? "onStageSoft" : "bgSunken", scheme))
                 shape
-                    .fill(Theme.color(onStage ? "onStage" : "accent", scheme))
+                    .fill(fill ?? Theme.color(onStage ? "onStage" : "accent", scheme))
                     .frame(width: proxy.size.width * clamped)
             }
         }
-        .frame(height: 2)
+        .frame(height: height)
         .clipShape(shape)
         .accessibilityElement(children: .ignore)
         .accessibilityValue("\(Int((clamped * 100).rounded())) percent")

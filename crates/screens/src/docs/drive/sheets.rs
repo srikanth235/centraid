@@ -161,7 +161,13 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                 words::labels_title(locale),
                 document_id,
                 locale,
-                Body::Labels(fold::labels_sheet(locale, row, &rail.labels, draft)),
+                Body::Labels(fold::labels_sheet(
+                    locale,
+                    row,
+                    &rail.labels,
+                    &rail.label_entries,
+                    draft,
+                )),
             )
         }
         Sheet::NewFolder(name) => {
@@ -183,7 +189,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                             "{} {}",
                             words::where_in(locale),
                             if drive.folder_name.is_empty() {
-                                words::band_folders(locale)
+                                words::band_browse(locale)
                             } else {
                                 drive.folder_name.clone()
                             }

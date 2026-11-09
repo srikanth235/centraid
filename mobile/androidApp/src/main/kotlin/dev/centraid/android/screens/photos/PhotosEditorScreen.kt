@@ -6,6 +6,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import dev.centraid.android.kit.KitSegmented
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -24,7 +27,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +69,10 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidScale
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -101,8 +113,9 @@ public fun PhotosEditorScreen(
     /** The new photograph is in the vault. The shell pops and opens it. */
     onSaved: (Route) -> Unit,
 ) {
-    val ink = centraidColor("onStage")
-    val soft = centraidColor("onStageSoft")
+    // THE PAGE IS THE CARD PAGE (#1173); only the photograph's own ground is the stage.
+    val ink = Surface.ink
+    val soft = Surface.meta
     val words = state.words ?: PhotosEditorWords()
     // BACK IS CANCEL, and Cancel asks first when there is something to lose. It
     // is inert while a save runs: a back that fell through mid-save would pop an
@@ -122,7 +135,7 @@ public fun PhotosEditorScreen(
     val loading = state.loading
     val failure = state.failure
     val data = state.data_
-    Box(modifier = Modifier.fillMaxSize().background(centraidColor("stage"))) {
+    Box(modifier = Modifier.fillMaxSize().background(Surface.page)) {
         when {
             loading != null -> StageSpinner(modifier = Modifier.align(Alignment.Center))
 
@@ -134,7 +147,7 @@ public fun PhotosEditorScreen(
                 OutlineButton(
                     label = words.cancel,
                     testTag = "editor-failure-cancel",
-                    ink = "onStage",
+                    ink = "text",
                     onPress = { onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled())) },
                 )
             }
@@ -171,37 +184,60 @@ private fun Editor(
         value = path?.let { withContext(Dispatchers.IO) { PhotosEditRender.preview(it) } }
     }
     Column(modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) {
-        // THE STAMP: what this is and where it came from. WHEN outranks WHAT.
-        Column(
+        // THE TOP BAR, as the board draws it: the way out, the one-line title and the commit.
+        Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(text = state.title, color = ink, style = centraidType("control"))
-            Text(text = data.meta, color = soft, style = centraidType("small"))
+            Tool(words.cancel, selected = false, enabled = editing, ink, soft, line = centraidColor("stageLine")) {
+                onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled()))
+            }
+            Text(
+                text = state.title,
+                color = ink,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            Commit(state, words, editing, onEvent, ink, soft, centraidColor("stageLine"))
         }
         BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(KitGeometry.GUTTER),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(KitGeometry.GUTTER)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp)),
             contentAlignment = Alignment.Center,
         ) {
             val image = preview
             if (image == null) {
                 Text(
                     text = if (path == null) state.save_refusal else words.loading,
-                    color = soft,
+                    color = centraidColor("onStageSoft"),
                     style = centraidType("small"),
                     textAlign = TextAlign.Center,
                 )
             } else {
-                Stage(image, plan, editing, words, maxWidth.value, maxHeight.value, onEvent, ink)
+                Stage(image, plan, editing, words, maxWidth.value, maxHeight.value, onEvent, centraidColor("onStage"))
             }
         }
+        // THE BOARD'S LINE UNDER THE STAGE: how the crop is moved and resized.
+        Text(
+            text = words.crop_hint,
+            color = soft,
+            style = kitTextStyle(KitType.Meta),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
         // THE ROTATED FRAME'S SHAPE, for a centred ratio crop. The stage is the
         // one thing that has measured the photograph, oriented, as drawn, so the
         // ratio chips carry it. Zero before the preview lands, which Rust answers
         // with the whole frame.
         val sourceRatio = preview?.let { it.width.toDouble() / it.height.coerceAtLeast(1) } ?: 0.0
         val frameRatio = if (sourceRatio > 0.0) rotatedFrameRatio(sourceRatio, totalRotation(plan)) else 0.0
-        EditBar(state, words, editing, frameRatio, onEvent, ink, soft)
+        EditBar(state, data, words, editing, frameRatio, onEvent, ink, soft)
     }
 }
 
@@ -244,9 +280,16 @@ private fun Stage(
     val thirds = centraidColor("stageLine")
     val flipX = if (plan.flip == PhotosEditPlan.Flip.FLIP_HORIZONTAL) -1f else 1f
     val flipY = if (plan.flip == PhotosEditPlan.Flip.FLIP_VERTICAL) -1f else 1f
+    // A STRAIGHTEN LEAVES WEDGES OF NOTHING AT THE CORNERS, so the stage is rescaled until the frame the
+    // photograph still fills takes the whole space, as the board draws it (layout only; the crop is Rust's).
+    val fill = straightenFillZoom(sourceRatio, plan.quarters, plan.straighten, frameW, frameH, maxWidthDp, maxHeightDp)
     Box(
         modifier = Modifier
             .size(frameW.dp, frameH.dp)
+            .graphicsLayer {
+                scaleX = fill
+                scaleY = fill
+            }
             .semantics {
                 contentDescription = words.crop_area
                 stateDescription = words.crop_hint
@@ -316,7 +359,7 @@ private fun Stage(
         Canvas(modifier = Modifier.size(frameW.dp, frameH.dp)) {
             val w = size.width
             val h = size.height
-            val left = (crop.x * w).toFloat()
+            val remaining = (crop.x * w).toFloat()
             val top = (crop.y * h).toFloat()
             val boxW = (crop.w * w).toFloat()
             val boxH = (crop.h * h).toFloat()
@@ -324,16 +367,16 @@ private fun Stage(
             // one that reads the same under every renderer.
             drawRect(mask, Offset(0f, 0f), Size(w, top))
             drawRect(mask, Offset(0f, top + boxH), Size(w, h - top - boxH))
-            drawRect(mask, Offset(0f, top), Size(left, boxH))
-            drawRect(mask, Offset(left + boxW, top), Size(w - left - boxW, boxH))
+            drawRect(mask, Offset(0f, top), Size(remaining, boxH))
+            drawRect(mask, Offset(remaining + boxW, top), Size(w - remaining - boxW, boxH))
             // THE THIRDS, in the stage's own hairline, and the box in its ink.
             for (step in 1..2) {
-                val x = left + boxW * step / 3f
+                val x = remaining + boxW * step / 3f
                 val y = top + boxH * step / 3f
                 drawLine(thirds, Offset(x, top), Offset(x, top + boxH), strokeWidth = 1.dp.toPx())
-                drawLine(thirds, Offset(left, y), Offset(left + boxW, y), strokeWidth = 1.dp.toPx())
+                drawLine(thirds, Offset(remaining, y), Offset(remaining + boxW, y), strokeWidth = 1.dp.toPx())
             }
-            drawRect(ink, Offset(left, top), Size(boxW, boxH), style = Stroke(width = 1.dp.toPx()))
+            drawRect(ink, Offset(remaining, top), Size(boxW, boxH), style = Stroke(width = 1.dp.toPx()))
         }
     }
 }
@@ -367,6 +410,7 @@ private fun cropActions(onEvent: (PhotosEditorEvent) -> Unit, words: PhotosEdito
 @Composable
 private fun EditBar(
     state: PhotosEditorState,
+    data: PhotosEditorData,
     words: PhotosEditorWords,
     editing: Boolean,
     frameRatio: Double,
@@ -378,62 +422,60 @@ private fun EditBar(
     val plan = state.plan ?: PhotosEditPlan()
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in, and
-            // pressing it returns the crop to the whole frame.
-            Tool(words.crop, selected = true, enabled = editing, ink, soft, line) {
-                onEvent(ratioEvent(PhotosEditPlan.Ratio.RATIO_ORIGINAL, 0.0))
-            }
-            Tool(words.rotate, selected = false, enabled = editing, ink, soft, line) {
-                onEvent(PhotosEditorEvent(rotate = PhotosEditorEvent.Rotated()))
-            }
-            Tool(state.straighten_label, selected = false, enabled = editing, ink, soft, line) {
-                onEvent(PhotosEditorEvent(straighten = PhotosEditorEvent.Straightened()))
-            }
-            Tool(
-                state.flip_label,
-                selected = plan.flip != PhotosEditPlan.Flip.FLIP_UNSPECIFIED,
-                enabled = editing,
-                ink,
-                soft,
-                line,
-            ) {
-                onEvent(PhotosEditorEvent(flip = PhotosEditorEvent.Flipped()))
-            }
+        // THE SHAPE: one segmented control, the chosen one raised, and the sentence saying what
+        // the photograph is now.
+        val ratios = state.ratios
+        KitSegmented(
+            options = ratios.map { it.ratio.name to it.label },
+            selected = ratios.firstOrNull { it.selected }?.ratio?.name ?: PhotosEditPlan.Ratio.RATIO_ORIGINAL.name,
+            onSelect = { key ->
+                val ratio = ratios.firstOrNull { it.ratio.name == key }?.ratio
+                if (editing && ratio != null) onEvent(ratioEvent(ratio, frameRatio))
+            },
+        )
+        if (state.status_line.isNotEmpty()) {
+            Text(
+                text = state.status_line,
+                color = ink,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+            )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            state.ratios.forEach { ratio ->
-                // ORIGINAL IS NEVER DRAWN SELECTED, as in v0: it is the absence of
-                // a ratio, and "Crop" already says what mode this is.
+        // STRAIGHTEN IS A SLIDER on a card of its own, as the board draws it: the angle in whole
+        // degrees either side of level, to the limit Rust states. Every whole degree is one
+        // `straighten` event carrying the angle; Rust clamps and keeps it.
+        StraightenCard(state, plan, editing, ink, soft, onEvent)
+        // THE THREE KEYS, equal and white: turn, mirror, start over.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) {
+                Tool(words.rotate, selected = false, enabled = editing, ink, soft, line, fill = true) {
+                    onEvent(PhotosEditorEvent(rotate = PhotosEditorEvent.Rotated()))
+                }
+            }
+            Box(Modifier.weight(1f)) {
                 Tool(
-                    ratio.label,
-                    selected = ratio.selected && ratio.ratio != PhotosEditPlan.Ratio.RATIO_ORIGINAL,
+                    state.flip_label,
+                    selected = plan.flip != PhotosEditPlan.Flip.FLIP_UNSPECIFIED,
                     enabled = editing,
                     ink,
                     soft,
                     line,
+                    fill = true,
                 ) {
-                    onEvent(ratioEvent(ratio.ratio, frameRatio))
+                    onEvent(PhotosEditorEvent(flip = PhotosEditorEvent.Flipped()))
                 }
             }
-            Tool(words.reset, selected = false, enabled = editing && state.edited, ink, soft, line) {
-                onEvent(PhotosEditorEvent(reset = PhotosEditorEvent.Reset()))
+            Box(Modifier.weight(1f)) {
+                Tool(words.reset, selected = false, enabled = editing && state.edited, ink, soft, line, fill = true) {
+                    onEvent(PhotosEditorEvent(reset = PhotosEditorEvent.Reset()))
+                }
             }
         }
-        Text(text = words.save_explanation, color = soft, style = centraidType("small"))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Tool(words.cancel, selected = false, enabled = editing, ink, soft, line) {
-                onEvent(PhotosEditorEvent(cancel = PhotosEditorEvent.Cancelled()))
-            }
-            Commit(state, words, editing, onEvent, ink, soft, line)
+        Text(text = words.save_explanation, color = soft, style = kitTextStyle(KitType.Meta))
+        // WHERE IT CAME FROM, the board's last line.
+        if (data.meta.isNotEmpty()) {
+            Text(text = data.meta, color = soft, style = kitTextStyle(KitType.Meta))
         }
         // THE REFUSAL IS VISIBLE TEXT, never only an accessibility hint, and a
         // save that did not land says so in the same place.
@@ -446,14 +488,12 @@ private fun EditBar(
         if (refusal.isNotEmpty()) {
             Text(text = refusal, color = ink, style = centraidType("small"))
         }
-        // THE ONE STATUS LINE.
-        Text(text = state.status_line, color = soft, style = centraidType("mono"), modifier = Modifier.fillMaxWidth())
     }
 }
 
 /**
  * THE ONE FILLED ELEMENT. A commit that cannot fire is OUTLINED, never a dimmed
- * fill (DESIGN.md invariant 3), and says why beneath.
+ * fill (product-intuition/references/design-behaviour.md § Controls), and says why beneath.
  */
 @Composable
 private fun Commit(
@@ -466,12 +506,12 @@ private fun Commit(
     line: Color,
 ) {
     val live = editing && state.save_refusal.isEmpty()
-    val shape = RoundedCornerShape(radius("md").dp)
+    val shape = RoundedCornerShape(percent = 50)
     Box(
         modifier = Modifier
             .heightIn(min = TARGET.dp)
             .clip(shape)
-            .then(if (live) Modifier.background(ink) else Modifier.border(1.dp, line, shape))
+            .background(if (live) appAccent("photos").fill else Surface.fill)
             .clickable(enabled = live, role = Role.Button) {
                 onEvent(PhotosEditorEvent(save = PhotosEditorEvent.Saved()))
             }
@@ -479,10 +519,14 @@ private fun Commit(
                 contentDescription = words.save
                 if (!live) disabled()
             }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = words.save, color = if (live) centraidColor("stage") else soft, style = centraidType("control"))
+        Text(
+            text = words.save,
+            color = if (live) Color.White else soft,
+            style = centraidType("control").copy(fontWeight = FontWeight.SemiBold),
+        )
     }
 }
 
@@ -494,14 +538,16 @@ private fun Tool(
     ink: Color,
     soft: Color,
     line: Color,
+    fill: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(radius("md").dp)
+    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
     Box(
         modifier = Modifier
+            .then(if (fill) Modifier.fillMaxWidth() else Modifier)
             .heightIn(min = TARGET.dp)
             .clip(shape)
-            .border(1.dp, if (selected) ink else line, shape)
+            .background(if (selected) appAccent("photos").fill else Surface.card)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = label
@@ -510,7 +556,11 @@ private fun Tool(
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = label, color = if (enabled) ink else soft, style = centraidType("control"))
+        Text(
+            text = label,
+            color = if (selected) Color.White else if (enabled) ink else soft,
+            style = centraidType("control"),
+        )
     }
 }
 
@@ -520,8 +570,81 @@ private fun ratioEvent(ratio: PhotosEditPlan.Ratio, frameRatio: Double): PhotosE
 @Composable
 private fun radius(name: String): Int = LocalCentraidTokens.current.radii[name] ?: 0
 
+@Composable
+private fun StraightenCard(
+    state: PhotosEditorState,
+    plan: PhotosEditPlan,
+    editing: Boolean,
+    ink: Color,
+    soft: Color,
+    onEvent: (PhotosEditorEvent) -> Unit,
+) {
+    val limit = state.straighten_limit.coerceAtLeast(1)
+    var position by remember(plan.straighten) { mutableFloatStateOf(plan.straighten.toFloat()) }
+    val accent = appAccent()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+            .background(Surface.card)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    ) {
+        Text(text = state.straighten_label, color = if (editing) ink else soft, style = kitTextStyle(KitType.Row))
+        Slider(
+            value = position,
+            onValueChange = { next ->
+                position = next
+                val whole = next.roundToInt()
+                if (editing && whole != plan.straighten) {
+                    onEvent(PhotosEditorEvent(straighten = PhotosEditorEvent.Straightened(degrees = whole)))
+                }
+            },
+            enabled = editing,
+            valueRange = -limit.toFloat()..limit.toFloat(),
+            steps = (2 * limit - 1),
+            colors = SliderDefaults.colors(
+                thumbColor = accent.fill,
+                activeTrackColor = accent.fill,
+                inactiveTrackColor = Surface.line,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("photos-editor-straighten")
+                .semantics { contentDescription = state.straighten_label },
+        )
+    }
+}
+
 /** Whole degrees of turn: quarter turns plus the straighten (Rust's `total_rotation`). */
 private fun totalRotation(plan: PhotosEditPlan): Int = (plan.quarters % 4) * 90 + plan.straighten
+
+/**
+ * How far the stage is scaled up so the largest centred rectangle of the photograph's shape that stays
+ * inside the turned photograph (Rust's `inscribed_crop`) fills the space; 1 when it is not straightened.
+ */
+private fun straightenFillZoom(
+    sourceRatio: Double,
+    quarters: Int,
+    straighten: Int,
+    frameW: Float,
+    frameH: Float,
+    spaceW: Float,
+    spaceH: Float,
+): Float {
+    if (straighten == 0 || sourceRatio <= 0.0 || frameW <= 0f || frameH <= 0f || spaceW <= 0f || spaceH <= 0f) return 1f
+    val ratio = if (quarters % 2 == 0) sourceRatio else 1.0 / sourceRatio
+    val radians = straighten * PI / 180.0
+    val c = abs(cos(radians))
+    val s = abs(sin(radians))
+    val k = minOf(ratio / (ratio * c + s), 1.0 / (ratio * s + c))
+    val box = rotatedBox(ratio, 1.0, straighten)
+    if (box.first <= 0.0 || box.second <= 0.0) return 1f
+    val cropW = (k * ratio / box.first).toFloat() * frameW
+    val cropH = (k / box.second).toFloat() * frameH
+    return maxOf(1f, minOf(spaceW / cropW, spaceH / cropH))
+}
 
 /** The grown box of a straightened frame (layout only: Rust owns the plan). */
 private fun rotatedBox(width: Double, height: Double, degrees: Int): Pair<Double, Double> {
@@ -539,7 +662,7 @@ private fun rotatedFrameRatio(assetRatio: Double, degrees: Int): Double {
 /** v0's `maskFill`: the stage colour at `8C`; alpha on the colour, never on the pane. */
 private const val MASK_ALPHA: Float = 0x8C / 255f
 
-/** The coarse target floor (DESIGN.md: 44 on touch). */
+/** The coarse target floor (product-intuition/references/design-behaviour.md: 44 on touch). */
 private const val TARGET: Int = 44
 
 /** One spoken step of the crop: a twentieth of the frame. */

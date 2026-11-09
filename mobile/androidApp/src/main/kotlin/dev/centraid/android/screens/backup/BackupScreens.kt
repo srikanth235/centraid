@@ -32,6 +32,21 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import centraid.core.v1.BackupCondition
+import centraid.core.v1.BackupLine
+import dev.centraid.android.R
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.tokenSp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,10 +65,14 @@ import centraid.core.v1.BackupHomeEvent
 import centraid.core.v1.BackupHomeState
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
-import dev.centraid.android.kit.AppMark
+import dev.centraid.android.kit.AppTile
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitProgressBar
 import dev.centraid.android.kit.KitSpinner
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.kitTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.theme.centraidColor
@@ -119,139 +138,224 @@ private fun BackupPage(
     val onBackUpNow: () -> Unit = {
         if (needsNotificationGrant(context)) notifications.launch(Manifest.permission.POST_NOTIFICATIONS) else backUpNow()
     }
-    val paired = model.destinations.isNotEmpty()
     val line = model.line
+    var ruleOpen by remember { mutableStateOf(false) }
     // WHETHER THE SYSTEM IS HOLDING CENTRAID BACK is the platform's to say; WHEN it
     // matters (a backlog that stood a day) is the screen's.
     val batteryHeld = model.battery_sentence.isNotEmpty() && !ignoresBatteryOptimizations(context)
     Column(
         Modifier
             .fillMaxWidth()
+            .background(Surface.page)
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 24.dp)
+            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
             .testTag("backup-screen"),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // WHERE THE BACKUP STANDS, and the one act that moves it: with nothing paired
-        // that act is adding a backup device, drawn as the page's primary; once one is
-        // paired it is "Back up now" (iOS `BackupHomeView`).
-        Head(model.title, line?.sentence.orEmpty())
-        if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
-        line?.waiting.orEmpty().map { it.sentence }.filter { it.isNotEmpty() }.forEach { Sentence(it) }
-        // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not.
-        if (model.background_notice.isNotEmpty()) Sentence(model.background_notice, "backup-background-notice")
-        if (batteryHeld) {
-            Sentence(model.battery_sentence)
-            if (model.battery_label.isNotEmpty()) {
-                OutlineButton(label = model.battery_label, testTag = "backup-battery") { openBatterySettings(context) }
+        Text(
+            model.title,
+            style = centraidType("title"),
+            color = Surface.ink,
+            modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
+        )
+        // THE STATUS CARD: where the backup stands, and the one act that moves it (iOS `statusCard`).
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape).background(conditionTint(model)))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(line?.sentence.orEmpty(), style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)), color = Surface.ink)
+                    if (!line?.detail.isNullOrEmpty()) Sentence(line?.detail.orEmpty())
+                    if (model.last_good.isNotEmpty()) Sentence(model.last_good, "backup-last-good")
+                    if (model.reason.isNotEmpty()) Sentence(model.reason, "backup-reason")
+                }
             }
-        }
-        // ONE INK BUTTON AT A TIME, and the screen names it (`ink`); a verb that is not
-        // the page's one thing to do is the outline.
-        if (!paired && model.add_destination_label.isNotEmpty()) {
-            if (model.ink == BackupInk.BACKUP_INK_ADD_DESTINATION) {
-                InkButton(label = model.add_destination_label, testTag = "backup-add-destination", onPress = onAddDestination)
-            } else {
-                OutlineButton(label = model.add_destination_label, testTag = "backup-add-destination", onPress = onAddDestination)
-            }
-        }
-        // BACK UP NOW, only once there is somewhere to back up to (the screen draws no
-        // label before). Pressable when the screen says so; while a run goes, its
-        // progress sentence stands beside it.
-        if (model.back_up_now_label.isNotEmpty()) {
-            if (model.ink == BackupInk.BACKUP_INK_BACK_UP_NOW) {
-                InkButton(
-                    label = model.back_up_now_label,
-                    testTag = "backup-now",
-                    enabled = model.back_up_now_enabled,
-                    onPress = onBackUpNow,
-                )
-            } else {
-                OutlineButton(
-                    label = model.back_up_now_label,
-                    testTag = "backup-now",
-                    enabled = model.back_up_now_enabled,
-                    onPress = onBackUpNow,
-                )
-            }
-        }
-        if (model.progress.isNotEmpty()) {
-            Row(
-                Modifier.testTag("backup-progress").semantics(mergeDescendants = true) { },
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                KitSpinner(model.progress)
-            }
-        }
-        // WHAT THE LAST ACT DID, in place: one clause, never a toast.
-        if (model.notice.isNotEmpty()) Sentence(model.notice, "backup-notice")
-        // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost phone takes
-        // every vault with it, whatever is backed up.
-        if (model.key_warning) RecoveryKey(model, onEvent, onShowWords)
-        // WHAT EACH APP'S BACKUP HOLDS (#1144), biggest first as the screen orders it.
-        if (model.apps.isNotEmpty()) Section(model.apps_heading) { Apps(model.apps) }
-        if (paired) Section(model.devices_heading) { Destinations(model, onEvent, onAddDestination) }
-        if (model.rule_choices.isNotEmpty()) {
-            Section(model.rule_label) {
-                model.rule_choices.forEach { choice ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 44.dp)
-                            .clickable {
-                                onEvent(BackupHomeEvent(rule_chosen = BackupHomeEvent.RuleChosen(stored = choice.stored)))
-                            }
-                            .padding(vertical = 8.dp)
-                            .testTag("backup-rule-" + choice.stored)
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = choice.sentence
-                                if (choice.picked) this.selected = true
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            if (model.progress.isNotEmpty()) {
+                if (model.progress_known) {
+                    // THE RUN'S BAR (BackupRunning): what a gateway has acknowledged of the whole,
+                    // and the bytes still to go under it.
+                    Column(
+                        Modifier.padding(top = 6.dp).testTag("backup-progress").semantics(mergeDescendants = true) { },
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        RuleMark(choice.picked)
+                        KitProgressBar(model.progress_fraction, height = 6.dp, fill = appAccent("").text)
                         Text(
-                            choice.sentence,
-                            style = centraidType("small"),
-                            color = centraidColor(if (choice.picked) "text" else "textSoft"),
+                            model.progress,
+                            style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                            color = appAccent("").text,
+                        )
+                    }
+                } else {
+                    Row(
+                        Modifier.testTag("backup-progress").semantics(mergeDescendants = true) { },
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { KitSpinner(model.progress) }
+                }
+            }
+            line?.waiting.orEmpty().map { it.sentence }.filter { it.isNotEmpty() }.forEach { Sentence(it) }
+            if (model.background_notice.isNotEmpty()) Sentence(model.background_notice, "backup-background-notice")
+            if (batteryHeld) {
+                Sentence(model.battery_sentence)
+                if (model.battery_label.isNotEmpty()) {
+                    OutlineButton(label = model.battery_label, testTag = "backup-battery") { openBatterySettings(context) }
+                }
+            }
+            if (model.notice.isNotEmpty()) Sentence(model.notice, "backup-notice")
+            if (model.back_up_now_label.isNotEmpty()) {
+                if (model.ink == BackupInk.BACKUP_INK_BACK_UP_NOW) {
+                    InkButton(label = model.back_up_now_label, testTag = "backup-now", enabled = model.back_up_now_enabled, onPress = onBackUpNow)
+                } else {
+                    OutlineButton(label = model.back_up_now_label, testTag = "backup-now", enabled = model.back_up_now_enabled, onPress = onBackUpNow)
+                }
+            } else if (model.destinations.isEmpty() && model.add_destination_label.isNotEmpty()) {
+                InkButton(label = model.add_destination_label, testTag = "backup-add-destination", onPress = onAddDestination)
+            }
+        }
+        if (model.apps.isNotEmpty()) Group(model.apps_heading) { Apps(model.apps) }
+        if (model.apps_waiting.isNotEmpty()) Group(model.waiting_heading) { Apps(model.apps_waiting) }
+        if (model.destinations.isNotEmpty()) {
+            Group(model.devices_heading) { Destinations(model, onEvent, onAddDestination) }
+        } else if (model.add_destination_label.isNotEmpty()) {
+            Group("") { AddDevice(model.add_destination_label, onAddDestination) }
+        }
+        if (model.rule_choices.isNotEmpty()) {
+            Group(model.travel_heading) {
+                // "BACK UP OVER": the picked rule's short word, opening the sentences it can be.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clickable { ruleOpen = !ruleOpen }
+                        .padding(horizontal = 16.dp)
+                        .testTag("backup-over")
+                        .semantics(mergeDescendants = true) { contentDescription = model.over_label + ", " + model.over_value },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(model.over_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                    Text(model.over_value, style = centraidType("body"), color = Surface.meta)
+                    CentraidIcon(iconKey = if (ruleOpen) "ChevronDown" else "ChevronRight", tint = Surface.meta, size = 16.dp)
+                }
+                if (ruleOpen) {
+                    model.rule_choices.forEach { choice ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .clickable {
+                                    onEvent(BackupHomeEvent(rule_chosen = BackupHomeEvent.RuleChosen(stored = choice.stored)))
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("backup-rule-" + choice.stored)
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = choice.sentence
+                                    if (choice.picked) this.selected = true
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            RuleMark(choice.picked)
+                            Text(choice.sentence, style = centraidType("annotLabel"), color = if (choice.picked) Surface.ink else Surface.meta)
+                        }
+                    }
+                }
+                if (model.include_videos_label.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(model.include_videos_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = model.include_videos,
+                            onCheckedChange = {
+                                onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it)))
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = appAccent("").fill),
+                            modifier = Modifier.semantics { contentDescription = model.include_videos_label },
                         )
                     }
                 }
             }
         }
-        if (model.include_videos_label.isNotEmpty()) {
-            Rule()
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .testTag("backup-include-videos"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    model.include_videos_label,
-                    style = centraidType("body"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = model.include_videos,
-                    onCheckedChange = {
-                        onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it)))
-                    },
-                    colors = SwitchDefaults.colors(checkedTrackColor = centraidColor("accent")),
-                    modifier = Modifier.semantics { contentDescription = model.include_videos_label },
-                )
+        if (model.key_heading.isNotEmpty() || model.restore_label.isNotEmpty()) {
+            Group(model.key_heading) {
+                if (model.key_heading.isNotEmpty()) {
+                    val open = model.key_show_label.isNotEmpty()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable(enabled = open, onClick = onShowWords)
+                            .padding(horizontal = 12.dp)
+                            .testTag("backup-show-key")
+                            .semantics(mergeDescendants = true) { contentDescription = model.key_show_label + ". " + model.key_summary },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        KitTile(iconKey = "Key", size = 32.dp)
+                        Column(Modifier.weight(1f)) {
+                            Text(model.key_heading, style = centraidType("body"), color = Surface.ink)
+                            Text(
+                                model.key_summary,
+                                style = centraidType("annotLabel"),
+                                color = if (model.key_warning) StateColor.Amber.text else Surface.meta,
+                            )
+                        }
+                        if (open) CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
+                    }
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp).testTag("backup-key-line")) {
+                        Text(model.key_line, style = centraidType("annotLabel"), color = Surface.meta)
+                    }
+                    if (model.key_sync_label.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                                .clickable(role = Role.Button) {
+                                    onEvent(BackupHomeEvent(set_key_sync = BackupHomeEvent.SetKeySync(on = !model.key_synced)))
+                                }
+                                .padding(horizontal = 16.dp)
+                                .testTag("backup-key-sync"),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(model.key_sync_label, style = centraidType("body"), color = appAccent("").text)
+                        }
+                    }
+                }
+                if (model.restore_label.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable { onEvent(BackupHomeEvent(restore_pressed = BackupHomeEvent.RestorePressed())) }
+                            .padding(horizontal = 12.dp)
+                            .testTag("backup-restore"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        KitTile(iconKey = "History", size = 32.dp)
+                        Text(model.restore_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                        CentraidIcon(iconKey = "ChevronRight", tint = Surface.meta, size = 16.dp)
+                    }
+                }
             }
         }
-        // THE RECOVERY KEY BELONGS HERE: it is the other half of getting a vault back,
-        // beside the backup device that holds the copy.
-        if (!model.key_warning) RecoveryKey(model, onEvent, onShowWords)
     }
+}
+
+private val CardRadius = 16.dp
+
+@Composable
+private fun conditionTint(model: BackupHomeData) = when (model.condition) {
+    BackupCondition.BACKUP_CONDITION_UP_TO_DATE -> StateColor.Green.text
+    BackupCondition.BACKUP_CONDITION_RUNNING -> Surface.meta
+    BackupCondition.BACKUP_CONDITION_NOT_REACHED -> StateColor.Amber.text
+    else -> if (model.line?.tone == BackupLine.Tone.TONE_URGENT) StateColor.Red.text else StateColor.Amber.text
 }
 
 private fun needsNotificationGrant(context: Context): Boolean =
@@ -280,105 +384,35 @@ private fun openBatterySettings(context: Context) {
     }
 }
 
-/** The page's head: its title and the line. */
+/** ONE GROUP: its name in the small caps rung over one card of rows. */
 @Composable
-private fun Head(title: String, lead: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (title.isNotEmpty()) {
-            Text(
-                title,
-                style = centraidType("title"),
-                color = centraidColor("text"),
-                modifier = Modifier.testTag("backup-title").semantics { heading() },
-            )
-        }
-        if (lead.isNotEmpty()) Text(lead, style = centraidType("body"), color = centraidColor("textSoft"))
-    }
-}
-
-/**
- * WHERE THE RECOVERY KEY IS, and what can be done about it (iOS
- * `BackupHomeView.recoveryKey`). A warning carries the attention mark Home's line
- * uses, and the screen makes "Show recovery key" the page's Ink button (`ink`);
- * otherwise it is one quiet sentence and an outline button. Moving the key into or
- * out of the keychain is a plain link: a choice made once, not a thing to do.
- */
-@Composable
-private fun RecoveryKey(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Unit, onShowKey: () -> Unit) {
-    if (model.key_heading.isEmpty()) return
-    Section(model.key_heading) {
-        if (model.key_warning) {
-            Row(
-                Modifier.height(IntrinsicSize.Min).testTag("backup-key-line").semantics(mergeDescendants = true) { },
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(Modifier.width(2.dp).fillMaxHeight().background(centraidColor("attention")))
-                Text(model.key_line, style = centraidType("body"), color = centraidColor("text"))
-            }
-        } else {
-            Sentence(model.key_line, "backup-key-line")
-        }
-        if (model.key_show_label.isNotEmpty()) {
-            if (model.ink == BackupInk.BACKUP_INK_SHOW_KEY) {
-                InkButton(label = model.key_show_label, testTag = "backup-show-key", onPress = onShowKey)
-            } else {
-                OutlineButton(label = model.key_show_label, testTag = "backup-show-key", onPress = onShowKey)
-            }
-        }
-        if (model.key_sync_label.isNotEmpty()) {
-            Box(
-                Modifier
-                    .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
-                    .clickable(role = Role.Button) {
-                        onEvent(BackupHomeEvent(set_key_sync = BackupHomeEvent.SetKeySync(on = !model.key_synced)))
-                    }
-                    .testTag("backup-key-sync"),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(model.key_sync_label, style = centraidType("small"), color = centraidColor("link"))
-            }
-        }
-    }
-}
-
-/** A hairline between groups: the page is already inset. */
-@Composable
-private fun Rule() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(CentraidGeometry.HAIRLINE.dp)
-            .background(centraidColor("line")),
-    )
-}
-
-/** ONE GROUP: a rule above, its name in sentence case, then its rows. */
-@Composable
-private fun Section(heading: String, content: @Composable () -> Unit) {
-    Rule()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun Group(heading: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (heading.isNotEmpty()) {
             Text(
-                heading,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                modifier = Modifier.semantics { heading() },
+                heading.uppercase(),
+                style = centraidType("eyebrow"),
+                color = Surface.meta,
+                modifier = Modifier.padding(start = 4.dp, top = 12.dp).semantics { heading() },
             )
         }
-        content()
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card)) { content() }
     }
 }
 
-/** THE RULE'S CHOICE MARK in the theme's ink: a ring, filled when picked. */
+@Composable
+private fun RowRule() {
+    Box(Modifier.fillMaxWidth().padding(start = 56.dp).height(CentraidGeometry.HAIRLINE.dp).background(Surface.line))
+}
+
+/** THE RULE'S CHOICE MARK: a ring, filled when picked. */
 @Composable
 private fun RuleMark(picked: Boolean) {
     Box(
-        Modifier
-            .size(20.dp)
-            .border(1.5.dp, centraidColor(if (picked) "text" else "lineStrong"), CircleShape),
+        Modifier.size(20.dp).border(1.5.dp, if (picked) Surface.ink else Surface.border, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        if (picked) Box(Modifier.size(10.dp).background(centraidColor("text"), CircleShape))
+        if (picked) Box(Modifier.size(10.dp).background(Surface.ink, CircleShape))
     }
 }
 
@@ -387,120 +421,93 @@ private fun RuleMark(picked: Boolean) {
 private fun Sentence(text: String, testTag: String? = null) {
     Text(
         text,
-        style = centraidType("small"),
-        color = centraidColor("textSoft"),
+        style = centraidType("annotLabel"),
+        color = Surface.meta,
         modifier = if (testTag == null) Modifier else Modifier.testTag(testTag),
     )
 }
 
 @Composable
-private fun Destinations(
-    model: BackupHomeData,
-    onEvent: (BackupHomeEvent) -> Unit,
-    onAddDestination: () -> Unit,
-) {
-    Column {
-        model.destinations.forEach { row ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(row.label, style = centraidType("smallStrong"), color = centraidColor("text"))
-                    // WHAT IT HOLDS, as this phone recorded its acknowledgements.
-                    if (row.held.isNotEmpty()) {
-                        Text(row.held, style = centraidType("small"), color = centraidColor("text"))
-                    }
-                    if (row.detail.isNotEmpty()) {
-                        Text(row.detail, style = centraidType("mono"), color = centraidColor("textFaint"))
-                    }
-                }
-                // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this
-                // phone's pairing and nothing the gateway holds, and pairing again undoes it.
-                if (model.forget_label.isNotEmpty()) {
-                    OutlineButton(
-                        label = model.forget_label,
-                        testTag = "backup-forget-" + row.gateway_id,
-                        modifier = Modifier.semantics { contentDescription = model.forget_label + " " + row.label },
-                    ) {
-                        onEvent(
-                            BackupHomeEvent(
-                                forget_destination = BackupHomeEvent.ForgetDestination(gateway_id = row.gateway_id),
-                            ),
-                        )
-                    }
-                }
-            }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(CentraidGeometry.HAIRLINE.dp)
-                    .background(centraidColor("line")),
-            )
+private fun AddDevice(label: String, onAddDestination: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clickable(onClick = onAddDestination)
+            .padding(horizontal = 12.dp)
+            .testTag("backup-add-destination"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+            CentraidIcon(iconKey = "Plus", tint = appAccent("").text, size = 18.dp)
         }
-        if (model.add_destination_label.isNotEmpty()) {
-            OutlineButton(
-                label = model.add_destination_label,
-                testTag = "backup-add-destination",
-                modifier = Modifier.padding(top = 12.dp),
-                onPress = onAddDestination,
-            )
-        }
+        Text(label, style = centraidType("body"), color = appAccent("").text)
     }
 }
 
-/**
- * "IN THIS BACKUP" (#1144): one row per app — its mark, its name, what it holds and
- * its size, what was left out of it, and whether it is backed up. A row that waits
- * draws its status in the attention tone (iOS `BackupHomeView.apps`).
- */
 @Composable
-private fun Apps(rows: List<BackupAppRow>) {
-    Column {
-        rows.forEach { row ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .padding(vertical = 8.dp)
-                    .testTag("backup-app-" + row.app_id)
-                    .clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.name } },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Unit, onAddDestination: () -> Unit) {
+    model.destinations.forEach { row ->
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            KitTile(iconKey = "Monitor", size = 32.dp)
+            Column(
+                Modifier.weight(1f).clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                AppMark(appId = row.app_id, size = 32.dp)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(row.name, style = centraidType("smallStrong"), color = centraidColor("text"))
-                    if (row.detail.isNotEmpty()) {
-                        Text(row.detail, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
-                    }
-                    if (row.note.isNotEmpty()) {
-                        Text(row.note, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
-                    }
-                }
-                if (row.status.isNotEmpty()) {
-                    Text(
-                        row.status,
-                        style = centraidType(if (row.waiting) "annotLabelOn" else "annotLabel"),
-                        color = centraidColor(if (row.waiting) "attention" else "textFaint"),
-                    )
+                Text(row.label, style = centraidType("body"), color = Surface.ink)
+                if (row.held.isNotEmpty()) Sentence(row.held)
+                if (row.detail.isNotEmpty()) Sentence(row.detail)
+            }
+            // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's pairing and
+            // nothing the backup device holds, and pairing again undoes it.
+            if (model.forget_label.isNotEmpty()) {
+                OutlineButton(
+                    label = model.forget_label,
+                    testTag = "backup-forget-" + row.gateway_id,
+                    modifier = Modifier.semantics { contentDescription = model.forget_label + " " + row.label },
+                ) {
+                    onEvent(BackupHomeEvent(forget_destination = BackupHomeEvent.ForgetDestination(gateway_id = row.gateway_id)))
                 }
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(CentraidGeometry.HAIRLINE.dp)
-                    .background(centraidColor("line")),
-            )
         }
+        RowRule()
+    }
+    if (model.add_destination_label.isNotEmpty()) AddDevice(model.add_destination_label, onAddDestination)
+}
+
+/** "IN THIS BACKUP" and "Not backed up yet": one row per app, its mark, what it holds, whether it is backed up. */
+@Composable
+private fun Apps(rows: List<BackupAppRow>) {
+    rows.forEachIndexed { index, row ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .testTag("backup-app-" + row.app_id)
+                .clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.name } },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            AppTile(appId = row.app_id, size = 32.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(row.name, style = centraidType("body"), color = Surface.ink)
+                if (row.detail.isNotEmpty()) Sentence(row.detail)
+                if (row.note.isNotEmpty()) Sentence(row.note)
+            }
+            if (row.status.isNotEmpty()) {
+                Text(
+                    row.status,
+                    style = centraidType("annotLabel"),
+                    color = if (row.waiting) StateColor.Amber.text else Surface.meta,
+                )
+            }
+        }
+        if (index < rows.size - 1) RowRule()
     }
 }

@@ -44,6 +44,23 @@ const PHOTO_ENTITY: &str = "photo";
 /// The kind a person is in the index.
 const PERSON_ENTITY: &str = "person";
 
+/// The kind an activity is in the index: a workout, or a touch.
+const ACTIVITY_ENTITY: &str = "activity";
+
+/// The kinds Home asks about beside the linkable ones and the named: a transaction (Money's
+/// group) and an activity (Health's group, once it is known to be a workout).
+const PAYMENT_AND_WORKOUT: [&str; 2] = ["txn", ACTIVITY_ENTITY];
+
+/// What a Home hit is called to the shell: a transaction is a `transaction` and a workout a
+/// `workout`, the words the row routes open by.
+fn entity_named(entity: &str) -> &str {
+    match entity {
+        "txn" => "transaction",
+        ACTIVITY_ENTITY => "workout",
+        other => other,
+    }
+}
+
 /// What a Home answer is made of: the hits that open something and the
 /// containers that matched.
 type Opened = (Vec<Target>, Vec<Target>);
@@ -81,13 +98,13 @@ pub(crate) fn search(
                 |term| {
                     // ONE STATEMENT for the linkable kinds (Locker's among them) and the
                     // named kinds.
-                    let (all, denial) = queries::load_targets_each(
-                        door,
-                        &index,
-                        &Principal::Owner,
-                        term,
-                        named::all(),
-                    )?;
+                    let also: Vec<&str> = named::all()
+                        .iter()
+                        .copied()
+                        .chain(PAYMENT_AND_WORKOUT)
+                        .collect();
+                    let (all, denial) =
+                        queries::load_targets_each(door, &index, &Principal::Owner, term, &also)?;
                     if denial.is_some() {
                         return Ok(((Vec::new(), Vec::new()), denial));
                     }
@@ -95,10 +112,16 @@ pub(crate) fn search(
                         .into_iter()
                         .partition(|target| named::is_named(&target.entity));
                     let people = live_people(door, &rows)?;
+                    let workouts = workouts_among(door, &rows)?;
                     let targets = rows
                         .into_iter()
                         .filter(|target| {
                             target.entity != PERSON_ENTITY || people.contains(&target.id)
+                        })
+                        // An activity is a workout only when its kind is one; a touch (a call, a
+                        // visit) is People's.
+                        .filter(|target| {
+                            target.entity != ACTIVITY_ENTITY || workouts.contains(&target.id)
                         })
                         .collect();
                     Ok(((targets, found), None))
@@ -122,7 +145,7 @@ pub(crate) fn search(
                     wire::VaultSearchHit {
                         app_id: named::app_of(&target.entity).to_owned(),
                         subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
-                        entity: target.entity,
+                        entity: entity_named(&target.entity).to_owned(),
                         id: target.id,
                         title: target.title,
                         subtitle: target.subtitle,
@@ -172,12 +195,44 @@ fn filled_each_kind(exact: Vec<Target>, extra: Vec<Target>, kinds: &[&str]) -> V
 }
 
 /// The kinds Home lists as rows, in the order it lists them: the kinds a note
-/// can link, Locker's item last.
+/// can link, Locker's item last, then the transactions and the workouts.
 fn row_kinds() -> Vec<&'static str> {
     centraid_vault::commands::note::LINKABLE
         .iter()
         .map(|kind| kind.as_str())
+        .chain(PAYMENT_AND_WORKOUT)
         .collect()
+}
+
+/// The activities among `targets` whose kind is a workout kind.
+fn workouts_among(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
+    let ids: Vec<String> = targets
+        .iter()
+        .filter(|target| target.entity == ACTIVITY_ENTITY)
+        .map(|target| target.id.clone())
+        .collect();
+    if ids.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let fragment = centraid_apps_kit::reads::in_list("id", &ids)?;
+    let rows = centraid_apps_kit::reads::read_pages(
+        door,
+        &centraid_apps_kit::statement::PageQuery::new(
+            "home.search.workouts",
+            "id",
+            "activity",
+            centraid_apps_kit::statement::PageOrder::asc("id", "id"),
+        )
+        .filter(
+            &format!("type_id LIKE 'workout_kind:%' AND {}", fragment.sql),
+            fragment.bind,
+        ),
+        centraid_apps_kit::reads::JOIN_FAN_OUT,
+    )?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| centraid_apps_kit::row::text_of(row, "id"))
+        .collect())
 }
 
 /// The person hits People can show: the live circle. The index holds the owner
@@ -314,7 +369,7 @@ mod tests {
             .collect();
         assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
         assert!(
-            hits.contains(&("agenda", "task", task.as_str())),
+            hits.contains(&("reminders", "task", task.as_str())),
             "{hits:?}"
         );
         assert!(
@@ -355,7 +410,7 @@ mod tests {
         let slipped = scratch.search("cabni");
         let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
         assert!(
-            apps.contains(&"notes") && apps.contains(&"agenda"),
+            apps.contains(&"notes") && apps.contains(&"reminders"),
             "{apps:?}"
         );
         assert_eq!(slipped.corrected, "cabin");
@@ -364,6 +419,60 @@ mod tests {
         assert!(exact.corrected.is_empty());
         let nothing = scratch.search("zeppelin");
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
+    }
+
+    /// MONEY AND HEALTH ARE HOME GROUPS (#1173, item 11): a transaction is a `transaction`
+    /// hit in Money, a workout a `workout` hit in Health found by its kind, and a call logged
+    /// in People is a touch and is no Health hit.
+    #[test]
+    fn a_transaction_and_a_workout_are_home_hits_and_a_touch_is_not() {
+        let scratch = Scratch::founded();
+        let account = scratch.run(
+            "account.add",
+            serde_json::json!({ "title": "Everyday", "type": "checking", "currency": "USD" }),
+        )["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+        scratch.run(
+            "follow.statement",
+            serde_json::json!({
+                "origin": { "ref": account, "label": "Everyday", "fills": account },
+                "records": [{ "external_id": "csv:a", "fields": {
+                    "title": "QUOKKA COFFEE ROASTERS", "posted_on": "2099-05-01",
+                    "amount_minor": -450, "line": { "memo": "m", "imported_from": "csv" } } }],
+            }),
+        );
+        scratch.run(
+            "workout.log",
+            serde_json::json!({ "type": "run", "starts": "2099-05-02", "moving_s": 1800, "distance_m": 5000 }),
+        );
+        let person = scratch.run("person.add", serde_json::json!({ "title": "Ada" }))["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+        scratch.run(
+            "person.log_interaction",
+            serde_json::json!({ "id": person, "kind": "call", "text": "hello" }),
+        );
+        let hits = |term: &str| -> Vec<(String, String)> {
+            scratch
+                .search(term)
+                .hits
+                .into_iter()
+                .map(|hit| (hit.app_id, hit.entity))
+                .collect()
+        };
+        assert_eq!(
+            hits("quokka"),
+            [("money".to_owned(), "transaction".to_owned())],
+            "the payment is Money's, and the call logged in People is no Health hit"
+        );
+        assert_eq!(hits("run"), [("health".to_owned(), "workout".to_owned())]);
+        assert!(
+            hits("call").iter().all(|(app, _)| app != "health"),
+            "a call is a touch, People's"
+        );
     }
 
     /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a pet is in the index
@@ -557,7 +666,7 @@ mod tests {
         assert_eq!(hits.len(), 4, "{hits:?}");
         assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "album")], (album.as_str(), ""));
-        assert_eq!(hits[&("agenda", "project")], (project.as_str(), ""));
+        assert_eq!(hits[&("reminders", "project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "folder")], (folder.as_str(), ""));
         // Titles are the names; a container's subtitle is its kind.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();

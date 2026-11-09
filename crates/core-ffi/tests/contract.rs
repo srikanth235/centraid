@@ -1245,7 +1245,7 @@ fn the_app_queries_round_trip_through_call() {
         &envelope(
             42,
             wire::request::Kind::Act(Box::new(wire::ActRequest {
-                app: "agenda".to_owned(),
+                app: "calendar".to_owned(),
                 action: "propose".to_owned(),
                 input: [
                     ("title", "Morning run"),

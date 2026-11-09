@@ -36,6 +36,7 @@ use super::rule::{self, TransferRule};
 use super::{apps, line, routes};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Reading, failure};
+use crate::pairing::discovery::Rediscovery;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, backup as words, backup_home, fill};
 
@@ -101,6 +102,14 @@ struct Backup {
     /// The platform's reading of its synchronised store; `None` before it says.
     synced: Option<wire::SyncedSecretsStatus>,
     backing_up_now: bool,
+    /// The browse for a gateway that moved to another address (#1080): on while the core says
+    /// items wait for a backup device that does not answer, and only while this page is in front.
+    rediscovery: Rediscovery,
+    /// The app is in front. A browse is foreground work.
+    foreground: bool,
+    /// A browse found the gateway and the core kept its new address: it is not browsed for again
+    /// until this page opens anew (the next pass is what reaches it).
+    found: bool,
     notice: Notice,
     /// Secret batches wait their turn: one in flight at a time, so an answer
     /// finds its job.
@@ -120,6 +129,9 @@ impl Backup {
             registered: None,
             synced: None,
             backing_up_now: false,
+            rediscovery: Rediscovery::default(),
+            foreground: true,
+            found: false,
             notice: Notice::None,
             in_flight: None,
             waiting: VecDeque::new(),
@@ -129,6 +141,7 @@ impl Backup {
     // ---- reading ----------------------------------------------------------
 
     fn read(&mut self, ctx: &Ctx) {
+        self.run_over(ctx);
         match reading::load(ctx) {
             Reading::Data(standing) => {
                 self.standing = Some(standing);
@@ -300,8 +313,11 @@ impl Backup {
 
     fn open(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.notice = Notice::None;
+        self.foreground = true;
+        self.found = false;
         self.read(ctx);
         let mut effects = self.run(Job::Load);
+        effects.extend(self.rediscover());
         effects.push(wire::Effect {
             kind: Some(wire::effect::Kind::SyncedProbe(wire::SyncedSecretsProbe {})),
         });
@@ -313,6 +329,26 @@ impl Backup {
         effects
     }
 
+    /// A PAIRED GATEWAY THAT DOES NOT ANSWER AT THE ADDRESS THE LEDGER KEPT is looked for on the
+    /// local network. The core says so itself: items wait for `WaitReason::Gateway` (the last pass
+    /// reached no paired gateway). The browse is on for exactly as long as that is true, this page
+    /// is in front and the app is in the foreground; the matching, and the core's check that the
+    /// machine at a new address is that gateway, are `pairing::discovery`'s.
+    fn rediscover(&mut self) -> Vec<wire::Effect> {
+        let lost = self.foreground
+            && !self.found
+            && !self.frozen()
+            && !self.destinations().is_empty()
+            && self
+                .reading()
+                .is_some_and(|reading| reading.waiting_for(wire::WaitReason::Gateway) > 0);
+        if lost {
+            self.rediscovery.start()
+        } else {
+            self.rediscovery.stop()
+        }
+    }
+
     fn back_up_now(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         if !self.can_back_up_now() {
             return Vec::new();
@@ -320,11 +356,23 @@ impl Backup {
         self.backing_up_now = true;
         self.notice = Notice::None;
         ctx.start_timer(PROGRESS_TIMER, PROGRESS_EVERY);
-        ctx.vault_async(
-            doors::PASS,
-            doors::pass_request(self.rule, self.include_videos),
-        );
+        // THE PASS CONDUCTOR RUNS IT, as it runs every pass: the camera-roll walk first, the
+        // long run the platform keeps alive (iOS's keep-awake and background session, Android's
+        // foreground job), and the drain under the member's rule and the link the platform
+        // reports, never a link this screen guessed.
+        self.secrets
+            .conductor()
+            .ask(ctx, wire::pass_asked::Ask::BackUpNow);
         Vec::new()
+    }
+
+    /// The run is the conductor's: when it no longer holds a "Back up now" (it ended, however it
+    /// ended), the screen stops drawing one and reads what the run moved.
+    fn run_over(&mut self, ctx: &Ctx) {
+        if self.backing_up_now && !self.secrets.conductor().back_up_now_going() {
+            self.backing_up_now = false;
+            ctx.cancel_timer(PROGRESS_TIMER);
+        }
     }
 
     fn forget(&mut self, gateway_id: &str, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -382,6 +430,20 @@ impl Backup {
             Some(B::ForgetDestination(forget)) => self.forget(&forget.gateway_id, ctx),
             Some(B::SetKeySync(set)) => self.set_key_sync(set.on, ctx),
             Some(B::Retry(_)) => self.open(ctx),
+            // RESTORE IS HOME'S: the same door the vault sheet opens, asked from here.
+            Some(B::RestorePressed(_)) => {
+                ctx.post(
+                    crate::shell::HOME,
+                    wire::ScreenEvent {
+                        kind: Some(E::Home(wire::HomeEvent {
+                            kind: Some(wire::home_event::Kind::Restore(
+                                wire::home_event::RestorePressed {},
+                            )),
+                        })),
+                    },
+                );
+                Vec::new()
+            }
             None => Vec::new(),
         }
     }
@@ -392,11 +454,6 @@ impl Backup {
             return;
         };
         match done {
-            // A RUN THAT ENDED IS RE-READ: what it moved is the line's to say.
-            Done::Pass => {
-                self.backing_up_now = false;
-                ctx.cancel_timer(PROGRESS_TIMER);
-            }
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either way
             // (#1080): a token the gateway was not told about stays live there
             // until its operator revokes it.
@@ -430,6 +487,13 @@ impl Backup {
             }
             Some(O::BackgroundStatus(status)) => {
                 self.registered = Some(status.registered);
+                Vec::new()
+            }
+            // A WINDOW OF THE BROWSE: what the local network advertised. Each sighting that is a
+            // recorded gateway (by its id, not its address) is offered to the core, which dials
+            // it with the pinned certificate and keeps only an address that answers as that gateway.
+            Some(O::GatewaysSighted(sighted)) => {
+                self.rediscovery.sighted(ctx, &sighted);
                 Vec::new()
             }
             // A SHELL THAT COULD NOT GIVE THE PHONE'S SETTINGS gives the defaults, which
@@ -528,6 +592,41 @@ impl Backup {
         }
     }
 
+    /// How much of the backup a gateway has acknowledged, while a run is going and the
+    /// phone can say what the whole is: `None` draws the spinner, never a bar stuck at zero.
+    fn progress_fraction(&self) -> Option<f32> {
+        if !self.backing_up_now {
+            return None;
+        }
+        let reading = self.reading()?;
+        if reading.total_bytes == 0 {
+            return None;
+        }
+        let done = reading.confirmed_bytes.min(reading.total_bytes);
+        // Whole thousandths, so the figure is the same on every phone.
+        let thousandths = u128::from(done) * 1000 / u128::from(reading.total_bytes);
+        Some(u16::try_from(thousandths).map_or(1.0, |t| f32::from(t) / 1000.0))
+    }
+
+    /// Where the backup stands, for the status card.
+    fn condition(&self) -> wire::BackupCondition {
+        use wire::BackupCondition as C;
+        if self.frozen() {
+            C::Moved
+        } else if self.destinations().is_empty() {
+            C::Unpaired
+        } else if self.backing_up_now {
+            C::Running
+        } else if self
+            .reading()
+            .is_some_and(|reading| line::unreached(reading, self.now_ms()))
+        {
+            C::NotReached
+        } else {
+            C::UpToDate
+        }
+    }
+
     fn data(&self, ctx: &Ctx) -> wire::BackupHomeData {
         let locale = ctx.locale();
         let frozen = self.frozen();
@@ -597,10 +696,66 @@ impl Backup {
         } else {
             wire::BackupInk::None
         };
-        let app_rows = self
+        let mut app_rows = self
             .reading()
             .map(|reading| apps::rows(locale, reading))
             .unwrap_or_default();
+        // WHEN NO BACKUP DEVICE ANSWERS, what waits is its own list (the board's "Not backed
+        // up yet"), and "In this backup" is what the device already holds.
+        let condition = self.condition();
+        let (waiting_apps, waiting_heading) = if condition == wire::BackupCondition::NotReached {
+            let (waiting, held): (Vec<_>, Vec<_>) =
+                app_rows.into_iter().partition(|row| row.waiting);
+            app_rows = held;
+            let heading = if waiting.is_empty() {
+                String::new()
+            } else {
+                words::backup_not_backed_up_heading(locale)
+            };
+            (waiting, heading)
+        } else {
+            (Vec::new(), String::new())
+        };
+        let (last_good, reason) = match (condition, self.reading()) {
+            (wire::BackupCondition::NotReached, Some(reading)) => {
+                let name = reading
+                    .destinations
+                    .iter()
+                    .max_by_key(|d| d.last_seen_ms)
+                    .map_or_else(
+                        || words::backup_unnamed(locale),
+                        |d| {
+                            if d.label.trim().is_empty() {
+                                words::backup_unnamed(locale)
+                            } else {
+                                d.label.clone()
+                            }
+                        },
+                    );
+                (
+                    reading.last_ack_ms.map_or_else(String::new, |at| {
+                        fill(
+                            &words::backup_last_good(locale),
+                            &[("when", &line::ago(locale, at, now))],
+                        )
+                    }),
+                    fill(&words::backup_unreachable(locale), &[("name", &name)]),
+                )
+            }
+            _ => (String::new(), String::new()),
+        };
+        let key_summary = if key_heading.is_empty() {
+            String::new()
+        } else if key.synced {
+            fill(
+                &words::backup_key_summary_synced(locale),
+                &[("place", &key.place)],
+            )
+        } else if key.saved {
+            words::backup_key_summary_saved(locale)
+        } else {
+            words::backup_key_summary_phone(locale)
+        };
         wire::BackupHomeData {
             title: words::backup_title(locale),
             apps_heading: if app_rows.is_empty() {
@@ -628,13 +783,14 @@ impl Backup {
             } else {
                 words::backup_forget(locale)
             },
-            rule_label: words::backup_rule_heading(locale),
             rule_choices: self.rule_choices(locale),
             include_videos: self.include_videos,
             include_videos_label: words::backup_include_videos(locale),
             back_up_now_label,
             back_up_now_enabled: self.can_back_up_now(),
             progress: self.progress(locale),
+            progress_known: self.progress_fraction().is_some(),
+            progress_fraction: self.progress_fraction().unwrap_or_default(),
             battery_sentence: if stood {
                 words::backup_battery(locale)
             } else {
@@ -664,6 +820,20 @@ impl Backup {
             key_synced: key.synced,
             key_sync_label,
             ink: ink as i32,
+            condition: condition as i32,
+            last_good,
+            reason,
+            waiting_heading,
+            apps_waiting: waiting_apps,
+            travel_heading: words::backup_travel_heading(locale),
+            over_label: words::backup_over(locale),
+            over_value: self.rule.short(locale),
+            key_summary,
+            restore_label: if frozen {
+                String::new()
+            } else {
+                crate::strings::home::restore_first_action(locale)
+            },
         }
     }
 }
@@ -677,7 +847,7 @@ impl Screen for Backup {
             // another look: read again.
             Some(E::DataChanged(_)) => {
                 self.read(ctx);
-                Vec::new()
+                self.rediscover()
             }
             Some(E::TimerFired(fired)) if fired.timer == PROGRESS_TIMER => {
                 if self.backing_up_now {
@@ -690,8 +860,24 @@ impl Screen for Backup {
             // have been turned off meanwhile, and the key is read from the stores
             // each time.
             Some(E::Lifecycle(lifecycle)) if lifecycle.foreground => self.open(ctx),
+            // A BROWSE IS FOREGROUND WORK: it ends with the app's front, and with this page.
+            Some(E::Lifecycle(_)) => {
+                self.foreground = false;
+                self.rediscovery.stop()
+            }
+            Some(E::Left(_)) => self.rediscovery.stop(),
             Some(E::EffectResult(result)) => self.on_result(result, ctx),
             Some(E::OffThreadDone(done)) => {
+                // THE CORE'S ANSWER TO AN OFFERED ADDRESS: a kept one ends the browse (the next
+                // pass dials it); a refused one leaves the browse on for the next window.
+                if self.rediscovery.heard(&done) {
+                    if self.rediscovery.refreshed() > 0 && self.rediscovery.pending() == 0 {
+                        self.found = true;
+                        self.read(ctx);
+                        return self.rediscover();
+                    }
+                    return Vec::new();
+                }
                 self.job_done(&done, ctx);
                 Vec::new()
             }

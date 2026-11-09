@@ -19,9 +19,9 @@ name: search-containers
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-agenda"
+    id: "home-tile-reminders"
 - tapOn:
-    id: "agenda-band-todo"
+    id: "reminders-band-reminders"
 - runFlow:
     when:
       notVisible: "Orchard"
@@ -42,7 +42,7 @@ name: search-containers
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-agenda"
+      id: "home-search-group-reminders"
     timeout: 5000
 - assertVisible:
     id: "search-container-schedule.project-.*"
@@ -61,7 +61,7 @@ name: search-containers
 # same page (#1128, Q-1128-1).
 - launchApp
 - tapOn:
-    id: "home-tile-agenda"
+    id: "home-tile-reminders"
 - tapOn:
     id: "agenda-search-open"
 - inputText: "orchard"

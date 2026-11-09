@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.health
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -20,19 +21,22 @@ import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
+import dev.centraid.android.kit.KitCardGrid
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomFilter
+import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.screenContentOf
 
 // ---------------------------------------------------------------------------
-// health.home: Today · Trends · Workouts, More as a sheet (#1129, #1135)
+// health.home: Summary · Trends · Workouts, More as a sheet (#1129, #1135, #1173)
 // ---------------------------------------------------------------------------
 
 /**
@@ -53,6 +57,17 @@ internal fun HealthHomeScreen(
         app = "health",
         title = chrome?.title.orEmpty(),
         meta = state.data_?.day_label.orEmpty(),
+        // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own, reached
+        // from the band's search key.
+        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.denied == null }?.let { placeholder ->
+            RoomSearch(
+                field = SearchField(),
+                placeholder = placeholder,
+                onTerm = {},
+                onClose = {},
+                onOpen = { chrome?.search_route?.let(onOpen) },
+            )
+        },
         // THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu.
         filter = state.filter_menu?.let { menu ->
             RoomFilter(
@@ -133,16 +148,38 @@ internal fun HealthHomeScreen(
     }
 }
 
+/**
+ * THE SUMMARY: the pinned cards (the first two wide with a sparkline, the rest two to a row, one
+ * column at the largest text), the highlights, and today's workouts.
+ */
 private fun LazyListScope.today(state: HealthHomeState, onOpen: (Route) -> Unit) {
     val today = state.data_?.today_data ?: return
-    today.hero?.let { hero -> item(key = "hero") { HealthHero(hero) { hero.route?.let(onOpen) } } }
-    item(key = "metrics-heading") { HealthSection(today.metrics_heading) }
-    items(today.metrics, key = { "m-${it.metric}" }) { line -> HealthMetricRow(line) { line.route?.let(onOpen) } }
+    val pinned = listOfNotNull(today.hero) + today.metrics
+    item(key = "pinned-heading") { HealthSection(today.metrics_heading, today.metrics_note) }
+    items(pinned.filter { it.wide }, key = { "p-${it.metric}" }) { line ->
+        Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+            HealthPinnedCard(line, if (line.metric == "steps") "health-hero" else "health-metric-${line.metric}") { line.route?.let(onOpen) }
+        }
+    }
+    item(key = "pinned-grid") {
+        KitCardGrid(
+            items = pinned.filterNot { it.wide },
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+            gap = 8.dp,
+        ) { line -> HealthPinnedCard(line, "health-metric-${line.metric}") { line.route?.let(onOpen) } }
+    }
+    if (today.highlights.isNotEmpty()) {
+        item(key = "highlights-heading") { HealthSection(today.highlights_heading) }
+        items(today.highlights, key = { "h-${it.metric}" }) { highlight ->
+            Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
+                HealthHighlightCard(highlight) { highlight.route?.let(onOpen) }
+            }
+        }
+    }
     if (today.workouts.isNotEmpty()) {
         item(key = "workouts-heading") { HealthSection(today.workouts_heading) }
         items(today.workouts, key = { "w-${it.activity_id}" }) { line -> HealthWorkoutRow(line) { line.route?.let(onOpen) } }
     }
-    item(key = "foot") { HealthNote(today.foot) }
 }
 
 private fun LazyListScope.trends(state: HealthHomeState, onOpen: (Route) -> Unit) {
@@ -153,7 +190,9 @@ private fun LazyListScope.trends(state: HealthHomeState, onOpen: (Route) -> Unit
         return
     }
     item(key = "compare") { HealthNote(trends.compare_line) }
-    items(trends.rows, key = { "t-${it.metric}" }) { row -> HealthTrendRowView(row) { row.route?.let(onOpen) } }
+    items(trends.rows, key = { "t-${it.metric}" }) { row ->
+        Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) { HealthTrendRowView(row) { row.route?.let(onOpen) } }
+    }
 }
 
 private fun LazyListScope.workouts(state: HealthHomeState, onOpen: (Route) -> Unit, onEvent: (HealthHomeEvent) -> Unit) {

@@ -4,7 +4,7 @@
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | All · Folders · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
+//! | Recents · Browse · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
 //! | One document | [`DOCUMENT`] | [`document`] |
 //! | A document's version history | [`VERSIONS`] | [`versions`] |
 //! | A text document's editor | [`EDITOR`] | [`editor`] |
@@ -128,6 +128,7 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }

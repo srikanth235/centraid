@@ -38,7 +38,7 @@ use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
 
-pub const STRAIGHTEN_STEP: i32 = 1;
+/// The slider's reach each way, in whole degrees.
 pub const STRAIGHTEN_LIMIT: i32 = 15;
 /// Smallest crop side, as a fraction of the frame.
 pub const MIN_CROP: f64 = 0.1;
@@ -72,11 +72,10 @@ fn crop_of(plan: &wire::PhotosEditPlan) -> wire::PhotosEditCrop {
 // The geometry (v0's `photo-edit-model.ts`)
 // -----------------------------------------------------------------------------
 
-/// One press levels a degree anticlockwise; past the limit returns to level.
+/// The slider's angle, held inside its reach either way.
 #[must_use]
-pub fn next_straighten(degrees: i32) -> i32 {
-    let next = degrees - STRAIGHTEN_STEP;
-    if next < -STRAIGHTEN_LIMIT { 0 } else { next }
+pub fn clamp_straighten(degrees: i32) -> i32 {
+    degrees.clamp(-STRAIGHTEN_LIMIT, STRAIGHTEN_LIMIT)
 }
 
 /// The minus is U+2212, not a hyphen: a number in the numeric register.
@@ -147,6 +146,38 @@ pub fn scale_crop(rect: wire::PhotosEditCrop, factor: f64) -> wire::PhotosEditCr
         w,
         h,
     })
+}
+
+/// THE CROP A STRAIGHTEN LEAVES FULL OF PHOTOGRAPH: the largest centred rectangle of the photograph's
+/// own shape that lies inside the turned photograph, as fractions of the turned box (the frame the
+/// crop is in). The board draws the preview cropped to it, so no corner of the frame is empty;
+/// `None` when the angle leaves nothing to cut or the shape is unknown.
+#[must_use]
+pub fn inscribed_crop(
+    source_ratio: f64,
+    quarters: u32,
+    straighten: i32,
+) -> Option<wire::PhotosEditCrop> {
+    if straighten == 0 || source_ratio <= 0.0 {
+        return None;
+    }
+    // The photograph as it lies after the quarter turns: its sides swap on an odd number.
+    let (a, b) = if quarters % 2 == 1 {
+        (1.0, source_ratio)
+    } else {
+        (source_ratio, 1.0)
+    };
+    let radians = f64::from(straighten).to_radians();
+    let (c, s) = (radians.cos().abs(), radians.sin().abs());
+    let k = 1.0 / (c + (a / b).max(b / a) * s);
+    let (box_w, box_h) = (a * c + b * s, a * s + b * c);
+    let (w, h) = (k * a / box_w, k * b / box_h);
+    Some(clamp_crop(wire::PhotosEditCrop {
+        x: (1.0 - w) / 2.0,
+        y: (1.0 - h) / 2.0,
+        w,
+        h,
+    }))
 }
 
 /// The centred rectangle of `ratio` inside a frame of `frame_ratio`.
@@ -348,6 +379,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         save_failure: None,
         saved_route: None,
         rendering: None,
+        crop_touched: false,
     }))
 }
 
@@ -377,6 +409,9 @@ struct Editor {
     saved_route: Option<wire::Route>,
     /// The effect that is rendering: an answer for any other is stale.
     rendering: Option<RenderKey>,
+    /// The member moved, resized or ratio-picked the crop: a straighten leaves it alone.
+    /// Until then the crop is the frame a straighten leaves full of photograph.
+    crop_touched: bool,
 }
 
 /// The plan a render was asked for, so a settle for a plan the member has since
@@ -438,7 +473,52 @@ impl Editor {
         None
     }
 
+    /// The photograph's own shape (width over height), when the vault knows its pixels.
+    fn source_ratio(&self) -> f64 {
+        match &self.content {
+            Content::Data(source) => match (source.cell.width, source.cell.height) {
+                (Some(width), Some(height)) if width > 0 && height > 0 => {
+                    width as f64 / height as f64
+                }
+                _ => 0.0,
+            },
+            _ => 0.0,
+        }
+    }
+
+    /// An untouched crop follows the straighten: the frame the turned photograph fills.
+    fn refit(&mut self) {
+        if self.crop_touched {
+            return;
+        }
+        let fit = inscribed_crop(
+            self.source_ratio(),
+            self.plan.quarters,
+            self.plan.straighten,
+        );
+        self.plan.crop = Some(fit.unwrap_or(FULL_CROP));
+    }
+
     fn edit(&mut self, kind: K) {
+        let touches = matches!(&kind, K::CropMoved(_) | K::CropScaled(_))
+            || matches!(&kind, K::Ratio(chosen) if chosen.ratio != Ratio::Original as i32);
+        let refits = matches!(&kind, K::Rotate(_) | K::Straighten(_) | K::Reset(_))
+            || matches!(&kind, K::Ratio(chosen) if chosen.ratio == Ratio::Original as i32);
+        if touches {
+            self.crop_touched = true;
+        }
+        if matches!(&kind, K::Rotate(_) | K::Reset(_))
+            || matches!(&kind, K::Ratio(chosen) if chosen.ratio == Ratio::Original as i32)
+        {
+            self.crop_touched = false;
+        }
+        self.apply(kind);
+        if refits {
+            self.refit();
+        }
+    }
+
+    fn apply(&mut self, kind: K) {
         let plan = &mut self.plan;
         match kind {
             // ROTATION MUST NOT SILENTLY RE-CROP AGAINST THE OLD ORIENTATION.
@@ -447,7 +527,7 @@ impl Editor {
                 plan.crop = Some(FULL_CROP);
                 plan.ratio = Ratio::Original as i32;
             }
-            K::Straighten(_) => plan.straighten = next_straighten(plan.straighten),
+            K::Straighten(set) => plan.straighten = clamp_straighten(set.degrees),
             K::Flip(_) => plan.flip = next_flip(plan.flip),
             K::Ratio(chosen) => {
                 let ratio = Ratio::try_from(chosen.ratio).unwrap_or(Ratio::Unspecified);
@@ -728,6 +808,7 @@ impl Screen for Editor {
                 crop_smaller: words::photos_crop_smaller(locale),
             }),
             plan: Some(self.plan),
+            straighten_limit: STRAIGHTEN_LIMIT.unsigned_abs(),
         };
         wire::ViewState {
             instance: 0,

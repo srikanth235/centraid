@@ -49,10 +49,12 @@ fn a_tie_on_a_half_pixel_goes_up_and_a_rectangle_never_leaves_the_bitmap() {
 
 #[test]
 fn the_tools_are_pure_changes_to_the_plan() {
-    // Straighten levels a degree anticlockwise and wraps to level past the limit.
-    assert_eq!(editor::next_straighten(0), -1);
-    assert_eq!(editor::next_straighten(-14), -15);
-    assert_eq!(editor::next_straighten(-15), 0);
+    // The straighten slider's angle is held inside its reach either way.
+    assert_eq!(editor::clamp_straighten(0), 0);
+    assert_eq!(editor::clamp_straighten(7), 7);
+    assert_eq!(editor::clamp_straighten(-15), -15);
+    assert_eq!(editor::clamp_straighten(40), 15);
+    assert_eq!(editor::clamp_straighten(-40), -15);
     assert_eq!(editor::signed_degrees(0), "0°");
     assert_eq!(editor::signed_degrees(-3), "−3°");
     assert_eq!(editor::signed_degrees(90), "+90°");
@@ -301,9 +303,14 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     assert_eq!(plan.quarters, 1);
     assert_eq!(plan.crop, Some(FULL_CROP));
     assert_eq!(plan.ratio, Ratio::Original as i32);
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: -1 }),
+    );
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     let state = state_of(&d, at);
+    assert_eq!(state.straighten_limit, 15);
     assert_eq!(state.straighten_label, "Straighten −1°");
     assert_eq!(state.flip_label, "Flip ↔");
     assert_eq!(state.status_line, "Rotated +89°, flipped left to right");
@@ -311,6 +318,26 @@ fn a_quarter_turn_resets_the_crop_and_the_ratio_and_every_tool_updates_the_words
     assert_eq!(state_of(&d, at).flip_label, "Flip ↕");
     send(&mut d, at, ev::Kind::Flip(ev::Flipped {}));
     assert_eq!(state_of(&d, at).flip_label, "Flip");
+    // THE SLIDER SETS THE ANGLE: either side of level, to the limit and no further.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: 3 }),
+    );
+    assert_eq!(state_of(&d, at).straighten_label, "Straighten +3°");
+    assert_eq!(state_of(&d, at).plan.expect("plan").straighten, 3);
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: -99 }),
+    );
+    assert_eq!(state_of(&d, at).plan.expect("plan").straighten, -15);
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: 0 }),
+    );
+    assert_eq!(state_of(&d, at).straighten_label, "Straighten 0°");
     send(&mut d, at, ev::Kind::Reset(ev::Reset {}));
     assert!(!state_of(&d, at).edited);
     // A move and a scale respect the clamp.
@@ -400,7 +427,11 @@ fn title_of(d: &Driver, id: &str) -> (String, Option<String>) {
 fn save_asks_the_shell_to_render_and_the_answer_becomes_a_new_photograph_over_the_original() {
     let (mut d, at, original) = opened(b"editor-save-original");
     send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
-    send(&mut d, at, ev::Kind::Straighten(ev::Straightened {}));
+    send(
+        &mut d,
+        at,
+        ev::Kind::Straighten(ev::Straightened { degrees: -1 }),
+    );
     let before = d.effects.len();
     send(&mut d, at, ev::Kind::Save(ev::Saved {}));
     assert_eq!(d.effects.len(), before + 1);
@@ -516,4 +547,168 @@ fn the_lightboxs_edit_button_is_live_only_over_a_still_whose_original_is_here() 
         editor::edit_refusal(en, None, false).as_deref(),
         Some("This photo is not in a vault yet.")
     );
+}
+
+/// THE EDITOR ONLY CROPS, ROTATES AND FLIPS (#1173, decided): no adjustments, no filters, no
+/// markup. Both matches below are exhaustive on purpose: a new tool is a new event kind or a
+/// new plan field, and either stops this test compiling until the decision is revisited.
+#[test]
+fn the_editor_only_crops_rotates_and_flips_and_saves_a_new_photograph() {
+    // The plan: the quarter turns and the straighten (rotate), the flip, and the crop with its
+    // ratio. Nothing about light, colour or marks.
+    let wire::PhotosEditPlan {
+        quarters: _,
+        straighten: _,
+        flip: _,
+        ratio: _,
+        crop: _,
+    } = editor::fresh_plan();
+    // The events: each is crop, rotate, flip, or the editor's own frame (read, reset, save,
+    // cancel, discard).
+    let tool = |kind: &ev::Kind| match kind {
+        ev::Kind::Ratio(_) | ev::Kind::CropMoved(_) | ev::Kind::CropScaled(_) => "crop",
+        ev::Kind::Rotate(_) | ev::Kind::Straighten(_) => "rotate",
+        ev::Kind::Flip(_) => "flip",
+        ev::Kind::Refreshed(_)
+        | ev::Kind::Reset(_)
+        | ev::Kind::Save(_)
+        | ev::Kind::Cancel(_)
+        | ev::Kind::Discard(_) => "frame",
+    };
+    assert_eq!(tool(&ev::Kind::Flip(ev::Flipped {})), "flip");
+
+    let (mut d, at, original) = opened(b"editor-set-1");
+    let state = state_of(&d, at);
+    // The words the board shows, from the core.
+    assert_eq!(state.title, "Crop and rotate");
+    let words = state.words.clone().expect("words");
+    assert_eq!(words.save, "Save new photo");
+    assert_eq!(words.rotate, "Rotate 90°");
+    assert_eq!(words.reset, "Reset");
+    // The ratios offered are the three crops: Original, Square and 3 : 2.
+    let ratios: Vec<&str> = state.ratios.iter().map(|r| r.label.as_str()).collect();
+    assert_eq!(ratios, ["Original", "Square", "3 : 2"]);
+    // Saving is a new photograph and never a change to the original's file.
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    send(&mut d, at, ev::Kind::Save(ev::Saved {}));
+    let wire::effect::Kind::RenderEdit(_) = d
+        .effects
+        .last()
+        .expect("effect")
+        .effect
+        .clone()
+        .and_then(|e| e.kind)
+        .expect("kind")
+    else {
+        panic!("not a render");
+    };
+    let staged = stage_bytes(&d, b"rendered edit bytes for the set");
+    d.answer_effect(wire::effect_result::Outcome::EditRendered(
+        wire::EditRendered {
+            content_hash: staged.content_hash,
+            byte_size: staged.byte_size,
+            media_type: "image/jpeg".to_owned(),
+            width: 300,
+            height: 400,
+        },
+    ));
+    let route = state_of(&d, at).saved_route.expect("the new photograph");
+    let Some(wire::route::Args::PhotosLightbox(args)) = route.args else {
+        panic!("not the lightbox");
+    };
+    assert_ne!(args.photo_id, original, "a new photograph");
+    assert_eq!(
+        title_of(&d, &args.photo_id).1.as_deref(),
+        Some(original.as_str()),
+        "an edit of the original"
+    );
+}
+
+#[test]
+fn a_straighten_crops_to_the_frame_the_turned_photograph_fills() {
+    // Level, or an unknown shape: nothing to cut.
+    assert_eq!(editor::inscribed_crop(1.5, 0, 0), None);
+    assert_eq!(editor::inscribed_crop(0.0, 0, 7), None);
+    for (ratio, quarters, degrees) in [(1.5, 0, 7), (1.5, 0, -15), (1.5, 1, 9), (0.75, 0, 4)] {
+        let fit = editor::inscribed_crop(ratio, quarters, degrees).expect("a crop");
+        // Centred, and smaller than the grown box.
+        assert!((fit.x - (1.0 - fit.w) / 2.0).abs() < 1e-9 && fit.w < 1.0 && fit.h < 1.0);
+        // Every corner of the crop, turned back, lies inside the photograph.
+        let (a, b) = if quarters % 2 == 1 {
+            (1.0, ratio)
+        } else {
+            (ratio, 1.0)
+        };
+        let (box_w, box_h) = editor::rotated_box(a, b, degrees);
+        let radians = f64::from(degrees).to_radians();
+        for (fx, fy) in [(fit.x, fit.y), (fit.x + fit.w, fit.y + fit.h)] {
+            let (x, y) = ((fx - 0.5) * box_w, (fy - 0.5) * box_h);
+            let (u, v) = (
+                x * radians.cos() + y * radians.sin(),
+                -x * radians.sin() + y * radians.cos(),
+            );
+            assert!(
+                u.abs() <= a / 2.0 + 1e-9 && v.abs() <= b / 2.0 + 1e-9,
+                "{ratio} {degrees}"
+            );
+        }
+        // And it keeps the photograph's own shape.
+        assert!(((fit.w * box_w) / (fit.h * box_h) - a / b).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn an_untouched_crop_follows_the_straighten_and_a_chosen_one_stays() {
+    let (mut d, at, _) = opened(b"editor-straighten-fit");
+    let crop_of = |d: &Driver| state_of(d, at).plan.expect("plan").crop;
+    let straighten = |d: &mut Driver, degrees: i32| {
+        send(d, at, ev::Kind::Straighten(ev::Straightened { degrees }));
+    };
+    // The vault knows this photograph is 400 x 300: a straighten crops to what the turn fills.
+    straighten(&mut d, 7);
+    let fit = editor::inscribed_crop(400.0 / 300.0, 0, 7);
+    assert!(fit.is_some() && fit != Some(FULL_CROP));
+    assert_eq!(crop_of(&d), fit);
+    // Another angle refits; level goes back to the full frame.
+    straighten(&mut d, -4);
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 0, -4));
+    straighten(&mut d, 0);
+    assert_eq!(crop_of(&d), Some(FULL_CROP));
+    // A crop the member moved stays put through the next straighten.
+    straighten(&mut d, 5);
+    send(
+        &mut d,
+        at,
+        ev::Kind::CropMoved(ev::CropMoved { dx: 0.02, dy: 0.0 }),
+    );
+    let moved = crop_of(&d);
+    straighten(&mut d, 9);
+    assert_eq!(crop_of(&d), moved);
+    // Picking "Original" gives the crop back to the straighten.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Ratio(ev::RatioChosen {
+            ratio: Ratio::Original as i32,
+            frame_ratio: 1.4,
+        }),
+    );
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 0, 9));
+    // A picked ratio is the member's: the next straighten leaves it.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Ratio(ev::RatioChosen {
+            ratio: Ratio::Square as i32,
+            frame_ratio: 1.4,
+        }),
+    );
+    let square = crop_of(&d);
+    straighten(&mut d, 3);
+    assert_eq!(crop_of(&d), square);
+    // A quarter turn resets the crop to the whole frame, then fits it to the straighten again.
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 1, 3));
+    send(&mut d, at, ev::Kind::Reset(ev::Reset {}));
+    assert_eq!(crop_of(&d), Some(FULL_CROP));
 }

@@ -237,7 +237,7 @@ impl Door for CoreDoor {
         self.with(|vault| {
             let door = VaultDoor::new(vault);
             let now = vault.clock().now_text();
-            let read = centraid_apps_agenda::occurrences(&door, from_day, to_day, &now, &zone);
+            let read = centraid_apps_calendar::occurrences(&door, from_day, to_day, &now, &zone);
             if let Some(failure) = door.take_failure() {
                 return Err(format!("reading the events: {failure}"));
             }

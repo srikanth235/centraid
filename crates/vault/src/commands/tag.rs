@@ -39,6 +39,38 @@ pub(crate) fn ensure_concept(ctx: &CommandCtx<'_, '_>, kind: Kind, label: &str) 
     Ok(id)
 }
 
+/// The colours a label may wear: the keys of the one list palette (`[list]` in
+/// `design/tokens.toml`, `centraid_design::tokens::LIST_IDS`; a test in the
+/// screens crate keeps the two lists equal). The same eight the baseline's CHECK names.
+pub const LABEL_COLORS: [&str; 8] = [
+    "blue",
+    "mustard",
+    "violet",
+    "petrol",
+    "indigo",
+    "graphite",
+    "raspberry",
+    "orchid",
+];
+
+/// The palette colour the fewest labels wear, the first such in palette order:
+/// a new label lands on the hue least in use, so a drive's labels spread over
+/// the palette before any colour repeats.
+pub(crate) fn next_color(ctx: &CommandCtx<'_, '_>) -> Result<&'static str> {
+    let mut least = (i64::MAX, LABEL_COLORS[0]);
+    for color in LABEL_COLORS {
+        let used: i64 = ctx.connection().query_row(
+            "SELECT COUNT(*) FROM concept WHERE kind = 'tag' AND color = ?1",
+            [color],
+            |row| row.get(0),
+        )?;
+        if used < least.0 {
+            least = (used, color);
+        }
+    }
+    Ok(least.1)
+}
+
 /// A sentence when this entity cannot carry a tag: it is missing, in the
 /// trash, or is itself a word.
 pub(crate) fn pre_taggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -93,7 +125,24 @@ pub(crate) fn set_tagged(
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let tag = ensure_concept(ctx, Kind::Tag, ctx.required_str("label")?)?;
+    let label = ctx.required_str("label")?;
+    let known: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM concept WHERE kind = 'tag' AND key = ?1",
+        [fold_label(label)],
+        |row| row.get(0),
+    )?;
+    let tag = ensure_concept(ctx, Kind::Tag, label)?;
+    if known == 0 {
+        // A NEW LABEL WEARS THE COLOUR ASKED FOR, else the palette hue least in use.
+        let color = match ctx.input.get("color").and_then(serde_json::Value::as_str) {
+            Some(color) => color,
+            None => next_color(ctx)?,
+        };
+        ctx.connection().execute(
+            "UPDATE concept SET color = ?2 WHERE id = ?1",
+            [tag.as_str(), color],
+        )?;
+    }
     let added = set_tagged(ctx, id, &tag, true)?;
     Ok(serde_json::json!({ "tag": tag, "added": added }))
 }
@@ -103,6 +152,27 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
     let removed = set_tagged(ctx, id, &tag, false)?;
     Ok(serde_json::json!({ "tag": tag, "removed": removed }))
+}
+
+/// `tag.color`: change the colour a label wears. The label's words are its identity.
+fn recolor(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
+    let color = ctx.required_str("color")?;
+    let changed = ctx.connection().execute(
+        "UPDATE concept SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+        [tag.as_str(), color],
+    )?;
+    Ok(serde_json::json!({ "tag": tag, "changed": changed > 0 }))
+}
+
+fn pre_known_label(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
+    let known: i64 =
+        ctx.connection()
+            .query_row("SELECT COUNT(*) FROM concept WHERE id = ?1", [tag], |row| {
+                row.get(0)
+            })?;
+    Ok((known == 0).then(|| "there is no such label".to_owned()))
 }
 
 fn pre_label(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -121,13 +191,35 @@ const SCHEMA: &str = r#"{
   }
 }"#;
 
+/// `tag.add` also takes the colour a NEW label should wear.
+const ADD_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["id", "label"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "label": { "type": "string", "maxLength": 200 },
+    "color": { "enum": ["blue","mustard","violet","petrol","indigo","graphite","raspberry","orchid"] }
+  }
+}"#;
+
+const COLOR_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["label", "color"],
+  "additionalProperties": false,
+  "properties": {
+    "label": { "type": "string", "maxLength": 200 },
+    "color": { "enum": ["blue","mustard","violet","petrol","indigo","graphite","raspberry","orchid"] }
+  }
+}"#;
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
         CommandDefinition::plain(
             "tag.add",
             "tag",
-            SCHEMA,
+            ADD_SCHEMA,
             Idempotency::Idempotent,
             &[
                 CommandCondition {
@@ -151,6 +243,23 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_taggable,
             }],
             remove,
+        ),
+        CommandDefinition::plain(
+            "tag.color",
+            "tag",
+            COLOR_SCHEMA,
+            Idempotency::Idempotent,
+            &[
+                CommandCondition {
+                    predicate: "label_is_a_word",
+                    check: pre_label,
+                },
+                CommandCondition {
+                    predicate: "label_exists",
+                    check: pre_known_label,
+                },
+            ],
+            recolor,
         ),
     ]
 }

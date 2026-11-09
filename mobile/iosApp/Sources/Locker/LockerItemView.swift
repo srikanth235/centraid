@@ -44,9 +44,28 @@ struct LockerItemView: View {
             // is `secure`: the bar is outside the secure canvas, and the page
             // already draws the title in its shielded header.
             PushedPage(title: state.secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
-                if !state.chrome.editLabel.isEmpty {
-                    ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
-                        if state.chrome.hasEditRoute { open(state.chrome.editRoute) }
+                HStack(spacing: 8) {
+                    // THE "…" MENU holds the item's verbs (add a field, star, archive, trash).
+                    if case let .data(item)? = state.content, !item.hasGone, !item.actions.isEmpty {
+                        Menu {
+                            ForEach(item.actions, id: \.key) { action in
+                                Button(role: action.destructive ? .destructive : nil) {
+                                    send(LockerItemEvents.make { $0.action = .with { $0.key = action.key } })
+                                } label: {
+                                    Text(action.label)
+                                }
+                                .accessibilityIdentifier("locker-item-action-\(action.key)")
+                            }
+                        } label: {
+                            ToolbarIconFace(iconKey: "MoreHoriz")
+                        }
+                        .accessibilityLabel(state.chrome.menuLabel)
+                        .accessibilityIdentifier("locker-item-menu")
+                    }
+                    if !state.chrome.editLabel.isEmpty {
+                        ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
+                            if state.chrome.hasEditRoute { open(state.chrome.editRoute) }
+                        }
                     }
                 }
             } content: {
@@ -62,6 +81,7 @@ struct LockerItemView: View {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
                             }
+                            .accessibilityIdentifier("locker-item")
                         }
                     }
                 }
@@ -88,6 +108,22 @@ struct LockerItemView: View {
                 )
             }
             .modifier(SheetPresentation(detents: ConfirmSheet.detents))
+        }
+        .sheet(isPresented: Binding(
+            get: { state.linkPicker.open },
+            set: { isOpen in
+                if !isOpen, state.linkPicker.open {
+                    send(LockerItemEvents.make { $0.link = .with { $0.closed = .init() } })
+                }
+            }
+        )) {
+            // A SHEET IS ITS OWN PRESENTATION: it carries its own shield, like the memo.
+            LockerShield(secure: state.secure) {
+                LinkPickerSheet(picker: state.linkPicker) { link in
+                    send(LockerItemEvents.make { $0.link = link })
+                }
+            }
+            .modifier(SheetPresentation())
         }
         .sheet(isPresented: Binding(
             get: { state.hasMemo },
@@ -136,31 +172,67 @@ struct LockerItemView: View {
 
     @ViewBuilder
     private func page(_ item: Centraid_Core_V1_LockerItemData) -> some View {
-        HStack(spacing: 12) {
-            LockerTypeChip(letters: item.typeChip)
-            VStack(alignment: .leading, spacing: 2) {
+        // THE CENTRED HERO (the Locker item board): the title's first letter on ink, the title with its star
+        // beside it, and the type with when it was last used under that.
+        VStack(spacing: 8) {
+            LockerHeroTile(letter: item.heroInitial)
+            HStack(spacing: 6) {
                 Text(item.title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Text(item.typeLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.hero)
+                    .foregroundStyle(Surface.ink)
+                    .multilineTextAlignment(.center)
+                if !item.starLabel.isEmpty {
+                    CentraidIconView(iconKey: "Star", tint: AppAccent("locker").text, size: 18, solid: true)
+                        .accessibilityLabel(item.starLabel)
+                        .accessibilityIdentifier("locker-item-star")
+                }
             }
-            Spacer(minLength: 0)
-            ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+            Text(item.subtitle)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .multilineTextAlignment(.center)
+            if !item.chips.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(item.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                }
+            }
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("locker-item-head")
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 8)
         LockerNote(text: item.trashedNote)
         LockerNote(text: item.statusLine)
-        ForEach(Array(item.sections.enumerated()), id: \.offset) { _, section in
+        ForEach(Array(item.sections.enumerated()), id: \.offset) { index, section in
             if !section.title.isEmpty { SectionHeader(title: section.title) }
-            ForEach(section.rows, id: \.key) { row in
-                LockerFieldRowView(row: row) { verb in
-                    send(LockerItemEvents.make { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
+            // EACH SECTION IS A WHITE CARD OF ROWS; the verification code is the first.
+            VStack(spacing: 0) {
+                ForEach(section.rows, id: \.key) { row in
+                    LockerFieldRowView(row: row) { verb in
+                        send(LockerItemEvents.make { $0.verb = .with { $0.key = row.key; $0.verb = verb.key } })
+                    }
                 }
             }
+            .kitCard()
+            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
             if !section.note.isEmpty { LockerNote(text: section.note) }
+            // "Change password on website" sits under the type's own fields.
+            if item.hasChangePassword, section.rows.contains(where: { $0.key == "password" }) {
+                KitOutlineButton(label: item.changePassword.label) {
+                    send(LockerItemEvents.make { $0.action = .with { $0.key = item.changePassword.key } })
+                }
+                .accessibilityIdentifier("locker-item-action-change_password")
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+            }
+        }
+        if item.hasLinks {
+            LinkSectionView(section: item.links, send: { link in
+                send(LockerItemEvents.make { $0.link = link })
+            }, open: open)
         }
         if !item.tags.isEmpty {
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))
@@ -179,20 +251,6 @@ struct LockerItemView: View {
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
         }
-        if !item.actions.isEmpty {
-            VStack(spacing: 0) {
-                ForEach(item.actions, id: \.key) { action in
-                    SheetRow(
-                        label: action.label,
-                        destructive: action.destructive,
-                        identifier: "locker-item-action-\(action.key)",
-                        onTap: { send(LockerItemEvents.make { $0.action = .with { $0.key = action.key } }) }
-                    )
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, 12)
-        }
     }
 }
 
@@ -205,51 +263,73 @@ struct LockerFieldRowView: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.label)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            Group {
-                if row.sealed && !row.revealed {
-                    Text(row.mask)
-                        .centraidType("mono")
-                        .kerning(2)
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                } else {
-                    HStack(spacing: 8) {
-                        Text(row.value)
-                            .centraidType(row.monospace ? "mono" : "body")
-                            .foregroundStyle(Theme.color("text", scheme))
-                        if row.hasCountdown {
-                            LockerCountdownRing(countdown: row.countdown)
+        // THE BOARD'S ROW: the label over the value on the left, the verbs on the trailing edge of
+        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack.
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                Group {
+                    if row.sealed && !row.revealed {
+                        Text(row.mask)
+                            .centraidType("mono")
+                            .kerning(2)
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                    } else {
+                        HStack(spacing: 8) {
+                            Text(row.value)
+                                .centraidType(row.monospace ? "mono" : "body")
+                                .font(row.key == "otp_seed" ? .system(size: 28, weight: .semibold, design: .monospaced) : nil)
+                                .foregroundStyle(Surface.ink)
+                            if row.hasCountdown {
+                                LockerCountdownRing(countdown: row.countdown)
+                            }
                         }
                     }
                 }
+                .textSelection(.disabled)
+                .accessibilityIdentifier("locker-value-\(row.key)")
+                if !row.note.isEmpty {
+                    Text(row.note)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .monospacedDigit()
+                }
             }
-            .textSelection(.disabled)
-            .accessibilityIdentifier("locker-field-\(row.key)-value")
-            if !row.note.isEmpty {
-                Text(row.note)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .monospacedDigit()
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if !row.verbs.isEmpty {
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     ForEach(row.verbs, id: \.key) { verb in
-                        KitLink(label: verb.label, dense: true, identifier: "locker-field-\(row.key)-\(verb.key)") {
-                            onVerb(verb)
+                        if verb.pill {
+                            // THE CODE CARD'S COPY: a green pill, as the board draws it.
+                            Button(action: { onVerb(verb) }) {
+                                Text(verb.label)
+                                    .centraidType("smallStrong")
+                                    .foregroundStyle(StateColor.green.text)
+                                    .padding(.horizontal, 14)
+                                    .frame(minHeight: 36)
+                                    .background(StateColor.green.tint, in: Capsule())
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("locker-verb-\(row.key)-\(verb.key)")
+                        } else {
+                            KitLink(label: verb.label, dense: true, identifier: "locker-verb-\(row.key)-\(verb.key)") {
+                                onVerb(verb)
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-        .overlay(alignment: .bottom) { KitHairline() }
+        .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(row.accessibilityLabel)
+        .accessibilityIdentifier("locker-field-\(row.key)")
     }
 }
 

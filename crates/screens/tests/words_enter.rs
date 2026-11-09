@@ -121,6 +121,7 @@ fn the_grid_opens_empty_and_secure_with_the_pairing_codes_field_only_for_a_resto
     assert_eq!(state.cells[4].prompt, "Word 5");
     assert_eq!(state.title, "Restore with your recovery key");
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
+    assert_eq!(state.endpoint_placeholder, "Pairing code");
     assert!(!state.primary_enabled);
 
     let rekey = open(routes::rekey_for_locker());
@@ -257,114 +258,15 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
         &mut phone,
         restore_answer(&[("/v/a/vault.db", 0, 1_204, "12345 67890")], &[]),
     );
+    // A RESTORE ENDS THE SCREEN: the core brings the restored vault to the front
+    // and closes every screen, so there is no page of results to draw.
     let state = phone.enter();
-    assert_eq!(state.phase, Phase::Done as i32);
+    assert!(state.finished);
     assert!(!state.secure && state.cells.is_empty());
-    assert_eq!(state.restored[0].line, "Vault 1: 1,204 rows.");
-    assert_eq!(state.restored[0].safety_number, "12345 67890");
-    assert!(
-        state.restored[0]
-            .safety_label
-            .starts_with("Check this number")
-    );
-    assert_eq!(state.title, "Your vaults are back");
-    assert_eq!(state.primary_label, "Done");
+    assert_eq!(state.endpoint, "");
     // The seed was stored and the words kept for Settings.
     assert!(phone.shell.device.contains_key(secrets::LOCAL_WORDS));
     assert_eq!(phone.keeper.log(), vec!["adopt [0] seed=true".to_owned()]);
-    primary(&mut phone);
-    assert!(phone.enter().finished);
-
-    // ONE ROW IS A ROW; a vault with no census says no count.
-    let mut one = filled(routes::restore(), Some(CODE));
-    primary(&mut one);
-    deliver(
-        &mut one,
-        restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]),
-    );
-    assert_eq!(one.enter().restored[0].line, "Vault 1: 1 row.");
-    assert_eq!(one.enter().restored[0].safety_label, "");
-}
-
-#[test]
-fn a_vault_that_stayed_is_numbered_with_the_ones_that_came_back_and_offers_a_retry() {
-    let mut phone = filled(routes::restore(), Some(CODE));
-    primary(&mut phone);
-    deliver(
-        &mut phone,
-        restore_answer(
-            &[("/v/a/vault.db", 0, 3, ""), ("/v/c/vault.db", 2, 1, "")],
-            &[1],
-        ),
-    );
-    let state = phone.enter();
-    assert_eq!(state.title, "Some of your vaults are back");
-    assert_eq!(
-        state.body,
-        "Keep your other phone for now. Try again to bring those vaults here."
-    );
-    // ONE SEQUENCE BY INDEX: index 1 is "Vault 2" on the stayed list, so the
-    // vault at index 2 is "Vault 3".
-    let lines: Vec<_> = state.restored.iter().map(|v| v.line.clone()).collect();
-    assert_eq!(lines, vec!["Vault 1: 3 rows.", "Vault 3: 1 row."]);
-    assert_eq!(
-        state.stayed,
-        vec!["Vault 2 stayed on your other phone. Your backup device wouldn't hand it over."]
-    );
-    assert_eq!(state.primary_label, "Done");
-    assert_eq!(state.secondary_label, "");
-    assert_eq!(state.retry_label, "Try again");
-    // THE CORE'S REASON IS A SUPPORT LOG, never a member's sentence.
-    assert!(!state.stayed[0].contains("logs only"));
-
-    // The retry: no grid comes back, a second tap asks nothing.
-    phone.send_enter(K::Retry(wire::WordsRetry {}));
-    let state = phone.enter();
-    assert_eq!(state.phase, Phase::Working as i32);
-    assert!(state.cells.is_empty() && !state.secure);
-    assert_eq!(state.retry_label, "");
-    assert_eq!(state.stayed.len(), 1);
-    phone.send_enter(K::Retry(wire::WordsRetry {}));
-
-    // STILL REFUSED: back to DONE, both lists standing, the retry offered.
-    deliver(&mut phone, restore_refused(wire::ErrorCode::Unauthorized));
-    let state = phone.enter();
-    assert_eq!(state.phase, Phase::Done as i32);
-    assert_eq!(
-        state.notice,
-        "Your backup device still won't hand it over. It stays on your other phone."
-    );
-    assert_eq!(state.restored.len(), 2);
-    assert_eq!(state.retry_label, "Try again");
-
-    phone.send_enter(K::Retry(wire::WordsRetry {}));
-    deliver(
-        &mut phone,
-        restore_refused(wire::ErrorCode::PeerUnreachable),
-    );
-    assert!(
-        phone
-            .enter()
-            .notice
-            .starts_with("Couldn't reach your backup device.")
-    );
-
-    // IT CAME BACK: one list, numbered as before, and the whole title.
-    phone.send_enter(K::Retry(wire::WordsRetry {}));
-    deliver(
-        &mut phone,
-        restore_answer(&[("/v/b/vault.db", 1, 5, "")], &[]),
-    );
-    let state = phone.enter();
-    assert_eq!(state.title, "Your vaults are back");
-    assert_eq!(state.notice, "");
-    let lines: Vec<_> = state.restored.iter().map(|v| v.line.clone()).collect();
-    assert_eq!(
-        lines,
-        vec!["Vault 1: 3 rows.", "Vault 2: 5 rows.", "Vault 3: 1 row."]
-    );
-    assert!(state.stayed.is_empty());
-    assert_eq!(state.retry_label, "");
 }
 
 #[test]
@@ -537,8 +439,7 @@ fn a_held_seed_restore_waits_for_the_code_then_restores_and_nothing_held_goes_ba
         &mut phone,
         restore_answer(&[("/v/a/vault.db", 0, 3, "")], &[]),
     );
-    assert_eq!(phone.enter().phase, Phase::Done as i32);
-    assert_eq!(phone.enter().restored.len(), 1);
+    assert!(phone.enter().finished);
     // The seed is settled once vaults came back; no words are kept.
     assert!(phone.shell.device.contains_key(secrets::SEED_SETTLED));
     assert!(!phone.shell.device.contains_key(secrets::LOCAL_WORDS));
@@ -589,20 +490,25 @@ fn a_held_restore_lists_the_vaults_on_their_own_words_it_will_also_bring_back() 
 }
 
 #[test]
-fn vaults_from_two_seeds_are_numbered_once_each_the_members_first() {
-    let mut phone = held_phone(routes::restore_held());
-    code(&mut phone, CODE);
-    primary(&mut phone);
-    deliver(
-        &mut phone,
-        restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[1]),
-    );
-    let state = phone.enter();
-    assert_eq!(state.restored[0].line, "Vault 1: 1 row.");
-    assert_eq!(
-        state.stayed,
-        vec!["Vault 2 stayed on your other phone. Your backup device wouldn't hand it over."]
-    );
+fn a_held_restore_says_the_key_was_found_and_where_it_came_back_from_and_a_typed_one_says_neither()
+{
+    // THE RestoreHeld BOARD (#1173): "Recovery key found", "In iCloud Keychain".
+    let ios = held_phone(routes::restore_held());
+    let state = ios.enter();
+    assert_eq!(state.held_found, "Recovery key found");
+    assert_eq!(state.held_place, "In iCloud Keychain");
+
+    let mut android = phone(routes::restore_held(), "android");
+    android
+        .shell
+        .synced
+        .insert(secrets::SEED_KEY.to_owned(), "ab".repeat(64));
+    android.serve();
+    assert_eq!(android.enter().held_place, "In Google");
+
+    // The grid a member types into has no such card.
+    let state = open(routes::restore()).enter().clone();
+    assert!(state.held_found.is_empty() && state.held_place.is_empty());
 }
 
 #[test]
@@ -624,5 +530,4 @@ fn a_late_answer_to_a_screen_that_was_left_changes_nothing() {
         restore_answer(&[("/v/a/vault.db", 0, 1, "")], &[]),
     );
     assert!(phone.enter().finished);
-    assert!(phone.enter().restored.is_empty());
 }

@@ -271,10 +271,14 @@ impl Service {
             standing.reading.frozen,
             standing.now_ms,
         );
+        // NOTHING PAIRED: the line is the way to pairing (decided in #1173), not
+        // the Backup place, whose page says the same and offers the same door.
+        let unpaired = standing.reading.destinations.is_empty() && !standing.reading.frozen;
         (!line.status.is_empty()).then_some(wire::HomeBackupLine {
             status: line.status,
             tone: line.tone,
             accessibility_label: line.accessibility_label,
+            route: unpaired.then(crate::pairing::routes::laptop),
         })
     }
 
@@ -344,6 +348,18 @@ impl Screen for Service {
                 Vec::new()
             }
             Some(E::DataChanged(changed)) => {
+                // THE LEDGER MOVED (a pairing, a pass, a forget, a refreshed address): Home's
+                // line is the backup lane's reading of it, so it is read again, as the Backup
+                // page and Settings read it. A pairing wakes no pass, so nothing else would.
+                // The line is a read and writes nothing: no change of its own follows.
+                if changed
+                    .tables
+                    .iter()
+                    .any(|table| table == crate::passes::service::LEDGER_TABLE)
+                    && self.launch == Launch::Ready
+                {
+                    self.tell_home(ctx);
+                }
                 if changed
                     .tables
                     .iter()

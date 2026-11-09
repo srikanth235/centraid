@@ -4,7 +4,7 @@
 //! as days — "Today", "Tuesday 3 June". So the core
 //! groups the entries by the civil day each was WRITTEN on (`created_at`), in
 //! the zone the request states, through the vault's one zone engine
-//! ([`FireZone`], the same `crates/apps/agenda`'s `local` module reads). A
+//! ([`FireZone`], the same `crates/apps/kit`'s `civil` module reads). A
 //! shell reads `YYYY-MM-DD` strings and does no zone arithmetic.
 //!
 //! Every function is pure: entries, a zone and the vault clock in; days out.

@@ -65,6 +65,11 @@ enum PhoneCalendar {
             entry.sourceTitle = calendar.source?.title ?? ""
             entry.title = calendar.title
             entry.color = hex(calendar.cgColor)
+            // THE SHELL'S FINAL WORD on whether the app may write here: a calendar that
+            // takes content and is the member's own kind (never a subscription or Birthdays).
+            let writable = calendar.allowsContentModifications && [.local, .calDAV, .exchange].contains(calendar.type)
+            entry.writable = writable
+            entry.allowsModifications = writable
             return entry
         }
         out.events = events(store, own, now, read)
@@ -72,7 +77,7 @@ enum PhoneCalendar {
     }
 
     /// `uid:` plus the iCal UID the provider fills, else `local:` plus an id that means something on this device only.
-    private static func phoneId(_ item: EKCalendarItem, fallback: String) -> String {
+    static func phoneId(_ item: EKCalendarItem, fallback: String) -> String {
         if let uid = item.calendarItemExternalIdentifier, !uid.isEmpty { return "uid:" + uid }
         return "local:" + fallback
     }
@@ -111,6 +116,8 @@ enum PhoneCalendar {
             out.calendarKey = event.calendar?.calendarIdentifier ?? ""
             out.url = event.url?.absoluteString ?? ""
             out.location = event.location ?? ""
+            out.attendees = (event.attendees ?? []).map(attendee)
+            out.alerts = alerts(event, start: start)
             if event.isAllDay {
                 // EventKit ends an all-day event at the next midnight (or
                 // 23:59:59); the all-day end is the LAST day, inclusive.
@@ -128,8 +135,33 @@ enum PhoneCalendar {
         }
     }
 
+    /// A guest as the phone holds it: its name, the address in its `mailto:` URL, and its answer.
+    private static func attendee(_ participant: EKParticipant) -> Centraid_Core_V1_PhoneAttendee {
+        var out = Centraid_Core_V1_PhoneAttendee()
+        out.name = participant.name ?? ""
+        let link = participant.url.absoluteString
+        out.email = link.lowercased().hasPrefix("mailto:") ? String(link.dropFirst("mailto:".count)) : ""
+        switch participant.participantStatus {
+        case .accepted: out.status = "accepted"
+        case .declined: out.status = "declined"
+        case .tentative: out.status = "tentative"
+        default: out.status = "needs-action"
+        }
+        return out
+    }
+
+    /// An event's alerts as whole minutes BEFORE this occurrence's start: a relative alarm is
+    /// its offset negated, an absolute one is the start minus its date; one after the start is
+    /// left out.
+    private static func alerts(_ event: EKEvent, start: Date) -> [UInt32] {
+        (event.alarms ?? []).compactMap { alarm in
+            let seconds = alarm.absoluteDate.map { start.timeIntervalSince($0) } ?? -alarm.relativeOffset
+            return seconds >= 0 ? UInt32((seconds / 60).rounded()) : nil
+        }
+    }
+
     /// `#RRGGBB` of a calendar's colour as the sRGB it paints with; empty when it has none.
-    private static func hex(_ color: CGColor?) -> String {
+    static func hex(_ color: CGColor?) -> String {
         guard let color,
               let srgb = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
               let parts = srgb.components, parts.count >= 3
@@ -224,7 +256,7 @@ enum PhoneCalendar {
     }
 
     /// The wall clock of [date] in [zone]: what `propose_event` takes with `tz`.
-    fileprivate static func civil(_ date: Date, _ zone: TimeZone, _ format: String) -> String {
+    static func civil(_ date: Date, _ zone: TimeZone, _ format: String) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)

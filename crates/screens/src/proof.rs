@@ -30,6 +30,7 @@ enum Phase {
 #[must_use]
 pub fn route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: NAME.to_owned(),
         args: Some(wire::route::Args::Counter(wire::CounterRoute {})),
     }
@@ -63,7 +64,7 @@ struct Counter {
 
 impl Counter {
     fn reload(&mut self, ctx: &Ctx) {
-        let request = load::agenda::Upcoming::default().into();
+        let request = load::calendar::Upcoming::default().into();
         self.phase = match ctx.load(request) {
             Ok(loaded) => match loaded.answer.and_then(|answer| answer.answer) {
                 Some(wire::app_query_response::Answer::AgendaUpcoming(upcoming)) => {

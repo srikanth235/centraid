@@ -82,8 +82,21 @@ struct DocsDocumentView: View {
                                         .padding(.horizontal, CentraidGeometry.pageMargin)
                                         .padding(.vertical, 8)
                                 }
+                                if !document.subtitle.isEmpty {
+                                    Text(document.subtitle)
+                                        .centraidType("annotLabel")
+                                        .foregroundStyle(Theme.color("textFaint", scheme))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.top, 2)
+                                        .accessibilityIdentifier("docs-document-subtitle")
+                                }
                                 surface(document)
-                                if !document.path.isEmpty { path(document.path) }
+                                infoCard(document)
+                                if document.hasAbout {
+                                    LinkSectionView(section: document.about, send: { link in
+                                        send(Self.event { $0.about = link })
+                                    }, open: open)
+                                }
                                 if !document.facts.isEmpty {
                                     SectionHeader(title: state.chrome.factsHeading)
                                     // Ids prefixed per list, so a second list added here never collides
@@ -92,11 +105,14 @@ struct DocsDocumentView: View {
                                         FieldRow(key: fact.label, value: fact.detail)
                                     }
                                 }
-                                if document.hasVersions { versionsRow(document.versions) }
                             }
                             .padding(.bottom, 16)
                         }
                         .refreshable { send(Self.event { $0.refreshed = .init() }) }
+                        // THE QUICK LOOK BAR floats over the page: glass on iOS 26, paper before.
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            if !document.bar.isEmpty { quickLookBar(document.bar) }
+                        }
                     }
                 }
             }
@@ -111,6 +127,7 @@ struct DocsDocumentView: View {
         .sheet(isPresented: sheetBinding(state)) {
             DocsSheetView(sheet: state.sheet, actions: sheetActions())
         }
+        .linkPickerSheet(state.aboutPicker) { link in send(Self.event { $0.about = link }) }
         .background {
             Color.clear.sheet(isPresented: Binding(
                 get: { state.hasConfirm },
@@ -178,23 +195,87 @@ struct DocsDocumentView: View {
         }
     }
 
-    private func path(_ crumbs: [Centraid_Core_V1_DocsCrumb]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
-                    if index > 0 {
-                        CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 10)
-                            .accessibilityHidden(true)
+    /// THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to
+    /// its versions. A white card on the page, 16 points round.
+    private func infoCard(_ document: Centraid_Core_V1_DocsDocumentData) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(document.kindSize)
+                Spacer(minLength: 8)
+                Text(document.changed).foregroundStyle(Theme.color("textFaint", scheme))
+            }
+            .centraidType("small")
+            .foregroundStyle(Theme.color("text", scheme))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            if document.hasRow, !document.row.labels.isEmpty {
+                KitHairline()
+                HStack(spacing: 8) {
+                    Text(document.labelsHeading)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("text", scheme))
+                    Spacer(minLength: 8)
+                    ForEach(document.row.labels, id: \.tagID) { label in
+                        HStack(spacing: 4) {
+                            DocsDot(colorKey: label.colorKey)
+                            Text(label.label)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                        }
                     }
-                    KitLink(label: crumb.name, dense: true, identifier: "docs-crumb-\(crumb.folderID)") {
-                        if crumb.hasRoute { open(crumb.route) }
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("docs-document-labels")
+            }
+            if document.hasVersions {
+                KitHairline()
+                versionsRow(document.versions)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: CentraidScale.cardRadius).fill(Color(CentraidAsset.surfaceCard)))
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+
+    /// THE BAR: Share, Star, Labels, Move, Trash (Restore and Delete forever in the trash), each
+    /// a key. Rust says which and in what order; a starred document's Star is drawn in the app's colour.
+    private func quickLookBar(_ actions: [Centraid_Core_V1_DocsAction]) -> some View {
+        BandGlassGroup(spacing: 8) {
+            HStack(spacing: 0) {
+                ForEach(actions, id: \.key) { action in
+                    Button {
+                        send(Self.event { $0.action = .with { $0.key = action.key } })
+                        if action.hasRoute { open(action.route) }
+                    } label: {
+                        CentraidIconView(
+                            iconKey: action.iconKey,
+                            tint: barTint(action),
+                            size: 22
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .contentShape(Rectangle())
                     }
-                    .disabled(crumb.folderID.isEmpty)
+                    .buttonStyle(.plain)
+                    .disabled(!action.enabled)
+                    .accessibilityLabel(action.label)
+                    .accessibilityIdentifier("docs-bar-\(action.key)")
                 }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .frame(height: 56)
+            .bandGround(Capsule(), solid: "bgElev")
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func barTint(_ action: Centraid_Core_V1_DocsAction) -> Color {
+        if action.destructive { return Theme.color("net", scheme) }
+        if action.key == "unstar" || action.key == "share" { return AppAccent("docs").text }
+        return Theme.color("text", scheme)
     }
 
     /// THE VERSION HISTORY'S ROW: its words, how many, and the page it opens.
@@ -213,9 +294,8 @@ struct DocsDocumentView: View {
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            .overlay(alignment: .bottom) { KitHairline() }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
@@ -315,7 +395,8 @@ struct DocsStageCard: View {
         let url = URL(fileURLWithPath: stage.bytesPath)
         switch stage.media {
         case .image:
-            if let image = UIImage(contentsOfFile: stage.bytesPath) {
+            // FROM DATA: the store's files have no extension, so a path-based decoder returns nil.
+            if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -376,6 +457,7 @@ struct DocsVersionsView: View {
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     static func event(_ build: (inout Centraid_Core_V1_DocsVersionsEvent) -> Void) -> Centraid_Core_V1_DocsVersionsEvent {
         var event = Centraid_Core_V1_DocsVersionsEvent()
@@ -394,6 +476,7 @@ struct DocsVersionsView: View {
     }
 
     var body: some View {
+        // THE BOARD (DocVersions): the title large in the page, the versions in one white card.
         PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
@@ -409,13 +492,16 @@ struct DocsVersionsView: View {
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(data.versions, id: \.key) { version in
+                                ForEach(Array(data.versions.enumerated()), id: \.element.key) { index, version in
+                                    if index > 0 { KitHairline().padding(.leading, 16) }
                                     HStack(spacing: 8) {
-                                        CentraidRow(title: version.label, meta: version.meta, dimmed: !version.current)
+                                        // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
+                                        CentraidRow(title: version.label, meta: version.meta)
                                         if !version.restoreLabel.isEmpty {
                                             KitLink(
                                                 label: version.restoreLabel,
                                                 dense: true,
+                                                tint: accent.text,
                                                 identifier: "docs-version-restore-\(version.key)"
                                             ) {
                                                 send(Self.event { $0.restored = .with { $0.key = version.key } })
@@ -425,6 +511,8 @@ struct DocsVersionsView: View {
                                     .padding(.trailing, 8)
                                 }
                             }
+                            .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
                             .padding(.bottom, 16)
                         }
                         .refreshable { send(Self.event { $0.refreshed = .init() }) }

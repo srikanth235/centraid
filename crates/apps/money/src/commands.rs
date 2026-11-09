@@ -88,11 +88,11 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-two actions, in the manifest's own order. A close, an archive
+/// THE TABLE. Twenty-five actions, in the manifest's own order. A close, an archive
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 23] = [
+pub const ACTIONS: [ActionRow; 25] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -116,6 +116,9 @@ pub const ACTIONS: [ActionRow; 23] = [
     confirmed("merge-category", "category.merge"),
     act("archive-category", "flag.set"),
     act("unarchive-category", "flag.clear"),
+    // A link set by hand (#1173): one edge, shaped by the vault.
+    act("add-with", "edge.add"),
+    act("remove-with", "edge.remove"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per

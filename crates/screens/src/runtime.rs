@@ -244,17 +244,30 @@ impl Runtime {
             // or an effect for a screen the same update closes would be drawn
             // or performed for nothing.
             out.views.retain(|view| view.instance != id);
-            out.effects.retain(|effect| effect.instance != id);
+            // ...EXCEPT A WITHDRAWN PROMPT: the screen's goodbye asked the shell to
+            // take down the OS prompt it raised, and that must outlive the screen.
+            out.effects
+                .retain(|effect| effect.instance != id || Self::withdraws_prompt(effect));
         }
         state.timers.retain(|(owner, _), _| *owner != id);
         state.jobs.retain(|_, (owner, _)| *owner != id);
     }
 
+    /// Whether an effect only takes down an OS prompt a screen raised (the
+    /// owner check's `cancel`): the one effect a screen may still ask as it goes.
+    fn withdraws_prompt(request: &wire::EffectRequest) -> bool {
+        matches!(
+            &request.effect,
+            Some(wire::Effect { kind: Some(wire::effect::Kind::OwnerCheck(check)) }) if check.cancel
+        )
+    }
+
     /// Tell a screen it is being popped: its last chance to write what the
     /// member typed. Only the writes it makes survive; the view and any effect
-    /// it asks for are dropped with the screen.
-    fn leave(state: &mut State, core: &dyn ScreenCtx, id: u64) {
-        let mut discarded = wire::ScreenUpdate::default();
+    /// it asks for are dropped with the screen, except the withdrawal of a
+    /// prompt it had up (the Face ID sheet must not outlive Locker).
+    fn leave(state: &mut State, core: &dyn ScreenCtx, id: u64, out: &mut wire::ScreenUpdate) {
+        let mut said = wire::ScreenUpdate::default();
         Self::dispatch(
             state,
             core,
@@ -262,8 +275,36 @@ impl Runtime {
             wire::ScreenEvent {
                 kind: Some(wire::screen_event::Kind::Left(wire::Left {})),
             },
-            &mut discarded,
+            &mut said,
         );
+        out.effects
+            .extend(said.effects.into_iter().filter(Self::withdraws_prompt));
+    }
+
+    /// Select `tab`. The tab that goes out of view is told (`TabHidden`) so a
+    /// screen with an OS prompt up withdraws it.
+    fn select(state: &mut State, core: &dyn ScreenCtx, tab: &str, out: &mut wire::ScreenUpdate) {
+        if state.selected == tab {
+            return;
+        }
+        let hidden: Vec<u64> = state
+            .tabs
+            .iter()
+            .find(|candidate| candidate.id == state.selected)
+            .map(|candidate| candidate.stack.clone())
+            .unwrap_or_default();
+        state.selected = tab.to_owned();
+        for id in hidden {
+            Self::dispatch(
+                state,
+                core,
+                id,
+                wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::TabHidden(wire::TabHidden {})),
+                },
+                out,
+            );
+        }
     }
 
     /// Run one event through one screen and collect everything that came of it.
@@ -359,7 +400,7 @@ impl Runtime {
             if let Some(wire::effect::Kind::SelectTab(select)) = &effect.kind {
                 if state.tabs.iter().any(|tab| tab.id == select.tab) && state.selected != select.tab
                 {
-                    state.selected.clone_from(&select.tab);
+                    Self::select(state, core, &select.tab, out);
                     state.nav_revision += 1;
                     out.navigation = Some(Self::navigation(state));
                 }
@@ -428,7 +469,7 @@ impl Runtime {
                     .ok_or_else(|| Self::bad("a push without a route"))?;
                 let id = self.open(state, core, route, false, out)?;
                 state.tabs[index].stack.push(id);
-                state.selected.clone_from(&push.tab);
+                Self::select(state, core, &push.tab, out);
             }
             N::Popped(popped) => {
                 let index = tab_index(state, &popped.tab)?;
@@ -443,19 +484,19 @@ impl Runtime {
                 };
                 let gone = stack.split_off(at);
                 for id in gone {
-                    Self::leave(state, core, id);
+                    Self::leave(state, core, id, out);
                     Self::close(state, id, out);
                 }
             }
             N::SelectTab(select) => {
                 tab_index(state, &select.tab)?;
-                state.selected.clone_from(&select.tab);
+                Self::select(state, core, &select.tab, out);
             }
             N::PopToRoot(pop) => {
                 let index = tab_index(state, &pop.tab)?;
                 let gone = state.tabs[index].stack.split_off(1);
                 for id in gone {
-                    Self::leave(state, core, id);
+                    Self::leave(state, core, id, out);
                     Self::close(state, id, out);
                 }
             }
@@ -523,7 +564,7 @@ impl Runtime {
                 .flat_map(|tab| tab.stack.iter().rev().copied())
                 .collect();
             for id in screens {
-                Self::leave(state, core, id);
+                Self::leave(state, core, id, out);
             }
             vaults.bring_to_front(&target);
         }
@@ -674,6 +715,7 @@ impl ScreenHost for Runtime {
                     region: region_of(&environment.locale),
                     platform: environment.platform.clone(),
                     library_deletes: environment.library_deletes,
+                    hour_cycle_12: environment.hour_cycle_12,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {

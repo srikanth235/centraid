@@ -66,6 +66,7 @@ struct LockerEditorView: View {
                                     send(LockerEditorEvents.make { $0.type = .with { $0.key = key } })
                                 }
                             }
+                            VStack(spacing: 0) {
                             ForEach(editor.inputs, id: \.key) { input in
                                 LockerInputRowView(
                                     input: input,
@@ -80,8 +81,8 @@ struct LockerEditorView: View {
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(editor.tagsLabel)
-                                    .centraidType("annotLabel")
-                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
                                 MachineTextField(placeholder: editor.tagsHint, value: editor.tagsText) { text in
                                     send(LockerEditorEvents.make { $0.tags = .with { $0.text = text } })
                                 }
@@ -90,9 +91,9 @@ struct LockerEditorView: View {
                                 .accessibilityLabel(editor.tagsLabel)
                                 .accessibilityIdentifier("locker-editor-tags")
                             }
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .overlay(alignment: .bottom) { KitHairline() }
+                            .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
                             if !editor.compromisedLabel.isEmpty {
                                 LockerCompromisedRow(
                                     label: editor.compromisedLabel,
@@ -102,6 +103,11 @@ struct LockerEditorView: View {
                                     send(LockerEditorEvents.make { $0.compromised = .with { $0.on = on } })
                                 }
                             }
+                            }
+                            .kitCard()
+                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.top, 8)
                             LockerNote(text: editor.blocked)
                         }
                         .padding(.bottom, 24)
@@ -120,7 +126,7 @@ struct LockerEditorView: View {
                         .accessibilityIdentifier("locker-write-refused")
                 }
             }
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
+            .background(Surface.page.ignoresSafeArea())
             .navigationTitle(chrome.title)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
@@ -185,9 +191,8 @@ struct LockerCompromisedRow: View {
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .overlay(alignment: .bottom) { KitHairline() }
     }
 }
 
@@ -206,8 +211,8 @@ struct LockerInputRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(input.label)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
             HStack(spacing: 8) {
                 field
                     .centraidType(input.secret ? "mono" : "body")
@@ -230,10 +235,10 @@ struct LockerInputRowView: View {
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-        .overlay(alignment: .bottom) { KitHairline() }
+        .overlay(alignment: .bottom) { KitHairline().padding(.leading, 14) }
     }
 
     @ViewBuilder

@@ -303,7 +303,14 @@ impl Editor {
 
     fn cadences(&self, locale: Locale) -> Vec<wire::PeopleCadenceChoice> {
         let shown = self.cadence_shown();
-        fold::CADENCES
+        // A CADENCE THE PRESETS LACK (an imported 21, a typed 45) IS OFFERED TOO, in order and lit,
+        // so the person's own rhythm is never shown as "none chosen".
+        let mut offered = fold::CADENCES.to_vec();
+        if !offered.contains(&shown) {
+            offered.push(shown);
+            offered.sort_unstable();
+        }
+        offered
             .iter()
             .map(|days| wire::PeopleCadenceChoice {
                 days: *days,

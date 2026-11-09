@@ -68,15 +68,22 @@ struct MoneySearchView: View {
             Spacer(minLength: 0)
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        StatusLineView(status: countLine(search.countLabel), identifier: "money-search-count") {}
-                        if search.hasAsk { SearchAskRow(ask: search.ask) }
-                        ForEach(Array(search.rows.enumerated()), id: \.offset) { _, row in
-                            MoneyRowView(row: row) { open(row.route) }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(search.countLabel)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .padding(.horizontal, 4)
+                        .accessibilityIdentifier("money-search-count")
+                    MoneyCardStack {
+                        ForEach(Array(search.rows.enumerated()), id: \.offset) { index, row in
+                            if index > 0 { KitHairline(inset: 64) }
+                            MoneyTxnRow(row: row) { open(row.route) }
                         }
                     }
+                    if search.hasAsk { SearchAskRow(ask: search.ask) }
                 }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
                 .padding(.bottom, 16)
             }
         }

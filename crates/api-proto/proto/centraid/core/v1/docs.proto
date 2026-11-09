@@ -208,6 +208,10 @@ message DocsFolder {
 message DocsLabel {
   string tag_id = 1;
   string label = 2;
+  // The colour the label wears: a key of the one list palette (`blue`,
+  // `mustard`, `violet`, `petrol`, `indigo`, `graphite`, `raspberry`,
+  // `orchid`). EMPTY for a label minted before labels had colours.
+  string color = 3;
 }
 
 // One document row, as every list draws it.
@@ -255,6 +259,10 @@ message DocsDocumentRow {
   // `search` only: the index's highlight, `⟦`/`⟧` around the matched words.
   // EMPTY on a hit with none.
   string snippet = 22;
+  // A PICTURE OF THE DOCUMENT for a list or grid, when the phone holds the
+  // bytes of an image or a PDF: an absolute path inside the app's store. EMPTY
+  // for every other kind, a trashed row, or bytes that are not here.
+  string thumbnail_path = 23;
 }
 
 // One version, newest first. A→B→A is THREE versions: each is an occurrence,
@@ -303,6 +311,9 @@ message DocsDrive {
   // The vault clock's day and wall clock in `tz`.
   string today = 10;
   string now_local = 11;
+  // The same labels as `labels`, in the same order, with the colour each wears:
+  // the label chips' dots.
+  repeated DocsLabel label_entries = 12;
 }
 
 message DocsSearch {

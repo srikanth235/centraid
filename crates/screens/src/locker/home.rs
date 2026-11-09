@@ -29,6 +29,50 @@ pub const FILTER: &str = "show";
 pub const ALL: &str = "all";
 pub const STARRED: &str = "starred";
 pub const ARCHIVED: &str = "archived";
+/// The items that make verification codes: a filter and a category card.
+pub const CODES: &str = "codes";
+/// The category cards' keys that are not filters.
+pub const REVIEW: &str = "review";
+pub const TRASH: &str = "trash";
+/// Starred and Recently used list at most this many rows on the landing; the
+/// Starred filter lists them all.
+pub const LANDING_ROWS: usize = 5;
+
+/// The distinct items Review lists: an item with two verdicts counts once.
+#[must_use]
+pub fn review_count(review: &wire::LockerReview) -> u32 {
+    let ids: std::collections::BTreeSet<&str> = [
+        &review.compromised,
+        &review.insecure_address,
+        &review.expired,
+        &review.expiring,
+    ]
+    .into_iter()
+    .flatten()
+    .map(|row| row.item_id.as_str())
+    .collect();
+    u32::try_from(ids.len()).unwrap_or(u32::MAX)
+}
+
+/// The rows "Recently used" lists, in the core's order (newest use first).
+fn recent_of(answer: &wire::LockerItems) -> Vec<&wire::LockerItemRow> {
+    answer
+        .recent_ids
+        .iter()
+        .filter_map(|id| answer.items.iter().find(|row| &row.item_id == id))
+        .collect()
+}
+
+/// The word a category's list is titled with: the filter's own label.
+fn list_title(locale: Locale, filter: &str) -> String {
+    match filter {
+        ALL => words::category_all(locale),
+        STARRED => words::filter_starred(locale),
+        ARCHIVED => words::filter_archived(locale),
+        CODES => words::category_codes(locale),
+        kind => (super::types::of(kind).plural)(locale),
+    }
+}
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -64,6 +108,9 @@ struct Home {
     destination: wire::LockerDestination,
     sheet: wire::locker_home_state::Sheet,
     filter: String,
+    /// The category whose list the page shows; `None` is the landing of
+    /// category cards, Starred and Recently used.
+    browsing: Option<String>,
     search_open: bool,
     term: String,
     items: Phase<wire::LockerItems>,
@@ -71,6 +118,8 @@ struct Home {
     hits: Phase<wire::LockerSearch>,
     generator: Generator,
     status: Option<wire::StatusLine>,
+    /// THE PLACE A LOCKED BAND WAS TAPPED ON: the unlock it started lands there.
+    pending: Option<String>,
 }
 
 impl Home {
@@ -81,6 +130,7 @@ impl Home {
             destination,
             sheet: wire::locker_home_state::Sheet::None,
             filter: ALL.to_owned(),
+            browsing: None,
             search_open: false,
             term: String::new(),
             items: Phase::Loading,
@@ -88,6 +138,7 @@ impl Home {
             hits: Phase::Loading,
             generator: Generator::new(entropy),
             status: None,
+            pending: None,
         }
     }
 
@@ -124,7 +175,20 @@ impl Home {
             }
             // Items — and Generate and an empty search, which read the shelf so
             // a change event on them re-reads something true.
-            _ => self.read_items(ctx),
+            _ => {
+                self.read_items(ctx);
+                // The Review card counts what Review would list.
+                if self.destination == D::Items {
+                    self.review = Phase::of(read::read(
+                        ctx,
+                        load::locker::Review::default(),
+                        |a| match a {
+                            Answer::LockerReview(review) => Some(review),
+                            _ => None,
+                        },
+                    ));
+                }
+            }
         }
     }
 
@@ -162,6 +226,20 @@ impl Home {
         effects
     }
 
+    /// THE MEMBER LOCKED BY HAND (the header's key, More's Lock row): the wall closes and the
+    /// page wipes what it held.
+    fn lock_now(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let step = self.wall.event(
+            ctx,
+            wire::LockerWallEvent {
+                kind: Some(wire::locker_wall_event::Kind::Lock(
+                    wire::locker_wall_event::LockTapped {},
+                )),
+            },
+        );
+        self.walled(ctx, step)
+    }
+
     /// Apply what the wall did to the page under it.
     fn walled(&mut self, ctx: &Ctx, step: super::wall::Step) -> Vec<wire::Effect> {
         let mut effects = step.effects;
@@ -169,8 +247,20 @@ impl Home {
             Change::Opened => {
                 self.generator.regenerate();
                 self.reload(ctx);
+                // THE PLACE THE MEMBER TAPPED while locked is where this unlock lands.
+                if let Some(key) = self.pending.take() {
+                    effects.extend(self.event(
+                        wire::LockerHomeEvent {
+                            kind: Some(H::Band(wire::locker_home_event::BandPicked { key })),
+                        },
+                        ctx,
+                    ));
+                }
             }
-            Change::Closed => effects.extend(self.wipe(ctx)),
+            Change::Closed => {
+                self.pending = None;
+                effects.extend(self.wipe(ctx));
+            }
             Change::None => {}
         }
         effects
@@ -194,6 +284,30 @@ impl Home {
         }
     }
 
+    /// A category card's pick: a filter the page browses, or Review.
+    fn pick_category(&mut self, ctx: &Ctx, key: &str) {
+        match key {
+            REVIEW => self.goto(ctx, wire::LockerDestination::Review),
+            // Trash is a page the card's route opens; nothing to do here.
+            TRASH => {}
+            _ => {
+                let filter = match key {
+                    "all" => ALL,
+                    CODES => CODES,
+                    other => other,
+                };
+                self.set_filter(ctx, filter);
+                self.browsing = Some(filter.to_owned());
+            }
+        }
+    }
+
+    /// Back to the landing: no category open, no filter.
+    fn close_category(&mut self, ctx: &Ctx) {
+        self.set_filter(ctx, ALL);
+        self.browsing = None;
+    }
+
     fn goto(&mut self, ctx: &Ctx, destination: wire::LockerDestination) {
         self.destination = destination;
         self.sheet = wire::locker_home_state::Sheet::None;
@@ -213,6 +327,8 @@ impl Home {
             Some(H::Band(band)) => match band.key.as_str() {
                 "more" => self.sheet = wire::locker_home_state::Sheet::More,
                 "items" if self.destination != D::Items => self.goto(ctx, D::Items),
+                // The Items key on a category's list is the way back to the landing.
+                "items" if self.browsing.is_some() => self.close_category(ctx),
                 "review" if self.destination != D::Review => self.goto(ctx, D::Review),
                 "generate" if self.destination != D::Generate => self.goto(ctx, D::Generate),
                 _ => {}
@@ -221,9 +337,12 @@ impl Home {
                 let pick = menu::Pick::of(&picked);
                 if pick.section == FILTER {
                     self.set_filter(ctx, pick.option);
+                    self.browsing = Some(pick.option.to_owned());
                 }
             }
-            Some(H::FilterMenuCleared(_)) => self.set_filter(ctx, ALL),
+            Some(H::FilterMenuCleared(_)) => self.close_category(ctx),
+            Some(H::CategoryPicked(picked)) => self.pick_category(ctx, &picked.key),
+            Some(H::CategoryClosed(_)) => self.close_category(ctx),
             Some(H::SheetOpened(opened)) => {
                 self.sheet = wire::locker_home_state::Sheet::try_from(opened.sheet)
                     .unwrap_or(wire::locker_home_state::Sheet::None);
@@ -252,20 +371,12 @@ impl Home {
             }
             Some(H::More(more)) => match more.key.as_str() {
                 "facts" => self.sheet = wire::locker_home_state::Sheet::Facts,
-                "lock" => {
-                    let step = self.wall.event(
-                        ctx,
-                        wire::LockerWallEvent {
-                            kind: Some(wire::locker_wall_event::Kind::Lock(
-                                wire::locker_wall_event::LockTapped {},
-                            )),
-                        },
-                    );
-                    effects.extend(self.walled(ctx, step));
-                }
+                "lock" => effects.extend(self.lock_now(ctx)),
                 // A page the shell pushes: the sheet closes behind the tap.
                 _ => self.sheet = wire::locker_home_state::Sheet::None,
             },
+            // THE HEADER'S LOCK KEY: the same lock as More's row.
+            Some(H::LockRequested(_)) => effects.extend(self.lock_now(ctx)),
             Some(H::Refreshed(_)) => self.reload(ctx),
             Some(H::GeneratorKind(picked)) => self.generator.pick_kind(&picked.key),
             Some(H::GeneratorLength(length)) => self.generator.set_length(length.length),
@@ -291,6 +402,7 @@ impl Home {
         let shown: Vec<&wire::LockerItemRow> = match filter {
             ALL | ARCHIVED => answer.items.iter().collect(),
             STARRED => answer.items.iter().filter(|row| row.starred).collect(),
+            CODES => answer.items.iter().filter(|row| row.has_code).collect(),
             kind => answer
                 .items
                 .iter()
@@ -311,6 +423,15 @@ impl Home {
                 words::filter_starred(locale),
                 u32::try_from(starred).unwrap_or(u32::MAX),
                 filter == STARRED,
+            ));
+        }
+        let codes = answer.items.iter().filter(|row| row.has_code).count();
+        if codes > 0 || filter == CODES {
+            options.push(menu::counted(
+                CODES,
+                words::category_codes(locale),
+                u32::try_from(codes).unwrap_or(u32::MAX),
+                filter == CODES,
             ));
         }
         for by_type in &answer.by_type {
@@ -372,17 +493,123 @@ impl Home {
             (true, _) => words::window_unknown(locale),
             _ => String::new(),
         };
+        let parent = words::app_name(locale);
+        if self.browsing.is_none() {
+            // THE LANDING: category cards, then Starred and Recently used.
+            return wire::LockerHomeData {
+                status_line: self.wall.unlocked_line(locale),
+                filter_menu,
+                categories: if day_one {
+                    Vec::new()
+                } else {
+                    self.categories(locale, answer)
+                },
+                starred_title: words::filter_starred(locale),
+                starred: answer
+                    .items
+                    .iter()
+                    .filter(|row| row.starred)
+                    .take(LANDING_ROWS)
+                    .map(|row| shared::row(locale, row, &parent))
+                    .collect(),
+                recent_title: words::recent_head(locale),
+                recent: recent_of(answer)
+                    .into_iter()
+                    .map(|row| shared::row(locale, row, &parent))
+                    .collect(),
+                items_empty: if day_one { empty } else { None },
+                ..wire::LockerHomeData::default()
+            };
+        }
+        let list_title = list_title(locale, filter);
         wire::LockerHomeData {
             status_line: words::items_status(locale),
             filter_menu,
             rows: shown
                 .into_iter()
-                .map(|row| shared::row(locale, row, &words::app_name(locale)))
+                .map(|row| shared::row(locale, row, &parent))
                 .collect(),
             window,
             items_empty: empty,
+            list_title,
+            list_back_label: parent,
             ..wire::LockerHomeData::default()
         }
+    }
+
+    /// The six cards, in the board's order, each with its own count.
+    fn categories(&self, locale: Locale, answer: &wire::LockerItems) -> Vec<wire::LockerCategory> {
+        let of_type = |kind: &str| {
+            answer
+                .by_type
+                .iter()
+                .find(|count| count.r#type == kind)
+                .map_or(0, |count| count.count)
+        };
+        let live = answer.items.iter().filter(|row| !row.archived);
+        let codes = u32::try_from(live.filter(|row| row.has_code).count()).unwrap_or(u32::MAX);
+        let review = match &self.review {
+            Phase::Ready(review) => review_count(review),
+            _ => 0,
+        };
+        let card = |key: &str, label: String, count: u32, icon: &str, color: &str| {
+            let spoken = format!("{label}, {}", shared::items(locale, u64::from(count)));
+            wire::LockerCategory {
+                key: key.to_owned(),
+                label,
+                count,
+                icon_key: icon.to_owned(),
+                color_key: color.to_owned(),
+                route: None,
+                accessibility_label: spoken,
+            }
+        };
+        let mut trash = card(
+            TRASH,
+            words::category_trash(locale),
+            answer.trashed_count.unwrap_or(0),
+            "Trash",
+            "graphite",
+        );
+        trash.route = Some(routes::trash());
+        vec![
+            card(
+                "all",
+                words::category_all(locale),
+                answer.total.unwrap_or(0),
+                "Key",
+                "blue",
+            ),
+            card(
+                CODES,
+                words::category_codes(locale),
+                codes,
+                "Hash",
+                "indigo",
+            ),
+            card(
+                "card",
+                words::category_cards(locale),
+                of_type("card"),
+                "Coin",
+                "violet",
+            ),
+            card(
+                "wifi",
+                words::category_wifi(locale),
+                of_type("wifi"),
+                "Wifi",
+                "petrol",
+            ),
+            card(
+                REVIEW,
+                words::category_review(locale),
+                review,
+                "Shield",
+                "raspberry",
+            ),
+            trash,
+        ]
     }
 
     fn review_data(locale: Locale, answer: &wire::LockerReview) -> wire::LockerHomeData {
@@ -527,14 +754,16 @@ impl Home {
             (self.destination, &self.items, &self.review),
             (D::Items, Phase::Denied(_), _) | (D::Review, _, Phase::Denied(_))
         );
-        if !self.wall.is_open() || denied {
+        if denied {
             return Vec::new();
         }
+        // A LOCKED BAND LIGHTS NO PLACE: the member is not in one yet.
+        let open = self.wall.is_open();
         let tab = |key: &str, label: String, icon: &str, current: bool| wire::LockerBandTab {
             key: key.to_owned(),
             label,
             icon_key: icon.to_owned(),
-            current,
+            current: open && current,
         };
         vec![
             tab(
@@ -552,7 +781,7 @@ impl Home {
             tab(
                 "generate",
                 words::band_generate(locale),
-                "Sparkle",
+                "Repeat",
                 self.destination == D::Generate,
             ),
             tab("more", words::band_more(locale), "MoreHoriz", false),
@@ -575,6 +804,7 @@ impl Home {
             title: parent.clone(),
             add_label: words::add_item(locale),
             add_route: Some(routes::add("", false)),
+            lock_label: words::lock_key(locale),
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has
@@ -667,6 +897,8 @@ impl Screen for Home {
                 }
             }
             Some(E::LockerWall(wall)) => {
+                // THE UNLOCK BUTTON LANDS ON THE LANDING, not on a place tapped before.
+                self.pending = None;
                 let step = self.wall.event(ctx, wall);
                 self.walled(ctx, step)
             }
@@ -676,7 +908,23 @@ impl Screen for Home {
             }
             Some(E::LockerHome(home)) => {
                 if !self.wall.is_open() {
-                    // Any tap on a screen the session ended under finds out.
+                    // A PLACE TAPPED ON THE LOCKED BAND STARTS THE UNLOCK (as the button does)
+                    // and lands there once it opens.
+                    if let Some(H::Band(band)) = &home.kind
+                        && matches!(band.key.as_str(), "items" | "review" | "generate" | "more")
+                    {
+                        self.pending = Some(band.key.clone());
+                        let step = self.wall.event(
+                            ctx,
+                            wire::LockerWallEvent {
+                                kind: Some(wire::locker_wall_event::Kind::Unlock(
+                                    wire::locker_wall_event::UnlockTapped {},
+                                )),
+                            },
+                        );
+                        return self.walled(ctx, step);
+                    }
+                    // Any other tap on a screen the session ended under finds out.
                     let step = self.wall.recheck(ctx);
                     return self.walled(ctx, step);
                 }
@@ -685,13 +933,25 @@ impl Screen for Home {
             Some(E::EffectResult(result)) => {
                 self.secrets.answered(ctx, &result);
                 let step = self.wall.answered(ctx, &result);
+                // A CANCELLED OR REFUSED CHECK forgets the place that asked for it.
+                if !self.wall.is_unlocking() && !self.wall.is_open() {
+                    self.pending = None;
+                }
                 self.walled(ctx, step)
             }
             Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
             Some(E::Left(_)) => {
                 self.secrets.conceal();
                 self.generator.forget();
-                Vec::new()
+                // THE FACE ID SHEET MUST NOT OUTLIVE LOCKER: a pending unlock is dropped.
+                self.pending = None;
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::TabHidden(_)) => {
+                self.pending = None;
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }
@@ -717,6 +977,7 @@ impl Screen for Home {
                 content,
                 sheet: self.sheet as i32,
                 band: self.band(locale),
+                band_locked: !open,
                 chrome: Some(Self::chrome(locale)),
                 search: Some(wire::LockerSearchField {
                     open: searched,
@@ -740,5 +1001,42 @@ impl Screen for Home {
             })),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod landing_tests {
+    use super::*;
+
+    fn row(id: &str) -> wire::LockerItemRow {
+        wire::LockerItemRow {
+            item_id: id.to_owned(),
+            ..wire::LockerItemRow::default()
+        }
+    }
+
+    #[test]
+    fn recently_used_keeps_the_cores_order_and_drops_an_id_with_no_row() {
+        let answer = wire::LockerItems {
+            items: vec![row("a"), row("b"), row("c")],
+            recent_ids: vec!["c".to_owned(), "gone".to_owned(), "a".to_owned()],
+            ..wire::LockerItems::default()
+        };
+        let ids: Vec<&str> = recent_of(&answer)
+            .into_iter()
+            .map(|row| row.item_id.as_str())
+            .collect();
+        assert_eq!(ids, ["c", "a"]);
+    }
+
+    #[test]
+    fn an_item_with_two_verdicts_counts_once_in_review() {
+        let review = wire::LockerReview {
+            compromised: vec![row("a"), row("b")],
+            insecure_address: vec![row("a")],
+            expired: vec![row("c")],
+            ..wire::LockerReview::default()
+        };
+        assert_eq!(review_count(&review), 3);
     }
 }

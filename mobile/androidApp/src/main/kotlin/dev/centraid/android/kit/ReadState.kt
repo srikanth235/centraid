@@ -7,7 +7,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.design.CentraidCatalog
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -157,14 +165,9 @@ public fun FailureView(
     retryLabel: String = KitWords.RETRY,
 ) {
     Column(modifier.fillMaxWidth().padding(KitGeometry.GUTTER).testTag("kit-failure")) {
-        Text(sentence, style = centraidType("body"), color = centraidColor("text"))
+        KitText(sentence, KitType.Row, Surface.ink)
         if (remedy.isNotEmpty()) {
-            Text(
-                remedy,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            KitText(remedy, KitType.Meta, Surface.meta, Modifier.padding(top = 4.dp))
         }
         if (onRetry != null) {
             OutlineButton(
@@ -179,7 +182,7 @@ public fun FailureView(
 
 /**
  * NOTHING HERE: one sentence, at most one more, and at most one action
- * (DESIGN.md copy table). The strings are finished; the action is the
+ * (product-intuition/references/design-behaviour.md § Wording). The strings are finished; the action is the
  * screen's own event.
  *
  * A ported app's day one that offers the phone's own data (People's contacts,
@@ -192,26 +195,32 @@ public fun EmptyStateView(
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    // THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
+    // colour, the one sentence, the reason, and at most one action as the app's pill.
+    val accent = appAccent()
+    val glyph = empty.icon_key.ifEmpty { CentraidCatalog.byId[accent.appId]?.iconKey }
     Column(
-        modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
-        verticalArrangement = Arrangement.Center,
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+            .kitCard()
+            .padding(horizontal = 20.dp, vertical = 28.dp)
+            .testTag("kit-empty"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(empty.headline, style = centraidType("title"), color = centraidColor("text"))
+        if (glyph != null) {
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon(iconKey = glyph, tint = accent.text, size = 22.dp) }
+        }
+        KitText(empty.headline, KitType.Section, Surface.ink, Modifier.semantics { heading() })
         if (empty.body.isNotEmpty()) {
-            Text(
-                empty.body,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(top = 8.dp),
-            )
+            Text(empty.body, style = kitTextStyle(KitType.Row), color = Surface.body, textAlign = TextAlign.Center)
         }
         if (empty.action_label.isNotEmpty() && onAction != null) {
-            OutlineButton(
-                label = empty.action_label,
-                testTag = "kit-empty-action",
-                modifier = Modifier.padding(top = 16.dp),
-                onPress = onAction,
-            )
+            KitPillButton(empty.action_label, onAction, testTag = "kit-empty-action")
         }
     }
 }
@@ -226,17 +235,12 @@ public fun DeniedGate(denied: Denied, modifier: Modifier = Modifier) {
         modifier.fillMaxSize().padding(24.dp).testTag("kit-denied"),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            denied.title,
-            style = centraidType("title"),
-            color = centraidColor("text"),
-            modifier = Modifier.semantics { heading() },
-        )
+        KitText(denied.title, KitType.Section, Surface.ink, Modifier.semantics { heading() })
         if (denied.body.isNotEmpty()) {
             Text(
                 denied.body,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
+                style = kitTextStyle(KitType.Row),
+                color = Surface.body,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -267,26 +271,32 @@ public fun OutlineButton(
     onPress: () -> Unit,
 ) {
     val stacked = LocalChoiceStack.current
+    val inRow = LocalChoiceRow.current
     val edge = when {
-        !enabled -> "textDisabled"
-        ink == "text" -> "lineStrong"
-        else -> ink
+        !enabled -> Surface.fill
+        ink == "text" -> Surface.border
+        else -> StateColor.Red.text
     }
+    val shape = RoundedCornerShape(percent = 50)
     Text(
         label,
-        style = centraidType("annotLabelOn"),
-        color = centraidColor(if (enabled) ink else "textDisabled"),
+        style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+        color = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text,
         textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
+        maxLines = if (inRow) 1 else Int.MAX_VALUE,
         modifier = modifier
             .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
             .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
             .widthIn(min = 44.dp)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .border(KitGeometry.HAIRLINE, centraidColor(edge), RoundedCornerShape(KitGeometry.RADIUS))
+            .clip(shape)
+            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
+            // sits on a card fill, so the keys read as keys on the page.
+            .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
+            .border(KitGeometry.HAIRLINE, edge, shape)
             .clickable(enabled = enabled, onClick = onPress)
             // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
             // the hugging button's 36.
-            .padding(horizontal = 12.dp, vertical = if (stacked) 13.dp else 9.dp)
+            .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
             .testTag(testTag)
             .semantics {
                 role = Role.Button
@@ -322,10 +332,32 @@ public fun ChoiceStack(
     }
 }
 
+/** True inside a [ChoiceRow]: the outline buttons share one line, so the label gets the room. */
+public val LocalChoiceRow: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
+
+/**
+ * A SHORT SET OF ACTIONS ON ONE LINE (#1173): the event page's Open in Maps, Edit and Cancel. Each
+ * button takes an equal share of the width (pass `Modifier.weight(1f)`), in the stack's full-width
+ * look, with 10dp between them.
+ */
+@Composable
+public fun ChoiceRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    CompositionLocalProvider(LocalChoiceStack provides true, LocalChoiceRow provides true) {
+        Row(
+            modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            content = content,
+        )
+    }
+}
+
 /** The kit's geometry, in one place. */
 public object KitGeometry {
     /**
-     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (DESIGN.md fixes it at 18), the one
+     * The page margin: the emitted `CentraidGeometry.PAGE_MARGIN` (design/tokens.toml fixes it), the one
      * definition every kit and screen inset reads. The name stays; the value is no longer typed here.
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp

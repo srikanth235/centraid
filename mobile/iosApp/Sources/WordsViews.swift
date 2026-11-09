@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-// THE 24 WORDS, DRAWN (#1047 E2). Two screens over the shared machines:
+// THE 24 WORDS, DRAWN (#1047 E2, restyled for #1173). Two screens over the shared machines:
 // `words.make` (`WordsMakeState`) and `words.enter` (`WordsEnterState`), drawn from Rust's view state.
 //
 // **THESE VIEWS DECIDE NOTHING.** Every phase, every word a member reads, when
@@ -25,6 +25,14 @@ import UIKit
 //    checking, inline prediction and smart punctuation, takes the ASCII
 //    keyboard and carries no `textContentType`, so the words do not land in a
 //    keyboard's dictionary or AutoFill.
+//
+// THE LOOK (#1173, the RecoveryKey, RestoreWords and RestoreHeld boards): a page
+// of cards in the shell's teal. The words are white chips in three columns, a notice is a
+// tinted callout, the leave control is a round X, and the answers sit at the foot in one
+// stack: a tonal verb, then the ink one.
+
+/// The three columns the words sit in, numbered across.
+private let wordColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
 // MARK: - words.make
 
@@ -35,98 +43,82 @@ struct VaultWordsView: View {
     /// The screen is finished (made, left): the shell pops it.
     let onDone: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         WordsShield(secure: state.secure) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    WordsHead(title: state.title, lead: state.body)
+            WordsFrame(
+                closeLabel: state.secondaryLabel,
+                closeIdentifier: "words-make-secondary",
+                onClose: { send(Self.event { $0.secondary = .init() }) },
+                identifier: "words-make"
+            ) {
+                WordsHead(title: state.title, lead: state.body)
 
-                    // CHOOSE (R-1047-E18): the vault's name, and whether it is
-                    // kept on its own 24 words.
-                    if !state.nameLabel.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(state.nameLabel)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                            MachineTextField(placeholder: "", value: state.name) { text in
-                                send(Self.event { $0.name = .with { $0.text = text } })
-                            }
-                            .textInputAutocapitalization(.words)
-                            .centraidType("body")
-                            .padding(10)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                            )
-                            .accessibilityLabel(state.nameLabel)
-                            .accessibilityIdentifier("words-make-name")
+                // CHOOSE (R-1047-E18): the vault's name, and whether it is
+                // kept on its own 24 words.
+                if !state.nameLabel.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(state.nameLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                        MachineTextField(placeholder: "", value: state.name) { text in
+                            send(Self.event { $0.name = .with { $0.text = text } })
                         }
+                        .textInputAutocapitalization(.words)
+                        .kitType(.row)
+                        .wordsFieldBox()
+                        .accessibilityLabel(state.nameLabel)
+                        .accessibilityIdentifier("words-make-name")
                     }
-                    if !state.ownLabel.isEmpty {
-                        WordsCheckbox(label: state.ownLabel, on: state.ownOn, identifier: "words-make-own") { on in
-                            send(Self.event { $0.own = .with { $0.on = on } })
+                }
+                if !state.ownLabel.isEmpty {
+                    WordsCheckbox(label: state.ownLabel, on: state.ownOn, identifier: "words-make-own") { on in
+                        send(Self.event { $0.own = .with { $0.on = on } })
+                    }
+                }
+
+                if !state.words.isEmpty {
+                    ShownWords(cells: state.words)
+                }
+                // WHERE THE KEY IS KEPT, in the platform's own words: a state the member should
+                // act on (Save a copy), so it is amber.
+                if !state.custody.isEmpty {
+                    WordsCallout(text: state.custody, state: .amber, identifier: "words-custody")
+                }
+
+                WordsNotice(notice: state.notice)
+
+                if state.phase == .checking || state.phase == .making {
+                    KitSpinner()
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("words-making")
+                }
+            } footer: {
+                if !state.saveLabel.isEmpty, !state.words.isEmpty {
+                    WordsTonalButton(label: state.saveLabel, iconKey: "Share", identifier: "words-save-copy") {
+                        send(Self.event { $0.saveCopy = .init() })
+                    }
+                }
+                // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack, one ink button.
+                if !state.primaryLabel.isEmpty {
+                    KitInkButton(label: state.primaryLabel) {
+                        send(Self.event { $0.primary = .init() })
+                    }
+                    .disabled(!state.primaryEnabled)
+                    .accessibilityIdentifier("words-make-primary")
+                }
+                if !state.restoreLabel.isEmpty {
+                    if state.primaryLabel.isEmpty {
+                        KitInkButton(label: state.restoreLabel) {
+                            send(Self.event { $0.restore = .init() })
                         }
-                    }
-
-                    if !state.words.isEmpty {
-                        ShownWords(cells: state.words)
-                    }
-                    if !state.custody.isEmpty {
-                        Text(state.custody)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .accessibilityIdentifier("words-custody")
-                    }
-                    if !state.saveLabel.isEmpty, !state.words.isEmpty {
-                        WordsSaveCopyButton(label: state.saveLabel) {
-                            send(Self.event { $0.saveCopy = .init() })
-                        }
-                    }
-
-                    WordsNotice(notice: state.notice)
-
-                    if state.phase == .checking || state.phase == .making {
-                        KitSpinner()
-                            .frame(maxWidth: .infinity)
-                            .accessibilityIdentifier("words-making")
-                    }
-
-                    // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack.
-                    KitChoiceStack {
-                        WordsControls(
-                            primary: state.primaryLabel,
-                            primaryEnabled: state.primaryEnabled,
-                            secondary: state.secondaryLabel,
-                            prefix: "words-make",
-                            onPrimary: { send(Self.event { $0.primary = .init() }) },
-                            onSecondary: { send(Self.event { $0.secondary = .init() }) }
-                        )
-
-                        // ONE INK BUTTON: with the primary drawn, restoring is
-                        // the outline.
-                        if !state.restoreLabel.isEmpty {
-                            if state.primaryLabel.isEmpty {
-                                KitInkButton(label: state.restoreLabel) {
-                                    send(Self.event { $0.restore = .init() })
-                                }
-                                .accessibilityIdentifier("words-make-restore")
-                            } else {
-                                KitOutlineButton(label: state.restoreLabel) {
-                                    send(Self.event { $0.restore = .init() })
-                                }
-                                .accessibilityIdentifier("words-make-restore")
-                            }
+                        .accessibilityIdentifier("words-make-restore")
+                    } else {
+                        WordsTonalButton(label: state.restoreLabel, identifier: "words-make-restore") {
+                            send(Self.event { $0.restore = .init() })
                         }
                     }
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
-            .accessibilityIdentifier("words-make")
         }
         .onAppear { if state.finished { onDone() } }
         .onChange(of: state.finished) { _, finished in if finished { onDone() } }
@@ -154,145 +146,150 @@ struct WordsEntryView: View {
     @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
 
+    private var held: Bool { !state.heldFound.isEmpty }
+
     var body: some View {
         let working = state.phase == .working
         WordsShield(secure: state.secure) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    WordsHead(title: state.title, lead: state.body)
+            WordsFrame(
+                closeLabel: state.secondaryLabel,
+                closeIdentifier: "words-enter-secondary",
+                onClose: {
+                    focus = nil
+                    send(Self.event { $0.secondary = .init() })
+                },
+                identifier: "words-enter",
+                dismissesKeyboard: true
+            ) {
+                WordsHead(title: state.title, lead: state.body)
 
-                    if !state.cells.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(state.cells, id: \.position) { cell in
-                                EntryCell(
-                                    cell: cell,
-                                    focus: $focus,
-                                    onEdit: { text in
-                                        send(Self.event { $0.typed = .with { $0.position = cell.position; $0.text = text } })
-                                        // A SPACE IS HOW A MEMBER MOVES ON: the
-                                        // keyboard goes to the cell after the
-                                        // last word typed at once, not after the
-                                        // machine's answer, so the next letter
-                                        // lands where the member is looking.
-                                        if text.contains(where: \.isWhitespace) {
-                                            let words = text.split(whereSeparator: \.isWhitespace).count
-                                            let next = Int(cell.position) + max(words, 1)
-                                            focus = next <= 24 ? UInt32(next) : nil
-                                        }
-                                    },
-                                    onPick: { word in
+                // A HELD KEY IS ALREADY HERE: say so, and where it came from.
+                if held {
+                    WordsHeldCard(found: state.heldFound, place: state.heldPlace)
+                }
+
+                if !state.cells.isEmpty {
+                    LazyVGrid(columns: wordColumns, spacing: 8) {
+                        ForEach(state.cells, id: \.position) { cell in
+                            EntryCell(
+                                cell: cell,
+                                focus: $focus,
+                                onEdit: { text in
+                                    send(Self.event { $0.typed = .with { $0.position = cell.position; $0.text = text } })
+                                    // A SPACE IS HOW A MEMBER MOVES ON: the
+                                    // keyboard goes to the cell after the
+                                    // last word typed at once, not after the
+                                    // machine's answer, so the next letter
+                                    // lands where the member is looking.
+                                    if text.contains(where: \.isWhitespace) {
+                                        let words = text.split(whereSeparator: \.isWhitespace).count
+                                        let next = Int(cell.position) + max(words, 1)
+                                        focus = next <= 24 ? UInt32(next) : nil
+                                    }
+                                },
+                                onReturn: {
+                                    focus = cell.position < 24 ? cell.position + 1 : nil
+                                }
+                            )
+                        }
+                    }
+                    .disabled(working)
+
+                    // THE LIST WORDS THE FOCUSED CELL'S PREFIX COULD BE, each a tap that sends
+                    // `WordsSuggestionPicked`: one row under the grid, for the cell being typed in.
+                    if let cell = suggesting {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(cell.suggestions, id: \.self) { word in
+                                    KitChip(
+                                        label: word,
+                                        selected: false,
+                                        identifier: "words-suggestion-\(cell.position)-\(word)"
+                                    ) {
                                         send(Self.event { $0.picked = .with { $0.position = cell.position; $0.word = word } })
                                         focus = cell.position < 24 ? cell.position + 1 : nil
-                                    },
-                                    onReturn: {
-                                        focus = cell.position < 24 ? cell.position + 1 : nil
                                     }
-                                )
+                                }
                             }
                         }
-                        .disabled(working)
+                        .privacySensitive()
                     }
+                }
 
-                    // A HELD RESTORE NAMES the vaults on their own words it
-                    // will also bring back (R-1047-E18).
-                    if !state.heldKeysLabel.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(state.heldKeysLabel)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                            ForEach(Array(state.heldKeys.enumerated()), id: \.offset) { _, name in
-                                Text(name)
-                                    .centraidType("bodyStrong")
-                                    .foregroundStyle(Theme.color("text", scheme))
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("words-held-keys")
-                    }
+                WordsNotice(notice: state.notice)
 
-                    if !state.endpointLabel.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(state.endpointLabel)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                            MachineTextField(placeholder: "", value: state.endpoint) { text in
+                if !state.endpointLabel.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(state.endpointLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            MachineTextField(placeholder: state.endpointPlaceholder, value: state.endpoint) { text in
                                 send(Self.event { $0.endpoint = .with { $0.text = text } })
                             }
                             .keyboardType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                            .centraidType("body")
-                            .padding(10)
-                            .background(
-                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                            )
+                            .centraidType(held ? "mono" : "body")
+                            .wordsFieldBox()
                             .accessibilityLabel(state.endpointLabel)
                             .accessibilityIdentifier("words-endpoint")
-                        }
-                        .disabled(working)
-                    }
 
-                    // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is:
-                    // the camera, or the photo picker where there is none
-                    // (`scan_camera`). What it reads fills the field above.
-                    if !state.scanLabel.isEmpty {
-                        KitOutlineButton(label: state.scanLabel) {
-                            if state.scanCamera { scanning = true } else { choosingPhoto = true }
-                        }
-                        .disabled(working)
-                        .accessibilityIdentifier("words-scan")
-                    }
-
-                    WordsNotice(notice: state.notice)
-
-                    if !state.progress.isEmpty {
-                        KitSpinner(label: state.progress)
-                            .accessibilityIdentifier("words-progress")
-                    }
-
-                    ForEach(Array(state.restored.enumerated()), id: \.offset) { _, line in
-                        RestoredLine(line: line)
-                    }
-
-                    ForEach(Array(state.stayed.enumerated()), id: \.offset) { at, line in
-                        StayedLine(line: line, at: at)
-                    }
-
-                    if !state.retryLabel.isEmpty {
-                        StayedRetry(label: state.retryLabel) {
-                            send(Self.event { $0.retry = .init() })
+                            // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is. Beside the
+                            // field while the words are typed; a held restore has the room for
+                            // a full-width one in the footer.
+                            if !state.scanLabel.isEmpty, !held {
+                                WordsScanSquare(label: state.scanLabel) { startScan() }
+                                    .disabled(working)
+                            }
                         }
                     }
-
-                    if !state.wordsLabel.isEmpty {
-                        StayedRetry(label: state.wordsLabel, identifier: "words-use-words") {
-                            send(Self.event { $0.useWords = .init() })
-                        }
-                    }
-
-                    WordsControls(
-                        primary: state.primaryLabel,
-                        primaryEnabled: state.primaryEnabled,
-                        secondary: state.secondaryLabel,
-                        prefix: "words-enter",
-                        onPrimary: {
-                            focus = nil
-                            send(Self.event { $0.primary = .init() })
-                        },
-                        onSecondary: {
-                            focus = nil
-                            send(Self.event { $0.secondary = .init() })
-                        }
-                    )
+                    .disabled(working)
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // A HELD RESTORE NAMES the vaults on their own words it
+                // will also bring back (R-1047-E18).
+                if !state.heldKeysLabel.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(state.heldKeysLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .fixedSize(horizontal: false, vertical: true)
+                        WordsHeldKeys(names: state.heldKeys)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("words-held-keys")
+                }
+
+                if !state.progress.isEmpty {
+                    KitSpinner(label: state.progress)
+                        .accessibilityIdentifier("words-progress")
+                }
+            } footer: {
+                // LEAVE THE HELD SEED for the grid: a link, then the scan, then the verb.
+                if !state.wordsLabel.isEmpty {
+                    KitLink(label: state.wordsLabel, tint: AppAccent.shell.text, identifier: "words-use-words") {
+                        send(Self.event { $0.useWords = .init() })
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(AppAccent.shell.text)
+                }
+                if !state.scanLabel.isEmpty, held {
+                    WordsTonalButton(label: state.scanLabel, iconKey: "Maximize", identifier: "words-scan") {
+                        startScan()
+                    }
+                    .disabled(working)
+                }
+                if !state.primaryLabel.isEmpty {
+                    KitInkButton(label: state.primaryLabel) {
+                        focus = nil
+                        send(Self.event { $0.primary = .init() })
+                    }
+                    .disabled(!state.primaryEnabled)
+                    .accessibilityIdentifier("words-enter-primary")
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
-            .accessibilityIdentifier("words-enter")
             .fullScreenCover(isPresented: $scanning) {
                 PairScanner(
                     photoLabel: state.photoLabel,
@@ -338,6 +335,17 @@ struct WordsEntryView: View {
         .onChange(of: state.phase) { _, phase in if phase != .entering { focus = nil } }
     }
 
+    /// The camera, or the photo picker where there is none (`scan_camera`).
+    private func startScan() {
+        if state.scanCamera { scanning = true } else { choosingPhoto = true }
+    }
+
+    /// The cell whose list words show: the one being typed in, else the first that has any.
+    private var suggesting: Centraid_Core_V1_WordEntry? {
+        state.cells.first { $0.position == focus && !$0.suggestions.isEmpty }
+            ?? state.cells.first { !$0.suggestions.isEmpty }
+    }
+
     static func event(_ build: (inout Centraid_Core_V1_WordsEnterEvent) -> Void) -> Centraid_Core_V1_WordsEnterEvent {
         var event = Centraid_Core_V1_WordsEnterEvent()
         build(&event)
@@ -345,129 +353,110 @@ struct WordsEntryView: View {
     }
 }
 
-/// One of the 24 cells: its number, the field, and the list words its prefix
-/// could be — each a tap that sends `WordsSuggestionPicked`.
+/// One of the 24 cells: its number inside a white box, the field, and a mark on the edge: red
+/// for a word that is not on the list, the shell's teal for the cell being typed in.
 private struct EntryCell: View {
     let cell: Centraid_Core_V1_WordEntry
     let focus: Binding<UInt32?>
     let onEdit: (String) -> Void
-    let onPick: (String) -> Void
     let onReturn: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text("\(cell.position)")
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .frame(minWidth: 24, alignment: .trailing)
-                    .accessibilityHidden(true)
-                WordBox(tone: tone) {
-                    WordField(
-                        value: cell.typed,
-                        position: cell.position,
-                        spoken: cell.accessibilityLabel,
-                        identifier: "words-cell-\(cell.position)",
-                        focus: focus,
-                        font: Theme.uiFont("body", scheme, dynamicTypeSize),
-                        color: UIColor(Theme.color("text", scheme)),
-                        onEdit: onEdit,
-                        onReturn: onReturn
-                    )
-                }
-            }
-            if !cell.suggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(cell.suggestions, id: \.self) { word in
-                            KitChip(
-                                label: word,
-                                selected: false,
-                                identifier: "words-suggestion-\(cell.position)-\(word)"
-                            ) { onPick(word) }
-                        }
-                    }
-                    .padding(.leading, 34)
-                }
-                .privacySensitive()
-            }
+        let focused = focus.wrappedValue == cell.position
+        let unknown = cell.mark == .unknown
+        HStack(spacing: 6) {
+            Text("\(cell.position)")
+                .centraidType("mono")
+                .foregroundStyle(Surface.meta)
+                .accessibilityHidden(true)
+            WordField(
+                value: cell.typed,
+                placeholder: cell.prompt,
+                position: cell.position,
+                spoken: cell.accessibilityLabel,
+                identifier: "words-cell-\(cell.position)",
+                focus: focus,
+                font: Theme.uiFont("body", scheme, dynamicTypeSize),
+                color: UIColor(Surface.ink),
+                placeholderColor: UIColor(Surface.meta),
+                onEdit: onEdit,
+                onReturn: onReturn
+            )
         }
-    }
-
-    private var tone: String {
-        switch cell.mark {
-        case .known: return "success"
-        case .unknown: return "attention"
-        default: return "lineStrong"
-        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+        .wordsBox(
+            border: unknown ? StateColor.red.text : (focused ? AppAccent.shell.text : Surface.border),
+            width: unknown || focused ? 1.5 : CentraidGeometry.hairline
+        )
     }
 }
 
-/// One restored vault: its line, and its safety number large and grouped so
-/// it can be read against the laptop's.
-private struct RestoredLine: View {
-    let line: Centraid_Core_V1_RestoredVaultLine
+/// The card that says a recovery key is already on this phone, and where it came from.
+private struct WordsHeldCard: View {
+    let found: String
+    let place: String
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(line.line)
-                .centraidType("bodyStrong")
-                .foregroundStyle(Theme.color("text", scheme))
-            if !line.safetyNumber.isEmpty {
-                Text(line.safetyNumber)
-                    .centraidType("display")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .accessibilityIdentifier("words-safety-number")
-                Text(line.safetyLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+        let accent = AppAccent.shell
+        HStack(spacing: 12) {
+            CentraidIconView(iconKey: "Key", tint: accent.text, size: 20)
+                .frame(width: 44, height: 44)
+                .wordsBox(fill: accent.wash(dark: scheme == .dark), border: nil)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(found)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Surface.ink)
+                if !place.isEmpty {
+                    Text(place)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kitCard()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("words-held-found")
+    }
+}
+
+/// The vaults on their own recovery key, one white card of rows: an initial, then the name.
+private struct WordsHeldKeys: View {
+    let names: [String]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(names.enumerated()), id: \.offset) { at, name in
+                HStack(spacing: 12) {
+                    Text(String(name.prefix(1)).uppercased())
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                        .frame(width: 32, height: 32)
+                        .wordsBox(fill: Surface.fill, border: nil)
+                        .accessibilityHidden(true)
+                    Text(name)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                if at < names.count - 1 {
+                    Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+                }
             }
         }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// One vault that stayed with the other phone (`WordsEntryState.stayed`,
-/// R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and
-/// not wrong" (DESIGN.md), since the vault is safe where it is. The retry
-/// under the list is `StayedRetry`.
-private struct StayedLine: View {
-    let line: String
-    let at: Int
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Rectangle()
-                .fill(Theme.color("seam", scheme))
-                .frame(width: 2)
-            Text(line)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("words-stayed-\(at)")
-    }
-}
-
-/// `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
-/// that stayed. A link-weight text button, like `WordsControls`' secondary;
-/// the label and when it shows are the machine's. `words_label`'s control
-/// (leave a held-seed restore for the grid) is the same link.
-private struct StayedRetry: View {
-    let label: String
-    var identifier = "words-retry"
-    let action: () -> Void
-
-    var body: some View {
-        KitLink(label: label, identifier: identifier, action: action)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        .kitCard()
     }
 }
 
@@ -485,8 +474,6 @@ struct WordsShowView: View {
     let send: (Centraid_Core_V1_WordsShowEvent) -> Void
     let onDone: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     /// THE OWNER CHECK IS UP: nothing is drawn, only the page's own colour, until it answers
     /// (every label is empty while `check_now` is set).
     var body: some View {
@@ -499,44 +486,40 @@ struct WordsShowView: View {
 
     private var shown: some View {
         WordsShield(secure: state.secure) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    WordsHead(title: state.title, lead: state.body)
+            WordsFrame(
+                closeLabel: state.secondaryLabel,
+                closeIdentifier: "words-show-secondary",
+                onClose: { send(Self.event { $0.secondary = .init() }) },
+                identifier: "words-show"
+            ) {
+                WordsHead(title: state.title, lead: state.body)
 
-                    if !state.words.isEmpty {
-                        ShownWords(cells: state.words)
-                    }
-                    if !state.saveLabel.isEmpty, !state.words.isEmpty {
-                        WordsSaveCopyButton(label: state.saveLabel) {
-                            send(Self.event { $0.saveCopy = .init() })
-                        }
-                    }
-
-                    WordsNotice(notice: state.notice)
-
-                    if state.phase == .loading {
-                        KitSpinner()
-                            .frame(maxWidth: .infinity)
-                            .accessibilityIdentifier("words-show-loading")
-                    }
-
-                    WordsControls(
-                        primary: state.primaryLabel,
-                        primaryEnabled: !state.primaryLabel.isEmpty,
-                        secondary: state.secondaryLabel,
-                        prefix: "words-show",
-                        onPrimary: { send(Self.event { $0.primary = .init() }) },
-                        onSecondary: { send(Self.event { $0.secondary = .init() }) }
-                    )
+                if !state.words.isEmpty {
+                    ShownWords(cells: state.words)
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                WordsNotice(notice: state.notice)
+
+                if state.phase == .loading {
+                    KitSpinner()
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("words-show-loading")
+                }
+            } footer: {
+                if !state.saveLabel.isEmpty, !state.words.isEmpty {
+                    WordsTonalButton(label: state.saveLabel, iconKey: "Share", identifier: "words-save-copy") {
+                        send(Self.event { $0.saveCopy = .init() })
+                    }
+                }
+                if !state.primaryLabel.isEmpty {
+                    KitInkButton(label: state.primaryLabel) {
+                        send(Self.event { $0.primary = .init() })
+                    }
+                    .accessibilityIdentifier("words-show-primary")
+                }
             }
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
             .accessibilityElement(children: .contain)
             .accessibilityLabel(state.accessibilityLabel)
-            .accessibilityIdentifier("words-show")
         }
         .onAppear { if state.finished { onDone() } }
         .onChange(of: state.finished) { _, finished in if finished { onDone() } }
@@ -553,41 +536,122 @@ struct WordsShowView: View {
 
 // MARK: - shared parts
 
+/// THE WORDS PAGES' FRAME: a round X at the top leading edge (the screen's own leave control,
+/// `secondary_label`, spoken as its label), the content scrolling, and the answers pinned at
+/// the foot. With no leave control and no answers it is just the page.
+struct WordsFrame<Content: View, Footer: View>: View {
+    let closeLabel: String
+    let closeIdentifier: String
+    let onClose: () -> Void
+    let identifier: String
+    var dismissesKeyboard = false
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let footer: () -> Footer
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !closeLabel.isEmpty {
+                HStack {
+                    Button(action: onClose) {
+                        CentraidIconView(iconKey: "X", tint: Surface.ink, size: 16)
+                            .frame(width: 44, height: 44)
+                            .background(Surface.card, in: Circle())
+                            .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(closeLabel)
+                    .accessibilityIdentifier(closeIdentifier)
+                    Spacer()
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    content()
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
+            VStack(spacing: 12) {
+                footer()
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Surface.page.ignoresSafeArea())
+        // THE ROUND X IS THE WAY OUT: with it drawn the stack's own back chevron would be a
+        // second one (the board has a single control).
+        .toolbar(closeLabel.isEmpty ? .automatic : .hidden, for: .navigationBar)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct WordsHead: View {
     let title: String
     let lead: String
-    @Environment(\.colorScheme) private var scheme
+    /// A badge page (PairDevice, PairCheck) centres its head over the badge.
+    var centered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: centered ? .center : .leading, spacing: 8) {
             if !title.isEmpty {
                 Text(title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.title)
+                    .foregroundStyle(Surface.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(centered ? .center : .leading)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("words-title")
             }
             if !lead.isEmpty {
                 Text(lead)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
+                    .multilineTextAlignment(centered ? .center : .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 }
 
+/// A SENTENCE ABOUT A STATE on a pale ground of that state's colour, with its mark: a red one
+/// for what went wrong, an amber one for what the member should do.
+struct WordsCallout: View {
+    let text: String
+    let state: StateColor
+    var identifier = ""
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            CentraidIconView(iconKey: "AlertCircle", tint: state.text, size: 18)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+            Text(text)
+                .kitType(.row)
+                .foregroundStyle(state.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .wordsBox(fill: state.tint, border: nil)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct WordsNotice: View {
     let notice: String
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if !notice.isEmpty {
-            Text(notice)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("net", scheme))
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("words-notice")
+            WordsCallout(text: notice, state: .red, identifier: "words-notice")
         }
     }
 }
@@ -599,7 +663,6 @@ struct WordsControls: View {
     let prefix: String
     let onPrimary: () -> Void
     let onSecondary: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty stack would
@@ -612,12 +675,104 @@ struct WordsControls: View {
                         .accessibilityIdentifier("\(prefix)-primary")
                 }
                 if !secondary.isEmpty {
-                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    KitLink(label: secondary, tint: AppAccent.shell.text, identifier: "\(prefix)-secondary", action: onSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }
             .padding(.top, 8)
         }
+    }
+}
+
+/// A SECOND VERB IN THE SHELL'S TINT: the shell's teal over its own pale ground, full width,
+/// beside the one ink button ("Save a copy", "Scan QR code", "Try again").
+struct WordsTonalButton: View {
+    let label: String
+    var iconKey: String? = nil
+    var identifier = ""
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        let accent = AppAccent.shell
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let iconKey {
+                    CentraidIconView(iconKey: iconKey, tint: enabled ? accent.text : Surface.meta, size: 16)
+                }
+                Text(label)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(enabled ? accent.text : Surface.meta)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            .background(accent.wash(dark: scheme == .dark), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// THE SCAN CONTROL BESIDE THE CODE'S FIELD: a square tonal key with the viewfinder, its words
+/// spoken, not drawn.
+private struct WordsScanSquare: View {
+    let label: String
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let accent = AppAccent.shell
+        Button(action: action) {
+            CentraidIconView(iconKey: "Maximize", tint: accent.text, size: 20)
+                .frame(width: 52, height: 52)
+                .wordsBox(fill: accent.wash(dark: scheme == .dark), border: nil)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("words-scan")
+    }
+}
+
+private extension View {
+    /// A field's box: a white card with a hairline edge, the shape every words field wears.
+    func wordsFieldBox() -> some View {
+        padding(.horizontal, 12)
+            .frame(minHeight: 52)
+            .wordsBox()
+    }
+}
+
+/// A BOX OF THE WORDS PAGES: the control radius from the token scale, white by default with a
+/// hairline edge; a pale ground (a state, a tint) passes its fill and no edge.
+private struct WordsBox: ViewModifier {
+    var fill: Color
+    var border: Color?
+    var width: CGFloat
+
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.radius("lg", scheme), style: .continuous)
+        content
+            .background(fill, in: shape)
+            .overlay {
+                if let border { shape.strokeBorder(border, lineWidth: width) }
+            }
+    }
+}
+
+extension View {
+    fileprivate func wordsBox(
+        fill: Color = Surface.card,
+        border: Color? = Surface.border,
+        width: CGFloat = CentraidGeometry.hairline
+    ) -> some View {
+        modifier(WordsBox(fill: fill, border: border, width: width))
     }
 }
 
@@ -644,97 +799,47 @@ private struct WordsCheckbox: View {
 
 private struct WordsCheckboxLabel: View {
     let label: String
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Text(label)
-            .centraidType("body")
-            .foregroundStyle(Theme.color("text", scheme))
+            .kitType(.row)
+            .foregroundStyle(Surface.ink)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .contentShape(Rectangle())
     }
 }
 
-/// SAVE A COPY (`VaultWordsState.save_label`). The words go out as one line of
-/// text through the system share sheet, so the member picks where they live — a
-/// password manager, Files, a note only they can open. The machine hears
-/// nothing back.
-///
-/// Duty 2 above (a word never reaches the clipboard) is relaxed here, on the
-/// member's own tap, and only as far as iOS lets this app go: the sheet is
-/// presented without Copy, Contact, Reading List and Camera Roll, and the
-/// words are not a URL, so no link preview is built from them. The sheet is
-/// presented by UIKit from the topmost controller rather than from SwiftUI,
-/// because this screen is hosted inside the capture-proof canvas.
-private struct WordsSaveCopyButton: View {
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        KitLink(label: label, identifier: "words-save-copy", action: action)
-            .frame(maxWidth: .infinity)
-    }
-}
-
-/// THE WORDS, SHOWN ONCE: numbered, in two columns, in order down each
-/// column. Plain text with selection off and no menu — nothing here can put a
-/// word on the clipboard.
+/// THE WORDS, SHOWN ONCE: numbered across three columns, each a white chip. Plain text with
+/// selection off and no menu — nothing here can put a word on the clipboard.
 private struct ShownWords: View {
     let cells: [Centraid_Core_V1_WordCell]
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let half = (cells.count + 1) / 2
-        HStack(alignment: .top, spacing: 16) {
-            column(Array(cells.prefix(half)))
-            column(Array(cells.dropFirst(half)))
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                .fill(Theme.color("bgSunken", scheme))
-        )
-        .textSelection(.disabled)
-        .privacySensitive()
-        .accessibilityIdentifier("words-shown")
-    }
-
-    private func column(_ cells: [Centraid_Core_V1_WordCell]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVGrid(columns: wordColumns, spacing: 8) {
             ForEach(cells, id: \.position) { cell in
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text("\(cell.position)")
                         .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .frame(minWidth: 22, alignment: .trailing)
+                        .foregroundStyle(Surface.meta)
                     Text(cell.word)
-                        .centraidType("bodyStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                .wordsBox()
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(cell.accessibilityLabel)
                 .accessibilityIdentifier("words-word-\(cell.position)")
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// The box a word field sits in, inked by the state's mark.
-private struct WordBox<Content: View>: View {
-    let tone: String
-    @ViewBuilder let content: () -> Content
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        content()
-            .padding(.horizontal, 12)
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                    .strokeBorder(Theme.color(tone, scheme), lineWidth: 1.5)
-            )
+        .textSelection(.disabled)
+        .privacySensitive()
+        .accessibilityIdentifier("words-shown")
     }
 }
 
@@ -751,12 +856,15 @@ private struct WordBox<Content: View>: View {
 /// spreads the rest).
 struct WordField: UIViewRepresentable {
     let value: String
+    /// What the cell says while it is empty ("Word 19").
+    let placeholder: String
     let position: UInt32
     let spoken: String
     let identifier: String
     let focus: Binding<UInt32?>
     let font: UIFont
     let color: UIColor
+    let placeholderColor: UIColor
     let onEdit: (String) -> Void
     let onReturn: () -> Void
 
@@ -787,6 +895,10 @@ struct WordField: UIViewRepresentable {
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: placeholderColor, .font: font]
+        )
         field.text = value
         context.coordinator.sent = [value]
         return field
@@ -813,6 +925,12 @@ struct WordField: UIViewRepresentable {
         // THE FONT FOLLOWS THE SYSTEM TEXT SIZE: `makeUIView` set it once, and a
         // setting changed while the field is on screen arrives here.
         if field.font != font { field.font = font }
+        if field.placeholder != placeholder {
+            field.attributedPlaceholder = NSAttributedString(
+                string: placeholder,
+                attributes: [.foregroundColor: placeholderColor, .font: font]
+            )
+        }
         // FOCUS MOVES ON A CHANGE, NEVER ON A RE-RENDER. A cell that took the
         // keyboard back whenever `focus` still named it stole it from the
         // endpoint field on its first keystroke — that edit re-renders every

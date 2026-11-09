@@ -8,10 +8,10 @@
 //! is placed from the latests in it. A shell does no date arithmetic (#1046's rule, RP-K-2).
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
 use centraid_apps_health::civil::{format_day, parse_day, utc_instant};
 use centraid_apps_health::figures::{Bucket, Metric};
 use centraid_apps_health::queries::{self, Range, TrendRange, Workout};
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::page::{PageCursor, PageRequest};
 use centraid_vault::Vault;
@@ -165,6 +165,8 @@ pub(crate) fn today(
                             low: metric.typical.map(|typical| typical.low),
                             high: metric.typical.map(|typical| typical.high),
                             typical_days: metric.typical.map_or(0, |typical| count(typical.days)),
+                            week: metric.week.into_iter().map(bucket).collect(),
+                            month_change_pct: metric.month_change_pct,
                         }
                     })
                     .collect(),
@@ -195,6 +197,7 @@ pub(crate) fn series(
     let range = match R::try_from(asked.range).unwrap_or(R::Unspecified) {
         R::Week => Range::Week,
         R::Month => Range::Month,
+        R::SixMonths => Range::SixMonths,
         R::Year => Range::Year,
         R::Unspecified => {
             return Err(invalid("a health series read names no range".to_owned()));
@@ -219,6 +222,8 @@ pub(crate) fn series(
                 counted: count(data.counted),
                 versus_typical: data.versus_typical,
                 versus_typical_pct: data.versus_typical_pct,
+                typical_low: data.typical_low,
+                typical_high: data.typical_high,
             })
         },
     )

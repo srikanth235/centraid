@@ -7,6 +7,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Keyed;
 use centraid_screens::kit::act as kit_act;
+use centraid_screens::kit::civil::HourCycle;
 use centraid_screens::kit::read::{self, Reading};
 use centraid_screens::photos;
 use centraid_screens::photos::album_choice::{self, AlbumChoice};
@@ -182,13 +183,32 @@ fn a_cells_day_is_the_capture_local_day_and_not_the_readers() {
         cells::capture_day("2026-03-01T23:30:00+02:00", 0),
         "2026-03-01"
     );
-    assert_eq!(cells::capture_clock("2026-03-01T23:30:00Z", 120), "01:30");
-    assert_eq!(cells::capture_clock("2026-03-01T00:10:00Z", -60), "23:10");
+    assert_eq!(
+        cells::capture_clock(
+            Locale::En,
+            "2026-03-01T23:30:00Z",
+            120,
+            HourCycle::default()
+        ),
+        "01:30"
+    );
+    assert_eq!(
+        cells::capture_clock(
+            Locale::En,
+            "2026-03-01T00:10:00Z",
+            -60,
+            HourCycle::default()
+        ),
+        "23:10"
+    );
     // Anything that is not a stamp is undated, never guessed at.
     assert_eq!(cells::capture_day("", 0), "");
     assert_eq!(cells::capture_day("2026-03-01", 0), "");
     assert_eq!(cells::capture_day("2026-02-31T10:00:00Z", 0), "");
-    assert_eq!(cells::capture_clock("nonsense", 0), "");
+    assert_eq!(
+        cells::capture_clock(Locale::En, "nonsense", 0, HourCycle::default()),
+        ""
+    );
 }
 
 #[test]

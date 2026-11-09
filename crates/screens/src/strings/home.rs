@@ -5,8 +5,6 @@
 //! there, not restated.
 
 catalog! {
-    plain appearance_to_dark = ("Switch to dark", "Switch to dark");
-    plain appearance_to_light = ("Switch to light", "Switch to light");
     plain backup_status_open = ("Open backup", "Open backup");
     plain band_backup = ("Backup", "Backup");
     plain band_backup_spoken = ("Backup and recovery key", "Backup and recovery key");
@@ -22,8 +20,7 @@ catalog! {
     plain first_launch_assistant_body = ("Ask about your own things. It runs on this phone.", "Ask about your own things. It runs on this phone.");
     plain first_launch_backup_title = ("Encrypted backups", "Encrypted backups");
     plain first_launch_backup_body = ("Pair a backup device. It keeps a copy it can't open.", "Pair a backup device. It keeps a copy it can't open.");
-    plain first_launch_next = ("Next", "Next");
-    plain first_launch_skip = ("Skip", "Skip");
+    plain first_launch_title = ("Welcome to Centraid", "Welcome to Centraid");
     plain first_launch_make = ("Get started", "Get started");
     plain first_launch_restore = ("Restore backup", "Restore backup");
     plain home_loading = ("Loading", "Loading");
@@ -47,7 +44,11 @@ catalog! {
     plain search_kind_locker_item = ("Locker item", "Locker item");
     plain search_kind_note = ("Note", "Note");
     plain search_kind_person = ("Person", "Person");
+    plain search_kind_metric = ("Metric", "Metric");
     plain search_kind_photo = ("Photo", "Photo");
+    plain search_kind_transaction = ("Payment", "Payment");
+    plain search_kind_workout = ("Workout", "Workout");
+    plain health_search_placeholder = ("Search Health", "Search Health");
     plain search_kind_task = ("Task", "Task");
     plain vault_denied_title = ("No vault access yet.", "No vault access yet.");
     plain vault_switch_spoken = ("Switch vault", "Switch vault");
@@ -72,7 +73,7 @@ catalog! {
     plain vaults_unnamed = ("Unnamed vault", "Unnamed vault");
 
     // ---- the apps' names ----
-    plain app_agenda = ("Agenda", "Agenda");
+    plain app_calendar = ("Calendar", "Calendar");
     plain app_docs = ("Docs", "Docs");
     plain app_health = ("Health", "Health");
     plain app_locker = ("Locker", "Locker");
@@ -80,31 +81,33 @@ catalog! {
     plain app_notes = ("Notes", "Notes");
     plain app_people = ("People", "People");
     plain app_photos = ("Photos", "Photos");
+    plain app_reminders = ("Reminders", "Reminders");
 
     // ---- the tiles ----
-    plain tile_agenda_all_day = ("all day", "all day");
     plain tile_agenda_count = ("on your plate", "on your plate");
-    plain tile_agenda_due = ("{n} due", "{n} due");
-    plain tile_agenda_nothing_after = ("nothing after it", "nothing after it");
-    plain tile_agenda_nothing_until = ("then nothing until the", "then nothing until the");
-    plain tile_agenda_no_events = ("No events coming up", "No events coming up");
-    plain tile_agenda_then = ("then", "then");
+    plain tile_agenda_foot_more = ("Calendar · {n} more", "Calendar · {n} more");
+    plain tile_agenda_none_today = ("No events today", "No events today");
     plain tile_docs_count_one = ("document", "document");
     plain tile_docs_count_many = ("documents", "documents");
+    plain tile_reminders_due = ("due", "due");
     plain tile_health_caption = ("steps today", "steps today");
     plain tile_health_slept = ("Slept {duration}", "Slept {duration}");
     plain tile_notes_count_one = ("note", "note");
     plain tile_notes_count_many = ("notes", "notes");
+    plain tile_notes_edited_on = ("Edited {day}", "Edited {day}");
+    plain tile_notes_edited_today = ("Edited today", "Edited today");
+    plain tile_notes_edited_yesterday = ("Edited yesterday", "Edited yesterday");
+    plain tile_people_reconnect = ("reconnect", "reconnect");
     plain tile_people_count_one = ("person", "person");
     plain tile_people_count_many = ("people", "people");
-    plain tile_people_everyone = ("That's everyone in your directory", "That's everyone in your directory");
-    plain tile_people_more = ("+{n} more in your directory", "+{n} more in your directory");
-    plain tile_empty_agenda = ("Put something on the calendar", "Put something on the calendar");
+    plain tile_empty_calendar = ("Put something on the calendar", "Put something on the calendar");
     plain tile_empty_docs = ("Add your first document", "Add your first document");
     plain tile_empty_health = ("Connect your health app", "Connect your health app");
+    plain tile_empty_health_small = ("Connect", "Connect");
     plain tile_empty_locker = ("Unlock to see your items", "Unlock to see your items");
     plain tile_empty_money = ("Import your first statement", "Import your first statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
     plain tile_empty_people = ("Add someone you know", "Add someone you know");
+    plain tile_empty_reminders = ("Add your first reminder", "Add your first reminder");
     plain tile_empty_photos = ("Import your first photo", "Import your first photo");
 }

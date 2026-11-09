@@ -264,6 +264,8 @@ struct BandSearchField: View {
     var keepsFocusOnClose = false
     let onTerm: (String) -> Void
     let onClose: () -> Void
+    /// The Search key, for a page that records the search when it is submitted.
+    var onSubmit: (() -> Void)? = nil
 
     @State private var typed = ""
     @State private var focused = false
@@ -331,7 +333,8 @@ struct BandSearchField: View {
                 placeholder: placeholder,
                 font: Theme.uiFont("body", scheme, dynamicTypeSize),
                 color: UIColor(Theme.color("text", scheme)),
-                placeholderColor: UIColor(Theme.color("textFaint", scheme))
+                placeholderColor: UIColor(Theme.color("textFaint", scheme)),
+                onSubmit: onSubmit
             )
             .accessibilityIdentifier("\(identifier)-field")
             if !typed.isEmpty {

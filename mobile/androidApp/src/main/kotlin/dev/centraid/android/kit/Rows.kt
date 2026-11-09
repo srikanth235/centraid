@@ -1,8 +1,10 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
+import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +42,7 @@ import centraid.core.v1.ListRow
 import centraid.core.v1.SearchContainer
 import centraid.core.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
+import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -72,82 +75,91 @@ public fun CentraidRow(
     metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    val titleInk = if (dimmed) centraidColor("textFaint") else centraidColor("text")
-    val softInk = if (dimmed) centraidColor("textFaint") else centraidColor("textSoft")
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .testTag(testTag)
-            .then(
-                when {
-                    accessory != null -> Modifier.semantics(mergeDescendants = false) { }
-                    a11y.isNotEmpty() -> Modifier.clearAndSetSemantics {
-                        contentDescription = a11y
-                        if (onTap != null) role = Role.Button
-                    }
-                    else -> Modifier.semantics(mergeDescendants = true) {
-                        if (onTap != null) role = Role.Button
-                    }
-                },
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (hueKey.isNotEmpty()) {
-            Box(
-                Modifier
-                    .padding(end = 10.dp)
-                    .width(2.dp)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(hueColor(hueKey)),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = centraidType("body"),
-                color = titleInk,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // [metaRuns] is the same line with spans a machine marked (a
-            // search snippet's matches); it replaces [meta] when set.
-            if (metaRuns != null && metaRuns.isNotEmpty()) {
-                Text(
-                    metaRuns,
-                    style = centraidType("annotLabel"),
-                    color = softInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else if (meta.isNotEmpty()) {
-                Text(
-                    meta,
-                    style = centraidType("annotLabel"),
-                    color = softInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+    val titleInk = if (dimmed) Surface.meta else Surface.ink
+    val softInk = Surface.meta
+    val line = Surface.line
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .testTag(testTag)
+                .then(
+                    when {
+                        accessory != null -> Modifier.semantics(mergeDescendants = false) { }
+                        a11y.isNotEmpty() -> Modifier.clearAndSetSemantics {
+                            contentDescription = a11y
+                            if (onTap != null) role = Role.Button
+                        }
+                        else -> Modifier.semantics(mergeDescendants = true) {
+                            if (onTap != null) role = Role.Button
+                        }
+                    },
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (hueKey.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .padding(end = 10.dp)
+                        .width(2.dp)
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(hueColor(hueKey)),
                 )
             }
-        }
-        chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
-        if (trailing.isNotEmpty() || pending) {
-            // THE FIGURE: right-aligned, with its sub-label under it.
-            Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
-                if (trailing.isNotEmpty()) {
-                    val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
-                    Text(trailing, style = centraidType("bodyStrong"), color = figureInk, textAlign = TextAlign.End, maxLines = 1)
-                }
-                val note = if (pending) pendingLabel else trailingNote
-                if (note.isNotEmpty()) {
-                    Text(note, style = centraidType("annotLabel"), color = softInk, textAlign = TextAlign.End, maxLines = 1)
+            Column(Modifier.weight(1f)) {
+                KitText(title, KitType.Row, titleInk, maxLines = 2)
+                // [metaRuns] is the same line with spans a machine marked (a
+                // search snippet's matches); it replaces [meta] when set.
+                if (metaRuns != null && metaRuns.isNotEmpty()) {
+                    Text(
+                        metaRuns,
+                        style = kitTextStyle(KitType.Meta),
+                        color = softInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else if (meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, softInk, maxLines = 2)
                 }
             }
+            // THE MONEY BOARDS' TRAILING COLUMN: a figure with its state chip UNDER it; a chip
+            // alone stays beside the title.
+            val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
+            if (!chipUnderFigure) {
+                chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
+            }
+            if (trailing.isNotEmpty() || pending) {
+                // THE FIGURE: right-aligned, with its sub-label under it.
+                Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
+                    if (trailing.isNotEmpty()) {
+                        val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
+                        Text(
+                            trailing,
+                            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                            color = figureInk,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                        )
+                    }
+                    if (chipUnderFigure) {
+                        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            chips.forEach { chip -> StatusChipView(chip) }
+                        }
+                    }
+                    val note = if (pending) pendingLabel else trailingNote
+                    if (note.isNotEmpty()) {
+                        KitText(note, KitType.Meta, softInk, Modifier, maxLines = 1)
+                    }
+                }
+            }
+            accessory?.invoke(this)
         }
-        accessory?.invoke(this)
+        // THE HAIRLINE starts at the text, not at the edge.
+        Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
     }
 }
 
@@ -171,40 +183,61 @@ public fun CentraidRow(row: ListRow, modifier: Modifier = Modifier, onTap: (() -
 }
 
 /**
- * A CHIP: a finished label on a hairline in its tone's ink. `seam` is "not
- * yet", `net` is "owe / leaves", `warning` is the warning role; neutral is
- * soft ink. No fill — a chip is read, not pressed.
+ * THE ONE BADGE SHAPE (#1173): 11pt capitals on a pale tint. A tone that says a state wears
+ * that state's colour (not yet and caution are amber, owe and leaves are red); a plain chip is
+ * quiet ink on the fill.
  */
 @Composable
 public fun StatusChipView(chip: StatusChip, modifier: Modifier = Modifier) {
     if (chip.label.isEmpty()) return
-    val ink = toneInk(chip.tone, neutral = "textSoft")
-    Text(
-        chip.label,
-        style = centraidType("annotLabel"),
-        color = ink,
-        maxLines = 1,
-        modifier = modifier
-            .border(KitGeometry.HAIRLINE, ink, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp)
-            .testTag("kit-chip"),
-    )
+    val tagged = modifier.testTag("kit-chip")
+    when (chip.tone) {
+        StatusChip.Tone.TONE_SEAM, StatusChip.Tone.TONE_WARNING -> KitBadge(chip.label, StateColor.Amber, tagged)
+        StatusChip.Tone.TONE_NET -> KitBadge(chip.label, StateColor.Red, tagged)
+        // THE APP'S OWN GOOD NEWS: the accent's chip ground under the accent's text.
+        StatusChip.Tone.TONE_ACCENT -> {
+            val accent = appAccent()
+            KitText(
+                chip.label,
+                KitType.Badge,
+                accent.text,
+                tagged
+                    .clip(RoundedCornerShape(KitBadgeRadius))
+                    .background(accent.tint ?: accent.wash(centraidDark()))
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                maxLines = 1,
+            )
+        }
+        else -> KitText(
+            chip.label,
+            KitType.Badge,
+            Surface.meta,
+            tagged
+                .clip(RoundedCornerShape(KitBadgeRadius))
+                .background(Surface.fill)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            maxLines = 1,
+        )
+    }
 }
 
-/** A tone's ink role: `seam`, `net`, `warning`, or [neutral] for the rest. */
+/** A tone's ink: the state's colour for a state, otherwise the plain ink ([neutral] `text`) or meta. */
 @Composable
-public fun toneInk(tone: StatusChip.Tone, neutral: String): Color = centraidColor(
-    when (tone) {
-        StatusChip.Tone.TONE_SEAM -> "seam"
-        StatusChip.Tone.TONE_NET -> "net"
-        StatusChip.Tone.TONE_WARNING -> "warning"
-        else -> neutral
-    },
-)
+public fun toneInk(tone: StatusChip.Tone, neutral: String): Color = when (tone) {
+    StatusChip.Tone.TONE_SEAM, StatusChip.Tone.TONE_WARNING -> StateColor.Amber.text
+    StatusChip.Tone.TONE_NET -> StateColor.Red.text
+    else -> if (neutral == "text") Surface.ink else Surface.meta
+}
 
 /** THE SECTION HEAD: a title, its count, and one text verb. */
 @Composable
-public fun SectionHeader(head: SectionHead, modifier: Modifier = Modifier, onVerb: (() -> Unit)? = null) {
+public fun SectionHeader(
+    head: SectionHead,
+    modifier: Modifier = Modifier,
+    /** The board's sentence-case head (Catch up's piles): the row rung in semibold, not 12pt capitals. */
+    sentenceCase: Boolean = false,
+    onVerb: (() -> Unit)? = null,
+) {
     Row(
         modifier
             .fillMaxWidth()
@@ -213,17 +246,22 @@ public fun SectionHeader(head: SectionHead, modifier: Modifier = Modifier, onVer
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val count = head.count
-        Text(
-            if (count != null) "${head.title} · $count" else head.title,
-            style = centraidType("smallStrong"),
-            color = centraidColor("textSoft"),
-            modifier = Modifier.weight(1f).semantics { heading() },
-        )
+        val title = if (count != null) "${head.title} · $count" else head.title
+        if (sentenceCase) {
+            Text(
+                title,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = Surface.meta,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+        } else {
+            KitText(title, KitType.Group, Surface.meta, Modifier.weight(1f).semantics { heading() })
+        }
         if (head.verb_label.isNotEmpty() && onVerb != null) {
             Text(
                 head.verb_label,
-                style = centraidType("annotLabelOn"),
-                color = centraidColor("link"),
+                style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                color = appAccent().text,
                 modifier = Modifier
                     .heightIn(min = 36.dp)
                     .clip(RoundedCornerShape(KitGeometry.RADIUS))
@@ -441,7 +479,7 @@ public fun hueColor(key: String): Color {
     return centraidColor(role)
 }
 
-/** `packages/design`'s eight party hues. */
+/** The eight party hues (`IDENTITY_HUE_KEYS` in `crates/design`). */
 private val PARTY_HUES: Set<String> =
     setOf("rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet")
 
@@ -483,46 +521,34 @@ private fun SearchContainerLine(
     modifier: Modifier,
     onTap: (() -> Unit)?,
 ) {
-    Column(
+    // A matched container is one pill above the rows (#1173): its glyph in the app's colour, the
+    // kind in meta, then its name.
+    val shape = RoundedCornerShape(percent = 50)
+    Box(
         modifier
             .fillMaxWidth()
-            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 4.dp)
             .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
                 contentDescription = accessibilityLabel
                 role = Role.Button
             },
+        contentAlignment = Alignment.CenterStart,
     ) {
         Row(
             Modifier
-                .fillMaxWidth()
+                .clip(shape)
+                .background(Surface.card)
+                .border(KitGeometry.HAIRLINE, Surface.border, shape)
+                .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
                 .heightIn(min = KitGeometry.ROW_MIN)
-                .padding(horizontal = KitGeometry.GUTTER),
+                .padding(start = 8.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 18.dp)
-            Text(
-                title,
-                style = centraidType("body"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 12.dp).weight(1f),
-            )
-            Text(
-                kindLabel,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                maxLines = 1,
-                modifier = Modifier.padding(start = 8.dp),
-            )
+            CentraidIcon(iconKey = iconKey, tint = appAccent().text, size = 16.dp)
+            KitText(kindLabel, KitType.Meta, Surface.meta, Modifier.padding(start = 6.dp), maxLines = 1)
+            KitText(title, KitType.Row, Surface.ink, Modifier.padding(start = 6.dp), maxLines = 1)
         }
-        Spacer(
-            Modifier
-                .padding(start = KitGeometry.GUTTER)
-                .fillMaxWidth()
-                .height(KitGeometry.HAIRLINE)
-                .background(centraidColor("line")),
-        )
     }
 }

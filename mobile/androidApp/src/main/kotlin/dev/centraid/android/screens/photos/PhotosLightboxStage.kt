@@ -102,7 +102,7 @@ import kotlin.math.max
  * - **A pinch, or a double tap, zooms**, from fit to 2.5× and up to 5×, and a
  *   one-finger drag pans a zoomed photograph. A zoomed photograph does not
  *   page — the drag that would have paged is the drag that pans it.
- * - **A swipe down closes**, the `StageRoom`'s own way out (DESIGN.md); the
+ * - **A swipe down closes**, the `StageRoom`'s own way out (product-intuition/references/design-behaviour.md § Rooms); the
  *   close control in the chrome is the same act.
  *
  * One bare tap toggles the chrome, a long press plays a Live Photo's movie.
@@ -183,7 +183,10 @@ internal fun LightboxStage(
                                                 scale > ZOOM_FIT + 0.001f -> Gesture.PAN
                                                 current.slideshow -> Gesture.NONE
                                                 abs(travelled.x) > abs(travelled.y) -> Gesture.PAGE
-                                                travelled.y > 0f -> Gesture.DISMISS
+                                                // THE DETAILS CLOSE BEFORE THE VIEWER DOES; a swipe up opens them.
+                                                travelled.y > 0f ->
+                                                    if (current.sheet == PhotosLightboxState.Sheet.SHEET_INFO) Gesture.INFO_CLOSE else Gesture.DISMISS
+                                                current.sheet != PhotosLightboxState.Sheet.SHEET_INFO -> Gesture.INFO_OPEN
                                                 else -> Gesture.NONE
                                             }
                                         }
@@ -203,6 +206,10 @@ internal fun LightboxStage(
                                     }
                                     Gesture.DISMISS -> {
                                         dismissY = max(0f, dismissY + delta.y)
+                                        change.consume()
+                                    }
+                                    Gesture.INFO_OPEN, Gesture.INFO_CLOSE -> {
+                                        travelled += delta
                                         change.consume()
                                     }
                                     Gesture.ZOOM, Gesture.NONE -> Unit
@@ -238,6 +245,14 @@ internal fun LightboxStage(
                                     scope.launch {
                                         animate(dismissY, 0f, animationSpec = settle) { value, _ -> dismissY = value }
                                     }
+                                }
+                            Gesture.INFO_OPEN ->
+                                if (travelled.y < -dismissAt / 2f) {
+                                    send(PhotosLightboxEvent(sheet = PhotosLightboxEvent.SheetChanged(sheet = PhotosLightboxState.Sheet.SHEET_INFO)))
+                                }
+                            Gesture.INFO_CLOSE ->
+                                if (travelled.y > dismissAt / 2f) {
+                                    send(PhotosLightboxEvent(sheet = PhotosLightboxEvent.SheetChanged(sheet = PhotosLightboxState.Sheet.SHEET_NONE)))
                                 }
                             Gesture.ZOOM ->
                                 if (scale <= ZOOM_FIT + 0.01f) {
@@ -490,7 +505,7 @@ internal fun PlayerSurface(player: LightboxPlayer) {
 /**
  * THE TRANSPORT — play, pause and the scrub strip (v0's `Transport`).
  *
- * Determinate, always: a position over a length, never a spinner (DESIGN.md
+ * Determinate, always: a position over a length, never a spinner (product-intuition/references/design-behaviour.md § Status line
  * §5). The strip is a track the member drags or taps to seek; the time beside
  * it is the clock the strip is drawing.
  */
@@ -647,7 +662,7 @@ internal fun LiveChip(live: LightboxPlayer, words: centraid.core.v1.PhotosLightb
     }
 }
 
-private enum class Gesture { UNDECIDED, PAGE, DISMISS, PAN, ZOOM, NONE }
+private enum class Gesture { UNDECIDED, PAGE, DISMISS, INFO_OPEN, INFO_CLOSE, PAN, ZOOM, NONE }
 
 /** v0's `ZOOM_FIT`, `ZOOM_RUNG` and `ZOOM_MAX`. */
 private const val ZOOM_FIT = 1f

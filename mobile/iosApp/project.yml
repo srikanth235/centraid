@@ -50,6 +50,12 @@ targets:
     platform: iOS
     settings:
       base:
+        # THE APP ICON IS TWO THINGS, BOTH WRITTEN BY `cargo xtask design` (#1173).
+        # `Resources/AppIcon.icon` is the layered Icon Composer icon iOS 26 draws
+        # with Liquid Glass; `Resources/Assets.xcassets/AppIcon.appiconset` is the
+        # flat light, dark and tinted fallback for the OS versions before it (the
+        # deployment target is 17.5). Both are named AppIcon.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
         #
         # Every file in `Tests/` says `@testable import CentraidApp`. XcodeGen's
@@ -103,6 +109,10 @@ targets:
     sources:
       - path: Sources
       - path: Design
+      # THE WIDGETS' SNAPSHOT MODEL, compiled into the app AND the extension
+      # (#1173): the app's `ScreenStore` writes the file, the extension and Siri
+      # read it, and one decoder serves all three.
+      - path: Shared
       # THE FACES, AS A BUILD PHASE — AND `resources:` IS NOT AN XCODEGEN KEY.
       #
       # This target carried `resources: - path: Resources` for its whole life
@@ -121,6 +131,18 @@ targets:
       # entitlements are not ALSO copied in as loose resources beside their
       # generated selves.
       - path: Resources/Fonts
+        buildPhase: resources
+      # THE REDESIGN'S COLOURS, with light and dark built into each set (#1173).
+      # `cargo xtask design` writes `Assets.xcassets/Colors/*.colorset` from
+      # `design/tokens.toml`; an `.xcassets` source is compiled into the
+      # bundle's asset catalogue, and `Color(CentraidAsset.appCalendar)` reads it.
+      # Re-run `xcodegen generate` after the first generation: the catalogue is
+      # a new source the project does not list until then.
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      # The layered iOS 26 app icon: a source file here, compiled by actool
+      # next to the catalogue (`ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`).
+      - path: Resources/AppIcon.icon
         buildPhase: resources
     # THE SWIFT PROTOBUF TYPES ARE BUILT, NOT CARRIED (#1020).
     #
@@ -149,6 +171,10 @@ targets:
           - $(SRCROOT)/.generated/protos.output.xcfilelist
     dependencies:
       - package: SwiftProtobuf
+      # THE WIDGET EXTENSION, EMBEDDED AND SIGNED WITH THE APP (#1173).
+      - target: CentraidWidgets
+        embed: true
+        codeSign: true
     # WITHOUT THIS THE KEYCHAIN IS DEAD AND PAIRING CANNOT PERSIST (#1025).
     #
     # `IosSecureStore` is where this device's endpoint secret lives, and every
@@ -183,6 +209,13 @@ targets:
         # (`HealthSeeder/project.yml`) and never part of this one.
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # THE APP GROUP THE WIDGETS READ THROUGH (#1173). The app writes Agenda's
+        # snapshot into this group's container and `CentraidWidgets` reads it; it is
+        # the only thing the two processes share. A DEVICE BUILD NEEDS A PROVISIONING
+        # PROFILE THAT CARRIES THE GROUP, on both bundle ids; a simulator build signed
+        # ad-hoc needs none.
+        com.apple.security.application-groups:
+          - group.dev.centraid
     # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
     #
     # The keys below are the source; `xcodegen generate` writes the plist from
@@ -206,6 +239,14 @@ targets:
         # whole declaration: the launch screen is the app's own background, and
         # nothing else belongs on it.
         UILaunchScreen: {}
+        # A WIDGET'S TAP OPENS `centraid://agenda?open=<key>` (#1173). The scheme is the
+        # app's, and the URL names no screen: the key is the core's, opaque, and the
+        # core answers with the page (`AgendaIntentOpen`). The handler ignores any
+        # other shape (`ShellModel.handleOpenURL`).
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.centraid.Centraid.open
+            CFBundleURLSchemes:
+              - centraid
         # THE FACE, DECLARED. Copying a .ttf into the bundle registers NOTHING:
         # iOS only loads an app-supplied font whose filename is listed here, and
         # `UIFont(name:size:)` for an unlisted face returns nil — silently. That
@@ -213,9 +254,8 @@ targets:
         # entire life, so `CentraidTypeModifier` now fails loudly instead, and
         # `FontRegistrationTests` asserts both names resolve.
         #
-        # The files are copied into `Resources/Fonts` by
-        # `contracts/tools/export-native-theme.ts` from `packages/design/fonts`,
-        # the one source, and the emitted `centraidFontFiles` in
+        # The files are copied into `Resources/Fonts` by `cargo xtask design`
+        # from `design/fonts`, the one source, and the emitted `centraidFontFiles` in
         # `Design/Theme.swift` is this list's other half — they must agree.
         #
         # `InstrumentSans_470Book.ttf` IS THE 400 REGISTER'S FACE HERE, and is
@@ -262,10 +302,10 @@ targets:
         # People's day-one empty state, never at launch, and read once into
         # their own vault on this phone.
         NSContactsUsageDescription: Centraid copies the contacts you choose into People, in your own vault on this phone.
-        # AND CALENDAR → AGENDA, REMINDERS → AGENDA'S TO-DO: asked at the tap on each
+        # AND CALENDAR → CALENDAR, REMINDERS → REMINDERS: asked at the tap on each
         # app's day-one empty state. iOS 17's full-access keys; the import reads.
-        NSCalendarsFullAccessUsageDescription: Centraid copies your calendar's events into Agenda, in your own vault on this phone.
-        NSRemindersFullAccessUsageDescription: Centraid copies your open reminders into Agenda, in your own vault on this phone.
+        NSCalendarsFullAccessUsageDescription: Centraid copies your calendar's events into Calendar, in your own vault on this phone.
+        NSRemindersFullAccessUsageDescription: Centraid copies your open reminders into Reminders, in your own vault on this phone.
         # WHY HEALTH ASKS FOR APPLE HEALTH (#1129): asked at the member's tap on
         # Connect, never at launch, for the types they chose there, READ ONLY
         # (R-1129-7). The sentence says both halves: what is read, and that
@@ -292,6 +332,66 @@ targets:
         # iCloud is EXCLUDED from the replica directory in code; this is the
         # declaration that goes with it.
         ITSAppUsesNonExemptEncryption: false
+
+  # AGENDA'S WIDGETS (#1173, wave 3): a WidgetKit extension, embedded in the app.
+  #
+  # THE PRIVACY RULE: READ-ONLY, AND NEVER THE VAULT. The extension draws one JSON
+  # file the app keeps in the App Group container (`Shared/AgendaGlanceSnapshot`:
+  # titles, times and counts Rust chose to disclose, finished in the member's
+  # language). It does NOT link the Rust core (no `OTHER_LDFLAGS`, no `CoreBridge`),
+  # does NOT depend on SwiftProtobuf, holds no keychain group and no HealthKit, and
+  # compiles none of `Sources/`. A new dependency here is a new way for a widget on a
+  # locked phone to reach the vault, and is the owner's call.
+  #
+  # ONLY THE DESIGN FILES IT NEEDS, listed by name: the words the gallery reads
+  # before any code runs (`GlanceWords`), the colour-set names (`DesignScale`) and
+  # the faces (`Theme`, which imports SwiftUI alone).
+  # `Resources/Assets.xcassets` is a resource here too, so `Color(name)` resolves in
+  # the extension's own bundle, and the faces are copied in and declared in
+  # `Widgets/Info.plist` (`UIAppFonts`; an extension registers its own).
+  #
+  # `Widgets/Info.plist` and `Widgets/CentraidWidgets.entitlements` are XCODEGEN'S
+  # OUTPUT of the `info:` and `entitlements:` keys below, committed so a reader can
+  # see them, exactly as the app's are.
+  CentraidWidgets:
+    type: app-extension
+    platform: iOS
+    settings:
+      base:
+        # `dev.centraid.Centraid` is the app's id (`bundleIdPrefix` + target name); an
+        # extension's id must extend its host's.
+        PRODUCT_BUNDLE_IDENTIFIER: dev.centraid.Centraid.widgets
+        SWIFT_VERSION: "6.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    sources:
+      - path: Widgets
+        excludes:
+          - Info.plist
+          - CentraidWidgets.entitlements
+      - path: Shared
+      - path: Design
+        includes:
+          - GlanceWords.swift
+          - DesignScale.swift
+          - Theme.swift
+      - path: Resources/Fonts
+        buildPhase: resources
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+    entitlements:
+      path: Widgets/CentraidWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.centraid
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Centraid
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts:
+          - InstrumentSans_470Book.ttf
+          - InstrumentSans-SemiBold.ttf
 
   CentraidTests:
     type: bundle.unit-test

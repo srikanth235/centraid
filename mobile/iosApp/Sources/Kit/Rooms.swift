@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-// THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
+// THE ROOMS (K5; product-intuition/references/design-behaviour.md § Rooms).
 //
 // A mobile screen is one of seven rooms and nothing else. The room owns the
 // header, the back control, search, the empty/loading/error states (through
@@ -101,52 +101,81 @@ struct RoomAction {
     let action: () -> Void
 }
 
-/// The search bar while search is closed, for a page that keeps its own field under its
-/// header (Chat's drawer): field-shaped, so it reads as the place to type before it is one.
-/// An app place's search is the band's key instead (`BandSearchKey`).
-struct SearchOpener: View {
-    let placeholder: String
-    var identifier: String = "search-opener"
-    let onOpen: () -> Void
+/// A PLACE'S OWN BAR (#1173): the Calendar's header stands in the system bar, a leading chip and
+/// the keys before the app's one verb, and the page draws no title. Values, so a place passes
+/// views and the kit stays ignorant of what they are.
+struct PlaceBar {
+    let leading: AnyView
+    let actions: AnyView
+    /// Reminders' board keeps its big title under the same bar; the Calendar's has none.
+    var showsTitle = false
+}
 
-    @Environment(\.colorScheme) private var scheme
+/// THE TITLE IN THE TOP ROW (#1173, round 9): an app root's title is large at the leading edge of
+/// the system bar, on the same row as the trailing keys (iOS 26 Photos' "Library"); the scope line
+/// is drawn under it in the page (`KitHeader` with an empty title). The bar's own item, with no
+/// glass plate behind it.
+struct RootBarTitle: ToolbarContent {
+    let title: String
 
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 8) {
-                CentraidIconView(iconKey: "Search", tint: Theme.color("textFaint", scheme), size: 16)
-                Text(placeholder)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            .background(
-                Theme.color("bgSunken", scheme),
-                in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                    .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-            )
-            .contentShape(Rectangle())
+    var body: some ToolbarContent {
+        if #available(iOS 26, *) {
+            ToolbarItem(placement: .topBarLeading) { label }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { label }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(placeholder)
-        .accessibilityIdentifier(identifier)
+    }
+
+    private var label: some View {
+        Text(title)
+            .kitType(.title)
+            .foregroundStyle(Surface.ink)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("kit-header-title")
+    }
+}
+
+extension View {
+    /// An app root's title in the bar's top row, large at the leading edge (see `RootBarTitle`).
+    func kitRootTitle(_ title: String) -> some View {
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar { RootBarTitle(title: title) }
+    }
+
+    /// A pushed page's title inline in the bar, beside the back chevron.
+    func kitInlineTitle(_ title: String) -> some View {
+        self.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
     }
 }
 
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
+    /// The place's app id: the toolbar does not carry the environment, so the accent is stated.
+    var app: String = ""
 
     var body: some View {
         if let action {
-            ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
-                .disabled(!action.enabled)
+            if action.iconKey == "Plus" {
+                // THE CREATE VERB is the filled key in the app's accent.
+                KitAccentKey(
+                    iconKey: action.iconKey,
+                    label: action.label,
+                    identifier: action.identifier,
+                    enabled: action.enabled,
+                    accent: AppAccent(app),
+                    action: action.action
+                )
+            } else {
+                ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
+                    .disabled(!action.enabled)
+            }
         }
     }
 }
@@ -191,15 +220,56 @@ struct PlaceDrawsShellLine: PreferenceKey {
     static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
+/// WHERE THE EDGE SWIPE OF AN APP ROOT GOES: Home. The shell states it once on the pages it hosts.
+private struct PlaceHomeKey: EnvironmentKey {
+    static var defaultValue: (() -> Void)? { nil }
+}
+
+extension EnvironmentValues {
+    var placeHome: (() -> Void)? {
+        get { self[PlaceHomeKey.self] }
+        set { self[PlaceHomeKey.self] = newValue }
+    }
+}
+
+/// THE LEADING EDGE OF AN APP ROOT: a swipe in from it returns to Home, the same act as the band's
+/// Home key. A root has no back chevron, and hiding the system's back button also puts its edge
+/// swipe away, so the root says its own. Leading, so it is the right edge in a right-to-left
+/// language; a thin strip inside the page margin, so no row under it loses its tap.
+private struct EdgeSwipeHome: View {
+    @Environment(\.placeHome) private var home
+    @Environment(\.layoutDirection) private var direction
+
+    var body: some View {
+        if let home {
+            Color.clear
+                .frame(width: 16)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 24)
+                        .onEnded { drag in
+                            let inward = direction == .rightToLeft ? -drag.translation.width : drag.translation.width
+                            if inward > 64, abs(drag.translation.height) < inward { home() }
+                        }
+                )
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
     var search: SearchSlot? = nil
+    /// A KEY BEFORE THE FILTER (#1173): the glass lock key of Locker's header. Nil in every other app.
+    var lead: RoomAction? = nil
     /// THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
     /// app's one trailing action. Nil where the app has nothing to filter or sort.
     var filter: FilterSlot? = nil
     /// The scope the page is in, under the app's name (Notes' notebook, Money's month).
     var subtitle: SubtitleSlot? = nil
+    /// A bar of the place's own: no drawn title, its leading view and keys in the system bar.
+    var bar: PlaceBar? = nil
     var showsBand: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
@@ -215,8 +285,10 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         app: String,
         title: String,
         search: SearchSlot? = nil,
+        lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
+        bar: PlaceBar? = nil,
         showsBand: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
@@ -225,31 +297,67 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.app = app
         self.title = title
         self.search = search
+        self.lead = lead
         self.filter = filter
         self.subtitle = subtitle
+        self.bar = bar
         self.showsBand = showsBand
         self.trailing = trailing
         self.band = band
         self.content = content
     }
 
+    private var showsBarTitle: Bool { bar == nil || bar?.showsTitle == true }
+
     var body: some View {
         VStack(spacing: 0) {
+            // THE HEADER IS THE BAR'S TOP ROW: the title at 34 bold at the leading edge, the keys
+            // (the glass filter and the filled accent `+`) at the trailing, nothing else.
+            // THE TITLE IS IN THE BAR'S TOP ROW (`RootBarTitle`); the scope line is first here, and a
+            // place's own bar (the Calendar's month chip) is one control row under it.
+            if showsBarTitle { KitHeader(title: "", subtitle: subtitle) }
+            if let bar, showsBarTitle {
+                HStack(spacing: 0) {
+                    bar.leading.environment(\.appAccent, AppAccent(app))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .background(Surface.page.ignoresSafeArea())
+        .overlay(alignment: .leading) { EdgeSwipeHome() }
+        .environment(\.appAccent, AppAccent(app))
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // AN APP ROOT HAS NO BACK CHEVRON: it is reached from Home and returns by the band's
+        // Home key; a chevron appears only on a page drilled into (`PushedPage`).
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
-            ToolbarItemGroup(placement: .primaryAction) {
-                if let filter { FilterMenuButton(app: app, slot: filter) }
-                trailing()
+            if showsBarTitle {
+                RootBarTitle(title: title)
+            } else if let bar {
+                // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
+                // stands in the top row, where the title would.
+                ToolbarItem(placement: .topBarLeading) {
+                    bar.leading.environment(\.appAccent, AppAccent(app))
+                }
             }
-            if let subtitle {
-                ToolbarItem(placement: .principal) { RoomTitle(title: title, slot: subtitle) }
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let bar { bar.actions.environment(\.appAccent, AppAccent(app)) }
+                if let lead { RoomTrailing(action: lead, app: app) }
+                if let filter { FilterMenuButton(app: app, slot: filter) }
+                // THE BAR IS HOSTED OUTSIDE THE PAGE'S ENVIRONMENT, so the filled `+` takes the
+                // app's accent from here and not the shell's teal.
+                trailing().environment(\.appAccent, AppAccent(app))
+            }
+            // The title is drawn in the page, so the bar's own is put away; the item keeps the
+            // back label the system takes from `navigationTitle`.
+            ToolbarItem(placement: .principal) {
+                Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -302,8 +410,10 @@ extension AppPlace where Trailing == RoomTrailing {
         title: String,
         trailing: RoomAction?,
         search: SearchSlot? = nil,
+        lead: RoomAction? = nil,
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
+        bar: PlaceBar? = nil,
         showsBand: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -312,10 +422,12 @@ extension AppPlace where Trailing == RoomTrailing {
             app: app,
             title: title,
             search: search,
+            lead: lead,
             filter: filter,
             subtitle: subtitle,
+            bar: bar,
             showsBand: showsBand,
-            trailing: { RoomTrailing(action: trailing) },
+            trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
             content: content
         )
@@ -329,6 +441,12 @@ struct PushedPage<Trailing: View, Content: View>: View {
     let title: String
     let parentTitle: String
     let onBack: () -> Void
+    /// A scope line under the bar (Trash's "3 items"); the title itself is always the bar's, inline.
+    var meta: String = ""
+    /// A colour of the page's own for the title (a smart list's, a list's), with its glyph before it.
+    var titleColor: Color? = nil
+    var titleIcon: String = ""
+    var titleIdentifier: String? = nil
     let trailing: () -> Trailing
     let content: () -> Content
 
@@ -338,40 +456,62 @@ struct PushedPage<Trailing: View, Content: View>: View {
         title: String,
         parentTitle: String,
         onBack: @escaping () -> Void,
+        meta: String = "",
+        titleColor: Color? = nil,
+        titleIcon: String = "",
+        titleIdentifier: String? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.parentTitle = parentTitle
         self.onBack = onBack
+        self.meta = meta
+        self.titleColor = titleColor
+        self.titleIcon = titleIcon
+        self.titleIdentifier = titleIdentifier
         self.trailing = trailing
         self.content = content
     }
 
     var body: some View {
-        content()
+        VStack(spacing: 0) {
+            if !meta.isEmpty { KitHeader(title: "", meta: meta) }
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Theme.color("bg", scheme).ignoresSafeArea())
+            .background(Surface.page.ignoresSafeArea())
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // THE BACK KEY IS A CHEVRON IN THE BAR'S OWN GLASS (#1173): a drill-in page
+                    // is the only place a back chevron appears. The parent's name is what a
+                    // screen reader says.
                     Button(action: onBack) {
-                        HStack(spacing: 2) {
-                            CentraidIconView(iconKey: "ChevronLeft", tint: Theme.color("text", scheme), size: 18)
-                            Text(parentTitle)
-                                .centraidType("body")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
+                        CentraidIconView(iconKey: "ChevronLeft", tint: Surface.ink, size: 18)
+                            .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(KitWords.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
+                }
+                if let titleColor {
+                    // THE TITLE IN THE PAGE'S OWN COLOUR, still inline in the top row.
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 6) {
+                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor, size: 20) }
+                            Text(title)
+                                .kitType(.section)
+                                .foregroundStyle(titleColor)
+                                .lineLimit(1)
+                                .accessibilityAddTraits(.isHeader)
+                                .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
             }
@@ -416,9 +556,13 @@ struct EditorRoom<Trailing: View, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AutosaveStatus(status)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.bottom, 4)
+            // WITH NO TRAILING CONTROL THE STATUS TAKES THE BAR'S TRAILING SLOT (the boards' "Done |
+            // title | Saved"); an editor with its own trailing key keeps the line over the content.
+            if !statusInBar {
+                AutosaveStatus(status)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.bottom, 4)
+            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -441,11 +585,18 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("kit-editor-close")
             }
-            ToolbarItem(placement: .topBarTrailing) { trailing() }
+            ToolbarItem(placement: .topBarTrailing) {
+                if statusInBar { AutosaveStatus(status, inline: true) } else { trailing() }
+            }
         }
         .onDisappear(perform: onDeparted)
     }
+
+    private var statusInBar: Bool { Trailing.self == EmptyView.self }
 }
+
+/// A sheet's full-width keys (the ink button and the text key under it): the boards draw them 50 tall.
+private let sheetButtonHeight: CGFloat = 50
 
 /// THE ONE INK BUTTON a sheet may carry.
 struct SheetPrimary {
@@ -464,6 +615,11 @@ struct SheetOutline {
     let label: String
     /// `net` when it destroys.
     var tone: String = "text"
+    /// Drawn as a text key in the link ink, centred, with no outline (the style sheets' Cancel).
+    var link: Bool = false
+    /// With `link`: the word is the page's ink, not the app's (the confirm's Cancel, as the Trash
+    /// and Cancel-event boards draw it).
+    var ink: Bool = false
     var identifier: String = ""
     let action: () -> Void
 }
@@ -481,9 +637,16 @@ struct SheetRoom<Content: View>: View {
     /// sheet without replacing its children's ids, which an identifier on the
     /// container does (#1047).
     var titleIdentifier: String = ""
+    /// A SHEET THAT TAKES THE HEIGHT OF ITS CONTENT (the band's More, a pick): one detent, the
+    /// measured height of the room, and the platform's own sheet ground on iOS 26. A list taller
+    /// than the screen scrolls inside it.
+    var fit: Bool = false
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
+    @State private var natural: CGFloat = 0
+    @State private var floor: CGFloat = 0
 
     init(
         title: String,
@@ -491,6 +654,7 @@ struct SheetRoom<Content: View>: View {
         primary: SheetPrimary? = nil,
         outlines: [SheetOutline] = [],
         titleIdentifier: String = "",
+        fit: Bool = false,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
@@ -498,22 +662,46 @@ struct SheetRoom<Content: View>: View {
         self.primary = primary
         self.outlines = outlines
         self.titleIdentifier = titleIdentifier
+        self.fit = fit
         self.content = content
     }
 
     var body: some View {
+        if fit {
+            ScrollView {
+                room
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { natural = $0 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
+            .modifier(SheetPresentation(detents: natural > 0 ? [.height(natural + floor)] : [.medium]))
+        } else {
+            room
+                // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
+                // floated mid-sheet as a band of `bgElev` between two slabs of the
+                // system's own sheet ground.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .modifier(SheetPresentation())
+        }
+    }
+
+    private var room: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
-                .padding(.top, 20)
+            // A SHEET THAT DRAWS ITS OWN HEAD (the custom repeat's title with Done beside it)
+            // passes no title.
+            if !title.isEmpty {
+                Text(title)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
+                    .padding(.top, 20)
+            }
             content()
             if !status.isEmpty {
                 Text(status)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
                     .accessibilityIdentifier("kit-sheet-status")
             }
             if primary != nil || !outlines.isEmpty {
@@ -528,19 +716,69 @@ struct SheetRoom<Content: View>: View {
                         .disabled(!primary.enabled)
                     }
                     ForEach(Array(outlines.enumerated()), id: \.offset) { _, outline in
-                        KitOutlineButton(label: outline.label, tone: outline.tone, action: outline.action)
+                        if outline.link {
+                            // THE APP'S BLUE, as the board's Cancel: a word, no outline.
+                            Button(action: outline.action) {
+                                Text(outline.label)
+                                    .centraidType("sheetKey")
+                                    .foregroundStyle(outline.ink ? Surface.ink : accent.text)
+                                    .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             .accessibilityIdentifier(outline.identifier)
+                        } else {
+                            KitOutlineButton(label: outline.label, tone: outline.tone, action: outline.action)
+                                .accessibilityIdentifier(outline.identifier)
+                        }
                     }
                 }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.bottom, 16)
-        // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
-        // floated mid-sheet as a band of `bgElev` between two slabs of the
-        // system's own sheet ground.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .modifier(SheetPresentation())
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+/// A ROUTED SCREEN THAT IS A SHEET (`Route.sheet`: Money's target, Photos' picker), as the boards
+/// draw it: the X at the leading edge (Cancel, in the bar's own glass), the title between, the
+/// page under it and, when the screen has one, a foot pinned to the bottom edge for its verbs.
+/// Cancel, a swipe down and a finished screen all close it the same way: the shell drops the
+/// sheet and Rust is told the pop.
+struct SheetPage<Content: View, Foot: View>: View {
+    let title: String
+    var cancelLabel: String = KitWords.CANCEL
+    let onCancel: () -> Void
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let foot: () -> Foot
+
+    var body: some View {
+        NavigationStack {
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .sheetPageGround()
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    foot()
+                        .frame(maxWidth: .infinity)
+                        .sheetPageGround(edges: .bottom)
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onCancel) {
+                            CentraidIconView(iconKey: "X", tint: Surface.ink, size: 18)
+                                .frame(minWidth: 30, minHeight: CentraidGeometry.targetMinCoarse)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(cancelLabel)
+                        .accessibilityIdentifier("kit-sheet-cancel")
+                    }
+                }
+        }
+        .modifier(SheetPresentation(detents: [.large]))
     }
 }
 
@@ -550,17 +788,29 @@ struct SheetRoom<Content: View>: View {
 /// hosting controller of its own) can state them again on the sheet's root.
 struct SheetPresentation: ViewModifier {
     var detents: Set<PresentationDetent> = [.medium, .large]
-
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content
-            .presentationBackground(Theme.color("bgElev", scheme))
+            .modifier(SheetGround())
             .presentationDragIndicator(.visible)
             .presentationDetents(detents)
             // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
             // root's (see `Theme.textSizeCap`).
             .dynamicTypeSize(...Theme.textSizeCap)
+    }
+}
+
+/// THE GROUND UNDER EVERY SHEET: the system's own on iOS 26 (Liquid Glass), and the kit's cream
+/// `sheet` surface only before it. Fixed here, once, so no sheet states its own ground and none
+/// lays a slab of its own colour on the glass (the owner's ruling, #1173).
+private struct SheetGround: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else {
+            content.presentationBackground(Surface.sheet)
+        }
     }
 }
 
@@ -573,36 +823,83 @@ struct KitInkButton: View {
     var destructive: Bool = false
     /// When non-empty, replaces the default `kit-primary` / `kit-destructive` id.
     var identifier: String = ""
+    /// A glyph before the label (the lock wall's face or fingerprint); empty for none.
+    var iconKey: String = ""
     let action: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
-    /// Disabled is still drawn: a `bgSunken` slab with a `textDisabled` label
-    /// (a destructive one, a `textDisabled` outline) — never hidden, never faded.
-    private var ink: String { enabled ? (destructive ? "net" : "onAccent") : "textDisabled" }
+    /// THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label;
+    /// a destructive one is the outlined state-red pill at the same width. Disabled is still
+    /// drawn: the fill colour with meta ink, never hidden, never faded.
+    private var ink: Color {
+        guard enabled else { return Surface.meta }
+        return destructive ? StateColor.red.text : .white
+    }
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .centraidType("labelOn")
-                .foregroundStyle(Theme.color(ink, scheme))
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            // `sheetKey` IS THE BOARD'S 16/600: `.fontWeight` does not reach a custom face.
+            HStack(spacing: 10) {
+                if !iconKey.isEmpty {
+                    CentraidIconView(iconKey: iconKey, tint: ink, size: 20)
+                        .accessibilityHidden(true)
+                }
+                Text(label)
+                    .centraidType("sheetKey")
+                    .foregroundStyle(ink)
+            }
+                .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {
                     if !destructive {
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .fill(Theme.color(enabled ? "accent" : "bgSunken", scheme))
+                        Capsule().fill(enabled ? accent.fill : Surface.fill)
                     }
                 }
                 .overlay {
                     if destructive {
-                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .strokeBorder(Theme.color(enabled ? "net" : "textDisabled", scheme), lineWidth: 1.5)
+                        Capsule().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
                     }
                 }
-                .contentShape(Rectangle())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)
+    }
+}
+
+extension View {
+    /// A SHEET PAGE'S GROUND: the system's glass on iOS 26 (nothing drawn), the kit's `sheet`
+    /// surface before it.
+    @ViewBuilder
+    func sheetPageGround(edges: Edge.Set = .all) -> some View {
+        if #available(iOS 26, *) {
+            self
+        } else {
+            self.background(Surface.sheet.ignoresSafeArea(edges: edges))
+        }
+    }
+
+    /// A GROUPED CARD INSIDE A SHEET: on iOS 26 the system's own grouped fill over the glass (no
+    /// cream slab), the kit's `sheetCard` before it.
+    @ViewBuilder
+    func sheetCardGround(_ shape: some Shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)) -> some View {
+        if #available(iOS 26, *) {
+            self.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
+        } else {
+            self.background(Surface.sheetCard, in: shape)
+        }
+    }
+
+    /// A PAGE THAT SCROLLS UNDER GLASS KEYS WITH CONTENT OF ITS OWN (a hero's round keys) takes a
+    /// hard top edge on iOS 26: the content stops at the bar's edge instead of showing through the
+    /// glass behind the back and Edit keys. Earlier systems draw no such edge, so nothing changes.
+    @ViewBuilder
+    func hardTopScrollEdge() -> some View {
+        if #available(iOS 26, *) {
+            scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
     }
 }

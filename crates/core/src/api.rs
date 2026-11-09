@@ -345,7 +345,7 @@ fn local_day_of(zone: &centraid_vault::time::zone::FireZone, text: &str) -> Opti
     if is_date {
         return Some(text.to_owned());
     }
-    centraid_apps_agenda::local::today(zone, text)
+    centraid_apps_kit::civil::today(zone, text)
 }
 
 /// The column whose code `PageQuery.with_minor_units` states the exponent of.
@@ -660,7 +660,7 @@ mod tests {
             };
             assert_eq!(
                 row.values[2].kind,
-                centraid_apps_agenda::local::today(&zone, created).map(wire::value::Kind::Text),
+                centraid_apps_kit::civil::today(&zone, created).map(wire::value::Kind::Text),
                 "the day {created} falls on at UTC+14"
             );
         }
@@ -1091,7 +1091,7 @@ mod tests {
                 })
                 .collect()
         };
-        for name in ["test", "home.people", "agenda.task.trash", "assist.native"] {
+        for name in ["test", "home.people", "reminders.trash", "assist.native"] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(
                 !titles(&answer).contains(&"Bank login".to_owned()),
@@ -1123,6 +1123,117 @@ mod tests {
         let refused = ask("locker.phone.rows", "locker_item", &["id"], "id", "id")
             .expect_err("`locker_item` is not a paged table");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE NEW LOCKER LINKS ARE EDGES THAT START AT THE ITEM, AND STAY BEHIND THE
+    /// WALL (#1173, O2/O4). A Locker item that is `about` an account, a place or a
+    /// person, or `with` one, is hidden from every page not named for Locker, from
+    /// the edge's start as from its end: People's read of the edges that end at a
+    /// person must not see the item.
+    #[test]
+    fn a_locker_items_links_to_a_person_an_account_and_a_place_stay_behind_the_wall() {
+        let scratch = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        let owner = Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| -> serde_json::Value {
+            let ran = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &centraid_vault::commands::Command::new(name, input),
+                )
+                .expect("the command is answered");
+            assert_eq!(
+                ran.status,
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
+                ran.reason
+            );
+            ran.output
+        };
+        let id = |output: serde_json::Value| output["id"].as_str().expect("an id").to_owned();
+        let person = id(run("person.add", serde_json::json!({"title": "Maya"})));
+        let account = id(run(
+            "account.add",
+            serde_json::json!({"title": "Everyday", "type": "checking", "currency": "USD"}),
+        ));
+        let place = id(run("place.add", serde_json::json!({"title": "Home"})));
+        run(
+            "locker.add_item",
+            serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
+        );
+        for (rel, to) in [
+            ("about", &person),
+            ("with", &person),
+            ("about", &account),
+            ("about", &place),
+        ] {
+            run(
+                "edge.add",
+                serde_json::json!({"from": "lk1", "rel": rel, "to": to}),
+            );
+        }
+        // A note that links the item: following the link from Notes goes nowhere, because the
+        // edge and the item are not served to Notes.
+        let note = id(run(
+            "note.create",
+            serde_json::json!({"title": "Banking", "body": "see the login"}),
+        ));
+        run(
+            "edge.add",
+            serde_json::json!({"from": note, "rel": "links", "to": "lk1"}),
+        );
+        let ask = |name: &str, to: Option<&str>| {
+            let mut asked = query(&["from_id", "to_id"], "from_id", "to_id");
+            asked.name = name.to_owned();
+            asked.from = "edge".to_owned();
+            if let Some(to) = to {
+                asked.r#where = Some("to_id = ?".to_owned());
+                asked.bind = vec![wire::Value {
+                    kind: Some(wire::value::Kind::Text(to.to_owned())),
+                }];
+            }
+            page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(asked),
+                    limit: 100,
+                    after: None,
+                },
+            )
+            .expect("a page")
+        };
+        for name in [
+            "home.people",
+            "people.vault.in",
+            "notes.library",
+            "assist.native",
+        ] {
+            for to in [
+                None,
+                Some(person.as_str()),
+                Some(account.as_str()),
+                Some(place.as_str()),
+            ] {
+                assert!(
+                    ask(name, to).rows.is_empty(),
+                    "{name} saw a Locker link ({to:?})"
+                );
+            }
+        }
+        assert_eq!(
+            ask("locker.phone.tags", None).rows.len(),
+            5,
+            "Locker's own read sees its four links and the note's link into it"
+        );
+        assert!(
+            ask("notes.library", Some("lk1")).rows.is_empty(),
+            "a link into the Locker is not followed from Notes"
+        );
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

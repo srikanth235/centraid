@@ -7,7 +7,7 @@
 //! | kind | app | entity | a tap opens |
 //! |---|---|---|---|
 //! | person | people | `person` | the person |
-//! | event | agenda | `event` | the event |
+//! | event | calendar | `event` | the event |
 //! | task | tasks | `task` | the task |
 //! | note | notes | `note` | the note |
 //! | document | docs | `document` | the document |
@@ -75,15 +75,15 @@ const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
 /// THE TABLE. Every kind.
 pub const TABLE: [CardKind; 18] = [
     row(Kind::Person, App::People, "person"),
-    row(Kind::Event, App::Agenda, "event"),
-    row(Kind::Task, App::Agenda, "task"),
+    row(Kind::Event, App::Calendar, "event"),
+    row(Kind::Task, App::Reminders, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
     row(Kind::Album, App::Photos, "album"),
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
-    row(Kind::List, App::Agenda, "project"),
+    row(Kind::List, App::Reminders, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
     row(Kind::LockerItem, App::Locker, "locker_item"),
     row(Kind::Workout, App::Health, "workout"),
@@ -115,19 +115,164 @@ pub fn app_of(kind: Kind) -> Option<App> {
 
 /// The card of a row: its name, its date, and one word of state.
 #[must_use]
-pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
+pub fn card_of(row: &Row, today: Date) -> Option<Card> {
     let how = card_kind(row.kind)?;
     let mut card = Card::new(how.app, how.entity, row.id.clone(), row.name.clone());
-    if let Some(stamp) = row.date {
-        card = card.subtitle(stamp.show());
+    // A person's date is when the row was made, which says nothing about them; every other kind's
+    // is the day it is about.
+    if let Some(stamp) = row.date.filter(|_| row.kind != Kind::Person) {
+        card = card.subtitle(friendly(stamp, today));
+    }
+    match row.kind {
+        Kind::Event => card = card.subtitle(event_line(row, today)),
+        Kind::Person => card = card.subtitle(person_line(row, today)),
+        _ => {}
     }
     // A transaction's one word is what it moved: `-42.00 USD`.
     let state = match (row.kind, row.field("amount"), row.field("status")) {
         (Kind::Transaction, Some(amount), _) => amount.show(None),
-        (_, _, Some(Val::Enum(status))) => (*status).to_owned(),
+        // the ordinary state of a row is not worth a word on a card
+        (_, _, Some(Val::Enum(status))) if !matches!(*status, "confirmed" | "open" | "posted") => {
+            (*status).to_owned()
+        }
         _ => String::new(),
     };
     Some(card.meta(state))
+}
+
+/// An event's second line as the board draws it: the day and the span, then the place
+/// (`Today · 11:15 – 12:30 · Café Lume`). The end is the start and the event's length.
+fn event_line(row: &Row, today: Date) -> String {
+    use crate::native::dates::clock;
+    let mut line = row
+        .date
+        .map(|stamp| friendly(stamp, today))
+        .unwrap_or_default();
+    if let (Some(start), Some(Val::Num(minutes))) = (row.date, row.field("duration"))
+        && start.time.is_some()
+        && *minutes > 0
+        && let Ok(end) = start
+            .at()
+            .checked_add(jiff::SignedDuration::from_mins(*minutes))
+        && end.date() == start.date
+    {
+        line = format!("{line} – {}", clock(end.time()));
+    }
+    match row.extra.get("place") {
+        Some(place) if !line.is_empty() => format!("{line} · {place}"),
+        Some(place) => place.clone(),
+        None => line,
+    }
+}
+
+/// A person's second line: what they are to the member and the one fact worth a word today,
+/// their birthday when it is near (`Landlord · birthday today`).
+fn person_line(row: &Row, today: Date) -> String {
+    let role = match row.field("role") {
+        Some(Val::Text(role)) => role.clone(),
+        _ => String::new(),
+    };
+    let birthday = row
+        .extra
+        .get("birthday")
+        .and_then(|day| birthday_fact(day, today));
+    match (role.is_empty(), birthday) {
+        (false, Some(fact)) => format!("{role} · {fact}"),
+        (false, None) => role,
+        (true, Some(fact)) => fact,
+        (true, None) => String::new(),
+    }
+}
+
+/// `birthday today`, `birthday tomorrow`, or `birthday Fri 6 Nov` when it falls in the next
+/// month; none when it is further off or past. The stored day is `MM-DD` or a full date.
+fn birthday_fact(day: &str, today: Date) -> Option<String> {
+    let (month, date) = match day.len() {
+        5 => day.split_once('-')?,
+        10 => day[5..].split_once('-')?,
+        _ => return None,
+    };
+    let (month, date): (i8, i8) = (month.parse().ok()?, date.parse().ok()?);
+    let next = [today.year(), today.year() + 1]
+        .into_iter()
+        .find_map(|year| {
+            let found = Date::new(year, month, date).ok()?;
+            (found >= today).then_some(found)
+        })?;
+    match (next - today).get_days() {
+        0 => Some("birthday today".to_owned()),
+        1 => Some("birthday tomorrow".to_owned()),
+        2..=30 => {
+            const MONTHS: [&str; 12] = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
+            Some(format!(
+                "birthday {} {} {}",
+                crate::native::dates::weekday_abbrev(next),
+                next.day(),
+                MONTHS[usize::try_from(next.month() - 1).unwrap_or(0)]
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// The stored card of one proposed step, so a thread reopened later can draw the proposal's row
+/// (title and when) inert. A step whose kind belongs to no app has none.
+pub const PROPOSAL_STEP: &str = "proposal_step";
+
+/// The step cards of a parked write, in order: `qualifier` is the verb, `meta` the kind, `title`
+/// the row's name and `subtitle` when it is.
+#[must_use]
+pub fn step_cards(steps: &[crate::native_turn::CardStep]) -> Vec<Card> {
+    steps
+        .iter()
+        .enumerate()
+        .filter_map(|(at, step)| {
+            let kind = Kind::ALL
+                .into_iter()
+                .find(|kind| kind.name() == step.kind)?;
+            let mut card = Card::new(
+                app_of(kind)?,
+                PROPOSAL_STEP,
+                (at + 1).to_string(),
+                step.title.clone(),
+            )
+            .subtitle(step.when.clone())
+            .meta(step.kind.clone());
+            card.qualifier.clone_from(&step.verb);
+            Some(card)
+        })
+        .collect()
+}
+
+/// A card's day in the member's words (the board's "Today · 11:15"): today, tomorrow and
+/// yesterday by name, any other day as `Fri 6 Nov` (with the year when it is not this one), then
+/// the time when the row has one.
+fn friendly(stamp: crate::native::dates::Stamp, today: Date) -> String {
+    use crate::native::dates::{clock, weekday_abbrev};
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let date = stamp.date;
+    let day = match (date - today).get_days() {
+        0 => "Today".to_owned(),
+        1 => "Tomorrow".to_owned(),
+        -1 => "Yesterday".to_owned(),
+        _ => {
+            let month = MONTHS[usize::try_from(date.month() - 1).unwrap_or(0)];
+            let year = if date.year() == today.year() {
+                String::new()
+            } else {
+                format!(" {}", date.year())
+            };
+            format!("{} {} {month}{year}", weekday_abbrev(date), date.day())
+        }
+    };
+    match stamp.time {
+        Some(time) => format!("{day} · {}", clock(time)),
+        None => day,
+    }
 }
 
 #[cfg(test)]
@@ -191,5 +336,104 @@ mod tests {
             card_kind(Kind::Transaction).map(|how| how.opens),
             Some(Opens::Row)
         );
+    }
+
+    fn blank(kind: Kind, name: &str) -> Row {
+        Row {
+            kind,
+            id: "r1".to_owned(),
+            name: name.to_owned(),
+            date: None,
+            fields: std::collections::BTreeMap::new(),
+            trashed: false,
+            created: String::new(),
+            updated: String::new(),
+            extra: std::collections::BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn an_event_card_carries_its_span_and_its_place() {
+        use crate::native::dates::Stamp;
+        let today = Date::constant(2026, 11, 8);
+        let mut row = blank(Kind::Event, "Lunch with Ana");
+        row.date = Stamp::parse("2026-11-08T11:15:00");
+        row.fields.insert("duration", Val::Num(75));
+        row.extra.insert("place", "Café Lume".to_owned());
+        assert_eq!(
+            card_of(&row, today).unwrap().subtitle,
+            "Today · 11:15 – 12:30 · Café Lume"
+        );
+        row.extra.clear();
+        assert_eq!(
+            card_of(&row, today).unwrap().subtitle,
+            "Today · 11:15 – 12:30"
+        );
+        row.fields.clear();
+        assert_eq!(card_of(&row, today).unwrap().subtitle, "Today · 11:15");
+        row.date = Stamp::parse("2026-11-09");
+        row.extra.insert("place", "Café Lume".to_owned());
+        assert_eq!(
+            card_of(&row, today).unwrap().subtitle,
+            "Tomorrow · Café Lume"
+        );
+    }
+
+    #[test]
+    fn a_person_card_carries_their_role_and_a_near_birthday() {
+        let today = Date::constant(2026, 11, 8);
+        let mut row = blank(Kind::Person, "Ana Díaz");
+        assert_eq!(card_of(&row, today).unwrap().subtitle, "");
+        row.fields.insert("role", Val::Text("Landlord".to_owned()));
+        assert_eq!(card_of(&row, today).unwrap().subtitle, "Landlord");
+        for (born, said) in [
+            ("11-08", "Landlord · birthday today"),
+            ("1984-11-09", "Landlord · birthday tomorrow"),
+            ("11-14", "Landlord · birthday Sat 14 Nov"),
+            ("03-02", "Landlord"),
+        ] {
+            row.extra.insert("birthday", born.to_owned());
+            assert_eq!(card_of(&row, today).unwrap().subtitle, said, "{born}");
+        }
+        row.fields.clear();
+        row.extra.insert("birthday", "11-08".to_owned());
+        assert_eq!(card_of(&row, today).unwrap().subtitle, "birthday today");
+    }
+
+    #[test]
+    fn a_proposed_step_is_stored_as_a_card_a_reopened_thread_can_draw() {
+        let step = crate::native_turn::CardStep {
+            verb: "create".to_owned(),
+            kind: "task".to_owned(),
+            title: "Bring Ana a birthday card".to_owned(),
+            summary: String::new(),
+            when: "today 10:45".to_owned(),
+            changes: String::new(),
+            destructive: false,
+        };
+        let cards = step_cards(&[step]);
+        assert_eq!(cards.len(), 1);
+        let card = &cards[0];
+        assert_eq!((card.app, card.entity), (App::Reminders, PROPOSAL_STEP));
+        assert_eq!(
+            (
+                card.qualifier.as_str(),
+                card.meta.as_str(),
+                card.subtitle.as_str()
+            ),
+            ("create", "task", "today 10:45")
+        );
+    }
+
+    #[test]
+    fn a_card_says_its_day_in_words_and_a_person_has_none() {
+        use crate::native::dates::Stamp;
+        let today = Date::constant(2026, 11, 8);
+        let at = |text: &str| friendly(Stamp::parse(text).unwrap(), today);
+        assert_eq!(at("2026-11-08T16:00:00"), "Today · 16:00");
+        assert_eq!(at("2026-11-09"), "Tomorrow");
+        assert_eq!(at("2026-11-07"), "Yesterday");
+        assert_eq!(at("2026-11-05 06:09"), "Thu 5 Nov · 06:09");
+        assert_eq!(at("2027-01-02"), "Sat 2 Jan 2027");
     }
 }

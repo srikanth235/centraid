@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.EmptyState
 import centraid.core.v1.PhotoTile as WireTile
 import dev.centraid.android.theme.centraidColor
+import androidx.compose.ui.graphics.Color
 import dev.centraid.android.theme.centraidType
 import centraid.core.v1.PhotosPackedRow
 
@@ -67,6 +68,8 @@ public fun PhotoCellsGrid(
     taken: Set<String> = emptySet(),
     /** What a taken cell says after its own label ("Already in this album"), Rust's words. */
     takenLabel: String = "",
+    /** A picker's cells all carry the empty ring and the chosen a frame (the board draws both). */
+    showsRing: Boolean = false,
     minimumCell: Int = 96,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
@@ -90,6 +93,7 @@ public fun PhotoCellsGrid(
                 isSelected = cell.photo_id in selected,
                 isTaken = cell.photo_id in taken,
                 takenLabel = takenLabel,
+                showsRing = showsRing,
                 onTap = onTap,
                 onFetch = onFetch,
             )
@@ -104,6 +108,7 @@ public fun PhotoCellSquare(
     isSelected: Boolean = false,
     isTaken: Boolean = false,
     takenLabel: String = "",
+    showsRing: Boolean = false,
     onTap: ((String) -> Unit)? = null,
     onFetch: ((assetId: String, contentHash: String) -> Unit)? = null,
 ) {
@@ -137,6 +142,11 @@ public fun PhotoCellSquare(
             SelectionDot(selected = true, muted = true)
         } else if (isSelected) {
             SelectionDot(selected = true)
+        } else if (showsRing) {
+            SelectionDot(selected = false)
+        }
+        if (isSelected && !isTaken && showsRing) {
+            Box(Modifier.fillMaxSize().border(SELECTION_OUTLINE.dp, appAccent("photos").fill))
         }
         KindLine(cell, rung = TILE_KIND_MIN_RUNG)
     }
@@ -197,7 +207,7 @@ public fun PhotoTile(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .border(SELECTION_OUTLINE.dp, centraidColor("text")),
+                    .border(SELECTION_OUTLINE.dp, appAccent("photos").fill),
             )
         }
         HeldState(cell, onFetch)
@@ -213,7 +223,7 @@ public fun PhotoTile(
  * photograph still on its way gets none — tapping it would ask for something
  * already queued — and `HELD_ORIGINAL` and `HELD_ABSENT` draw nothing at all.
  *
- * A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
+ * A FETCH IS A LINE AND NOT A SPINNER (product-intuition/references/design-behaviour.md § Status line: loading is determinate or
  * static, never a spinner). The byte plane reports completion and not progress
  * (the tile carries no percentage), so the honest mark is words on the tile's own
  * chip — v0's state slot, which is one quiet mono line on the page colour.
@@ -268,13 +278,15 @@ private fun BoxScope.HeldState(
 
 /**
  * SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6
- * in. Selecting and not picked is an outline in the stage's ink; picked is a
- * filled ink circle with the inverse tick. INK, never a hue: DESIGN.md keeps
- * colour off controls, and a picked photograph is a control's state.
+ * in. Not picked is a white outline over the photograph; picked is the app's fill under a white
+ * tick (#1173); taken, already in the album, is a white disc with a grey tick.
  */
 @Composable
 private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
-    val ink = if (muted) centraidColor("textSoft") else centraidColor("text")
+    // NOT PICKED is a white outline over the photograph; PICKED is the app's fill under a white
+    // tick (#1173); TAKEN (already in the album) is a white disc with a grey tick, so the two
+    // never read alike.
+    val fill = appAccent("photos").fill
     Box(
         Modifier
             .align(Alignment.TopEnd)
@@ -282,22 +294,23 @@ private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
             .size(SELECTION_DOT.dp)
             .clip(CircleShape)
             .then(
-                if (selected) {
-                    Modifier.background(ink).border(1.5.dp, ink, CircleShape)
-                } else {
-                    Modifier.border(1.5.dp, centraidColor("onStage"), CircleShape)
+                when {
+                    muted -> Modifier.background(Color.White)
+                    selected -> Modifier.background(fill).border(1.5.dp, Color.White, CircleShape)
+                    else -> Modifier.border(1.5.dp, Color.White, CircleShape)
                 },
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) CentraidIcon(iconKey = "Check", tint = centraidColor("textInv"), size = 13.dp)
+        if (muted) CentraidIcon(iconKey = "Check", tint = Surface.meta, size = 13.dp)
+        else if (selected) CentraidIcon(iconKey = "Check", tint = Color.White, size = 13.dp)
     }
 }
 
 /**
  * SLOT 3 — KIND (v0's `kindOverlay`): a video's length or `live`, in mono,
  * bottom-trailing, from rung S up — below it the type would have to shrink
- * past legibility, and DESIGN.md puts the floor there rather than shrinking it.
+ * past legibility, and product-intuition/references/design-behaviour.md § Accessibility puts the floor there rather than shrinking it.
  * A video whose length the vault does not know still says it is a video,
  * with the catalog's play mark, because that is what changes what a tap does.
  */
@@ -340,7 +353,7 @@ public fun mediaClock(seconds: Int): String = MediaClock.clock(seconds.toLong())
  * Skeleton tiles at the rung's own geometry, packed by Rust at the width the
  * shell reported ([rows] is `PhotosLibraryLoading.skeleton`), so the photographs
  * land where their placeholders stood. The aspect sequence is FIXED — random
- * aspects would flicker — and nothing moves: DESIGN.md's `Loading` is static
+ * aspects would flicker — and nothing moves: product-intuition/references/design-behaviour.md § Status line: `Loading` is static
  * skeletons, and a shimmer is attention-seeking about work the product can
  * simply describe.
  */

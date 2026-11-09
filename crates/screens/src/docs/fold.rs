@@ -10,10 +10,10 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::{folders, routes};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, docs as words, shared};
 
-/// The `design/native-catalog.json` key of a trash glyph.
+/// The `design/icons.toml` key of a trash glyph.
 pub const TRASH_ICON: &str = "trash";
 
 // The keys a `DocsAction` carries, and so what `ActionPicked` sends.
@@ -27,6 +27,7 @@ pub const KEY_TRASH: &str = "trash";
 pub const KEY_RESTORE: &str = "restore";
 pub const KEY_PURGE: &str = "purge";
 pub const KEY_MORE: &str = "more";
+pub const KEY_SHARE: &str = "share";
 
 /// "1 document" / "24 documents".
 #[must_use]
@@ -52,9 +53,9 @@ pub fn dated(locale: Locale, verb: &str, local: &str, today: &str) -> String {
 
 /// "Wed 11 March 09:12", or `None` for no reading.
 #[must_use]
-pub fn stamp(locale: Locale, local: &str) -> Option<String> {
+pub fn stamp(locale: Locale, cycle: HourCycle, local: &str) -> Option<String> {
     let day = local.get(..10)?;
-    let clock = civil::clock(local);
+    let clock = civil::clock_for(locale, local, cycle);
     let day = civil::day_month(locale, day);
     Some(if clock.is_empty() {
         day
@@ -113,17 +114,62 @@ pub fn row(
         starred: row.starred,
         trashed: row.trashed,
         folder_id: row.folder_id.clone(),
-        labels: row
-            .labels
-            .iter()
-            .map(|label| wire::DocsLabelChip {
-                tag_id: label.tag_id.clone(),
-                label: label.label.clone(),
-            })
-            .collect(),
+        labels: row.labels.iter().map(chip).collect(),
         snippet: snippet(&row.snippet),
         accessibility_label,
+        thumbnail_path: row.thumbnail_path.clone(),
+        badge: badge(row),
+        dot_color_key: row
+            .labels
+            .first()
+            .map(|label| color_key(&label.color, &label.tag_id))
+            .unwrap_or_default(),
     }
+}
+
+/// A label as a chip, wearing its colour.
+#[must_use]
+pub fn chip(label: &wire::DocsLabel) -> wire::DocsLabelChip {
+    wire::DocsLabelChip {
+        tag_id: label.tag_id.clone(),
+        label: label.label.clone(),
+        color_key: color_key(&label.color, &label.tag_id),
+        selected: false,
+    }
+}
+
+/// THE PALETTE KEY A LABEL IS DRAWN IN: the one the vault stores, else (a label
+/// minted before labels had colours) a stable one from its id, so a label never
+/// changes colour between reads and a view never has to choose.
+#[must_use]
+pub fn color_key(stored: &str, tag_id: &str) -> String {
+    centraid_design::list_color_key(tag_id, Some(stored)).to_owned()
+}
+
+/// The kind badge on a thumbnail: the file's own extension when it has a short
+/// one ("PDF", "MD", "XLSX"), else a short mark for its kind.
+#[must_use]
+pub fn badge(row: &wire::DocsDocumentRow) -> String {
+    let extension = row
+        .title
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .filter(|extension| (1..=4).contains(&extension.len()))
+        .filter(|extension| extension.chars().all(|c| c.is_ascii_alphanumeric()));
+    if let Some(extension) = extension {
+        return extension.to_uppercase();
+    }
+    match row.kind() {
+        wire::DocsKind::Pdf => "PDF",
+        wire::DocsKind::Image => "IMG",
+        wire::DocsKind::Video => "VID",
+        wire::DocsKind::Audio => "AUD",
+        wire::DocsKind::Spreadsheet => "XLS",
+        wire::DocsKind::Presentation => "PPT",
+        wire::DocsKind::Document => "DOC",
+        wire::DocsKind::Unspecified | wire::DocsKind::Other => "FILE",
+    }
+    .to_owned()
 }
 
 /// The index's highlight, `⟦`/`⟧` around the matched words, as runs.
@@ -170,7 +216,7 @@ pub fn surface_of(surface: wire::DocsSurface) -> wire::DocsSurfaceKind {
     }
 }
 
-/// A `design/native-catalog.json` key for a kind.
+/// A `design/icons.toml` key for a kind.
 #[must_use]
 pub fn icon_of(kind: wire::DocsKind) -> &'static str {
     match kind {
@@ -258,29 +304,66 @@ pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::Do
     actions
 }
 
+/// THE QUICK LOOK BAR: Share, Star, Labels, Move and Trash on a live document
+/// (the five a viewer needs under its thumb); Restore and Delete forever on a
+/// trashed one. Everything else is behind More.
+#[must_use]
+pub fn bar_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
+    if row.trashed {
+        return head_actions(locale, row);
+    }
+    vec![
+        action(KEY_SHARE, words::action_share(locale), "Share"),
+        if row.starred {
+            action(KEY_UNSTAR, words::action_unstar(locale), "Star")
+        } else {
+            action(KEY_STAR, words::action_star(locale), "Star")
+        },
+        action(KEY_LABELS, words::action_labels(locale), "Tag"),
+        action(KEY_MOVE, words::action_move(locale), "Folder"),
+        wire::DocsAction {
+            destructive: true,
+            ..action(KEY_TRASH, words::action_trash(locale), TRASH_ICON)
+        },
+    ]
+}
+
 /// The labels sheet for a row, shared with the document page.
 #[must_use]
 pub fn labels_sheet(
     locale: Locale,
     row: &wire::DocsDocumentRow,
     drive_labels: &[String],
+    entries: &[wire::DocsLabel],
     draft: &str,
 ) -> wire::DocsLabelsSheet {
     let on: Vec<&str> = row.labels.iter().map(|chip| chip.label.as_str()).collect();
     let typed = draft.trim();
     wire::DocsLabelsSheet {
-        current: row
-            .labels
-            .iter()
-            .map(|chip| wire::DocsLabelChip {
-                tag_id: chip.tag_id.clone(),
-                label: chip.label.clone(),
-            })
-            .collect(),
+        current: row.labels.iter().map(chip).collect(),
         available: drive_labels
             .iter()
             .filter(|label| !on.contains(&label.as_str()))
             .cloned()
+            .collect(),
+        // THE SAME LABELS WEARING THEIR COLOURS, for the offers' dots: one per `available` word.
+        options: drive_labels
+            .iter()
+            .filter(|label| !on.contains(&label.as_str()))
+            .map(|label| {
+                entries
+                    .iter()
+                    .find(|entry| &entry.label == label)
+                    .map_or_else(
+                        || wire::DocsLabelChip {
+                            tag_id: label.clone(),
+                            label: label.clone(),
+                            color_key: color_key("", label),
+                            selected: false,
+                        },
+                        chip,
+                    )
+            })
             .collect(),
         draft: draft.to_owned(),
         can_add: !typed.is_empty() && !on.contains(&typed),
@@ -299,6 +382,7 @@ pub fn labels_sheet(
 #[must_use]
 pub fn document(
     locale: Locale,
+    cycle: HourCycle,
     answer: &wire::DocsDocument,
     drive: Option<&wire::DocsDrive>,
 ) -> wire::DocsDocumentData {
@@ -326,15 +410,51 @@ pub fn document(
         .map(|drive| folders::nodes(locale, &drive.folders, &view.title))
         .unwrap_or_default();
     wire::DocsDocumentData {
+        about: None,
         surface: Some(surface),
-        facts: facts(locale, found, answer, &view),
+        facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         versions: versions_link(locale, answer, found, &view.title),
         actions: head_actions(locale, found),
+        bar: bar_actions(locale, found),
+        kind_size: [view.kind_label.clone(), found.size.clone()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · "),
+        changed: dated(
+            locale,
+            &words::changed(locale),
+            if found.updated_local.is_empty() {
+                &found.created_local
+            } else {
+                &found.updated_local
+            },
+            &answer.today,
+        ),
+        subtitle: subtitle(locale, answer),
+        labels_heading: words::action_labels(locale),
         trashed_note: trashed_note(locale, found),
         folders: nodes,
         labels: drive.map(|d| d.labels.clone()).unwrap_or_default(),
         row: Some(view),
+    }
+}
+
+/// "Docs › Taxes 2025": where the document is filed, for the head's second line.
+fn subtitle(locale: Locale, answer: &wire::DocsDocument) -> String {
+    let root = words::subtitle_root(locale);
+    match answer
+        .path
+        .last()
+        .map(|folder| folder.name.trim())
+        .filter(|name| !name.is_empty())
+    {
+        Some(folder) => crate::strings::fill(
+            &words::subtitle_in(locale),
+            &[("root", &root), ("folder", folder)],
+        ),
+        None => root,
     }
 }
 
@@ -420,6 +540,7 @@ fn stage(
 
 fn facts(
     locale: Locale,
+    cycle: HourCycle,
     row: &wire::DocsDocumentRow,
     answer: &wire::DocsDocument,
     view: &wire::DocsRowView,
@@ -441,10 +562,10 @@ fn facts(
             .filter(|name| !name.trim().is_empty())
             .unwrap_or_else(|| words::move_top(locale)),
     ));
-    if let Some(added) = stamp(locale, &row.created_local) {
+    if let Some(added) = stamp(locale, cycle, &row.created_local) {
         facts.push(fact(words::fact_added(locale), added));
     }
-    if let Some(changed) = stamp(locale, &row.updated_local) {
+    if let Some(changed) = stamp(locale, cycle, &row.updated_local) {
         facts.push(fact(words::fact_changed(locale), changed));
     }
     if !row.labels.is_empty() {
@@ -468,11 +589,16 @@ fn facts(
 
 /// One version of the history page.
 #[must_use]
-pub fn version(locale: Locale, version: &wire::DocsVersion, trashed: bool) -> wire::DocsVersionRow {
+pub fn version(
+    locale: Locale,
+    cycle: HourCycle,
+    version: &wire::DocsVersion,
+    trashed: bool,
+) -> wire::DocsVersionRow {
     let meta = [
         version.current.then(|| words::current(locale)),
         Some(version.size.clone()).filter(|size| !size.is_empty()),
-        stamp(locale, &version.asserted_local),
+        stamp(locale, cycle, &version.asserted_local),
     ]
     .into_iter()
     .flatten()

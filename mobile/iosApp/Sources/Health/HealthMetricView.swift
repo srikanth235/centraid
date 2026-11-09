@@ -1,17 +1,16 @@
 import SwiftUI
 
-/// `health.metric` — one metric over a week, a month or a year (#1129, #1135), on the kit.
+/// `health.metric` — one metric over a week, a month, 6 months or a year (#1129, #1135, #1173), on
+/// the kit, on a plain page.
 ///
-/// **THE VIEW DECIDES NOTHING.** The segments, the caption, the average and its unit, the line
-/// against the typical, every bar's height and which bar is the current one, the ticks, the facts
-/// and the foot are `HealthMetricState`'s (Rust makes them: `crates/screens`, module `health`);
-/// this lays them out. The current bucket's bar is the app's one hue mark (R-1129-10).
+/// **THE VIEW DECIDES NOTHING.** The segments, the average's label and figure, the caption, the line
+/// against the typical, every bar's height and callout, the usual range, the ticks, the facts and
+/// the "About" paragraph are `HealthMetricState`'s (Rust makes them: `crates/screens`, module
+/// `health`); this lays them out. The scrubber's finger is the chart's own state.
 struct HealthMetricView: View {
     let state: Centraid_Core_V1_HealthMetricState
     let send: (Centraid_Core_V1_HealthMetricEvent) -> Void
     let onBack: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
 
     private func event(_ build: (inout Centraid_Core_V1_HealthMetricEvent) -> Void) -> Centraid_Core_V1_HealthMetricEvent {
         var event = Centraid_Core_V1_HealthMetricEvent()
@@ -35,6 +34,7 @@ struct HealthMetricView: View {
                                 options: state.segments.map { (key: $0.key, label: $0.label) },
                                 selected: state.segments.first(where: \.active)?.key ?? "",
                                 identifier: "health-metric-range",
+                                fills: true,
                                 onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
                             )
                             .frame(maxWidth: .infinity)
@@ -53,41 +53,55 @@ struct HealthMetricView: View {
                 .accessibilityIdentifier("health-metric-page")
             }
         }
+        .background(Surface.plainPage.ignoresSafeArea())
+        .appAccent("health")
     }
 
     @ViewBuilder
     private func page(_ metric: Centraid_Core_V1_HealthMetricData) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(metric.caption)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            Text(metric.averageLabel)
+                .kitType(.group)
+                .foregroundStyle(Surface.meta)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(metric.average)
-                    .centraidType("display")
+                    .font(.system(size: 36, weight: .bold))
                     .monospacedDigit()
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .foregroundStyle(Surface.ink)
                 Text(metric.averageUnit)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.meta)
             }
+            Text(metric.caption)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
             if !metric.versus.isEmpty {
                 Text(metric.versus)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(metric.versusGood ? StateColor.green.text : Surface.meta)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("health-metric-versus")
             }
         }
         .accessibilityElement(children: .combine)
-        HealthCard {
-            HealthBarChart(data: metric)
-        }
+        HealthBarChart(data: metric)
         if !metric.facts.isEmpty {
-            HealthCard(padding: 0) {
+            VStack(spacing: 0) {
                 ForEach(Array(metric.facts.enumerated()), id: \.offset) { index, fact in
                     if index > 0 { KitHairline() }
                     HealthFactRow(label: fact.label, detail: fact.detail)
                 }
             }
+            .kitBorderedCard()
         }
-        HealthNote(text: metric.foot)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(metric.aboutHeading)
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.ink)
+                .accessibilityAddTraits(.isHeader)
+            HealthNote(text: metric.foot)
+        }
+        .padding(.horizontal, 4)
     }
 }

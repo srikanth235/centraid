@@ -51,40 +51,21 @@ struct ShellSearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // TOP-ALIGNED: the field can carry the corrected line under it, and
-            // Cancel stays beside the capsule and not beside the line.
-            HStack(alignment: .top, spacing: 4) {
-                VStack(alignment: .leading, spacing: 4) {
-                    CentraidSearchField(
-                        field: field,
-                        placeholder: state.chrome.placeholder,
-                        closeLabel: state.chrome.closeLabel,
-                        identifier: "home-search",
-                        scope: state.chrome.scopeLabel,
-                        closes: false,
-                        onSubmit: { send(event { $0.committed = .init() }) },
-                        onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
-                        onClose: {}
-                    )
-                    // THE LINE UNDER THE FIELD, finished by Rust.
-                    if case let .data(data)? = state.content, !data.corrected.isEmpty {
-                        Text(data.corrected)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(2)
-                            .padding(.leading, BandMetrics.searchGlyphLead)
-                            .accessibilityIdentifier("search-corrected")
-                    }
-                }
-                KitLink(label: state.chrome.cancel, identifier: "home-search-cancel") {
-                    send(event { $0.cleared = .init() })
-                    onCancel()
-                }
-                .frame(height: 40)
+            // THE BOARD'S PAGE: "Search" large with its scope ("All apps") under it, the answer
+            // grouped by app, and the field at the foot as a glass pill with a close key.
+            KitHeader(title: state.chrome.title, meta: state.chrome.scopeLabel)
+                .padding(.top, 8)
+            // THE LINE UNDER THE TITLE, finished by Rust.
+            if case let .data(data)? = state.content, !data.corrected.isEmpty {
+                Text(data.corrected)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                    .padding(.bottom, 4)
+                    .accessibilityIdentifier("search-corrected")
             }
-            .padding(.leading, CentraidGeometry.pageMargin)
-            .padding(.trailing, CentraidGeometry.pageMargin - 4)
-            .padding(.vertical, 8)
             ReadStateView(
                 content: content,
                 loadingLabel: state.chrome.loading,
@@ -109,8 +90,25 @@ struct ShellSearchView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .background(Surface.plainPage.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        // THE FIELD IS AT THE FOOT, the glass pill and its close key, riding the keyboard; the
+        // close key clears the term and leaves, as Cancel did.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            BandSearchField(
+                field: field,
+                placeholder: state.chrome.placeholder,
+                closeLabel: state.chrome.closeLabel,
+                identifier: "home-search",
+                onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
+                onClose: {
+                    send(event { $0.cleared = .init() })
+                    onCancel()
+                },
+                onSubmit: { send(event { $0.committed = .init() }) }
+            )
+            .bandStrip()
+        }
     }
 
     /// THE ASK ROW closes the answer, matched or not; pressing it records the search.
@@ -142,7 +140,7 @@ struct ShellSearchView: View {
                         }
                     }
                     ForEach(group.rows, id: \.id) { row in
-                        HitRow(row: row) { commit(row.hasRoute ? row.route : nil) }
+                        HitRow(row: row, appId: group.appID) { commit(row.hasRoute ? row.route : nil) }
                     }
                 }
                 askRow(results)
@@ -164,8 +162,8 @@ private struct RestingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 Text(resting.note)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                 if !resting.suggestions.isEmpty {
                     SectionHeader(title: resting.suggestionsLabel)
@@ -188,27 +186,23 @@ private struct RestingView: View {
     }
 }
 
-/// One app's head: its hue dot, its name in the section micro-label, its count.
+/// One app's head (#1173): its name in the app's own colour, its count at the far edge in meta.
 private struct GroupHeader: View {
     let group: Centraid_Core_V1_HomeSearchGroup
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Circle()
-                .fill(scheme.centraidMarks[group.appID]?.hue ?? Theme.color("textFaint", scheme))
-                .frame(width: 8, height: 8)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(group.label)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(AppAccent(group.appID).text)
             Spacer(minLength: 0)
             Text("\(group.count)")
-                .centraidType("eyebrow")
+                .kitType(.meta)
                 .monospacedDigit()
-                .foregroundStyle(Theme.color("textFaint", scheme))
+                .foregroundStyle(Surface.meta)
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
         .padding(.top, 16)
         .padding(.bottom, 4)
         .accessibilityElement(children: .ignore)
@@ -218,34 +212,40 @@ private struct GroupHeader: View {
     }
 }
 
-/// One hit: the kind in a soft fixed column, then the title on one line.
+/// One hit (#1173): the app's glyph on a tile in its colour, the title, and the kind under it.
 private struct HitRow: View {
     let row: Centraid_Core_V1_HomeSearchRow
+    let appId: String
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
-    /// The kind column's width: "Document" at the body rung, so titles align.
-    private static let kindColumn: CGFloat = 88
-
     var body: some View {
+        let accent = AppAccent(appId)
         Button(action: onTap) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(row.kindLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
-                    .frame(width: Self.kindColumn, alignment: .leading)
-                Text(row.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            HStack(spacing: 12) {
+                if let glyph = CentraidCatalog.byID[appId]?.iconKey {
+                    KitTile(iconKey: glyph, size: 30, fill: accent.fill)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(row.title)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(row.kindLabel)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-            .overlay(alignment: .bottom) { KitHairline() }
+            .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse + 6, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline)
+                    .padding(.leading, CentraidGeometry.pageMargin + 44)
+                    .padding(.trailing, CentraidGeometry.pageMargin + 2)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())

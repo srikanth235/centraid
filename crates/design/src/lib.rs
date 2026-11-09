@@ -1,26 +1,20 @@
-//! # `crates/design` — ONE lowering of `packages/design`, not a second copy
+//! # `crates/design`: design values and computed identity, owned by Rust
 //!
-//! `packages/design` is the token source with two lowerings from one token set:
-//! `toCss()` for the web and desktop, `toNativeTheme(scheme)` for native
-//! (`packages/design/src/native.ts:213`). Wave 3's lane E emitted the native
-//! lowering as data — `design/native-theme.json`, `mobile/.../Tokens.kt`,
-//! `mobile/iosApp/Design/Theme.swift` — from one emitter with a drift gate
-//! (`contracts/tools/export-native-theme.ts`, D-1020-E6).
+//! Two jobs, both pure data and arithmetic:
 //!
-//! This crate is the Rust half of that same lowering, and it exists for a
-//! blocked parity comparison: a parity fixture carries a party's `color` from
-//! `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials`
-//! and a figure's tone from `figureTone`, so the Tally cases could be committed
-//! and not compared (wave 2 lane D3's receipt, D-1020-D3-9; the Tally fixture
-//! left with the app, #1099).
-//!
-//! ## What keeps it honest (#1020, D-1020-T1)
-//!
-//! | Risk | What stops it |
-//! |---|---|
-//! | A retyped hue wheel drifting from the TS one | the same emitter runs the REAL functions over a fixed corpus into `design/identity-corpus.json`; [`tests/corpus.rs`](../../tests/corpus.rs) asserts **every row** |
-//! | A hand-maintained colour table | the theme is READ from `design/native-theme.json`; there is no colour literal in this crate but [`BRAND`], which the corpus asserts too |
-//! | A role quietly dropped from the native theme | the emitter carries `colorRoleContract` as data and [`assert_native_color_role_contract`] re-asserts it in Rust over the emitted bytes |
+//! 1. [`tokens`] is the model, parser and validation of `design/tokens.toml`
+//!    and `design/icons.toml`, the one source of design values (#1173).
+//!    `cargo xtask design` lowers them into the iOS asset catalogue and Swift
+//!    tables, the Android resources and Kotlin tables, and the two sites' CSS.
+//!    There is no TypeScript in that road.
+//! 2. The identity functions below: a party's hue key from its id, its
+//!    initials, and a figure's tone. The core computes them once and sends the
+//!    shells a key; the shells only look it up. They were ported from
+//!    the retired TypeScript design package (#1020), and the golden rows in this file's tests are
+//!    that package's answers over a deliberately hostile corpus (non-ASCII
+//!    names, an empty name, a one-emoji name, every shape of stored
+//!    `avatar_color`), pinned as literals when the TypeScript oracle was
+//!    retired.
 //!
 //! ## The one behaviour that looks like a bug and is reproduced on purpose
 //!
@@ -28,13 +22,13 @@
 //! **UTF-16 code unit**. A name whose first character is outside the BMP
 //! ("🙂 Smith") yields half a surrogate pair — a string Rust's `String` cannot
 //! hold. So [`identity_initials_units`] is the primitive and returns code
-//! units; [`identity_initials`] is the lossy convenience over it. The corpus
-//! compares units, so a port that "fixed" this would go red, and the receipt
+//! units; [`identity_initials`] is the lossy convenience over it. The golden rows
+//! compare units, so a port that "fixed" this would go red, and the receipt
 //! carries the finding rather than this crate carrying a divergence.
 
-use std::collections::BTreeMap;
+pub mod tokens;
 
-/// The ink brand (`packages/design/src/themes/shared.ts:18`).
+/// The ink brand (`#141414`).
 ///
 /// The owner's own avatar is painted with it and never with a party hue: the
 /// person wheel has eight places and the vault wheel's ninth is the ink brand,
@@ -43,7 +37,7 @@ use std::collections::BTreeMap;
 pub const BRAND: &str = "#141414";
 
 /// The eight party hues, in the order the wheel indexes them
-/// (`packages/design/src/identity.ts:47-56`). INK is not among them.
+///. INK is not among them.
 pub const IDENTITY_HUE_KEYS: [&str; 8] = [
     "rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet",
 ];
@@ -140,7 +134,7 @@ pub fn party_color(party_id: &str) -> String {
     party_hue_value(identity_hue_key(party_id))
 }
 
-/// The OKLCH hue angle of each wheel key (`packages/design/src/palette.ts`, `APP_HUES`).
+/// The OKLCH hue angle of each wheel key (OKLCH, as the party wheel was drawn).
 const WHEEL_HUES: [(&str, f64); 8] = [
     ("rose", 0.0),
     ("amber", 28.0),
@@ -161,6 +155,20 @@ const GREY_CHROMA: f64 = 0.03;
 /// a hex colour: such a calendar takes its id's own hue.
 #[must_use]
 pub fn hue_key_of_hex(hex: &str) -> Option<&'static str> {
+    let (_, hue) = oklch_of_hex(hex)?;
+    let apart = |wheel: f64| {
+        let gap = (hue - wheel).abs();
+        gap.min(360.0 - gap)
+    };
+    WHEEL_HUES
+        .iter()
+        .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
+        .map(|(key, _)| *key)
+}
+
+/// The OKLab chroma and OKLCH hue angle of `#RRGGBB`; `None` for a grey (no hue to name) and for a
+/// spelling that is not a hex colour.
+fn oklch_of_hex(hex: &str) -> Option<(f64, f64)> {
     let digits = hex.trim().strip_prefix('#')?;
     if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
@@ -180,18 +188,90 @@ pub fn hue_key_of_hex(hex: &str) -> Option<&'static str> {
     let s = (0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b).cbrt();
     let a = 1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s;
     let c = 0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s;
-    if a.hypot(c) < GREY_CHROMA {
+    let chroma = a.hypot(c);
+    if chroma < GREY_CHROMA {
         return None;
     }
-    let hue = c.atan2(a).to_degrees().rem_euclid(360.0);
-    let apart = |wheel: f64| {
-        let gap = (hue - wheel).abs();
-        gap.min(360.0 - gap)
-    };
-    WHEEL_HUES
-        .iter()
-        .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
-        .map(|(key, _)| *key)
+    Some((chroma, c.atan2(a).to_degrees().rem_euclid(360.0)))
+}
+
+/// The eight list colours (`[list]` in `design/tokens.toml`), with the OKLCH hue angle each is
+/// nearest to. Graphite is the grey: it has no angle and takes every colour with no hue.
+const LIST_KEYS: [&str; 8] = [
+    "blue",
+    "mustard",
+    "violet",
+    "petrol",
+    "indigo",
+    "graphite",
+    "raspberry",
+    "orchid",
+];
+
+/// Where a hue angle lands among the coloured list hues. Red (about 29) is nearer raspberry than
+/// anything, and a green (about 145) sits between mustard and petrol, so the angles are placed to
+/// send it to petrol: there are no red, amber or green lists (#1173).
+const LIST_ANGLES: [(&str, f64); 7] = [
+    ("raspberry", 5.0),
+    ("mustard", 70.0),
+    ("petrol", 205.0),
+    ("blue", 250.0),
+    ("indigo", 275.0),
+    ("violet", 305.0),
+    ("orchid", 340.0),
+];
+
+/// A list's colour key (`raspberry`, `blue` ...: the `[list]` names), from the list's id and what
+/// it stored.
+///
+/// There is ONE palette of eight (#1173), so every spelling a list can hold lands on it:
+/// - nothing stored: the id's own place on the palette, stable;
+/// - a list key: itself;
+/// - a wheel `var(--c-<hue>)`: its nearest list colour (rose raspberry, amber and ochre mustard,
+///   forest and teal petrol, slate graphite);
+/// - a `#RRGGBB` from an import: the list colour nearest by hue, a grey going to graphite. So an
+///   imported red list is raspberry and a green one petrol, never red or green;
+/// - anything else: the id's own place.
+#[must_use]
+pub fn list_color_key(list_id: &str, stored: Option<&str>) -> &'static str {
+    let own = || LIST_KEYS[(identity_hash(list_id.trim()) % LIST_KEYS.len() as u64) as usize];
+    let stored = stored.unwrap_or("").trim();
+    if stored.is_empty() {
+        return own();
+    }
+    if let Some(key) = LIST_KEYS.iter().find(|key| **key == stored) {
+        return key;
+    }
+    if let Some(wheel) = stored
+        .strip_prefix(HUE_VAR_OPEN)
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        return match wheel {
+            "rose" => "raspberry",
+            "amber" | "ochre" => "mustard",
+            "forest" | "teal" => "petrol",
+            "slate" => "graphite",
+            "indigo" => "indigo",
+            "violet" => "violet",
+            _ => own(),
+        };
+    }
+    if stored.starts_with('#') {
+        return match oklch_of_hex(stored) {
+            None => "graphite",
+            Some((_, hue)) => {
+                let apart = |angle: f64| {
+                    let gap = (hue - angle).abs();
+                    gap.min(360.0 - gap)
+                };
+                LIST_ANGLES
+                    .iter()
+                    .min_by(|left, right| apart(left.1).total_cmp(&apart(right.1)))
+                    .map_or("graphite", |(key, _)| key)
+            }
+        };
+    }
+    own()
 }
 
 /// `identityInitials`, in UTF-16 code units (`identity.ts:22-28`).
@@ -308,128 +388,6 @@ pub const fn figure_tone(net_minor: i64) -> FigureTone {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The emitted theme.
-// ---------------------------------------------------------------------------
-
-/// One scheme of the emitted native theme, as the bytes carry it.
-#[derive(Debug, Clone)]
-pub struct NativeTheme {
-    pub scheme: String,
-    /// Every `colors` entry, including the three that are CSS `box-shadow`
-    /// strings rather than colours (the emitter's own finding).
-    pub colors: BTreeMap<String, String>,
-    pub spacing: BTreeMap<String, f64>,
-    pub radii: BTreeMap<String, f64>,
-}
-
-/// The whole emitted table: the schemes plus the role contract, as data.
-#[derive(Debug, Clone)]
-pub struct NativeThemes {
-    pub schemes: BTreeMap<String, NativeTheme>,
-    /// Native field name → the CSS custom property it lowers.
-    pub color_role_contract: BTreeMap<String, String>,
-}
-
-/// What a theme file can be wrong about.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ThemeError {
-    /// The JSON is not the shape the emitter writes.
-    Shape { detail: String },
-    /// A role the contract names is not in a scheme's colours.
-    MissingRole { scheme: String, field: String },
-}
-
-impl std::fmt::Display for ThemeError {
-    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Shape { detail } => write!(out, "the emitted theme is not readable: {detail}"),
-            Self::MissingRole { scheme, field } => write!(
-                out,
-                "`{field}` is in the colour-role contract and missing from the `{scheme}` scheme"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ThemeError {}
-
-fn object<'a>(
-    value: &'a serde_json::Value,
-    at: &str,
-) -> Result<&'a serde_json::Map<String, serde_json::Value>, ThemeError> {
-    value
-        .get(at)
-        .and_then(serde_json::Value::as_object)
-        .ok_or(ThemeError::Shape {
-            detail: format!("`{at}` is not an object"),
-        })
-}
-
-/// Read `design/native-theme.json`'s parsed JSON into [`NativeThemes`].
-pub fn native_themes(value: &serde_json::Value) -> Result<NativeThemes, ThemeError> {
-    let mut schemes: BTreeMap<String, NativeTheme> = BTreeMap::new();
-    for (name, scheme) in object(value, "schemes")? {
-        let strings = |at: &str| -> Result<BTreeMap<String, String>, ThemeError> {
-            Ok(object(scheme, at)?
-                .iter()
-                .map(|(key, entry)| {
-                    (
-                        key.clone(),
-                        entry
-                            .as_str()
-                            .map_or_else(|| entry.to_string(), str::to_owned),
-                    )
-                })
-                .collect())
-        };
-        let numbers = |at: &str| -> Result<BTreeMap<String, f64>, ThemeError> {
-            Ok(object(scheme, at)?
-                .iter()
-                .filter_map(|(key, entry)| Some((key.clone(), entry.as_f64()?)))
-                .collect())
-        };
-        schemes.insert(
-            name.clone(),
-            NativeTheme {
-                scheme: name.clone(),
-                colors: strings("colors")?,
-                spacing: numbers("spacing")?,
-                radii: numbers("radii")?,
-            },
-        );
-    }
-    let color_role_contract = object(value, "colorRoleContract")?
-        .iter()
-        .map(|(field, css)| (field.clone(), css.as_str().unwrap_or_default().to_owned()))
-        .collect();
-    Ok(NativeThemes {
-        schemes,
-        color_role_contract,
-    })
-}
-
-/// `assertNativeColorRoleContract`, re-asserted over the EMITTED table
-/// (`packages/design/src/roles.ts:1022`).
-///
-/// The TypeScript assertion runs inside the emitter, over the same values. This
-/// one runs over the committed bytes, which is the artifact a Rust surface
-/// reads — and an emitter that started dropping a role would otherwise only be
-/// caught by the side that no longer needs it.
-pub fn assert_native_color_role_contract(themes: &NativeThemes) -> Result<(), ThemeError> {
-    for (scheme, theme) in &themes.schemes {
-        for field in themes.color_role_contract.keys() {
-            if !theme.colors.contains_key(field) {
-                return Err(ThemeError::MissingRole {
-                    scheme: scheme.clone(),
-                    field: field.clone(),
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -511,5 +469,174 @@ mod tests {
         assert_eq!(identity_initials("  Priya   Raman  "), "PR");
         // Three parts take the FIRST and the LAST, never the middle.
         assert_eq!(identity_initials("a b c"), "AC");
+    }
+
+    /// `partyHueKey` over the corpus the TypeScript oracle was run on, pinned
+    /// as literals: the id's own hue when nothing is stored.
+    #[test]
+    fn a_party_with_nothing_stored_lands_on_the_hue_the_oracle_answered() {
+        let rows = [
+            ("id-0001", "forest"),
+            ("id-0002", "teal"),
+            ("id-0003", "slate"),
+            ("id-0004", "indigo"),
+            ("a", "amber"),
+            ("z", "ochre"),
+            ("A", "amber"),
+            ("", "rose"),
+            (" ", "rose"),
+            ("  spaced  ", "ochre"),
+            ("party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC", "forest"),
+            ("0", "rose"),
+            ("00000000-0000-0000-0000-000000000000", "rose"),
+            ("ffffffff-ffff-ffff-ffff-ffffffffffff", "rose"),
+            ("Ana", "teal"),
+            ("Ana Díaz", "ochre"),
+            ("李明", "rose"),
+            ("Ω", "amber"),
+            ("🙂", "ochre"),
+            ("🙂🙂", "rose"),
+            ("user@example.test", "slate"),
+            (
+                "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+                "amber",
+            ),
+            ("\u{a0}", "rose"),
+            ("\t", "rose"),
+        ];
+        assert_eq!(rows.len(), 24);
+        for (id, key) in rows {
+            assert_eq!(identity_hue_key(id), key, "hue key for {id:?}");
+            assert_eq!(
+                party_hue_key(id, None),
+                Some(key),
+                "stored nothing, for {id:?}"
+            );
+            assert_eq!(
+                party_color(id),
+                format!("var(--c-{key})"),
+                "value for {id:?}"
+            );
+        }
+    }
+
+    /// A stored `var(--c-<hue>)` wins over the id, whichever id it is.
+    #[test]
+    fn a_stored_wheel_hue_wins_over_the_id() {
+        for id in ["id-0001", "", "\t"] {
+            assert_eq!(party_hue_key(id, Some("var(--c-teal)")), Some("teal"));
+            assert_eq!(party_hue_key(id, Some("var(--c-violet)")), Some("violet"));
+            assert_eq!(party_hue_key(id, Some("var(--c-not-a-hue)")), None);
+            assert_eq!(party_hue_key(id, Some("#8c4c61")), None);
+            assert_eq!(party_hue_value("teal"), "var(--c-teal)");
+        }
+    }
+
+    /// `identityInitials` over the oracle's names, as UTF-16 units, including
+    /// the half surrogate that `slice(0, 1)` cuts on purpose.
+    #[test]
+    fn initials_are_the_units_the_oracle_answered_including_the_half_surrogate() {
+        let rows: [(&str, &[u16]); 30] = [
+            ("You", &[89]),
+            ("Someone", &[83]),
+            ("Friend", &[70]),
+            ("Ana", &[65]),
+            ("Ana Díaz", &[65, 68]),
+            ("ana díaz", &[65, 68]),
+            ("Bo", &[66]),
+            ("Cleo", &[67]),
+            ("Priya Raman", &[80, 82]),
+            ("  Priya   Raman  ", &[80, 82]),
+            ("María-José de la Cruz", &[77, 67]),
+            ("Jean-Luc", &[74]),
+            ("李 明", &[26446, 26126]),
+            ("李明", &[26446]),
+            ("Ω Ψ", &[937, 936]),
+            ("🙂 Smith", &[55357, 83]),
+            ("🙂", &[55357]),
+            ("Smith 🙂", &[83, 55357]),
+            ("", &[183]),
+            (" ", &[183]),
+            ("   ", &[183]),
+            ("\t\n", &[183]),
+            ("\u{a0}Ana\u{a0}", &[65]),
+            ("d'Angelo", &[68]),
+            ("van der Berg", &[86, 66]),
+            ("O'Neill McTavish", &[79, 77]),
+            ("x", &[88]),
+            ("X y", &[88, 89]),
+            ("a b c d", &[65, 68]),
+            ("ANA", &[65]),
+        ];
+        for (name, units) in rows {
+            assert_eq!(
+                identity_initials_units(name),
+                units,
+                "initials for {name:?}"
+            );
+        }
+        // The divergence stays visible: the emoji rows are half a surrogate.
+        assert!(
+            identity_initials_units("🙂 Smith")
+                .iter()
+                .any(|unit| (0xD800..0xE000).contains(unit))
+        );
+    }
+
+    /// `figureTone` over the oracle's amounts: the sign says the rest.
+    #[test]
+    fn tones_are_the_ones_the_oracle_answered() {
+        for net in [
+            1_i64,
+            2,
+            99,
+            100,
+            1000,
+            10001,
+            4200,
+            8333,
+            2_147_483_647,
+            5000,
+            1333,
+            8416,
+            24000,
+            3500,
+            12,
+        ] {
+            assert_eq!(figure_tone(net), FigureTone::Owed, "{net}");
+            assert_eq!(figure_tone(-net), FigureTone::Net, "-{net}");
+        }
+        assert_eq!(figure_tone(-2_147_483_648), FigureTone::Net);
+        assert_eq!(figure_tone(0), FigureTone::Settled);
+    }
+
+    /// There are no red, amber or green lists: every spelling lands on the eight.
+    #[test]
+    fn a_list_colour_is_always_one_of_the_eight_and_red_becomes_raspberry() {
+        for (stored, key) in [
+            ("#FF3B30", "raspberry"),
+            ("#D32F2F", "raspberry"),
+            ("#34C759", "petrol"),
+            ("#FF9500", "mustard"),
+            ("#FFCC00", "mustard"),
+            ("#007AFF", "blue"),
+            ("#5856D6", "indigo"),
+            ("#AF52DE", "violet"),
+            ("#FF2D55", "raspberry"),
+            ("#8E8E93", "graphite"),
+            ("var(--c-rose)", "raspberry"),
+            ("var(--c-forest)", "petrol"),
+            ("var(--c-amber)", "mustard"),
+            ("var(--c-slate)", "graphite"),
+            ("orchid", "orchid"),
+        ] {
+            assert_eq!(list_color_key("any-id", Some(stored)), key, "{stored}");
+        }
+        for id in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] {
+            let key = list_color_key(id, None);
+            assert!(LIST_KEYS.contains(&key));
+            assert_eq!(list_color_key(id, Some("  ")), key, "stable by id");
+            assert_eq!(list_color_key(id, Some("var(--c-not-a-hue)")), key);
+        }
     }
 }

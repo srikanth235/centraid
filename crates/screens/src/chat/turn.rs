@@ -254,18 +254,22 @@ impl Chat {
             Some(K::Pending(pending)) => {
                 self.with_answer(|answer| answer.with_proposal(pending));
             }
-            Some(K::Answer(answer)) => self.answered(answer),
-            Some(K::Failed(failed)) => return self.failed(Some(failed), ctx),
-            None => {}
+            // THE TURN IS NOT OVER UNTIL THE `send` CALL COMES BACK (#1173): the core emits these
+            // before it has saved the turn, so a chat that settled on them would offer a tap, a
+            // new chat or a reopen while the thread does not exist yet, and would not know its
+            // id. The words are drawn now; `settled` ends the turn.
+            Some(K::Answer(answer)) => self.draw_answer(answer),
+            Some(K::Failed(_)) | None => {}
         }
         Vec::new()
     }
 
-    /// The `send` call came back: the same fact as the terminal event, and the ONE carrier of
-    /// where the turn was saved.
+    /// The `send` call came back: the end of the turn, and the ONE carrier of where it was saved.
+    /// The stream's terminal event only draws the words (the core emits it before the save), so
+    /// a dropped event costs nothing and no tap, new chat or reopen can run against a thread the
+    /// core has not written yet.
     ///
-    /// The thread is absorbed whichever of the two arrived first (an event can be dropped from a
-    /// full queue and a response cannot), but only for the latest turn: a new chat moves the turn
+    /// The thread is absorbed only for the latest turn: a new chat moves the turn
     /// id on, and an old turn's thread must not be adopted by the chat that replaced it.
     pub(super) fn settled(
         &mut self,
@@ -277,6 +281,10 @@ impl Chat {
             return Vec::new();
         }
         let saved = sent.as_ref().is_some_and(|sent| !sent.thread_id.is_empty());
+        let answered = matches!(
+            sent.as_ref().and_then(|sent| sent.outcome.as_ref()),
+            Some(wire::assist_sent::Outcome::Answered(_))
+        );
         if let Some(sent) = sent.as_ref().filter(|sent| !sent.thread_id.is_empty()) {
             self.thread_id.clone_from(&sent.thread_id);
             if !sent.thread_title.is_empty() {
@@ -296,10 +304,24 @@ impl Chat {
         if saved {
             self.read_threads(ctx);
         }
+        // THE THREAD IS LIVE (#1173): offer the next questions above the composer. Asked here,
+        // once per turn, and not where the answer is drawn: this response always comes, and it ends
+        // the turn.
+        if answered && !self.running {
+            self.suggest(ctx);
+        }
         effects
     }
 
     fn answered(&mut self, answer: &wire::AssistAnswer) {
+        self.draw_answer(answer);
+        self.running = false;
+        self.activity.clear();
+        self.error = None;
+    }
+
+    /// Draw the answer's words and cards; the turn stays running until `settled`.
+    fn draw_answer(&mut self, answer: &wire::AssistAnswer) {
         let truncated = answer
             .notices
             .contains(&(wire::AssistNotice::DocTruncated as i32));
@@ -314,9 +336,6 @@ impl Chat {
                 message.with_proposal(pending);
             }
         });
-        self.running = false;
-        self.activity.clear();
-        self.error = None;
     }
 
     fn with_answer(&mut self, change: impl FnOnce(&mut Msg)) {
@@ -445,6 +464,7 @@ impl Chat {
                 reason: words::unlock_reason(locale),
                 title: words::unlock_title(locale),
                 subtitle: words::unlock_subtitle(locale),
+                cancel: false,
             }))];
         }
         if let Some(held) = self.proposal_mut(id, Stage::Working) {
@@ -633,7 +653,13 @@ impl Msg {
                 .iter()
                 .map(|step| Step {
                     summary: step.summary.clone(),
+                    title: step.title.clone(),
+                    when: step.when.clone(),
+                    changes: step.changes.clone(),
                     destructive: step.destructive,
+                    app: super::model::app_of_kind(&step.kind),
+                    verb: super::confirm::verb_of(&step.verb),
+                    noun: super::confirm::noun_of(&step.kind),
                 })
                 .collect(),
             more: parked.more,

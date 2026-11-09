@@ -134,12 +134,14 @@ impl Rig {
                 }))
             });
         let root = wire::Route {
+            sheet: false,
             screen: QUIET.to_owned(),
             args: None,
         };
         let runtime = Runtime::new(registry, vec![("t".to_owned(), root)]).with_services({
             let mut services = passes::services();
             services.push(wire::Route {
+                sheet: false,
                 screen: centraid_screens::imports::CAMERA_ROLL.to_owned(),
                 args: None,
             });
@@ -810,6 +812,52 @@ fn back_up_now_from_another_screen_walks_asks_and_releases_the_long_run() {
     assert_eq!(long_runs(&rig), Vec::<bool>::new());
 }
 
+/// "BACK UP NOW" IS A CONDUCTOR PASS, so it carries the rule the member set and what the platform
+/// reported of the link: the Backup screen asks and guesses nothing. An unreported link is the
+/// expensive reading; a reported one is believed, whatever the rule.
+#[test]
+fn back_up_now_carries_the_members_rule_and_the_links_own_reading() {
+    use centraid_screens::backup::rule::{RULE_KEY, TransferRule};
+    for (rule, stored) in [
+        (TransferRule::WifiOnly, "wifi-only"),
+        (
+            TransferRule::WifiAndCellularPhotos,
+            "wifi-and-cellular-photos",
+        ),
+        (TransferRule::Manual, "manual"),
+    ] {
+        // (what the platform said, whether the pass is metered)
+        for (reported, metered) in [(None, true), (Some(true), true), (Some(false), false)] {
+            let mut shell = FakeShell::default();
+            shell.device.insert(RULE_KEY.to_owned(), stored.to_owned());
+            let mut rig = Rig::with_shell(shell);
+            rig.first_pass(empty());
+            if let Some(reported) = reported {
+                // OFFLINE REPORTS CARRY THE READING WITHOUT A PASS.
+                rig.fact(wire::shell_fact::Fact::Link(wire::LinkChanged {
+                    online: false,
+                    metered: reported,
+                    charging: false,
+                    metered_known: true,
+                    charging_known: true,
+                }));
+            }
+            // THE BACKUP SCREEN ASKS THE CONDUCTOR, and nothing else starts a pass.
+            let probe = rig.driver.push("t", passes_probe_route());
+            rig.redraw(probe);
+            assert!(rig.secrets.conductor().facts().backing_up, "{stored}");
+            assert!(rig.walk_asked(), "the camera roll is walked first");
+            rig.walk();
+            let (drain, _) = rig.drain();
+            assert_eq!(drain.rule, rule.to_wire() as i32, "{stored}");
+            assert_eq!(drain.metered, metered, "{stored} / {reported:?}");
+            // THE MEMBER'S OWN TAP and a snapshot now.
+            assert!(drain.asked && drain.wants_snapshot);
+            assert_eq!(long_runs(&rig), [true], "the platform keeps the run alive");
+        }
+    }
+}
+
 trait Title {
     fn kind_title(&self) -> String;
 }
@@ -825,6 +873,7 @@ impl Title for wire::ViewState {
 
 fn passes_probe_route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: PROBE.to_owned(),
         args: None,
     }
@@ -839,7 +888,7 @@ fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce
     rig.first_pass(empty());
     let write = |rig: &mut Rig, n: u32| {
         let response = rig.driver.act(
-            act::agenda::AddTask {
+            act::reminders::AddTask {
                 title: format!("task {n}"),
                 ..Default::default()
             }

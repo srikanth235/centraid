@@ -32,13 +32,14 @@ struct ConfirmSheet: View {
         SheetRoom(
             title: confirm.title,
             primary: SheetPrimary(label: confirm.confirmLabel, destructive: confirm.destructive, action: onConfirm),
-            outlines: [SheetOutline(label: cancelLabel, identifier: "kit-confirm-cancel", action: onDismiss)],
+            // THE WAY OUT IS A TEXT KEY (the Trash and Cancel-event boards): bold, no outline.
+            outlines: [SheetOutline(label: cancelLabel, link: true, ink: true, identifier: "kit-confirm-cancel", action: onDismiss)],
             titleIdentifier: "kit-confirm"
         ) {
             if !confirm.body.isEmpty {
                 Text(confirm.body)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.body)
             }
         }
         .presentationDetents(Self.detents)
@@ -49,7 +50,7 @@ struct ConfirmSheet: View {
     }
 }
 
-/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (DESIGN.md "The controls (mobile)"):
+/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (product-intuition/references/design-behaviour.md § Controls):
 /// the act that was refused as the title, the sentence saying what happened
 /// and what to do, and one way out, the outline [doneLabel]. A swipe away is
 /// the same as Done.
@@ -70,8 +71,8 @@ struct NoticeSheet: View {
             titleIdentifier: "kit-notice"
         ) {
             Text(sentence)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.row)
+                .foregroundStyle(Surface.body)
         }
         .presentationDetents(Self.detents)
     }
@@ -82,40 +83,59 @@ struct NoticeSheet: View {
 struct SheetRow: View {
     var iconKey: String = ""
     let label: String
+    /// A line of meta under the label ("From a password manager"); the machine's words.
+    var detail: String = ""
     var destructive: Bool = false
     var selected: Bool = false
     /// A row that opens another sheet or page says so with a trailing chevron.
     var chevron: Bool = false
+    /// A colour dot in the mark's place (a label wears its colour); the dot replaces the tile.
+    var dot: Color? = nil
     var identifier: String = ""
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
-        let ink = enabled ? (destructive ? "net" : "text") : "textDisabled"
+        let ink = enabled ? (destructive ? StateColor.red.text : Surface.ink) : Surface.meta
         Button(action: onTap) {
             HStack(spacing: 12) {
-                if !iconKey.isEmpty {
-                    CentraidIconView(
-                        iconKey: iconKey,
-                        tint: Theme.color(ink, scheme),
-                        size: 18
-                    )
-                    .frame(width: 24, height: 24)
+                if let dot {
+                    Circle().fill(dot).frame(width: 10, height: 10)
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                } else if !iconKey.isEmpty {
+                    // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a
+                    // destructive row's is the state's red.
+                    KitTile(iconKey: iconKey, size: 32, fill: destructive ? StateColor.red.fill : nil)
                 }
-                Text(label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(ink, scheme))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label)
+                        .kitType(.row)
+                        .foregroundStyle(ink)
+                        // A SENTENCE WRAPS, never ends in an ellipsis (the Downloads sheet's choices).
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                    }
+                }
                 Spacer(minLength: 0)
                 if selected {
-                    CentraidIconView(iconKey: "Check", tint: Theme.color(enabled ? "text" : "textDisabled", scheme), size: 16)
+                    CentraidIconView(iconKey: "Check", tint: accent.text, size: 16)
                 }
                 if chevron {
-                    CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 16)
+                    CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse + 8)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
@@ -125,7 +145,9 @@ struct SheetRow: View {
 }
 
 /// A SHEET OF CHOICES — a More sheet, a pick. Rows are `SheetRow`s; choosing
-/// is the row's own event, so the sheet carries no ink button.
+/// is the row's own event, so the sheet carries no ink button. **ONE SURFACE** (#1173): the rows
+/// stand on the sheet itself, grouped by hairlines, with no card of their own, and the sheet takes
+/// the height of its rows (`SheetRoom.fit`), on the system's ground on iOS 26.
 struct OptionSheet<Rows: View>: View {
     let title: String
     var status: String = ""
@@ -138,8 +160,21 @@ struct OptionSheet<Rows: View>: View {
     }
 
     var body: some View {
-        SheetRoom(title: title, status: status) {
-            VStack(spacing: 0) { rows() }
+        SheetRoom(title: title, status: status, fit: true) {
+            // THE LAST ROW'S HAIRLINE FALLS OUTSIDE THE CLIP, so the group never ends on a rule;
+            // the row's own inset is taken back so its words stand under the title's.
+            VStack(spacing: 0) { rows() }.sheetRowGroup()
         }
+    }
+}
+
+extension View {
+    /// THE ROWS OF A CHOICE SHEET AS ONE GROUP ON THE SHEET: no card of their own. The last row's
+    /// hairline falls outside the clip, so the group never ends on a rule, and the row's own inset
+    /// is taken back so its words stand under the title's.
+    func sheetRowGroup() -> some View {
+        padding(.horizontal, -12)
+            .padding(.bottom, -1)
+            .clipped()
     }
 }

@@ -1,4 +1,4 @@
-// DOCS' SCREENS (#1135): the drive (All · Folders · Starred, Recently added from
+// DOCS' SCREENS (#1135): the drive (Recents · Browse · Starred, Recently added from
 // More, and a folder's own page), one document, its version history, its text
 // editor and its trash, over the core's `docs.drive`, `docs.search`
 // and `docs.history` (`crates/apps/docs/manifest.json`) and
@@ -11,7 +11,7 @@
 // depends on the SCREEN's state (the band, the filter menu, the sheets, the empty
 // choice) is made by the screen on every view.
 //
-// THE BAND IS ALL · FOLDERS · STARRED · MORE. Shared left with the sharing plane
+// THE BAND IS RECENTS · BROWSE · STARRED · MORE (keys `all`, `folders`, `starred`, `more`). Shared left with the sharing plane
 // (#1029); "Coming due" has no data plane in this build. Search is a field on the
 // current surface, never a destination; Recently changed is a shelf chosen from
 // the More sheet; Trash is the kit's screen (`docs.trash`, `TrashView`).
@@ -144,7 +144,7 @@ message DocsBandTab {
   // `all`, `folders`, `starred`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
-  // A `design/native-catalog.json` icon key.
+  // A `design/icons.toml` icon key.
   string icon_key = 3;
   bool current = 4;
 }
@@ -204,6 +204,10 @@ message DocsDriveData {
   string shelf_note = 8;
   // SEARCH'S CONTAINERS (#1097): the folders whose own name the term matched.
   repeated SearchContainer containers = 9;
+  // THE LABEL CHIPS over the shelf, each a shortcut to the Label filter: every
+  // label in the drive with its colour, the one filtering marked `selected`.
+  // EMPTY when the drive has no labels, or in search.
+  repeated DocsLabelChip label_chips = 10;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -230,7 +234,7 @@ message DocsRowView {
   string content_id = 2;
   // The title, or "Untitled".
   string title = 3;
-  // A `design/native-catalog.json` icon key for the kind.
+  // A `design/icons.toml` icon key for the kind.
   string kind_icon_key = 4;
   // "PDF", "Image", …
   string kind_label = 5;
@@ -248,6 +252,14 @@ message DocsRowView {
   string accessibility_label = 13;
   // WHERE A TAP GOES: the document's page.
   Route route = 14;
+  // A PICTURE OF THE DOCUMENT: the file that draws it (an image, or a PDF's
+  // first page), when this phone holds it. EMPTY: draw the kind's icon tile.
+  string thumbnail_path = 15;
+  // The kind badge on a thumbnail: "PDF", "MD", "XLSX". Never empty.
+  string badge = 16;
+  // The palette key of the document's first label, for the dot before its
+  // meta line. EMPTY when it wears no label.
+  string dot_color_key = 17;
 }
 
 enum DocsSurfaceKind {
@@ -264,6 +276,13 @@ message DocsLabelChip {
   // The label's words are its identity: `tag.remove` takes them.
   string tag_id = 1;
   string label = 2;
+  // THE COLOUR THE LABEL WEARS: a key of the one list palette (`blue`,
+  // `mustard`, `violet`, `petrol`, `indigo`, `graphite`, `raspberry`,
+  // `orchid`), always set (a label with none stored gets a stable one from its
+  // words). A view looks the key up; it never mixes a colour.
+  string color_key = 3;
+  // On the drive's label chips: this label is the one filtering the shelf.
+  bool selected = 4;
 }
 
 message DocsSnippetRun {
@@ -361,6 +380,8 @@ message DocsLabelsSheet {
   string add_label = 5;
   string placeholder = 6;
   string remove_label = 7;
+  // The `available` labels again, each in its colour (same order), for the dot an offer wears.
+  repeated DocsLabelChip options = 8;
 }
 
 message DocsNewFolderSheet {
@@ -396,7 +417,7 @@ message DocsIngestView {
   // Bytes streamed into the core so far and the file's size, as thousandths
   // for a bar. 0 is unknown.
   uint32 progress_permille = 3;
-  // THE STATUS LINE'S CONTROLS (DESIGN.md: at most one inline text action).
+  // THE STATUS LINE'S CONTROLS (product-intuition/references/design-behaviour.md § Status line: at most one inline text action).
   // `retry_label` is that one text action — FAILED only, EMPTY otherwise.
   // `dismiss_label` is the line's CLOSE KEY (an icon control; this is its
   // accessibility label), set at FILED and at FAILED, EMPTY otherwise.
@@ -444,6 +465,8 @@ message DocsDriveEvent {
     // ---- The header's filter menu ----
     FilterMenuPicked filter_menu_picked = 26;
     FilterMenuCleared filter_menu_cleared = 27;
+    // A label chip over the shelf: on, or off when it is the one set.
+    LabelChipPicked label_chip = 28;
   }
   // `FollowedChanged`: the drive reads what the vault follows itself.
   reserved 23;
@@ -531,6 +554,11 @@ message DocsDriveEvent {
   message IngestRetried {}
 
   message IngestDismissed {}
+
+  // A `DocsLabelChip.label` over the shelf.
+  message LabelChipPicked {
+    string label = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +588,8 @@ message DocsDocumentState {
   reserved "asking";
   // THE SCREEN IS DONE — the document was deleted forever here. The shell pops.
   bool dismissed = 14;
+  // THE "ABOUT" PICKER (#1173): who the document is about, picked by name.
+  LinkPicker about_picker = 15;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -618,6 +648,19 @@ message DocsDocumentData {
   // The drive's folders and labels, for the move and labels sheets.
   repeated DocsFolderNode folders = 13;
   repeated string labels = 14;
+  // THE QUICK LOOK BAR under the page: Share, Star, Labels, Move and Trash on
+  // a live document; Restore and Delete forever on a trashed one. `actions` is
+  // the longer list behind More.
+  repeated DocsAction bar = 15;
+  // "PDF · 2.1 MB" and "Changed 28 Oct": the info card's first line.
+  string kind_size = 16;
+  string changed = 17;
+  // The head's second line: "Docs › Taxes 2025" (the folder it is filed in).
+  string subtitle = 18;
+  // "Labels", the info card's row. Its chips are `row.labels`.
+  string labels_heading = 19;
+  // "About" (#1173): the people the document is about.
+  LinkSection about = 20;
 }
 
 // The row that opens the version history.
@@ -705,6 +748,8 @@ message DocsDocumentEvent {
     LabelDraftEdited label_draft = 10;
     Confirmed confirmed = 11;
     Dismissed dismissed = 12;
+    // The About section's and picker's events (#1173).
+    LinkEvent about = 13;
   }
 
   message Refreshed {}

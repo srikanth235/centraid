@@ -1,4 +1,4 @@
-//! THE TWENTY-SEVEN ACTIONS, as command invocations.
+//! THE TWENTY-NINE ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app, so this module is a table, not
@@ -9,7 +9,7 @@
 //! are both `person.edit`), and an action's input is its command's input,
 //! verbatim.
 //!
-//! **Three commands are Agenda's**, which owns events and tasks:
+//! **Three commands are Reminders' and Calendar's**, which own tasks and events:
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
@@ -111,8 +111,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-six actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 27] = [
+/// THE TABLE. Twenty-nine actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 29] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -140,6 +140,9 @@ pub const ACTIONS: [ActionRow; 27] = [
     confirmed("delete-contact-channel", "person.remove_contact_point"),
     confirmed("merge-people", "person.merge"),
     act("follow-contacts", "follow.contacts"),
+    // Item 20 (#1173): the More page's Import and Export of vCards.
+    act("import-vcf", "person.import_vcf"),
+    act("export-vcf", "person.export_vcf"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -199,7 +202,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 27);
+        assert_eq!(ACTIONS.len(), 29);
         assert_eq!(
             commands("person."),
             [
@@ -211,6 +214,8 @@ mod tests {
                 "person.add_relationship",
                 "person.add_task",
                 "person.edit",
+                "person.export_vcf",
+                "person.import_vcf",
                 "person.log_interaction",
                 "person.merge",
                 "person.move",
@@ -254,8 +259,8 @@ mod tests {
         );
     }
 
-    /// Every command an action names is one the vault registers, Agenda's three
-    /// included.
+    /// Every command an action names is one the vault registers, Reminders' and Calendar's
+    /// three included.
     #[test]
     fn every_action_names_a_command_the_vault_registers() {
         let registry =

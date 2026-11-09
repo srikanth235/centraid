@@ -1,5 +1,6 @@
 package dev.centraid.android
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
@@ -20,8 +21,10 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import dev.centraid.android.backup.MediaStoreDeleter
+import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.notify.NotifyTaps
 import dev.centraid.android.screens.RustRoot
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.theme.CentraidTheme
@@ -64,14 +67,32 @@ public class MainActivity : FragmentActivity() {
         open.scope.launch { open.screens.memoryWarning() }
     }
 
+    /**
+     * A tap on a notification, or the shortcut or widget button (#1173), reached an activity that was
+     * already running: the tap is reported at once if the session is, else with the launch's.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        NotifyTaps.note(intent)
+        AgendaIntents.accept(intent)
+        val open = AppSession.current.value ?: return
+        open.scope.launch { NotifyTaps.flush(open.screens) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A secret copied before the app was killed is cleared once its deadline has passed.
         ClipboardDeadline.sweep(applicationContext)
+        // A TAP ON A NOTIFICATION launched this: reported once the session is up (below).
+        NotifyTaps.note(intent)
         // EDGE TO EDGE: the page ground is the emitted `bg` and reaches the notch; the insets are paid
         // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
         placeDemoVaults()
+        // THE LAUNCHER SHORTCUT'S "ADD A REMINDER" AND A WIDGET'S TAPS (#1173), queued until the session
+        // reports it. A recreated activity (a rotation) is handed the same intent again: not twice.
+        if (savedInstanceState == null) AgendaIntents.accept(intent)
         // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2):
         // `mobile/scripts/demo-vault.sh android` starts the activity with the public all-`abandon`
         // words' seed as an extra, and the shelf stores it where a real seed lives. A build that is
@@ -95,6 +116,7 @@ public class MainActivity : FragmentActivity() {
                     try {
                         rust.attach(opened, scope)
                         value = opened
+                        NotifyTaps.flush(opened.screens)
                         awaitCancellation()
                     } finally {
                         rust.detach()

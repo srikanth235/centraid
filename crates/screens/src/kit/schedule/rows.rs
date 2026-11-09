@@ -1,0 +1,585 @@
+//! WHAT ONE TASK SAYS AS A ROW — one way, for every to-do surface (Day,
+//! Schedule, To-do, a list, a project, Catch up).
+//!
+//! Pure: every date is a civil string the core already placed in the device's
+//! zone (`due_day`, `due_time`, `remind_at_local`, `completed_day`), and `today`
+//! is the answer's own, never the device clock's UTC day. The words are
+//! [`crate::kit::civil`] and [`crate::strings::task`]; a view formats nothing.
+
+use std::collections::HashMap;
+
+use centraid_api_proto::core_v1 as wire;
+use wire::AgendaTaskGroupKind as Kind;
+
+use crate::kit::civil::{self, HourCycle};
+use crate::kit::schedule::routes;
+use crate::kit::schedule::rule_words;
+use crate::strings::{
+    Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,
+};
+
+pub const STATUS_OPEN: &str = "open";
+pub const STATUS_DONE: &str = "done";
+pub const STATUS_CANCELLED: &str = "cancelled";
+/// A later occurrence of a repeating reminder that Calendar projects onto its day: open, but with no
+/// row of its own, so its box does not tick (a tap opens the series' reminder in Reminders).
+pub const STATUS_PROJECTED: &str = "projected";
+
+/// The board window, and how far "Show more" may widen it (the manifest's 20…500).
+pub const PAGE: u32 = 100;
+pub const MAX_WINDOW: u32 = 500;
+
+/// Filing choice keys.
+pub const FILE_INBOX: &str = "inbox";
+pub const FILE_PROJECT: &str = "project:";
+pub const FILE_SECTION: &str = "section:";
+
+/// A group verb's keys: Overdue's way out, and a section's add target.
+pub const VERB_CATCH_UP: &str = "catch_up";
+pub const VERB_ADD: &str = "add:";
+
+/// Undated open work this old says how long it has sat.
+const SITTING_DAYS: i32 = 30;
+const META_SEPARATOR: &str = " · ";
+
+/// What a row needs besides its task.
+#[derive(Clone, Debug, Default)]
+pub struct Context<'a> {
+    pub today: &'a str,
+    pub projects: HashMap<&'a str, &'a wire::AgendaTaskProject>,
+    pub sections: HashMap<&'a str, &'a wire::AgendaTaskSection>,
+    /// The group head already names the day, so the row says the time only.
+    pub day_in_head: bool,
+    /// Name the project in the meta line (not inside the project itself).
+    pub show_project: bool,
+    /// How the phone words a time of day; 24-hour until the shell says.
+    pub cycle: HourCycle,
+    /// Every row's box does not check it, a tap opens it. (Calendar's projected occurrences are
+    /// read-only on their own: [`STATUS_PROJECTED`].)
+    pub read_only: bool,
+}
+
+impl<'a> Context<'a> {
+    /// A context over a board's projects and sections.
+    #[must_use]
+    pub fn of(
+        today: &'a str,
+        projects: &'a [wire::AgendaTaskProject],
+        sections: &'a [wire::AgendaTaskSection],
+    ) -> Self {
+        Self {
+            today,
+            projects: projects
+                .iter()
+                .map(|p| (p.project_id.as_str(), p))
+                .collect(),
+            sections: sections
+                .iter()
+                .map(|s| (s.section_id.as_str(), s))
+                .collect(),
+            day_in_head: false,
+            show_project: true,
+            cycle: HourCycle::default(),
+            read_only: false,
+        }
+    }
+}
+
+#[must_use]
+pub fn is_open(task: &wire::AgendaTask) -> bool {
+    task.status != STATUS_DONE && task.status != STATUS_CANCELLED
+}
+
+#[must_use]
+pub fn check_of(status: &str) -> wire::TodoCheck {
+    match status {
+        STATUS_DONE => wire::TodoCheck::Done,
+        STATUS_CANCELLED => wire::TodoCheck::WontDo,
+        _ => wire::TodoCheck::Open,
+    }
+}
+
+#[must_use]
+pub fn check_label(locale: Locale, title: &str, open: bool) -> String {
+    if open {
+        format!(
+            "{} {title} {}",
+            words::mark(locale),
+            words::done_suffix(locale)
+        )
+    } else {
+        format!("{} {title}", words::reopen(locale))
+    }
+}
+
+/// The row for `task`; `subtask` rows carry no children of their own.
+#[must_use]
+pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool) -> wire::TodoRow {
+    let title = if task.title.trim().is_empty() {
+        words::untitled(locale)
+    } else {
+        task.title.clone()
+    };
+    let due = due_label(locale, task, ctx);
+    let meta = meta(locale, task, ctx);
+    let priority = priority_label(locale, task.priority);
+    let check = check_of(&task.status);
+    let open = matches!(check, wire::TodoCheck::Open | wire::TodoCheck::InProcess);
+    let spoken = priority_spoken(locale, task.priority);
+    let accessibility = [title.as_str(), &due, &meta, &spoken]
+        .iter()
+        .filter(|part| !part.is_empty())
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
+    wire::TodoRow {
+        task_id: task.task_id.clone(),
+        children: if subtask {
+            Vec::new()
+        } else {
+            task.children
+                .iter()
+                .map(|child| row(locale, child, ctx, true))
+                .collect()
+        },
+        due_label: due,
+        overdue: task.overdue && open,
+        meta,
+        priority_label: priority,
+        project_hue_key: task
+            .project_id
+            .as_deref()
+            .map(|id| hue_of(id, ctx.projects.get(id).copied()))
+            .unwrap_or_default(),
+        check: check as i32,
+        check_label: check_label(locale, &title, open),
+        accessibility_label: accessibility,
+        subtask,
+        can_file: open && !subtask,
+        route: Some(routes::task(&task.task_id)),
+        flagged: task.flagged,
+        read_only: ctx.read_only || task.status == STATUS_PROJECTED,
+        list_color_key: task
+            .project_id
+            .as_deref()
+            .map(|id| list_color_of(id, ctx.projects.get(id).copied()))
+            .unwrap_or_default(),
+        title,
+    }
+}
+
+/// The due, in words. Overdue says how long ago — a fact, in the attention
+/// tone, never a scold. A group head that names the day leaves the time.
+#[must_use]
+pub fn due_label(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
+    if task.due_day.is_empty() {
+        return String::new();
+    }
+    if let Some(days) = task
+        .days_from_today
+        .filter(|days| task.overdue && *days < 0)
+    {
+        return if days == -1 {
+            civil::relative_day(locale, &task.due_day, ctx.today)
+        } else {
+            format!("{} {}", -days, words::days_ago(locale))
+        };
+    }
+    let time = civil::time_for(locale, &task.due_time, ctx.cycle);
+    if ctx.day_in_head {
+        return time;
+    }
+    let day = civil::relative_day(locale, &task.due_day, ctx.today);
+    if task.due_time.is_empty() {
+        day
+    } else if task.lands_today {
+        time
+    } else {
+        format!("{day} {time}")
+    }
+}
+
+/// The meta line: project · repeats · missed · reminder · effort · tags ·
+/// family · age · logbook day. Each part only when it says something.
+#[must_use]
+pub fn meta(locale: Locale, task: &wire::AgendaTask, ctx: &Context) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let project = task
+        .project_id
+        .as_deref()
+        .and_then(|id| ctx.projects.get(id))
+        .filter(|_| ctx.show_project);
+    if let Some(project) = project {
+        let section = task
+            .section_id
+            .as_deref()
+            .and_then(|id| ctx.sections.get(id));
+        parts.push(match section {
+            Some(section) => format!("{} · {}", project.name, section.name),
+            None => project.name.clone(),
+        });
+    }
+    // THE CORE'S SENTENCE, never a dash.
+    if let Some(rule) = task
+        .rrule
+        .as_deref()
+        .filter(|rule| task.repeats && !rule.trim().is_empty())
+    {
+        parts.push(rule_words::stored(locale, rule));
+    }
+    if task.missed > 0 && !task.due_day.is_empty() {
+        parts.push(format!(
+            "{} {} · {} {}",
+            words::missed(locale),
+            task.missed,
+            words::next_is(locale),
+            civil::relative_day(locale, &task.due_day, ctx.today)
+        ));
+    }
+    parts.extend(reminder_part(locale, task, ctx.today, ctx.cycle));
+    if let Some(minutes) = task.effort_min {
+        parts.push(effort_label(locale, minutes));
+    }
+    parts.extend(task.tags.iter().map(|tag| format!("#{}", tag.label)));
+    if !task.children.is_empty() {
+        parts.push(format!(
+            "{} {} {}",
+            task.done_children,
+            words::of(locale),
+            task.children.len()
+        ));
+    }
+    if task.due_day.is_empty() && is_open(task) {
+        let month = civil::month_of(locale, &task.created_local_day);
+        if task.age_days.is_some_and(|age| age >= SITTING_DAYS) && !month.is_empty() {
+            parts.push(format!("{} {month}", words::sitting_since(locale)));
+        }
+    }
+    if !is_open(task) && !task.completed_day.is_empty() {
+        let day = civil::relative_day(locale, &task.completed_day, ctx.today);
+        parts.push(if task.status == STATUS_CANCELLED {
+            format!("{} · {day}", words::wont_do(locale).to_lowercase())
+        } else {
+            day
+        });
+    }
+    parts.retain(|part| !part.is_empty());
+    parts.join(META_SEPARATOR)
+}
+
+/// THE OWNER'S RULING ON A DATE-ONLY REMINDER: it names a moment only when the
+/// core supplies one (`remind_at_local`); a date has no moment to count back
+/// from, so it says "on the day" and never invents 09:00.
+#[must_use]
+pub fn reminder_part(
+    locale: Locale,
+    task: &wire::AgendaTask,
+    today: &str,
+    cycle: HourCycle,
+) -> Option<String> {
+    if !task.remind_at_local.is_empty() {
+        let day = civil::relative_day(
+            locale,
+            task.remind_at_local.get(..10).unwrap_or_default(),
+            today,
+        );
+        return Some(format!(
+            "{} {day} {}",
+            words::reminder(locale),
+            civil::clock_for(locale, &task.remind_at_local, cycle)
+        ));
+    }
+    if task.remind_before_min.is_some() && !task.due_day.is_empty() {
+        return Some(format!(
+            "{} {}",
+            words::reminder(locale),
+            words::reminder_on_the_day(locale).to_lowercase()
+        ));
+    }
+    None
+}
+
+/// `~25 min`, `~1 hour`.
+#[must_use]
+pub fn effort_label(locale: Locale, minutes: i64) -> String {
+    if minutes == 60 {
+        format!(
+            "{}{}",
+            words::effort_prefix(locale),
+            words::effort_hour(locale)
+        )
+    } else {
+        format!(
+            "{}{minutes} {}",
+            words::effort_prefix(locale),
+            words::min(locale)
+        )
+    }
+}
+
+/// Four member-facing levels over the core's scale, higher more urgent.
+#[must_use]
+pub fn priority_label(locale: Locale, priority: i64) -> String {
+    match priority {
+        i64::MIN..=0 => String::new(),
+        1 => card_words::priority_1(locale),
+        2 => card_words::priority_2(locale),
+        _ => card_words::priority_3(locale),
+    }
+}
+
+/// What a screen reader says for [`priority_label`]: the bangs are not words.
+#[must_use]
+pub fn priority_spoken(locale: Locale, priority: i64) -> String {
+    match priority {
+        i64::MIN..=0 => String::new(),
+        1 => card_words::priority_1_spoken(locale),
+        2 => card_words::priority_2_spoken(locale),
+        _ => card_words::priority_3_spoken(locale),
+    }
+}
+
+/// A project's hue as the theme's colour role (`cTeal`): the stored hue when it
+/// is a wheel hue, else the id's own.
+#[must_use]
+pub fn hue_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
+    let key = centraid_design::party_hue_key(project_id, project.and_then(|p| p.color.as_deref()))
+        .unwrap_or_else(|| centraid_design::identity_hue_key(project_id));
+    hue_role(key)
+}
+
+/// A list's colour key (the `[list]` names of `design/tokens.toml`): what the
+/// list stored, put on the one palette of eight. There is no red, amber or
+/// green list, and an imported red list is raspberry (#1173).
+#[must_use]
+pub fn list_color_of(project_id: &str, project: Option<&wire::AgendaTaskProject>) -> String {
+    centraid_design::list_color_key(project_id, project.and_then(|p| p.color.as_deref())).to_owned()
+}
+
+/// A wheel key as the theme's colour role: `rose` → `cRose`; empty stays empty.
+#[must_use]
+pub fn hue_role(wheel_key: &str) -> String {
+    let mut chars = wheel_key.chars();
+    chars.next().map_or_else(String::new, |first| {
+        format!("c{}{}", first.to_uppercase(), chars.as_str())
+    })
+}
+
+/// `April 2026`.
+#[must_use]
+pub fn month_year(locale: Locale, day: &str) -> String {
+    format!(
+        "{} {}",
+        civil::month_of(locale, day),
+        day.get(..4).unwrap_or_default()
+    )
+}
+
+/// `3 tasks`, `1 task`.
+#[must_use]
+pub fn count(locale: Locale, n: usize) -> String {
+    format!(
+        "{n} {}",
+        if n == 1 {
+            words::task_one(locale)
+        } else {
+            words::task_many(locale)
+        }
+    )
+}
+
+/// The core's groups, finished. A group left empty is dropped, except a
+/// project's sections, which are drawn empty (the core's own rule for the
+/// project view).
+#[must_use]
+pub fn groups(
+    locale: Locale,
+    groups: &[wire::AgendaTaskGroup],
+    ctx: &Context,
+) -> Vec<wire::TodoRowGroup> {
+    let mut last_month = ctx.today.get(..7).unwrap_or_default().to_owned();
+    groups
+        .iter()
+        .filter_map(|group| {
+            let kind = Kind::try_from(group.kind).unwrap_or(Kind::Unspecified);
+            let keep_empty = kind == Kind::Section;
+            let day_head = matches!(kind, Kind::Today | Kind::Day);
+            let mut row_ctx = ctx.clone();
+            row_ctx.day_in_head = day_head;
+            row_ctx.show_project = ctx.show_project && kind != Kind::Project;
+            let rows: Vec<_> = group
+                .tasks
+                .iter()
+                .map(|t| row(locale, t, &row_ctx, false))
+                .collect();
+            if rows.is_empty() && !keep_empty {
+                return None;
+            }
+            let month = (kind == Kind::Day && group.day.len() >= 7)
+                .then(|| group.day[..7].to_owned())
+                .filter(|month| *month != last_month)
+                .inspect(|month| last_month.clone_from(month))
+                .map(|_| month_year(locale, &group.day));
+            let (verb_label, verb_key) = verb_of(locale, group, kind);
+            Some(wire::TodoRowGroup {
+                key: if group.key.is_empty() {
+                    format!(
+                        "{}|{}|{}|{}",
+                        group.kind,
+                        group.day,
+                        group.project_id.as_deref().unwrap_or_default(),
+                        group.section_id.as_deref().unwrap_or_default()
+                    )
+                } else {
+                    group.key.clone()
+                },
+                title: title_of(locale, group, kind, ctx),
+                meta: rows.len().to_string(),
+                month_heading: month,
+                verb_label,
+                verb_key,
+                rows,
+            })
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn title_of(
+    locale: Locale,
+    group: &wire::AgendaTaskGroup,
+    kind: Kind,
+    ctx: &Context,
+) -> String {
+    match kind {
+        Kind::Overdue => words::group_overdue(locale),
+        Kind::Today => words::group_today(locale),
+        Kind::Day => civil::relative_day(locale, &group.day, ctx.today),
+        Kind::Inbox => words::inbox(locale),
+        Kind::Project => group
+            .project_id
+            .as_deref()
+            .and_then(|id| ctx.projects.get(id))
+            .map_or_else(|| words::inbox(locale), |p| p.name.clone()),
+        Kind::Dated => words::group_dated(locale),
+        Kind::Undated => words::group_undated(locale),
+        Kind::Done => words::done(locale),
+        Kind::WontDo => words::wont_do(locale),
+        Kind::Reminders => words::group_reminders(locale),
+        Kind::Section => group
+            .section_id
+            .as_deref()
+            .and_then(|id| ctx.sections.get(id))
+            .map_or_else(|| words::group_unsectioned(locale), |s| s.name.clone()),
+        Kind::Unsectioned => words::group_unsectioned(locale),
+        Kind::Unspecified => String::new(),
+    }
+}
+
+fn verb_of(locale: Locale, group: &wire::AgendaTaskGroup, kind: Kind) -> (String, String) {
+    match kind {
+        Kind::Overdue => (words::catch_up(locale), VERB_CATCH_UP.to_owned()),
+        Kind::Section => (
+            words::add_task(locale),
+            format!(
+                "{VERB_ADD}{}",
+                group.section_id.as_deref().unwrap_or_default()
+            ),
+        ),
+        Kind::Unsectioned => (words::add_task(locale), VERB_ADD.to_owned()),
+        _ => (String::new(), String::new()),
+    }
+}
+
+/// Roots on screen, for the count.
+#[must_use]
+pub fn root_count(groups: &[wire::TodoRowGroup]) -> usize {
+    groups.iter().map(|group| group.rows.len()).sum()
+}
+
+/// A group's roots and their children.
+#[must_use]
+pub fn flatten(group: &wire::AgendaTaskGroup) -> Vec<&wire::AgendaTask> {
+    group
+        .tasks
+        .iter()
+        .flat_map(|t| std::iter::once(t).chain(t.children.iter()))
+        .collect()
+}
+
+/// The fixed words a to-do screen draws, so no view carries copy.
+#[must_use]
+pub fn chrome(locale: Locale) -> wire::TodoChrome {
+    wire::TodoChrome {
+        title: reminders::reminders_title(locale),
+        retry: words::retry(locale),
+        loading: words::loading(locale),
+        search_placeholder: words::search_placeholder(locale),
+        search_label: words::search_label(locale),
+        search_close: words::close(locale),
+        more_title: words::more_title(locale),
+        reads_title: words::reads_title(locale),
+        reads_facts: vec![
+            wire::TodoFact {
+                label: words::reads_fact_reads(locale),
+                detail: words::reads_fact_reads_value(locale),
+            },
+            wire::TodoFact {
+                label: words::reads_fact_writes(locale),
+                detail: words::reads_fact_writes_value(locale),
+            },
+            wire::TodoFact {
+                label: words::reads_fact_leaves(locale),
+                detail: words::reads_fact_leaves_value(locale),
+            },
+        ],
+        quick_add_placeholder: words::title_placeholder(locale),
+        quick_add_verb: words::add(locale),
+        file_title: words::file_title(locale),
+        add_section_title: words::add_section(locale),
+        add_section_placeholder: words::add_section_placeholder(locale),
+        add_section_verb: words::add_section(locale),
+        cancel: words::cancel(locale),
+        home: words::band_home(locale),
+        show_more: words::show_more(locale),
+        back: reminders::reminders_title(locale),
+        add_subtask_verb: words::add(locale),
+        add_tag_verb: words::add(locale),
+        file_verb: words::file(locale),
+        details_verb: reminders::details(locale),
+        flag_verb: reminders::flag(locale),
+        unflag_verb: reminders::unflag(locale),
+        delete_verb: words::delete(locale),
+        new_reminder: reminders::new_reminder(locale),
+        show_completed_verb: reminders::show_completed(locale),
+        hide_completed_verb: reminders::hide_completed(locale),
+        clear_completed_verb: reminders::clear_completed(locale),
+        move_up_verb: reminders::move_up(locale),
+        move_down_verb: reminders::move_down(locale),
+    }
+}
+
+#[cfg(test)]
+mod cycle_tests {
+    use super::*;
+
+    #[test]
+    fn a_due_time_is_worded_in_the_cycle_of_the_context() {
+        let task = wire::AgendaTask {
+            due_day: "2026-03-11".to_owned(),
+            due_time: "09:00".to_owned(),
+            lands_today: true,
+            ..wire::AgendaTask::default()
+        };
+        let said = |cycle| {
+            let ctx = Context {
+                today: "2026-03-11",
+                cycle,
+                ..Context::default()
+            };
+            due_label(Locale::En, &task, &ctx)
+        };
+        assert_eq!(said(HourCycle::H24), "09:00");
+        assert_eq!(said(HourCycle::H12), "9:00 AM");
+    }
+}

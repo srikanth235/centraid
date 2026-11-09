@@ -1,5 +1,15 @@
 package dev.centraid.android.screens.agenda
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,6 +52,7 @@ import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
@@ -93,6 +104,15 @@ internal fun TodoDetailScreen(
     val open = state.data_?.fields?.firstOrNull { it.key == state.open_field }
     if (open != null) {
         TodoFieldSheet(open, state.chrome?.add_tag_verb.orEmpty(), onEvent)
+    }
+    // THE CUSTOM REPEAT SHEET: the editor's own, over this task's rule; Done is Rust's.
+    state.data_?.custom_repeat?.let { custom ->
+        CustomRepeatSheetView(
+            fallbackTitle = "",
+            custom = custom,
+            onEvent = { onEvent(TodoDetailEvent(custom_repeat = it)) },
+            onDismiss = { onEvent(TodoDetailEvent(field_closed = TodoDetailEvent.FieldClosed())) },
+        )
     }
     val confirm = state.confirm
     if (confirm != null) {
@@ -148,18 +168,60 @@ private fun TodoDetailBody(
             onEdit = { onEvent(TodoDetailEvent(notes = TodoDetailEvent.NotesChanged(notes = it))) },
             testTag = "tasks-detail-notes",
         )
-        data.fields.forEach { field ->
-            if (field.enabled) {
-                ChoiceFieldRow(
-                    key = field.label,
-                    value = field.value_,
-                    testTag = "tasks-field-${field.key}",
-                    onTap = { onEvent(TodoDetailEvent(field_opened = TodoDetailEvent.FieldOpened(field_ = field.key))) },
-                )
-                if (field.note.isNotEmpty()) FieldNote(field.note)
-            } else {
-                FieldRow(key = field.label, value = field.value_, note = field.note)
+        // THE TASK'S ADDRESS (#1173 wave 2): as stored, with the verb that hands it to the phone.
+        data.link?.let { link ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("agenda-detail-link")) {
+                Text(link.label, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(link.url, style = centraidType("body"), color = centraidColor("text"), maxLines = 2, modifier = Modifier.weight(1f))
+                    KitLink(
+                        label = link.open_label,
+                        onClick = { onEvent(TodoDetailEvent(open_link = TodoDetailEvent.OpenLinkTapped())) },
+                        modifier = Modifier
+                            .testTag("agenda-detail-link-open")
+                            .semantics { contentDescription = link.accessibility_label.ifEmpty { link.open_label } },
+                    )
+                }
             }
+        }
+        // THE GROUPED CARDS (#1173): a field with a `group` opens a card under that heading and the fields
+        // after it (with none) continue it; fields before the first heading stand on the page.
+        val blocks = mutableListOf<List<TodoField>>()
+        data.fields.forEach { field ->
+            if (field.group.isNotEmpty() || blocks.isEmpty()) blocks.add(listOf(field)) else blocks[blocks.lastIndex] = blocks.last() + field
+        }
+        blocks.forEach { block ->
+            val head = block.first()
+            if (head.group.isEmpty()) {
+                block.forEach { TodoFieldRow(it, onEvent) }
+            } else {
+                Text(
+                    head.group,
+                    style = centraidType("eyebrow"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
+                )
+                val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+                Column(
+                    Modifier
+                        .padding(horizontal = KitGeometry.GUTTER)
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(Surface.card)
+                        .border(KitGeometry.HAIRLINE, Surface.border, shape)
+                        .testTag("tasks-detail-group-${head.key}"),
+                ) {
+                    block.forEach { TodoFieldRow(it, onEvent) }
+                }
+            }
+        }
+        data.attachments?.let { section ->
+            AgendaAttachmentsView(
+                section = section,
+                prefix = "agenda-detail",
+                onEvent = { onEvent(TodoDetailEvent(attachment = it)) },
+                onOpen = onOpen,
+            )
         }
         if (data.subtasks_label.isNotEmpty() || data.subtasks.isNotEmpty()) {
             SectionHeader(SectionHead(title = data.subtasks_label))
@@ -189,6 +251,43 @@ private fun TodoDetailBody(
                 }
             }
         }
+    }
+}
+
+/** One field: a switch row for a `toggle`, else the choice row that opens its sheet (or a plain row while it takes no edit). */
+@Composable
+private fun TodoFieldRow(field: TodoField, onEvent: (TodoDetailEvent) -> Unit) {
+    if (field.toggle) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .toggleable(
+                    value = field.on,
+                    enabled = field.enabled,
+                    role = Role.Switch,
+                    onValueChange = { next ->
+                        onEvent(TodoDetailEvent(field_choice = TodoDetailEvent.FieldChoice(field_ = field.key, key = if (next) "on" else "off")))
+                    },
+                )
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+                .testTag("tasks-field-${field.key}"),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(field.label, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+            Switch(checked = field.on, onCheckedChange = null, enabled = field.enabled, colors = kitSwitchColors())
+        }
+        if (field.note.isNotEmpty()) FieldNote(field.note)
+    } else if (field.enabled) {
+        ChoiceFieldRow(
+            key = field.label,
+            value = field.value_,
+            testTag = "tasks-field-${field.key}",
+            onTap = { onEvent(TodoDetailEvent(field_opened = TodoDetailEvent.FieldOpened(field_ = field.key))) },
+        )
+        if (field.note.isNotEmpty()) FieldNote(field.note)
+    } else {
+        FieldRow(key = field.label, value = field.value_, note = field.note)
     }
 }
 

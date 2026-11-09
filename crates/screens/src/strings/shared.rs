@@ -1,7 +1,7 @@
 //! The kit's sentences, shared by every app's screens: civil words (weekdays,
 //! months, Today), trash, autosave and search. The native kit's
 //! fixed words (`KitWords`) are emitted from this file by
-//! `contracts/tools/export-native-words.ts`. A lane that needs another shared
+//! `cargo xtask design` (`crates/xtask/src/design_words.rs`). A lane that needs another shared
 //! sentence adds it here in its own block.
 
 catalog! {
@@ -12,17 +12,22 @@ catalog! {
     plain autosave_saved = ("Saved", "Saved");
     plain autosave_saving = ("Saving…", "Saving…");
     plain back = ("Back", "Back");
+    plain clock_am = ("AM", "AM");
+    plain clock_pm = ("PM", "PM");
     plain back_to = ("Back to {parent}", "Back to {parent}");
     plain kit_band_home = ("Home", "Home");
     plain kit_band_more = ("More", "More");
     plain kit_cancel = ("Cancel", "Cancel");
     plain kit_clear_filters = ("Clear filters", "Clear filters");
     plain kit_close_search = ("Close search", "Close search");
+    plain kit_delete = ("Delete", "Delete");
+    plain kit_details = ("Details", "Details");
     plain kit_dismiss = ("Dismiss", "Dismiss");
     plain kit_done = ("Done", "Done");
     plain kit_filter = ("Filter", "Filter");
     plain kit_filter_on = ("{label}, on", "{label}, on");
     plain kit_filter_sort = ("Filter and sort", "Filter and sort");
+    plain kit_flag = ("Flag", "Flag");
     plain kit_loading_more = ("Loading more", "Loading more");
     plain kit_open = ("Open", "Open");
     plain kit_opening = ("Opening", "Opening");
@@ -31,6 +36,7 @@ catalog! {
     plain kit_retry = ("Try again", "Try again");
     plain kit_save = ("Save", "Save");
     plain kit_search = ("Search", "Search");
+    plain kit_unflag = ("Unflag", "Unflag");
     plain kit_select = ("Select", "Select");
     plain kit_show_more = ("Show more", "Show more");
     plain month_01 = ("January", "January");
@@ -45,6 +51,19 @@ catalog! {
     plain month_10 = ("October", "October");
     plain month_11 = ("November", "November");
     plain month_12 = ("December", "December");
+    plain month_short_01 = ("Jan", "Jan");
+    plain month_short_02 = ("Feb", "Feb");
+    plain month_short_03 = ("Mar", "Mar");
+    plain month_short_04 = ("Apr", "Apr");
+    plain month_short_05 = ("May", "May");
+    plain month_short_06 = ("Jun", "Jun");
+    plain month_short_07 = ("Jul", "Jul");
+    plain month_short_08 = ("Aug", "Aug");
+    plain month_short_09 = ("Sep", "Sep");
+    plain month_short_10 = ("Oct", "Oct");
+    plain month_short_11 = ("Nov", "Nov");
+    plain month_short_12 = ("Dec", "Dec");
+    plain short_date = ("{day} {month}", "{day} {month}");
     plain search_ask_about = ("Ask about “{term}”", "Ask about “{term}”");
     plain search_ask_question = ("Find {term}", "Find {term}");
     plain search_corrected = ("Including results for “{corrected}”", "Including results for “{corrected}”");
@@ -55,6 +74,7 @@ catalog! {
     plain today = ("Today", "Today");
     plain tomorrow = ("Tomorrow", "Tomorrow");
     plain trash_deleted = ("Deleted", "Deleted");
+    counted trash_count = ("Trash · 1", "Trash · {n}");
     plain trash_empty_action = ("Empty trash", "Empty trash");
     plain trash_empty_body = ("Everything in trash leaves this vault for good. This cannot be undone.", "Everything in trash leaves this vault for good. This cannot be undone.");
     plain trash_empty_headline = ("Trash is empty.", "Trash is empty.");

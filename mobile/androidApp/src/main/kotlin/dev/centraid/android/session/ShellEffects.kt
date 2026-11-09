@@ -34,8 +34,12 @@ import dev.centraid.android.backup.LinkFacts
 import dev.centraid.android.backup.PassWork
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.kit.ClipboardDeadline
+import dev.centraid.android.glance.GlanceSnapshot
+import dev.centraid.android.glance.GlanceWidgets
 import dev.centraid.android.kit.SecretStores
+import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
+import dev.centraid.android.screens.agenda.performCalendarWrite
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.docs.FolderReader
 import dev.centraid.android.screens.people.readContactsSnapshot
@@ -111,7 +115,8 @@ internal class ShellEffects(
         }
         scope.launch {
             screens.effects.collect { request ->
-                if (request.effect?.model_download != null) {
+                // A WITHDRAWN PROMPT JUMPS THE QUEUE: it ends the owner check the queue is waiting on.
+                if (request.effect?.model_download != null || request.effect?.owner_check?.cancel == true) {
                     scope.launch { run(request) }
                 } else {
                     queueOf(request.instance).send(request)
@@ -156,6 +161,13 @@ internal class ShellEffects(
                 PassWork.windowDone(effect.pass_window_done!!.window, effect.pass_window_done!!.drained)
                 EffectResult(pass_noted = PassNoted())
             }
+            // ---- notifications (`crates/screens/src/agenda/notify`) ----------------------------
+            // THE PROMPT IS THE ACTIVITY'S (`UiHost.ask`); with none up nothing is asked and Rust hears NOT_ASKED.
+            effect.schedule_notifications != null -> EffectResult(
+                notifications_scheduled = withContext(Dispatchers.IO) {
+                    Notify.schedule(context, effect.schedule_notifications!!) { ui?.ask(Manifest.permission.POST_NOTIFICATIONS) }
+                },
+            )
             effect.long_run != null -> {
                 if (effect.long_run!!.start) BackupNow.start(context, effect.long_run!!.title, effect.long_run!!.channel_name) else BackupNow.stop(context)
                 EffectResult(pass_noted = PassNoted())
@@ -196,11 +208,17 @@ internal class ShellEffects(
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
                     EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
                 } else {
+                    // THE WRITE GRANT SHARES READ'S GROUP: asked at the same tap, the system grants it without a second prompt.
+                    if (read.ask_permission) allowed(Manifest.permission.WRITE_CALENDAR, true)
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
                     }.fold({ EffectResult(calendar = it) }, { failed("the calendar could not be read") })
                 }
             }
+            // TWO-WAY CALENDAR SYNC: the core's writes to the phone's calendars; never a permission prompt.
+            effect.calendar_write != null -> effectAttempt {
+                withContext(Dispatchers.IO) { performCalendarWrite(context, effect.calendar_write!!) }
+            }.fold({ EffectResult(calendar_written = it) }, { failed("the calendar could not be written") })
             effect.contacts_read != null -> {
                 val read = effect.contacts_read!!
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
@@ -241,6 +259,18 @@ internal class ShellEffects(
                 EffectResult(camera_read = CameraRead(camera = camera.orEmpty()))
             }
             effect.render_edit != null -> PhotosEditRender.perform(context, core, effect.render_edit!!)
+            // ---- Agenda's widgets (#1173) --------------------------------------------------------
+            // The snapshot Rust composed, kept as the one file the widgets draw, then redrawn. A
+            // version this shell does not draw is refused, so a newer core never paints a half read.
+            effect.agenda_glance != null -> {
+                val glance = effect.agenda_glance!!
+                if (glance.version != GlanceSnapshot.VERSION) {
+                    failed("the widgets draw another snapshot version")
+                } else {
+                    effectAttempt { withContext(Dispatchers.IO) { GlanceWidgets.keep(context, glance.document.toByteArray()) } }
+                        .fold({ done }, { failed("the widgets' snapshot could not be kept") })
+                }
+            }
             // ---- generic platform work -----------------------------------------------------------
             effect.clipboard_set != null -> {
                 val set = effect.clipboard_set!!

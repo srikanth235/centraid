@@ -12,6 +12,7 @@ category.merge
 checkpoint.record
 container.create
 container.move
+container.style
 derivative.drop
 derivative.write
 document.add
@@ -39,6 +40,7 @@ follow.calendar
 follow.contacts
 follow.files
 follow.health
+follow.pushed
 follow.statement
 follow.stop
 locker.add_item
@@ -61,6 +63,8 @@ measurement.log
 measurement.record
 note.create
 note.edit
+note.export
+note.import
 note.move
 note.restore_version
 person.add
@@ -71,6 +75,8 @@ person.add_note
 person.add_relationship
 person.add_task
 person.edit
+person.export_vcf
+person.import_vcf
 person.log_interaction
 person.merge
 person.move
@@ -87,6 +93,7 @@ rule.apply
 rule.delete
 rule.edit
 tag.add
+tag.color
 tag.remove
 task.add
 task.cancel

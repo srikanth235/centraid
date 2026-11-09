@@ -105,6 +105,26 @@ impl Export {
         step.effects
     }
 
+    /// Take down the export's own owner check when one is up.
+    fn withdraw_check(&mut self, popped: bool) -> Vec<wire::Effect> {
+        let checking = self.phase == wire::locker_export_state::Phase::Checking;
+        if popped {
+            self.confirm = false;
+            self.phase = wire::locker_export_state::Phase::Idle;
+        } else if checking {
+            self.phase = wire::locker_export_state::Phase::Idle;
+        }
+        if !checking {
+            return Vec::new();
+        }
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
+                cancel: true,
+                ..Default::default()
+            })),
+        }]
+    }
+
     /// The owner check's answer, for an export that is checking.
     fn checked(&mut self, ctx: &Ctx, checked: &wire::OwnerChecked) -> Vec<wire::Effect> {
         let locale = ctx.locale();
@@ -220,6 +240,7 @@ impl Export {
                         reason: words::export_prompt_reason(locale),
                         title: words::export_prompt_title(locale),
                         subtitle: words::export_prompt_subtitle(locale),
+                        cancel: false,
                     })),
                 }]
             }
@@ -338,10 +359,13 @@ impl Screen for Export {
                     self.walled(ctx, step)
                 }
             },
-            Some(E::Left(_)) => {
-                self.confirm = false;
-                self.phase = wire::locker_export_state::Phase::Idle;
-                Vec::new()
+            Some(left @ (E::Left(_) | E::TabHidden(_))) => {
+                // THE EXPORT'S OWN OWNER CHECK goes down with the screen too; its late
+                // answer finds the phase idle and is ignored.
+                let mut effects = self.withdraw_check(matches!(left, E::Left(_)));
+                let step = self.wall.hidden();
+                effects.extend(self.walled(ctx, step));
+                effects
             }
             _ => Vec::new(),
         }
@@ -542,6 +566,7 @@ impl Import {
                             "application/json".to_owned(),
                             "text/plain".to_owned(),
                         ],
+                        ..wire::PickBytes::default()
                     })),
                 }]
             }
@@ -784,7 +809,12 @@ impl Screen for Import {
                     self.phase = wire::locker_import_state::Phase::Idle;
                     self.status = None;
                 }
-                Vec::new()
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::TabHidden(_)) => {
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }

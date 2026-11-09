@@ -15,6 +15,9 @@ path = "src/lib.rs"
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
+# Quick add reads a typed date with the app's own `nl_date` parser (#1173).
+centraid-apps-calendar = { path = "../apps/calendar" }
+centraid-apps-reminders = { path = "../apps/reminders" }
 # The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
 # the docs crate's one `folder_path` (#1135).
 centraid-apps-docs = { path = "../apps/docs" }
@@ -22,6 +25,7 @@ centraid-apps-docs = { path = "../apps/docs" }
 centraid-assist = { path = "../assist" }
 prost.workspace = true
 serde_json.workspace = true
+base64.workspace = true
 # THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.
 centraid-design = { path = "../design" }
 # Locker's one-time-code seed rule is the app crate's (`totp::seed_of`): the
@@ -34,6 +38,10 @@ centraid-identity = { path = "../identity" }
 # The headless driver founds and seeds a scratch vault (`testing`).
 centraid-ontology = { path = "../ontology" }
 
-[dev-dependencies]
-# Photos' tests stage a photograph's bytes and need the digest the vault names them by.
+# Civil time is the vault's one engine (`time::FireZone`): a reminder's instant is read in
+# the member's zone by the same rule the core placed it with, never a second reader.
+# Photos' tests also stage a photograph's bytes and need the digest the vault names them by.
+# THE ONE RRULE READER AND WRITER: the Custom repeat sheet's rule is the vault's
+# `RepeatSpec` (`time::repeat`), so a rule the editor writes is one the engine
+# expands and one it reads is the rule that was stored.
 centraid-vault = { path = "../vault" }

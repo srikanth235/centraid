@@ -163,6 +163,16 @@
         "schema": "category",
         "table": "merge",
         "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
       }
     ]
   },
@@ -1389,6 +1399,138 @@
         },
         "required": ["id", "flag"],
         "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-with",
+      "verb": "link",
+      "kind": "transaction",
+      "inverse": "remove-with",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "mark the coffee payment as with Priya",
+        "this payment was with Maya",
+        "put Priya on the coffee payment"
+      ],
+      "description": "Say who a transaction was with through edge.add (rel with, from the transaction to a person): the app proposes the person the payee names and writes the link only when the member confirms. Adding it twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          },
+          "position": {
+            "type": ["number", "null"]
+          },
+          "state": {
+            "type": ["string", "null"],
+            "enum": ["needs-action", "accepted", "declined", "tentative", null]
+          },
+          "anchor": {
+            "type": ["object", "null"]
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-with",
+      "verb": "unlink",
+      "kind": "transaction",
+      "inverse": "add-with",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "take Priya off the coffee payment",
+        "this payment was not with Maya",
+        "this coffee payment was not with Priya"
+      ],
+      "description": "Take a person off a transaction through edge.remove (rel with). The transaction keeps its place in Activity.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
       },
       "output": {
         "type": "object",

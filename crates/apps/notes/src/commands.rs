@@ -10,7 +10,7 @@
 //! input is its command's input, verbatim.
 //!
 //! **`send-to-tasks` is the one action making TWO invocations**: `task.add`
-//! (Agenda's) and then `edge.add` joining the
+//! (Reminders') and then `edge.add` joining the
 //! task to the note with an `about` edge, which is conditional on the task having
 //! landed.
 //!
@@ -107,7 +107,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Seventeen actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 17] = [
+pub const ACTIONS: [ActionRow; 19] = [
     act("create-note", "note.create"),
     act("edit-note", "note.edit"),
     act("move-note", "note.move"),
@@ -127,6 +127,10 @@ pub const ACTIONS: [ActionRow; 17] = [
     act("detach", "edge.remove"),
     act("add-tag", "tag.add"),
     act("remove-tag", "tag.remove"),
+    // Item 14 (#1173): the More page's Import and Export. Neither is reversible by an action
+    // (an import adds notes the member can trash; an export writes nothing).
+    act("import-notes", "note.import"),
+    act("export-notes", "note.export"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -175,7 +179,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_note_verbs_are_the_notes_own() {
-        assert_eq!(ACTIONS.len(), 17);
+        assert_eq!(ACTIONS.len(), 19);
         let note_own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -187,7 +191,9 @@ mod tests {
                 "note.create",
                 "note.edit",
                 "note.move",
-                "note.restore_version"
+                "note.restore_version",
+                "note.import",
+                "note.export"
             ],
             "what only a note has; everything else is a shared verb"
         );
@@ -218,7 +224,7 @@ mod tests {
             .collect();
         assert_eq!(edges, ["link", "attach"]);
         // One scope per distinct command.
-        assert_eq!(act_scope_tables().len(), 15);
+        assert_eq!(act_scope_tables().len(), 17);
     }
 
     #[test]
@@ -232,7 +238,7 @@ mod tests {
     }
 
     /// Every command an action names is one the vault registers: `send-to-tasks`'
-    /// `task.add` is Agenda's.
+    /// `task.add` is Reminders'.
     #[test]
     fn every_action_names_a_command_the_vault_registers() {
         let registry =

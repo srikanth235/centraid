@@ -110,9 +110,16 @@ pub mod routes {
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
+            sheet: false,
             screen: screen.to_owned(),
             args: Some(args),
         }
+    }
+
+    /// A route the shells present as a sheet over the page that opened it.
+    fn sheet(mut route: wire::Route) -> wire::Route {
+        route.sheet = true;
+        route
     }
 
     /// Photos' home, landing on `destination`; `query` opens Search on those words.
@@ -144,28 +151,28 @@ pub mod routes {
     /// The picker that adds photographs to the album `album_id`.
     #[must_use]
     pub fn picker(album_id: &str, album_name: &str) -> wire::Route {
-        route(
+        sheet(route(
             PICKER,
             wire::route::Args::PhotosPicker(wire::PhotosPickerRoute {
                 purpose: wire::PhotosPickerPurpose::AddToAlbum as i32,
                 album_id: album_id.to_owned(),
                 album_name: album_name.to_owned(),
             }),
-        )
+        ))
     }
 
     /// The picker that chooses ONE photograph for the chat to attach; the pick goes back to
     /// `chat.home` as an `Attached` event.
     #[must_use]
     pub fn attach_picker() -> wire::Route {
-        route(
+        sheet(route(
             PICKER,
             wire::route::Args::PhotosPicker(wire::PhotosPickerRoute {
                 purpose: wire::PhotosPickerPurpose::Attach as i32,
                 album_id: String::new(),
                 album_name: String::new(),
             }),
-        )
+        ))
     }
 
     #[must_use]

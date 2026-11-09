@@ -51,13 +51,18 @@ struct CentraidApp: App {
                         .task(id: route) { shell.opened(route) }
                         // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
                         .environment(\.askChat, { shell.open($0) })
-                        // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
-                        // one status line): above the app's band where the page
+                        // THE IMPORT'S LINE on every route, at the foot (product-intuition/references/design-behaviour.md § Status line                        // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.
                         .modifier(ShellLineHost(shell: shell))
                     }
             }
-            // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
+            // A SCREEN RUST SAYS IS A SHEET (`Route.sheet`), over the page that opened it.
+            .sheet(item: $shell.sheet) { entry in
+                RustScreenHost(shell: shell, entry: entry)
+                    .environment(\.askChat, { shell.open($0) })
+                    .kitRootTint()
+            }
+            // THE ROOT'S TINT (product-intuition/references/design-behaviour.md § Controls): `link`
             // ink on every platform control, not system blue.
             .kitRootTint()
             // THE PICKERS A SCREEN CAN ASK FOR WHEREVER THE MEMBER IS: Docs' file
@@ -70,6 +75,9 @@ struct CentraidApp: App {
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
             }
+            // A WIDGET'S TAP (#1173): `centraid://agenda?open=<key>`, the core's opaque
+            // key; the core answers with the page. Any other URL is ignored.
+            .onOpenURL { shell.handleOpenURL($0) }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
@@ -79,7 +87,7 @@ struct CentraidApp: App {
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
-            // THE SYSTEM TEXT SIZE, CAPPED ONCE (DESIGN.md, Dynamic Type): every
+            // THE SYSTEM TEXT SIZE, CAPPED ONCE (product-intuition/references/design-behaviour.md § Accessibility): every
             // role but `band` follows it up to `xxxLarge`, here and nowhere else.
             .dynamicTypeSize(...Theme.textSizeCap)
             .onChange(of: scenePhase) { _, phase in

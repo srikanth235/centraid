@@ -79,7 +79,7 @@ message AppQueryRequest {
     AgendaPartiesRequest agenda_parties = 3;
     AgendaSearchRequest agenda_search = 4;
     AgendaEventRequest agenda_event = 5;
-    // Agenda's tasks: 6-9, 17 and 18. They were `tasks_*` at 10-14 and 16 before
+    // Agenda's tasks: 6-9, 17-19, 25 and 26. They were `tasks_*` at 10-14 and 16 before
     // Tasks folded into Agenda (#1135); a renamed arm takes a new number, because
     // WIRE_JSON keeps a number's JSON name, so those are reserved above.
     AgendaTaskBoardRequest agenda_task_board = 6;
@@ -89,6 +89,13 @@ message AppQueryRequest {
     AgendaTaskCatchUpRequest agenda_task_catch_up = 17;
     // The trashed tasks (#1135): the shelf the page door cannot read, since the trash is the entity's.
     AgendaTaskTrashRequest agenda_task_trash = 18;
+    // The reminders the notification service schedules from, a bounded read of its own.
+    AgendaTaskRemindersRequest agenda_task_reminders = 19;
+    // The true Today, Overdue and Flagged counts, at any vault size (#1173).
+    AgendaTaskSmartCountsRequest agenda_task_smart_counts = 26;
+    // The earliest-due open tasks of a window, at any vault size (#1173).
+    AgendaTaskDueRowsRequest agenda_task_due_rows = 25;
+    CalendarDatedRemindersRequest calendar_dated_reminders = 29;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -107,6 +114,8 @@ message AppQueryRequest {
     PeoplePersonRequest people_person = 22;
     PeopleSearchRequest people_search = 23;
     PeopleTrashRequest people_trash = 24;
+    // The people one thing is joined to (#1173): a line's `with`, a document's `about`, a photograph's `depicts`.
+    PeopleLinksRequest people_links = 28;
     // Locker (#1047): 60-69. Metadata only; a secret is the session's.
     LockerItemsRequest locker_items = 60;
     LockerItemRequest locker_item = 61;
@@ -184,6 +193,12 @@ message AppQueryResponse {
     AgendaTaskSearch agenda_task_search = 9;
     AgendaTaskCatchUp agenda_task_catch_up = 17;
     AgendaTaskTrash agenda_task_trash = 18;
+    AgendaTaskBoard agenda_task_reminders = 19;
+    AgendaTaskSmartCounts agenda_task_smart_counts = 26;
+    AgendaTaskDueRows agenda_task_due_rows = 25;
+    CalendarDatedReminders calendar_dated_reminders = 29;
+    // What an event or a task has attached (`agenda.attachments`, #1173).
+    AgendaAttachments agenda_attachments = 27;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;
@@ -201,6 +216,7 @@ message AppQueryResponse {
     PeoplePerson people_person = 22;
     PeopleSearch people_search = 23;
     PeopleTrash people_trash = 24;
+    PeopleLinks people_links = 28;
     LockerItems locker_items = 60;
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;
@@ -241,6 +257,8 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
+    // What the phone's calendars are owed (`shell.calendar-owed`, two-way sync).
+    ImportsCalendarOwed imports_calendar_owed = 1701;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

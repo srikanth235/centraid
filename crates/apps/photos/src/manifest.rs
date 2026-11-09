@@ -51,7 +51,7 @@ mod tests {
         // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
         // photograph, the collections and the places.
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 21);
+        assert_eq!(manifest.actions.len(), 23);
         for name in ["search", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }

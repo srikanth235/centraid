@@ -142,7 +142,7 @@ fn a_write_to_a_table_the_screen_read_redraws_it_once() {
     let done = driver
         .handle
         .act(&wire::ActRequest {
-            app: "agenda".to_owned(),
+            app: "calendar".to_owned(),
             action: "propose".to_owned(),
             input,
             invoke_key: "proof-1".to_owned(),
@@ -196,6 +196,7 @@ fn an_unknown_route_tab_or_instance_is_refused_by_name() {
         kind: Some(wire::nav_event::Kind::Push(wire::NavPush {
             tab: "proof".to_owned(),
             route: Some(wire::Route {
+                sheet: false,
                 screen: "nowhere".to_owned(),
                 args: None,
             }),

@@ -1,5 +1,9 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -266,17 +270,16 @@ private fun MonthHeader(title: String) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(centraidColor("bg"))
+            .background(Surface.page)
             .height(MONTH_ROW_HEIGHT.dp)
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
             .padding(top = 12.dp),
     ) {
-        Text(
+        KitText(
             text = title,
-            style = centraidType("title"),
-            color = centraidColor("text"),
+            rung = KitType.Section,
+            color = Surface.ink,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.semantics { heading() },
         )
     }
@@ -305,8 +308,8 @@ private fun DayHeader(
     ) {
         Text(
             text = title,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
+            style = kitTextStyle(KitType.Meta).copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = Surface.meta,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },
@@ -344,11 +347,11 @@ private fun tileAt(
     val item = state.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
         ?: return null
     val row = rows.firstOrNull { it.id == item.key && it.kind == PhotosRowKind.PHOTOS_ROW_KIND_TILES } ?: return null
-    var left = 0f
+    var remaining = 0f
     row.packed.forEach { packed ->
-        val right = left + packed.width.toFloat() * density
+        val right = remaining + packed.width.toFloat() * density
         if (x < right) return tiles.getOrNull(packed.tile)?.photo_id
-        left = right + GAP * density
+        remaining = right + GAP * density
     }
     return row.packed.lastOrNull()?.let { tiles.getOrNull(it.tile)?.photo_id }
 }

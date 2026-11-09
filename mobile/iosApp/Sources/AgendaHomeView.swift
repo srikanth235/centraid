@@ -25,16 +25,18 @@ struct AgendaHomeView: View {
 
     @Environment(\.colorScheme) private var scheme
     /// The quick add holds the keyboard: the band is put away while it does
-    /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
+    /// (as an editor's is, product-intuition/references/design-behaviour.md § Rooms), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
     @State private var quickAddTyping = false
 
     var body: some View {
         let content = readContent(state)
+        // THE SHARED HEADER (Day, Week and Reminders) stands in the bar; Reminders keeps its title under it.
+        let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
-            app: "agenda",
-            title: state.chrome.title,
+            app: state.appKey,
+            title: header?.title.isEmpty == false ? header?.title ?? "" : state.chrome.title,
             trailing: addAction(state, denied: content.isDenied),
             // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
             // through Rust, at the foot. None on the gate, which has nothing to search.
@@ -46,10 +48,19 @@ struct AgendaHomeView: View {
                 onTerm: { term in send(AgendaEvents.make { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(AgendaEvents.make { $0.searchClosed = .init() }) }
             ),
+            filter: filter,
+            subtitle: toolbarSubtitle(state, eventCountText),
+            bar: header.map { header in
+                PlaceBar(
+                    leading: AnyView(AgendaMonthChip(header: header, send: send)),
+                    actions: AnyView(AgendaLayoutKey(header: header, send: send)),
+                    showsTitle: !header.title.isEmpty
+                )
+            },
             showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
-                app: "agenda",
+                app: state.appKey,
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
@@ -67,8 +78,27 @@ struct AgendaHomeView: View {
             )
         } content: {
             VStack(spacing: 0) {
-                if state.toolbar.shown {
-                    AgendaToolbarView(toolbar: state.toolbar, eventCountText: eventCountText, chrome: state.chrome, send: send)
+                // ONE CONTROL ROW (#1173): the view menu, then ‹ › at the end. The period and its
+                // event count are the header's subtitle, so nothing here repeats them.
+                if !state.calendarViews.isEmpty {
+                    AgendaViewMenu(
+                        views: state.calendarViews,
+                        label: state.calendarViewLabel,
+                        month: monthGrid(state),
+                        pick: { destination in
+                            send(AgendaEvents.make { $0.destination = .with { $0.destination = destination } })
+                        },
+                        pickStyle: { style in
+                            send(AgendaEvents.make { $0.monthStyle = .with { $0.style = style } })
+                        },
+                        trailing: state.toolbar.shown ? AnyView(
+                            AgendaStepper(chrome: state.chrome, stepsPeriod: stepsPeriod(state), send: send)
+                        ) : nil
+                    )
+                } else if state.toolbar.shown {
+                    AgendaStepper(chrome: state.chrome, stepsPeriod: stepsPeriod(state), send: send)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
                 ReadStateView(
                     content: content,
@@ -76,6 +106,16 @@ struct AgendaHomeView: View {
                     onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
                 ) { home in
                     homeContent(home, state: state)
+                }
+                // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
+                .overlay(alignment: .bottomLeading) {
+                    if let header {
+                        if header.todayShown, !content.isDenied {
+                            AgendaTodayButton(label: header.todayLabel, send: send)
+                        }
+                    } else if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
+                        AgendaTodayButton(label: state.chrome.today, send: send)
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "agenda-status-action") {
                     send(AgendaEvents.make { $0.statusActed = .init() })
@@ -87,13 +127,18 @@ struct AgendaHomeView: View {
                         verb: state.chrome.tasks.quickAddVerb,
                         onChange: { title in send(AgendaEvents.make { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(AgendaEvents.make { $0.quickAddSubmitted = .init() }) },
+                        onDismissChip: { send(AgendaEvents.make { $0.quickAddChipDismissed = .init() }) },
                         onFocusChange: { typing in
                             quickAddTyping = typing
                             // THE KEYBOARD LEFT: Rust puts an empty bar away.
                             if !typing { send(AgendaEvents.make { $0.quickAddClosed = .init() }) }
                         },
                         fieldIdentifier: "agenda-quick-add",
-                        verbIdentifier: "agenda-quick-add-verb"
+                        verbIdentifier: "agenda-quick-add-verb",
+                        // THE KEYBOARD TOOLBAR (#1173).
+                        onTool: { key in send(AgendaEvents.make { $0.quickTool = .with { $0.key = key } }) },
+                        onDue: { key in send(AgendaEvents.make { $0.quickDue = .with { $0.key = key } }) },
+                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) }
                     )
                 }
             }
@@ -103,6 +148,15 @@ struct AgendaHomeView: View {
         }
         .sheet(isPresented: sheetBinding(state, .reads)) {
             AgendaReadsSheet(chrome: state.chrome)
+        }
+        // THE REMINDERS IMPORT (iOS): the option and the verb, opened from More. The verb asks the
+        // one import (`imports.made`) to read the phone's Reminders; its outcome is the import line's.
+        .sheet(isPresented: sheetBinding(state, .importReminders)) {
+            AgendaImportRemindersSheet(
+                sheet: state.importReminders,
+                onToggle: { send(AgendaEvents.make { $0.importRemindersCompleted = .init() }) },
+                onImport: { send(AgendaEvents.make { $0.importRemindersSubmitted = .init() }) }
+            )
         }
         .sheet(isPresented: sheetBinding(state, .file)) {
             OptionSheet(title: state.chrome.tasks.fileTitle) {
@@ -118,28 +172,49 @@ struct AgendaHomeView: View {
                 }
             }
         }
-        .sheet(isPresented: sheetBinding(state, .newProject)) {
-            SheetRoom(
-                title: state.chrome.tasks.newProjectTitle,
-                primary: state.newProjectCanSubmit
-                    ? SheetPrimary(label: state.chrome.tasks.newProjectVerb) {
-                        send(AgendaEvents.make { $0.newProjectSubmitted = .init() })
-                    }
-                    : nil
-            ) {
-                MachineTextField(
-                    placeholder: state.chrome.tasks.newProjectPlaceholder,
-                    value: state.newProjectName,
-                    focusOnAppear: true,
-                    onEdit: { name in send(AgendaEvents.make { $0.newProjectName = .with { $0.name = name } }) }
-                )
-                .centraidType("body")
-                .accessibilityLabel(state.chrome.tasks.newProjectPlaceholder)
-                .accessibilityIdentifier("tasks-new-project-field")
+        // THE STYLE SHEET, one for the new list, the new calendar and an edited calendar.
+        .sheet(isPresented: Binding(
+            get: { [.newProject, .newCalendar, .editCalendar].contains(state.sheet) },
+            set: { open in
+                if !open, [.newProject, .newCalendar, .editCalendar].contains(state.sheet) {
+                    send(AgendaEvents.make { $0.sheetClosed = .init() })
+                }
             }
+        )) {
+            AgendaStyleSheetView(
+                style: state.style,
+                appKey: state.appKey,
+                onName: { name in send(AgendaEvents.make { $0.styleName = .with { $0.name = name } }) },
+                onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
+                onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
+                onSubmit: { send(AgendaEvents.make { $0.styleSubmitted = .init() }) },
+                onCancel: { send(AgendaEvents.make { $0.sheetClosed = .init() }) }
+            )
         }
+        // THE SHEETS WEAR AGENDA'S BLUE (the boards' Create, Save and Import reminders): the accent
+        // is set on the screen that presents them, so a sheet's ink button no longer falls back to
+        // the shell's teal.
+        .environment(\.appAccent, AppAccent(state.appKey))
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
+    }
+
+    /// THE REMINDERS "FILTER AND SORT" FUNNEL (`Main.dc.html`): Rust's menu, drawn only when it is
+    /// on the state (the Reminders place). A pick or the clear row is an event.
+    private var filter: FilterSlot? {
+        guard state.hasFilterMenu else { return nil }
+        return FilterSlot(
+            menu: state.filterMenu,
+            onPick: { section, option in
+                send(AgendaEvents.make {
+                    $0.filterMenuPicked = .with {
+                        $0.sectionKey = section
+                        $0.optionKey = option
+                    }
+                })
+            },
+            onClear: { send(AgendaEvents.make { $0.filterMenuCleared = .init() }) }
+        )
     }
 
     /// The state's four content branches as the kit's one read shape.
@@ -152,6 +227,13 @@ struct AgendaHomeView: View {
         case let .denied(denied)?: return .gated(denied)
         case let .data(home)?: return .data(home)
         }
+    }
+
+    /// THE HEADER'S SUBTITLE (HeaderSubtitle): the period, then how many events it holds.
+    private func toolbarSubtitle(_ state: Centraid_Core_V1_AgendaHomeState, _ count: String) -> SubtitleSlot? {
+        guard state.toolbar.shown else { return nil }
+        let words = [state.toolbar.rangeLabel, count].filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
+        return SubtitleSlot(subtitle: .with { $0.label = words; $0.spoken = words })
     }
 
     /// THE APP BAR'S WORDS FOR THE EVENTS DRAWN ("3 events"): Rust's `event_count_label`, which
@@ -196,6 +278,21 @@ struct AgendaHomeView: View {
         return field
     }
 
+    /// The Month the data holds, for the view menu's second group (Grid and List).
+    private func monthGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Centraid_Core_V1_AgendaMonthGrid? {
+        if case let .data(home)? = state.content, home.hasMonth { return home.month }
+        return nil
+    }
+
+    /// MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); the lists by days. Day and Week
+    /// have no day bar: they page by swipe.
+    private func stepsPeriod(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        switch state.calendarViews.first(where: { $0.current })?.destination {
+        case .month?, .year?: return true
+        default: return false
+        }
+    }
+
     /// The day-one empty's words and import door, as the kit's message.
     private func emptyState(_ home: Centraid_Core_V1_AgendaHomeData) -> Centraid_Core_V1_EmptyState {
         var empty = Centraid_Core_V1_EmptyState()
@@ -212,6 +309,13 @@ struct AgendaHomeView: View {
     ) -> some View {
         if home.hasTodo {
             AgendaTodoList(home: home, state: state, send: send, open: open)
+        } else if home.hasTimeGrid {
+            // DAY AND WEEK: the hour grid, under the week strip on Day.
+            AgendaTimeGridView(home: home, header: state.calendarHeader, send: send, open: open)
+        } else if home.hasMonth {
+            AgendaMonthView(home: home, chrome: state.chrome, send: send, open: open)
+        } else if home.hasYear {
+            AgendaYearView(year: home.year, send: send)
         } else if home.empty != .none, home.empty != .unspecified {
             if home.empty == .noMatch {
                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
@@ -289,45 +393,31 @@ private struct CalendarImportButton: View {
 
 // MARK: - Toolbar
 
-/// The day bar: range label, ‹ ›, and Today — hidden when the state says the
-/// anchor is already today.
-private struct AgendaToolbarView: View {
-    let toolbar: Centraid_Core_V1_AgendaToolbar
-    /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").
-    let eventCountText: String
+/// The ‹ › of Month, Year and the lists, stepping a period or a day. Today is the floating key
+/// (`AgendaTodayButton`); the range and the count are the header's subtitle.
+private struct AgendaStepper: View {
     let chrome: Centraid_Core_V1_AgendaChrome
+    /// Week, Month and Year step a whole period (`PeriodStepped`); the rest step a day.
+    let stepsPeriod: Bool
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(toolbar.rangeLabel)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 8) {
-                KitStepper(
-                    previousLabel: chrome.previousDay,
-                    nextLabel: chrome.nextDay,
-                    previousIdentifier: "agenda-previous-day",
-                    nextIdentifier: "agenda-next-day",
-                    onPrevious: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = -1 } }) },
-                    onNext: { send(AgendaEvents.make { $0.dayStepped = .with { $0.days = 1 } }) }
-                )
-                if !toolbar.atToday {
-                    KitLink(label: chrome.today, identifier: "agenda-today") {
-                        send(AgendaEvents.make { $0.today = .init() })
-                    }
-                }
-                Spacer(minLength: 0)
-                Text([toolbar.monthLabel, eventCountText].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-            }
+        KitStepper(
+            previousLabel: chrome.previousDay,
+            nextLabel: chrome.nextDay,
+            previousIdentifier: "agenda-previous-day",
+            nextIdentifier: "agenda-next-day",
+            onPrevious: { step(-1) },
+            onNext: { step(1) }
+        )
+    }
+
+    private func step(_ by: Int32) {
+        if stepsPeriod {
+            send(AgendaEvents.make { $0.periodStepped = .with { $0.by = by } })
+        } else {
+            send(AgendaEvents.make { $0.dayStepped = .with { $0.days = by } })
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
     }
 }
 
@@ -343,30 +433,35 @@ private struct AgendaList: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), in a plain
-                    // stack above the lazy one, as Notes and Docs draw theirs.
+            // A LIST, so a task row can be swiped (#1173): each task is a row of its own, the
+            // events and the day heads plain rows beside them.
+            List {
+                Group {
+                    // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), as Notes
+                    // and Docs draw theirs.
                     AgendaSearchContainers(containers: home.containers, open: open)
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
-                        // birthdays): the phone's calendar is offered quietly above
-                        // them, at the point of use.
-                        if home.importSource == .calendar {
-                            CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                                .padding(.vertical, 8)
-                        }
-                        AgendaLeadBlocks(home: home, chrome: chrome, send: send, open: open)
-                        ForEach(home.days, id: \.day) { section in
-                            AgendaSectionView(section: section, chrome: chrome, send: send, open: open)
-                                .id(section.day)
-                        }
+                    // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
+                    // phone's calendar is offered quietly above them, at the point of use.
+                    if home.importSource == .calendar {
+                        CalendarImportButton(label: home.importLabel, identifier: "agenda-import", send: send)
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.vertical, 8)
                     }
-                    if let ask { SearchAskRow(ask: ask) }
                 }
-                .padding(.bottom, 16)
+                .todoPlainRow()
+                AgendaLeadBlocks(home: home, chrome: chrome, send: send, open: open)
+                ForEach(home.days, id: \.day) { section in
+                    AgendaSectionView(section: section, chrome: chrome, send: send, open: open, inList: true)
+                }
+                Group {
+                    if let ask { SearchAskRow(ask: ask) }
+                    Color.clear.frame(height: 16)
+                }
+                .todoPlainRow()
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
             .refreshable { send(AgendaEvents.make { $0.refreshed = .init() }) }
             .onAppear { land(proxy) }
             .onChange(of: home.landing.day) { _, _ in land(proxy) }
@@ -415,12 +510,13 @@ private struct AgendaLeadBlocks: View {
         // THE NOTICE'S VERB AND THE OVERDUE GROUP'S push Catch up, whose route the data carries.
         if home.hasNotice {
             AgendaNoticeView(notice: home.notice) { if home.hasCatchUp { open(home.catchUp) } }
+                .todoPlainRow()
         }
         if home.hasOverdue {
-            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send, open: open, catchUp: home.hasCatchUp ? home.catchUp : nil)
+            AgendaTaskGroup(group: home.overdue, chrome: chrome, send: send, open: open, catchUp: home.hasCatchUp ? home.catchUp : nil, inList: true)
         }
         ForEach(home.taskHits, id: \.key) { group in
-            AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
+            AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil, inList: true)
         }
     }
 }
@@ -433,6 +529,8 @@ private struct AgendaTaskGroup: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let catchUp: Centraid_Core_V1_Route?
+    /// Drawn as rows of a `List`, so a swipe lands on one task.
+    var inList = false
 
     var body: some View {
         TodoGroupView(
@@ -442,7 +540,11 @@ private struct AgendaTaskGroup: View {
             onPick: open,
             fileVerb: chrome.tasks.fileVerb,
             onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
-            identifierPrefix: "agenda-task-row"
+            identifierPrefix: "agenda-task-row",
+            chrome: chrome.tasks,
+            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+            onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) },
+            inList: inList
         )
     }
 }
@@ -472,8 +574,8 @@ private struct AgendaNoticeView: View {
 
 // MARK: - To-do
 
-/// THE TO-DO PLACE: the Inbox's groups, then the projects by area, then the
-/// new-project verb at the foot — whatever the list holds.
+/// REMINDERS' HOME: the smart-list cards, then My Lists (the Inbox first, then the lists by
+/// area), then the new-list verb at the foot. No task is drawn here: a task is opened from its list.
 private struct AgendaTodoList: View {
     let home: Centraid_Core_V1_AgendaHomeData
     let state: Centraid_Core_V1_AgendaHomeState
@@ -484,39 +586,69 @@ private struct AgendaTodoList: View {
     var body: some View {
         let todo = home.todo
         let chrome = state.chrome
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
+        // A LIST, so a task row can be swiped (#1173): each task is a row of its own.
+        List {
+            Group {
+                // THE REMINDERS HOME (#1173): the smart-list cards, then My Lists.
+                AgendaSmartListGrid(lists: todo.smartLists, open: open)
+                if !todo.countLabel.isEmpty || !todo.windowLabel.isEmpty {
+                    TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
+                }
                 if !todo.empty.headline.isEmpty {
                     EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
                 }
-                ForEach(todo.groups, id: \.key) { group in
-                    AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil)
+            }
+            .todoPlainRow()
+            ForEach(todo.groups, id: \.key) { group in
+                AgendaTaskGroup(group: group, chrome: chrome, send: send, open: open, catchUp: nil, inList: true)
+            }
+            Group {
+                if !todo.myListsTitle.isEmpty, !todo.projects.isEmpty {
+                    Text(todo.myListsTitle)
+                        .kitType(.section)
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 12)
+                        .accessibilityAddTraits(.isHeader)
                 }
                 ForEach(todo.projects, id: \.key) { group in
-                    SectionHeader(title: group.title, count: UInt32(group.rows.count))
+                    if !group.title.isEmpty {
+                        SectionHeader(title: group.title, count: UInt32(group.rows.count))
+                    }
                     ForEach(group.rows, id: \.row.id) { project in
                         let row = project.row
-                        CentraidRow(
-                            title: row.title,
-                            meta: row.meta,
-                            trailing: row.trailing,
-                            trailingTone: StatusChipView.ink(row.trailingTone, neutral: "text"),
-                            chips: row.chips,
-                            hueKey: row.hueKey.isEmpty ? "" : (KitHue.role(row.hueKey) ?? "cSlate"),
-                            dimmed: row.dimmed,
-                            pending: row.pending,
-                            accessibility: row.accessibilityLabel,
-                            identifier: "agenda-project-\(row.id)"
-                        ) { open(project.route) }
+                        Button { open(project.route) } label: {
+                            HStack(spacing: 12) {
+                                AgendaListMark(
+                                    colorKey: project.listColorKey,
+                                    iconKey: project.iconKey,
+                                    fallback: Theme.color("textFaint", scheme)
+                                )
+                                Text(row.title)
+                                    .centraidType("body")
+                                    .foregroundStyle(Theme.color("text", scheme))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(project.count)
+                                    .centraidType("body")
+                                    .foregroundStyle(Theme.color("textSoft", scheme))
+                            }
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(KitRowPress())
+                        .accessibilityLabel(row.accessibilityLabel)
+                        .accessibilityIdentifier("agenda-project-\(row.id)")
                     }
                 }
-                ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
-                    send(AgendaEvents.make { $0.nextPage = .init() })
+                if todo.canShowMore {
+                    ShowMoreFooter(visible: todo.canShowMore, label: chrome.tasks.showMore) {
+                        send(AgendaEvents.make { $0.nextPage = .init() })
+                    }
                 }
                 if !todo.newProjectLabel.isEmpty {
                     HStack {
-                        KitLink(label: todo.newProjectLabel, identifier: "agenda-new-project") {
+                        KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project") {
                             send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
                         }
                         Spacer(minLength: 0)
@@ -525,22 +657,127 @@ private struct AgendaTodoList: View {
                     .padding(.top, 12)
                 }
             }
-            .padding(.bottom, 16)
+            .todoPlainRow()
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
         .refreshable { send(AgendaEvents.make { $0.refreshed = .init() }) }
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("agenda-todo-list")
     }
 }
 
-private struct AgendaSectionView: View {
+struct AgendaSectionView: View {
     let section: Centraid_Core_V1_AgendaDaySection
     let chrome: Centraid_Core_V1_AgendaChrome
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
+    /// Drawn as rows of a `List` (Agenda's Day and Schedule), so a swipe lands on one task; the
+    /// Month's list below its grid keeps the stack.
+    var inList = false
     @Environment(\.colorScheme) private var scheme
 
+    /// The date column's width and the gap to the rows beside it.
+    private static let dateWidth: CGFloat = 44
+    private static let dateGap: CGFloat = 8
+
     var body: some View {
+        if inList {
+            listRows
+        } else {
+            stack
+        }
+    }
+
+    /// THE SECTION AS LIST ROWS: the head (month heading and rule, the section's id), the ribbon,
+    /// then each item its own row. The date column is drawn by the section's first row, in the gutter
+    /// every row keeps, so it still stands beside the items and a swipe moves one row only.
+    @ViewBuilder
+    private var listRows: some View {
+        let margin = CentraidGeometry.pageMargin
+        let gutter = Self.dateWidth + Self.dateGap
+        VStack(alignment: .leading, spacing: 0) {
+            if section.hasMonthHeading {
+                Text(section.monthHeading)
+                    .centraidType("eyebrow")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .padding(.horizontal, margin)
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            Rectangle()
+                .fill(Surface.line)
+                .frame(height: CentraidGeometry.hairline)
+        }
+        .id(section.day)
+        .todoPlainRow()
+        if section.hasRibbon {
+            ribbon
+                .padding(.leading, gutter)
+                .overlay(alignment: .topLeading) { dateColumn.padding(.top, 8) }
+                .padding(.horizontal, margin)
+                .padding(.top, 8)
+                .todoPlainRow()
+        }
+        if section.items.isEmpty && !section.hasRibbon {
+            // A day with nothing on it still shows its date.
+            Color.clear
+                .frame(height: Self.dateWidth)
+                .padding(.leading, gutter)
+                .overlay(alignment: .topLeading) { dateColumn }
+                .padding(.horizontal, margin)
+                .padding(.vertical, 8)
+                .todoPlainRow()
+        }
+        ForEach(Array(section.items.enumerated()), id: \.offset) { index, item in
+            let lead: AnyView? = index == 0 && !section.hasRibbon ? AnyView(dateColumn) : nil
+            switch item.kind {
+            case let .event(row):
+                AgendaEventRowView(row: row, open: open)
+                    .padding(.leading, gutter)
+                    .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
+                    .padding(.horizontal, margin)
+                    .todoPlainRow()
+            case let .task(row):
+                // A DATED TASK IS A ROW OF ITS DAY (R-1128-2): the round box checks it off in
+                // place, a tap opens it, a swipe flags or deletes it.
+                taskRow(row, gutter: gutter, lead: lead)
+                    .listRowInsets(EdgeInsets(top: 0, leading: margin, bottom: 0, trailing: margin))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            case let .nowLine(now):
+                AgendaNowLineView(now: now)
+                    .id("now-\(section.day)")
+                    .padding(.leading, gutter)
+                    .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
+                    .padding(.horizontal, margin)
+                    .todoPlainRow()
+            case .none:
+                EmptyView()
+            }
+        }
+    }
+
+    private func taskRow(_ row: Centraid_Core_V1_TodoRow, gutter: CGFloat, lead: AnyView?) -> some View {
+        TodoRowView(
+            row: row,
+            onCheck: { id in send(AgendaEvents.make { $0.taskChecked = .with { $0.taskID = id } }) },
+            onPick: open,
+            fileVerb: chrome.tasks.fileVerb,
+            onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
+            embedded: true,
+            identifierPrefix: "agenda-task-row",
+            chrome: chrome.tasks,
+            onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+            onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) },
+            gutter: gutter,
+            gutterContent: lead
+        )
+    }
+
+    private var stack: some View {
         VStack(alignment: .leading, spacing: 0) {
             if section.hasMonthHeading {
                 Text(section.monthHeading)
@@ -552,9 +789,9 @@ private struct AgendaSectionView: View {
                     .accessibilityAddTraits(.isHeader)
             }
             Rectangle()
-                .fill(Theme.color("line", scheme))
+                .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: Self.dateGap) {
                 dateColumn
                 VStack(alignment: .leading, spacing: 0) {
                     if section.hasRibbon {
@@ -574,7 +811,10 @@ private struct AgendaSectionView: View {
                                 fileVerb: chrome.tasks.fileVerb,
                                 onFile: { id in send(AgendaEvents.make { $0.fileRequested = .with { $0.taskID = id } }) },
                                 embedded: true,
-                                identifierPrefix: "agenda-task-row"
+                                identifierPrefix: "agenda-task-row",
+                                chrome: chrome.tasks,
+                                onFlag: { id, on in send(AgendaEvents.make { $0.taskFlagged = .with { $0.taskID = id; $0.flagged = on } }) },
+                                onDelete: { id in send(AgendaEvents.make { $0.taskDeleted = .with { $0.taskID = id } }) }
                             )
                         case let .nowLine(now):
                             AgendaNowLineView(now: now).id("now-\(section.day)")
@@ -610,7 +850,7 @@ private struct AgendaSectionView: View {
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color(section.isPast ? "textFaint" : "textSoft", scheme))
         }
-        .frame(width: 44)
+        .frame(width: Self.dateWidth)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(section.heading)
         .accessibilityAddTraits(.isHeader)
@@ -669,7 +909,7 @@ private struct AgendaEventRowView: View {
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Theme.color(KitHue.role(row.calendarHueKey) ?? "cSlate", scheme))
+                    .fill(agendaHue(row.calendarHueKey, scheme))
                     .frame(width: 2)
                     .padding(.vertical, 6)
             }
@@ -712,40 +952,103 @@ private struct AgendaMoreSheet: View {
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
+    /// A calendar row that wears a list colour draws its icon in the leading mark, so the
+    /// row itself names no icon; every other row keeps the icon the core sent.
+    private func sheetIcon(of row: Centraid_Core_V1_AgendaMoreRow) -> String {
+        row.colorKey.isEmpty ? row.iconKey : String()
+    }
+
     /// A `SheetRoom` of `SheetRow`s — what `OptionSheet` draws — with the
     /// title carrying the sheet's id, so the rows keep their own. THE ROWS ARE
     /// RUST'S (`more_rows`), the same list Android draws: a calendar row is a
     /// toggle with its hue dot, and every tap sends the row's key; a place's
     /// row then pushes its `route`.
     var body: some View {
-        SheetRoom(title: state.chrome.moreTitle, titleIdentifier: "agenda-more-sheet") {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(state.moreRows, id: \.key) { row in
-                        if !row.section.isEmpty {
-                            SectionHeader(title: row.section)
+        SheetRoom(title: state.chrome.moreTitle, titleIdentifier: "agenda-more-sheet", fit: true) {
+            VStack(spacing: 0) {
+                ForEach(state.moreRows, id: \.key) { row in
+                    if !row.section.isEmpty {
+                        SectionHeader(title: row.section)
+                    }
+                    HStack(spacing: 8) {
+                        // A CALENDAR WEARS THE ONE LIST PALETTE and its own icon; an events
+                        // calendar with no list colour keeps its hue dot.
+                        if !row.colorKey.isEmpty {
+                            AgendaListMark(colorKey: row.colorKey, iconKey: row.iconKey)
+                                .padding(.leading, 12)
+                        } else if !row.hueKey.isEmpty {
+                            Circle()
+                                .fill(agendaHue(row.hueKey, scheme))
+                                .frame(width: 8, height: 8)
                         }
-                        HStack(spacing: 8) {
-                            if !row.hueKey.isEmpty {
-                                Circle()
-                                    .fill(Theme.color(KitHue.role(row.hueKey) ?? "cSlate", scheme))
-                                    .frame(width: 8, height: 8)
+                        SheetRow(
+                            iconKey: sheetIcon(of: row),
+                            label: row.label,
+                            selected: row.toggle && row.on,
+                            identifier: "agenda-more-\(row.key)"
+                        ) {
+                            send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
+                            if row.hasRoute { open(row.route) }
+                        }
+                        .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                        // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.
+                        if !row.editLabel.isEmpty {
+                            let calendarID = String(row.key.dropFirst("calendar-".count))
+                            Button {
+                                send(AgendaEvents.make { $0.calendarEdit = .with { $0.calendarID = calendarID } })
+                            } label: {
+                                CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme), size: 18)
+                                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                                    .contentShape(Rectangle())
                             }
-                            SheetRow(
-                                iconKey: row.iconKey,
-                                label: row.label,
-                                selected: row.toggle && row.on,
-                                identifier: "agenda-more-\(row.key)"
-                            ) {
-                                send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
-                                if row.hasRoute { open(row.route) }
-                            }
-                            .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(row.editLabel)
+                            .accessibilityIdentifier("agenda-calendar-edit-\(calendarID)")
                         }
                     }
                 }
             }
+            .sheetRowGroup()
         }
+    }
+}
+
+/// THE IMPORT REMINDERS SHEET: one switch ("Include completed reminders", off until turned on) and
+/// the one verb. Both words are Rust's (`ImportsMadeState`'s); the switch's state is the core's and a
+/// flip is an event; the verb is `SheetRoom`'s one ink button.
+private struct AgendaImportRemindersSheet: View {
+    let sheet: Centraid_Core_V1_AgendaImportRemindersSheet
+    let onToggle: () -> Void
+    let onImport: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            primary: SheetPrimary(
+                label: sheet.importLabel,
+                identifier: "agenda-import-reminders-go",
+                action: onImport
+            ),
+            titleIdentifier: "agenda-import-reminders-sheet"
+        ) {
+            Toggle(isOn: Binding(
+                get: { sheet.completedOn },
+                set: { _ in onToggle() }
+            )) {
+                Text(sheet.completedLabel)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+            }
+            .kitToggle()
+            // THE BOARD'S CARD ROW: the switch sits on a plate of its own.
+            .padding(.horizontal, 16)
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .sheetCardGround()
+            .accessibilityIdentifier("agenda-import-reminders-completed")
+        }
+        // THE BOARD'S COMPACT SHEET: title, the switch and the verb, no more.
+        .presentationDetents([.height(230)])
     }
 }
 

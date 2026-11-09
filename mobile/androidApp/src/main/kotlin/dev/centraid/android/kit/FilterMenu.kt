@@ -1,6 +1,9 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -38,7 +41,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /*
- * THE ONE FILTER AND SORT MENU (DESIGN.md, `AppPlace`), the Compose twin of iOS's `FilterMenu.swift`.
+ * THE ONE FILTER AND SORT MENU (product-intuition/references/design-behaviour.md § App roots), the Compose twin of iOS's `FilterMenu.swift`.
  *
  * The header's filter button opens a Material 3 `DropdownMenu` that Rust finished (`FilterMenu`):
  * its sections, options, counts, checks and words. This file is the only drawing of it, so every
@@ -84,10 +87,13 @@ public fun FilterMenuButton(app: String, filter: RoomFilter) {
         inside = null
     }
     Box {
+        // THE FUNNEL KEY (#1173) is a tonal circle like every header key; while a filter is on
+        // it is filled in the app's colour with a white glyph, so "filtered" is seen at a glance.
+        val accent = appAccent()
         Box(
             Modifier
                 .size(KitGeometry.ROW_MIN)
-                .clip(RoundedCornerShape(KitGeometry.RADIUS))
+                .clip(CircleShape)
                 .clickable { open = true }
                 .testTag("$app-filter-menu")
                 .clearAndSetSemantics {
@@ -96,14 +102,21 @@ public fun FilterMenuButton(app: String, filter: RoomFilter) {
                 },
             contentAlignment = Alignment.Center,
         ) {
-            CentraidIcon(
-                iconKey = "Filter",
-                tint = centraidColor("text"),
-                size = 20.dp,
-                solid = menu.filtering,
-            )
+            val plate = if (menu.filtering) {
+                Modifier.clip(CircleShape).background(accent.fill)
+            } else {
+                Modifier.clip(CircleShape).background(Surface.card).border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
+            }
+            Box(Modifier.size(38.dp).then(plate), contentAlignment = Alignment.Center) {
+                CentraidIcon(
+                    iconKey = "Filter",
+                    tint = if (menu.filtering) Color.White else Surface.ink,
+                    size = 18.dp,
+                    solid = menu.filtering,
+                )
+            }
         }
-        DropdownMenu(expanded = open, onDismissRequest = close) {
+        DropdownMenu(expanded = open, onDismissRequest = close, containerColor = Surface.card) {
             val section = menu.sections.firstOrNull { it.key == inside }
             if (section != null) {
                 DropdownMenuItem(

@@ -68,6 +68,9 @@ message LockerItems {
   repeated string tags = 8;
   // `YYYY-MM-DD` in `tz`.
   string today = 9;
+  // "Recently used": the ids of live items the core opened lately, most
+  // recently used first, at most five (#1173). Each is in `items`.
+  repeated string recent_ids = 10;
 }
 
 message LockerTypeCount {
@@ -100,6 +103,8 @@ message LockerItemRow {
   // the trash and will be erased, in the request's zone.
   string deleted_local_day = 12;
   string purge_local_day = 13;
+  // A verification-code seed is stored: its PRESENCE, never the seed (#1173).
+  bool has_code = 14;
 }
 
 // `locker.item` (61): one item and its sidecars. Answers a TRASHED item too,
@@ -165,6 +170,18 @@ message LockerItem {
   // The day the core last opened one of this item's sealed cells or made a
   // code from its seed, in `tz`; empty when it never has (#1146).
   string last_used_local_day = 32;
+  // What the item is linked to (#1173): an account, a place, a person. Plain links, never a sealed value.
+  repeated LockerLink links = 33;
+}
+
+// One link out of a Locker item: an `about` an account, a place or a person, or `with` a person.
+message LockerLink {
+  string id = 1;
+  // `account`, `place` or `person`.
+  string kind = 2;
+  string title = 3;
+  // `about`, or `with` for a person the item is shared with.
+  string relation = 4;
 }
 
 message LockerSecret {
@@ -454,6 +471,10 @@ message LockerSessionResponse {
   uint32 failed_unlocks = 10;
   string failed_unlock_local_day = 11;
   string failed_unlock_local_time = 12;
+  // HOW LONG AN UNLOCKED SESSION MAY SIT IDLE before it ends, on every answer:
+  // the wall and the Locker's facts say the member's real setting, not a fixed
+  // five minutes. Zero locks as soon as the phone is idle.
+  uint64 idle_timeout_ms = 13;
 }
 
 enum LockerSessionState {

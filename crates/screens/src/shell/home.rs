@@ -75,28 +75,6 @@ impl Appearance {
             Self::Dark => "dark",
         }
     }
-
-    /// Whether the app is dark right now.
-    fn dark(self, phone_dark: bool) -> bool {
-        match self {
-            Self::System => phone_dark,
-            Self::Light => false,
-            Self::Dark => true,
-        }
-    }
-
-    /// The choice the key makes: the other of the two. A choice that lands where
-    /// the phone already is goes back to following it.
-    fn toggled(self, phone_dark: bool) -> Self {
-        let to_dark = !self.dark(phone_dark);
-        if to_dark == phone_dark {
-            Self::System
-        } else if to_dark {
-            Self::Dark
-        } else {
-            Self::Light
-        }
-    }
 }
 
 /// The step after a vault was picked in the sheet.
@@ -113,8 +91,9 @@ enum Ask {
 }
 
 struct Home {
-    /// One per app, in [`policy::ORDER`].
-    tiles: Vec<(String, Made)>,
+    /// Each widget read, with the app it belongs to: one per app in
+    /// [`policy::ORDER`], and Agenda's second while something is owed.
+    tiles: Vec<(String, String, Made)>,
     read: bool,
     /// The one in front, the roster in the shelf's order, and whether the phone
     /// holds none: all told.
@@ -127,7 +106,6 @@ struct Home {
     ask: Ask,
     outcome: String,
     appearance: Appearance,
-    phone_dark: bool,
     /// The cache of what the shell keeps, shared with the pass service: the
     /// transfer rule is read from it and written through it.
     secrets: VaultSecrets,
@@ -149,10 +127,7 @@ impl Home {
     fn new(secrets: VaultSecrets) -> Self {
         Self {
             secrets,
-            tiles: policy::ORDER
-                .iter()
-                .map(|app| ((*app).to_owned(), tiles::loading()))
-                .collect(),
+            tiles: loading_tiles(),
             read: false,
             vault: None,
             vaults: Vec::new(),
@@ -163,11 +138,18 @@ impl Home {
             ask: Ask::None,
             outcome: String::new(),
             appearance: Appearance::System,
-            phone_dark: false,
             transfer_sheet_open: false,
             keeping: None,
         }
     }
+}
+
+/// Every app's widget, still reading.
+fn loading_tiles() -> Vec<(String, String, Made)> {
+    policy::ORDER
+        .iter()
+        .map(|app| ((*app).to_owned(), (*app).to_owned(), tiles::loading()))
+        .collect()
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -214,7 +196,11 @@ impl Home {
         }
         self.tiles = policy::ORDER
             .iter()
-            .map(|app| ((*app).to_owned(), tiles::read(ctx, app)))
+            .flat_map(|app| {
+                tiles::read(ctx, app)
+                    .into_iter()
+                    .map(move |(widget, made)| (widget.to_owned(), (*app).to_owned(), made))
+            })
             .collect();
     }
 
@@ -244,14 +230,17 @@ impl Home {
     fn on_home(&mut self, event: H, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event {
-            H::Backup(_) => return open_backup(),
+            H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
             H::EntryAsked(asked) => return entry_route(asked.entry()),
-            H::Appearance(_) => {
-                self.appearance = self.appearance.toggled(self.phone_dark);
+            // SETTINGS CHOSE IT: kept in the Keychain, the one store, and drawn at once.
+            H::AppearanceChosen(chosen) => {
+                self.appearance = Appearance::of(&chosen.stored);
                 return vec![keychain_set(self.appearance.stored())];
             }
-            H::PhoneSchemeTold(told) => self.phone_dark = told.dark,
+            // Following the phone is the shell's to draw: Home no longer words a switch
+            // that depends on where the phone is.
+            H::PhoneSchemeTold(_) => {}
             H::Vault(_) => self.sheet_open = true,
             H::VaultPicked(picked) => {
                 self.sheet_open = false;
@@ -271,11 +260,15 @@ impl Home {
                 self.ask = Ask::None;
             }
             H::Shown(_) => self.reload(ctx),
+            // THE PAGE COVERS THE SHEET: a sheet left open under a pushed make or restore page is
+            // drawn over it on iOS (the page shows dimmed behind the roster), so it closes first.
             H::Make(_) => {
+                self.sheet_open = false;
                 self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Make(true))];
             }
             H::Restore(_) => {
+                self.sheet_open = false;
                 self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Restore(true))];
             }
@@ -325,10 +318,7 @@ impl Home {
                 if switched {
                     self.sheet_open = false;
                     self.ask = Ask::None;
-                    self.tiles = policy::ORDER
-                        .iter()
-                        .map(|app| ((*app).to_owned(), tiles::loading()))
-                        .collect();
+                    self.tiles = loading_tiles();
                 }
                 // Founding a vault leaves the failed Home (its tiles ask to be read),
                 // and a switch reads again; any other change of roster or lockup
@@ -391,6 +381,17 @@ impl Home {
         })
     }
 
+    /// The line under the vault's name: the pairing page while nothing is paired,
+    /// the Backup place otherwise.
+    fn backup_pressed(&self) -> Vec<wire::Effect> {
+        match self.backup.as_ref().and_then(|line| line.route.clone()) {
+            Some(route) => vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                route: Some(route),
+            }))],
+            None => open_backup(),
+        }
+    }
+
     fn status_pressed(&self) -> Vec<wire::Effect> {
         use wire::home_status::Destination as D;
         let Some(status) = &self.status else {
@@ -436,17 +437,19 @@ impl Home {
 
     // -- the view -------------------------------------------------------------
 
-    fn dress(&self, locale: Locale, app: &str, made: &Made) -> wire::HomeTile {
-        let name = app_name(locale, app);
+    /// A widget, finished. `app` is the mark and the colour (Reminders wears
+    /// Agenda's); `widget` is its identity and the key a row lists. Its size,
+    /// height and place are the fold's ([`policy::fold`]).
+    fn dress(&self, locale: Locale, widget: &str, app: &str, made: &Made) -> wire::HomeTile {
+        let name = widget_name(locale, widget, app);
         let open = fill(&words::open_app(locale), &[("name", &name)]);
         wire::HomeTile {
             app_id: app.to_owned(),
+            widget: widget.to_owned(),
             name,
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            size: policy::size_of(app) as i32,
-            wide: policy::is_wide(app),
             empty_copy: empty_copy(locale, app),
             body: made
                 .body
@@ -455,6 +458,7 @@ impl Home {
             accessibility_label: spoken(&open, made),
             open_label: open,
             route: tile_route(app, made),
+            ..Default::default()
         }
     }
 
@@ -462,28 +466,39 @@ impl Home {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(app, made)| self.dress(locale, app, made))
+            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
             .collect();
-        let springboard = policy::springboard(&tiles);
+        let mut folded = policy::fold(tiles);
+        // A small Health invitation has room for one word; the medium one says the sentence.
+        for tile in &mut folded.tiles {
+            if tile.widget == "health"
+                && tile.size() == wire::HomeTileSize::Small
+                && tile.status() != wire::HomeTileStatus::Content
+            {
+                tile.empty_copy = words::tile_empty_health_small(locale);
+            }
+        }
         wire::HomeData {
-            springboard: springboard as i32,
-            grid_rows: policy::rows(&tiles),
+            springboard: folded.springboard as i32,
+            grid_rows: folded.rows,
             day_one_title: words::home_day_one_title(locale),
             day_one_body: words::home_day_one_body(locale),
-            tiles,
+            tiles: folded.tiles,
         }
     }
 
     fn bar(&self, locale: Locale) -> wire::HomeBar {
-        let dark = self.appearance.dark(self.phone_dark);
         let vault = match &self.vault {
             Some(vault) => finish_vault(locale, vault),
-            None => wire::HomeVault {
+            // "NO VAULT YET" IS A CLAIM, made only once the shelf has said the phone holds none.
+            // Before the first `VaultsTold` the lockup is bare, so first launch never flashes it.
+            None if self.none => wire::HomeVault {
                 name: photos::vault_none_yet(locale),
                 initial: initial_of(&photos::vault_none_yet(locale)),
                 accessibility_label: photos::vault_none_yet(locale),
                 ..Default::default()
             },
+            None => wire::HomeVault::default(),
         };
         // The backup's status stands in the line only for a vault that has not
         // moved: a moved vault says so itself.
@@ -512,7 +527,14 @@ impl Home {
         );
         let backup_open_label = backup
             .as_ref()
-            .map(|line| format!("{}. {}", line.status, words::backup_status_open(locale)))
+            .map(|line| {
+                // A line that leads to pairing is its own action.
+                if line.route.is_some() {
+                    line.status.clone()
+                } else {
+                    format!("{}. {}", line.status, words::backup_status_open(locale))
+                }
+            })
             .unwrap_or_default();
         wire::HomeBar {
             vault: Some(vault),
@@ -522,12 +544,8 @@ impl Home {
             search_label: words::home_search_placeholder(locale),
             search_route: Some(routes::search()),
             transfer_rules_label: photos::transfer_settings_label(locale),
-            appearance_icon: if dark { "Sun" } else { "Moon" }.to_owned(),
-            appearance_label: if dark {
-                words::appearance_to_light(locale)
-            } else {
-                words::appearance_to_dark(locale)
-            },
+            settings_label: crate::strings::settings::settings_title(locale),
+            settings_route: Some(routes::settings()),
         }
     }
 
@@ -686,16 +704,15 @@ impl Screen for Home {
     }
 }
 
-/// THE FIRST-LAUNCH GATE: what a phone that holds no vault opens onto. The house
-/// is Home's own roster ([`policy::ORDER`]), so an app that gets a tile is in the
-/// house the same day; the doors are `MakePressed` and `RestorePressed`.
+/// THE WELCOME SCREEN (#1173): what a phone that holds no vault opens onto. One
+/// screen, three claims and two doors, `MakePressed` and `RestorePressed`.
 fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
     let slide = |title: String, body: String| wire::HomeFirstLaunchSlide { title, body };
     wire::HomeFirstLaunch {
+        title: words::first_launch_title(locale),
         body: words::first_launch_body(locale),
         make_label: words::first_launch_make(locale),
         restore_label: words::first_launch_restore(locale),
-        apps: policy::ORDER.iter().map(|app| (*app).to_owned()).collect(),
         slides: vec![
             slide(
                 words::first_launch_house_title(locale),
@@ -710,8 +727,6 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
                 words::first_launch_backup_body(locale),
             ),
         ],
-        next_label: words::first_launch_next(locale),
-        skip_label: words::first_launch_skip(locale),
     }
 }
 
@@ -744,11 +759,17 @@ fn keychain_set(value: &str) -> wire::Effect {
     }))
 }
 
+/// A widget's name: its app's.
+fn widget_name(locale: Locale, _widget: &str, app: &str) -> String {
+    app_name(locale, app)
+}
+
 /// An app's name, by the catalogue's id: Home's tiles and the Backup screen's
 /// rows say it the same way.
 pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::app_agenda(locale),
+        "calendar" => words::app_calendar(locale),
+        "reminders" => words::app_reminders(locale),
         "docs" => words::app_docs(locale),
         "health" => words::app_health(locale),
         "locker" => words::app_locker(locale),
@@ -760,10 +781,11 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     }
 }
 
-/// What an empty tile says to do.
+/// What an empty widget says to do.
 fn empty_copy(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::tile_empty_agenda(locale),
+        "calendar" => words::tile_empty_calendar(locale),
+        "reminders" => words::tile_empty_reminders(locale),
         "docs" => words::tile_empty_docs(locale),
         "health" => words::tile_empty_health(locale),
         "locker" => words::tile_empty_locker(locale),
@@ -852,21 +874,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_appearance_key_goes_to_the_other_scheme_and_back_to_following() {
-        // On a light phone: following -> dark -> following (light is the phone's).
-        let a = Appearance::System.toggled(false);
-        assert_eq!(a, Appearance::Dark);
-        assert_eq!(a.toggled(false), Appearance::System);
-        // On a dark phone: following -> light -> following.
-        let b = Appearance::System.toggled(true);
-        assert_eq!(b, Appearance::Light);
-        assert_eq!(b.toggled(true), Appearance::System);
-        // A held scheme that disagrees with the phone flips to the other held one.
-        assert_eq!(Appearance::Dark.toggled(true), Appearance::Light);
-        assert_eq!(Appearance::Light.toggled(false), Appearance::Dark);
-    }
-
-    #[test]
     fn a_tile_opens_its_app_and_notes_opens_a_new_note_when_it_holds_none() {
         use wire::HomeTileStatus as Status;
         let made = |status| Made {
@@ -889,8 +896,13 @@ mod tests {
         assert_eq!(screen("notes", Status::Unknown), None);
         // Every other app opens even when it is empty or unreadable.
         assert_eq!(
-            screen("agenda", Status::Empty).as_deref(),
-            Some("agenda.home")
+            screen("calendar", Status::Empty).as_deref(),
+            Some("calendar.home")
+        );
+        // Reminders is its own app with its own home.
+        assert_eq!(
+            screen("reminders", Status::Empty).as_deref(),
+            Some("reminders.home")
         );
         assert_eq!(
             screen("photos", Status::Unknown).as_deref(),

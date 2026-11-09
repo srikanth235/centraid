@@ -63,21 +63,27 @@ message PhotosLightboxState {
   string next_id = 18;
   // "12 of 184", empty when this photograph is not on the shelf it opened from.
   string position = 19;
-  // The bottom row, and the More sheet's rows, in draw order.
+  // The bottom row, and the rows of the "…" menu (the platform's own), in draw order.
   repeated PhotosLightboxVerb toolbar = 20;
   repeated PhotosLightboxVerb menu = 21;
   repeated PhotosLightboxShareChoice share_choices = 22;
   PhotosLightboxWords words = 23;
+  // THE PEOPLE PICKER (#1173): who is in the photograph, picked by name. Open while the sheet is up.
+  LinkPicker people_picker = 24;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
-    // Everything the vault knows: the facts panel.
+    // Everything the vault knows: the details under the photograph, open. The viewer
+    // opens with them closed every time; (i) and a swipe up open them, (i) and a swipe
+    // down close them.
     SHEET_INFO = 2;
     // What leaves the vault, and in what form. A share is a decision about
     // bytes, so it is a sheet with a choice and never a direct hand-off.
     SHEET_SHARE = 3;
-    SHEET_MORE = 4;
+    // 4 was `SHEET_MORE`: the "…" key opens the platform's menu, never a sheet (#1173).
+    reserved 4;
+    reserved "SHEET_MORE";
     // "Adjust location": the place picker.
     SHEET_PLACE = 5;
   }
@@ -130,6 +136,8 @@ message PhotosLightboxPhoto {
   string stage_label = 24;
   // The stage's spoken name for the photograph: its caption, else the noun.
   string spoken = 25;
+  // "People in this photo" (#1173): who the member says is in it, by hand. Nothing recognises a face.
+  LinkSection people = 26;
 }
 
 message PhotosLightboxFact {
@@ -272,6 +280,8 @@ message PhotosLightboxEvent {
     SlideshowLeft slideshow_left = 14;
     Confirmed confirmed = 15;
     ConfirmDismissed confirm_dismissed = 16;
+    // The people section's and picker's events (#1173).
+    LinkEvent people = 17;
   }
 
   message Refreshed {}
@@ -334,7 +344,7 @@ message PhotosLightboxEvent {
 message PhotosEditPlan {
   // Quarter turns clockwise, 0-3.
   uint32 quarters = 1;
-  // Whole degrees, 0 to -15 (anticlockwise only, one control).
+  // Whole degrees, -15 to +15 (the slider; negative is anticlockwise).
   sint32 straighten = 2;
   Flip flip = 3;
   Ratio ratio = 4;
@@ -422,6 +432,8 @@ message PhotosEditorState {
   bool dismissed = 17;
   repeated PhotosEditorRatio ratios = 18;
   PhotosEditorWords words = 19;
+  // The slider's reach each way, in whole degrees (15): it runs from minus this to plus this.
+  uint32 straighten_limit = 20;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -493,8 +505,10 @@ message PhotosEditorEvent {
   // A quarter turn resets the crop and the ratio.
   message Rotated {}
 
-  // One press levels a degree anticlockwise; past the limit returns to level.
-  message Straightened {}
+  // The slider's angle, in whole degrees; Rust clamps it to the limit either way.
+  message Straightened {
+    sint32 degrees = 1;
+  }
 
   message Flipped {}
 

@@ -29,7 +29,7 @@ use wire::home_tile_body::Kind as Body;
 
 use crate::catalog::load;
 use crate::health::figures::grouped;
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::kit::money::{self, Amount};
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
@@ -119,21 +119,25 @@ fn content(count: u32, capped: bool, one: String, many: String, body: Body) -> M
     }
 }
 
-/// Read one app's tile.
+/// Read one app's widget, keyed by its widget id.
 #[must_use]
-pub fn read(ctx: &Ctx, app: &str) -> Made {
+pub fn read(ctx: &Ctx, app: &str) -> Vec<(&'static str, Made)> {
     match app {
-        "photos" => photos(ctx),
-        "docs" => docs(ctx),
-        "agenda" => agenda(ctx),
-        "notes" => notes(ctx),
-        "money" => money(ctx),
-        "health" => health(ctx),
-        "people" => people(ctx),
-        "locker" => locker(ctx),
-        _ => unknown(),
+        "photos" => vec![("photos", photos(ctx))],
+        "docs" => vec![("docs", docs(ctx))],
+        "calendar" => vec![("calendar", calendar(ctx))],
+        "reminders" => vec![(REMINDERS, reminders(ctx))],
+        "notes" => vec![("notes", notes(ctx))],
+        "money" => vec![("money", money(ctx))],
+        "health" => vec![("health", health(ctx))],
+        "people" => vec![("people", people(ctx))],
+        "locker" => vec![("locker", locker(ctx))],
+        _ => Vec::new(),
     }
 }
+
+/// The widget of what Reminders is owed today.
+pub const REMINDERS: &str = "reminders";
 
 // -- photos -------------------------------------------------------------------
 
@@ -260,26 +264,20 @@ fn docs_tile(locale: Locale, drive: &wire::DocsDrive) -> Made {
     )
 }
 
-// -- agenda -------------------------------------------------------------------
+// -- calendar and reminders -------------------------------------------------------------------
 
 fn midnight(day: &str) -> Option<String> {
     civil::epoch_day_of(day).map(|_| format!("{day}T00:00:00Z"))
 }
 
-/// What is owed today: overdue and due-today tasks, and the first one's title.
+/// What is owed today: overdue and due-today tasks, and the first few titles,
+/// overdue first.
 struct Due {
     count: u32,
-    title: String,
+    titles: Vec<String>,
 }
 
 impl Due {
-    fn none() -> Self {
-        Self {
-            count: 0,
-            title: String::new(),
-        }
-    }
-
     fn of(board: &wire::AgendaTaskBoard) -> Self {
         use wire::AgendaTaskGroupKind as Kind;
         let count = board
@@ -301,28 +299,13 @@ impl Due {
             .filter(|group| rank(group.kind).is_some())
             .collect();
         groups.sort_by_key(|group| rank(group.kind));
-        let title = groups
+        let titles = groups
             .iter()
-            .find_map(|group| group.tasks.first())
+            .flat_map(|group| group.tasks.iter())
+            .take(PREVIEW)
             .map(|task| task.title.clone())
-            .unwrap_or_default();
-        Self { count, title }
-    }
-
-    fn on(
-        &self,
-        locale: Locale,
-        mut body: wire::home_tile_body::Agenda,
-    ) -> wire::home_tile_body::Agenda {
-        if self.count > 0 {
-            body.due_count = self.count;
-            body.due_label = fill(
-                &words::tile_agenda_due(locale),
-                &[("n", &self.count.to_string())],
-            );
-            body.due_title.clone_from(&self.title);
-        }
-        body
+            .collect();
+        Self { count, titles }
     }
 }
 
@@ -364,81 +347,33 @@ fn event_title(locale: Locale, event: &wire::AgendaEvent) -> String {
         .map_or_else(|| crate::strings::agenda::untitled(locale), str::to_owned)
 }
 
-fn when_line(locale: Locale, event: &wire::AgendaEvent, today: &str) -> String {
-    let start_day = day_of(&event.local_start);
-    if event.all_day {
-        let day = if start_day <= today {
-            crate::strings::agenda::today(locale)
-        } else {
-            civil::dated(locale, start_day)
-        };
-        return format!("{day} · {}", words::tile_agenda_all_day(locale));
-    }
-    let clock = civil::clock(&event.local_start);
-    if start_day == today {
-        clock
-    } else {
-        format!("{} · {clock}", civil::dated(locale, start_day))
+/// The core's own today, in the device's zone: the day-context query.
+fn today_of(ctx: &Ctx) -> Option<String> {
+    match read::read(
+        ctx,
+        load::calendar::DayContext::default(),
+        |answer| match answer {
+            Answer::AgendaDayContext(context) => Some(context),
+            _ => None,
+        },
+    ) {
+        Reading::Data(context) => Some(context.today),
+        _ => None,
     }
 }
 
-fn after_line(
-    locale: Locale,
-    next: &wire::AgendaEvent,
-    after: Option<&wire::AgendaEvent>,
-    today: &str,
-) -> String {
-    let Some(after) = after else {
-        return words::tile_agenda_nothing_after(locale);
-    };
-    let then = || {
-        format!(
-            "{} {}",
-            words::tile_agenda_then(locale),
-            event_title(locale, after)
-        )
-    };
-    let headline = first_day(next).max(today);
-    let after_day = first_day(after);
-    if after_day <= headline {
-        return then();
-    }
-    match civil::day_of_month_of(after_day) {
-        Some(day) => format!(
-            "{} {}",
-            words::tile_agenda_nothing_until(locale),
-            civil::ordinal(day)
-        ),
-        None => then(),
-    }
-}
-
-/// THE NEXT EVENT AND WHAT IS OWED, from Agenda's own upcoming window and its
-/// Today board: the next occurrence of whatever repeats is the core's
-/// recurrence engine's to say, so nothing here expands a series. A DUE READ THAT
-/// DID NOT LAND COSTS THE TILE ITS DUE LINE AND NOTHING ELSE: the events are the
-/// tile, the owed tasks ride on it.
-fn agenda(ctx: &Ctx) -> Made {
-    // TODAY IS THE CORE'S: an unbounded day-context names it in the device's zone.
-    let Reading::Data(context) =
-        read::read(
-            ctx,
-            load::agenda::DayContext::default(),
-            |answer| match answer {
-                Answer::AgendaDayContext(context) => Some(context),
-                _ => None,
-            },
-        )
-    else {
+/// THE CALENDAR WIDGET, from Calendar's own upcoming window: the next occurrence of whatever repeats
+/// is the core's recurrence engine's to say, so nothing here expands a series.
+fn calendar(ctx: &Ctx) -> Made {
+    let Some(today) = today_of(ctx) else {
         return unknown();
     };
-    let Some(to) = civil::plus_days(&context.today, WINDOW_DAYS + 1).and_then(|day| midnight(&day))
-    else {
+    let Some(to) = civil::plus_days(&today, WINDOW_DAYS + 1).and_then(|day| midnight(&day)) else {
         return unknown();
     };
     let Reading::Data(upcoming) = read::read(
         ctx,
-        load::agenda::Upcoming {
+        load::calendar::Upcoming {
             from: None,
             to: Some(to),
         },
@@ -449,11 +384,17 @@ fn agenda(ctx: &Ctx) -> Made {
     ) else {
         return unknown();
     };
+    calendar_tile(ctx.locale(), ctx.hour_cycle(), &upcoming)
+}
+
+/// THE REMINDERS WIDGET, from Reminders' own Today board (round 10 of #1173: Reminders is an app,
+/// so its tile is always there, with its own invitation when nothing is owed).
+fn reminders(ctx: &Ctx) -> Made {
     let board = read::read(
         ctx,
-        load::agenda::Board {
+        load::reminders::Board {
             limit: 100,
-            view: Some(load::agenda::BoardView::Today),
+            view: Some(load::reminders::BoardView::Today),
             project_id: None,
         },
         |answer| match answer {
@@ -461,18 +402,56 @@ fn agenda(ctx: &Ctx) -> Made {
             _ => None,
         },
     );
-    agenda_tile(ctx.locale(), &upcoming, board.data())
+    match board.data() {
+        Some(board) => reminders_tile(ctx.locale(), board),
+        None => unknown(),
+    }
 }
 
-/// The count is the occurrences of the next [`COUNT_DAYS`] days plus what is
-/// owed today, so the header agrees with the lines beneath it.
-fn agenda_tile(
-    locale: Locale,
-    upcoming: &wire::AgendaUpcoming,
-    board: Option<&wire::AgendaTaskBoard>,
-) -> Made {
+/// The day's full name, "Wednesday", or empty for a day that does not parse.
+fn weekday_long(locale: Locale, day: &str) -> String {
+    use crate::strings::agenda as w;
+    match civil::iso_weekday_of(day) {
+        Some(1) => w::weekday_full_mon(locale),
+        Some(2) => w::weekday_full_tue(locale),
+        Some(3) => w::weekday_full_wed(locale),
+        Some(4) => w::weekday_full_thu(locale),
+        Some(5) => w::weekday_full_fri(locale),
+        Some(6) => w::weekday_full_sat(locale),
+        Some(7) => w::weekday_full_sun(locale),
+        _ => String::new(),
+    }
+}
+
+/// How many of today's events a calendar widget lists; the rest are counted.
+pub const DAY_EVENTS: usize = 2;
+
+/// The reminders widget's tile: what is owed today, or the invitation when nothing is.
+fn reminders_tile(locale: Locale, board: &wire::AgendaTaskBoard) -> Made {
+    let owed = Due::of(board);
+    let (one, many) = (
+        words::tile_reminders_due(locale),
+        words::tile_reminders_due(locale),
+    );
+    if owed.count == 0 {
+        return empty_with(0, one, many);
+    }
+    content(
+        owed.count,
+        false,
+        one,
+        many,
+        Body::Reminders(wire::home_tile_body::Reminders {
+            titles: owed.titles.clone(),
+            caption: crate::strings::shared::today(locale),
+        }),
+    )
+}
+
+/// The calendar widget's tile. Its count is the occurrences of the next [`COUNT_DAYS`] days, so its
+/// spoken label agrees with the lines in it.
+fn calendar_tile(locale: Locale, cycle: HourCycle, upcoming: &wire::AgendaUpcoming) -> Made {
     let (today, now) = (upcoming.today.as_str(), upcoming.now_local.as_str());
-    let owed = board.map_or(Due::none(), Due::of);
     let live: Vec<&wire::AgendaEvent> = upcoming
         .events
         .iter()
@@ -482,18 +461,39 @@ fn agenda_tile(
         words::tile_agenda_count(locale),
         words::tile_agenda_count(locale),
     );
-    let Some(next) = live.first().copied() else {
-        if owed.count == 0 {
-            return empty_with(0, one, many);
-        }
-        let body = owed.on(
-            locale,
-            wire::home_tile_body::Agenda {
-                title: words::tile_agenda_no_events(locale),
-                ..Default::default()
-            },
-        );
-        return content(owed.count, false, one, many, Body::Agenda(body));
+    if live.is_empty() {
+        return empty_with(0, one, many);
+    }
+    // TODAY'S: what is still to come on the day, or still running (an all-day
+    // run that covers it).
+    let todays: Vec<&&wire::AgendaEvent> = live
+        .iter()
+        .filter(|event| first_day(event) <= today)
+        .collect();
+    let events: Vec<wire::home_tile_body::agenda::Event> = todays
+        .iter()
+        .take(DAY_EVENTS)
+        .map(|event| wire::home_tile_body::agenda::Event {
+            title: event_title(locale, event),
+            span: civil::span(
+                locale,
+                &event.local_start,
+                &event.local_end,
+                event.all_day,
+                cycle,
+            ),
+        })
+        .collect();
+    let rest = todays.len().saturating_sub(DAY_EVENTS);
+    let foot = if todays.is_empty() {
+        words::tile_agenda_none_today(locale)
+    } else if rest > 0 {
+        fill(
+            &words::tile_agenda_foot_more(locale),
+            &[("n", &rest.to_string())],
+        )
+    } else {
+        words::app_calendar(locale)
     };
     let horizon = civil::plus_days(today, COUNT_DAYS);
     let week = live
@@ -504,23 +504,21 @@ fn agenda_tile(
                 .is_none_or(|horizon| first_day(event) < horizon)
         })
         .count();
-    let count = u32::try_from(week).unwrap_or(u32::MAX) + owed.count;
-    // A SERIES IS ONE THING: the after-line skips the next occurrence's own repeats.
-    let after = live
-        .iter()
-        .skip(1)
-        .find(|event| event.event_id != next.event_id)
-        .copied();
-    let body = owed.on(
-        locale,
-        wire::home_tile_body::Agenda {
-            title: event_title(locale, next),
-            at: when_line(locale, next, today),
-            after: after_line(locale, next, after, today),
-            ..Default::default()
-        },
-    );
-    content(count, false, one, many, Body::Agenda(body))
+    let count = u32::try_from(week).unwrap_or(u32::MAX);
+    content(
+        count,
+        false,
+        one,
+        many,
+        Body::Agenda(wire::home_tile_body::Agenda {
+            weekday: weekday_long(locale, today),
+            day: civil::day_of_month_of(today)
+                .map(|day| day.to_string())
+                .unwrap_or_default(),
+            events,
+            foot,
+        }),
+    )
 }
 
 // -- notes --------------------------------------------------------------------
@@ -556,22 +554,29 @@ fn notes(ctx: &Ctx) -> Made {
     else {
         return unknown();
     };
-    let Reading::Data(spine) =
-        read::read(
-            ctx,
-            load::notes::Notebooks::default(),
-            |answer| match answer {
-                Answer::NotesNotebooks(spine) => Some(spine),
-                _ => None,
-            },
-        )
-    else {
-        return unknown();
-    };
-    notes_tile(ctx.locale(), &library, &spine)
+    notes_tile(ctx.locale(), &library, today_of(ctx).as_deref())
 }
 
-fn notes_tile(locale: Locale, library: &wire::NotesLibrary, spine: &wire::NotesNotebooks) -> Made {
+/// "Edited yesterday", "Edited today", else "Edited Wed 11 March"; empty for a
+/// note with no edit day. `today` is the core's day; without it the day is named.
+fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
+    if day.is_empty() {
+        return String::new();
+    }
+    match today {
+        Some(today) if day == today => words::tile_notes_edited_today(locale),
+        Some(today) if civil::plus_days(today, -1).as_deref() == Some(day) => {
+            words::tile_notes_edited_yesterday(locale)
+        }
+        _ => fill(
+            &words::tile_notes_edited_on(locale),
+            &[("day", &civil::day_month(locale, day))],
+        ),
+    }
+}
+
+/// THE NEWEST NOTE, when it was last edited, and the title of the one after it.
+fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>) -> Made {
     let (one, many) = (
         words::tile_notes_count_one(locale),
         words::tile_notes_count_many(locale),
@@ -579,37 +584,6 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, spine: &wire::NotesN
     let total = u32::try_from(library.notes.len()).unwrap_or(u32::MAX);
     let Some(newest) = library.notes.first() else {
         return empty_with(0, one, many);
-    };
-    // The notebooks that hold notes, in the member's order, three at most.
-    let shelf: Vec<wire::home_tile_body::notes::Notebook> = spine
-        .notebooks
-        .iter()
-        .filter(|notebook| notebook.note_count > 0)
-        .take(PREVIEW)
-        .map(|notebook| wire::home_tile_body::notes::Notebook {
-            notebook_id: notebook.notebook_id.clone(),
-            name: notebook
-                .name
-                .as_deref()
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .map_or_else(|| notes::untitled_notebook(locale), str::to_owned),
-            note_count: notebook.note_count,
-        })
-        .collect();
-    // With nothing filed the tile draws the newest notes instead.
-    let recent = if shelf.is_empty() {
-        library
-            .notes
-            .iter()
-            .take(PREVIEW)
-            .map(|note| wire::home_tile_body::notes::Recent {
-                note_id: note.note_id.clone(),
-                title: note_title(locale, note),
-            })
-            .collect()
-    } else {
-        Vec::new()
     };
     content(
         total,
@@ -619,8 +593,12 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, spine: &wire::NotesN
         Body::Notes(wire::home_tile_body::Notes {
             note_id: newest.note_id.clone(),
             title: note_title(locale, newest),
-            notebooks: shelf,
-            recent,
+            edited: edited_line(locale, &newest.updated_local_day, today),
+            next_title: library
+                .notes
+                .get(1)
+                .map(|next| note_title(locale, next))
+                .unwrap_or_default(),
         }),
     )
 }
@@ -763,25 +741,8 @@ fn health_tile(locale: Locale, today: &wire::HealthToday) -> Made {
 
 // -- people -------------------------------------------------------------------
 
-/// A person's initials from the display name: one letter for one word, the
-/// first and LAST word's for more, because a middle name is not the letter
-/// anybody recognises.
-fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let first = |word: &str| {
-        word.chars()
-            .next()
-            .map(|c| c.to_uppercase().collect::<String>())
-    };
-    match words.as_slice() {
-        [] => "?".to_owned(),
-        [only] => first(only).unwrap_or_default(),
-        [head, .., last] => first(head).unwrap_or_default() + &first(last).unwrap_or_default(),
-    }
-}
-
 /// THE CIRCLE People's own roster lists (live, neither the owner nor a pet), so
-/// the tile and the app agree on how many.
+/// the widget and the app agree on how many.
 fn people(ctx: &Ctx) -> Made {
     let Reading::Data(roster) =
         read::read(
@@ -798,6 +759,8 @@ fn people(ctx: &Ctx) -> Made {
     people_tile(ctx.locale(), &roster)
 }
 
+/// HOW MANY ARE DUE FOR A CATCH-UP when any are ("3 reconnect"), else how many
+/// people there are. Both are People's own counts, never a number made here.
 fn people_tile(locale: Locale, roster: &wire::PeopleRoster) -> Made {
     let (one, many) = (
         words::tile_people_count_one(locale),
@@ -806,39 +769,26 @@ fn people_tile(locale: Locale, roster: &wire::PeopleRoster) -> Made {
     if roster.people.is_empty() {
         return empty_with(0, one, many);
     }
-    let faces: Vec<wire::home_tile_body::people::Face> = roster
-        .people
-        .iter()
-        .take(PREVIEW)
-        .map(|person| wire::home_tile_body::people::Face {
-            party_id: person.party_id.clone(),
-            initials: initials(&person.name),
-            // THE HUE IS RESOLVED HERE, ONCE, FOR BOTH SHELLS: derived from the
-            // id, so a corrected spelling never repaints a person.
-            color: centraid_design::party_hue_key(&person.party_id, None).map(str::to_owned),
-        })
-        .collect();
     let total = u32::try_from(roster.people.len())
         .unwrap_or(u32::MAX)
         .max(roster.count_all);
-    let more = total.saturating_sub(u32::try_from(faces.len()).unwrap_or(0));
+    let (figure, caption) = if roster.count_due > 0 {
+        (
+            grouped(i64::from(roster.count_due)),
+            words::tile_people_reconnect(locale),
+        )
+    } else {
+        (
+            grouped(i64::from(total)),
+            noun(total, roster.truncated, one.clone(), many.clone()),
+        )
+    };
     content(
         total,
         roster.truncated,
         one,
         many,
-        Body::People(wire::home_tile_body::People {
-            faces,
-            more,
-            more_label: if more > 0 {
-                fill(
-                    &words::tile_people_more(locale),
-                    &[("n", &more.to_string())],
-                )
-            } else {
-                words::tile_people_everyone(locale)
-            },
-        }),
+        Body::People(wire::home_tile_body::People { figure, caption }),
     )
 }
 
@@ -989,8 +939,9 @@ mod tests {
         }
     }
 
+    /// The calendar widget alone, with nothing owed.
     fn agenda_of(events: Vec<wire::AgendaEvent>) -> Made {
-        agenda_tile(Locale::En, &upcoming(events), Some(&board(&[], &[])))
+        calendar_tile(Locale::En, HourCycle::default(), &upcoming(events))
     }
 
     fn agenda_body(made: &Made) -> &wire::home_tile_body::Agenda {
@@ -1004,206 +955,99 @@ mod tests {
         made.count.expect("a count").value
     }
 
-    // -- Agenda (ports of HomeReadsSpec) ----------------------------------------
+    fn lines(body: &wire::home_tile_body::Agenda) -> Vec<(&str, &str)> {
+        body.events
+            .iter()
+            .map(|event| (event.title.as_str(), event.span.as_str()))
+            .collect()
+    }
+
+    // -- Agenda: the calendar widget and the reminders widget --------------------
 
     #[test]
-    fn the_due_count_is_overdue_plus_today_headed_by_the_first_overdue_title_beside_the_next_event()
-    {
-        let made = agenda_tile(
-            Locale::En,
-            &upcoming(vec![timed(
-                "evt-dentist",
-                "Dentist",
-                "2026-06-15T14:00",
-                "2026-06-15T15:00",
-            )]),
-            Some(&board(
-                &["File the taxes"],
-                &["Call Mum", "Water the plants"],
-            )),
-        );
+    fn the_calendar_widget_names_the_day_and_lists_two_events_with_the_rest_counted() {
+        let made = agenda_of(vec![
+            timed(
+                "a",
+                "Lunch with Ana",
+                "2026-06-15T11:15",
+                "2026-06-15T12:30",
+            ),
+            timed("b", "Lease call", "2026-06-15T11:45", ""),
+            timed("c", "Dentist", "2026-06-15T14:00", "2026-06-15T15:00"),
+            timed("d", "Gym", "2026-06-15T18:00", "2026-06-15T19:00"),
+        ]);
         assert_eq!(made.status, Status::Content);
         let body = agenda_body(&made);
-        assert_eq!(body.title, "Dentist");
+        assert_eq!((body.weekday.as_str(), body.day.as_str()), ("Monday", "15"));
         assert_eq!(
-            (
-                body.due_count,
-                body.due_label.as_str(),
-                body.due_title.as_str()
-            ),
-            (3, "3 due", "File the taxes")
+            lines(body),
+            [
+                ("Lunch with Ana", "11:15 \u{2013} 12:30"),
+                ("Lease call", "11:45")
+            ]
         );
-        // The header count is what the tile draws: the event plus the three due tasks.
+        assert_eq!(body.foot, "Calendar \u{b7} 2 more");
+        // The count is what the spoken label says: four events in the week.
         assert_eq!(count(&made), 4);
         assert_eq!(made.count_label, "on your plate");
     }
 
     #[test]
-    fn tasks_due_and_no_event_is_content_whose_headline_says_there_is_no_event() {
-        let made = agenda_tile(
-            Locale::En,
-            &upcoming(vec![]),
-            Some(&board(&[], &["Call Mum"])),
-        );
-        assert_eq!(made.status, Status::Content);
-        let body = agenda_body(&made);
-        assert_eq!(body.title, "No events coming up");
-        assert_eq!((body.at.as_str(), body.after.as_str()), ("", ""));
-        assert_eq!(
-            (body.due_label.as_str(), body.due_title.as_str()),
-            ("1 due", "Call Mum")
-        );
-        // NOT "0" over "1 due": the count agrees with the line.
-        assert_eq!(count(&made), 1);
+    fn with_no_more_than_two_the_foot_is_the_apps_name_and_nothing_today_says_so() {
+        let two = agenda_of(vec![
+            timed("a", "Lunch", "2026-06-15T11:15", ""),
+            timed("b", "Call", "2026-06-15T11:45", ""),
+        ]);
+        assert_eq!(agenda_body(&two).foot, "Calendar");
+        // An event on a later day is in the week and not in the day.
+        let later = agenda_of(vec![timed("a", "Survey", "2026-06-17T08:15", "")]);
+        assert_eq!(later.status, Status::Content);
+        let body = agenda_body(&later);
+        assert!(body.events.is_empty());
+        assert_eq!(body.foot, "No events today");
+        assert_eq!(count(&later), 1);
     }
 
     #[test]
-    fn a_due_read_that_did_not_land_costs_the_tile_its_due_line_and_nothing_else() {
-        let events = vec![timed("e", "Dentist", "2026-06-15T14:00", "")];
-        let made = agenda_tile(Locale::En, &upcoming(events), None);
-        assert_eq!(made.status, Status::Content);
-        let body = agenda_body(&made);
-        assert_eq!(body.title, "Dentist");
-        assert_eq!((body.due_count, body.due_label.as_str()), (0, ""));
-        // And with no event either, the tile says nothing is coming rather than inventing a due line.
-        let none = agenda_tile(Locale::En, &upcoming(vec![]), None);
-        assert_eq!(none.status, Status::Empty);
-        assert_eq!(count(&none), 0);
-    }
-
-    #[test]
-    fn nothing_coming_up_and_nothing_due_is_empty_with_a_zero_count() {
-        let made = agenda_of(vec![timed(
-            "evt-early",
-            "School run",
-            "2026-06-15T07:30",
-            "2026-06-15T08:00",
-        )]);
-        assert_eq!(made.status, Status::Empty);
-        assert_eq!(count(&made), 0);
-        assert!(made.body.is_none());
-        assert_eq!(made.count_label, "on your plate");
-        let calm = agenda_of(vec![timed("e", "Dentist", "2026-06-15T14:00", "")]);
-        let body = agenda_body(&calm);
-        assert_eq!(
-            (
-                body.due_count,
-                body.due_label.as_str(),
-                body.due_title.as_str()
-            ),
-            (0, "", "")
-        );
-    }
-
-    #[test]
-    fn the_next_occurrence_today_is_its_clock_alone_and_what_follows_it_is_named() {
+    fn an_event_that_has_ended_is_left_out_and_one_ending_exactly_now_has_ended() {
         let made = agenda_of(vec![
-            // OVER at 08:00, an hour before now: not next, not counted.
-            timed(
-                "evt-early",
-                "School run",
-                "2026-06-15T07:30",
-                "2026-06-15T08:00",
-            ),
-            timed(
-                "evt-survey",
-                "Survey walk-through",
-                "2026-06-15T10:00",
-                "2026-06-15T11:00",
-            ),
-            timed(
-                "evt-dentist",
-                "Dentist",
-                "2026-06-15T14:00",
-                "2026-06-15T15:00",
-            ),
+            timed("e", "School run", "2026-06-15T07:30", "2026-06-15T08:00"),
+            // A timed end is exclusive.
+            timed("s", "Stand-up", "2026-06-15T08:45", "2026-06-15T09:00"),
+            timed("c", "Call with Ana", "2026-06-15T08:30", "2026-06-15T09:30"),
+            timed("v", "Survey", "2026-06-15T10:00", ""),
         ]);
-        assert_eq!(made.status, Status::Content);
-        let body = agenda_body(&made);
-        assert_eq!(body.title, "Survey walk-through");
-        assert_eq!(body.at, "10:00");
-        assert_eq!(body.after, "then Dentist");
         assert_eq!(
-            made.count,
-            Some(wire::HomeTileCount {
-                value: 2,
-                capped: false
-            })
+            lines(agenda_body(&made)),
+            [
+                ("Call with Ana", "08:30 \u{2013} 09:30"),
+                ("Survey", "10:00")
+            ]
         );
+        assert_eq!(count(&made), 2);
     }
 
     #[test]
-    fn an_occurrence_under_way_is_next_and_one_ending_exactly_now_has_ended() {
-        let under_way = agenda_of(vec![
-            timed(
-                "evt-call",
-                "Call with Ana",
-                "2026-06-15T08:30",
-                "2026-06-15T09:30",
-            ),
-            timed("evt-survey", "Survey walk-through", "2026-06-15T10:00", ""),
-        ]);
-        assert_eq!(agenda_body(&under_way).title, "Call with Ana");
-        assert_eq!(agenda_body(&under_way).at, "08:30");
-        // A timed end is exclusive.
-        let ended = agenda_of(vec![
-            timed(
-                "evt-standup",
-                "Stand-up",
-                "2026-06-15T08:45",
-                "2026-06-15T09:00",
-            ),
-            timed("evt-survey", "Survey walk-through", "2026-06-15T10:00", ""),
-        ]);
-        assert_eq!(agenda_body(&ended).title, "Survey walk-through");
-    }
-
-    #[test]
-    fn a_later_day_is_weekday_and_date_and_an_empty_stretch_names_the_day_it_ends() {
+    fn an_all_day_event_is_a_day_and_never_a_clock_time_and_a_run_covering_today_is_todays() {
         let made = agenda_of(vec![
-            timed(
-                "evt-survey",
-                "Survey walk-through",
-                "2026-06-17T08:15",
-                "2026-06-17T09:00",
-            ),
-            timed("evt-lease", "Lease signing", "2026-06-20T11:00", ""),
+            all_day("old", "Conference", "2026-06-12", "2026-06-14"),
+            all_day("trip", "Lisbon", "2026-06-13", "2026-06-16"),
+            all_day("move", "Moving day", "2026-06-18", "2026-06-18"),
         ]);
-        let body = agenda_body(&made);
-        assert_eq!(body.at, "Wed 17 · 08:15");
-        assert_eq!(body.after, "then nothing until the 20th");
+        // The run that ended yesterday is gone; the one covering today leads.
+        assert_eq!(lines(agenda_body(&made)), [("Lisbon", "All day")]);
+        assert_eq!(count(&made), 2);
     }
 
     #[test]
-    fn an_all_day_event_is_a_day_and_never_a_clock_time() {
-        let today = agenda_of(vec![all_day("evt-holiday", "Bank holiday", TODAY, TODAY)]);
-        assert_eq!(agenda_body(&today).at, "Today · all day");
-        let later = agenda_of(vec![all_day(
-            "evt-move",
-            "Moving day",
-            "2026-06-18",
-            "2026-06-18",
-        )]);
-        assert_eq!(agenda_body(&later).at, "Thu 18 · all day");
+    fn an_untitled_event_is_called_one() {
+        let made = agenda_of(vec![timed("x", "", "2026-06-15T10:00", "")]);
+        assert_eq!(agenda_body(&made).events[0].title, "Untitled event");
     }
 
     #[test]
-    fn an_all_day_run_covering_today_is_todays_and_one_that_ended_yesterday_is_gone() {
-        let made = agenda_of(vec![
-            all_day("evt-yesterday", "Conference", "2026-06-12", "2026-06-14"),
-            all_day("evt-trip", "Lisbon", "2026-06-13", "2026-06-16"),
-        ]);
-        let body = agenda_body(&made);
-        assert_eq!(
-            (body.title.as_str(), body.at.as_str()),
-            ("Lisbon", "Today · all day")
-        );
-        assert_eq!(count(&made), 1);
-    }
-
-    #[test]
-    fn a_repeating_series_is_one_thing_its_next_occurrence_heads_and_the_after_line_skips_its_repeats()
-     {
+    fn a_repeating_series_counts_every_occurrence_and_lists_the_first_two() {
         // SEVEN occurrences of one series, expanded BY THE CORE: this side expands nothing.
         let mut events: Vec<wire::AgendaEvent> = (15..=21)
             .map(|day| {
@@ -1218,14 +1062,11 @@ mod tests {
         events.push(timed("evt-dentist", "Dentist", "2026-06-16T14:00", ""));
         events.sort_by(|a, b| a.local_start.cmp(&b.local_start));
         let made = agenda_of(events);
-        let body = agenda_body(&made);
+        // Only today's occurrence is the day's; the other six are the week's.
         assert_eq!(
-            (body.title.as_str(), body.at.as_str()),
-            ("Stand-up", "10:00")
+            lines(agenda_body(&made)),
+            [("Stand-up", "10:00 \u{2013} 10:15")]
         );
-        // NOT "then Stand-up": tomorrow's stand-up is the same thing again.
-        assert_eq!(body.after, "then nothing until the 16th");
-        // The COUNT is occurrences: seven stand-ups and a dentist.
         assert_eq!(count(&made), 8);
     }
 
@@ -1241,16 +1082,73 @@ mod tests {
     }
 
     #[test]
-    fn nothing_after_the_next_says_so_and_an_untitled_event_is_called_one() {
-        let made = agenda_of(vec![timed(
-            "evt-survey",
-            "Survey walk-through",
-            "2026-06-15T10:00",
-            "",
+    fn what_is_owed_is_the_reminders_widget_with_its_count_and_the_first_three_titles() {
+        let reminders = reminders_tile(
+            Locale::En,
+            &board(
+                &["File the taxes"],
+                &["Call Mum", "Water the plants", "Pay rent"],
+            ),
+        );
+        assert_eq!(reminders.status, Status::Content);
+        // Overdue first, then today's; four are owed and three are named.
+        assert_eq!(count(&reminders), 4);
+        assert_eq!(reminders.count_label, "due");
+        let Some(Body::Reminders(body)) = &reminders.body else {
+            panic!("not a reminders body");
+        };
+        assert_eq!(
+            body.titles,
+            ["File the taxes", "Call Mum", "Water the plants"]
+        );
+        assert_eq!(body.caption, "Today");
+    }
+
+    #[test]
+    fn nothing_owed_is_the_reminders_widget_empty_and_the_calendar_counts_only_events() {
+        let none = reminders_tile(Locale::En, &board(&[], &[]));
+        assert_eq!(none.status, Status::Empty);
+        assert_eq!(count(&none), 0);
+        let events = vec![timed("e", "Dentist", "2026-06-15T14:00", "")];
+        let calendar = calendar_tile(Locale::En, HourCycle::default(), &upcoming(events));
+        assert_eq!(calendar.status, Status::Content);
+        assert_eq!(lines(agenda_body(&calendar)), [("Dentist", "14:00")]);
+        assert_eq!(count(&calendar), 1);
+    }
+
+    #[test]
+    fn nothing_coming_up_is_empty_with_a_zero_count() {
+        let made = calendar_tile(Locale::En, HourCycle::default(), &upcoming(vec![]));
+        assert_eq!(made.status, Status::Empty);
+        assert_eq!(count(&made), 0);
+        assert!(made.body.is_none());
+        assert_eq!(made.count_label, "on your plate");
+        // An event that is over leaves the same: nothing to say.
+        let over = agenda_of(vec![timed(
+            "e",
+            "School run",
+            "2026-06-15T07:30",
+            "2026-06-15T08:00",
         )]);
-        assert_eq!(agenda_body(&made).after, "nothing after it");
-        let untitled = agenda_of(vec![timed("evt-x", "", "2026-06-15T10:00", "")]);
-        assert_eq!(agenda_body(&untitled).title, "Untitled event");
+        assert_eq!(over.status, Status::Empty);
+    }
+
+    #[test]
+    fn the_weekday_is_spelled_out_for_each_day_and_empty_for_a_day_that_is_not_one() {
+        let week = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ];
+        for (offset, name) in week.iter().enumerate() {
+            let day = civil::plus_days("2026-06-15", i64::try_from(offset).unwrap()).unwrap();
+            assert_eq!(weekday_long(Locale::En, &day), *name);
+        }
+        assert_eq!(weekday_long(Locale::En, "soon"), "");
     }
 
     // -- Notes (ports of HomeNotesTileSpec) -----------------------------------
@@ -1264,20 +1162,7 @@ mod tests {
         }
     }
 
-    fn notebook(id: &str, name: Option<&str>, count: u32) -> wire::NotesNotebook {
-        wire::NotesNotebook {
-            notebook_id: id.to_owned(),
-            name: name.map(str::to_owned),
-            note_count: count,
-            ..Default::default()
-        }
-    }
-
-    fn notes_of(
-        notes: Vec<wire::NotesRow>,
-        notebooks: Vec<wire::NotesNotebook>,
-        truncated: bool,
-    ) -> Made {
+    fn notes_of(notes: Vec<wire::NotesRow>, truncated: bool, today: Option<&str>) -> Made {
         notes_tile(
             Locale::En,
             &wire::NotesLibrary {
@@ -1285,10 +1170,7 @@ mod tests {
                 truncated,
                 ..Default::default()
             },
-            &wire::NotesNotebooks {
-                notebooks,
-                ..Default::default()
-            },
+            today,
         )
     }
 
@@ -1299,73 +1181,61 @@ mod tests {
         body
     }
 
+    fn edited(day: &str) -> wire::NotesRow {
+        wire::NotesRow {
+            updated_local_day: day.to_owned(),
+            ..note("n1", Some("Link with [["), "")
+        }
+    }
+
     #[test]
-    fn the_shelf_is_the_notebooks_that_hold_notes_in_the_members_order_three_at_most() {
+    fn the_notes_widget_is_the_newest_note_and_when_it_was_edited() {
         let made = notes_of(
             vec![
-                note("n1", Some("Grocery run"), ""),
-                note("n2", Some("x"), ""),
-            ],
-            vec![
-                notebook("a", Some("Recipes"), 12),
-                notebook("b", Some("Empty"), 0),
-                notebook("c", Some("Work"), 9),
-                notebook("d", Some("Lisbon trip"), 4),
-                notebook("e", Some("Garden"), 2),
+                note("n1", Some("Grocery run"), "milk"),
+                note("n2", Some("Older"), "x"),
             ],
             false,
+            Some(TODAY),
         );
         assert_eq!(made.status, Status::Content);
         let body = notes_body(&made);
-        let shelf: Vec<(&str, u32)> = body
-            .notebooks
-            .iter()
-            .map(|n| (n.name.as_str(), n.note_count))
-            .collect();
-        assert_eq!(shelf, [("Recipes", 12), ("Work", 9), ("Lisbon trip", 4)]);
-        // The newest note is the foot, and with a shelf there is no list of notes.
         assert_eq!(
             (body.note_id.as_str(), body.title.as_str()),
             ("n1", "Grocery run")
         );
-        assert!(body.recent.is_empty());
+        // No edit day on the row: no line, and never a made-up one.
+        assert_eq!(body.edited, "");
+        // THE NOTE AFTER IT rides along, so a new vault's two starter notes both show.
+        assert_eq!(body.next_title, "Older");
+        let alone = notes_of(vec![note("n1", Some("Grocery run"), "milk")], false, None);
+        assert_eq!(notes_body(&alone).next_title, "");
     }
 
     #[test]
-    fn with_nothing_filed_the_tile_draws_the_newest_notes_instead() {
-        let made = notes_of(
-            vec![
-                note("n1", None, "a"),
-                note("n2", None, "b"),
-                note("n3", None, "c"),
-                note("n4", None, "d"),
-            ],
-            vec![notebook("b", Some("Empty"), 0)],
-            false,
-        );
-        let body = notes_body(&made);
-        assert!(body.notebooks.is_empty());
-        assert_eq!(
-            body.recent
-                .iter()
-                .map(|r| r.note_id.as_str())
-                .collect::<Vec<_>>(),
-            ["n1", "n2", "n3"]
-        );
+    fn edited_is_today_yesterday_or_the_day_named() {
+        let line = |day: &str, today: Option<&str>| {
+            notes_body(&notes_of(vec![edited(day)], false, today))
+                .edited
+                .clone()
+        };
+        assert_eq!(line("2026-06-15", Some(TODAY)), "Edited today");
+        assert_eq!(line("2026-06-14", Some(TODAY)), "Edited yesterday");
+        assert_eq!(line("2026-06-01", Some(TODAY)), "Edited Mon 1 June");
+        // With no day from the core the edit day is named, never guessed.
+        assert_eq!(line("2026-06-14", None), "Edited Sun 14 June");
     }
 
     #[test]
-    fn an_untitled_note_is_named_by_its_first_line_and_an_unnamed_notebook_says_so() {
+    fn an_untitled_note_is_named_by_its_first_line_or_called_one() {
         let made = notes_of(
             vec![note("n1", Some(" "), "\n  Buy oat milk\nlemons")],
-            vec![notebook("a", None, 1)],
             false,
+            None,
         );
-        let body = notes_body(&made);
-        assert_eq!(body.title, "Buy oat milk");
-        assert_eq!(body.notebooks[0].name, "Untitled notebook");
-        let bare = notes_of(vec![note("n1", None, "")], vec![], false);
-        assert_eq!(notes_body(&bare).recent[0].title, "Untitled note");
+        assert_eq!(notes_body(&made).title, "Buy oat milk");
+        let bare = notes_of(vec![note("n1", None, "")], false, None);
+        assert_eq!(notes_body(&bare).title, "Untitled note");
     }
 
     #[test]
@@ -1376,8 +1246,8 @@ mod tests {
                 note("n1", None, "a"),
                 note("n2", None, "a"),
             ],
-            vec![],
             true,
+            None,
         );
         assert_eq!(
             made.count,
@@ -1388,14 +1258,14 @@ mod tests {
         );
         assert_eq!(made.count_label, "notes");
         assert_eq!(
-            notes_of(vec![note("n1", None, "a")], vec![], false).count_label,
+            notes_of(vec![note("n1", None, "a")], false, None).count_label,
             "note"
         );
     }
 
     #[test]
     fn no_notes_is_empty_with_a_stated_zero() {
-        let made = notes_of(vec![], vec![notebook("a", Some("Recipes"), 0)], false);
+        let made = notes_of(vec![], false, None);
         assert_eq!(made.status, Status::Empty);
         assert_eq!(count(&made), 0);
         assert!(made.body.is_none());
@@ -1444,7 +1314,7 @@ mod tests {
                 body.caption.as_str(),
                 body.line.as_str()
             ),
-            ("8,412", "steps today", "Slept 7 h 12 m")
+            ("8,412", "steps today", "Slept 7 h 12 min")
         );
         // Connected with no figures: nothing is invented.
         let quiet = health_tile(Locale::En, &health_today(vec![], true));
@@ -1703,58 +1573,49 @@ mod tests {
         assert_eq!(count(&made), 4);
     }
 
-    #[test]
-    fn the_people_tile_shows_three_faces_with_a_hue_and_counts_the_rest() {
-        let roster = wire::PeopleRoster {
-            people: [
-                "Ada Lovelace",
-                "Grace",
-                "Alan Mathison Turing",
-                "Edsger Dijkstra",
-            ]
-            .iter()
-            .enumerate()
-            .map(|(i, name)| wire::PeopleRosterRow {
-                party_id: format!("party-{i}"),
-                name: (*name).to_owned(),
-                ..Default::default()
-            })
-            .collect(),
-            count_all: 4,
+    fn roster(names: &[&str], count_due: u32) -> wire::PeopleRoster {
+        wire::PeopleRoster {
+            people: names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| wire::PeopleRosterRow {
+                    party_id: format!("party-{i}"),
+                    name: (*name).to_owned(),
+                    ..Default::default()
+                })
+                .collect(),
+            count_all: u32::try_from(names.len()).unwrap(),
+            count_due,
             ..Default::default()
-        };
-        let made = people_tile(Locale::En, &roster);
+        }
+    }
+
+    fn people_body(made: &Made) -> (&str, &str) {
         let Some(Body::People(body)) = &made.body else {
             panic!("not people")
         };
-        assert_eq!(
-            body.faces
-                .iter()
-                .map(|f| f.initials.as_str())
-                .collect::<Vec<_>>(),
-            ["AL", "G", "AT"]
-        );
-        assert!(body.faces.iter().all(|f| f.color.is_some()));
-        assert_eq!(
-            (body.more, body.more_label.as_str()),
-            (1, "+1 more in your directory")
-        );
-        // Everyone shown says so.
-        let few = people_tile(
-            Locale::En,
-            &wire::PeopleRoster {
-                people: roster.people[..2].to_vec(),
-                count_all: 2,
-                ..Default::default()
-            },
-        );
-        let Some(Body::People(body)) = &few.body else {
-            panic!("not people")
-        };
-        assert_eq!(
-            (body.more, body.more_label.as_str()),
-            (0, "That's everyone in your directory")
-        );
+        (body.figure.as_str(), body.caption.as_str())
+    }
+
+    #[test]
+    fn the_people_widget_says_how_many_are_due_for_a_catch_up_when_any_are() {
+        let made = people_tile(Locale::En, &roster(&["Ada", "Grace", "Alan", "Edsger"], 3));
+        assert_eq!(made.status, Status::Content);
+        assert_eq!(people_body(&made), ("3", "reconnect"));
+        // The tile's own count stays everyone, for the spoken label.
+        assert_eq!(count(&made), 4);
+        assert_eq!(made.count_label, "people");
+    }
+
+    #[test]
+    fn with_no_one_due_the_people_widget_says_how_many_there_are() {
+        let many = people_tile(Locale::En, &roster(&["Ada", "Grace"], 0));
+        assert_eq!(people_body(&many), ("2", "people"));
+        let one = people_tile(Locale::En, &roster(&["Ada"], 0));
+        assert_eq!(people_body(&one), ("1", "person"));
+        let none = people_tile(Locale::En, &roster(&[], 0));
+        assert_eq!(none.status, Status::Empty);
+        assert_eq!(count(&none), 0);
     }
 
     #[test]
@@ -1798,14 +1659,6 @@ mod tests {
     }
 
     #[test]
-    fn initials_take_the_first_and_last_word() {
-        assert_eq!(initials("ada"), "A");
-        assert_eq!(initials("Ada Lovelace"), "AL");
-        assert_eq!(initials("Ada Augusta King Lovelace"), "AL");
-        assert_eq!(initials("   "), "?");
-    }
-
-    #[test]
     fn a_count_that_fills_its_window_is_never_singular() {
         assert_eq!(noun(1, false, "item".into(), "items".into()), "item");
         assert_eq!(noun(1, true, "item".into(), "items".into()), "items");
@@ -1814,8 +1667,8 @@ mod tests {
 
     #[test]
     fn a_duration_is_hours_and_minutes() {
-        assert_eq!(duration(Locale::En, 45.0), "45 m");
-        assert_eq!(duration(Locale::En, 7.0 * 60.0 + 12.0), "7 h 12 m");
-        assert_eq!(duration(Locale::En, -3.0), "0 m");
+        assert_eq!(duration(Locale::En, 45.0), "45 min");
+        assert_eq!(duration(Locale::En, 7.0 * 60.0 + 12.0), "7 h 12 min");
+        assert_eq!(duration(Locale::En, -3.0), "0 min");
     }
 }

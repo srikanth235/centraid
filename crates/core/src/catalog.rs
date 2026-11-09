@@ -1,4 +1,4 @@
-//! THE NINE APPS' CATALOGUES, AS ONE LOOKUP (#1135).
+//! THE APPS' CATALOGUES, AS ONE LOOKUP (#1135).
 //!
 //! Each app crate embeds its `manifest.json` and carries a Rust action table
 //! (`commands::ACTIONS`) that says which vault command each manifest action
@@ -42,11 +42,11 @@ macro_rules! app {
 }
 
 /// Every app, in the order the product lists them.
-pub(crate) const APPS: [App; 8] = [
+pub(crate) const APPS: [App; 9] = [
     app!(
-        "agenda",
-        centraid_apps_agenda,
-        centraid_apps_agenda::ACTIONS
+        "calendar",
+        centraid_apps_calendar,
+        centraid_apps_calendar::ACTIONS
     ),
     app!("docs", centraid_apps_docs, centraid_apps_docs::ACTIONS),
     app!(
@@ -75,12 +75,17 @@ pub(crate) const APPS: [App; 8] = [
         centraid_apps_photos,
         centraid_apps_photos::ACTIONS
     ),
+    app!(
+        "reminders",
+        centraid_apps_reminders,
+        centraid_apps_reminders::ACTIONS
+    ),
 ];
 
 /// THE SHELL'S OWN CATALOGUE: what Home, search, the chat's history and the vault's plumbing read
 /// and write, which is not one app's. It is addressed like an app (`load("shell", ..)`,
-/// `act("shell", ..)`) and is not one of the eight [`APPS`]: the assistant's catalogue and the
-/// training harness carry the eight and never this.
+/// `act("shell", ..)`) and is not one of the nine [`APPS`]: the assistant's catalogue and the
+/// training harness carry the nine and never this.
 pub(crate) const SHELL: App = App {
     id: crate::shell::ID,
     manifest: crate::shell::manifest,
@@ -95,7 +100,7 @@ pub(crate) fn app(id: &str) -> Option<App> {
         .or_else(|| (id == SHELL.id).then_some(SHELL))
 }
 
-/// The manifest `load` answers from for an app id: one of the eight apps', or
+/// The manifest `load` answers from for an app id: one of the nine apps', or
 /// the shell's own catalogue ([`crate::shell`], no app: it has no actions, so
 /// [`app`] and `act` never see it).
 pub(crate) fn manifest_of(id: &str) -> Option<&'static Manifest> {
@@ -125,7 +130,10 @@ mod tests {
                 actions += 1;
             }
         }
-        assert_eq!(actions, 160, "the eight manifests declare 160 actions");
+        assert_eq!(
+            actions, 183,
+            "the nine manifests declare 183 actions: the 179 of the eight, plus the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style)"
+        );
     }
 
     #[test]
@@ -150,7 +158,7 @@ mod tests {
         }
     }
 
-    /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks were folded into Agenda, so no
+    /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks are Reminders', so no
     /// app id, manifest id, crate or query namespace is `tasks`. `task` stays what it is: a vault
     /// entity kind and a chat kind.
     #[test]
@@ -158,7 +166,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         assert!(
             !root.join("crates/apps/tasks").exists(),
-            "crates/apps/tasks came back: the tasks are Agenda's"
+            "crates/apps/tasks came back: the tasks are Reminders'"
         );
         for manifest in ["Cargo.toml", "crates/core/Cargo.toml"] {
             let text = std::fs::read_to_string(root.join(manifest)).expect("a manifest");

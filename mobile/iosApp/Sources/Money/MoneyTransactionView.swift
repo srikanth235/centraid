@@ -29,7 +29,9 @@ struct MoneyTransactionView: View {
         let confirmBinding = moneySheetBinding(state.hasConfirm) {
             send(event { $0.confirmDismissed = .init() })
         }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        // THE PAGE HEADS ITSELF with the merchant's name, so the bar carries only the back chevron
+        // (the board draws no small title over it).
+        PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
@@ -56,21 +58,27 @@ struct MoneyTransactionView: View {
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.withPicker) { link in send(event { $0.withLink = link }) }
     }
 
     @ViewBuilder
     private func page(_ transaction: Centraid_Core_V1_MoneyTransactionData) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(transaction.directionLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            Text(MoneyWords.amount(transaction.amount))
-                .centraidType("display")
-                .foregroundStyle(Theme.color(StatusChipView.ink(transaction.amountTone, neutral: "text"), scheme))
+        VStack(alignment: .leading, spacing: 6) {
             Text(transaction.title)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.title)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(MoneyWords.amount(transaction.amount))
+                    .kitType(.title)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .foregroundStyle(moneyInk(positive: transaction.amountPositive, tone: transaction.amountTone))
+                Text(transaction.directionLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
             HStack(spacing: 6) {
                 ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
             }
@@ -84,8 +92,9 @@ struct MoneyTransactionView: View {
         // Category and Name facts carry the `category` and `name` actions, so those
         // two actions are not drawn a second time below.
         let folded = Set(transaction.facts.compactMap { actionKey(forFact: $0, in: transaction) })
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(transaction.facts.enumerated()), id: \.offset) { _, fact in
+        MoneyPageCard {
+            ForEach(Array(transaction.facts.enumerated()), id: \.offset) { index, fact in
+                if index > 0 { KitHairline(inset: 16) }
                 if let key = actionKey(forFact: fact, in: transaction),
                    let action = transaction.actions.first(where: { $0.key == key }) {
                     MoneyFactRow(
@@ -106,6 +115,7 @@ struct MoneyTransactionView: View {
         }
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
+        if transaction.hasWithOffer { offer(transaction.withOffer, key: "with") }
         // THE ACTIONS ARE ALTERNATIVES: one stack.
         KitChoiceStack {
             ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in
@@ -133,17 +143,18 @@ struct MoneyTransactionView: View {
     private func offer(_ offer: Centraid_Core_V1_MoneyOffer, key: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(offer.title)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.ink)
             if !offer.body.isEmpty {
                 Text(offer.body)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
             }
             if !offer.detail.isEmpty {
                 Text(offer.detail)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
             }
             HStack(spacing: 8) {
                 KitOutlineButton(label: offer.acceptLabel) {
@@ -159,10 +170,7 @@ struct MoneyTransactionView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
-                .strokeBorder(Theme.color("seam", scheme), lineWidth: 1)
-        )
+        .background(StateColor.amber.tint, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 16)
     }
@@ -198,7 +206,10 @@ struct MoneyTransactionView: View {
     }
 }
 
-/// `money.target` — a category's plan for a month, per currency (#1099).
+/// `money.target` — a category's plan for a month, per currency (#1099), as a SHEET over Money
+/// (`Route.sheet`) the way MoneyTarget.dc.html draws it: the X, the title, the figures, the
+/// amount with "Use average" inside the field, the carry switch, the next month's effect, and
+/// Save pinned at the foot with Remove under it.
 ///
 /// The amount is the member's typing, held as `amount_text` on the state, and
 /// every edit re-reads for the preview; the average, the carry and the preview's
@@ -217,13 +228,7 @@ struct MoneyTargetView: View {
 
     var body: some View {
         let content = state.readContent
-        PushedPage(
-            title: content.loaded?.title ?? state.chrome.title,
-            parentTitle: state.chrome.backLabel,
-            onBack: onBack
-        ) {
-            EmptyView()
-        } content: {
+        SheetPage(title: state.chrome.title, onCancel: onBack) {
             ReadStateView(
                 content: content,
                 onRetry: { send(event { $0.refreshed = .init() }) }
@@ -232,52 +237,137 @@ struct MoneyTargetView: View {
                     VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
                         .padding(.bottom, 16)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+        } foot: {
+            VStack(spacing: 0) {
                 MoneyStatusFoot(
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-target-status"
                 )
+                if let target = content.loaded {
+                    footKeys(target)
+                }
             }
         }
-        // SAVED OR REMOVED: Rust says the page is done, the shell pops.
+        // SAVED OR REMOVED: Rust says the page is done, the shell closes the sheet.
         .onChange(of: state.finished) { _, finished in if finished { onBack() } }
     }
 
     @ViewBuilder
     private func page(_ target: Centraid_Core_V1_MoneyTargetData, state: Centraid_Core_V1_MoneyTargetState) -> some View {
-        MoneyNote(text: target.monthLabel)
-        MoneyTextField(
-            key: MoneyWords.meta(target.amountLabel, target.currencyLabel),
-            value: state.amountText,
-            identifier: "money-target-amount",
-            large: true
-        ) { text in send(event { $0.amount = .with { $0.text = text } }) }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(target.title)
+                .kitType(.section)
+                .foregroundStyle(Surface.ink)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("kit-sheet-title")
+            Text(target.monthLabel)
+                .kitType(.row)
+                .foregroundStyle(Surface.meta)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+        .padding(.top, 8)
+        MoneyFigureCard(figures: target.figures)
+        amountField(target, state: state)
         MoneyNote(text: target.issue, ink: "net")
         MoneyNote(text: target.exponentHint)
-        ForEach(Array(target.figures.enumerated()), id: \.offset) { _, figure in
-            MoneyFigureRow(figure: figure)
-        }
-        MoneyQuietButton(label: target.useAverageLabel, identifier: "money-target-average") {
-            send(event { $0.useAverage = .init() })
-        }
-        MoneyToggleRow(label: target.carryLabel, on: state.carry, identifier: "money-target-carry") {
-            send(event { $0.carry = .init() })
-        }
-        MoneyNote(text: target.carryNote)
+        carryCard(target, on: state.carry)
         MoneyPreviewCard(label: target.previewLabel, amount: target.preview, note: target.previewNote)
-        // SAVE AND REMOVE ARE ALTERNATIVES: one stack.
-        MoneyChoiceStack {
-            MoneyInkButton(label: target.saveLabel, enabled: target.canSave, identifier: "money-target-save") {
+    }
+
+    /// THE AMOUNT, on a card with the accent's ring: the currency, the figure, and "Use average"
+    /// at the trailing end in the app's ink.
+    private func amountField(_ target: Centraid_Core_V1_MoneyTargetData, state: Centraid_Core_V1_MoneyTargetState) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(target.amountLabel)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+                .padding(.leading, 4)
+            HStack(spacing: 10) {
+                Text(target.currencyLabel)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.meta)
+                MachineTextField(placeholder: "", value: state.amountText) { text in
+                    send(event { $0.amount = .with { $0.text = text } })
+                }
+                .centraidType("title")
+                .foregroundStyle(Surface.ink)
+                .accessibilityLabel(MoneyWords.meta(target.amountLabel, target.currencyLabel))
+                .accessibilityIdentifier("money-target-amount")
+                Button { send(event { $0.useAverage = .init() }) } label: {
+                    Text(target.useAverageLabel)
+                        .centraidType("sheetKey")
+                        .foregroundStyle(accent.text)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("money-target-average")
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .frame(minHeight: 52)
+            .background(Surface.card, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous).strokeBorder(accent.fill, lineWidth: 1.5)
+            }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 8)
+    }
+
+    /// THE CARRY SWITCH, with its sentence under the label, on a card.
+    private func carryCard(_ target: Centraid_Core_V1_MoneyTargetData, on: Bool) -> some View {
+        Toggle(isOn: Binding(get: { on }, set: { value in if value != on { send(event { $0.carry = .init() }) } })) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(target.carryLabel)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                Text(target.carryNote)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
+        }
+        .kitToggle()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .kitCard()
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 8)
+        .accessibilityIdentifier("money-target-carry")
+    }
+
+    /// SAVE, THEN ITS ALTERNATIVE under it, pinned to the foot: the ink key, and Remove as a red
+    /// text key when a target is stored.
+    private func footKeys(_ target: Centraid_Core_V1_MoneyTargetData) -> some View {
+        VStack(spacing: 2) {
+            KitInkButton(label: target.saveLabel, identifier: "money-target-save") {
                 send(event { $0.save = .init() })
             }
+            .disabled(!target.canSave)
             if !target.removeLabel.isEmpty {
-                MoneyQuietButton(label: target.removeLabel, tone: "net", identifier: "money-target-remove") {
-                    send(event { $0.remove = .init() })
+                Button { send(event { $0.remove = .init() }) } label: {
+                    Text(target.removeLabel)
+                        .centraidType("sheetKey")
+                        .foregroundStyle(StateColor.red.text)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("money-target-remove")
             }
         }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
     }
+
+    @Environment(\.appAccent) private var accent
+    @Environment(\.colorScheme) private var scheme
 }
 
 /// `money.recurring` — what repeats, per merchant (#1099). A read: nothing here writes.
@@ -300,18 +390,22 @@ struct MoneyRecurringView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(recurring.rows.enumerated()), id: \.offset) { _, row in
-                                CentraidRow(
-                                    title: row.merchant,
-                                    meta: MoneyWords.meta(row.meta, row.detail),
-                                    trailing: MoneyWords.amount(row.amount),
-                                    chips: row.chips,
-                                    accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
-                                    identifier: "money-recurring-\(row.key)"
-                                )
+                            MoneyPageCard {
+                                ForEach(Array(recurring.rows.enumerated()), id: \.offset) { index, row in
+                                    if index > 0 { KitHairline(inset: 16) }
+                                    CentraidRow(
+                                        title: row.merchant,
+                                        meta: MoneyWords.meta(row.meta, row.detail),
+                                        trailing: MoneyWords.amount(row.amount),
+                                        chips: row.chips,
+                                        accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
+                                        identifier: "money-recurring-\(row.key)",
+                                        divider: false
+                                    )
+                                }
                             }
                             ForEach(Array(recurring.definitions.enumerated()), id: \.offset) { _, fact in
-                                FieldRow(key: fact.label, value: fact.detail)
+                                MoneyNote(text: "\(fact.label). \(fact.detail)")
                             }
                             MoneyNote(text: recurring.windowNote)
                         }

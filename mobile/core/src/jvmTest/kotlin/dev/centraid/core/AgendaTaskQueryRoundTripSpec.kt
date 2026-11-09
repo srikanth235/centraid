@@ -32,7 +32,7 @@ import java.time.ZoneId
  * promotion rule and collapses a repeating task's missed periods, and v0 did
  * the civil arithmetic — "today", "overdue", Upcoming's days — on the phone in
  * the host zone. The `agenda_task_*` arms of `app_query` run Agenda's task loaders
- * (`crates/apps/agenda`, since the tasks are Agenda's, #1128) in the core and
+ * (`crates/apps/reminders`, since the tasks are Reminders', #1128) in the core and
  * answer every civil reading in the zone the request states, so `commonMain`
  * draws strings.
  *
@@ -89,11 +89,11 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             lateRow.overdue shouldBe true
             lateRow.due_day shouldBe today.minusDays(3).toString()
             // THE REPEATING TASK IS DUE ITS NEXT PERIOD, not four days late —
-            // and it carries the sentence, built in Rust, never the rule.
+            // and it carries its rule for the editor; the sentence is built in Rust.
             val dailyRow = board.groups.flatMap { it.tasks }.single { it.task_id == daily }
             dailyRow.overdue shouldBe false
             dailyRow.repeats shouldBe true
-            dailyRow.recurrence_summary shouldBe "Daily"
+            dailyRow.rrule shouldBe "FREQ=DAILY"
             dailyRow.next_due shouldNotBe null
 
             // --- Upcoming ---------------------------------------------------
@@ -175,9 +175,9 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One write, as a screen makes it (`act` on agenda); answers its `id`, if any of its output. */
+        /** One write, as a screen makes it (`act` on reminders); answers its `id`, if any of its output. */
         suspend fun CentraidCore.write(action: String, input: String, key: String): String {
-            val output = act("agenda", action, input, key)
+            val output = act("reminders", action, input, key)
             return Regex("\"id\":\"([^\"]+)\"")
                 .find(output)
                 ?.groupValues

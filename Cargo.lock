@@ -268,6 +268,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.73.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "787ef8ef523575546b106a58213d6e6b06198a05c2f757258c68a74273670cfa"
+dependencies = [
+ "bitflags 2.13.2",
+ "cexpr",
+ "clang-sys",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash",
+ "shlex 2.0.1",
+ "syn 3.0.5",
+]
+
+[[package]]
 name = "bip39"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -445,7 +462,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "centraid-apps-agenda"
+name = "centraid-apps-calendar"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
@@ -542,6 +559,7 @@ name = "centraid-apps-people"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-blobs",
  "centraid-ontology",
  "centraid-vault",
  "rusqlite",
@@ -564,10 +582,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-apps-reminders"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-kit",
+ "centraid-ontology",
+ "centraid-search",
+ "centraid-vault",
+ "rusqlite",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-kit",
  "centraid-search",
  "centraid-vault",
@@ -622,7 +653,7 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "centraid-api-proto",
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-docs",
  "centraid-apps-health",
  "centraid-apps-kit",
@@ -631,6 +662,7 @@ dependencies = [
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",
+ "centraid-apps-reminders",
  "centraid-assist",
  "centraid-blobs",
  "centraid-gateway",
@@ -704,7 +736,9 @@ dependencies = [
 name = "centraid-design"
 version = "1.0.0-alpha.0"
 dependencies = [
- "serde_json",
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]
@@ -783,7 +817,7 @@ name = "centraid-nativetools"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-kit",
  "centraid-apps-locker",
  "centraid-assist",
@@ -819,9 +853,12 @@ dependencies = [
 name = "centraid-screens"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "base64 0.22.1",
  "centraid-api-proto",
+ "centraid-apps-calendar",
  "centraid-apps-docs",
  "centraid-apps-locker",
+ "centraid-apps-reminders",
  "centraid-assist",
  "centraid-core",
  "centraid-design",
@@ -2040,11 +2077,11 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.38.2"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1d20bef17f513b9b3004532233187769cd072d790971f4e4da0e346eb6401e8"
+checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
 dependencies = [
- "bindgen",
+ "bindgen 0.73.2",
  "cc",
  "pkg-config",
  "vcpkg",
@@ -2081,7 +2118,7 @@ version = "0.1.158"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "608edbeed8bcb8573d8e665f3f047e085202510b7b3d09e7fae2cfe3d80d6bec"
 dependencies = [
- "bindgen",
+ "bindgen 0.72.1",
  "cc",
  "cmake",
  "find_cuda_helper",
@@ -2915,9 +2952,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.40.2"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f2a97da3e3873c73cb2a2e71b35c40ff95e0b1eefa8d72d8499a6928c3b5b3"
+checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
@@ -3976,10 +4013,14 @@ name = "xtask"
 version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",
+ "centraid-design",
  "clap",
+ "png",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

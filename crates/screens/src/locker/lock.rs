@@ -51,6 +51,14 @@ impl Screen for Lock {
                 let step = self.wall.lifecycle(ctx, lifecycle.foreground);
                 self.walled(step)
             }
+            Some(E::Left(_)) => {
+                let step = self.wall.left();
+                self.walled(step)
+            }
+            Some(E::TabHidden(_)) => {
+                let step = self.wall.hidden();
+                self.walled(step)
+            }
             Some(E::EffectResult(result)) => {
                 let step = self.wall.answered(ctx, &result);
                 self.walled(step)

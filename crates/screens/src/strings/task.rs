@@ -14,13 +14,13 @@ catalog! {
     plain anchor_scheduled = ("From the schedule", "From the schedule");
     plain anchor_scheduled_body = ("Every Monday, whether or not I did it.", "Every Monday, whether or not I did it.");
     plain anytime_empty = ("Nothing undated is open.", "Nothing undated is open.");
-    plain app_title = ("Agenda", "Agenda");
+    plain app_title = ("Reminders", "Reminders");
     plain away = ("You were away", "You were away");
     plain band_home = ("Home", "Home");
     plain came_due_many = ("tasks came due", "tasks came due");
     plain came_due_one = ("task came due", "task came due");
     plain cancel = ("Cancel", "Cancel");
-    plain catch_up = ("Reschedule", "Reschedule");
+    plain catch_up = ("Catch up", "Catch up");
     plain catch_up_empty = ("Nothing is overdue.", "Nothing is overdue.");
     plain close = ("Close", "Close");
     plain complete_all = ("Complete all", "Complete all");
@@ -34,7 +34,7 @@ catalog! {
     plain delete_body = ("It goes to Trash with its subtasks, and Restore brings it back for 30 days.", "It goes to Trash with its subtasks, and Restore brings it back for 30 days.");
     plain delete_title = ("Delete this task?", "Delete this task?");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
-    plain denied_title = ("Agenda cannot read your tasks", "Agenda cannot read your tasks");
+    plain denied_title = ("Reminders cannot read your tasks", "Reminders cannot read your tasks");
     plain done = ("Done", "Done");
     plain done_suffix = ("done", "done");
     plain effort_hour = ("1 hour", "1 hour");
@@ -44,7 +44,7 @@ catalog! {
     plain field_empty = ("—", "—");
     plain field_priority = ("Priority", "Priority");
     plain field_project = ("Project", "Project");
-    plain field_reminder = ("Reminder", "Reminder");
+    plain field_reminder = ("Early reminder", "Early reminder");
     plain field_repeats = ("Repeats", "Repeats");
     plain field_subtasks = ("Subtasks", "Subtasks");
     plain field_tags = ("Tags", "Tags");
@@ -77,11 +77,9 @@ catalog! {
     plain more_anytime_meta = ("no date, still yours", "no date, still yours");
     plain more_logbook_meta = ("done and won't do", "done and won't do");
     plain more_reminders_meta = ("open work with a reminder", "open work with a reminder");
-    plain more_title = ("More in Agenda", "More in Agenda");
+    plain more_title = ("More in Reminders", "More in Reminders");
     plain more_trash_meta = ("deleted tasks", "deleted tasks");
-    plain new_project_placeholder = ("Name", "Name");
     plain new_project_title = ("New project", "New project");
-    plain new_project_verb = ("Create project", "Create project");
     plain next_is = ("next is", "next is");
     plain next_one_is = ("the next one is", "the next one is");
     plain notes_placeholder = ("Notes", "Notes");
@@ -92,10 +90,7 @@ catalog! {
     plain pile_dated = ("Came due", "Came due");
     plain pile_repeating = ("Repeating, behind", "Repeating, behind");
     plain pile_sitting = ("Sitting 90 days or more", "Sitting 90 days or more");
-    plain priority_next = ("Next", "Next");
     plain priority_none = ("None", "None");
-    plain priority_now = ("Now", "Now");
-    plain priority_soon = ("Soon", "Soon");
     plain projects_no_area = ("Projects", "Projects");
     plain project_created = ("Project created", "Project created");
     plain project_empty = ("Nothing is filed here yet.", "Nothing is filed here yet.");
@@ -108,7 +103,7 @@ catalog! {
     plain reads_fact_reads_value = ("tasks, projects, sections, tags", "tasks, projects, sections, tags");
     plain reads_fact_writes = ("Writes", "Writes");
     plain reads_fact_writes_value = ("tasks, projects and sections you make", "tasks, projects and sections you make");
-    plain reads_title = ("What Agenda may read", "What Agenda may read");
+    plain reads_title = ("What Reminders may read", "What Reminders may read");
     plain read_incomplete = ("Part of this list didn't load.", "Part of this list didn't load.");
     plain release = ("Release", "Release");
     plain release_body = ("It goes to the Logbook as won't do, with its history. Nothing is erased.", "It goes to the Logbook as won't do, with its history. Nothing is erased.");

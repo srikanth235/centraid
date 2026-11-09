@@ -5,15 +5,18 @@
 //! file, renders its DDL as the committed fixture, and answers two engine-level
 //! soundness questions. The model itself, with its kinds, relations and
 //! registries, is `crates/vault`'s baseline; there
-//! is no second copy of it here. The one other thing it holds is [`text`]: the
+//! is no second copy of it here. The two other things it holds are [`text`]: the
 //! fold and the tokenizer of the vault's search index, which the vault, the app
-//! kit and the search door all need to agree on.
+//! kit and the search door all need to agree on; and [`graph`]: the catalogue of
+//! how entities are joined (edges and foreign-key columns) and the one reading
+//! of them as a graph, which People, Notes and the assistant read through.
 
 #![forbid(unsafe_code)]
 
 pub mod ddl;
 pub mod doctor;
 pub mod error;
+pub mod graph;
 pub mod jsvalue;
 pub mod scratch;
 pub mod text;

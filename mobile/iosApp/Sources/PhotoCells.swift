@@ -26,6 +26,9 @@ struct PhotoCellsGrid: View {
     var taken: Set<String> = []
     /// What a taken cell is spoken as, Rust's ("Already in this album").
     var takenLabel = ""
+    /// A picker's cells all carry the empty ring, so every one reads as choosable (the board draws
+    /// it on each, and a pink frame on the chosen).
+    var showsRing = false
     var minimumCell: CGFloat = 96
     var onTap: ((String) -> Void)?
     /// The download arrow. Both ids, because they answer different questions:
@@ -40,6 +43,7 @@ struct PhotoCellsGrid: View {
                     isSelected: selected.contains(cell.photoID),
                     isTaken: taken.contains(cell.photoID),
                     takenLabel: takenLabel,
+                    showsRing: showsRing,
                     onTap: onTap,
                     onFetch: onFetch
                 )
@@ -57,8 +61,10 @@ struct PhotoCellSquare: View {
     var isSelected = false
     var isTaken = false
     var takenLabel = ""
+    var showsRing = false
     var onTap: ((String) -> Void)?
     var onFetch: ((String, String) -> Void)?
+    @Environment(\.appAccent) private var accent
 
     private var path: String? {
         cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty ? cell.thumbnailPath : nil
@@ -93,6 +99,13 @@ struct PhotoCellSquare: View {
                         .accessibilityLabel(takenLabel)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
+                } else if showsRing {
+                    PhotoSelectionDot(selected: false)
+                }
+            }
+            .overlay {
+                if isSelected, !isTaken, showsRing {
+                    Rectangle().strokeBorder(accent.fill, lineWidth: 3)
                 }
             }
             .overlay(alignment: .bottomTrailing) { PhotoKindLine(cell: cell, rung: PhotoKindLine.minimumRung) }
@@ -119,6 +132,7 @@ struct PhotoCellSquare: View {
 /// mark would say nothing.
 struct PhotoTile: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
     let cell: Centraid_Core_V1_PhotoTile
     let width: CGFloat
     let height: CGFloat
@@ -145,7 +159,7 @@ struct PhotoTile: View {
                 // THE OUTLINE IS DRAWN INSIDE THE BOX: the gutter is 2 and an
                 // overhang would paint over the neighbour's edge.
                 if selected {
-                    Rectangle().strokeBorder(Theme.color("text", scheme), lineWidth: PhotoTileMetrics.outline)
+                    Rectangle().strokeBorder(accent.fill, lineWidth: PhotoTileMetrics.outline)
                 }
             }
             .overlay(alignment: .bottomLeading) { PhotoHeldMark(cell: cell, onFetch: onFetch) }
@@ -171,7 +185,7 @@ struct PhotoTile: View {
 /// still on its way gets none — tapping it would ask for something already
 /// queued — and `original` and `absent` draw nothing.
 ///
-/// A FETCH IS A LINE AND NOT A SPINNER (DESIGN.md: loading is determinate or
+/// A FETCH IS A LINE AND NOT A SPINNER (product-intuition/references/design-behaviour.md § Status line: loading is determinate or
 /// static, never a spinner). The byte plane reports completion and not
 /// progress (the tile carries no percentage), so the honest mark is words on the
 /// tile's own chip — v0's state slot, one quiet mono line on the page colour.
@@ -216,23 +230,26 @@ struct PhotoHeldMark: View {
     }
 }
 
-/// SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6
-/// in. Selecting and not picked is an outline in the stage's ink; picked is a
-/// filled ink circle with the inverse tick. INK, never a hue: DESIGN.md keeps
-/// colour off controls, and a picked photograph is a control's state.
+/// SLOT 1 — SELECTION (v0's `tile-overlays.ts`): a 20 circle, top-trailing, 6 in. Not picked is a
+/// white outline over the photograph; picked is the app's fill under a white tick (#1173: a
+/// chosen photograph wears Photos' orchid, and the tile carries the same colour as its edge);
+/// taken (already in the album) is a white disc with a grey tick, so the two never read alike.
 struct PhotoSelectionDot: View {
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
     let selected: Bool
     var muted = false
 
     var body: some View {
-        let ink = Theme.color(muted ? "textSoft" : "text", scheme)
         ZStack {
-            if selected {
-                Circle().fill(ink)
-                CentraidIconView(iconKey: "Check", tint: Theme.color("textInv", scheme), size: 13)
+            if muted {
+                Circle().fill(Color.white)
+                CentraidIconView(iconKey: "Check", tint: Surface.meta, size: 13)
+            } else if selected {
+                Circle().fill(accent.fill)
+                Circle().strokeBorder(Color.white, lineWidth: 1.5)
+                CentraidIconView(iconKey: "Check", tint: .white, size: 13)
             } else {
-                Circle().strokeBorder(Theme.color("onStage", scheme), lineWidth: 1.5)
+                Circle().strokeBorder(Color.white, lineWidth: 1.5)
             }
         }
         .frame(width: PhotoTileMetrics.dot, height: PhotoTileMetrics.dot)
@@ -243,7 +260,7 @@ struct PhotoSelectionDot: View {
 
 /// SLOT 3 — KIND (v0's `kindOverlay`): a video's length or `live`, in mono,
 /// bottom-trailing, from rung S up — below it the type would have to shrink
-/// past legibility, and DESIGN.md puts the floor there rather than shrinking
+/// past legibility, and product-intuition/references/design-behaviour.md § Accessibility puts the floor there rather than shrinking
 /// it. A video whose length the vault does not know still says it is a video,
 /// with the catalog's play mark, because that is what changes what a tap does.
 struct PhotoKindLine: View {
@@ -299,7 +316,7 @@ enum PhotoTileMetrics {
 /// Skeleton tiles at the rung's own geometry, packed by Rust at the width the
 /// shell reported, so the photographs land where their placeholders stood. The
 /// aspect sequence is FIXED — random aspects would flicker — and nothing moves:
-/// DESIGN.md's `Loading` is static skeletons, and a shimmer is
+/// product-intuition/references/design-behaviour.md § Status line: `Loading` is static skeletons, and a shimmer is
 /// attention-seeking about work the product can simply describe.
 struct PhotoGridSkeleton: View {
     @Environment(\.colorScheme) private var scheme

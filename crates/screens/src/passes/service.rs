@@ -36,7 +36,7 @@ use crate::strings::{backup, backup_home};
 
 /// The pseudo-table the core announces when the backup ledger moved
 /// (`centraid_core` `phone::backup_reads::TABLE`).
-const LEDGER_TABLE: &str = "backup";
+pub(crate) const LEDGER_TABLE: &str = "backup";
 
 /// What the core asked for again, as the roll names it: the hash in hex, the
 /// form the stage door's answer carries.
@@ -63,6 +63,7 @@ pub const NAME: &str = "passes.conductor";
 #[must_use]
 pub fn route() -> wire::Route {
     wire::Route {
+        sheet: false,
         screen: NAME.to_owned(),
         args: None,
     }
@@ -337,7 +338,10 @@ impl Service {
             Some(Fact::Window(granted)) => self
                 .conductor
                 .window_granted(&granted.window, granted.deadline_ms),
-            Some(Fact::Expired(_)) | None => Vec::new(),
+            // A button pressed on a notification is the notify service's (`agenda.notify`),
+            // and an Agenda intent is the glance service's (`agenda::glance`).
+            Some(Fact::Expired(_) | Fact::NotificationAnswered(_) | Fact::AgendaIntent(_))
+            | None => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults

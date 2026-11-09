@@ -20,6 +20,7 @@ struct PeopleEditorView: View {
     @State private var seeded = false
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     private var content: ScreenContent<Centraid_Core_V1_PeopleProfileDraft> {
         switch state.content {
@@ -52,6 +53,8 @@ struct PeopleEditorView: View {
                 ) { draft in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
+                            // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
+                            VStack(alignment: .leading, spacing: 0) {
                             EditableFieldRow(key: chrome.nameField, text: $name, identifier: "people-editor-name") { typed in
                                 guard typed != draft.displayName else { return }
                                 send(PeopleEvents.editor { $0.name = .with { $0.text = typed } })
@@ -73,9 +76,17 @@ struct PeopleEditorView: View {
                                 guard typed != draft.met else { return }
                                 send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
                             }
+                            }
+                            .background(
+                                Surface.card,
+                                in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
+                            )
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.top, 8)
                             cadences(chrome)
                         }
                     }
+                    .background(Surface.page.ignoresSafeArea())
                     .onAppear {
                         // ONCE — re-seeding would overwrite typing with the
                         // state Rust still holds.
@@ -94,29 +105,41 @@ struct PeopleEditorView: View {
 
     private func cadences(_ chrome: Centraid_Core_V1_PeopleEditorChrome) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(chrome.cadenceField)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            Text(chrome.cadenceField.uppercased())
+                .kitType(.group)
+                .foregroundStyle(Surface.meta)
+                .accessibilityAddTraits(.isHeader)
+            // THE FIVE CHOICES WRAP: none is pushed off the edge to be found by scrolling.
+            KitFlow(spacing: 8) {
                     ForEach(state.cadences, id: \.days) { cadence in
-                        KitChip(
-                            label: cadence.label,
-                            selected: cadence.selected,
-                            identifier: "people-editor-cadence-\(cadence.days)"
-                        ) {
+                        // THE CHOSEN CADENCE IS FILLED in the app's colour under a white label; the
+                        // others are white pills with a hairline.
+                        Button {
                             send(PeopleEvents.editor { $0.cadence = .with { $0.days = cadence.days } })
+                        } label: {
+                            Text(cadence.label)
+                                .kitType(.row)
+                                .fontWeight(cadence.selected ? .semibold : .regular)
+                                .foregroundStyle(cadence.selected ? Color.white : Surface.ink)
+                                .padding(.horizontal, 16)
+                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                .background(cadence.selected ? accent.fill : Surface.card, in: Capsule())
+                                .overlay(Capsule().strokeBorder(Surface.border, lineWidth: cadence.selected ? 0 : CentraidGeometry.hairline))
+                                .contentShape(Capsule())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(cadence.selected ? .isSelected : [])
+                        .accessibilityIdentifier("people-editor-cadence-\(cadence.days)")
                     }
-                }
             }
             if state.hasStatus, !state.status.sentence.isEmpty {
                 Text(state.status.sentence)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(state.status.refused ? "net" : "textFaint", scheme))
+                    .kitType(.meta)
+                    .foregroundStyle(state.status.refused ? StateColor.red.text : Surface.meta)
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
+        .padding(.horizontal, CentraidGeometry.pageMargin + 4)
+        .padding(.top, 22)
+        .padding(.bottom, 8)
     }
 }

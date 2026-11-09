@@ -1,6 +1,22 @@
 package dev.centraid.android.screens.money
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.selected
+import centraid.core.v1.MoneyChoice
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.SheetRoom
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.screens.docs.docsListColor
+import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.SheetOption
+import dev.centraid.design.CentraidScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,10 +46,12 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.MoneyFigure
 import centraid.core.v1.MoneyHero
 import centraid.core.v1.MoneyRow
-import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -53,21 +71,28 @@ internal fun money(amount: String): String = amount
 internal fun spoken(words: String, amount: String?): String =
     listOf(words, amount.orEmpty()).filter { it.isNotEmpty() }.joinToString(", ")
 
-/** A section label with the kit's header. Empty is nothing. */
+/** A section label in the kit's group head (12pt capitals). Empty is nothing. */
 @Composable
 internal fun MoneySection(title: String) {
-    if (title.isNotEmpty()) SectionHeader(SectionHead(title = title))
+    if (title.isNotEmpty()) {
+        KitText(
+            title,
+            KitType.Group,
+            Surface.meta,
+            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER + 4.dp, end = KitGeometry.GUTTER, top = 14.dp, bottom = 2.dp).semantics { heading() },
+        )
+    }
 }
 
-/** A quiet sentence under a section. */
+/** A quiet sentence under a section. `ink` `net` is the state red. */
 @Composable
 internal fun MoneyNote(text: String, ink: String = "textSoft") {
     if (text.isEmpty()) return
-    Text(
+    KitText(
         text,
-        style = centraidType("annotLabel"),
-        color = centraidColor(ink),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
+        KitType.Meta,
+        if (ink == "net") StateColor.Red.text else Surface.meta,
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 6.dp),
     )
 }
 
@@ -77,104 +102,14 @@ internal fun MoneyFigureRow(figure: MoneyFigure, modifier: Modifier = Modifier) 
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 36.dp)
+            .heightIn(min = 44.dp)
             .padding(horizontal = KitGeometry.GUTTER)
             .clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(figure.label, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
-        Text(
-            money(figure.amount),
-            style = centraidType("mono"),
-            color = toneInk(figure.tone, neutral = "text"),
-        )
+        KitText(figure.label, KitType.Row, Surface.body, Modifier.weight(1f), maxLines = 2)
+        KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
     }
-}
-
-/**
- * THE HERO: one display figure per currency, the sentence under it, and the
- * bar when a plan is set. The bar is spent against plan; the tick is how far
- * through the month today falls. Over plan reads as the `net` ink and the
- * figures' own minus sign: colour is the second channel.
- */
-@Composable
-internal fun MoneyHeroView(hero: MoneyHero) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .testTag("money-hero")
-            .semantics(mergeDescendants = true) { },
-    ) {
-        // THE FIGURE AND ITS SENTENCE SHARE A BASELINE: the sentence beside the figure, not under it.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FitText(
-                money(hero.spent),
-                role = "display",
-                ink = centraidColor(if (hero.over) "net" else "text"),
-                minScale = HERO_MIN_SCALE,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .alignByBaseline()
-                    .clearAndSetSemantics { contentDescription = spoken(hero.spent_label, hero.spent) },
-            )
-            Text(
-                hero.spent_label,
-                style = centraidType("body"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.alignByBaseline().clearAndSetSemantics { },
-            )
-        }
-        if (hero.has_bar) {
-            MoneyBar(hero.fill_bp, hero.tick_bp, hero.over, hero.accessibility_label)
-        }
-    }
-    // PLANNED, LEFT (and Refunds) ACROSS THE PAGE, not down it.
-    MoneyFigureColumns(hero.figures)
-}
-
-/** A plan bar from the state's basis points: the fill, and a tick for the day. */
-@Composable
-internal fun MoneyBar(fillBp: Int, tickBp: Int, over: Boolean, spokenWords: String) {
-    val radius = RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp)
-            .height(6.dp)
-            .clip(radius)
-            .background(centraidColor("bgSunken"))
-            .clearAndSetSemantics { contentDescription = spokenWords },
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(fillBp.coerceIn(0, BP) / BP.toFloat())
-                .height(6.dp)
-                .background(centraidColor(if (over) "net" else "textSoft")),
-        )
-        if (tickBp > 0) {
-            Row(Modifier.fillMaxWidth().height(6.dp)) {
-                Box(Modifier.fillMaxWidth(tickBp.coerceIn(0, BP) / BP.toFloat()).height(6.dp))
-                Box(Modifier.height(6.dp).fillMaxWidth(TICK_WIDTH).background(centraidColor("text")))
-            }
-        }
-    }
-}
-
-/** THE TRANSACTION ROW: the one row, the signed amount as its figure. */
-@Composable
-internal fun MoneyRowView(row: MoneyRow, onTap: (() -> Unit)?) {
-    CentraidRow(
-        title = row.title,
-        meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-        trailing = money(row.amount),
-        trailingTone = row.amount_tone,
-        chips = row.chips.map { it },
-        dimmed = row.dimmed,
-        a11y = spoken(row.accessibility_label, row.amount),
-        testTag = "money-row-${row.txn_id}",
-        onTap = onTap,
-    )
 }
 
 /** A switch row: the state's label and whether it is on. The toggle is an event the screen forwards. */
@@ -204,17 +139,99 @@ internal fun MoneyToggleRow(label: String, checked: Boolean, testTag: String, on
 @Composable
 internal fun MoneyHeading(text: String) {
     if (text.isEmpty()) return
-    Text(
+    KitText(
         text,
-        style = centraidType("smallStrong"),
-        color = centraidColor("textSoft"),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .semantics { heading() },
+        KitType.Meta,
+        Surface.body,
+        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { heading() },
     )
 }
 
-private const val BP: Int = 10_000
-private const val HERO_MIN_SCALE: Float = 0.7f
-private const val TICK_WIDTH: Float = 0.006f
+
+/**
+ * A SHEET OF CHOICES that scrolls: a month, an account, a category, a merge target. Choices that
+ * name a group (the category picker) stand in a card per group under its capitals heading, and a
+ * category wears its colour as a dot, "No category" the dashed one (iOS `MoneyChoiceSheet`).
+ */
+@Composable
+internal fun MoneyChoiceSheet(
+    title: String,
+    choices: List<MoneyChoice>,
+    tagPrefix: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // A picker of categories: any choice with a colour, and any with a group name.
+    val hasDots = choices.any { it.color_key.isNotEmpty() } && choices.any { it.detail.isNotEmpty() }
+    if (!hasDots) {
+        OptionSheet(
+            title = title,
+            options = choices.map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+            onPick = onPick,
+            onDismiss = onDismiss,
+        )
+        return
+    }
+    // The choices as runs sharing one group name, in order; the first run is the ungrouped lead.
+    val runs = mutableListOf<Pair<String, MutableList<MoneyChoice>>>()
+    choices.forEach { choice ->
+        val last = runs.lastOrNull()
+        if (last != null && last.first == choice.detail) last.second += choice else runs += choice.detail to mutableListOf(choice)
+    }
+    SheetRoom(title = title, onDismiss = onDismiss) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            runs.forEach { (group, items) ->
+                if (group.isNotEmpty()) {
+                    KitText(
+                        group,
+                        KitType.Group,
+                        Surface.meta,
+                        Modifier.padding(start = KitGeometry.GUTTER + 4.dp, end = KitGeometry.GUTTER, top = 14.dp, bottom = 4.dp).semantics { heading() },
+                    )
+                }
+                Column(
+                    Modifier
+                        .padding(horizontal = KitGeometry.GUTTER)
+                        .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                        .background(Surface.sheetCard),
+                ) {
+                    items.forEachIndexed { index, choice ->
+                        if (index > 0) MoneyHairline()
+                        MoneyChoiceRow(choice, "$tagPrefix-${choice.key}") { onPick(choice.key) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice with its colour dot: a filled dot for a category, the dashed one for "No category". */
+@Composable
+private fun MoneyChoiceRow(choice: MoneyChoice, testTag: String, onTap: () -> Unit) {
+    val meta = Surface.meta
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onTap)
+            .padding(horizontal = KitGeometry.GUTTER)
+            .testTag(testTag)
+            .clearAndSetSemantics {
+                contentDescription = choice.label
+                role = Role.Button
+                selected = choice.selected
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (choice.color_key.isEmpty()) {
+            Canvas(Modifier.size(10.dp)) {
+                drawCircle(meta, style = Stroke(1.2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))))
+            }
+        } else {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(docsListColor(choice.color_key)))
+        }
+        KitText(choice.label, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 2)
+        if (choice.selected) CentraidIcon(iconKey = "Check", tint = appAccent().text, size = 16.dp)
+    }
+}

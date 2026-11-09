@@ -10,7 +10,7 @@ import SwiftUI
 /// beneath, Utilities as a grouped list, and the albums in the trash with their
 /// Restore. A member who knows that screen knows this one. What is NOT borrowed is
 /// the system's own look: the type, colour and icons are the emitted tables'
-/// (DESIGN.md), because a second icon set is a second product.
+/// (design/mockups/DesignRules.dc.html), because a second icon set is a second product.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which section a card lands in, every title, every
 /// count, which sections are folded and the route a tap opens are Rust's
@@ -69,7 +69,7 @@ struct PhotosCollectionsBody: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center) {
                 Text(section.title)
-                    .centraidType("title")
+                    .kitType(.section)
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
@@ -276,7 +276,7 @@ private struct UtilitiesGroup: View {
             ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 {
                     Rectangle()
-                        .fill(Theme.color("line", scheme))
+                        .fill(Surface.line)
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }
@@ -327,7 +327,7 @@ private struct DeletedGroup: View {
             ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 {
                     Rectangle()
-                        .fill(Theme.color("line", scheme))
+                        .fill(Surface.line)
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }

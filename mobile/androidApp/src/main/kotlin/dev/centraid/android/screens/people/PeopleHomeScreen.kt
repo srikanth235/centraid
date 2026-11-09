@@ -1,6 +1,34 @@
 package dev.centraid.android.screens.people
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
+import centraid.core.v1.PeopleIndexLetter
+import centraid.core.v1.PeopleMyCard
+import centraid.core.v1.PeopleReconnectLine
+import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
+import dev.centraid.android.theme.centraidDark
+import dev.centraid.design.CentraidScale
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -152,10 +180,10 @@ public fun PeopleHomeScreen(
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
             ) { data ->
-                LazyColumn(Modifier.testTag("people-list")) {
-                    when (data) {
-                        is PeopleRosterData -> roster(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
-                        is PeopleTouchData -> touch(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
+                when (data) {
+                    is PeopleRosterData -> RosterList(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
+                    is PeopleTouchData -> LazyColumn(Modifier.testTag("people-list")) {
+                        touch(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
                     }
                 }
             }
@@ -165,7 +193,11 @@ public fun PeopleHomeScreen(
     val dismiss = { onEvent(PeopleHomeEvent(sheet_closed = PeopleHomeEvent.SheetClosed())) }
     // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
     if (state.sheet == PeopleHomeState.Sheet.SHEET_MORE && chrome != null) {
-        SheetRoom(title = chrome.more_title, onDismiss = dismiss) {
+        SheetRoom(title = chrome.more_title, onDismiss = dismiss, expanded = true) {
+            // WHAT PEOPLE MAY READ of the address book (#1173): Rust decides every word.
+            state.contacts?.let { row ->
+                PeopleContactsRowView(row) { onEvent(PeopleHomeEvent(contacts_action = PeopleHomeEvent.ContactsActionTapped())) }
+            }
             state.more_rows.forEach { row ->
                 SheetRow(
                     label = row.label,
@@ -199,17 +231,170 @@ private fun DayOne(empty: centraid.core.v1.EmptyState, importLabel: String, onEv
     )
 }
 
-private fun LazyListScope.roster(
+/**
+ * THE ROSTER (#1173): My card, the reconnect line, then the people. Under the Name order they are
+ * A to Z in sections (the letter stays at the top while its people scroll) with the index beside
+ * them; under any other they are one flat list. Rust sent the sections, the index and where each
+ * letter jumps to; this only draws them and scrolls.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RosterList(
     roster: PeopleRosterData,
     importLabel: String,
     onOpen: (Route) -> Unit,
     onEvent: (PeopleHomeEvent) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val empty = roster.empty
-    if (roster.rows.isEmpty() && empty != null) {
-        item(key = "empty") { DayOne(empty, importLabel, onEvent) }
+    // The list's items before the first section: My card, the reconnect line.
+    val lead = (if (roster.my_card != null) 1 else 0) + (if (roster.reconnect != null) 1 else 0)
+    val starts = remember(roster) {
+        var at = lead + roster.rows.size
+        roster.sections.associate { section ->
+            val start = at
+            at += 1 + section.rows.size
+            section.key to start
+        }
     }
-    items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+    // The index is put away at the largest text, where its letters would overlap.
+    val showIndex = roster.index.isNotEmpty() && LocalDensity.current.fontScale < LARGEST_TEXT_SCALE
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.testTag("people-list"),
+            contentPadding = PaddingValues(end = if (showIndex) 22.dp else 0.dp),
+        ) {
+            roster.my_card?.let { card -> item(key = "my-card") { MyCardRow(card, onOpen) } }
+            roster.reconnect?.let { line ->
+                item(key = "reconnect") {
+                    ReconnectLine(line) { onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked("touch"))) }
+                }
+            }
+            if (roster.rows.isEmpty() && roster.sections.isEmpty() && empty != null) {
+                item(key = "empty") { DayOne(empty, importLabel, onEvent) }
+            }
+            items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+            roster.sections.forEach { section ->
+                stickyHeader(key = "s-" + section.key) { SectionLetter(section.title) }
+                items(section.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+            }
+        }
+        if (showIndex) {
+            IndexRail(roster.index, Modifier.align(Alignment.CenterEnd)) { key ->
+                starts[key]?.let { at -> scope.launch { listState.scrollToItem(at) } }
+            }
+        }
+    }
+}
+
+/** At this font scale and above the index would not fit its letters. */
+private const val LARGEST_TEXT_SCALE = 1.5f
+
+/** A section's letter: 13 semibold in the quiet ink on the page, kept at the top while its people scroll. */
+@Composable
+private fun SectionLetter(title: String) {
+    KitText(
+        text = title,
+        rung = KitType.Meta,
+        color = Surface.meta,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Surface.page)
+            .padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 10.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
+}
+
+/**
+ * THE INDEX: every letter in the app's colour, the ones with nobody dim; a tap or a drag along it
+ * jumps to the letter's section. TalkBack steps through the letters and activates one.
+ */
+@Composable
+private fun IndexRail(letters: List<PeopleIndexLetter>, modifier: Modifier, onJump: (String) -> Unit) {
+    val accent = appAccent("people")
+    var height by remember { mutableIntStateOf(1) }
+    val pick = { y: Float ->
+        val at = ((y / height) * letters.size).toInt().coerceIn(0, letters.size - 1)
+        onJump(letters[at].section_key)
+    }
+    Column(
+        modifier
+            .padding(end = 2.dp)
+            .onSizeChanged { height = it.height.coerceAtLeast(1) }
+            .pointerInput(letters) { detectTapGestures { offset -> pick(offset.y) } }
+            .pointerInput(letters) { detectVerticalDragGestures { change, _ -> pick(change.position.y) } }
+            .testTag("people-index"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        letters.forEach { letter ->
+            KitText(
+                text = letter.letter,
+                rung = KitType.Badge,
+                color = accent.text.copy(alpha = if (letter.has_rows) 1f else 0.4f),
+                modifier = Modifier
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .clearAndSetSemantics {
+                        contentDescription = letter.accessibility_label
+                        role = Role.Button
+                        onClick {
+                            onJump(letter.section_key)
+                            true
+                        }
+                    },
+            )
+        }
+    }
+}
+
+/** MY CARD: the owner's own card above the list, a 52dp avatar, the name and the words "My card". */
+@Composable
+private fun MyCardRow(card: PeopleMyCard, onOpen: (Route) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { card.route?.let(onOpen) }
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .testTag("people-my-card")
+            .clearAndSetSemantics {
+                contentDescription = card.accessibility_label
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Avatar(card.avatar, size = 52)
+        Column(Modifier.padding(start = 12.dp)) {
+            KitText(card.name, KitType.Row, Surface.ink, maxLines = 1)
+            KitText(card.label, KitType.Meta, Surface.meta, maxLines = 1)
+        }
+    }
+}
+
+/** THE RECONNECT LINE: who is overdue, in a pale pill in the app's colour; a tap is the band's Touch. */
+@Composable
+private fun ReconnectLine(line: PeopleReconnectLine, onTap: () -> Unit) {
+    val accent = appAccent("people")
+    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(shape)
+            .background(accent.wash(centraidDark()))
+            .clickable(onClick = onTap)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag("people-reconnect-line")
+            .clearAndSetSemantics {
+                contentDescription = line.accessibility_label
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CentraidIcon(iconKey = "Activity", tint = accent.text, size = 20.dp)
+        KitText(line.text, KitType.Row, Surface.ink, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+        KitText(line.action_label, KitType.Row, accent.text, maxLines = 1)
+    }
 }
 
 private fun LazyListScope.touch(

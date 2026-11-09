@@ -22,7 +22,7 @@
 //! `tests/log_plane.rs` asserts both halves, and the receipt carries the grep
 //! that shows no other public function returns a `Connection`.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -200,7 +200,7 @@ impl Vault {
             let staging = crate::snapshot::pre_migration_dir(&path);
             let vault = Self::wrap(connection, path.clone(), found, clock, ids)?;
             crate::snapshot::build_snapshot(&vault, &staging)?;
-            crate::migrations::run_from(vault.connection(), found)?;
+            crate::migrations::run_from(&vault.connection(), found)?;
             let reached: i64 = vault
                 .connection()
                 .query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -224,7 +224,7 @@ impl Vault {
     /// ladder whose schema digest is not [`SCHEMA_DIGEST`] was changed by something other than
     /// this build, and is refused rather than read.
     fn check_schema(&self) -> Result<()> {
-        let found = crate::format::schema_digest(self.connection())?;
+        let found = crate::format::schema_digest(&self.connection())?;
         if found == SCHEMA_DIGEST {
             return Ok(());
         }
@@ -296,7 +296,7 @@ impl Vault {
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
         Ok(Self {
-            connection: Held(Some(connection)),
+            connection: Held(RefCell::new(Some(connection))),
             path,
             schema_version,
             clock,
@@ -372,22 +372,38 @@ impl Vault {
     /// an inner read does not clear the pragma while an outer one is still
     /// running.
     pub fn read<T>(&self, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        let scope = self.enter_read()?;
+        let outcome = body(&self.connection.get());
+        scope.leave()?;
+        outcome
+    }
+
+    /// Open a read: `query_only` goes on for the outermost one. Inside a commit the
+    /// connection is deliberately writable and turning `query_only` on would break the
+    /// enclosing commit's writes, so there it is a scope that does nothing.
+    ///
+    /// The scope ends in [`ReadScope::leave`], which reports a failure to clear the pragma;
+    /// dropping it any other way (an early return, a panic) clears it on a best-effort basis.
+    pub(crate) fn enter_read(&self) -> Result<ReadScope<'_>> {
         if self.depth.get() > 0 {
-            // Inside a commit the connection is deliberately writable; turning
-            // `query_only` on here would break the enclosing commit's writes.
-            return body(&self.connection);
+            return Ok(ReadScope {
+                vault: self,
+                outermost: false,
+                open: false,
+            });
         }
         let outermost = self.read_depth.get() == 0;
         if outermost {
-            self.connection.pragma_update(None, "query_only", "ON")?;
+            self.connection
+                .get()
+                .pragma_update(None, "query_only", "ON")?;
         }
         self.read_depth.set(self.read_depth.get() + 1);
-        let outcome = body(&self.connection);
-        self.read_depth.set(self.read_depth.get() - 1);
-        if outermost {
-            self.connection.pragma_update(None, "query_only", "OFF")?;
-        }
-        outcome
+        Ok(ReadScope {
+            vault: self,
+            outermost,
+            open: true,
+        })
     }
 
     /// The words the index holds, as a list kept in memory and checked against
@@ -404,8 +420,21 @@ impl Vault {
     /// which `query_only` forbids and which is not a write to the live file,
     /// and the log store needs to insert its rows inside the guard's
     /// transaction. Neither is a caller-facing write path.
-    pub(crate) fn connection(&self) -> &Connection {
-        &self.connection
+    ///
+    /// A shared borrow of the one connection, so keep it short: a hook goes in or out only when
+    /// nothing holds one ([`Held::with_exclusive`]).
+    pub(crate) fn connection(&self) -> Ref<'_, Connection> {
+        self.connection.get()
+    }
+
+    /// The one place the connection is borrowed exclusively: to put a hook in or take it out
+    /// (rusqlite 0.41 takes those on `&mut Connection`). Hold no [`Self::connection`] borrow
+    /// across it; if one is held this is an error, not a race.
+    pub(crate) fn with_exclusive_connection<T>(
+        &self,
+        body: impl FnOnce(&mut Connection) -> rusqlite::Result<T>,
+    ) -> Result<T> {
+        self.connection.with_exclusive(body)
     }
 
     /// Close the file, surfacing a failure to close rather than swallowing it.
@@ -430,11 +459,48 @@ impl Vault {
         // into the file, so the `.db` alone carries them.
         self.connection.optimize();
         self.connection
+            .get()
             .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
                 row.get::<_, i64>(0)
             })
             .map_err(|error| VaultError::from_sqlite("checkpointing the log to finish", error))?;
         self.close()
+    }
+}
+
+/// One open read: the `query_only` pragma and the read depth it counts, undone when it ends.
+pub(crate) struct ReadScope<'a> {
+    vault: &'a Vault,
+    outermost: bool,
+    open: bool,
+}
+
+impl ReadScope<'_> {
+    /// End the read, clearing `query_only` if this was the outermost one.
+    pub(crate) fn leave(mut self) -> Result<()> {
+        self.close()
+    }
+
+    fn close(&mut self) -> Result<()> {
+        if !self.open {
+            return Ok(());
+        }
+        self.open = false;
+        let vault = self.vault;
+        vault.read_depth.set(vault.read_depth.get() - 1);
+        if self.outermost {
+            vault
+                .connection
+                .get()
+                .pragma_update(None, "query_only", "OFF")?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for ReadScope<'_> {
+    fn drop(&mut self) {
+        let _ = self.close();
     }
 }
 
@@ -446,37 +512,62 @@ impl Vault {
 /// caller having to remember. It is the vault that closes a file, whether by
 /// [`Vault::close`], [`Vault::finish`] or by being dropped, and every way goes
 /// through here.
-struct Held(Option<Connection>);
+///
+/// **It is a `RefCell` because rusqlite 0.41 made `update_hook` and `authorizer` take
+/// `&mut Connection`** (a hook can re-enter the connection, so installing one claims it
+/// exclusively). The vault's API is `&self` and its readers hold `&Connection` for the length
+/// of a body, so the exclusive claim is taken only where a hook goes in or out
+/// ([`Self::with_exclusive`]), and it is a runtime check: it fails with an error, never a
+/// race, if a reader is still holding the connection. Everything else borrows it shared
+/// ([`Self::get`]).
+struct Held(RefCell<Option<Connection>>);
 
 impl Held {
+    /// Borrow the connection for reading and writing through its `&self` API.
+    fn get(&self) -> Ref<'_, Connection> {
+        Ref::map(self.0.borrow(), |slot| {
+            // `None` only after `close` took it, and `close` consumed the holder.
+            slot.as_ref()
+                .expect("the connection is held until the vault closes")
+        })
+    }
+
+    /// Borrow the connection exclusively, for the one call that needs `&mut`.
+    ///
+    /// Callers install or remove a hook and nothing else, and must hold no [`Self::get`]
+    /// borrow while they do.
+    fn with_exclusive<T>(
+        &self,
+        body: impl FnOnce(&mut Connection) -> rusqlite::Result<T>,
+    ) -> Result<T> {
+        let mut slot = self.0.try_borrow_mut().map_err(|_| VaultError::Invariant {
+            context: "a hook was changed while the connection was in use".to_owned(),
+        })?;
+        let connection = slot
+            .as_mut()
+            .expect("the connection is held until the vault closes");
+        Ok(body(connection)?)
+    }
+
     /// Learn the statistics. **Its failure is ignored, on purpose.** It is
     /// advisory (a plan without statistics is a slower plan, never a wrong
     /// answer), it runs on the way out of a file that may already be failing (a
     /// full disk, a connection dropped by a panic mid-commit), and the one thing
     /// a close must not do is fail for the sake of an optimisation.
     fn optimize(&self) {
-        if let Some(connection) = &self.0 {
+        if let Ok(slot) = self.0.try_borrow()
+            && let Some(connection) = slot.as_ref()
+        {
             crate::index::optimize(connection);
         }
     }
 
     fn close(mut self) -> std::result::Result<(), rusqlite::Error> {
         self.optimize();
-        match self.0.take() {
+        match self.0.get_mut().take() {
             Some(connection) => connection.close().map_err(|(_, error)| error),
             None => Ok(()),
         }
-    }
-}
-
-impl std::ops::Deref for Held {
-    type Target = Connection;
-
-    fn deref(&self) -> &Connection {
-        // `None` only after `close` took it, and `close` consumed the holder.
-        self.0
-            .as_ref()
-            .expect("the connection is held until the vault closes")
     }
 }
 

@@ -11,9 +11,9 @@ name: agenda-todo
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-agenda"
+    id: "home-tile-reminders"
 - tapOn:
-    id: "agenda-band-todo"
+    id: "reminders-band-reminders"
 - extendedWaitUntil:
     visible:
       id: "agenda-todo-list"
@@ -54,7 +54,7 @@ name: agenda-todo
     id: "agenda-todo-list"
 # More: the Tasks places, then back to Agenda.
 - tapOn:
-    id: "agenda-band-more"
+    id: "reminders-band-more"
 - tapOn:
     id: "agenda-more-anytime"
 - extendedWaitUntil:

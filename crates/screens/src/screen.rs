@@ -47,6 +47,8 @@ pub struct Environment {
     pub platform: String,
     /// The platform deletes from its photo library behind its own confirmation.
     pub library_deletes: bool,
+    /// The phone keeps 12-hour time (`Environment.hour_cycle_12`); false is 24-hour.
+    pub hour_cycle_12: bool,
 }
 
 impl Default for Environment {
@@ -57,6 +59,7 @@ impl Default for Environment {
             region: String::new(),
             platform: String::new(),
             library_deletes: false,
+            hour_cycle_12: false,
         }
     }
 }
@@ -269,12 +272,28 @@ impl<'a> Ctx<'a> {
         &self.env.platform
     }
 
+    /// Whether the platform has a Reminders store to import from: iOS (EventKit) does,
+    /// Android has none. The same fact the shell tells `imports.made` at a made vault
+    /// (`Made.reminders`), from the one signal the core always has (`Environment.platform`),
+    /// so Agenda's "Import reminders" row is offered only where the import can read.
+    #[must_use]
+    pub fn reminders_source(&self) -> bool {
+        self.env.platform == "ios"
+    }
+
     /// Whether the platform deletes from its photo library behind its own
     /// confirmation (`Environment.library_deletes`): "Free up space" is offered
     /// only where it does.
     #[must_use]
     pub fn library_deletes(&self) -> bool {
         self.env.library_deletes
+    }
+
+    /// How the phone words a time of day (`Environment.hour_cycle_12`): every
+    /// clock a screen shows goes through [`civil::clock_for`] with this.
+    #[must_use]
+    pub fn hour_cycle(&self) -> crate::kit::civil::HourCycle {
+        crate::kit::civil::HourCycle::of(self.env.hour_cycle_12)
     }
 
     /// Start (or restart) the named timer. When it elapses the screen gets

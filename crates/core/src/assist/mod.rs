@@ -219,7 +219,8 @@ fn scope_of(app: &str) -> Result<Option<App>> {
     if app.is_empty() {
         return Ok(None);
     }
-    App::from_id(app)
+    // A thread an older build scoped to `agenda` reopens in Calendar (round 10 split the app).
+    App::from_id(centraid_vault::roster::legacy(app, ""))
         .map(Some)
         .ok_or_else(|| invalid(format!("`{app}` is not an app the assistant reads")))
 }
@@ -273,6 +274,8 @@ fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
                 title: step.title.clone(),
                 summary: step.summary.clone(),
                 destructive: step.destructive,
+                when: step.when.clone(),
+                changes: step.changes.clone(),
             })
             .collect(),
         destructive: card.destructive,
@@ -828,7 +831,21 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 text: answered.text.clone(),
                 refusal: None,
                 notice: store::notice_word(&answered.notices),
-                cards: answered.cards.clone(),
+                // The proposal's rows are kept as cards, so a thread reopened later draws their
+                // titles on the inert card (the pending write itself is memory).
+                cards: answered
+                    .cards
+                    .iter()
+                    .cloned()
+                    .chain(
+                        pending_seen
+                            .as_ref()
+                            .map(|card| {
+                                centraid_assist::native_turn::cards::step_cards(&card.steps)
+                            })
+                            .unwrap_or_default(),
+                    )
+                    .collect(),
             };
             let saved = persist(&said, record.as_ref(), carried.as_ref());
             sent(
@@ -1005,6 +1022,8 @@ mod tests {
                 kind: "task".to_owned(),
                 title: "Old".to_owned(),
                 summary: "Delete task \"Old\"".to_owned(),
+                when: String::new(),
+                changes: String::new(),
                 destructive: true,
             }],
             more: 3,
@@ -1062,8 +1081,14 @@ mod tests {
     #[test]
     fn an_unknown_app_is_the_requests_fault() {
         assert_eq!(scope_of("").unwrap(), None);
-        assert_eq!(scope_of("agenda").unwrap(), Some(App::Agenda));
-        // There is no `tasks` app: the tasks are Agenda's (#1128).
+        assert_eq!(scope_of("calendar").unwrap(), Some(App::Calendar));
+        assert_eq!(scope_of("reminders").unwrap(), Some(App::Reminders));
+        // There is no `agenda` app any more (round 10), and no `tasks` app: the tasks are Reminders'.
+        assert_eq!(
+            scope_of("agenda").unwrap(),
+            Some(App::Calendar),
+            "an older thread reopens"
+        );
         assert!(matches!(
             scope_of("tasks"),
             Err(CoreError::InvalidRequest { .. })

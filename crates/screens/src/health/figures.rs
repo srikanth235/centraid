@@ -5,7 +5,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::{Metric, Units, kinds};
-use crate::kit::civil;
+use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, fill, health as words};
 
 pub const BP: u32 = 10_000;
@@ -17,7 +17,7 @@ const WEEK_BACK: i64 = 6;
 pub const WORKOUT_ICON: &str = "Gym";
 
 /// Kotlin's `roundToLong`: ties toward positive infinity.
-fn round(value: f64) -> i64 {
+pub(crate) fn round(value: f64) -> i64 {
     #[allow(clippy::cast_possible_truncation)]
     {
         (value + 0.5).floor() as i64
@@ -51,7 +51,7 @@ pub fn label(locale: Locale, metric: Metric) -> String {
     }
 }
 
-/// A figure and its unit word, apart: `"8,412" ""`, `"7 h 12 m" ""`,
+/// A figure and its unit word, apart: `"8,412" ""`, `"7 h 12 min" ""`,
 /// `"412" "kcal"`, `"157.4" "lb"`.
 #[must_use]
 pub fn figure(locale: Locale, metric: Metric, value: f64, units: Units) -> (String, String) {
@@ -79,7 +79,7 @@ pub fn phrase(locale: Locale, metric: Metric, value: f64, units: Units) -> Strin
     }
 }
 
-/// Minutes asleep as `7 h 12 m`, or `48 m`.
+/// Minutes asleep as `7 h 12 min`, or `48 min`.
 #[must_use]
 pub fn duration(locale: Locale, minutes: f64) -> String {
     let total = round(minutes).max(0);
@@ -251,6 +251,19 @@ pub fn scale_over(top: f64) -> f64 {
     (raw / unit).ceil() * unit
 }
 
+/// A metric's mark. Every one is drawn in the Health colour, never a state's.
+#[must_use]
+pub const fn metric_icon(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Steps => "MapPin",
+        Metric::Sleep => "Moon",
+        Metric::Energy => "Bolt",
+        Metric::Exercise => "Activity",
+        Metric::RestingHr => "Heart",
+        Metric::Weight => "Gauge",
+    }
+}
+
 /// A kind key's word: `Run`; one the seed does not name is a plain `Workout`.
 #[must_use]
 pub fn kind_word(locale: Locale, key: &str) -> String {
@@ -330,7 +343,7 @@ pub fn month_heading(locale: Locale, day: &str, today: &str) -> String {
     }
 }
 
-/// A KIND'S MARK, from the icon registry (`packages/design/src/icons.ts`), so a
+/// A KIND'S MARK, from the icon registry (`design/icons.toml`), so a
 /// list of runs, rides and swims is not one glyph repeated. The registry has no
 /// runner, cyclist or mountain: each kind takes the nearest mark it does have,
 /// and a kind with none takes [`WORKOUT_ICON`].
@@ -351,6 +364,7 @@ pub fn kind_icon(key: &str) -> &'static str {
 #[must_use]
 pub fn line(
     locale: Locale,
+    cycle: HourCycle,
     row: &wire::HealthWorkoutRow,
     today: &str,
     units: Units,
@@ -358,7 +372,7 @@ pub fn line(
 ) -> wire::HealthWorkoutLine {
     let local = &row.local_start;
     let day = local.get(..10).unwrap_or_default();
-    let clock = civil::clock(local);
+    let clock = civil::clock_for(locale, local, cycle);
     let meta = [
         row.distance_m.filter(|metres| *metres > 0.0).map(|metres| {
             let (n, u) = distance(locale, metres, units);
@@ -419,7 +433,7 @@ mod tests {
             figure(EN, Metric::Steps, 8_412.4, m),
             ("8,412".into(), String::new())
         );
-        assert_eq!(figure(EN, Metric::Sleep, 432.0, m).0, "7 h 12 m");
+        assert_eq!(figure(EN, Metric::Sleep, 432.0, m).0, "7 h 12 min");
         assert_eq!(
             figure(EN, Metric::Energy, 412.0, m),
             ("412".into(), "kcal".into())
@@ -432,7 +446,7 @@ mod tests {
             figure(EN, Metric::Weight, 71.4, Units::Imperial),
             ("157.4".into(), "lb".into())
         );
-        assert_eq!(duration(EN, 48.0), "48 m");
+        assert_eq!(duration(EN, 48.0), "48 min");
     }
 
     #[test]
@@ -540,7 +554,14 @@ mod tests {
             length_sec: 1_864,
             ..Default::default()
         };
-        let today = line(EN, &row, "2026-10-20", Units::Metric, "Health");
+        let today = line(
+            EN,
+            HourCycle::default(),
+            &row,
+            "2026-10-20",
+            Units::Metric,
+            "Health",
+        );
         assert_eq!(today.title, "Morning run");
         assert_eq!(today.meta, "5.2 km · 31 min");
         assert_eq!(today.when_label, "07:10");
@@ -549,7 +570,15 @@ mod tests {
             ..row.clone()
         };
         assert_eq!(
-            line(EN, &week, "2026-10-20", Units::Metric, "").when_label,
+            line(
+                EN,
+                HourCycle::default(),
+                &week,
+                "2026-10-20",
+                Units::Metric,
+                ""
+            )
+            .when_label,
             "Sun"
         );
         let old = wire::HealthWorkoutRow {
@@ -557,7 +586,15 @@ mod tests {
             ..row
         };
         assert_eq!(
-            line(EN, &old, "2026-10-20", Units::Metric, "").when_label,
+            line(
+                EN,
+                HourCycle::default(),
+                &old,
+                "2026-10-20",
+                Units::Metric,
+                ""
+            )
+            .when_label,
             "30 Sep"
         );
     }

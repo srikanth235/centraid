@@ -20,15 +20,15 @@ enum Theme {
 
     /// A role, or a loud failure.
     ///
-    /// A trap and not a fallback colour: a role renamed in `packages/design` and
+    /// A trap and not a fallback colour: a role renamed in `design/tokens.toml` and
     /// not here would otherwise paint something plausible and wrong, and
     /// `centraidColorRoles` is the list a test checks this against.
     static func color(_ role: String, _ scheme: ColorScheme) -> Color {
         guard let value = tokens(scheme).colors[role] else {
             preconditionFailure(
                 "no such colour role '\(role)' in the emitted native theme. Roles come "
-                    + "from packages/design; regenerate with "
-                    + "`bun contracts/tools/export-native-theme.ts`."
+                    + "from design/tokens.toml; regenerate with "
+                    + "`cargo xtask design`."
             )
         }
         return value
@@ -43,6 +43,8 @@ enum Theme {
     /// own natural height is applied as `lineSpacing` plus half of it as padding
     /// above and below — see `CentraidTypeModifier` for why both are needed.
     static func style(_ role: String, _ scheme: ColorScheme) -> CentraidTypeStyle {
+        // THE REDESIGN'S SCALE (#1173) is `CentraidScale`, not the legacy table.
+        if let rung = KitType.named(role) { return rung.style }
         guard let value = tokens(scheme).type[role] else {
             preconditionFailure("no such type role '\(role)' in the emitted native theme.")
         }
@@ -61,7 +63,7 @@ enum Theme {
 private struct CentraidTypeModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     /// READ SO THE VIEW RE-RENDERS WHEN THE MEMBER CHANGES THE SYSTEM TEXT SIZE.
-    /// The app root caps it (DESIGN.md, Dynamic Type); a place the root's cap
+    /// The app root caps it (product-intuition/references/design-behaviour.md § Accessibility); a place the root's cap
     /// does not reach is capped again by `Theme.resolve`.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let role: String
@@ -113,7 +115,9 @@ struct CentraidResolvedType {
 }
 
 extension Theme {
-    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (DESIGN.md, Dynamic Type).
+    /// THE LARGEST SYSTEM TEXT SIZE THE SHELL DRAWS (product-intuition/references/design-behaviour.md § Accessibility):
+    /// every size up to the largest accessibility size (AX5, owner ruling of 8 November). Layouts
+    /// reflow from `reflowSize` up; nothing truncates or overlaps.
     ///
     /// The app root caps the environment at this once, but a SHEET DOES NOT
     /// INHERIT THAT CAP: a presentation is a hosting controller of its own and
@@ -122,9 +126,13 @@ extension Theme {
     /// size and overlapped). So `SheetPresentation` states the cap again on a
     /// sheet's root, and `resolve` clamps as a backstop for every role drawn
     /// anywhere a cap did not reach.
-    static let textSizeCap: DynamicTypeSize = .xxxLarge
+    static let textSizeCap: DynamicTypeSize = .accessibility5
 
-    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (DESIGN.md, Dynamic Type).
+    /// WHERE A LAYOUT REFLOWS: a card that shared a row has the row to itself, a segmented choice
+    /// stacks. The size the LargeText board draws (`xxxLarge`) and every size above it.
+    static let reflowSize: DynamicTypeSize = .xxxLarge
+
+    /// THE ROLES THAT HOLD THEIR SIZE AT EVERY SETTING (product-intuition/references/design-behaviour.md § Accessibility).
     ///
     /// `band` is the only one, and the hold is arithmetic and not preference:
     /// invariant 1 caps a band at five destinations plus More, and those six
@@ -214,8 +222,8 @@ extension Theme {
         guard let name = centraidTypeFaces[style.family]?[style.weight] else {
             preconditionFailure(
                 "no face for family '\(style.family)' at weight \(style.weight) in the "
-                    + "emitted table. Faces come from packages/design/fonts; regenerate "
-                    + "with `bun contracts/tools/export-native-theme.ts`."
+                    + "emitted table. Faces come from design/fonts; regenerate "
+                    + "with `cargo xtask design`."
             )
         }
         guard let uiFont = UIFont(name: name, size: style.fontSize) else {
@@ -223,7 +231,7 @@ extension Theme {
                 "the font '\(name)' is not registered. Its file must be in "
                     + "Resources/Fonts AND listed under UIAppFonts in "
                     + "mobile/iosApp/project.yml; re-run `xcodegen generate` after "
-                    + "`bun contracts/tools/export-native-theme.ts`."
+                    + "`cargo xtask design`."
             )
         }
         return uiFont

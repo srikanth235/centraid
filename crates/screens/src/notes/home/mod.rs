@@ -506,6 +506,9 @@ impl Home {
             cancel: words::cancel(locale),
             close: words::close(locale),
             new_note: words::new_note(locale),
+            pin_label: words::pin(locale),
+            unpin_label: words::unpin(locale),
+            file_label: words::file_verb(locale),
         }
     }
 
@@ -607,7 +610,7 @@ impl Screen for Home {
                 Phase::Loading => loading(),
                 Phase::Failed => C::Failure(read::failure(locale)),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Journal(Journal::data(locale, answer)),
+                Phase::Ready(answer) => C::Journal(Journal::data(locale, ctx.hour_cycle(), answer)),
             },
             _ => from_phase(self.library.content(locale)),
         };
@@ -627,12 +630,27 @@ impl Screen for Home {
             more_rows: if denied_now {
                 Vec::new()
             } else {
-                vec![wire::NotesMoreRow {
-                    key: "trash".to_owned(),
-                    label: words::trash_label(locale),
-                    icon_key: "Trash".to_owned(),
-                    route: Some(routes::trash()),
-                }]
+                let back = words::title(locale);
+                vec![
+                    wire::NotesMoreRow {
+                        key: "import".to_owned(),
+                        label: words::more_import(locale),
+                        icon_key: "Download".to_owned(),
+                        route: Some(routes::transfer(false, &back)),
+                    },
+                    wire::NotesMoreRow {
+                        key: "export".to_owned(),
+                        label: words::more_export(locale),
+                        icon_key: "Upload".to_owned(),
+                        route: Some(routes::transfer(true, &back)),
+                    },
+                    wire::NotesMoreRow {
+                        key: "trash".to_owned(),
+                        label: words::trash_label(locale),
+                        icon_key: "Trash".to_owned(),
+                        route: Some(routes::trash()),
+                    },
+                ]
             },
             sheet: self.sheet as i32,
             menu,

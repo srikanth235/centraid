@@ -36,10 +36,11 @@ use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::secret::Secrets;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, locker as words};
+use crate::strings::{Locale, fill, links as link_words, locker as words};
 
 /// The product's reveal window, in seconds (`REVEAL_WINDOW_MS`).
 const REVEAL_SECONDS: u32 = 30;
@@ -62,6 +63,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Loaded {
     item: Option<wire::LockerItem>,
+    /// The core's today, for "last used today".
+    today: String,
 }
 
 /// Which confirm is up.
@@ -110,6 +113,10 @@ struct Item {
     /// A chat card's member action, run once after the first load under an open
     /// Locker.
     follow: String,
+    /// The Linked to section's picker (#1173).
+    links: Links,
+    /// The vault's owner, read once an item links to a person, so the row can say "You".
+    owner_id: Option<String>,
 }
 
 impl Item {
@@ -127,6 +134,8 @@ impl Item {
             memo: None,
             field: None,
             passkey_name: None,
+            links: Links::new(&[Kind::Account, Kind::Place, Kind::Person]),
+            owner_id: None,
         }
     }
 
@@ -146,12 +155,22 @@ impl Item {
                 item_id: self.route.item_id.clone(),
             },
             |answer| match answer {
-                Answer::LockerItem(detail) => Some(detail.item),
+                Answer::LockerItem(detail) => Some((detail.item, detail.today)),
                 _ => None,
             },
         );
+        if let Reading::Data((Some(found), _)) = &item
+            && found.links.iter().any(|link| link.kind == "person")
+        {
+            self.owner_id = self
+                .links
+                .people(ctx)
+                .iter()
+                .find(|person| person.is_owner)
+                .map(|person| person.id.clone());
+        }
         self.loaded = match item {
-            Reading::Data(item) => Phase::Ready(Loaded { item }),
+            Reading::Data((item, today)) => Phase::Ready(Loaded { item, today }),
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
@@ -211,6 +230,8 @@ impl Item {
         self.memo = None;
         self.field = None;
         self.passkey_name = None;
+        self.links.close();
+        self.owner_id = None;
         ctx.cancel_timer(TICK);
         let mut effects = self.secrets.hide_all(ctx);
         effects.extend(self.secrets.clear_clip(ctx));
@@ -219,7 +240,7 @@ impl Item {
 
     /// A session step answered LOCKED: idle ended it under this page.
     fn locked(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        match self.wall.expired(ctx) {
+        match self.wall.expired() {
             Change::Closed => self.wipe(ctx),
             _ => Vec::new(),
         }
@@ -504,6 +525,17 @@ impl Item {
                 self.confirming = Some(Confirming::Purge);
                 return Vec::new();
             }
+            // THE ITEM'S OWN SITE, where the member changes the password. The
+            // core opens nothing but the address it already stores.
+            "change_password" => {
+                return change_password_url(&item)
+                    .map(|url| {
+                        vec![wire::Effect {
+                            kind: Some(wire::effect::Kind::OpenUrl(wire::OpenUrl { url })),
+                        }]
+                    })
+                    .unwrap_or_default();
+            }
             _ => return Vec::new(),
         };
         if settled.committed && matches!(key, "star" | "archive") {
@@ -730,9 +762,98 @@ impl Item {
         self.reload(ctx)
     }
 
+    /// One event of the Linked to section or its picker: a link is written or taken off, and the
+    /// page reads again. No link carries a sealed value; the command refuses one.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(item) = self.item().filter(|item| !item.trashed).cloned() else {
+            return Vec::new();
+        };
+        let linked: Vec<String> = item.links.iter().map(|link| link.id.clone()).collect();
+        let from = self.id();
+        let locale = ctx.locale();
+        let (settled, sentence) = match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id, .. } => (
+                self.submit(
+                    ctx,
+                    "add-link",
+                    act::locker::AddLink {
+                        from,
+                        rel: act::locker::AddLinkRel::About,
+                        to: id,
+                    },
+                ),
+                link_words::saved(locale),
+            ),
+            Outcome::Remove { id } => {
+                let Some(link) = item.links.iter().find(|link| link.id == id) else {
+                    return Vec::new();
+                };
+                let rel = if link.relation == "with" {
+                    act::locker::RemoveLinkRel::With
+                } else {
+                    act::locker::RemoveLinkRel::About
+                };
+                (
+                    self.submit(
+                        ctx,
+                        "remove-link",
+                        act::locker::RemoveLink { from, rel, to: id },
+                    ),
+                    link_words::removed(locale),
+                )
+            }
+            Outcome::Moved => return Vec::new(),
+        };
+        if settled.committed {
+            self.status = shared::status(sentence);
+            self.undo = None;
+        }
+        self.reload(ctx)
+    }
+
+    /// The Linked to section: an account, a place, a person, each row saying which.
+    fn link_section(&self, locale: Locale, item: &wire::LockerItem) -> wire::LinkSection {
+        let rows = item
+            .links
+            .iter()
+            .map(|link| {
+                let meta = match (link.kind.as_str(), link.relation.as_str()) {
+                    ("account", _) => link_words::kind_account(locale),
+                    ("place", _) => link_words::kind_place(locale),
+                    (_, "with") => link_words::kind_with(locale),
+                    _ => link_words::kind_person(locale),
+                };
+                let is_person = link.kind == "person";
+                wire::LinkRow {
+                    id: link.id.clone(),
+                    title: if self.owner_id.as_deref() == Some(link.id.as_str()) {
+                        link_words::you(locale)
+                    } else {
+                        link.title.clone()
+                    },
+                    meta,
+                    route: is_person.then(|| links::person_route(&link.id, &link.title)),
+                    remove_label: fill(&link_words::remove(locale), &[("name", &link.title)]),
+                    selected: false,
+                }
+            })
+            .collect();
+        let mut section = self.links.section(
+            locale,
+            link_words::section_linked(locale),
+            rows,
+            String::new(),
+        );
+        if item.trashed {
+            section.adds.clear();
+        }
+        section
+    }
+
     fn event(&mut self, event: wire::LockerItemEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event.kind {
+            Some(I::Link(link)) => self.link_event(&link, ctx),
             Some(I::Verb(verb)) => self.verb(ctx, &verb.key, &verb.verb),
             Some(I::Action(action)) => self.action(ctx, &action.key),
             Some(I::Confirmed(_)) => self.confirmed(ctx),
@@ -847,11 +968,24 @@ impl Item {
                 wire::status_chip::Tone::Seam,
             ));
         }
-        let mut sections = vec![wire::LockerSection {
-            title: (kind.label)(locale),
-            rows: self.own(locale, item),
-            note: String::new(),
-        }];
+        // THE VERIFICATION CODE IS ITS OWN CARD, first on the page; the type's
+        // other fields follow under the type's word.
+        let (code, own): (Vec<_>, Vec<_>) = self
+            .own(locale, item)
+            .into_iter()
+            .partition(|row| row.key == SEED);
+        let mut sections = vec![
+            wire::LockerSection {
+                title: String::new(),
+                rows: code,
+                note: String::new(),
+            },
+            wire::LockerSection {
+                title: (kind.label)(locale),
+                rows: own,
+                note: String::new(),
+            },
+        ];
         if !item.addresses.is_empty() {
             sections.push(wire::LockerSection {
                 title: words::addresses_head(locale),
@@ -918,10 +1052,17 @@ impl Item {
             actions
         };
         wire::LockerItemData {
+            links: Some(self.link_section(locale, item)),
             title: item.title.clone(),
-            type_label: (kind.label)(locale),
             type_chip: kind.chip(locale),
+            hero_initial: types::initial(&item.title),
+            subtitle: subtitle(locale, &(kind.label)(locale), item, &loaded.today),
             starred: item.starred,
+            star_label: if item.starred {
+                words::item_starred(locale)
+            } else {
+                String::new()
+            },
             chips,
             status_line: if item.secrets.iter().any(|secret| secret.present) {
                 words::item_status(locale)
@@ -946,6 +1087,8 @@ impl Item {
             },
             actions,
             gone: None,
+            change_password: change_password_url(item)
+                .map(|_| action("change_password", words::change_password(locale), false)),
             trashed_note: if item.trashed {
                 fill(
                     &words::trashed_note(locale),
@@ -1115,7 +1258,7 @@ impl Item {
     /// A ONE-TIME CODE'S ROW: the code, grouped, with its seconds and a
     /// countdown while shown; a mask with Show code and Copy code otherwise.
     fn code_row(&self, locale: Locale) -> wire::LockerFieldRow {
-        let label = types::label(locale, SEED);
+        let label = words::verification_code(locale);
         if let (Some(code), Some(shown)) = (self.secrets.value(SEED), self.shown_code(SEED)) {
             let grouped = if code.chars().count() == 6 {
                 format!(
@@ -1307,6 +1450,8 @@ fn verb(key: &str, label: String) -> wire::LockerVerb {
     wire::LockerVerb {
         key: key.to_owned(),
         label,
+        // THE VERIFICATION CODE'S COPY is the card's one pill, as the board draws it.
+        pill: key == "copy_code",
     }
 }
 
@@ -1334,6 +1479,28 @@ fn plain_row(
         verbs,
         accessibility_label: format!("{label}, {value}"),
         ..wire::LockerFieldRow::default()
+    }
+}
+
+/// THE HERO'S SECOND LINE: the type's word, then when a secret was last opened
+/// ("Login · last used today"), or that none ever was.
+fn subtitle(locale: Locale, kind: &str, item: &wire::LockerItem, today: &str) -> String {
+    if item.trashed {
+        return kind.to_owned();
+    }
+    if item.last_used_local_day.len() >= 10 {
+        let day = &item.last_used_local_day[..10];
+        let when = if day == today {
+            words::used_today(locale)
+        } else {
+            civil::day_month(locale, day)
+        };
+        fill(
+            &words::item_last_used(locale),
+            &[("type", kind), ("when", &when)],
+        )
+    } else {
+        fill(&words::item_never_used(locale), &[("type", kind)])
     }
 }
 
@@ -1536,6 +1703,26 @@ fn plain_value(item: &wire::LockerItem, key: &str) -> Option<String> {
         .flatten()
 }
 
+/// Where a login's password is changed: its own address, opened as a link. A
+/// trashed item, a type with no address and an empty address have none. The
+/// item's `url` column leads; its first extra address is the fallback.
+#[must_use]
+pub fn change_password_url(item: &wire::LockerItem) -> Option<String> {
+    if item.trashed || item.r#type != "login" {
+        return None;
+    }
+    let stored = item.url.trim();
+    let address = if stored.is_empty() {
+        item.addresses
+            .iter()
+            .map(|address| address.url.trim())
+            .find(|url| !url.is_empty())?
+    } else {
+        stored
+    };
+    Some(openable(address))
+}
+
 /// A stored address as a link the OS can open: one with no scheme is https.
 fn openable(url: &str) -> String {
     if url.contains("://") {
@@ -1617,7 +1804,13 @@ impl Screen for Item {
                 self.field = None;
                 self.passkey_name = None;
                 self.confirming = None;
-                Vec::new()
+                // A pending unlock is dropped, and its prompt taken down.
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::TabHidden(_)) => {
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }
@@ -1672,10 +1865,21 @@ impl Screen for Item {
                             .filter(|item| !item.trashed)
                             .map(|item| routes::edit(&item.item_id)),
                         retry: words::retry(locale),
+                        menu_label: words::more_actions(locale),
                     }),
                     memo: self.memo_sheet(locale),
                     field_sheet: self.field_sheet(locale),
                     passkey_name: self.passkey_sheet(locale),
+                    link_picker: Some(
+                        self.links.picker(
+                            locale,
+                            &item
+                                .map(|item| {
+                                    item.links.iter().map(|l| l.id.clone()).collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default(),
+                        ),
+                    ),
                     finished: false,
                 },
             ))),

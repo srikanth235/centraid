@@ -36,9 +36,9 @@ import kotlin.math.min
  *
  * The mapping from Centraid's roles to Material's slots is hand-written and
  * belongs here; the VALUES are not. `dev.centraid.design.CentraidTokens` is
- * emitted by `contracts/tools/export-native-theme.ts` from `packages/design`,
- * and `git diff --exit-code design copy mobile` in the `mobile-jvm` gate step
- * is what stops it drifting.
+ * emitted by `cargo xtask design` from `design/tokens.toml`, and the gate's
+ * `design` step (`cargo xtask design --check`, also run by `mobile-jvm`) is what
+ * stops it drifting.
  */
 @Composable
 public fun CentraidTheme(
@@ -47,7 +47,7 @@ public fun CentraidTheme(
     content: @Composable () -> Unit,
 ) {
     val tokens = if (dark) CentraidTokens.dark else CentraidTokens.light
-    // THE SYSTEM FONT SCALE, CAPPED ONCE (DESIGN.md, Dynamic Type). Every `sp` in
+    // THE SYSTEM FONT SCALE, CAPPED ONCE (product-intuition/references/design-behaviour.md § Accessibility). Every `sp` in
     // the tree — ours through [centraidType], Material's own — resolves against
     // THIS density, so the cap is not something a screen can forget. A scale at
     // or under the cap passes through untouched, nonlinear scaling and all; a
@@ -85,11 +85,12 @@ public fun CentraidTheme(
 }
 
 /**
- * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS caps Dynamic Type at
- * `DynamicTypeSize.xxxLarge`, Android caps the system font scale here
- * (DESIGN.md, Dynamic Type). A member who sets text larger than this reads this.
+ * THE LARGEST FONT SCALE EITHER SHELL DRAWS: iOS follows Dynamic Type up to
+ * `DynamicTypeSize.accessibility5`, Android follows the system font scale up to 2.0, the
+ * largest the system offers (owner ruling of 8 November; product-intuition/references/design-behaviour.md
+ * § Accessibility). Layouts reflow from `rememberLargestText`; nothing truncates or overlaps.
  */
-private const val MAX_FONT_SCALE: Float = 1.3f
+private const val MAX_FONT_SCALE: Float = 2.0f
 
 /**
  * The roles that hold their size at every font scale. `band` is the only one,
@@ -148,8 +149,8 @@ public fun centraidColor(role: String): Color = LocalCentraidTokens.current.colo
 public fun centraidType(role: String, scales: Boolean = true): TextStyle {
     val style = requireNotNull(LocalCentraidTokens.current.type[role]) {
         "no such type role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     }
     // `Dp.toSp()` against the density in force is the `sp` that draws as that
     // many `dp` whatever the font scale (and its nonlinear curve) is, which is
@@ -196,8 +197,8 @@ public fun centraidType(role: String, scales: Boolean = true): TextStyle {
  * Every type token says `family: "sans"` and this shell has never drawn it:
  * with no `fontFamily`, Compose renders Roboto, and nothing about that is an
  * error — which is how it went unnoticed for the project's whole life. The
- * files come from `packages/design/fonts`, the one source, copied into
- * `res/font` by `contracts/tools/export-native-theme.ts`.
+ * files come from `design/fonts`, the one source, copied into
+ * `res/font` by `cargo xtask design`.
  *
  * A `val` and not an expression inside [centraidType]: `FontFamily(...)` builds
  * a new instance per call, and a new instance is a new cache key for Compose's
@@ -231,27 +232,27 @@ private val CentraidSans: FontFamily = FontFamily(
  * GUARD: `aapt2` fails the build outright if `res/font/instrument_sans_*.ttf`
  * is missing or misnamed, and `R.font.instrument_sans_book` above does not
  * resolve. This value is the readable half — it names the emitted rows so a
- * reader can see which `packages/design` fact the ids above are bound to.
+ * reader can see which `design/tokens.toml` fact the ids above are bound to.
  */
 internal val CentraidSansFaces: Map<Int, String> =
     requireNotNull(NATIVE_TYPE_FACES["sans"]) {
         "the emitted face table has no 'sans' family; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "`cargo xtask design`."
     }
 
 /**
  * A role, or a loud failure.
  *
  * `requireNotNull` and not a fallback colour: a role that has been renamed in
- * `packages/design` and not here would otherwise paint something plausible and
+ * `design/tokens.toml` and not here would otherwise paint something plausible and
  * wrong, and the emitted `NATIVE_COLOR_ROLES` list is what a test checks this
  * against.
  */
 internal fun NativeTheme.color(role: String): Color = Color(
     requireNotNull(colors[role]) {
         "no such colour role '$role' in the emitted native theme. Roles come from " +
-            "packages/design; regenerate with " +
-            "`bun contracts/tools/export-native-theme.ts`."
+            "design/tokens.toml; regenerate with " +
+            "`cargo xtask design`."
     },
 )
 
@@ -259,7 +260,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
  * MONEY, WITH THE VAULT'S LOCALE AND THE CURRENCY'S OWN EXPONENT.
  *
  * v0's formatter is wrong in two ways at once
- * (`packages/design/src/format.ts:38`, `:49`; census §E8): it divides minor
+ * (the retired TypeScript `format.ts`; census §E8): it divides minor
  * units by 100 UNCONDITIONALLY, so JPY is rendered a hundred times too small
  * and BHD ten times too large, and it calls
  * `new Intl.NumberFormat(undefined, …)` — the HOST's locale — so the same vault

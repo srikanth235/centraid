@@ -28,13 +28,20 @@ pub(crate) enum Input {
 type Row = (&'static str, &'static str, Input);
 
 /// `(action, its inverse, where the inverse's input comes from)`.
-const AGENDA: &[Row] = &[
+const CALENDAR: &[Row] = &[
     ("propose", "cancel-event", Input::Created),
     ("trash-event", "restore-event", Input::Id),
     ("restore-event", "trash-event", Input::Id),
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
+];
+
+const REMINDERS: &[Row] = &[
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
     ("add-task", "delete-task", Input::Created),
+    ("star-task", "unstar-task", Input::Same),
+    ("unstar-task", "star-task", Input::Same),
     ("complete-task", "reopen-task", Input::Id),
     ("reopen-task", "complete-task", Input::Id),
     ("cancel-task", "reopen-task", Input::Id),
@@ -56,6 +63,8 @@ const DOCS: &[Row] = &[
     ("unstar", "star", Input::Same),
     ("tag", "untag", Input::Same),
     ("untag", "tag", Input::Same),
+    ("add-about", "remove-about", Input::Same),
+    ("remove-about", "add-about", Input::Same),
 ];
 const LOCKER: &[Row] = &[
     ("add-item", "trash-item", Input::Created),
@@ -68,6 +77,8 @@ const LOCKER: &[Row] = &[
     ("unarchive-item", "archive-item", Input::Same),
     ("add-tag", "remove-tag", Input::Same),
     ("remove-tag", "add-tag", Input::Same),
+    ("add-link", "remove-link", Input::Same),
+    ("remove-link", "add-link", Input::Same),
 ];
 const HEALTH: &[Row] = &[
     ("log-workout", "delete-workout", Input::Created),
@@ -79,6 +90,8 @@ const MONEY: &[Row] = &[
     ("reopen-account", "close-account", Input::Same),
     ("add-rule", "delete-rule", Input::Created),
     ("link-transfer", "unlink-transfer", Input::Id),
+    ("add-with", "remove-with", Input::Same),
+    ("remove-with", "add-with", Input::Same),
 ];
 const NOTES: &[Row] = &[
     ("create-note", "delete-note", Input::Created),
@@ -119,11 +132,13 @@ const PHOTOS: &[Row] = &[
     ("remove-from-album", "add-to-album", Input::Same),
     ("tag-photo", "untag-photo", Input::Same),
     ("untag-photo", "tag-photo", Input::Same),
+    ("add-person", "remove-person", Input::Same),
+    ("remove-person", "add-person", Input::Same),
 ];
 
 fn rows(app: &str) -> &'static [Row] {
     match app {
-        "agenda" => AGENDA,
+        "calendar" => CALENDAR,
         "docs" => DOCS,
         "health" => HEALTH,
         "locker" => LOCKER,
@@ -131,6 +146,7 @@ fn rows(app: &str) -> &'static [Row] {
         "notes" => NOTES,
         "people" => PEOPLE,
         "photos" => PHOTOS,
+        "reminders" => REMINDERS,
         _ => &[],
     }
 }
@@ -251,7 +267,7 @@ mod tests {
     fn the_input_comes_from_the_shell_or_the_commands_output() {
         let minted: Map<String, Value> =
             serde_json::from_str(r#"{"id":"t1","title":"x"}"#).unwrap();
-        let (action, input) = of("agenda", "add-task", &minted, &Value::Null).expect("undoable");
+        let (action, input) = of("reminders", "add-task", &minted, &Value::Null).expect("undoable");
         assert_eq!(
             (action, Value::Object(input)),
             ("delete-task", serde_json::json!({"id":"t1"}))
@@ -259,9 +275,9 @@ mod tests {
 
         let unminted: Map<String, Value> = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
         let output = serde_json::json!({"id":"made"});
-        let (_, input) = of("agenda", "add-task", &unminted, &output).expect("undoable");
+        let (_, input) = of("reminders", "add-task", &unminted, &output).expect("undoable");
         assert_eq!(Value::Object(input), serde_json::json!({"id":"made"}));
-        assert!(of("agenda", "add-task", &unminted, &Value::Null).is_none());
+        assert!(of("reminders", "add-task", &unminted, &Value::Null).is_none());
 
         let flag: Map<String, Value> =
             serde_json::from_str(r#"{"id":"i","flag":"starred"}"#).unwrap();
@@ -269,7 +285,7 @@ mod tests {
         assert_eq!(action, "unstar-item");
         assert_eq!(Value::Object(input), Value::Object(flag));
 
-        assert!(of("agenda", "purge-task", &minted, &Value::Null).is_none());
+        assert!(of("reminders", "purge-task", &minted, &Value::Null).is_none());
         let (action, _) = of("health", "delete-workout", &minted, &Value::Null).expect("undoable");
         assert_eq!(action, "restore-workout");
     }

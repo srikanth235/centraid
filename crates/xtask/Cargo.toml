@@ -20,7 +20,11 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+# The tokens model (`design/tokens.toml`) and its validation, for `cargo xtask
+# design` (#1173). Pulls serde and toml, both already in the lock.
+centraid-design = { path = "../design" }
 # THE ONLY sha2 LEFT UNDER `crates/` (#1025 S4, D-1025-S4-5). `artifact-key`
 # feeds GitHub Actions' cache key and `ci.rs` reads Subresource Integrity
 # attributes; both are somebody else's protocol, and neither names anything
@@ -28,6 +32,12 @@ serde_json = { workspace = true }
 # sha2 at all — `crates/vault` no longer does — so it is now an extra compile
 # for the gate tool, and that is the correct place to pay it.
 sha2 = { workspace = true }
+# `design/tokens.toml` is read by the dark-mockup generator (#1173); toml is already in the lockfile.
+toml = "0.9"
+# The app icon's PNGs (`design_icon.rs`, #1173). Already in the lock through
+# `image`; this is the encoder alone, so the gate rasterises in Rust and needs no
+# system tool.
+png = "0.18"
 
 [dev-dependencies]
 # The artifact-key rules are asserted over throwaway trees, so the tests are

@@ -566,7 +566,7 @@ fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
 
 /// The shapes `edge_shape` is seeded with, written out once more so the table,
 /// the trigger and the spec are three witnesses of one list.
-const SHAPES: [(&str, &str, &str); 13] = [
+const SHAPES: [(&str, &str, &str); 20] = [
     ("contains", "album", "photo"),
     ("contains", "list", "person"),
     ("tagged", "*", "tag"),
@@ -580,6 +580,13 @@ const SHAPES: [(&str, &str, &str); 13] = [
     ("attendee", "event", "person"),
     ("with", "activity", "person"),
     ("related", "person", "person"),
+    ("with", "txn", "person"),
+    ("about", "document", "person"),
+    ("depicts", "photo", "person"),
+    ("about", "locker_item", "account"),
+    ("about", "locker_item", "place"),
+    ("about", "locker_item", "person"),
+    ("with", "locker_item", "person"),
 ];
 
 fn shape_allows(rel: &str, from: &str, to: &str) -> bool {
@@ -649,7 +656,7 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                     }
                 }
             }
-            assert_eq!(tried, 8 * Kind::ALL.len() * Kind::ALL.len());
+            assert_eq!(tried, 9 * Kind::ALL.len() * Kind::ALL.len());
             // A label names a relation, and only `related` has one.
             let bad_label = c.execute(
                 "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES ('from:person', 'related', 'to:person', 'to:tag', ?1)",
@@ -1558,6 +1565,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
+    ("task", "url", Reach::Not("a link, not prose")),
     ("task", "rule", Reach::Not("an RFC 5545 rule")),
     ("task", "zone", Reach::Not("a time zone name, not prose")),
     ("note", "body", Reach::Own),
@@ -1616,6 +1624,7 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("the folded form of the title, which is indexed in what it labels"),
     ),
     ("container", "color", Reach::Not("a colour token")),
+    ("container", "icon", Reach::Not("an icon key")),
     (
         "vault",
         "name",

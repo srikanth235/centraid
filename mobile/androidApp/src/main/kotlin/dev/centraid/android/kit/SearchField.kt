@@ -180,6 +180,8 @@ public fun BandSearchField(
     closeLabel: String = KitWords.CLOSE_SEARCH,
     testTag: String = "kit-search",
     keepsFocusOnClose: Boolean = false,
+    /** The Search key, for a page that records the search when it is submitted. */
+    onSubmit: (() -> Unit)? = null,
 ) {
     val editor = rememberFollowedText(field.term)
     val typed = editor.text.value
@@ -253,7 +255,10 @@ public fun BandSearchField(
                             imeAction = ImeAction.Search,
                         ),
                         // The search key only puts the keyboard away: the query is already live.
-                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            focusManager.clearFocus()
+                            onSubmit?.invoke()
+                        }),
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(focus)

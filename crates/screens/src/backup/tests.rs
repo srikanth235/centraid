@@ -18,6 +18,7 @@ use wire::screen_event::Kind as E;
 
 use super::line::{self, STALE_MS};
 use super::reading::Reading;
+use super::rule::TransferRule;
 use super::{claim, doors, freeze, home, routes};
 use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Environment, Screen, TimerOp};
@@ -124,6 +125,26 @@ impl ScreenCtx for Fake {
     fn push(&self, _: wire::ScreenUpdate) {}
 
     fn wake_after(&self, _: std::time::Duration) {}
+
+    /// The device's ledger of paired gateways, which is what the reading names.
+    fn vault(&self, request: centraid_core::screens::VaultRequest) -> Result<wire::Response> {
+        use centraid_core::screens::VaultRequest;
+        match request {
+            VaultRequest::Pins(_) => Ok(wire::Response {
+                kind: Some(wire::response::Kind::Pins(wire::PinsResponse {
+                    destinations: self
+                        .status
+                        .borrow()
+                        .as_ref()
+                        .map(|status| status.destinations.clone())
+                        .unwrap_or_default(),
+                })),
+            }),
+            other => Err(CoreError::Unavailable {
+                reason: format!("the scripted door answers no {other:?}"),
+            }),
+        }
+    }
 }
 
 /// A Backup screen over a scripted core and a shell with two stores.
@@ -131,6 +152,7 @@ struct Page {
     fake: Fake,
     env: Environment,
     screen: Box<dyn Screen>,
+    secrets: VaultSecrets,
     shell: FakeShell,
     /// Effects asked and not yet answered.
     effects: Vec<wire::Effect>,
@@ -143,6 +165,7 @@ struct Page {
 
 impl Page {
     fn over(status: wire::BackupStatusResponse) -> Self {
+        let secrets = VaultSecrets::new();
         let mut shell = FakeShell::default();
         shell
             .synced
@@ -160,7 +183,8 @@ impl Page {
                 platform: "ios".to_owned(),
                 ..Environment::default()
             },
-            screen: home::build(&routes::home(), &VaultSecrets::new()).expect("the screen builds"),
+            screen: home::build(&routes::home(), &secrets).expect("the screen builds"),
+            secrets,
             shell,
             effects: Vec::new(),
             jobs: Vec::new(),
@@ -245,6 +269,11 @@ impl Page {
             tag,
             bytes: called.encode_to_vec(),
         }));
+    }
+
+    /// What the pass service does with the screen's ask: it takes it off the conductor's inbox.
+    fn service_takes_the_ask(&self) -> Vec<wire::pass_asked::Ask> {
+        self.secrets.conductor().take_asks()
     }
 
     fn state(&self) -> wire::BackupHomeState {
@@ -795,7 +824,6 @@ fn a_read_draws_the_line_the_gateways_and_the_controls_every_word_finished() {
     );
     assert_eq!(data.add_destination, Some(routes::add_destination()));
     assert_eq!(data.forget_label, words::backup_forget(EN));
-    assert_eq!(data.rule_label, words::backup_rule_heading(EN));
     assert_eq!(
         data.rule_choices
             .iter()
@@ -977,19 +1005,55 @@ fn back_up_now_needs_a_gateway_a_vault_that_has_not_moved_and_no_run_already_goi
         ..both()
     });
     running.say(tap.clone());
-    // ONE PASS ASKED FOR, under its own tag, off the runtime's lock.
-    assert_eq!(running.jobs, vec![doors::PASS.to_owned()]);
+    // THE PASS IS THE CONDUCTOR'S: the screen asks it and runs no door of its own.
+    assert!(running.jobs.is_empty());
+    assert!(running.secrets.conductor().back_up_now_going());
     let data = running.data();
     assert!(!data.back_up_now_enabled);
     // BYTES TO GO, while bytes are to move (#1144).
     assert_eq!(data.progress, "Backing up — 380 MB to go");
-    // A SECOND PRESS STARTS NOTHING HERE: the run is already going.
+    // NO BYTE TOTAL, NO BAR: the spinner stands in, never a bar stuck at zero.
+    assert!(!data.progress_known);
+    // A SECOND PRESS ASKS NOTHING MORE: the run is already going.
     running.say(tap.clone());
-    assert_eq!(running.jobs.len(), 1);
+    assert!(running.jobs.is_empty());
+    assert_eq!(
+        running.service_takes_the_ask(),
+        [wire::pass_asked::Ask::BackUpNow],
+        "one ask for two presses"
+    );
     // NOTHING LEFT TO MOVE is said plainly, never "0 bytes to go" while it runs.
     let mut whole = Page::open(both());
     whole.say(tap);
     assert_eq!(whole.data().progress, words::backup_now_running(EN));
+}
+
+#[test]
+fn a_run_with_a_byte_total_draws_a_bar_of_what_a_gateway_has_acknowledged() {
+    let tap = wire::backup_home_event::Kind::BackUpNow(wire::backup_home_event::BackUpNow {});
+    let mut running = Page::open(wire::BackupStatusResponse {
+        total_bytes: 5_000_000_000,
+        confirmed_bytes: 4_600_000_000,
+        pending_bytes: 412_000_000,
+        ..both()
+    });
+    // NOT RUNNING: no bar, whatever the bytes say.
+    let idle = running.data();
+    assert!(!idle.progress_known && idle.progress_fraction == 0.0);
+    running.say(tap.clone());
+    let data = running.data();
+    assert_eq!(data.progress, "Backing up — 412 MB to go");
+    assert!(data.progress_known);
+    assert!((data.progress_fraction - 0.92).abs() < 1e-6);
+
+    // MORE ACKNOWLEDGED THAN COUNTED never overshoots the bar.
+    let mut over = Page::open(wire::BackupStatusResponse {
+        total_bytes: 1_000,
+        confirmed_bytes: 2_000,
+        ..both()
+    });
+    over.say(tap);
+    assert_eq!(over.data().progress_fraction, 1.0);
 }
 
 #[test]
@@ -1005,9 +1069,18 @@ fn a_run_that_ends_is_re_read_because_what_it_moved_is_the_lines_to_say() {
         page.timers
             .contains(&(super::home::PROGRESS_TIMER_NAME.to_owned(), true))
     );
+    // THE SERVICE TAKES THE ASK and the run goes; the screen still draws it.
+    assert_eq!(
+        page.service_takes_the_ask(),
+        [wire::pass_asked::Ask::BackUpNow]
+    );
+    assert!(!page.secrets.conductor().back_up_now_going());
     let reads = page.reads();
     page.set_status(both());
-    page.answer_job(None);
+    // THE LEDGER MOVES when the run ends: the screen reads again and stops drawing a run.
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
     assert_eq!(page.reads(), reads + 1);
     let data = page.data();
     assert_eq!(data.progress, "");
@@ -1461,35 +1534,138 @@ fn nothing_the_screen_says_carries_the_words_themselves() {
     assert!(!text.contains(SEED));
 }
 
-// ---- what the doors are asked ---------------------------------------------
+// ---- a gateway that moved -------------------------------------------------
+
+/// A reading in which the laptop's items wait for a backup device that does not answer.
+fn lost() -> wire::BackupStatusResponse {
+    wire::BackupStatusResponse {
+        content_confirmed: 4,
+        waiting: waiting(&[(wire::WaitReason::Gateway, 6)]),
+        ..both()
+    }
+}
+
+/// The `BrowseGateways` effects among `effects`, in order, as their `on`.
+fn browses(effects: &[wire::Effect]) -> Vec<bool> {
+    effects
+        .iter()
+        .filter_map(|effect| match &effect.kind {
+            Some(wire::effect::Kind::BrowseGateways(browse)) => Some(browse.on),
+            _ => None,
+        })
+        .collect()
+}
+
+fn sighted(gw: &str, addresses: &[&str]) -> E {
+    E::EffectResult(wire::EffectResult {
+        effect_id: 0,
+        outcome: Some(wire::effect_result::Outcome::GatewaysSighted(
+            wire::GatewaysSighted {
+                sightings: vec![wire::GatewaySighting {
+                    service_name: "centraid-gateway".to_owned(),
+                    txt: [("gw".to_owned(), gw.to_owned())].into(),
+                    addresses: addresses.iter().map(|a| (*a).to_owned()).collect(),
+                }],
+            },
+        )),
+    })
+}
+
+fn kept(refreshed: bool) -> Option<wire::response::Kind> {
+    Some(wire::response::Kind::RefreshDestination(
+        wire::RefreshDestinationResponse {
+            refreshed,
+            ..Default::default()
+        },
+    ))
+}
 
 #[test]
-fn a_pass_is_asked_for_under_the_rule_and_videos_bit_the_screen_shows_by_the_members_own_tap() {
-    use super::rule::TransferRule;
-    use centraid_core::screens::VaultRequest;
-    let drain = |rule, include| match doors::pass_request(rule, include) {
-        VaultRequest::Drain(drain) => drain,
-        other => panic!("not a pass: {other:?}"),
-    };
-    let wifi = drain(TransferRule::WifiOnly, true);
-    // THE MEMBER'S OWN TAP and a snapshot now: `asked` is set by nothing else.
-    assert!(wifi.asked && wifi.wants_snapshot);
-    assert_eq!(wifi.rule, wire::TransferRule::WifiOnly as i32);
-    assert!(!wifi.exclude_videos, "videos are included by default");
-    // THE LINK IS NOT THE SCREEN'S TO KNOW: the conservative reading, no deadline.
-    assert!(wifi.metered && !wifi.charging);
-    assert_eq!(wifi.deadline_ms, 0);
-    let manual = drain(TransferRule::Manual, false);
-    assert_eq!(manual.rule, wire::TransferRule::Manual as i32);
-    assert!(
-        manual.exclude_videos,
-        "include videos off is exclude_videos on"
-    );
-    assert_eq!(
-        drain(TransferRule::WifiAndCellularPhotos, true).rule,
-        wire::TransferRule::WifiAndCellularPhotos as i32
-    );
+fn a_gateway_the_core_cannot_reach_is_browsed_for_and_one_that_answers_is_not() {
+    // ITEMS WAIT FOR A BACKUP DEVICE that does not answer: the browse begins with the page.
+    let page = Page::open(lost());
+    assert_eq!(browses(&page.effects), [true]);
+    // A gateway that answers, a vault with none paired and a vault that moved are not browsed for.
+    for status in [
+        both(),
+        status(Vec::new()),
+        wire::BackupStatusResponse {
+            frozen: true,
+            ..lost()
+        },
+    ] {
+        assert!(browses(&Page::open(status).effects).is_empty());
+    }
 }
+
+#[test]
+fn rediscovery_matches_by_identity_asks_the_core_and_stops_on_a_kept_address() {
+    let mut paired = lost();
+    paired.destinations[0].gateway_id = "a1b2c3d4".to_owned();
+    let mut page = Page::open(paired.clone());
+    assert_eq!(browses(&page.effects), [true]);
+    page.effects.clear();
+    // A gateway of another identity, at an address: nothing is offered.
+    page.send(sighted("ffffffff", &["192.168.1.99:7443"]));
+    assert!(page.jobs.is_empty());
+    // The paired one, by its id, at a new address (the recorded one is not offered again).
+    page.send(sighted(
+        "A1B2C3D4",
+        &["192.168.1.20:7443", "192.168.1.77:7443"],
+    ));
+    assert_eq!(page.jobs, ["refresh:a1b2c3d4"]);
+    // THE CORE REFUSED the address (nothing answered as that gateway): the browse goes on.
+    page.answer_job(kept(false));
+    assert!(browses(&page.effects).is_empty());
+    // A later window finds it and the core keeps the address: the browse ends, once.
+    page.send(sighted("a1b2c3d4", &["192.168.1.78:7443"]));
+    assert_eq!(page.jobs, ["refresh:a1b2c3d4"]);
+    page.answer_job(kept(true));
+    assert_eq!(browses(&page.effects), [false]);
+    // IT IS NOT BROWSED FOR AGAIN while the page stays open, though the pass has not reached it yet.
+    page.effects.clear();
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
+    assert!(browses(&page.effects).is_empty());
+    // A page opened anew looks again.
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: true }));
+    assert_eq!(browses(&page.effects), [true]);
+}
+
+#[test]
+fn a_browse_ends_when_the_gateway_answers_the_app_leaves_the_front_or_the_page_is_left() {
+    // THE PASS REACHED IT: the next read has nothing waiting for a gateway, and the browse ends.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.set_status(both());
+    page.send(E::DataChanged(wire::DataChanged {
+        tables: vec!["backup".to_owned()],
+    }));
+    assert_eq!(browses(&page.effects), [false]);
+
+    // THE APP LEAVES THE FRONT: a browse is foreground work, and comes back with the front.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: false }));
+    assert_eq!(browses(&page.effects), [false]);
+    page.effects.clear();
+    page.send(E::DataChanged(wire::DataChanged { tables: vec![] }));
+    assert!(
+        browses(&page.effects).is_empty(),
+        "nothing browses in the background"
+    );
+    page.send(E::Lifecycle(wire::AppLifecycle { foreground: true }));
+    assert_eq!(browses(&page.effects), [true]);
+
+    // THE PAGE IS LEFT.
+    let mut page = Page::open(lost());
+    page.effects.clear();
+    page.send(E::Left(wire::Left {}));
+    assert_eq!(browses(&page.effects), [false]);
+}
+
+// ---- what the doors are asked ---------------------------------------------
 
 #[test]
 fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
@@ -1501,7 +1677,6 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
     assert_eq!(doors::forget_tag("gw-7"), "backup.forget:gw-7");
     // A tag this screen did not ask is not its answer.
     assert_eq!(doors::done("other", &[]), None);
-    assert_eq!(doors::done(doors::PASS, &[]), Some(doors::Done::Pass));
     // A refusal, or bytes that are not an answer, are not forgotten.
     let refused = wire::VaultCalled {
         response: Vec::new(),
@@ -1579,7 +1754,7 @@ fn holding(app: &str, items: u64, bytes: u64) -> wire::AppHolding {
 /// The design's backed-up phone: eight apps, 5.0 GB, all of it acknowledged.
 fn eight_apps() -> Vec<wire::AppHolding> {
     vec![
-        holding("agenda", 640, 6 * MB),
+        holding("calendar", 640, 6 * MB),
         holding("docs", 58, 412 * MB),
         wire::AppHolding {
             workouts: 96,
@@ -1683,7 +1858,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
             ("Notes", "312 notes · 38 MB", "Backed up"),
             ("Money", "3,412 transactions · 21 MB", "Backed up"),
             ("People", "418 people · 14 MB", "Backed up"),
-            ("Agenda", "640 events and tasks · 6 MB", "Backed up"),
+            ("Calendar", "640 events · 6 MB", "Backed up"),
             ("Health", "731 days, 96 workouts · 3 MB", "Backed up"),
         ]
     );
@@ -1698,11 +1873,14 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     );
     assert_eq!(data.apps[0].app_id, "photos");
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
-    assert_eq!(data.destinations[0].held, "Holds 5.1 GB");
+    assert_eq!(
+        data.destinations[0].held,
+        "Holds 5.1 GB \u{b7} can't open it"
+    );
     assert!(
         data.destinations[0]
             .accessibility_label
-            .contains("Holds 5.1 GB")
+            .contains("Holds 5.1 GB \u{b7} can't open it")
     );
 }
 
@@ -1746,7 +1924,7 @@ fn a_row_says_what_waits_and_never_more_than_was_acknowledged() {
         (notes.status.as_str(), notes.waiting),
         ("3 edits waiting", true)
     );
-    assert_eq!(row("agenda").status, "1 edit waiting");
+    assert_eq!(row("calendar").status, "1 edit waiting");
     assert_eq!(row("money").status, "Backed up");
 
     // NEVER ACKNOWLEDGED: no row says "Backed up".
@@ -1780,4 +1958,114 @@ fn videos_left_out_are_the_photos_rows_note() {
         photos.accessibility_label,
         "Photos. 1,203 photos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
     );
+}
+
+// ---- THE SETTINGS-STYLE PAGE (#1173) ----
+
+fn condition_of(status: wire::BackupStatusResponse) -> wire::BackupCondition {
+    Page::open(status).data().condition()
+}
+
+#[test]
+fn the_page_names_where_the_backup_stands_in_one_condition() {
+    use wire::BackupCondition as C;
+    assert_eq!(condition_of(both()), C::UpToDate);
+    assert_eq!(condition_of(status(Vec::new())), C::Unpaired);
+    assert_eq!(
+        condition_of(wire::BackupStatusResponse {
+            frozen: true,
+            ..both()
+        }),
+        C::Moved
+    );
+    // A run that is going.
+    let mut running = Page::open(both());
+    running.say(wire::backup_home_event::Kind::BackUpNow(
+        wire::backup_home_event::BackUpNow {},
+    ));
+    assert_eq!(running.data().condition(), C::Running);
+    // Unreached is the line's own predicate: exactly STALE_MS ago still answers, one
+    // millisecond more does not, and never having answered does not either.
+    let seen = |at: i64| {
+        let mut unreached = both();
+        unreached.destinations[0].last_seen_ms = at;
+        condition_of(unreached)
+    };
+    assert_eq!(seen(NOW - STALE_MS), C::UpToDate);
+    assert_eq!(seen(NOW - STALE_MS - 1), C::NotReached);
+    assert_eq!(seen(0), C::NotReached);
+}
+
+#[test]
+fn a_backup_device_that_has_not_answered_says_when_it_last_did_and_what_to_check() {
+    let mut unreached = with_apps(eight_apps());
+    unreached.destinations = vec![gateway(
+        "gw-1",
+        "Srikanth's Mac mini",
+        Some("192.168.1.20:7443"),
+        NOW - 5 * DAY,
+        NOW - 5 * DAY,
+    )];
+    unreached.acked_at_ms = Some(NOW - 5 * DAY);
+    unreached.apps[7].waiting = 184;
+    unreached.apps[1].waiting = 28;
+    let data = Page::open(unreached).data();
+    assert_eq!(data.condition(), wire::BackupCondition::NotReached);
+    assert_eq!(data.last_good, "Last good backup 5 days ago");
+    assert_eq!(
+        data.reason,
+        "Srikanth's Mac mini hasn't answered. Check it's awake and on the same network as this phone."
+    );
+    // What waits is its own list, and "In this backup" is what the device holds.
+    assert_eq!(data.waiting_heading, "Not backed up yet");
+    let waiting: Vec<&str> = data.apps_waiting.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(waiting, ["Photos", "Docs"]);
+    assert!(data.apps_waiting.iter().all(|row| row.waiting));
+    assert_eq!(data.apps.len(), 6);
+    assert!(data.apps.iter().all(|row| !row.waiting));
+    // A healthy page carries none of it.
+    let calm = Page::open(with_apps(eight_apps())).data();
+    assert_eq!(
+        (
+            calm.last_good.as_str(),
+            calm.reason.as_str(),
+            calm.waiting_heading.as_str()
+        ),
+        ("", "", "")
+    );
+    assert!(calm.apps_waiting.is_empty());
+}
+
+#[test]
+fn what_travels_when_has_one_row_worth_the_rules_short_word_and_the_sentences_behind_it() {
+    let mut page = Page::open(both());
+    let data = page.data();
+    assert_eq!(data.travel_heading, "What travels when");
+    assert_eq!(data.over_label, "Back up over");
+    assert_eq!(data.over_value, "Wi-Fi only");
+    // The three short words are the rule's, one for each sentence a member can pick.
+    let shorts: Vec<String> = TransferRule::ALL.iter().map(|r| r.short(EN)).collect();
+    assert_eq!(shorts, ["Wi-Fi only", "Wi-Fi and cellular", "On tap"]);
+    // Choosing moves the value, and what is picked is the one sentence.
+    page.say(wire::backup_home_event::Kind::RuleChosen(
+        wire::backup_home_event::RuleChosen {
+            stored: "wifi-and-cellular-photos".into(),
+        },
+    ));
+    let data = page.data();
+    assert_eq!(data.over_value, "Wi-Fi and cellular");
+    assert_eq!(data.rule_choices.iter().filter(|c| c.picked).count(), 1);
+}
+
+#[test]
+fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
+    let data = Page::open(both()).data();
+    assert_eq!(data.restore_label, "Restore my vaults");
+    assert_eq!(data.key_summary, "Saved in iCloud Keychain");
+    let moved = Page::open(wire::BackupStatusResponse {
+        frozen: true,
+        ..both()
+    })
+    .data();
+    assert_eq!(moved.restore_label, "");
 }

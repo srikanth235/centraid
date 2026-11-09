@@ -55,7 +55,7 @@ impl WorkoutPage {
     }
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units, cycle) = (ctx.locale(), Units::of(ctx), ctx.hour_cycle());
         let Some(row) = &answer.workout else {
             return wire::HealthWorkoutData {
                 gone: Some(wire::EmptyState {
@@ -123,7 +123,12 @@ impl WorkoutPage {
         .join(" ");
         wire::HealthWorkoutData {
             kind_label: figures::kind_word(locale, &row.kind_key),
-            title: figures::title(locale, &row.kind_key, &civil::clock(start)),
+            kind_icon_key: figures::kind_icon(&row.kind_key).to_owned(),
+            title: figures::title(
+                locale,
+                &row.kind_key,
+                &civil::clock_for(locale, start, cycle),
+            ),
             when_label: if start.is_empty() {
                 String::new()
             } else {
@@ -134,8 +139,8 @@ impl WorkoutPage {
                             "day",
                             &civil::day_month(locale, start.get(..10).unwrap_or_default()),
                         ),
-                        ("start", &civil::clock(start)),
-                        ("end", &civil::clock(&row.local_end)),
+                        ("start", &civil::clock_for(locale, start, cycle)),
+                        ("end", &civil::clock_for(locale, &row.local_end, cycle)),
                     ],
                 )
             },

@@ -46,9 +46,17 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/// The eight first-party apps (`crates/apps`). Chat is a tab, not an app.
-const APPS: [&str; 8] = [
-    "agenda", "docs", "health", "locker", "money", "notes", "people", "photos",
+/// The nine first-party apps (`crates/apps`). Chat is a tab, not an app.
+const APPS: [&str; 9] = [
+    "calendar",
+    "docs",
+    "health",
+    "locker",
+    "money",
+    "notes",
+    "people",
+    "photos",
+    "reminders",
 ];
 
 /// Files under `root/dir` with any of `extensions`, sorted.
@@ -62,13 +70,17 @@ fn files(root: &Path, dir: &str, extensions: &[&str]) -> Vec<PathBuf> {
     out
 }
 
-/// The SwiftUI shell's hand-written sources: `iosApp/Sources` without
-/// protoc's `Generated/`.
+/// The iOS app's hand-written Swift: the shell (`Sources`, without protoc's
+/// `Generated/`), the widget extension (`Widgets`) and the code both targets
+/// share (`Shared`).
 fn swift_sources(root: &Path) -> Vec<PathBuf> {
-    files(root, "mobile/iosApp/Sources", &["swift"])
-        .into_iter()
+    let mut out: Vec<PathBuf> = ["Sources", "Widgets", "Shared"]
+        .iter()
+        .flat_map(|dir| files(root, &format!("mobile/iosApp/{dir}"), &["swift"]))
         .filter(|path| !relative(root, path).contains("/Sources/Generated/"))
-        .collect()
+        .collect();
+    out.sort();
+    out
 }
 
 /// The Compose shell's production Kotlin.
@@ -298,7 +310,7 @@ pub fn native_accessibility(root: &Path) -> RuleReport {
     RuleReport::applied(NAME, compose.len() + swift.len(), findings)
 }
 
-/// `no-tasks-namespace` — the tasks a member keeps are Agenda's (#1128,
+/// `no-tasks-namespace` — the tasks a member keeps are Reminders' (#1128,
 /// #1135): no directory called `tasks` under a shell's sources, no `tasks`
 /// app id or `tasks.` prefix in its production code, and no `tasks` copy
 /// leaf. The Rust twin is `crates/core/src/catalog.rs`'s
@@ -334,7 +346,7 @@ pub fn no_tasks_namespace(root: &Path) -> RuleReport {
             .is_some_and(|name| name.eq_ignore_ascii_case("tasks"))
         {
             findings.push(format!(
-                "{}: a `tasks` directory is the old app; the tasks are Agenda's",
+                "{}: a `tasks` directory is the old app; the tasks are Reminders'",
                 relative(root, directory)
             ));
         }
@@ -373,7 +385,7 @@ pub fn no_tasks_namespace(root: &Path) -> RuleReport {
             let code = text.trim();
             if tasks_namespace(code) {
                 findings.push(format!(
-                    "{rel}:{line}: {code} — the tasks are Agenda's: say `agenda`, route to `agenda.<screen>`"
+                    "{rel}:{line}: {code} — the tasks are Reminders': say `reminders`, route to `reminders.<screen>`"
                 ));
             }
         }
@@ -472,9 +484,9 @@ pub fn native_spells_no_screen_id(root: &Path) -> RuleReport {
     let mut sources = swift_sources(root);
     sources.extend(compose_sources(root));
     let mut findings = Vec::new();
-    if !ids.contains("agenda.home") || !ids.contains("backup.home") {
+    if !ids.contains("calendar.home") || !ids.contains("backup.home") {
         findings.push(format!(
-            "the registry scan read {} id(s) and missed agenda.home or backup.home; it stopped reading `Registry::with`",
+            "the registry scan read {} id(s) and missed calendar.home or backup.home; it stopped reading `Registry::with`",
             ids.len()
         ));
     }
@@ -1167,7 +1179,7 @@ pub fn walker_platform_law(root: &Path) -> RuleReport {
 /// `first-launch-asks-nothing` — the first-launch gate lists Home's roster
 /// without typing app ids, and asks the phone for nothing: Health asks on its
 /// own Connect button (#1129, R-1127-15). The roster itself is Rust's ORDER,
-/// held to the catalogue by `packages/design/src/native-emission.test.ts`.
+/// held to the catalogue by `crates/xtask/src/design_checks.rs`.
 pub fn first_launch_asks_nothing(root: &Path) -> RuleReport {
     const NAME: &str = "first-launch-asks-nothing";
     let mut views: Vec<PathBuf> = swift_sources(root)

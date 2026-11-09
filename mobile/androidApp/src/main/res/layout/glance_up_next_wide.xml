@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Up next, 4x2 (#1173): up to four rows, each with an optional day header above it
+     (a "Tomorrow" the snapshot words). RemoteViews cannot add children without a list
+     service, so the slots are fixed and `GlanceWidgets` shows or hides them. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/glance_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/glance_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+    <TextView android:id="@+id/glance_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="2dp" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/glance_day_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/centraid_text_badge" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <LinearLayout android:id="@+id/glance_row_0" android:layout_width="match_parent" android:layout_height="28dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+        <FrameLayout android:layout_width="64dp" android:layout_height="wrap_content">
+            <TextView android:id="@+id/glance_row_time_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_app_calendar_text" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/glance_row_time_red_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+        </FrameLayout>
+        <View android:id="@+id/glance_row_bar_0" android:layout_width="4dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:layout_marginEnd="12dp" android:background="@drawable/glance_bar_agenda" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/glance_row_title_0" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <TextView android:id="@+id/glance_day_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/centraid_text_badge" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <LinearLayout android:id="@+id/glance_row_1" android:layout_width="match_parent" android:layout_height="28dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+        <FrameLayout android:layout_width="64dp" android:layout_height="wrap_content">
+            <TextView android:id="@+id/glance_row_time_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_app_calendar_text" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/glance_row_time_red_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+        </FrameLayout>
+        <View android:id="@+id/glance_row_bar_1" android:layout_width="4dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:layout_marginEnd="12dp" android:background="@drawable/glance_bar_agenda" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/glance_row_title_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <TextView android:id="@+id/glance_day_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/centraid_text_badge" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <LinearLayout android:id="@+id/glance_row_2" android:layout_width="match_parent" android:layout_height="28dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+        <FrameLayout android:layout_width="64dp" android:layout_height="wrap_content">
+            <TextView android:id="@+id/glance_row_time_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_app_calendar_text" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/glance_row_time_red_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+        </FrameLayout>
+        <View android:id="@+id/glance_row_bar_2" android:layout_width="4dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:layout_marginEnd="12dp" android:background="@drawable/glance_bar_agenda" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/glance_row_title_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <TextView android:id="@+id/glance_day_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/centraid_text_badge" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+    <LinearLayout android:id="@+id/glance_row_3" android:layout_width="match_parent" android:layout_height="28dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+        <FrameLayout android:layout_width="64dp" android:layout_height="wrap_content">
+            <TextView android:id="@+id/glance_row_time_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_app_calendar_text" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/glance_row_time_red_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+        </FrameLayout>
+        <View android:id="@+id/glance_row_bar_3" android:layout_width="4dp" android:layout_height="18dp" android:layout_marginStart="8dp" android:layout_marginEnd="12dp" android:background="@drawable/glance_bar_agenda" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/glance_row_title_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <TextView android:id="@+id/glance_message" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_row" android:textStyle="bold" android:textColor="@color/centraid_text_ink" android:maxLines="2" android:ellipsize="end" android:visibility="gone" />
+</LinearLayout>

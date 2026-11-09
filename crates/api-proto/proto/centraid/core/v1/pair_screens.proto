@@ -60,6 +60,16 @@ message PairLaptopState {
   // The screen is done (cancelled, Done, or handing over to the words): the
   // shell pops it.
   bool finished = 15;
+  // WAITING and FAILED: the command to run on the backup device, drawn as a
+  // terminal line ("centraid-gateway pair").
+  string command = 16;
+  // PAIRED: the safety number's groups of 5 digits, in order, for a shell to
+  // lay out in rows; `safety_number` stays the whole, for a screen reader.
+  repeated string safety_groups = 17;
+  // PAIRED: "Safety number", over the groups.
+  string safety_label = 18;
+  // PAIRED: what matching numbers mean.
+  string safety_hint = 19;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

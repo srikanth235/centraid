@@ -36,7 +36,7 @@ import java.time.ZoneId
  * `upcoming` joins six-plus tables and expands every repeating series — had
  * nothing to draw from but a page read of one table, and a Kotlin expansion
  * would have been a second recurrence engine (D-1020-S1). `app_query` (20) is
- * the arm: the core runs `crates/apps/agenda`'s loader and answers a TYPED
+ * the arm: the core runs `crates/apps/calendar`'s loader and answers a TYPED
  * message, which Wire decodes like everything else the core says.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
@@ -90,13 +90,13 @@ class AgendaQueryRoundTripSpec : StringSpec({
                 run.event_id shouldBe seriesId
                 run.instance_key shouldStartWith "$seriesId:"
                 run.original_start_local shouldNotBe null
-                // The sentence, never the rule — and the reminders decoded in
+                // The rule, for the editor (the sentence is built in Rust) — and the reminders decoded in
                 // Rust, because `commonMain` has no JSON to decode them with.
-                run.recurrence_summary shouldNotBe null
+                run.rrule shouldNotBe null
                 run.reminders.map { it.minutes_before } shouldBe listOf(10L)
             }
             val dentist = upcoming.events.single { it.summary == "Dentist" }
-            dentist.recurrence_summary shouldBe null
+            dentist.rrule shouldBe null
             dentist.dtend shouldBe "2099-06-03T10:00:00.000Z"
             // IN START ORDER, which is what a Day list draws in.
             upcoming.events.map { it.dtstart } shouldBe upcoming.events.map { it.dtstart }.sorted()
@@ -290,9 +290,9 @@ class AgendaQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One write, as a screen makes it (`act` on agenda); answers its `id`, if any of its output. */
+        /** One write, as a screen makes it (`act` on calendar); answers its `id`, if any of its output. */
         suspend fun CentraidCore.write(action: String, input: String, key: String): String {
-            val output = act("agenda", action, input, key)
+            val output = act("calendar", action, input, key)
             return Regex("\"id\":\"([^\"]+)\"")
                 .find(output)
                 ?.groupValues

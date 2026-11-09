@@ -51,7 +51,7 @@
 //!   screen uses: `confirm` reads the rows its steps address again before it runs anything, and a
 //!   row that changed since the turn planned is a typed `Confirmed::Stale`, nothing written. A door
 //!   that served a cached world would make a stale card look fresh.
-//! * [`Door::events`] is `centraid_apps_agenda::occurrences` over the core's own `PageDoor`
+//! * [`Door::events`] is `centraid_apps_calendar::occurrences` over the core's own `PageDoor`
 //!   (`VaultDoor`), the zone being the request's: the same function the harness's door calls, so the
 //!   chat and the Agenda tab cannot disagree about which day an event is on (R-1088-8).
 //! * [`Door::advance`] may do nothing on the phone (its clock is the device's), and [`Door::mint_id`]
@@ -60,7 +60,7 @@
 //! A refusal by the vault is a value ([`Ran::ok`] false), never an `Err`: an `Err` is a door that
 //! could not answer at all.
 
-pub use centraid_apps_agenda::Occurrence;
+pub use centraid_apps_calendar::Occurrence;
 use centraid_apps_kit::row::{Cell, Row};
 use centraid_search::Target;
 use serde_json::Value;
@@ -135,7 +135,7 @@ pub trait Door: Send {
     /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and
     /// the trashed left out, each placed on the member's calendar in `tz` (its wall clock, its
     /// end, the days it occupies). The rows Agenda's own `upcoming` answers, from the one
-    /// implementation of it (`centraid_apps_agenda::occurrences`), so the runtime cannot disagree
+    /// implementation of it (`centraid_apps_calendar::occurrences`), so the runtime cannot disagree
     /// with the Agenda tab (R-1088-8). A door that cannot answer says so; the runtime then reads
     /// the stored events as they are.
     fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {

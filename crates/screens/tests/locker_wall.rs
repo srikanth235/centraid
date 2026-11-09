@@ -30,7 +30,8 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.unlock_label, "Unlock with your face");
-    assert!(wall.notice.is_empty(), "a cancel is not a failure");
+    // A CANCEL IS NOT A FAILURE: the wall says only the member's lock setting.
+    assert_eq!(wall.notice, "Locked after 5 minutes idle.");
     // The wall reads nothing: no content under it.
     assert!(home(&d, id).content.is_none() && !home(&d, id).secure);
 }
@@ -154,7 +155,7 @@ fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     let mut d = driver();
     login(&d, "i1", "Bank");
     let id = open_home(&mut d);
-    assert_eq!(home_data(&d, id).rows.len(), 1);
+    assert_eq!(home_data(&d, id).categories.len(), 6);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
     }));
@@ -201,6 +202,17 @@ fn pick(d: &mut Driver, id: u64, option: &str) {
     );
 }
 
+/// Open a category card's list, as a tap on the card does.
+fn category(d: &mut Driver, id: u64, key: &str) {
+    home_event(
+        d,
+        id,
+        H::CategoryPicked(wire::locker_home_event::CategoryPicked {
+            key: key.to_owned(),
+        }),
+    );
+}
+
 /// The options of the menu's one section, as (key, count, checked).
 fn options(d: &Driver, id: u64) -> Vec<(String, u32, bool)> {
     let data = home_data(d, id);
@@ -238,8 +250,12 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
         },
     );
     d.pump(std::time::Duration::from_millis(300));
+    // The landing draws cards, not rows; a card opens the list.
+    assert!(home_data(&d, id).rows.is_empty());
+    category(&mut d, id, "all");
     let data = home_data(&d, id);
     assert_eq!(data.rows.len(), 2);
+    assert_eq!(data.list_title, "All");
     assert_eq!(
         options(&d, id),
         [
@@ -327,9 +343,12 @@ fn starred_and_archived_join_the_menu_when_there_are_some_and_clear_returns_to_a
         ["archived"]
     );
 
-    // Clear is All, and the live shelf is back.
+    // Clear is All, back on the landing, and the live shelf is read again.
     home_event(&mut d, id, H::FilterMenuCleared(wire::FilterMenuCleared {}));
     d.pump(std::time::Duration::from_millis(300));
+    let data = home_data(&d, id);
+    assert!(data.rows.is_empty() && data.categories.len() == 6);
+    category(&mut d, id, "all");
     let data = home_data(&d, id);
     assert_eq!(data.rows.len(), 2);
     let menu = data.filter_menu.as_ref().unwrap();
@@ -354,6 +373,7 @@ fn a_pick_in_another_section_changes_nothing_and_search_has_no_menu() {
         },
     );
     d.pump(std::time::Duration::from_millis(300));
+    category(&mut d, id, "all");
     home_event(
         &mut d,
         id,
@@ -553,4 +573,198 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
         k,
         wire::effect::Kind::ClipboardSet(set) if set.sensitive && set.clear_after_ms == 30_000
     )));
+}
+
+/// THE HEADER'S LOCK KEY (#1173): a tap covers the Locker at once, through the same wall as More's
+/// Lock row, and the chrome says the key's words.
+#[test]
+fn the_header_lock_key_covers_the_locker_and_says_its_words() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(passed(wire::Biometry::Face));
+    assert!(home(&d, id).wall.is_none());
+    assert_eq!(home(&d, id).chrome.unwrap().lock_label, "Lock now");
+    d.send(
+        id,
+        E::LockerHome(wire::LockerHomeEvent {
+            kind: Some(H::LockRequested(wire::locker_home_event::LockRequested {})),
+        }),
+    );
+    let state = home(&d, id);
+    assert!(state.wall.is_some(), "the wall is back");
+    assert!(!state.secure, "nothing is shown under the wall");
+    assert!(state.content.is_none());
+}
+
+#[test]
+fn a_locked_locker_keeps_its_band_and_a_tapped_place_starts_the_unlock_and_lands_there() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    // THE SAME BAND AS AN OPEN LOCKER, dimmed: the places are there and flagged locked.
+    let state = home(&d, id);
+    assert!(state.band_locked && state.wall.is_some());
+    let keys: Vec<&str> = state.band.iter().map(|t| t.key.as_str()).collect();
+    assert_eq!(keys, ["items", "review", "generate", "more"]);
+
+    // A TAP ON A PLACE IS THE UNLOCK BUTTON: the same owner check goes up.
+    let asked = d.effects.len();
+    home_event(
+        &mut d,
+        id,
+        H::Band(wire::locker_home_event::BandPicked {
+            key: "review".into(),
+        }),
+    );
+    assert!(
+        d.effects[asked..].iter().any(|e| matches!(
+            e.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )),
+        "a place on the locked band asks the owner check"
+    );
+    assert_eq!(
+        wall_of(&d, id).unwrap().phase,
+        wire::locker_wall::Phase::Unlocking as i32
+    );
+    d.answer_effect(passed(wire::Biometry::Face));
+    let state = home(&d, id);
+    assert!(state.wall.is_none() && !state.band_locked);
+    assert_eq!(
+        state.destination,
+        wire::LockerDestination::Review as i32,
+        "the unlock lands on the place that was tapped"
+    );
+}
+
+#[test]
+fn a_cancelled_unlock_forgets_the_place_and_the_button_lands_on_items() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    home_event(
+        &mut d,
+        id,
+        H::Band(wire::locker_home_event::BandPicked {
+            key: "generate".into(),
+        }),
+    );
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    assert_eq!(
+        wall_of(&d, id).unwrap().phase,
+        wire::locker_wall::Phase::Locked as i32
+    );
+    d.send(
+        id,
+        E::LockerWall(wire::LockerWallEvent {
+            kind: Some(wire::locker_wall_event::Kind::Unlock(
+                wire::locker_wall_event::UnlockTapped {},
+            )),
+        }),
+    );
+    d.answer_effect(passed(wire::Biometry::Face));
+    assert_eq!(
+        home(&d, id).destination,
+        wire::LockerDestination::Items as i32
+    );
+}
+
+fn cancels(d: &Driver, from: usize) -> usize {
+    effects_of(d, from)
+        .iter()
+        .filter(|kind| matches!(kind, wire::effect::Kind::OwnerCheck(check) if check.cancel && !check.ask))
+        .count()
+}
+
+#[test]
+fn leaving_locker_before_answering_takes_the_prompt_down_and_a_late_answer_is_ignored() {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    d.start();
+    // A second Locker page asks at once, as opening Locker from Home does.
+    let page = d.push(locker::TAB, routes::home(wire::LockerDestination::Items));
+    assert!(matches!(
+        effects_of(&d, 1).as_slice(),
+        [wire::effect::Kind::OwnerCheck(check)] if check.ask
+    ));
+    let before = d.effects.len();
+    // THE MEMBER GOES BACK TO HOME before answering the OS prompt.
+    d.pop(locker::TAB, page);
+    assert_eq!(
+        cancels(&d, before),
+        1,
+        "one withdrawal, for the page that asked"
+    );
+    let withdrawal = &d.effects[before];
+    assert_eq!(withdrawal.instance, page);
+    // The late answer (the OS passing it after the screen was gone) opens nothing.
+    let stale = d.effects.remove(1);
+    assert_eq!(stale.instance, page);
+    let late = d.try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+        instance: page,
+        event: Some(wire::ScreenEvent {
+            kind: Some(E::EffectResult(wire::EffectResult {
+                effect_id: stale.effect_id,
+                outcome: Some(passed(wire::Biometry::Face)),
+            })),
+        }),
+    }));
+    assert!(late.is_err(), "the closed screen takes no answer");
+    let state = session(
+        &d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
+    );
+    assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
+}
+
+#[test]
+fn a_prompt_answered_already_is_not_withdrawn_on_leaving() {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    let id = open_home(&mut d);
+    assert!(wall_of(&d, id).is_none());
+    let page = d.push(locker::TAB, routes::home(wire::LockerDestination::Items));
+    let before = d.effects.len();
+    d.pop(locker::TAB, page);
+    assert_eq!(
+        cancels(&d, before),
+        0,
+        "nothing was up, so nothing is withdrawn"
+    );
+}
+
+#[test]
+fn selecting_another_tab_drops_a_pending_unlock() {
+    let mut d = Driver::keyed(centraid_screens::Runtime::new(
+        locker::registry(),
+        vec![
+            (
+                locker::TAB.to_owned(),
+                routes::home(wire::LockerDestination::Items),
+            ),
+            ("elsewhere".to_owned(), routes::lock()),
+        ],
+    ));
+    login(&d, "i1", "Bank");
+    d.start();
+    let asked = d.effects.len();
+    assert!(asked >= 1);
+    let before = d.effects.len();
+    d.nav(wire::nav_event::Kind::SelectTab(wire::NavSelectTab {
+        tab: "elsewhere".to_owned(),
+    }));
+    assert_eq!(cancels(&d, before), 1);
+    let wall = wall_of(&d, home_instance(&d)).expect("a wall again");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    // THE ANSWER THAT LANDS AFTERWARDS IS DROPPED: the OS passing the check
+    // after the member left opens nothing.
+    d.answer_effect(passed(wire::Biometry::Face));
+    let state = session(
+        &d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
+    );
+    assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
 }

@@ -52,7 +52,7 @@ echo "$demo_out"
 # place_* below relaunches a DEBUG build with it; a release build never reads it.
 demo_seed="$(printf '%s\n' "$demo_out" | sed -n 's/^CENTRAID_DEMO_SEED=//p')"
 (cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging" \
-  --file work-vault.sqlite3 --name "Work" --only docs,tasks,agenda)
+  --file work-vault.sqlite3 --name "Work" --only docs,reminders,calendar)
 # ONE DIRECTORY PER VAULT, AND THE FILE IS `vault.db` (#1047, Q-1047-17).
 # `Shelf` adopts `<vault dir>/<name>/vault.db` and nothing else, because the
 # core keeps a vault's backup home beside its file and two files in one

@@ -1,12 +1,25 @@
 //! Health's fixed sentences (#1135). Every sentence a Health screen shows is one of these; the ones with a hole in them are filled with [`crate::strings::fill`].
 
 catalog! {
+    plain about_energy = ("Active energy is the energy you burn by moving, beyond resting.", "Active energy is the energy you burn by moving, beyond resting.");
+    plain about_exercise = ("Exercise counts the minutes of brisk activity in a day.", "Exercise counts the minutes of brisk activity in a day.");
+    plain about_heart = ("Resting heart rate is your pulse when you are still.", "Resting heart rate is your pulse when you are still.");
+    plain about_sleep = ("Your phone and watch time how long you are asleep.", "Your phone and watch time how long you are asleep.");
+    plain about_steps = ("Your phone and watch count steps as you walk.", "Your phone and watch count steps as you walk.");
+    plain about_title = ("About {metric}", "About {metric}");
+    plain about_weight = ("Weight is the figure from your scale or your entry in the health app.", "Weight is the figure from your scale or your entry in the health app.");
     plain app_title = ("Health", "Health");
+    plain average_label_day = ("Daily average", "Daily average");
+    plain average_label_latest = ("Latest", "Latest");
+    plain average_label_night = ("Nightly average", "Nightly average");
+    plain average_label_reading = ("Average", "Average");
     plain band_more = ("More", "More");
-    plain band_today = ("Today", "Today");
+    plain band_summary = ("Summary", "Summary");
     plain band_trends = ("Trends", "Trends");
     plain band_workouts = ("Workouts", "Workouts");
+    plain bucket_week_of = ("Week of {day}", "Week of {day}");
     plain caption_month = ("Last 30 days", "Last 30 days");
+    plain caption_six_months = ("Last 6 months", "Last 6 months");
     plain chart_spoken = ("{caption}, average {average}", "{caption}, average {average}");
     plain chip_cycle = ("Rides", "Rides");
     plain chip_hike = ("Hikes", "Hikes");
@@ -47,15 +60,18 @@ catalog! {
     plain denied_body = ("Health can’t read this vault.", "Health can’t read this vault.");
     plain denied_scope = ("Reading daily totals and workouts", "Reading daily totals and workouts");
     plain denied_title = ("Health is off", "Health is off");
-    plain duration_hours = ("{h} h {m} m", "{h} h {m} m");
-    plain duration_minutes = ("{m} m", "{m} m");
+    plain duration_hours = ("{h} h {m} min", "{h} h {m} min");
+    plain duration_minutes = ("{m} min", "{m} min");
     plain fact_above_days = ("Days above typical", "Days above typical");
     plain fact_above_months = ("Months above typical", "Months above typical");
+    plain fact_above_weeks = ("Weeks above typical", "Weeks above typical");
     plain fact_best_day = ("Best day", "Best day");
     plain fact_best_month = ("Best month", "Best month");
+    plain fact_best_week = ("Best week", "Best week");
     plain fact_count = ("{n} of {m}", "{n} of {m}");
     plain fact_lowest_day = ("Lowest day", "Lowest day");
     plain fact_lowest_month = ("Lowest month", "Lowest month");
+    plain fact_lowest_week = ("Lowest week", "Lowest week");
     plain fact_total = ("Total", "Total");
     plain figure_distance = ("Distance", "Distance");
     plain figure_elevation = ("Elevation gain", "Elevation gain");
@@ -64,7 +80,16 @@ catalog! {
     plain figure_moving = ("Moving time", "Moving time");
     plain figure_pace = ("Average pace", "Average pace");
     plain figure_time = ("Time", "Time");
-    plain hero_scale_middle = ("your typical day", "your typical day");
+    plain highlight_energy_less = ("Over the last 30 days you burned **{pct} less** active energy than the 30 days before.", "Over the last 30 days you burned **{pct} less** active energy than the 30 days before.");
+    plain highlight_energy_more = ("Over the last 30 days you burned **{pct} more** active energy than the 30 days before.", "Over the last 30 days you burned **{pct} more** active energy than the 30 days before.");
+    plain highlight_exercise_less = ("Over the last 30 days you exercised **{pct} less** than the 30 days before.", "Over the last 30 days you exercised **{pct} less** than the 30 days before.");
+    plain highlight_exercise_more = ("Over the last 30 days you exercised **{pct} more** than the 30 days before.", "Over the last 30 days you exercised **{pct} more** than the 30 days before.");
+    plain highlight_heart_down = ("Over the last 30 days your resting heart rate was **{pct} lower** than the 30 days before.", "Over the last 30 days your resting heart rate was **{pct} lower** than the 30 days before.");
+    plain highlight_heart_up = ("Over the last 30 days your resting heart rate was **{pct} higher** than the 30 days before.", "Over the last 30 days your resting heart rate was **{pct} higher** than the 30 days before.");
+    plain highlight_sleep_less = ("Over the last 30 days you slept **{pct} less** than the 30 days before.", "Over the last 30 days you slept **{pct} less** than the 30 days before.");
+    plain highlight_sleep_more = ("Over the last 30 days you slept **{pct} more** than the 30 days before.", "Over the last 30 days you slept **{pct} more** than the 30 days before.");
+    plain highlight_steps_less = ("Over the last 30 days you walked **{pct} less** than the 30 days before.", "Over the last 30 days you walked **{pct} less** than the 30 days before.");
+    plain highlight_steps_more = ("Over the last 30 days you walked **{pct} more** than the 30 days before.", "Over the last 30 days you walked **{pct} more** than the 30 days before.");
     plain home = ("Home", "Home");
     plain kind_all = ("All", "All");
     plain kind_cycle = ("Ride", "Ride");
@@ -83,6 +108,7 @@ catalog! {
     plain metric_foot_heart = ("Each day is {store}’s daily average.", "Each day is {store}’s daily average.");
     plain metric_foot_sleep = ("Each night counts on the day you woke.", "Each night counts on the day you woke.");
     plain metric_foot_weight = ("Each day shows its last weighing.", "Each day shows its last weighing.");
+    plain metric_read_only = ("Centraid reads it and never writes back.", "Centraid reads it and never writes back.");
     plain metric_resting_hr = ("Resting heart rate", "Resting heart rate");
     plain metric_sleep = ("Sleep", "Sleep");
     plain metric_steps = ("Steps", "Steps");
@@ -101,6 +127,7 @@ catalog! {
     plain range_days_30 = ("30 days", "30 days");
     plain range_days_90 = ("90 days", "90 days");
     plain range_month = ("Month", "Month");
+    plain range_six_months = ("6 months", "6 months");
     plain range_week = ("Week", "Week");
     plain range_year = ("Year", "Year");
     plain read_incomplete = ("Couldn’t read this page. Try again.", "Couldn’t read this page. Try again.");
@@ -118,6 +145,8 @@ catalog! {
     plain show_more = ("Show more", "Show more");
     plain span_hours = ("{h} h {m} min", "{h} h {m} min");
     plain span_minutes = ("{m} min", "{m} min");
+    plain spark_days = ("Last 7 days", "Last 7 days");
+    plain spark_nights = ("Last 7 nights", "Last 7 nights");
     plain stop_body = (
         "Health stops reading {store} on this phone. The days and workouts already here stay.",
         "Health stops reading {store} on this phone. The days and workouts already here stay."
@@ -128,17 +157,22 @@ catalog! {
     plain store_any = ("this phone’s health app", "this phone’s health app");
     plain store_apple_health = ("Apple Health", "Apple Health");
     plain store_health_connect = ("Health Connect", "Health Connect");
-    plain today_foot = ("Read from {store}", "Read from {store}");
-    plain today_metrics_heading = ("Against your own typical", "Against your own typical");
+    plain today_highlights_heading = ("Highlights", "Highlights");
+    plain today_metrics_heading = ("Pinned", "Pinned");
+    plain today_metrics_note = ("against your own typical", "against your own typical");
+    plain today_subtitle = ("{day} · read from {store}", "{day} · read from {store}");
     plain today_workouts_heading = ("Workouts today", "Workouts today");
     plain trend_spoken = ("{label}, {delta} against the period before", "{label}, {delta} against the period before");
     plain trends_compare_30 = ("Last 30 days, against the 30 days before", "Last 30 days, against the 30 days before");
     plain trends_compare_90 = ("Last 90 days, against the 90 days before", "Last 90 days, against the 90 days before");
     plain trends_compare_year = ("Last 12 months, against the year before", "Last 12 months, against the year before");
     plain trends_empty = ("Nothing to compare yet.", "Nothing to compare yet.");
-    plain typical = ("{value} typical", "{value} typical");
+    plain typical = ("Typical {value}", "Typical {value}");
+    plain typical_above = ("Above your typical {range}", "Above your typical {range}");
+    plain typical_below = ("Below your typical {range}", "Below your typical {range}");
     plain typical_line = ("typical", "typical");
-    plain typical_range = ("{low}–{high} typical", "{low}–{high} typical");
+    plain typical_range = ("Typical {low}–{high}", "Typical {low}–{high}");
+    plain typical_within = ("Within your typical {range}", "Within your typical {range}");
     plain unit_bpm = ("bpm", "bpm");
     plain unit_ft = ("ft", "ft");
     plain unit_kcal = ("kcal", "kcal");
@@ -154,6 +188,9 @@ catalog! {
     plain versus_about = ("About your typical", "About your typical");
     plain versus_above = ("{diff} above your typical", "{diff} above your typical");
     plain versus_below = ("{diff} below your typical", "{diff} below your typical");
+    plain versus_six_months_about = ("About the same as the 6 months before", "About the same as the 6 months before");
+    plain versus_six_months_above = ("{diff} above the 6 months before", "{diff} above the 6 months before");
+    plain versus_six_months_below = ("{diff} below the 6 months before", "{diff} below the 6 months before");
     plain versus_year_about = ("About the same as the year before", "About the same as the year before");
     plain versus_year_above = ("{diff} above the year before", "{diff} above the year before");
     plain versus_year_below = ("{diff} below the year before", "{diff} below the year before");

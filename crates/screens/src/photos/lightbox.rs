@@ -53,6 +53,8 @@ use super::{editor, fetch, media, routes};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
+use crate::kit::civil::HourCycle;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
@@ -86,6 +88,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         fetching: false,
         dismissed: false,
         pending: VecDeque::new(),
+        links: Links::new(&[Kind::Person]),
     }))
 }
 
@@ -121,6 +124,8 @@ struct Detail {
     trashed: bool,
     tags: Vec<wire::PhotosTag>,
     place: Option<wire::PhotosPlaceCard>,
+    /// Who the member says is in it (`people.links`), tagged by hand.
+    people: Vec<wire::PeopleLinked>,
 }
 
 enum Content {
@@ -166,6 +171,8 @@ struct Lightbox {
     fetching: bool,
     dismissed: bool,
     pending: VecDeque<Pending>,
+    /// The people picker (#1173).
+    links: Links,
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -196,11 +203,21 @@ impl Lightbox {
                         self.content = Content::Failed;
                         return Vec::new();
                     };
+                    let people = match links::read_people(ctx, &self.photo_id) {
+                        Reading::Data(people) => people,
+                        _ => match &self.content {
+                            Content::Data(old) if old.cell.photo_id == cell.photo_id => {
+                                old.people.clone()
+                            }
+                            _ => Vec::new(),
+                        },
+                    };
                     self.content = Content::Data(Box::new(Detail {
                         cell,
                         trashed: detail.trashed,
                         tags: detail.tags,
                         place: detail.place,
+                        people,
                     }));
                 }
                 // No such photograph: gone (deleted forever here or elsewhere).
@@ -397,6 +414,43 @@ impl Lightbox {
         }
     }
 
+    fn people_ids(&self) -> Vec<String> {
+        self.detail()
+            .map(|d| d.people.iter().map(|p| p.party_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// One event of the "People in this photo" section or its picker.
+    fn people_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.people_ids();
+        let id = self.photo_id.clone();
+        match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id: person, .. } => {
+                self.write(
+                    ctx,
+                    "add-person",
+                    &[&id, &person],
+                    act::photos::AddPerson {
+                        from: id.clone(),
+                        to: person.clone(),
+                    },
+                );
+            }
+            Outcome::Remove { id: person } => {
+                self.write(
+                    ctx,
+                    "remove-person",
+                    &[&id, &person],
+                    act::photos::RemovePerson {
+                        from: id.clone(),
+                        to: person.clone(),
+                    },
+                );
+            }
+            Outcome::Moved => {}
+        }
+    }
+
     fn detail(&self) -> Option<&Detail> {
         match &self.content {
             Content::Data(detail) => Some(detail),
@@ -495,7 +549,14 @@ impl Lightbox {
                 }
             }
             V::DeleteForever => self.confirm = true,
-            V::Info => self.sheet = Sheet::Info,
+            // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
+            V::Info => {
+                self.sheet = if self.sheet == Sheet::Info {
+                    Sheet::None
+                } else {
+                    Sheet::Info
+                };
+            }
             // WHICH LOCATION TRAVELS IS ASKED ONLY OF A PHOTOGRAPH THAT HAS ONE;
             // without a place there is nothing to choose and the copy goes out bare.
             V::Share | V::SendCopy => {
@@ -713,7 +774,12 @@ impl Lightbox {
         tile
     }
 
-    fn photo(&self, detail: &Detail, locale: Locale) -> wire::PhotosLightboxPhoto {
+    fn photo(
+        &self,
+        detail: &Detail,
+        locale: Locale,
+        cycle: HourCycle,
+    ) -> wire::PhotosLightboxPhoto {
         let cell = &detail.cell;
         let tile = self.tile(cell, locale);
         let held = Held::try_from(tile.held).unwrap_or(Held::Unspecified);
@@ -743,7 +809,7 @@ impl Lightbox {
         let clock = cell
             .taken_at
             .as_deref()
-            .map(|at| cells::capture_clock(at, offset))
+            .map(|at| cells::capture_clock(locale, at, offset, cycle))
             .unwrap_or_default();
         let stamp_line = [clock.clone(), place_name.clone()]
             .into_iter()
@@ -842,6 +908,18 @@ impl Lightbox {
                 String::new()
             },
             labels,
+            people: Some({
+                let mut section = self.links.section(
+                    locale,
+                    crate::strings::links::section_people_in_photo(locale),
+                    links::person_rows(locale, &detail.people),
+                    String::new(),
+                );
+                if detail.trashed {
+                    section.adds.clear();
+                }
+                section
+            }),
             has_place: detail.place.is_some(),
             place_phrase: detail
                 .place
@@ -932,7 +1010,15 @@ fn export_sentence(
     }
 }
 
-/// THE BOTTOM ROW AND THE MORE SHEET, as data: every verb live or visibly
+/// What the screen's state adds to the verbs: whether a slideshow has somewhere to go, and whether
+/// the details are open (the (i) key is drawn pressed).
+#[derive(Clone, Copy)]
+struct Offers {
+    slideshow: bool,
+    info_open: bool,
+}
+
+/// THE BOTTOM ROW AND THE "…" MENU, as data: every verb live or visibly
 /// refused with the reason that says which. `refusal` is the write ladder's,
 /// `edit` the editor's.
 fn verbs(
@@ -942,7 +1028,7 @@ fn verbs(
     edit: Option<&str>,
     photo_id: &str,
     album_id: &str,
-    can_slideshow: bool,
+    offers: Offers,
 ) -> (Vec<wire::PhotosLightboxVerb>, Vec<wire::PhotosLightboxVerb>) {
     let verb = |kind: V, label: String, icon: &str, why: Option<&str>, on: bool| {
         wire::PhotosLightboxVerb {
@@ -1007,7 +1093,13 @@ fn verbs(
             refusal,
             cell.favorite,
         ),
-        verb(V::Info, words::photos_info(locale), "info", None, false),
+        verb(
+            V::Info,
+            words::photos_info(locale),
+            "info",
+            None,
+            offers.info_open,
+        ),
         edit_verb,
         verb(
             V::Archive,
@@ -1029,7 +1121,7 @@ fn verbs(
         ),
     ];
     let mut menu = Vec::new();
-    if can_slideshow {
+    if offers.slideshow {
         menu.push(verb(
             V::Slideshow,
             words::photos_slideshow(locale),
@@ -1131,6 +1223,7 @@ impl Screen for Lightbox {
                         }
                     }
                     K::AlbumChoice(album) => self.album_event(&album, ctx),
+                    K::People(link) => self.people_event(&link, ctx),
                     K::Share(chosen) => {
                         self.sheet = Sheet::None;
                         let precision =
@@ -1279,7 +1372,9 @@ impl Screen for Lightbox {
                 body: own::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
             }),
-            Content::Data(detail) => C::Photo(Box::new(self.photo(detail, locale))),
+            Content::Data(detail) => {
+                C::Photo(Box::new(self.photo(detail, locale, ctx.hour_cycle())))
+            }
         };
         let refusal = self.refusal(locale);
         let edit = self
@@ -1293,7 +1388,10 @@ impl Screen for Lightbox {
             edit.as_deref(),
             &self.photo_id,
             &self.album_id,
-            self.neighbours.len() > 1,
+            Offers {
+                slideshow: self.neighbours.len() > 1,
+                info_open: self.sheet == Sheet::Info,
+            },
         );
         let at = self.position();
         let neighbour = |index: Option<usize>| {
@@ -1331,6 +1429,7 @@ impl Screen for Lightbox {
             slideshow_line: words::photos_slideshow_line(locale),
             status: self.status.clone(),
             album_choice: Some(self.albums.view(locale, Link::default())),
+            people_picker: Some(self.links.picker(locale, &self.people_ids())),
             place_choices: self.place_choices(locale),
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::photos_delete_forever_one(locale),
@@ -1410,7 +1509,10 @@ impl Lightbox {
             edit.as_deref(),
             &self.photo_id,
             &self.album_id,
-            self.neighbours.len() > 1,
+            Offers {
+                slideshow: self.neighbours.len() > 1,
+                info_open: self.sheet == Sheet::Info,
+            },
         );
         toolbar
             .iter()

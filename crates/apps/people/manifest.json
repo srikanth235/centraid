@@ -56,12 +56,27 @@
       },
       {
         "schema": "vault",
+        "table": "txn",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "vault",
         "verbs": "read"
       },
       {
         "schema": "person",
         "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "import_vcf",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "export_vcf",
         "verbs": "act"
       },
       {
@@ -1489,6 +1504,75 @@
           }
         }
       }
+    },
+    {
+      "name": "import-vcf",
+      "verb": "log",
+      "bulk": true,
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "person.import_vcf",
+      "phrasings": [
+        "import my contacts file",
+        "bring in this vcf",
+        "import vCards"
+      ],
+      "description": "Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "string",
+            "description": "The text of one or more .vcf files."
+          },
+          "dry_run": { "type": "boolean" },
+          "merge": { "type": "boolean" }
+        },
+        "required": ["cards"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "export-vcf",
+      "verb": "log",
+      "bulk": true,
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "person.export_vcf",
+      "phrasings": [
+        "export my people as vcf",
+        "save a list as vCards",
+        "back up my contacts to a file"
+      ],
+      "description": "Answer everyone, or one list's people, as vCards in one file through person.export_vcf. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] }
+        },
+
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      }
     }
   ],
   "queries": [
@@ -1629,6 +1713,35 @@
       "input": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "links",
+      "kind": "person",
+      "figures": ["people"],
+      "description": "The people one transaction, document or photograph is joined to by hand, in name order: a payment's `with`, a document's `about`, a photograph's `depicts`. A person in the trash is left out; a Locker item's links are Locker's own read and never answered here.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the transaction, document or photograph."
+          }
+        },
+        "required": ["entity_id"],
         "additionalProperties": false
       },
       "output": {

@@ -652,3 +652,140 @@ fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
         "Reminder off · Birthday"
     );
 }
+
+fn hero_keys(d: &Driver, i: u64) -> Vec<String> {
+    person_data(d.view(i))
+        .hero
+        .iter()
+        .map(|action| action.key.clone())
+        .collect()
+}
+
+fn hero_tap(d: &mut Driver, i: u64, key: &str) -> wire::ScreenUpdate {
+    d.send(
+        i,
+        wire::screen_event::Kind::PeoplePerson(wire::PeoplePersonEvent {
+            kind: Some(P::Hero(ev::HeroTapped {
+                key: key.to_owned(),
+            })),
+        }),
+    )
+}
+
+#[test]
+fn the_hero_reaches_the_preferred_phone_and_the_email_and_log_opens_its_sheet() {
+    use wire::effect::Kind as K;
+    let mut d = clean();
+    let (i, _) = opened(&mut d);
+    assert_eq!(hero_keys(&d, i), ["message", "call", "mail", "log"]);
+    let effect = |update: wire::ScreenUpdate| update.effects[0].effect.clone().expect("an effect");
+    assert_eq!(
+        effect(hero_tap(&mut d, i, "message")).kind,
+        Some(K::OpenUrl(wire::OpenUrl {
+            url: "sms:+442079460000".into()
+        }))
+    );
+    assert_eq!(
+        effect(hero_tap(&mut d, i, "call")).kind,
+        Some(K::OpenUrl(wire::OpenUrl {
+            url: "tel:+442079460000".into()
+        }))
+    );
+    assert_eq!(
+        effect(hero_tap(&mut d, i, "mail")).kind,
+        Some(K::OpenUrl(wire::OpenUrl {
+            url: "mailto:dana@example.com".into()
+        }))
+    );
+    // An unknown action is nothing; Log a touch opens the sheet and asks the OS for nothing.
+    assert!(hero_tap(&mut d, i, "fax").effects.is_empty());
+    assert!(person_state(d.view(i)).sheet.is_none());
+    assert!(hero_tap(&mut d, i, "log").effects.is_empty());
+    let Some(wire::people_person_sheet::Kind::LogTouch(_)) = &sheet_of_view(d.view(i)).kind else {
+        panic!("the Log a touch sheet is up");
+    };
+}
+
+#[test]
+fn a_person_with_no_phone_or_email_is_offered_log_a_touch_alone() {
+    let mut d = clean();
+    let id = person(&d, "Bea Okafor");
+    let i = open_person(&mut d, &id, "Bea Okafor");
+    assert_eq!(hero_keys(&d, i), ["log"]);
+    // A tap on what is not offered asks the OS for nothing.
+    for key in ["message", "call", "mail"] {
+        assert!(hero_tap(&mut d, i, key).effects.is_empty(), "{key}");
+    }
+}
+
+#[test]
+fn in_your_vault_lists_a_task_about_the_person_in_agendas_own_page_and_colour() {
+    let mut d = clean();
+    let id = person(&d, "Ada Lovelace");
+    let task = arrange(
+        &d,
+        act::people::AddTask {
+            id: id.clone(),
+            text: "Send Ada the book".to_owned(),
+        },
+    );
+    let i = open_person(&mut d, &id, "Ada Lovelace");
+    let data = person_data(d.view(i));
+    assert_eq!(data.vault_head.as_ref().unwrap().title, "In your vault");
+    assert_eq!(data.vault_head.as_ref().unwrap().count, 1);
+    assert_eq!(data.vault.len(), 1);
+    let row = &data.vault[0];
+    assert_eq!(
+        (
+            row.app_key.as_str(),
+            row.kind_label.as_str(),
+            row.title.as_str()
+        ),
+        ("reminders", "Task", "Send Ada the book")
+    );
+    let task: serde_json::Value = serde_json::from_slice(&task.output).unwrap();
+    assert_eq!(row.id, task["task_id"].as_str().unwrap());
+    assert_eq!(row.route.as_ref().unwrap().screen, "reminders.task");
+    assert!(data.vault_more.is_empty());
+    // The follow-up is also the person's own, and a person with nothing else has none.
+    let other = person(&d, "Bea Okafor");
+    let j = open_person(&mut d, &other, "Bea Okafor");
+    assert!(person_data(d.view(j)).vault.is_empty());
+}
+
+#[test]
+fn my_card_is_the_owner_s_own_sheet_and_offers_no_star_merge_trash_or_touch() {
+    let mut d = clean();
+    let owner = roster_of(&d).owner.expect("the vault has an owner");
+    let i = open_person(&mut d, &owner.party_id, &owner.name);
+    let data = person_data(d.view(i));
+    assert!(data.is_me);
+    assert_eq!(data.my_card_label, "My card");
+    assert!(data.hero.is_empty() && data.due_chip.is_none());
+    assert_eq!(data.party_id, owner.party_id);
+    // The writes that are about someone else are not made on it.
+    for event in [
+        P::Star(ev::StarToggled {}),
+        P::TrashTapped(ev::TrashTapped {}),
+        P::SheetOpened(ev::SheetOpened {
+            which: ev::sheet_opened::Which::Merge as i32,
+        }),
+        P::SheetOpened(ev::SheetOpened {
+            which: ev::sheet_opened::Which::LogTouch as i32,
+        }),
+    ] {
+        send_person(&mut d, i, event);
+        let state = person_state(d.view(i));
+        assert!(state.sheet.is_none() && state.confirm.is_none() && !state.done);
+        assert!(!person_data(d.view(i)).starred);
+    }
+    // Your own notes and dates are still yours to write.
+    send_person(
+        &mut d,
+        i,
+        P::SheetOpened(ev::SheetOpened {
+            which: ev::sheet_opened::Which::Note as i32,
+        }),
+    );
+    assert!(person_state(d.view(i)).sheet.is_some());
+}

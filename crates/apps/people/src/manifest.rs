@@ -46,11 +46,11 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_twenty_seven_actions() {
+    fn it_declares_six_queries_and_twenty_nine_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 27);
-        for name in ["people", "person", "dashboard", "search", "trash"] {
+        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.actions.len(), 29);
+        for name in ["people", "person", "dashboard", "search", "trash", "links"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
         // The Journal is Notes': People writes an entry and Notes shows it.
@@ -98,16 +98,16 @@ mod tests {
         }
     }
 
-    /// THIRTY-FIVE SCOPES: ten reads of the vault's own tables and one `act`
+    /// THIRTY-SIX SCOPES: eleven reads of the vault's own tables and one `act`
     /// per command the actions invoke. The `act` half is compared against the
     /// action table rather than transcribed: an action with no scope is an
     /// action the grant does not cover, and a scope with no action is reach
     /// nothing uses.
     #[test]
-    fn it_declares_ten_reads_and_one_act_scope_per_command() {
+    fn it_declares_eleven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 35);
+        assert_eq!(vault.scopes.len(), 38);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -133,7 +133,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 10);
+        assert_eq!(reads.len(), 11);
         // NOTHING WIDER and nothing revealed: no whole-schema grant, and
         // `reveal` is Locker's alone.
         assert!(

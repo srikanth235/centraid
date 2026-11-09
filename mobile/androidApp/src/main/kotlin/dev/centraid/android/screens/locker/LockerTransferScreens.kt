@@ -25,6 +25,11 @@ import centraid.core.v1.LockerImportEvent
 import centraid.core.v1.LockerImportState
 import centraid.core.v1.LockerWallEvent
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
@@ -73,29 +78,37 @@ internal fun LockerExportScreen(
             ) { export ->
                 LazyColumn(Modifier.fillMaxSize().testTag("locker-export")) {
                     item(key = "lede") {
-                        Text(
+                        KitText(
                             export.lede,
-                            style = centraidType("body"),
-                            color = centraidColor("net"),
+                            KitType.Row,
+                            StateColor.Red.text,
                             modifier = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).testTag("locker-export-lede"),
                         )
                     }
-                    item(key = "what") { FieldRow(export.what_label, export.what_value, note = export.leaves_out) }
-                    item(key = "format") {
-                        Column(Modifier.padding(top = 8.dp)) {
-                            Text(
-                                export.format_label,
-                                style = centraidType("eyebrow"),
-                                color = centraidColor("textSoft"),
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
-                            )
-                            LockerChoices(export.formats, "locker-export-format") { key ->
-                                onEvent(LockerExportEvent(format = LockerExportEvent.FormatPicked(key = key)))
+                    // THE THREE FACTS ARE ONE WHITE CARD: what leaves, the format, where it goes.
+                    item(key = "facts") {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = KitGeometry.GUTTER - 6.dp)
+                                .kitCard(),
+                        ) {
+                            FieldRow(export.what_label, export.what_value, note = export.leaves_out)
+                            Column(Modifier.padding(top = 8.dp)) {
+                                KitText(
+                                    export.format_label,
+                                    KitType.Meta,
+                                    Surface.meta,
+                                    Modifier.padding(horizontal = KitGeometry.GUTTER),
+                                )
+                                LockerChoices(export.formats, "locker-export-format") { key ->
+                                    onEvent(LockerExportEvent(format = LockerExportEvent.FormatPicked(key = key)))
+                                }
+                                LockerNote(export.format_note)
                             }
-                            LockerNote(export.format_note)
+                            FieldRow(export.where_label, export.where_value, note = export.where_note)
                         }
                     }
-                    item(key = "where") { FieldRow(export.where_label, export.where_value, note = export.where_note) }
                     item(key = "commit") {
                         if (export.commit_label.isNotEmpty()) {
                             InkButton(

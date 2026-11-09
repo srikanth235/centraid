@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar month view (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: flex-start; justify-content: flex-end; padding: 56px 20px 0;">
+    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Calendar</h1>
+    <button aria-label="New event" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #3077CD; display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+  
+
+  <div style="margin: 2px 20px 0; font-size: 13px; color: #A39E95;">November 2026 · 8 events</div>
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 20px 8px;">
+    <button aria-label="View: Month" style="height: 44px; padding: 0 12px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600;">Month <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A39E95" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div style="display: flex; gap: 8px;"><button aria-label="Previous month" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><button aria-label="Next month" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 0 12px; text-align: center;">
+    <span style="font-size: 12px; color: #A39E95;">M</span><span style="font-size: 12px; color: #A39E95;">T</span><span style="font-size: 12px; color: #A39E95;">W</span><span style="font-size: 12px; color: #A39E95;">T</span><span style="font-size: 12px; color: #A39E95;">F</span><span style="font-size: 12px; color: #75716A;">S</span><span style="font-size: 12px; color: #75716A;">S</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 4px 12px 0; text-align: center;">
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">26</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">27</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">28</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">29</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">30</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">31</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">1</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">2</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">3</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">4</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">5</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">6</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">7</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">8</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="width: 34px; height: 34px; border-radius: 17px; background: #3077CD; color: #FFFFFF; font-weight: 600; display: flex; align-items: center; justify-content: center;">9</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">10</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">11</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">12</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">13</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">14</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">15</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">16</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">17</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">18</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">19</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">20</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">21</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">22</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">23</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">24</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">25</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">26</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #F2EFEA;">27</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">28</span></div>
+    <div style="height: 70px; display: flex; flex-direction: column; align-items: center; padding-top: 6px; font-size: 17px; border-top: 1px solid #2C2A27;"><span style="color: #75716A;">29</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

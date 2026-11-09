@@ -28,15 +28,19 @@ enum RustScreens {
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
 /// push, so two pushes of the same route are two entries.
-struct RustEntry: Hashable {
+struct RustEntry: Hashable, Identifiable {
     let token: Int
+    var id: Int { token }
     let route: Centraid_Core_V1_Route
+    /// The tab whose stack holds it: Home's for a page, the place the member was in for a sheet
+    /// (a sheet opened from Chat must not select Home under itself).
+    var tab: String = RustScreens.homeTab
 
     @MainActor private static var last = 0
 
-    @MainActor static func make(_ route: Centraid_Core_V1_Route) -> RustEntry {
+    @MainActor static func make(_ route: Centraid_Core_V1_Route, tab: String = RustScreens.homeTab) -> RustEntry {
         last += 1
-        return RustEntry(token: last, route: route)
+        return RustEntry(token: last, route: route, tab: tab)
     }
 }
 
@@ -67,6 +71,10 @@ struct RustScreenView: View {
 
     /// This entry leaves the stack (a finished screen, a back control).
     private func pop() {
+        if let entry, shell.sheet == entry {
+            shell.sheet = nil
+            return
+        }
         guard let entry, shell.path.last == .rust(entry) else { return }
         shell.path.removeLast()
     }
@@ -90,7 +98,31 @@ struct RustScreenView: View {
     /// THE SCREEN, SHIELDED while Rust holds a `ScreenshotShield` for it: always wrapped, so the
     /// view keeps its identity (and its state) as the shield goes on and off.
     var body: some View {
-        WordsShield(secure: store.shielded.contains(instance)) { screen }
+        WordsShield(secure: store.shielded.contains(instance)) {
+            if appId.isEmpty {
+                screen
+            } else {
+                screen.appAccent(appId)
+            }
+        }
+        .environment(\.placeHome, { shell.popToRoot() })
+    }
+
+    /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets
+    /// it presents) wears that app's colour, not the shell's. A page that is no app's (Settings,
+    /// Backup, search, the words) stays the shell's; a view that states its own accent still wins.
+    private var appId: String {
+        switch store.views[instance]?.kind {
+        case .photosHome?, .photosShelf?, .photosPicker?, .photosPlaces?, .photosLightbox?, .photosEditor?: "photos"
+        case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
+        case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
+             .moneyCategories?, .moneyImport?, .moneySearch?: "money"
+        case .docsDrive?, .docsDocument?, .docsVersions?, .docsEditor?: "docs"
+        case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
+        case .notesHome?, .notesEditor?, .notesHistory?: "notes"
+        case .peopleHome?, .peoplePerson?, .peopleEditor?: "people"
+        default: ""
+        }
     }
 
     @ViewBuilder
@@ -130,6 +162,14 @@ struct RustScreenView: View {
                 open: open,
                 onCancel: pop
             )
+        // SETTINGS (#1173): a page pushed from Home.
+        case .settings(let state)?:
+            SettingsView(
+                state: state,
+                send: { store.send(instance, .settings($0)) },
+                open: open,
+                onBack: pop
+            )
         case .agendaHome(let state)?:
             AgendaHomeView(
                 state: state,
@@ -144,12 +184,14 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("calendar"))
         case .agendaEditor(let state)?:
             AgendaEditorView(
                 state: state,
                 send: { store.send(instance, .agendaEditor($0)) },
                 onDone: pop
             )
+            .environment(\.appAccent, AppAccent("calendar"))
         case .todoList(let state)?:
             TodoListView(
                 state: state,
@@ -157,6 +199,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoProject(let state)?:
             TodoProjectView(
                 state: state,
@@ -164,6 +207,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoDetail(let state)?:
             TodoDetailView(
                 state: state,
@@ -171,6 +215,7 @@ struct RustScreenView: View {
                 open: open,
                 onClose: pop
             )
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoCatchUp(let state)?:
             TodoCatchUpView(
                 state: state,
@@ -178,6 +223,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .environment(\.appAccent, AppAccent("reminders"))
         case .backupHome(let state)?:
             BackupHomeView(
                 state: state,
@@ -409,11 +455,19 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+            .appAccent("people")
         case .peopleEditor(let state)?:
             PeopleEditorView(
                 state: state,
                 send: { store.send(instance, .peopleEditor($0)) },
                 onClose: pop
+            )
+            .appAccent("people")
+        case .transfer(let state)?:
+            CoreTransferView(
+                state: state,
+                send: { store.send(instance, .transfer($0)) },
+                onBack: pop
             )
         case .trash(let state)?:
             CoreTrashView(

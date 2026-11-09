@@ -49,17 +49,17 @@ internal object MoneyGeometry {
     fun chartSummary(spokenMonths: List<String>): String = spokenMonths.joinToString(SUMMARY_JOINER)
 
     /** The three figure columns of a category line. */
-    data class CategoryFigures(val planned: String, val spent: String, val left: String)
+    data class CategoryFigures(val planned: String, val spent: String, val remaining: String)
 
     /**
      * PLANNED · SPENT · LEFT for one line: a line with no plan has only what was
      * spent, a dash standing for planned and for left.
      */
-    fun categoryFigures(hasPlan: Boolean, planned: String, spent: String, left: String): CategoryFigures =
+    fun categoryFigures(hasPlan: Boolean, planned: String, spent: String, remaining: String): CategoryFigures =
         CategoryFigures(
             planned = if (hasPlan) planned else DASH,
             spent = spent,
-            left = if (hasPlan) left else DASH,
+            remaining = if (hasPlan) remaining else DASH,
         )
 
     /** The Needs row's right-hand words: each currency's amount, in the state's order. */

@@ -88,7 +88,7 @@ message PeopleHomeState {
   // Search is the field under the title; while a term is answered its rows
   // replace the surface.
   PeopleSearchState search = 12;
-  // SHEET_MORE's rows: Trash alone (R-CHROME-4).
+  // SHEET_MORE's rows: Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
   repeated PeopleMoreRow more_rows = 13;
   Sheet sheet = 14;
   // What a write did, a refusal's sentence, or how an import went; the screen
@@ -100,6 +100,9 @@ message PeopleHomeState {
   // counts (All · Starred · Overdue, one picked) and its order (Recently added ·
   // Name). Unset on Touch, over search and while denied.
   optional FilterMenu filter_menu = 18;
+  // THE "PHONE CONTACTS" ROW OF MORE (#1173, item 20): what People may read of the address
+  // book, drawn above the rows. Unset while denied.
+  optional PeopleContactsRow contacts = 19;
 
   enum Sheet {
     // No sheet is open.
@@ -111,12 +114,36 @@ message PeopleHomeState {
   }
 }
 
+// What People may read of the phone's address book: whether it follows, how many it follows,
+// when it last looked, and the one action that fits (pause, resume, turn on, or Settings when
+// the phone refused access).
+message PeopleContactsRow {
+  // "Phone contacts".
+  string title = 1;
+  State state = 2;
+  // "On", "Paused", "Off", "No access".
+  string state_label = 3;
+  // "12 followed · Updated 3 min ago", or empty.
+  string detail = 4;
+  // "Pause", "Resume", "Turn on" or "Settings"; the tap is `contacts_action`.
+  string action_label = 5;
+  string accessibility_label = 6;
+
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_FOLLOWING = 1;
+    STATE_PAUSED = 2;
+    STATE_OFF = 3;
+    STATE_DENIED = 4;
+  }
+}
+
 // One tab of People's band: `people`, `touch`, `more` (an ordinary tab, last,
 // whose tap opens SHEET_MORE).
 message PeopleBandTab {
   string key = 1;
   string label = 2;
-  // A `design/native-catalog.json` icon key.
+  // A `design/icons.toml` icon key.
   string icon_key = 3;
   bool current = 4;
 }
@@ -170,6 +197,8 @@ message PeopleRow {
 }
 
 message PeopleRosterData {
+  // The flat list, in the requested order. EMPTY while `sections` holds the rows: under the
+  // Name order the roster is A to Z (#1173).
   repeated PeopleRow rows = 1;
   // Set exactly when `rows` is empty: day one (with "Add person" and the
   // phone's contacts), or the chip's own sentence.
@@ -177,6 +206,55 @@ message PeopleRosterData {
   // "12 people · 3 to reconnect · 2 starred" ("shown" when truncated).
   string status_line = 3;
   bool truncated = 4;
+  // A TO Z (#1173): under the Name order, the rows in letter sections (A to Z, then "#" for
+  // a name that starts with no Latin letter), the core's order kept inside each.
+  repeated PeopleSection sections = 5;
+  // The index beside the list: A to Z and "#", every letter, the ones with no people dimmed.
+  // Set with `sections`.
+  repeated PeopleIndexLetter index = 6;
+  // MY CARD: the owner's own card, above the list under the All filter and the Name or
+  // Recent order alike. ABSENT when the vault names no owner, or a filter narrows the list.
+  optional PeopleMyCard my_card = 7;
+  // "3 to reconnect · Dana is 26 days over", over the list under the All filter. ABSENT when
+  // nobody is overdue. A tap is the band's Touch.
+  optional PeopleReconnectLine reconnect = 8;
+}
+
+// One letter's people.
+message PeopleSection {
+  // "A" to "Z", or "#".
+  string key = 1;
+  string title = 2;
+  repeated PeopleRow rows = 3;
+}
+
+// One letter of the index.
+message PeopleIndexLetter {
+  string letter = 1;
+  // The section a tap jumps to: this letter's, else the next letter that has people (the
+  // last section for a letter past the end).
+  string section_key = 2;
+  // False for a letter with no people: drawn dim, and still a stop.
+  bool has_rows = 3;
+  string accessibility_label = 4;
+}
+
+message PeopleMyCard {
+  string party_id = 1;
+  string name = 2;
+  PeopleAvatar avatar = 3;
+  // "My card".
+  string label = 4;
+  string accessibility_label = 5;
+  Route route = 6;
+}
+
+message PeopleReconnectLine {
+  // "3 to reconnect · Dana is 26 days over".
+  string text = 1;
+  // "Touch".
+  string action_label = 2;
+  string accessibility_label = 3;
 }
 
 // A count tile on Touch. `tappable` false draws a figure, not a control.
@@ -288,6 +366,8 @@ message PeopleHomeEvent {
     // ---- the header's filter menu ----
     FilterMenuPicked filter_menu_picked = 13;
     FilterMenuCleared filter_menu_cleared = 14;
+    // The Phone contacts row's one action: pause, resume, turn on, or open Settings.
+    ContactsActionTapped contacts_action = 15;
   }
 
   // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
@@ -322,6 +402,8 @@ message PeopleHomeEvent {
   }
 
   message ImportContactsTapped {}
+
+  message ContactsActionTapped {}
 }
 
 // ---------------------------------------------------------------------------
@@ -363,15 +445,17 @@ message PeoplePersonState {
 
 message PeoplePersonChrome {
   string edit = 1;
-  string log_touch = 2;
-  string add_note = 3;
-  string add_date = 4;
-  string add_channel = 5;
+  // 2 to 5 were `log_touch`, `add_note`, `add_date` and `add_channel`, the verb strip's words
+  // (#1173): Log a touch is the hero's, and each add is its section head's `verb_label`.
+  reserved 2, 3, 4, 5;
+  reserved "log_touch", "add_note", "add_date", "add_channel";
   string merge = 6;
   string move_to_trash = 7;
   string retry = 8;
   string loading = 9;
   string back = 10;
+  // "More": the label of the glass key that holds Star, Merge and Move to trash.
+  string more = 11;
 }
 
 // A label and a value on the sheet: "Nickname", "How you met".
@@ -462,6 +546,47 @@ message PeoplePersonData {
   // The relationships, both directions; the section draws only when there are some (#1146 D8).
   PeopleSectionHead relations_head = 22;
   repeated PeopleRelationRow relations = 23;
+  // THE HERO'S ACTIONS (#1173): Message and Call when they have a phone, Mail when they have
+  // an email, and Log a touch. Only the ones the person's data allows, in that order; none
+  // on the owner's own card.
+  repeated PeopleHeroAction hero = 24;
+  // "In your vault": what else in the vault is about this person, from other apps. The head's
+  // count is the total (shown and not). Draws only when there are items.
+  PeopleSectionHead vault_head = 25;
+  repeated PeopleVaultRow vault = 26;
+  // "and 3 more", or empty.
+  string vault_more = 27;
+  // This is the owner's own card (My card): no star, merge, trash, touch or cadence.
+  bool is_me = 28;
+  // "My card", on the owner's own card.
+  string my_card_label = 29;
+}
+
+message PeopleHeroAction {
+  // `message`, `call`, `mail` or `log`.
+  string key = 1;
+  // "message", "call", "mail", "log touch".
+  string label = 2;
+  // "Message Ada" and so on.
+  string accessibility_label = 3;
+  string icon_key = 4;
+  // The one filled action: Log a touch.
+  bool primary = 5;
+}
+
+message PeopleVaultRow {
+  string id = 1;
+  // The app the item belongs to (`agenda`, `notes`, `docs`, `money`, `photos`): the shell draws the kind word in that
+  // app's colour.
+  string app_key = 2;
+  // "Event", "Task", "Note", "Doc", "Payment", "Photo".
+  string kind_label = 3;
+  string title = 4;
+  // "Sat 7 Nov, 12:30", "3 days ago", or empty.
+  string when_label = 5;
+  string accessibility_label = 6;
+  // The item's page in its own app.
+  Route route = 7;
 }
 
 message PeopleRelationRow {
@@ -585,6 +710,12 @@ message PeoplePersonEvent {
     Dismissed dismissed = 15;
     // A channel row's tap: Rust asks the OS to call, mail, map or copy it.
     ChannelTapped channel = 16;
+    // A hero action by `PeopleHeroAction.key`.
+    HeroTapped hero = 17;
+  }
+
+  message HeroTapped {
+    string key = 1;
   }
 
   message Refreshed {}

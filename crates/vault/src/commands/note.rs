@@ -27,10 +27,15 @@
 //! nothing and nothing re-resolves it later; a title that names several things
 //! links every one, because the text carries the title and not the id.
 //!
-//! A memo (a note with an `about` edge) is neither a target of a wikilink nor a
-//! shelf note: it belongs to what it is about, and Notes shows it in the Journal.
+//! A journal entry (a note about the owner) is neither a target of a wikilink nor a shelf
+//! note: Notes shows it in the Journal. A note about anything else is the member's note,
+//! and a link may name it.
 
 use std::collections::BTreeSet;
+
+use rusqlite::OptionalExtension;
+
+use crate::commands::tag::{ensure_concept, next_color, set_tagged};
 
 use crate::commands::entity::lookup_live;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
@@ -309,7 +314,8 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
           WHERE e.kind IN ({linkable}) AND e.deleted_at IS NULL AND e.id <> ?1
             AND lower(e.title) = lower(?2)
             AND NOT (e.kind = 'note'
-                     AND EXISTS (SELECT 1 FROM edge m WHERE m.from_id = e.id AND m.rel = 'about'))
+                     AND EXISTS (SELECT 1 FROM edge m WHERE m.from_id = e.id AND m.rel = 'about'
+                                    AND m.to_id = (SELECT self_id FROM vault)))
           ORDER BY e.n"
     ))?;
     let mut linked: BTreeSet<String> = BTreeSet::new();
@@ -340,6 +346,303 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Import and export (#1173, item 14)
+// ---------------------------------------------------------------------------
+
+use crate::commands::note_portable::{self as portable, Entry, Parsed, SourceFile};
+
+/// The most files one import takes.
+const IMPORT_MAX_FILES: usize = 5_000;
+
+/// The files, as an array or (how a screen's act carries a list) as JSON text of one.
+fn source_files(ctx: &CommandCtx<'_, '_>) -> Vec<SourceFile> {
+    let listed = match ctx.input.get("files") {
+        Some(serde_json::Value::String(text)) => {
+            serde_json::from_str::<Vec<serde_json::Value>>(text).unwrap_or_default()
+        }
+        Some(serde_json::Value::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    listed
+        .iter()
+        .take(IMPORT_MAX_FILES)
+        .filter_map(|file| {
+            Some(SourceFile {
+                path: file.get("path")?.as_str()?.to_owned(),
+                text: file.get("text")?.as_str()?.to_owned(),
+            })
+        })
+        .collect()
+}
+
+/// Whether a live note already has these words under this title.
+fn already_there(ctx: &CommandCtx<'_, '_>, parsed: &Parsed) -> Result<bool> {
+    let held: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM entity e JOIN note n ON n.id = e.id
+          WHERE e.kind = 'note' AND e.deleted_at IS NULL
+            AND lower(e.title) = lower(?1) AND n.body = ?2",
+        rusqlite::params![parsed.title, parsed.body],
+        |row| row.get(0),
+    )?;
+    Ok(held > 0)
+}
+
+/// Whether a title names something a link may be made to: a live thing already in the vault.
+fn names_something(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<bool> {
+    let linkable = LINKABLE
+        .iter()
+        .map(|kind| format!("'{}'", kind.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let held: i64 = ctx.connection().query_row(
+        &format!(
+            "SELECT COUNT(*) FROM entity WHERE kind IN ({linkable}) AND deleted_at IS NULL
+                AND lower(title) = lower(?1)"
+        ),
+        [title],
+        |row| row.get(0),
+    )?;
+    Ok(held > 0)
+}
+
+/// A name safe as a file name (the export's stem).
+pub(crate) fn portable_stem(title: &str) -> String {
+    portable::file_stem(title)
+}
+
+fn notebook_named(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<String> {
+    let found: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT id FROM entity WHERE kind = 'notebook' AND deleted_at IS NULL
+                AND title = ?1 COLLATE NOCASE ORDER BY created_at, id LIMIT 1",
+            [title],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(id) = found {
+        return Ok(id);
+    }
+    let id = ctx.insert_entity(Kind::Notebook, title)?;
+    ctx.connection().execute(
+        "INSERT INTO container (id, kind, parent_id, position)
+         VALUES (?1, 'notebook', NULL,
+                 (SELECT COALESCE(MAX(position), 0) + 1 FROM container
+                   WHERE kind = 'notebook' AND parent_id IS NULL))",
+        [&id],
+    )?;
+    Ok(id)
+}
+
+/// `note.import`: read Markdown and text files as notes, with their `[[links]]` and
+/// `#tags` as real links and tags. With `dry_run` it writes nothing and answers what
+/// importing would do, for the preview the member confirms. A note the vault already has
+/// (same title, same words) is skipped, so importing twice adds nothing.
+fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let dry_run = ctx
+        .input
+        .get("dry_run")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let files = source_files(ctx);
+    let total = files.len();
+    // A file longer than a note may be is not imported, and is counted with the files that are not
+    // notes: one big file never costs a folder its other notes.
+    let parsed: Vec<Parsed> = files
+        .iter()
+        .filter(|file| file.text.len() <= BODY_BUDGET_BYTES)
+        .filter_map(portable::parse)
+        .collect();
+    let ignored = total - parsed.len();
+    let mut fresh: Vec<Parsed> = Vec::new();
+    let mut skipped = 0_usize;
+    for note in parsed {
+        let twin = fresh
+            .iter()
+            .any(|seen| seen.title.eq_ignore_ascii_case(&note.title) && seen.body == note.body);
+        if twin || already_there(ctx, &note)? {
+            skipped += 1;
+        } else {
+            fresh.push(note);
+        }
+    }
+    let tags: BTreeSet<String> = fresh
+        .iter()
+        .flat_map(|note| note.tags.iter().map(|tag| tag.to_lowercase()))
+        .collect();
+    let notebooks: BTreeSet<String> = fresh
+        .iter()
+        .filter_map(|note| note.notebook.as_ref().map(|name| name.to_lowercase()))
+        .collect();
+    let imported_titles: BTreeSet<String> =
+        fresh.iter().map(|note| note.title.to_lowercase()).collect();
+    let (mut links, mut unresolved) = (0_usize, 0_usize);
+    for note in &fresh {
+        for title in wikilink_titles(&note.body) {
+            if imported_titles.contains(&title.to_lowercase()) || names_something(ctx, &title)? {
+                links += 1;
+            } else {
+                unresolved += 1;
+            }
+        }
+    }
+    let mut report = serde_json::json!({
+        "notes": fresh.len(),
+        "skipped": skipped,
+        "ignored": ignored,
+        "tags": tags.len(),
+        "notebooks": notebooks.len(),
+        "links": links,
+        "unresolved": unresolved,
+        "dry_run": dry_run,
+    });
+    if dry_run {
+        return Ok(report);
+    }
+    let mut books: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut made: Vec<(String, String)> = Vec::new();
+    for note in &fresh {
+        let notebook = match &note.notebook {
+            Some(name) => {
+                let key = name.to_lowercase();
+                if !books.contains_key(&key) {
+                    books.insert(key.clone(), notebook_named(ctx, name)?);
+                }
+                books.get(&key).cloned()
+            }
+            None => None,
+        };
+        let id = found(
+            ctx,
+            None,
+            &note.title,
+            &note.body,
+            "markdown",
+            notebook.as_deref(),
+        )?;
+        for tag in &note.tags {
+            let known: i64 = ctx.connection().query_row(
+                "SELECT COUNT(*) FROM concept WHERE kind = 'tag' AND key = ?1",
+                [crate::model::fold_label(tag)],
+                |row| row.get(0),
+            )?;
+            let concept = ensure_concept(ctx, Kind::Tag, tag)?;
+            if known == 0 {
+                ctx.connection().execute(
+                    "UPDATE concept SET color = ?2 WHERE id = ?1",
+                    [concept.as_str(), next_color(ctx)?],
+                )?;
+            }
+            set_tagged(ctx, &id, &concept, true)?;
+        }
+        made.push((id, note.body.clone()));
+    }
+    // A link to a note imported after the one that names it resolves now that all are there.
+    for (id, body) in &made {
+        compile_wikilinks(ctx, id, body)?;
+    }
+    report["ids"] = serde_json::json!(made.iter().map(|(id, _)| id).collect::<Vec<_>>());
+    Ok(report)
+}
+
+/// `note.export`: the member's notes (a notebook's, or all) as Markdown files in an archive,
+/// a folder per notebook, `[[links]]` as written, tags in front matter. Writes nothing.
+/// Journal entries are People's and are not exported here.
+fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let notebook = ctx.optional_str("notebook_id");
+    let mut scope: BTreeSet<String> = BTreeSet::new();
+    let mut archive_name = "Notes".to_owned();
+    if let Some(id) = notebook {
+        let title: Option<String> = ctx
+            .connection()
+            .query_row("SELECT title FROM entity WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        archive_name = title.map_or_else(|| "Notes".to_owned(), |t| portable::file_stem(&t));
+        scope.insert(id.to_owned());
+        let mut children = ctx.connection().prepare_cached(
+            "SELECT c.id FROM container c JOIN entity e ON e.id = c.id
+              WHERE c.parent_id = ?1 AND c.kind = 'notebook' AND e.deleted_at IS NULL",
+        )?;
+        let mut frontier = vec![id.to_owned()];
+        while let Some(next) = frontier.pop() {
+            let ids = children
+                .query_map([&next], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for child in ids {
+                if scope.insert(child.clone()) {
+                    frontier.push(child);
+                }
+            }
+        }
+    }
+    let mut statement = ctx.connection().prepare_cached(
+        "SELECT e.id, e.title, n.body, nb.title
+           FROM entity e JOIN note n ON n.id = e.id
+           LEFT JOIN entity nb ON nb.id = n.notebook_id AND nb.deleted_at IS NULL
+          WHERE e.kind = 'note' AND e.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM edge m WHERE m.from_id = e.id AND m.rel = 'about'
+                              AND m.to_id = (SELECT self_id FROM vault))
+            AND (?1 = 0 OR n.notebook_id IN (SELECT value FROM json_each(?2)))
+          ORDER BY e.n",
+    )?;
+    let rows = statement
+        .query_map(
+            rusqlite::params![
+                i64::from(notebook.is_some()),
+                serde_json::to_string(&scope).unwrap_or_default()
+            ],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut tags = ctx.connection().prepare_cached(
+        "SELECT c.key FROM edge t JOIN concept c ON c.id = t.to_id AND c.kind = 'tag'
+          WHERE t.from_id = ?1 AND t.rel = 'tagged' ORDER BY c.key",
+    )?;
+    let mut used: BTreeSet<String> = BTreeSet::new();
+    let mut entries: Vec<Entry> = Vec::new();
+    for (id, title, body, book) in rows {
+        let labels = tags
+            .query_map([&id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let folder = book.map(|name| portable::file_stem(&name));
+        let stem = portable::file_stem(&title);
+        let mut path = match &folder {
+            Some(folder) => format!("{folder}/{stem}.md"),
+            None => format!("{stem}.md"),
+        };
+        let mut again = 1;
+        while !used.insert(path.to_lowercase()) {
+            again += 1;
+            path = match &folder {
+                Some(folder) => format!("{folder}/{stem} {again}.md"),
+                None => format!("{stem} {again}.md"),
+            };
+        }
+        entries.push(Entry {
+            path,
+            bytes: portable::markdown_of(&title, &body, &labels).into_bytes(),
+        });
+    }
+    let count = entries.len();
+    let bytes = portable::zip(&entries);
+    Ok(serde_json::json!({
+        "name": format!("{archive_name}.zip"),
+        "media_type": "application/zip",
+        "count": count,
+        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes),
+    }))
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     const CREATE: &[CommandCondition] = &[CommandCondition {
@@ -359,6 +662,36 @@ pub fn definitions() -> Vec<CommandDefinition> {
         check: pre_restore_version,
     }];
     vec![
+        CommandDefinition::plain(
+            "note.import",
+            "note",
+            r#"{
+              "type": "object",
+              "required": ["files"],
+              "additionalProperties": false,
+              "properties": {
+                "files": { "type": ["array", "string"] },
+                "dry_run": { "type": "boolean" }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[],
+            import,
+        ),
+        CommandDefinition::plain(
+            "note.export",
+            "note",
+            r#"{
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "notebook_id": { "type": ["string", "null"] }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[],
+            export,
+        ),
         CommandDefinition::plain(
             "note.create",
             "note",

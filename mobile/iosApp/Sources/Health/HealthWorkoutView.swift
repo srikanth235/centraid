@@ -11,7 +11,7 @@ struct HealthWorkoutView: View {
     let send: (Centraid_Core_V1_HealthWorkoutEvent) -> Void
     let onBack: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
+    private let accent = AppAccent("health")
 
     private func event(_ build: (inout Centraid_Core_V1_HealthWorkoutEvent) -> Void) -> Centraid_Core_V1_HealthWorkoutEvent {
         var event = Centraid_Core_V1_HealthWorkoutEvent()
@@ -19,11 +19,10 @@ struct HealthWorkoutView: View {
         return event
     }
 
-    private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
-
     var body: some View {
         let state = state
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
+        // THE BOARD HAS NO BAR TITLE: the kind is the chip over the page's own title.
+        PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
@@ -46,43 +45,63 @@ struct HealthWorkoutView: View {
                 .accessibilityIdentifier("health-workout-page")
             }
         }
+        .appAccent("health")
     }
 
     @ViewBuilder
     private func page(_ workout: Centraid_Core_V1_HealthWorkoutData) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(workout.kindLabel)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            // THE KIND IS A CHIP (HealthWorkout): the kind's mark and word on the app's pale tile.
+            HStack(spacing: 6) {
+                if !workout.kindIconKey.isEmpty {
+                    CentraidIconView(iconKey: workout.kindIconKey, tint: accent.text, size: 14)
+                        .accessibilityHidden(true)
+                }
+                Text(workout.kindLabel)
+                    .kitType(.meta)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(accent.text)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(accent.tile))
+            .padding(.bottom, 6)
             Text(workout.title)
-                .centraidType("display")
-                .foregroundStyle(Theme.color("text", scheme))
+                .kitType(.title)
+                .foregroundStyle(Surface.ink)
                 .accessibilityAddTraits(.isHeader)
             Text(workout.whenLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
         }
         .accessibilityElement(children: .combine)
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-            ForEach(Array(workout.figures.enumerated()), id: \.offset) { _, figure in
-                HealthCard(padding: 14) {
-                    Text(figure.label)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(figure.value)
-                            .centraidType("title")
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.color("text", scheme))
-                        Text(figure.unit)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                    }
-                    .padding(.top, 2)
+        // The figures are cards two to a row, one column at the largest text.
+        KitCardGrid(items: workout.figures.enumerated().map { HealthFigureItem(index: $0.offset, figure: $0.element) }, gap: 8) { item in
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.figure.label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(item.figure.value)
+                        .font(.system(size: 28, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(Surface.ink)
+                    Text(item.figure.unit)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
                 }
-                .accessibilityElement(children: .combine)
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kitCard()
+            .accessibilityElement(children: .combine)
         }
         HealthNote(text: workout.foot)
     }
+}
+
+private struct HealthFigureItem: Identifiable {
+    let index: Int
+    let figure: Centraid_Core_V1_HealthFigure
+    var id: Int { index }
 }

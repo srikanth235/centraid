@@ -9,6 +9,9 @@ import SwiftUI
 /// A refused add is `status`, above the grid and never instead of it, so the
 /// member keeps the library they were choosing from.
 ///
+/// A SHEET over the page that asked (`Route.sheet`), as PhotosPicker.dc.html draws it: the X, the
+/// title ("Add to “Portugal”"), the library, and the foot pinned under it.
+///
 /// The Compose twin is `androidApp/.../screens/PhotoPickerScreen.kt`.
 struct PhotoPickerView: View {
     @Environment(\.colorScheme) private var scheme
@@ -25,12 +28,20 @@ struct PhotoPickerView: View {
     }
 
     var body: some View {
+        SheetPage(title: state.title, onCancel: onFinished) {
+            grid
+        } foot: {
+            foot
+        }
+        .onChange(of: state.finished) { _, done in
+            if done { onFinished() }
+        }
+        .appAccent("photos")
+    }
+
+    private var grid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(state.refersNote)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-
                 if state.hasStatus {
                     ScreenFailureView(sentence: state.status.sentence, remedy: "")
                         .accessibilityIdentifier("photos.picker.writeFailure")
@@ -54,6 +65,7 @@ struct PhotoPickerView: View {
                             selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
                             taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
                             takenLabel: data.takenLabel,
+                            showsRing: true,
                             onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
                         )
                         if data.canShowMore {
@@ -65,34 +77,29 @@ struct PhotoPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle(state.title)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                // THE ONE FILLED ELEMENT (§18), disabled with nothing picked
-                // rather than absent: a control that appears when a member
-                // picks is a control that moves under their thumb.
-                ToolbarVerb(label: state.addLabel, identifier: "photos.picker.add") {
-                    event { $0.confirm = .init() }
-                }
-                .disabled(!state.addEnabled)
+    }
+
+    // THE FOOT: how many are chosen, the sentence about albums, and the one filled button,
+    // in the app's colour, greyed with nothing picked and never absent: a control that
+    // appears when a member picks is a control that moves under their thumb.
+    private var foot: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(state.chosenLabel)
+                .kitType(.row)
+                .fontWeight(.semibold)
+                .foregroundStyle(Surface.ink)
+            Text(state.refersNote)
+                .kitType(.meta)
+                .foregroundStyle(Surface.meta)
+            KitInkButton(label: state.addLabel, identifier: "photos.picker.add") {
+                event { $0.confirm = .init() }
             }
+            .disabled(!state.addEnabled)
+            .padding(.top, 8)
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(Theme.color("line", scheme))
-                    .frame(height: CentraidGeometry.hairline)
-                Text(state.chosenLabel)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.vertical, 8)
-            }
-            .background(Theme.color("bgElev", scheme).ignoresSafeArea(edges: .bottom))
-        }
-        .onChange(of: state.finished) { _, done in
-            if done { onFinished() }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 }

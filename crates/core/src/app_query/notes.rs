@@ -61,7 +61,7 @@ fn known(instant: &str) -> Option<&str> {
 /// is absent.
 fn minute_if(zone: Option<&FireZone>, instant: Option<&str>) -> String {
     zone.zip(instant)
-        .and_then(|(zone, instant)| centraid_apps_agenda::local::now_local(zone, instant))
+        .and_then(|(zone, instant)| centraid_apps_kit::civil::now_local(zone, instant))
         .unwrap_or_default()
 }
 
@@ -428,6 +428,7 @@ pub(crate) fn note(
                     .into_iter()
                     .map(attachment_to_wire)
                     .collect(),
+                about: note.about.into_iter().map(card_to_wire).collect(),
             })
         },
     )
@@ -505,6 +506,7 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
                 label: tag.label,
             })
             .collect(),
+        about: row.about.into_iter().map(card_to_wire).collect(),
     }
 }
 

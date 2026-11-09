@@ -3,7 +3,7 @@
 //! ## One zone source, moved here so there is only one
 //!
 //! [`FireZone`] and [`ZoneUnset`] are the one resolution of a zone name:
-//! recurrence, the task lifecycle and Agenda (`crates/apps/agenda`) all read
+//! recurrence, the task lifecycle and Calendar and Reminders (`crates/apps/calendar`, `crates/apps/reminders`) all read
 //! it, and a second reader would be exactly the drift one zone source
 //! prevents. It lives at the bottom of the crate graph so every app above the
 //! vault can reach it.
@@ -23,8 +23,11 @@
 //!
 //! Three sentences, and this module is where they are enforced:
 //!
-//! - a **nonexistent** wall time (the spring-forward gap) is SKIPPED — it
-//!   exists at no instant, so nothing can deliver it;
+//! - a **nonexistent** wall time (the spring-forward gap) moves FORWARD by the
+//!   gap, as RFC 5545 section 3.3.5 reads it (owner decision on #1173):
+//!   [`FireZone::resolve_wall_time_forward`]. ([`FireZone::resolve_wall_time`]
+//!   is the strict reading, `None`, that v0 captured and the one-off write
+//!   boundary still uses to refuse a time the clocks skip.);
 //! - an **overlapping** wall time (the autumn fold) occurs ONCE, at the
 //!   EARLIER instant;
 //! - a per-instance exception keys off the **unmodified original**
@@ -192,8 +195,9 @@ impl FireZone {
     /// RESOLVE A CIVIL CLOCK VALUE INTO AN INSTANT — the DST policy, in one
     /// function (v0's `resolveWallTime`, `timezone.ts:96`).
     ///
-    /// A **gap** returns `None`: the wall time exists at no instant, so there
-    /// is nothing to deliver and nothing to pretend. An **overlap** returns
+    /// A **gap** returns `None`: the wall time exists at no instant. (A SERIES
+    /// does not skip it: [`Self::resolve_wall_time_forward`] is RFC 5545's
+    /// reading, which moves it forward by the gap.) An **overlap** returns
     /// the EARLIER of the two instants with `overlap: true`, so a caller can
     /// explain it and a window cannot emit the occurrence twice.
     ///
@@ -222,6 +226,30 @@ impl FireZone {
             instant: crate::clock::format_iso_ms(first),
             overlap: candidates.len() > 1,
         })
+    }
+
+    /// RESOLVE A SERIES' WALL CLOCK THE WAY RFC 5545 SECTION 3.3.5 READS IT
+    /// (owner decision on #1173, so a two-way sync with EventKit and
+    /// CalendarContract expands exactly the phone's occurrences).
+    ///
+    /// An existing wall time and a fold are [`Self::resolve_wall_time`]'s: an
+    /// overlap is the EARLIER instant. A wall time in a spring-forward **gap**
+    /// moves FORWARD by the gap: it is read with the offset in force before
+    /// the change, so 02:30 New York on the gap day is 03:30 EDT. Never `None`
+    /// for a real zone.
+    #[must_use]
+    pub fn resolve_wall_time_forward(&self, value: WallTime) -> ResolvedWallTime {
+        if let Some(resolved) = self.resolve_wall_time(value) {
+            return resolved;
+        }
+        // THE GAP: no instant carries this wall clock. The offset a day
+        // earlier is the one in force before the change.
+        let naive = wall_epoch(value);
+        let before = i64::from(self.offset_minutes(naive.saturating_sub(86_400_000))) * 60_000;
+        ResolvedWallTime {
+            instant: crate::clock::format_iso_ms(naive - before),
+            overlap: false,
+        }
     }
 
     /// The dedupe key a fall-back's two absolute minutes share.
@@ -451,23 +479,6 @@ pub fn add_wall_days(value: WallTime, days: i64) -> WallTime {
     wall_from_epoch(wall_epoch(value) + days * 86_400_000)
 }
 
-/// Add whole months in wall clock, CLAMPING the day to the target month's
-/// last: a series anchored on the 31st lands on the 30th in a 30-day month
-/// rather than rolling into the next one (v0's `addWallMonths`).
-#[must_use]
-pub fn add_wall_months(value: WallTime, months: i64) -> WallTime {
-    let zero_based = value.year * 12 + (value.month - 1) + months;
-    let year = zero_based.div_euclid(12);
-    let month = zero_based.rem_euclid(12) + 1;
-    let last_day = days_in_month(year, month);
-    WallTime {
-        year,
-        month,
-        day: value.day.min(last_day),
-        ..value
-    }
-}
-
 /// 0 = Sunday … 6 = Saturday, for a civil date.
 #[must_use]
 pub fn wall_weekday(value: WallTime) -> i64 {
@@ -542,23 +553,6 @@ mod tests {
         assert_eq!(parse_wall_iso("2026-02-31"), None);
         assert!(parse_wall_iso("2028-02-29").is_some(), "a leap day is real");
         assert_eq!(parse_wall_iso("2027-02-29"), None);
-    }
-
-    #[test]
-    fn a_monthly_step_clamps_rather_than_rolling_over() {
-        let anchor = parse_wall_iso("2026-01-31T09:00:00").expect("a wall clock");
-        assert_eq!(
-            wall_iso(add_wall_months(anchor, 1), true),
-            "2026-02-28T09:00:00"
-        );
-        assert_eq!(
-            wall_iso(add_wall_months(anchor, 2), true),
-            "2026-03-31T09:00:00"
-        );
-        assert_eq!(
-            wall_iso(add_wall_months(anchor, -1), true),
-            "2025-12-31T09:00:00"
-        );
     }
 
     #[test]

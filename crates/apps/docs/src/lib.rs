@@ -1,4 +1,4 @@
-//! # Docs — a manifest, four queries, the phone's shelves, eighteen actions
+//! # Docs — a manifest, four queries, the phone's shelves, nineteen actions
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!

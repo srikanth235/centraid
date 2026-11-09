@@ -26,9 +26,6 @@
 //! computed with each edit, so it can never be for other words. The words are
 //! dropped the moment a restore or a re-key succeeds, and on leaving.
 //!
-//! A restore's DONE that names vaults which stayed with the old phone offers
-//! `retry_label`: it asks the gateway again for those indices alone, from the
-//! seed the restore stored, over the lists already drawn, never the grid again.
 
 use std::fmt;
 
@@ -37,7 +34,7 @@ use wire::screen_event::Kind as E;
 use wire::words_enter_state::Phase;
 use wire::{WordsEnterOrigin as Origin, WordsEnterPurpose as Purpose};
 
-use super::door::{self, Judged, RestoredVaultAt, UnclaimedVaultAt, Verdict};
+use super::door::{self, Judged, Verdict};
 use super::enrollment::{Env, Job, Out, Progress, Refusal, Rekeyed, Restored, Runner};
 use super::keeper::{Absent, Keeper, KeeperSlot};
 use super::secrets::{VaultSecrets, WORDS};
@@ -77,7 +74,6 @@ enum Notice {
     DidNotCheck,
     Refusal(Refusal),
     RekeyNone,
-    StayedStill,
     PhotoUnread,
 }
 
@@ -91,6 +87,8 @@ pub struct Enter {
     origin: Origin,
     /// The locale of the last event, for sentences made when an answer lands.
     locale: Locale,
+    /// The platform of the last event ("ios", "android"), for where a held key came from.
+    platform: String,
     started: bool,
     finished: bool,
     /// The seed question is still being read: nothing is drawn yet.
@@ -103,18 +101,9 @@ pub struct Enter {
     notice: Notice,
     /// A re-key found nothing to key; the primary control restores instead.
     offer_restore: bool,
-    /// DONE after a restore: every vault here, as the core answered it. Carries
-    /// no secret.
-    restored_at: Vec<RestoredVaultAt>,
-    /// DONE after a restore: every vault that stayed, by seed and index.
-    stayed_at: Vec<UnclaimedVaultAt>,
-    restored: Vec<wire::RestoredVaultLine>,
-    stayed: Vec<String>,
     /// A held-seed restore: the name of each vault on its own words it will
     /// also ask for (R-1047-E18).
     held_keys: Vec<String>,
-    /// WORKING on a retry of what stayed, over DONE's lists.
-    retrying: bool,
 }
 
 impl fmt::Debug for Enter {
@@ -145,6 +134,7 @@ impl Enter {
             },
             origin,
             locale: Locale::En,
+            platform: String::new(),
             started: false,
             finished: false,
             loading: false,
@@ -154,12 +144,7 @@ impl Enter {
             verdict: None,
             notice: Notice::None,
             offer_restore: false,
-            restored_at: Vec::new(),
-            stayed_at: Vec::new(),
-            restored: Vec::new(),
-            stayed: Vec::new(),
             held_keys: Vec::new(),
-            retrying: false,
         }
     }
 
@@ -348,73 +333,23 @@ impl Enter {
         self.finished = true;
     }
 
-    /// ASK AGAIN FOR WHAT STAYED (R-1047-R6): DONE with any vault that stayed,
-    /// and no retry already running. The indices are the ones the core named;
-    /// the vaults already here are not asked for.
-    fn retry(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.phase != Phase::Done || self.stayed_at.is_empty() {
-            return Vec::new();
-        }
-        self.phase = Phase::Working;
-        self.retrying = true;
-        self.notice = Notice::None;
-        let stayed = self.stayed_at.clone();
-        self.begin(Job::stayed(&stayed, &self.endpoint), ctx)
-    }
-
+    /// A RESTORE'S ANSWER. Success leaves nothing to say here: the core brings
+    /// the restored vault to the front and closes every screen, so the words go
+    /// and the screen finishes. A refusal goes back to the grid with its reason.
     fn restored(&mut self, outcome: Restored) {
         if self.phase != Phase::Working {
             return;
         }
-        if self.retrying {
-            self.retried(outcome);
-            return;
-        }
         match outcome {
-            // THE WORDS GO; the pairing code stays, for a retry of what stayed.
-            Restored::Done {
-                answer, missing, ..
-            } => {
-                let endpoint = std::mem::take(&mut self.endpoint);
-                self.fresh(Phase::Done, Purpose::Restore, Origin::Unspecified);
-                self.endpoint = endpoint;
-                self.settled(answer.vaults, answer.unclaimed, &missing);
+            Restored::Done { .. } => {
+                self.fresh(Phase::Entering, Purpose::Restore, Origin::Unspecified);
+                self.close();
             }
             Restored::Unreachable => self.back(Notice::Unreachable),
             Restored::NothingHeld => self.back(Notice::NothingHeld),
             Restored::NotTaken => self.back(Notice::NotTaken),
             Restored::DidNotCheck => self.back(Notice::DidNotCheck),
             Restored::Refused(why) => self.back(Notice::Refusal(why)),
-        }
-    }
-
-    /// A RETRY'S ANSWER. What came back joins the vaults already here; what did
-    /// not still stayed. A refusal changes neither list and says why, and the
-    /// retry is offered again.
-    fn retried(&mut self, outcome: Restored) {
-        self.phase = Phase::Done;
-        self.retrying = false;
-        self.notice = Notice::None;
-        match outcome {
-            Restored::Done { answer, .. } => {
-                let back: Vec<(Option<String>, u32)> = answer
-                    .vaults
-                    .iter()
-                    .map(|vault| (vault.own.clone(), vault.index))
-                    .collect();
-                let mut vaults: Vec<RestoredVaultAt> = std::mem::take(&mut self.restored_at)
-                    .into_iter()
-                    .filter(|vault| !back.contains(&(vault.own.clone(), vault.index)))
-                    .collect();
-                vaults.extend(answer.vaults);
-                let stayed: Vec<UnclaimedVaultAt> = std::mem::take(&mut self.stayed_at)
-                    .into_iter()
-                    .filter(|vault| !back.contains(&(vault.own.clone(), vault.index)))
-                    .collect();
-                self.settled(vaults, stayed, &[]);
-            }
-            Restored::Unreachable => self.notice = Notice::Unreachable,
-            _ => self.notice = Notice::StayedStill,
         }
     }
 
@@ -455,91 +390,7 @@ impl Enter {
         self.verdict = None;
         self.notice = Notice::None;
         self.offer_restore = false;
-        self.restored_at.clear();
-        self.stayed_at.clear();
-        self.restored.clear();
-        self.stayed.clear();
         self.held_keys.clear();
-        self.retrying = false;
-    }
-
-    /// DONE after a restore: the vaults here and the ones that stayed.
-    ///
-    /// "VAULT N" IS ONE SEQUENCE over both, ordered by derivation index
-    /// (R-1047-R5), so a vault that stayed is never given the number of one that
-    /// came back. Never the index itself: a member made "Vault 1", not "index
-    /// 0". The member's vaults come first; each vault on its own words
-    /// (R-1047-E18) follows, its seed's vaults in index order: two vaults at
-    /// index 0 under two seeds are two numbers, never one.
-    fn settled(
-        &mut self,
-        restored: Vec<RestoredVaultAt>,
-        stayed: Vec<UnclaimedVaultAt>,
-        missing: &[String],
-    ) {
-        let order = |own: &Option<String>, index: u32| {
-            (own.is_some(), own.clone().unwrap_or_default(), index)
-        };
-        let mut sequence: Vec<(bool, String, u32)> = restored
-            .iter()
-            .map(|vault| order(&vault.own, vault.index))
-            .chain(stayed.iter().map(|vault| order(&vault.own, vault.index)))
-            .collect();
-        sequence.sort();
-        sequence.dedup();
-        let ordinal = |own: &Option<String>, index: u32| {
-            sequence
-                .iter()
-                .position(|entry| *entry == order(own, index))
-                .map_or(0, |at| at + 1)
-        };
-        let mut sorted = restored;
-        sorted.sort_by_key(|vault| order(&vault.own, vault.index));
-        self.restored = sorted
-            .iter()
-            .map(|vault| self.restored_line(ordinal(&vault.own, vault.index), vault))
-            .collect();
-        self.stayed = stayed
-            .iter()
-            .map(|vault| {
-                fill(
-                    &words::restored_stayed(self.locale),
-                    &[("index", &ordinal(&vault.own, vault.index).to_string())],
-                )
-            })
-            .chain(missing.iter().map(|name| {
-                let name = if name.trim().is_empty() {
-                    words::restore_held_own_unnamed(self.locale)
-                } else {
-                    name.clone()
-                };
-                fill(&words::restored_missing(self.locale), &[("name", &name)])
-            }))
-            .collect();
-        self.restored_at = sorted;
-        self.stayed_at = stayed;
-    }
-
-    fn restored_line(&self, number: usize, vault: &RestoredVaultAt) -> wire::RestoredVaultLine {
-        let locale = self.locale;
-        let index = number.to_string();
-        let line = match vault.rows {
-            1 => fill(&words::restored_line_one(locale), &[("index", &index)]),
-            rows if rows > 0 => fill(
-                &words::restored_line_many(locale),
-                &[("index", &index), ("rows", &grouped(rows))],
-            ),
-            _ => fill(&words::restored_line_none(locale), &[("index", &index)]),
-        };
-        wire::RestoredVaultLine {
-            line,
-            safety_number: vault.safety_number.clone(),
-            safety_label: if vault.safety_number.is_empty() {
-                String::new()
-            } else {
-                words::restored_safety(locale)
-            },
-        }
     }
 
     fn event(&mut self, event: wire::WordsEnterEvent, ctx: &Ctx) -> Vec<wire::Effect> {
@@ -586,7 +437,6 @@ impl Enter {
                 self.close();
                 Vec::new()
             }
-            Some(K::Retry(_)) => self.retry(ctx),
             // THE KEYCHAIN'S KEY IS NOT THE BACKUP'S: draw the grid, keep the code.
             Some(K::UseWords(_)) if entering && self.purpose == Purpose::RestoreHeld => {
                 self.purpose = Purpose::Restore;
@@ -636,7 +486,6 @@ impl Enter {
             Notice::Refusal(Refusal::DifferentWords) => words::different_words(locale),
             Notice::Refusal(Refusal::StoreRefused) => words::keep_failed(locale),
             Notice::RekeyNone => words::rekey_none(locale),
-            Notice::StayedStill => words::restore_stayed_still(locale),
             Notice::PhotoUnread => words::pair_photo_unread(locale),
         }
     }
@@ -650,19 +499,13 @@ impl Enter {
         let from_pairing = rekey && self.origin == Origin::Pairing;
         let held = self.purpose == Purpose::RestoreHeld;
         let done = phase == Phase::Done;
-        // A RETRY OF WHAT STAYED draws DONE's lists under its progress: the words
-        // are gone, so no grid and no address box come back.
-        let answered = done || self.retrying;
         if self.loading {
             return wire::WordsEnterState {
                 phase: Phase::Working as i32,
                 ..wire::WordsEnterState::default()
             };
         }
-        let grid = !held
-            && !self.finished
-            && !self.retrying
-            && (phase == Phase::Entering || phase == Phase::Working);
+        let grid = !held && !self.finished && (phase == Phase::Entering || phase == Phase::Working);
         let cells = if grid {
             self.cells
                 .iter()
@@ -698,13 +541,9 @@ impl Enter {
         } else {
             Vec::new()
         };
-        let title = if done && rekey {
+        // DONE IS A RE-KEY'S: a restore finishes the screen instead.
+        let title = if done {
             words::rekeyed_title(locale)
-        // NOT "YOUR VAULTS ARE BACK" when one of them is not (R-1047-R5).
-        } else if answered && !self.stayed.is_empty() {
-            words::restored_some_title(locale)
-        } else if done {
-            words::restored_title(locale)
         } else if rekey {
             words::rekey_title(locale)
         } else if held {
@@ -714,13 +553,8 @@ impl Enter {
         };
         let body = if done && from_pairing {
             words::rekeyed_pair_body(locale)
-        } else if done && rekey {
-            words::rekeyed_body(locale)
-        // WHAT BECOMES OF WHAT STAYED, and that it can be asked for again.
-        } else if answered && !self.stayed.is_empty() {
-            words::restored_stayed_body(locale)
         } else if done {
-            String::new()
+            words::rekeyed_body(locale)
         } else if from_pairing {
             words::rekey_pair_body(locale)
         } else if rekey {
@@ -739,7 +573,7 @@ impl Enter {
             _ => String::new(),
         };
         // THE SCAN IS DRAWN WHEREVER THE CODE'S FIELD IS, and only while entering.
-        let scans = self.restores() && !answered && entering;
+        let scans = self.restores() && !done && entering;
         let notice = if self.notice == Notice::None {
             if entering && !held {
                 self.verdict_notice()
@@ -763,12 +597,17 @@ impl Enter {
             cells,
             // THE CODE'S FIELD IS DRAWN WHEREVER THE PRIMARY RESTORES (#1080
             // A23): every restore, and the re-key that offers one instead.
-            endpoint_label: if self.restores() && !answered {
+            endpoint_label: if self.restores() && !done {
                 words::endpoint_label(locale)
             } else {
                 String::new()
             },
-            endpoint: if self.restores() && !answered {
+            endpoint_placeholder: if self.restores() && !done {
+                crate::strings::pairing::paste_label(locale)
+            } else {
+                String::new()
+            },
+            endpoint: if self.restores() && !done {
                 self.endpoint.clone()
             } else {
                 String::new()
@@ -805,15 +644,18 @@ impl Enter {
             } else {
                 String::new()
             },
-            restored: self.restored.clone(),
-            stayed: self.stayed.clone(),
-            retry_label: if done && !rekey && !self.stayed_at.is_empty() {
-                words::restored_stayed_retry(locale)
+            words_label: if held && entering {
+                words::restore_held_words(locale)
             } else {
                 String::new()
             },
-            words_label: if held && entering {
-                words::restore_held_words(locale)
+            held_found: if held && entering {
+                words::restore_held_found(locale)
+            } else {
+                String::new()
+            },
+            held_place: if held && entering {
+                super::held_place(locale, &self.platform)
             } else {
                 String::new()
             },
@@ -847,22 +689,10 @@ impl Enter {
     }
 }
 
-/// 1204 as "1,204".
-fn grouped(rows: i64) -> String {
-    let digits = rows.unsigned_abs().to_string();
-    let mut out = String::new();
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    if rows < 0 { format!("-{out}") } else { out }
-}
-
 impl Screen for Enter {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         self.locale = ctx.locale();
+        self.platform = ctx.platform().to_owned();
         if self.finished {
             return Vec::new();
         }
