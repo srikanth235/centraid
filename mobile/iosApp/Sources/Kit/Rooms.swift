@@ -132,7 +132,7 @@ struct RootBarTitle: ToolbarContent {
             .kitType(.title)
             .foregroundStyle(Surface.ink)
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
+            .fixedSize()
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("kit-header-title")
     }
@@ -316,7 +316,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // THE TITLE IS IN THE BAR'S TOP ROW (`RootBarTitle`); the scope line is first here, and a
             // place's own bar (the Calendar's month chip) is one control row under it.
             if showsBarTitle { KitHeader(title: "", subtitle: subtitle) }
-            if let bar {
+            if let bar, showsBarTitle {
                 HStack(spacing: 0) {
                     bar.leading.environment(\.appAccent, AppAccent(app))
                     Spacer(minLength: 0)
@@ -337,7 +337,15 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
-            if showsBarTitle { RootBarTitle(title: title) }
+            if showsBarTitle {
+                RootBarTitle(title: title)
+            } else if let bar {
+                // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
+                // stands in the top row, where the title would.
+                ToolbarItem(placement: .topBarLeading) {
+                    bar.leading.environment(\.appAccent, AppAccent(app))
+                }
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 if let bar { bar.actions.environment(\.appAccent, AppAccent(app)) }
                 if let lead { RoomTrailing(action: lead, app: app) }

@@ -214,28 +214,33 @@ public fun AppPlace(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Column(Modifier.weight(1f).padding(top = 2.dp)) {
-                if (showsTitle) RoomTitle(title)
+            if (!showsTitle && barLeading != null) {
+                // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
+                // stands in the top row, where the title would.
+                barLeading.invoke()
+                Spacer(Modifier.weight(1f))
+            }
+            if (showsTitle) Column(Modifier.weight(1f).padding(top = 2.dp)) {
+                RoomTitle(title)
                 if (showsTitle && meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, Surface.meta)
                 }
                 if (showsTitle && subtitle != null) RoomSubtitleLine(subtitle)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (barLeading == null) barActions?.invoke()
+                barActions?.invoke()
                 if (lead != null) HeaderVerb(lead)
                 if (filter != null) FilterMenuButton(app, filter)
                 if (trailing != null) HeaderVerb(trailing)
             }
         }
-        if (barLeading != null) {
+        if (barLeading != null && showsTitle) {
             Row(
                 Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 barLeading.invoke()
-                barActions?.invoke()
             }
         }
         BandStage(
