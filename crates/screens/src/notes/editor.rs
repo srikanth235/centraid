@@ -1263,7 +1263,7 @@ impl Screen for Editor {
                 .unwrap_or_default(),
             _ => String::new(),
         };
-        let agenda_words = title.clone();
+        let reminders_words = title.clone();
         let mut state = wire::NotesEditorState {
             note_id: self.note_id.clone().unwrap_or_default(),
             content: Some(content),
@@ -1283,7 +1283,7 @@ impl Screen for Editor {
                     words::pin(locale)
                 },
                 history_label: words::history_title(locale),
-                send_to_agenda_label: words::send_to_agenda(locale),
+                send_to_agenda_label: words::send_to_reminders(locale),
                 link_label: words::link_label(locale),
                 status: if autosave.refused {
                     save_status
@@ -1363,10 +1363,10 @@ impl Screen for Editor {
         if let Some(id) = draft.and_then(|draft| draft.id.as_deref()) {
             state.history = Some(routes::history(id, &title));
         }
-        // SEND TO AGENDA: To-do's quick add, the words waiting in it (the Inbox
+        // SEND TO REMINDERS: Reminders' quick add, the words waiting in it (the Inbox
         // is where they land). Nothing is written until the member adds them.
-        if !agenda_words.trim().is_empty() {
-            state.send_to_agenda = Some(routes::send_to_agenda(agenda_words.trim()));
+        if !reminders_words.trim().is_empty() {
+            state.send_to_agenda = Some(routes::send_to_reminders(reminders_words.trim()));
         }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::NotesEditor(state)),

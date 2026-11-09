@@ -10,10 +10,13 @@
 //! Every day is read off the core's own `today`, so no assertion is on the machine's clock, and
 //! none is on a duration: only on values.
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, glance, routes};
+use centraid_screens::agenda::{self, glance};
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::{Field, Keyed};
 use centraid_screens::kit::civil;

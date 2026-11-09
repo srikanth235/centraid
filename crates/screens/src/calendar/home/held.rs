@@ -1,10 +1,9 @@
-//! WHAT AGENDA'S HOME HOLDS FROM THE CORE, and the reads that fill it.
+//! WHAT CALENDAR'S HOME HOLDS FROM THE CORE, and the reads that fill it.
 //!
 //! The answers are kept raw, like the core gave them, so a local change (a
 //! calendar hidden, Schedule to Waiting, search closed) re-folds without a
-//! read. `window` names the window `upcoming` was read for, `dated` the one the
-//! dated boards were, and `todo` says the Inbox and the projects are current; a
-//! change event clears all three, so coming back to a place reads again.
+//! read. `window` names the window `upcoming` was read for and `dated` the one the
+//! dated reminders were; a change event clears both, so coming back to a place reads again.
 //!
 //! ## The read range
 //!
@@ -31,12 +30,12 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
+use super::Home;
 use super::grid::{self, WeekStart};
-use super::{App, Home, Phase};
 use crate::catalog::load::calendar as query_cal;
-use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;
-use crate::kit::read::{Reading, read};
+use crate::kit::read::read;
+use crate::kit::schedule::phase::{Phase, Stop, get};
 use crate::kit::schedule::rows;
 use crate::screen::Ctx;
 
@@ -44,8 +43,6 @@ use crate::screen::Ctx;
 pub const LIST_DAYS: i64 = 120;
 /// `search`'s own ceiling.
 pub const SEARCH_LIMIT: u32 = 100;
-/// The dated boards' window: the board's own ceiling, so a window is not cut short.
-pub const BOARD_LIMIT: u32 = rows::MAX_WINDOW;
 
 #[derive(Default)]
 pub struct Held {
@@ -53,84 +50,26 @@ pub struct Held {
     pub upcoming: Option<wire::AgendaUpcoming>,
     pub context: Option<wire::AgendaDayContext>,
     pub dated: Option<String>,
-    pub today_board: Option<wire::AgendaTaskBoard>,
-    pub upcoming_board: Option<wire::AgendaTaskBoard>,
-    pub catch_up: Option<wire::AgendaTaskCatchUp>,
-    pub todo: bool,
-    pub inbox: Option<wire::AgendaTaskBoard>,
-    /// Every open task: the smart lists' counts and the Flag (#1173).
-    pub all: Option<wire::AgendaTaskBoard>,
-    pub projects: Option<wire::AgendaTaskProjects>,
+    /// The reminders due on the days drawn, read-only rows of their day.
+    pub reminders: Option<wire::AgendaTaskBoard>,
     /// The trimmed term `search` answers.
     pub search_term: Option<String>,
     pub search: Option<wire::AgendaSearch>,
 }
 
-/// Why a read stopped.
-pub enum Stop {
-    Failed,
-    Denied(wire::AppQueryDenial),
-}
-
-fn get<T>(reading: Reading<T>) -> Result<T, Stop> {
-    match reading {
-        Reading::Data(data) => Ok(data),
-        Reading::Denied(denial) => Err(Stop::Denied(denial)),
-        Reading::Failed => Err(Stop::Failed),
-    }
-}
-
 impl Held {
-    /// Every task the held answers carry, root or child: the Inbox, the dated
-    /// boards and the hits.
+    /// A reminder on screen that has a row of its own to tick, by id: not a projected occurrence.
     #[must_use]
-    pub fn tasks(&self) -> Vec<&wire::AgendaTask> {
-        let boards = [
-            &self.inbox,
-            &self.all,
-            &self.today_board,
-            &self.upcoming_board,
-        ];
-        let mut found: Vec<&wire::AgendaTask> = boards
-            .into_iter()
-            .flatten()
-            .flat_map(|board| &board.groups)
-            .flat_map(rows::flatten)
-            .collect();
-        if let Some(tasks) = self.search.as_ref().and_then(|s| s.tasks.as_ref()) {
-            found.extend(
-                tasks
-                    .tasks
-                    .iter()
-                    .flat_map(|t| std::iter::once(t).chain(&t.children)),
-            );
-        }
-        found
-    }
-
-    /// A task on screen, root or child, by id.
-    #[must_use]
-    pub fn find(&self, id: &str) -> Option<wire::AgendaTask> {
+    pub fn find_reminder(&self, id: &str) -> Option<wire::AgendaTask> {
         if id.is_empty() {
             return None;
         }
-        self.tasks()
-            .into_iter()
-            .find(|task| task.task_id == id)
+        self.reminders
+            .iter()
+            .flat_map(|board| &board.groups)
+            .flat_map(|group| &group.tasks)
+            .find(|task| task.task_id == id && task.status != rows::STATUS_PROJECTED)
             .cloned()
-    }
-
-    /// Projects and sections from whichever answer holds them.
-    #[must_use]
-    pub fn projects_of(&self) -> (&[wire::AgendaTaskProject], &[wire::AgendaTaskSection]) {
-        if let Some(projects) = &self.projects {
-            return (&projects.projects, &projects.sections);
-        }
-        [&self.inbox, &self.today_board, &self.upcoming_board]
-            .into_iter()
-            .flatten()
-            .next()
-            .map_or((&[], &[]), |board| (&board.projects, &board.sections))
     }
 
     /// The day the core named, from whichever held answer has one.
@@ -139,10 +78,7 @@ impl Held {
         let named = [
             self.context.as_ref().map(|c| c.today.as_str()),
             self.upcoming.as_ref().map(|u| u.today.as_str()),
-            self.inbox.as_ref().map(|b| b.today.as_str()),
-            self.today_board.as_ref().map(|b| b.today.as_str()),
-            self.upcoming_board.as_ref().map(|b| b.today.as_str()),
-            self.catch_up.as_ref().map(|c| c.today.as_str()),
+            self.reminders.as_ref().map(|b| b.today.as_str()),
         ];
         named
             .into_iter()
@@ -198,15 +134,6 @@ impl Home {
                 Phase::Denied(denial)
             }
         };
-        if matches!(self.phase, Phase::Ready) {
-            let tasks = self.held.tasks();
-            let open: Vec<&wire::AgendaTask> = tasks
-                .into_iter()
-                .filter(|task| rows::is_open(task))
-                .collect();
-            let today = self.today.clone();
-            self.ops.answered(ctx.locale(), &open, &today);
-        }
     }
 
     /// Forget every held answer: a pull, or a row moved.
@@ -216,18 +143,6 @@ impl Home {
 
     fn fill(&mut self, ctx: &Ctx) -> Result<(), Stop> {
         let term = self.active_term();
-        // REMINDERS READS TASKS ALONE, CALENDAR EVENTS ALONE (and the dates of reminders, read-only).
-        if self.app == App::Reminders {
-            self.fill_todo(ctx)?;
-            return match term {
-                Some(term) => self.fill_task_search(ctx, &term),
-                None => {
-                    self.held.search = None;
-                    self.held.search_term = None;
-                    Ok(())
-                }
-            };
-        }
         self.fill_window(ctx)?;
         match term {
             Some(term) => self.fill_search(ctx, &term),
@@ -237,46 +152,6 @@ impl Home {
                 Ok(())
             }
         }
-    }
-
-    /// TO-DO READS TASKS ALONE: the Inbox board and the projects.
-    fn fill_todo(&mut self, ctx: &Ctx) -> Result<(), Stop> {
-        if !self.held.todo {
-            let board = get(read(
-                ctx,
-                query_rem::Board {
-                    limit: self.limit,
-                    view: Some(query_rem::BoardView::Inbox),
-                    project_id: None,
-                },
-                |answer| match answer {
-                    Answer::AgendaTaskBoard(board) => Some(board),
-                    _ => None,
-                },
-            ))?;
-            let projects = get(read(ctx, query_rem::Projects {}, |answer| match answer {
-                Answer::AgendaTaskProjects(projects) => Some(projects),
-                _ => None,
-            }))?;
-            let all = get(read(
-                ctx,
-                query_rem::Board {
-                    limit: BOARD_LIMIT,
-                    view: Some(query_rem::BoardView::All),
-                    project_id: None,
-                },
-                |answer| match answer {
-                    Answer::AgendaTaskBoard(board) => Some(board),
-                    _ => None,
-                },
-            ))?;
-            self.today.clone_from(&board.today);
-            self.held.all = Some(all);
-            self.held.inbox = Some(board);
-            self.held.projects = Some(projects);
-            self.held.todo = true;
-        }
-        Ok(())
     }
 
     /// THE EVENTS' WINDOW, and the dated boards Day, Schedule, Week and Month draw on it.
@@ -339,31 +214,40 @@ impl Home {
                 | wire::AgendaDestination::Week
                 | wire::AgendaDestination::Month
         );
-        // DAY'S BOARDS ARE KEYED BY THE ANCHOR TOO: the absence notice is read
-        // on today alone, and a step inside the held week lands there.
+        // THE OVERDUE REMINDERS are read with Day on today alone (Apple's Calendar shows them above
+        // the day), and the board is keyed by the anchor too, so a step inside the held week reads
+        // again where it lands.
+        let overdue_before = if self.destination == wire::AgendaDestination::Day
+            && !self.today.is_empty()
+            && self.anchor == self.today
+        {
+            self.today.clone()
+        } else {
+            String::new()
+        };
         let dated_key = if self.destination == wire::AgendaDestination::Day {
-            format!("{key}|{}", self.anchor)
+            format!("{key}|{}|{overdue_before}", self.anchor)
         } else {
             key.clone()
         };
         if dated && self.held.dated.as_deref() != Some(dated_key.as_str()) {
-            // THE REMINDERS OF THE DAYS DRAWN, read-only (round 10): Calendar reads a task's title,
-            // due day and time, and shows it as a row of its day that opens in Reminders.
+            // THE REMINDERS OF THE DAYS DRAWN (rounds 10 and 12): Calendar reads a task's title, due
+            // day and time and its state, and shows it as a row of its day: ticked there with
+            // Reminders' own action, opened in Reminders.
             let last = civil::plus_days(&first, span - 1).ok_or(Stop::Failed)?;
             let window = get(read(
                 ctx,
                 query_cal::DatedReminders {
                     from: first.clone(),
                     to: last,
+                    overdue_before: Some(overdue_before).filter(|day| !day.is_empty()),
                 },
                 |answer| match answer {
                     Answer::CalendarDatedReminders(found) => Some(found),
                     _ => None,
                 },
             ))?;
-            self.held.upcoming_board = Some(board_of(&window));
-            self.held.today_board = None;
-            self.held.catch_up = None;
+            self.held.reminders = Some(board_of(&window));
             self.held.dated = Some(dated_key);
         }
         Ok(())
@@ -387,62 +271,57 @@ impl Home {
         self.held.search_term = Some(term.to_owned());
         Ok(())
     }
-
-    /// REMINDERS' HITS: the tasks and lists a term finds, as the one answer the fold draws, with
-    /// no event and no day under them.
-    fn fill_task_search(&mut self, ctx: &Ctx, term: &str) -> Result<(), Stop> {
-        if self.held.search_term.as_deref() == Some(term) {
-            return Ok(());
-        }
-        let mut request: wire::LoadRequest = query_rem::Search {
-            term: term.to_owned(),
-        }
-        .into();
-        request.limit = SEARCH_LIMIT;
-        let tasks = get(read(ctx, request, |answer| match answer {
-            Answer::AgendaTaskSearch(tasks) => Some(tasks),
-            _ => None,
-        }))?;
-        let today = self.held.today();
-        self.held.upcoming = Some(wire::AgendaUpcoming {
-            today: today.clone(),
-            ..wire::AgendaUpcoming::default()
-        });
-        self.held.context = Some(wire::AgendaDayContext {
-            today,
-            ..wire::AgendaDayContext::default()
-        });
-        self.held.search = Some(wire::AgendaSearch {
-            tasks: Some(tasks),
-            ..wire::AgendaSearch::default()
-        });
-        self.held.search_term = Some(term.to_owned());
-        Ok(())
-    }
 }
 
-/// The reminders of a window as the board the fold draws a day from: one group of open tasks,
-/// each with its title, due day and time, and nothing else.
+/// The reminders of a window as the board the fold draws a day from: a group of the rows due on
+/// the days drawn (a ticked one is done, a later occurrence of a repeating one is
+/// [`rows::STATUS_PROJECTED`]) and, when the read named them, a group of the overdue ones, each with
+/// how long ago. Each row carries its title, due day and time and nothing else.
 fn board_of(found: &wire::CalendarDatedReminders) -> wire::AgendaTaskBoard {
-    let tasks = found
-        .reminders
-        .iter()
-        .map(|reminder| wire::AgendaTask {
+    let today_epoch = civil::epoch_day_of(&found.today);
+    let task_of = |reminder: &wire::CalendarDatedReminder| {
+        let late = today_epoch
+            .zip(civil::epoch_day_of(&reminder.due_day))
+            .map(|(today, due)| due - today)
+            .filter(|days| reminder.overdue && *days < 0);
+        wire::AgendaTask {
             task_id: reminder.task_id.clone(),
             title: reminder.title.clone(),
-            status: rows::STATUS_OPEN.to_owned(),
+            status: if reminder.done {
+                rows::STATUS_DONE
+            } else if reminder.projected {
+                rows::STATUS_PROJECTED
+            } else {
+                rows::STATUS_OPEN
+            }
+            .to_owned(),
             due_day: reminder.due_day.clone(),
             due_time: reminder.due_time.clone(),
+            repeats: reminder.repeats,
+            overdue: late.is_some(),
+            days_from_today: late.and_then(|days| i32::try_from(days).ok()),
             ..wire::AgendaTask::default()
-        })
-        .collect();
+        }
+    };
+    let (late, dated): (Vec<_>, Vec<_>) = found
+        .reminders
+        .iter()
+        .partition(|reminder| reminder.overdue);
+    let mut groups = vec![wire::AgendaTaskGroup {
+        kind: wire::AgendaTaskGroupKind::Day as i32,
+        tasks: dated.into_iter().map(task_of).collect(),
+        ..wire::AgendaTaskGroup::default()
+    }];
+    if !late.is_empty() {
+        groups.push(wire::AgendaTaskGroup {
+            kind: wire::AgendaTaskGroupKind::Overdue as i32,
+            tasks: late.into_iter().map(task_of).collect(),
+            ..wire::AgendaTaskGroup::default()
+        });
+    }
     wire::AgendaTaskBoard {
         today: found.today.clone(),
-        groups: vec![wire::AgendaTaskGroup {
-            kind: wire::AgendaTaskGroupKind::Day as i32,
-            tasks,
-            ..wire::AgendaTaskGroup::default()
-        }],
+        groups,
         ..wire::AgendaTaskBoard::default()
     }
 }

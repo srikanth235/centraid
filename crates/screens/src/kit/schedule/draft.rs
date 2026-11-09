@@ -264,6 +264,26 @@ pub fn new_draft(day: &str, upcoming: &wire::AgendaUpcoming) -> Draft {
     }
 }
 
+/// A NEW REMINDER'S DRAFT: due on `day`, all day (a bare date, so it lands among the day's untimed
+/// rows), repeating never, filed in the Inbox.
+#[must_use]
+pub fn new_task(day: &str) -> Draft {
+    all_day(
+        &Draft {
+            start_day: day.to_owned(),
+            end_day: day.to_owned(),
+            start_time: DEFAULT_START.to_owned(),
+            end_time: DEFAULT_END.to_owned(),
+            repeat_key: REPEAT_NONE.to_owned(),
+            reminder_key: REMINDER_NONE.to_owned(),
+            second_reminder_key: REMINDER_NONE.to_owned(),
+            list_key: LIST_INBOX.to_owned(),
+            ..Draft::default()
+        },
+        true,
+    )
+}
+
 /// A create route's start time (`HH:MM` on its day): the draft starts then and
 /// ends an hour later. A time that is not one leaves the defaults.
 #[must_use]

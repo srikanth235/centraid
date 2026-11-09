@@ -42,8 +42,8 @@ use wire::app_query_response::Answer;
 use crate::kit::schedule::rule_words::{self, long_day};
 use wire::screen_event::Kind as E;
 
-use super::home::Hues;
-use super::routes;
+use crate::calendar::hues::Hues;
+use crate::calendar::routes;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
@@ -607,7 +607,6 @@ impl EventPage {
                             &self.route.instance_key,
                             self.route.original_start_local.as_deref(),
                             &self.route.day,
-                            wire::AgendaEditorKind::Event,
                         )),
                     },
                     wire::AgendaAction {
@@ -931,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn a_vault_that_will_not_let_agenda_read_is_the_gate_on_the_event_page() {
+    fn a_vault_that_will_not_let_calendar_read_is_the_gate_on_the_event_page() {
         let view = opened(routes::event("e1", "e1", None, "2099-06-15"));
         let Some(wire::view_state::Kind::AgendaEvent(state)) = view.kind else {
             panic!("not an event page")
@@ -944,14 +943,8 @@ mod tests {
     }
 
     #[test]
-    fn a_vault_that_will_not_let_agenda_read_is_the_gate_on_the_editor() {
-        let view = opened(routes::editor(
-            "",
-            "",
-            None,
-            "2099-06-15",
-            wire::AgendaEditorKind::Event,
-        ));
+    fn a_vault_that_will_not_let_calendar_read_is_the_gate_on_the_editor() {
+        let view = opened(routes::editor("", "", None, "2099-06-15"));
         let Some(wire::view_state::Kind::AgendaEditor(state)) = view.kind else {
             panic!("not an editor")
         };

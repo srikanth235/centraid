@@ -7,6 +7,9 @@
 //! its own rows under titles of its own (`Zq …`) and asserts on those, or clears
 //! what it must see empty.
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -37,7 +40,7 @@ fn rig_with(destination: Dest, quick_add_title: &str) -> Rig {
         agenda::registry(),
         vec![(
             agenda::TAB.to_owned(),
-            agenda::routes::home(destination, quick_add_title),
+            routes::home(destination, quick_add_title),
         )],
     ));
     driver.start();
@@ -437,7 +440,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
     assert!(!state.add_opens_quick_add);
     assert_eq!(
         state.new_event,
-        Some(agenda::routes::editor(
+        Some(routes::editor(
             "",
             "",
             None,
@@ -448,7 +451,8 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
     let landing = r.data().landing.as_ref().unwrap();
     assert_eq!(landing.day, r.today());
     assert!(landing.now_line);
-    assert_eq!(r.data().catch_up, Some(agenda::routes::catch_up()));
+    // CATCH UP IS REMINDERS' PAGE: Calendar's day offers no route to it.
+    assert_eq!(r.data().catch_up, None);
 }
 
 #[test]
@@ -777,12 +781,7 @@ fn todays_rows_all_day_first_the_now_line_among_what_has_not_started_ended_rows_
     let late = rows.iter().find(|row| row.title == "Zq Late").unwrap();
     assert_eq!(
         late.route,
-        Some(agenda::routes::event(
-            "zq-late",
-            &late.instance_key,
-            None,
-            &today
-        ))
+        Some(routes::event("zq-late", &late.instance_key, None, &today))
     );
 }
 
@@ -1137,17 +1136,17 @@ fn to_do_has_no_calendar_rows_in_more() {
     let rows = r.state().more_rows.clone();
     assert_eq!(
         rows[0].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Anytime))
+        Some(routes::todo_list(wire::TodoView::Anytime))
     );
     assert_eq!(
         rows[1].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Logbook))
+        Some(routes::todo_list(wire::TodoView::Logbook))
     );
     assert_eq!(
         rows[2].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Reminders))
+        Some(routes::todo_list(wire::TodoView::Reminders))
     );
-    assert_eq!(rows[3].route, Some(agenda::routes::trash()));
+    assert_eq!(rows[3].route, Some(routes::trash()));
     assert_eq!(
         rows[4].label, "What Reminders may read",
         "the sheet says what Reminders may read"
@@ -1330,7 +1329,7 @@ fn each_app_searches_its_own_kind_calendar_events_and_reminders_tasks() {
     assert_eq!(group.title, "Tasks");
     assert_eq!(group.meta, "1");
     assert_eq!(group.rows[0].title, "Zq Book podiatrist");
-    assert_eq!(group.rows[0].route, Some(agenda::routes::task("zq-t")));
+    assert_eq!(group.rows[0].route, Some(routes::task("zq-t")));
     assert!(data.days.is_empty());
     let mut r = t;
     // TASKS ALONE ARE AN ANSWER: no "nothing matches" over them.
@@ -1395,7 +1394,7 @@ fn search_finds_a_project_by_name_and_a_tap_opens_its_page() {
     assert_eq!(container.accessibility_label, "Project, Zqgarden");
     assert_eq!(
         container.route,
-        Some(agenda::routes::project("zq-garden", "Zqgarden"))
+        Some(routes::project("zq-garden", "Zqgarden"))
     );
     assert_eq!(data.task_hits[0].rows[0].title, "Water the zqgarden");
     assert_eq!(data.empty, wire::AgendaEmpty::None as i32);
@@ -1467,7 +1466,7 @@ fn the_empties_are_four_different_screens() {
     let add = r.state().new_event.clone().unwrap();
     assert_eq!(
         add,
-        agenda::routes::editor(
+        routes::editor(
             "",
             "",
             None,
@@ -1599,10 +1598,7 @@ fn a_task_due_today_is_a_row_of_today_untimed_after_the_all_day_rows_timed_among
     assert_eq!(row("Zq Send notes").due_label, "23:59");
     assert_eq!(row("Zq Buy milk").check, wire::TodoCheck::Open as i32);
     assert_eq!(row("Zq Buy milk").check_label, "Mark Zq Buy milk done");
-    assert_eq!(
-        row("Zq Buy milk").route,
-        Some(agenda::routes::task("zq-untimed"))
-    );
+    assert_eq!(row("Zq Buy milk").route, Some(routes::task("zq-untimed")));
     // The events' count is the events' alone.
     let events: usize = r
         .data()
@@ -1657,10 +1653,9 @@ fn a_past_day_draws_the_open_tasks_that_came_due_on_it_as_rows_of_it() {
 /// The Inbox's task rows, by opening the Inbox list as a member does from My Lists (the home
 /// draws no task, round 10).
 fn inbox_rows(r: &mut Rig) -> Vec<wire::TodoRow> {
-    let page = r.driver.push(
-        agenda::TAB,
-        agenda::routes::todo_list(wire::TodoView::Inbox),
-    );
+    let page = r
+        .driver
+        .push(agenda::TAB, routes::todo_list(wire::TodoView::Inbox));
     let Some(wire::view_state::Kind::TodoList(state)) = &r.driver.view(page).kind else {
         panic!("not a list");
     };
@@ -1747,10 +1742,7 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
     assert_eq!(row.meta, "1 task");
     assert!(row.hue_key.starts_with('c'));
     assert_eq!(row.accessibility_label, "Garden, 1 task");
-    assert_eq!(
-        garden.route,
-        Some(agenda::routes::project("zq-garden", "Garden"))
-    );
+    assert_eq!(garden.route, Some(routes::project("zq-garden", "Garden")));
     // NO SUMMARY LINE and no inline task on the Reminders home (round 10).
     assert_eq!(todo.count_label, "");
     assert!(todo.groups.is_empty());
@@ -1781,28 +1773,56 @@ fn the_empty_to_do_action_is_the_new_project_sheet_and_a_to_do_that_holds_anythi
     assert!(inbox_titles(&mut r).is_empty());
 }
 
+/// The reminder row titled `title` among every row of every day.
+fn reminder_row(r: &Rig, title: &str) -> Option<wire::TodoRow> {
+    r.data()
+        .days
+        .iter()
+        .flat_map(tasks_of)
+        .find(|row| row.title == title)
+        .cloned()
+}
+
 #[test]
-fn a_reminder_on_its_day_is_a_read_only_row_that_opens_in_reminders_and_calendar_checks_nothing() {
+fn a_reminder_on_its_day_is_ticked_there_and_ticked_back_by_reminders_own_action() {
     let mut r = rig(Dest::Schedule);
     let day = r.day(1);
-    r.task("zq-ro", "Zq Read only", Some(&day));
+    r.task("zq-ro", "Zq Tick me", Some(&day));
     r.settle();
-    let find = |r: &Rig| -> wire::TodoRow {
-        r.data()
-            .days
-            .iter()
-            .flat_map(tasks_of)
-            .find(|row| row.title == "Zq Read only")
-            .cloned()
-            .expect("the reminder is a row of its day")
-    };
-    let row = find(&r);
-    assert!(row.read_only, "a reminder in Calendar is read-only");
-    // A tap opens it in Reminders.
-    assert_eq!(row.route, Some(agenda::routes::task("zq-ro")));
+    let row = reminder_row(&r, "Zq Tick me").expect("the reminder is a row of its day");
+    // A reminder on a Calendar day has a box that ticks it, and a tap on the row opens it in Reminders.
+    assert!(!row.read_only, "a dated reminder ticks on its day");
+    assert_eq!(row.check, wire::TodoCheck::Open as i32);
+    assert_eq!(row.route, Some(routes::task("zq-ro")));
     assert_eq!(row.route.as_ref().unwrap().screen, "reminders.task");
-    // CALENDAR WRITES NO TASK: a check, a flag and a delete do nothing and say nothing.
+
+    // THE TICK IS REMINDERS' OWN `complete-task`: the task is done in the vault, and the row stays
+    // on its day, ticked, with the status line Reminders' words and an Undo.
     r.check("zq-ro");
+    r.settle();
+    let row = reminder_row(&r, "Zq Tick me").expect("a ticked reminder stays on its day");
+    assert_eq!(row.check, wire::TodoCheck::Done as i32);
+    assert_eq!(r.status().map(|s| s.sentence.as_str()), Some("Task done"));
+    let wire::app_query_response::Answer::AgendaTask(detail) = r.read(load::reminders::Task {
+        task_id: "zq-ro".to_owned(),
+    }) else {
+        panic!("the task's page");
+    };
+    assert_eq!(
+        detail.task.as_ref().map(|task| task.status.as_str()),
+        Some("done"),
+        "Reminders' own write made it so"
+    );
+
+    // AND TICKED BACK: `reopen-task`, the same box.
+    r.check("zq-ro");
+    r.settle();
+    assert_eq!(
+        reminder_row(&r, "Zq Tick me").map(|row| row.check),
+        Some(wire::TodoCheck::Open as i32)
+    );
+
+    // Calendar flags and deletes nothing: those are Reminders' gestures.
     r.send(H::TaskFlagged(wire::agenda_home_event::TaskFlagged {
         task_id: "zq-ro".to_owned(),
         flagged: true,
@@ -1811,10 +1831,130 @@ fn a_reminder_on_its_day_is_a_read_only_row_that_opens_in_reminders_and_calendar
         task_id: "zq-ro".to_owned(),
     }));
     r.settle();
-    assert!(r.status().is_none());
-    let row = find(&r);
-    assert_eq!(row.check, wire::TodoCheck::Open as i32);
+    let row = reminder_row(&r, "Zq Tick me").expect("still there");
     assert!(!row.flagged);
+}
+
+#[test]
+fn every_occurrence_of_a_repeating_reminder_is_on_its_day_and_only_the_open_one_ticks() {
+    let mut r = rig(Dest::Schedule);
+    let (first, second, third) = (r.day(1), r.day(2), r.day(3));
+    r.write(act::reminders::AddTask {
+        id: Some("zq-water".to_owned()),
+        title: "Zq Water".to_owned(),
+        due: Field::Is(first.clone()),
+        rule: Field::Is("FREQ=DAILY".to_owned()),
+        ..Default::default()
+    });
+    r.settle();
+    for day in [&first, &second, &third] {
+        let section = section(r.data(), day).unwrap_or_else(|| panic!("a section for {day}"));
+        let row = tasks_of(section)
+            .into_iter()
+            .find(|row| row.title == "Zq Water")
+            .unwrap_or_else(|| panic!("the series is on {day}"));
+        // The open occurrence is a row of its own; a later one is the rule's, so its box ticks nothing.
+        assert_eq!(row.read_only, day != &first, "{day}");
+        assert_eq!(row.route, Some(routes::task("zq-water")));
+    }
+    // TICKING THE OPEN ONE opens the next: the series carries on with the same days.
+    r.check("zq-water");
+    r.settle();
+    let first_row = tasks_of(section(r.data(), &first).unwrap())
+        .into_iter()
+        .find(|row| row.title == "Zq Water")
+        .cloned()
+        .expect("the ticked occurrence stays on its day");
+    assert_eq!(first_row.check, wire::TodoCheck::Done as i32);
+    let second_row = tasks_of(section(r.data(), &second).unwrap())
+        .into_iter()
+        .find(|row| row.title == "Zq Water")
+        .cloned()
+        .expect("the next occurrence is on its day");
+    assert!(!second_row.read_only, "the next one is the open row now");
+}
+
+#[test]
+fn today_draws_the_overdue_reminders_above_the_day_and_no_other_day_does() {
+    let mut r = rig(Dest::Day);
+    let (older, old) = (r.day(-3), r.day(-1));
+    r.task("zq-older", "Zq Renew passport", Some(&older));
+    r.task("zq-old", "Zq Call dentist", Some(&old));
+    r.task("zq-today", "Zq Today's own", Some(&r.today()));
+    r.settle();
+    let overdue = r.data().overdue.clone().expect("an Overdue group on today");
+    assert_eq!(overdue.title, "Overdue");
+    let titles: Vec<&str> = overdue
+        .rows
+        .iter()
+        .filter(|row| row.title.starts_with("Zq"))
+        .map(|row| row.title.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        ["Zq Renew passport", "Zq Call dentist"],
+        "oldest first, and never today's own"
+    );
+    let labels: Vec<&str> = overdue
+        .rows
+        .iter()
+        .filter(|row| row.title.starts_with("Zq"))
+        .map(|row| row.due_label.as_str())
+        .collect();
+    assert_eq!(labels, ["3 days ago", "Yesterday"]);
+    // There is no Catch up verb here (that page is Reminders'), and no "You were away" notice.
+    assert!(overdue.verb_label.is_empty() && overdue.verb_key.is_empty());
+    assert!(r.data().notice.is_none());
+    assert!(overdue.rows.iter().all(|row| !row.read_only && row.overdue));
+    // A tick clears one from the group.
+    r.check("zq-older");
+    r.settle();
+    let after = r.data().overdue.clone();
+    assert!(
+        after.is_none_or(|group| group
+            .rows
+            .iter()
+            .all(|row| row.title != "Zq Renew passport")),
+        "a ticked overdue reminder leaves the group"
+    );
+    // TOMORROW HAS NONE: the group is today's.
+    r.step(1);
+    assert!(r.data().overdue.is_none());
+}
+
+#[test]
+fn the_inbox_row_counts_every_open_reminder_in_it_never_the_boards_window() {
+    let mut r = rig(Dest::Todo);
+    // More than the page the home reads (100), all in the Inbox.
+    let before = r.todo_inbox_count();
+    for n in 0..(rows_page() + 12) {
+        r.task(&format!("zq-bulk-{n}"), &format!("Zq Bulk {n}"), None);
+    }
+    r.settle();
+    assert_eq!(
+        r.todo_inbox_count(),
+        before + rows_page() + 12,
+        "the Inbox says its true total, not the first {}",
+        rows_page()
+    );
+}
+
+/// The reads' page size: the window the board stops at.
+fn rows_page() -> usize {
+    centraid_screens::kit::schedule::rows::PAGE as usize
+}
+
+impl Rig {
+    /// The Inbox row's count on the Reminders home.
+    fn todo_inbox_count(&self) -> usize {
+        self.todo()
+            .projects
+            .iter()
+            .flat_map(|group| &group.rows)
+            .find(|row| row.row.as_ref().is_some_and(|row| row.id == "inbox"))
+            .and_then(|row| row.count.parse().ok())
+            .expect("the Inbox row names its count")
+    }
 }
 
 #[test]
@@ -2274,7 +2414,7 @@ fn the_add_sheet_opens_on_the_anchor_day() {
     r.step(3);
     assert_eq!(
         r.state().new_event,
-        Some(agenda::routes::editor(
+        Some(routes::editor(
             "",
             "",
             None,
@@ -2370,7 +2510,7 @@ fn a_row_s_time_follows_the_phones_12_or_24_hour_setting() {
 fn the_new_reminder_route_opens_an_empty_bar_on_todo() {
     let mut driver = Driver::with_runtime(Runtime::new(
         agenda::registry(),
-        vec![(agenda::TAB.to_owned(), agenda::routes::home_adding(""))],
+        vec![(agenda::TAB.to_owned(), routes::home_adding(""))],
     ));
     driver.start();
     let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;

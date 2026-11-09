@@ -15,8 +15,8 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::{Home, grid};
-use crate::agenda::event::is_series_occurrence;
-use crate::agenda::routes;
+use crate::calendar::event::is_series_occurrence;
+use crate::calendar::routes;
 use crate::catalog::act::calendar as command_cal;
 use crate::field::Field;
 use crate::kit::civil;

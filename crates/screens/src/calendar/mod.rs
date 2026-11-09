@@ -8,7 +8,13 @@
 //! the route Reminders registered for it, as data.
 
 use crate::Registry;
-use crate::agenda::{editor, event, home};
+pub mod editor;
+pub mod event;
+pub mod follow;
+pub mod home;
+pub mod hues;
+pub mod push;
+pub mod routes;
 
 /// Calendar's home.
 pub const HOME: &str = "calendar.home";
@@ -21,7 +27,7 @@ pub const EDITOR: &str = "calendar.editor";
 #[must_use]
 pub fn registry() -> Registry {
     Registry::default()
-        .with(HOME, home::build_calendar)
+        .with(HOME, home::build)
         .with(EVENT, event::build)
         .with(EDITOR, editor::build)
 }

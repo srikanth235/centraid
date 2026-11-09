@@ -39,20 +39,18 @@ use wire::AgendaDestination as Dest;
 
 use super::grid::{self, WeekStart};
 use super::held::{Held, range_of, span_of};
-use super::search;
-use crate::agenda::routes;
+use crate::calendar::hues::Hues;
+use crate::calendar::routes;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words;
 use crate::kit::schedule::style;
-use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
+use crate::strings::{Locale, agenda as words, agenda_home as sentences};
 
 const CANCELLED: &str = "cancelled";
 const NEEDS_ACTION: &str = "needs-action";
 const MIDNIGHT: &str = "00:00";
 const META_SEPARATOR: &str = " · ";
-/// A party hue for an event on no calendar: neutral, and never a brand.
-pub(super) const NO_CALENDAR_HUE: &str = "cSlate";
 
 /// What a fold reads besides the held answers.
 pub struct Fold<'a> {
@@ -69,41 +67,6 @@ pub struct Fold<'a> {
     /// weeks begin.
     pub week_start: WeekStart,
     pub month_style: wire::AgendaMonthStyle,
-    /// Calendar's reminders are read-only rows that open in Reminders (round 10).
-    pub read_only_tasks: bool,
-}
-
-/// The calendar's colour role by id: People's convention, so no view converts
-/// a wheel word. A calendar that stores `var(--c-<hue>)` gets that hue; one that
-/// stores nothing, or a colour the wheel cannot name, gets its id's own.
-pub(in crate::agenda) struct Hues<'a> {
-    stored: HashMap<&'a str, Option<&'a str>>,
-}
-
-impl<'a> Hues<'a> {
-    pub(in crate::agenda) fn of(calendars: &'a [wire::AgendaCalendar]) -> Self {
-        Self {
-            stored: calendars
-                .iter()
-                .map(|calendar| (calendar.calendar_id.as_str(), calendar.color.as_deref()))
-                .collect(),
-        }
-    }
-
-    /// THE ONE COLOUR OF A CALENDAR (#1173): its list-palette token (`listBlue`), the colour
-    /// the member chose or else the id's own place on the palette (`list_color_key`), which is
-    /// also what the More sheet's mark wears. So a block, a chip, a dot, the picker and the
-    /// event page all read the same colour; an event on no calendar is the neutral one.
-    pub(in crate::agenda) fn grid_hue(&self, id: Option<&str>) -> String {
-        let Some(id) = id else {
-            return NO_CALENDAR_HUE.to_owned();
-        };
-        let stored = self.stored.get(id).copied().flatten().map(str::trim);
-        let key = centraid_design::list_color_key(id, stored);
-        let mut chars = key.chars();
-        let first = chars.next().map(|c| c.to_ascii_uppercase());
-        format!("list{}{}", first.unwrap_or_default(), chars.as_str())
-    }
 }
 
 /// One row on a day: an event or a task, and the key it sorts by.
@@ -204,12 +167,10 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
             fold.destination,
             Dest::Day | Dest::Schedule | Dest::Week | Dest::Month
         );
-    let (projects, sections) = held.projects_of();
-    let mut task_ctx = rows::Context::of(today, projects, sections);
+    let mut task_ctx = rows::Context::of(today, &[], &[]);
     // THE DAY'S HEAD NAMES THE DAY, so a row says its time only.
     task_ctx.day_in_head = true;
     task_ctx.cycle = fold.cycle;
-    task_ctx.read_only = fold.read_only_tasks;
     let due_on = if dated {
         tasks_by_day(held, &in_range)
     } else {
@@ -287,24 +248,11 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         });
     }
 
-    // THE OVERDUE GROUP AND THE ABSENCE NOTICE: Day on today, and nowhere else.
+    // THE OVERDUE REMINDERS, above the day (Apple's Calendar): Day on today, and nowhere else.
     let on_today = dated && fold.destination == Dest::Day && anchor == today;
     let overdue = on_today
         .then(|| overdue_group(locale, held, &task_ctx))
         .flatten();
-    let notice = on_today.then(|| notice_of(locale, held)).flatten();
-    // THE TASKS THE TERM FOUND (R-1128-4): one group above the event days; and
-    // THE PROJECTS THE TERM NAMED (R-1097-19, Q-1128-1), above those.
-    let task_hits = if fold.term.is_some() {
-        search::hits_group(locale, held, &task_ctx)
-    } else {
-        None
-    };
-    let containers = if fold.term.is_some() {
-        search::containers(locale, held)
-    } else {
-        Vec::new()
-    };
 
     let drawn: HashSet<&str> = sections_out
         .iter()
@@ -368,15 +316,10 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
     let empty = if drawn_grid && fold.destination != Dest::Day {
         // A GRID IS DRAWN EMPTY: its cells say what they hold.
         wire::AgendaEmpty::None
-    } else if !sections_out.is_empty() || overdue.is_some() || notice.is_some() {
+    } else if !sections_out.is_empty() || overdue.is_some() {
         wire::AgendaEmpty::None
     } else if fold.term.is_some() {
-        // A PROJECT FOUND BY NAME IS AN ANSWER too: no "nothing matches" over it.
-        if task_hits.is_some() || !containers.is_empty() {
-            wire::AgendaEmpty::None
-        } else {
-            wire::AgendaEmpty::NoMatch
-        }
+        wire::AgendaEmpty::NoMatch
     } else if waiting_only {
         wire::AgendaEmpty::NothingWaiting
     } else if fold.destination == Dest::Schedule
@@ -467,12 +410,12 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
             })
             .collect(),
         overdue,
-        notice,
-        task_hits: task_hits.into_iter().collect(),
-        containers,
+        notice: None,
+        task_hits: Vec::new(),
+        containers: Vec::new(),
         event_count_label: sentences::event_count(locale, event_count as u64),
         landing: Some(landing),
-        catch_up: Some(routes::catch_up()),
+        catch_up: None,
         todo: None,
         week_strip: grids.week_strip,
         time_grid: grids.time_grid,
@@ -618,16 +561,11 @@ fn tasks_by_day<'a>(
 ) -> BTreeMap<&'a str, Vec<&'a wire::AgendaTask>> {
     let mut seen = HashSet::new();
     let mut out: BTreeMap<&str, Vec<&wire::AgendaTask>> = BTreeMap::new();
-    let boards = [&held.today_board, &held.upcoming_board];
+    let boards = [&held.reminders];
     for group in boards.into_iter().flatten().flat_map(|board| &board.groups) {
         let kind = wire::AgendaTaskGroupKind::try_from(group.kind)
             .unwrap_or(wire::AgendaTaskGroupKind::Unspecified);
-        if !matches!(
-            kind,
-            wire::AgendaTaskGroupKind::Overdue
-                | wire::AgendaTaskGroupKind::Today
-                | wire::AgendaTaskGroupKind::Day
-        ) {
+        if kind != wire::AgendaTaskGroupKind::Day {
             continue;
         }
         for task in &group.tasks {
@@ -642,10 +580,10 @@ fn tasks_by_day<'a>(
     out
 }
 
-/// The TODAY board's Overdue group, finished: its rows, its count and the
-/// "Reschedule" verb. THE HEAD NAMES NO DAY, so each row says how long ago.
+/// The overdue reminders as a group, finished: its rows (each says how long ago) and its count. It
+/// has no "Catch up" verb: that page is Reminders'.
 fn overdue_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wire::TodoRowGroup> {
-    let board = held.today_board.as_ref()?;
+    let board = held.reminders.as_ref()?;
     let group = board
         .groups
         .iter()
@@ -653,27 +591,11 @@ fn overdue_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wir
     rows::groups(locale, std::slice::from_ref(group), ctx)
         .into_iter()
         .next()
-}
-
-/// "You were away 16 days; 34 tasks came due", when the core names an absence.
-fn notice_of(locale: Locale, held: &Held) -> Option<wire::TodoNotice> {
-    let catch_up = held.catch_up.as_ref().filter(|catch_up| catch_up.absent)?;
-    let template = if catch_up.overdue == 1 {
-        sentences::away_notice_one(locale)
-    } else {
-        sentences::away_notice_many(locale)
-    };
-    Some(wire::TodoNotice {
-        sentence: fill(
-            &template,
-            &[
-                ("days", &catch_up.away_days.to_string()),
-                ("n", &catch_up.overdue.to_string()),
-            ],
-        ),
-        verb_label: task::catch_up(locale),
-        verb_key: rows::VERB_CATCH_UP.to_owned(),
-    })
+        .map(|group| wire::TodoRowGroup {
+            verb_label: String::new(),
+            verb_key: String::new(),
+            ..group
+        })
 }
 
 fn event_row(
@@ -930,7 +852,6 @@ mod tests {
             held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
-            read_only_tasks: false,
         })
         .unwrap()
     }
@@ -1136,7 +1057,6 @@ mod tests {
             held: &held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
-            read_only_tasks: false,
         })
         .unwrap();
         let row = rows_of(&data)[0].clone();
@@ -1151,41 +1071,6 @@ mod tests {
                 Some("2026-06-16T08:15"),
                 "2026-06-16"
             ))
-        );
-    }
-
-    #[test]
-    fn the_notice_names_the_absence_and_counts_one_in_the_singular() {
-        let mut held = held_of(vec![]);
-        held.catch_up = Some(wire::AgendaTaskCatchUp {
-            away_days: 16,
-            overdue: 34,
-            absent: true,
-            ..wire::AgendaTaskCatchUp::default()
-        });
-        assert_eq!(
-            notice_of(Locale::En, &held).unwrap().sentence,
-            "You were away 16 days; 34 tasks came due"
-        );
-        held.catch_up = Some(wire::AgendaTaskCatchUp {
-            away_days: 9,
-            overdue: 1,
-            absent: true,
-            ..wire::AgendaTaskCatchUp::default()
-        });
-        assert_eq!(
-            notice_of(Locale::En, &held).unwrap().sentence,
-            "You were away 9 days; 1 task came due"
-        );
-        held.catch_up = Some(wire::AgendaTaskCatchUp {
-            away_days: 3,
-            overdue: 2,
-            absent: false,
-            ..wire::AgendaTaskCatchUp::default()
-        });
-        assert!(
-            notice_of(Locale::En, &held).is_none(),
-            "no absence, no notice"
         );
     }
 }

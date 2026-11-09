@@ -4,8 +4,11 @@
 
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::kit::menu;
 use centraid_screens::runtime::Runtime;
 use centraid_screens::testing::Driver;
@@ -47,16 +50,9 @@ fn is_keychain(request: &wire::EffectRequest, op: wire::keychain_op::Op) -> bool
     )
 }
 
-/// Answer the calendar's flag (the first Get) and then the choice's (the second), the way a shell
-/// answers them one after the other.
+/// Answer the choice's read (the one Get Reminders' home asks when it appears), the way a shell
+/// does.
 fn settle_reads(d: &mut Driver, stored: Option<&str>) {
-    d.answer_effect(keychain(false, ""));
-    let second = d
-        .effects
-        .iter()
-        .position(|r| is_keychain(r, wire::keychain_op::Op::Get))
-        .expect("the choice is read after the calendar's flag");
-    assert_eq!(second, 0);
     d.answer_effect(match stored {
         Some(text) => keychain(true, text),
         None => keychain(false, ""),
@@ -64,22 +60,17 @@ fn settle_reads(d: &mut Driver, stored: Option<&str>) {
 }
 
 #[test]
-fn the_choice_is_read_after_the_calendars_flag_never_beside_it() {
+fn the_choice_is_asked_once_when_the_home_appears_and_its_answer_is_worn() {
     let (mut d, _) = home(Dest::Todo);
     let gets = d
         .effects
         .iter()
         .filter(|r| is_keychain(r, wire::keychain_op::Op::Get))
         .count();
-    assert_eq!(gets, 1, "only the calendar's flag is out");
-    d.answer_effect(keychain(false, ""));
-    let gets = d
-        .effects
-        .iter()
-        .filter(|r| is_keychain(r, wire::keychain_op::Op::Get))
-        .count();
-    assert_eq!(gets, 1, "the choice is asked once the flag landed");
-    // The choice's answer is its own: a stored value is worn, the flag is untouched.
+    assert_eq!(
+        gets, 1,
+        "Reminders reads its own choice and waits on no calendar's flag"
+    );
     d.answer_effect(keychain(true, "sort=title;flagged=0;completed=0"));
     assert!(d.effects.is_empty());
 }
@@ -115,7 +106,6 @@ fn a_page_opened_afterwards_reads_the_choice_and_wears_it() {
         ["apple", "Mango", "Pear"],
         "the core's own order until the choice is read"
     );
-    d.answer_effect(keychain(false, ""));
     d.answer_effect(keychain(true, "sort=title;flagged=0;completed=0"));
     assert_eq!(
         titles_of(&list_data(d.view(all)).groups),

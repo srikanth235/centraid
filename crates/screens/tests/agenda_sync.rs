@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use agenda_event_support::World;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::calendar::CalendarFollow;
+use centraid_screens::calendar::follow::CalendarFollow;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Field;
 use centraid_screens::{Registry, Screen};
@@ -948,7 +948,7 @@ fn a_calendar_the_shell_never_reported_is_treated_as_read_only() {
 
 #[test]
 fn alerts_and_guests_ride_the_record_alerts_once_each_and_guests_only_when_there_are_any() {
-    use centraid_screens::agenda::calendar;
+    use centraid_screens::calendar::follow as calendar;
     use centraid_screens::strings::Locale;
     let mut event = meeting("Party", "uid:party");
     event.alerts = vec![10, 60, 10];

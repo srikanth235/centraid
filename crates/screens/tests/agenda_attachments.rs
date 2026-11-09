@@ -5,9 +5,12 @@
 
 mod agenda_event_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use agenda_event_support::World;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Field;
 use centraid_screens::{docs, photos};
@@ -21,7 +24,10 @@ fn world() -> World {
 }
 
 fn wire_task_screen() -> centraid_screens::Registry {
-    centraid_screens::Registry::default().with(agenda::TASK, agenda::detail::build)
+    centraid_screens::Registry::default().with(
+        centraid_screens::reminders::TASK,
+        centraid_screens::reminders::detail::build,
+    )
 }
 
 fn an_event(world: &mut World) -> String {

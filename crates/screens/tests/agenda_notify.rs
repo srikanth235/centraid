@@ -5,6 +5,9 @@
 
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::act;
@@ -19,7 +22,7 @@ fn rig() -> (Driver, u64) {
         agenda::registry(),
         vec![(
             agenda::TAB.to_owned(),
-            agenda::routes::home(wire::AgendaDestination::Day, ""),
+            routes::home(wire::AgendaDestination::Day, ""),
         )],
     )
     .with_services(agenda::notify::services());

@@ -3,8 +3,11 @@
 //! helper one of them does not use is dead there).
 #![allow(dead_code)]
 
+#[allow(clippy::duplicate_mod)]
+#[path = "../schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::{Field, Keyed};
 use centraid_screens::testing::Driver;
@@ -33,8 +36,14 @@ impl World {
     pub fn with(registry: Registry) -> Self {
         let registry = registry
             .with(proof::NAME, proof::build)
-            .with(agenda::EVENT, agenda::event::build)
-            .with(agenda::EDITOR, agenda::editor::build);
+            .with(
+                centraid_screens::calendar::EVENT,
+                centraid_screens::calendar::event::build,
+            )
+            .with(
+                centraid_screens::calendar::EDITOR,
+                centraid_screens::calendar::editor::build,
+            );
         let runtime = Runtime::new(registry, vec![(agenda::TAB.to_owned(), proof::route())]);
         let mut driver = Driver::with_runtime(runtime);
         driver.start();

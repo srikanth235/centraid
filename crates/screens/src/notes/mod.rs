@@ -123,7 +123,7 @@ pub mod routes {
     /// Reminders" door. Built as the wire route Reminders' home registers under
     /// (`reminders.home`), because a screen never names another app's module.
     #[must_use]
-    pub fn send_to_agenda(title: &str) -> wire::Route {
+    pub fn send_to_reminders(title: &str) -> wire::Route {
         route(
             "reminders.home",
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {

@@ -11,14 +11,14 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 use wire::todo_list_event::Kind as L;
 
-use super::todo::buckets;
-use super::todo::view::Prefs;
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words::long_day;
+use crate::reminders::buckets;
+use crate::reminders::view::Prefs;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, fill, task as words};
 
@@ -113,7 +113,7 @@ fn window_label(locale: Locale, board: &wire::AgendaTaskBoard) -> String {
 
 /// The colour token of a smart list, one place for the home's card and the page's title.
 #[must_use]
-pub(super) fn smart_color(view: wire::TodoView) -> &'static str {
+pub fn smart_color(view: wire::TodoView) -> &'static str {
     match view {
         wire::TodoView::Today => "listBlue",
         wire::TodoView::Scheduled => "listRaspberry",
@@ -132,7 +132,7 @@ pub(super) fn verb_effects(key: &str) -> Vec<wire::Effect> {
     }
     vec![wire::Effect {
         kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
-            route: Some(super::routes::catch_up()),
+            route: Some(crate::reminders::routes::catch_up()),
         })),
     }]
 }
@@ -390,15 +390,10 @@ impl Screen for List {
                 } else {
                     String::new()
                 },
-                add_route: self.phase.data().map(|board| {
-                    super::routes::editor(
-                        "",
-                        "",
-                        None,
-                        &board.today,
-                        wire::AgendaEditorKind::Unspecified,
-                    )
-                }),
+                add_route: self
+                    .phase
+                    .data()
+                    .map(|board| crate::reminders::routes::editor(&board.today)),
             })),
             ..wire::ViewState::default()
         }

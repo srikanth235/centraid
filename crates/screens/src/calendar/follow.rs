@@ -43,7 +43,7 @@
 //! The shell reports each calendar's `writable` / `allows_modifications` in the snapshot; the
 //! writable ones are remembered for the pass. After every pass, and after any commit
 //! ([`wire::DataChanged`]) while some calendar is writable, the core reads what those calendars
-//! are OWED ([`super::calendar_push`]: derived at read time, nothing queued) and asks the shell to
+//! are OWED ([`super::push`]: derived at read time, nothing queued) and asks the shell to
 //! write it with ONE [`wire::CalendarWrite`]; the shell answers [`wire::CalendarWritten`] and the
 //! core records it with `follow.pushed`. **One write in flight, one queued**, like the reads: a
 //! write and a read never overlap, a trigger during either waits for it. A write that fails or is
@@ -64,7 +64,7 @@ use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 use wire::screen_event::Kind as E;
 
-use super::calendar_push::{self as push, Prepared};
+use super::push::{self as push, Prepared};
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::kit::civil;

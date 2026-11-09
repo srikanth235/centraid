@@ -147,7 +147,7 @@ catalog! {
     plain search_placeholder = ("Search notes", "Search notes");
     plain section_notes = ("Notes", "Notes");
     plain section_pinned = ("Pinned", "Pinned");
-    plain send_to_agenda = ("Send to Reminders", "Send to Reminders");
+    plain send_to_reminders = ("Send to Reminders", "Send to Reminders");
     plain show_every_note = ("Show every note", "Show every note");
     plain sort_created = ("Date created", "Date created");
     plain sort_title = ("Sort notes", "Sort notes");

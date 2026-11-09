@@ -23,8 +23,9 @@ use std::collections::{BTreeMap, HashMap};
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
-use super::fold::{self, Hues};
-use crate::agenda::routes;
+use super::fold;
+use crate::calendar::hues::Hues;
+use crate::calendar::routes;
 use crate::kit::civil;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words::long_day;
@@ -418,7 +419,7 @@ impl Input<'_> {
         task.project_id
             .as_deref()
             .map(|id| rows::hue_of(id, self.tasks.projects.get(id).copied()))
-            .unwrap_or_else(|| fold::NO_CALENDAR_HUE.to_owned())
+            .unwrap_or_else(|| crate::calendar::hues::NO_CALENDAR_HUE.to_owned())
     }
 
     fn task_title(&self, task: &wire::AgendaTask) -> String {
@@ -609,9 +610,11 @@ fn chips_of(input: &Input, day: &str) -> Vec<wire::AgendaGridChip> {
                     hue_key: input.task_hue(task),
                     is_task: true,
                     task_id: task.task_id.clone(),
-                    route: Some(routes::task(&task.task_id)),
+                    route: Some(crate::kit::schedule::routes::task(&task.task_id)),
                     accessibility_label: title.clone(),
                     title,
+                    done: task.status == rows::STATUS_DONE,
+                    read_only: task.status == rows::STATUS_PROJECTED,
                 }
             }),
     );
@@ -731,7 +734,9 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
             is_past: past(end),
             is_task: true,
             task_id: task.task_id.clone(),
-            route: Some(routes::task(&task.task_id)),
+            route: Some(crate::kit::schedule::routes::task(&task.task_id)),
+            done: task.status == rows::STATUS_DONE,
+            read_only: task.status == rows::STATUS_PROJECTED,
             title,
             detail: meta.clone(),
             time_label,

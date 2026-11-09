@@ -7,14 +7,14 @@ use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
 use super::Editor;
-use super::draft::{
-    Draft, REMINDER_NONE, REMINDERS, TRAVELS, ZONE_FLOATING, alerts_of, normalize_url,
-};
-use crate::agenda::event::reminder_label;
+use crate::calendar::event::reminder_label;
 use crate::catalog::act;
 use crate::catalog::load;
 use crate::kit::act as kit_act;
 use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::schedule::draft::{
+    Draft, REMINDER_NONE, REMINDERS, TRAVELS, ZONE_FLOATING, alerts_of,
+};
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda as words, agenda_editor as editor_words, fill};
 
@@ -145,7 +145,7 @@ pub const ZONES: [&str; 74] = [
 
 /// `London, Europe` for `Europe/London`: the page's one spelling of a zone.
 fn zone_title(locale: Locale, id: &str) -> String {
-    crate::agenda::event::zone_title(locale, id)
+    crate::calendar::event::zone_title(locale, id)
 }
 
 /// Whether `text` is in the choice's words, in any case, an underscore being a space.
@@ -159,18 +159,15 @@ fn matches_query(query: &str, haystacks: &[&str]) -> bool {
 
 impl Editor {
     /// Open a sheet the editor draws. The second alert waits for the first and
-    /// the zone for a timed event; a task has none of the event's.
+    /// the zone for a timed event.
     pub(super) fn open_sheet(&mut self, sheet: wire::agenda_editor_state::Sheet) {
         use wire::agenda_editor_state::Sheet;
         let Some(draft) = &self.draft else { return };
         let (no_first_alert, all_day) = (draft.reminder_key == REMINDER_NONE, draft.all_day);
-        let task = self.is_task();
         match sheet {
             Sheet::CustomRepeat => self.open_custom(),
             Sheet::SecondReminder if no_first_alert => {}
-            Sheet::Zone if all_day || task => {}
-            Sheet::Location | Sheet::Availability | Sheet::Travel | Sheet::SecondReminder
-                if task => {}
+            Sheet::Zone if all_day => {}
             _ => {
                 self.close_sheet();
                 self.sheet = sheet;
@@ -534,7 +531,7 @@ impl Editor {
     }
 
     pub(super) fn travel_label(locale: Locale, minutes: i32) -> String {
-        crate::agenda::event::travel_label(locale, i64::from(minutes))
+        crate::calendar::event::travel_label(locale, i64::from(minutes))
     }
 
     pub(super) fn travel_choices(&self, locale: Locale, draft: &Draft) -> Vec<wire::AgendaChoice> {
@@ -548,18 +545,6 @@ impl Editor {
                 )
             })
             .collect()
-    }
-
-    // -- a task's address ---------------------------------------------------
-
-    /// What Save will write for the address, empty when none or refused.
-    pub(super) fn url_saved_as(draft: &Draft) -> String {
-        normalize_url(&draft.url).unwrap_or_default()
-    }
-
-    /// The address is typed and is not one.
-    pub(super) fn url_refused(draft: &Draft) -> bool {
-        normalize_url(&draft.url).is_none()
     }
 }
 

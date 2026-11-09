@@ -19,7 +19,7 @@ use wire::imports_made_event::Kind as M;
 use wire::screen_event::Kind as E;
 
 use super::{effect, reminders};
-use crate::agenda::calendar::{self, CalendarFollow};
+use crate::calendar::follow::{self as calendar, CalendarFollow};
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
 use crate::shell::row_routes as rows;

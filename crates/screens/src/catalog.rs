@@ -5611,11 +5611,12 @@ pub mod load {
             }
         }
 
-        /// The open reminders that fall due in a window of days: the title, due day, due time and state of each, read-only, so a day can show them. A reminder opens in Reminders.
+        /// The dated reminders that fall due in a window of days: the title, due day, due time and state of each, every occurrence of a repeating one, and, when asked, the open ones overdue, so a day can show them. A reminder is ticked and opened in Reminders, never here.
         #[derive(Clone, Debug, Default)]
         pub struct DatedReminders {
             pub from: String,
             pub to: String,
+            pub overdue_before: Option<String>,
         }
         impl DatedReminders {
             pub const NAME: &str = "dated-reminders";
@@ -5624,6 +5625,7 @@ pub mod load {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("from".to_owned(), text(self.from));
                 map.insert("to".to_owned(), text(self.to));
+                if let Some(it) = self.overdue_before { map.insert("overdue_before".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }

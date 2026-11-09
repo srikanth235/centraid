@@ -3,6 +3,9 @@
 //! through `Driver`, the door a shell uses.
 #![allow(dead_code)]
 
+#[allow(clippy::duplicate_mod)]
+#[path = "../schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
@@ -24,7 +27,7 @@ pub fn reminders_driver() -> Driver {
         agenda::registry(),
         vec![(
             agenda::TAB.to_owned(),
-            agenda::routes::home(wire::AgendaDestination::Todo, ""),
+            routes::home(wire::AgendaDestination::Todo, ""),
         )],
     ));
     driver.start();

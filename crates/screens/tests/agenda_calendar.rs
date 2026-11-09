@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use agenda_event_support::World;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::calendar::{self, CalendarFollow};
+use centraid_screens::calendar::follow::{self as calendar, CalendarFollow};
 use centraid_screens::kit::civil;
 use centraid_screens::strings::Locale;
 use centraid_screens::{Registry, Screen};

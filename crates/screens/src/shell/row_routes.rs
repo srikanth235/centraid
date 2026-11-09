@@ -9,7 +9,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::{agenda, docs, health, locker, money, notes, people, photos};
+use crate::{docs, health, locker, money, notes, people, photos};
 
 /// A row to open: the app it lives in, what kind of thing it is, its id, its
 /// title (which rides to the page's head so it has words before its read lands)
@@ -40,8 +40,8 @@ impl RowRef {
 #[must_use]
 pub fn app_home(app: &str) -> Option<wire::Route> {
     Some(match app {
-        "calendar" => agenda::routes::home(wire::AgendaDestination::Day, ""),
-        "reminders" => agenda::routes::home(wire::AgendaDestination::Todo, ""),
+        "calendar" => crate::calendar::routes::home(wire::AgendaDestination::Day),
+        "reminders" => crate::reminders::routes::home(),
         "docs" => docs::routes::drive(wire::DocsDestination::All, "", "", ""),
         "health" => health::routes::home(wire::HealthDestination::Today),
         "locker" => locker::routes::home(wire::LockerDestination::Items),
@@ -63,9 +63,9 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
     // A ROW AN OLDER BUILD STORED UNDER `agenda` is read as the app of its kind (round 10).
     let app = centraid_vault::roster::legacy(row.app.as_str(), row.entity.as_str());
     match (app, row.entity.as_str()) {
-        ("reminders", "task") => Some(agenda::routes::task(id)),
-        ("reminders", "project") => Some(agenda::routes::project(id, title)),
-        ("calendar", "event") => Some(agenda::routes::event(id, &row.qualifier, None, "")),
+        ("reminders", "task") => Some(crate::reminders::routes::task(id)),
+        ("reminders", "project") => Some(crate::reminders::routes::project(id, title)),
+        ("calendar", "event") => Some(crate::calendar::routes::event(id, &row.qualifier, None, "")),
         ("notes", "note") => Some(notes::routes::editor(id)),
         ("notes", "notebook") => Some(notes::routes::home(
             wire::NotesPlace::Notes,
@@ -175,7 +175,7 @@ mod tests {
     fn a_row_opens_the_page_of_its_own_kind() {
         let open =
             |app: &str, entity: &str| screen(route(&RowRef::new(app, entity, "x", "T"), "", &[]));
-        assert_eq!(open("reminders", "task"), agenda::TASK);
+        assert_eq!(open("reminders", "task"), crate::reminders::TASK);
         assert_eq!(open("notes", "note"), notes::EDITOR);
         assert_eq!(open("docs", "document"), docs::DOCUMENT);
         assert_eq!(open("people", "person"), people::PERSON);
@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(open("money", "transaction"), money::TRANSACTION);
         assert_eq!(open("health", "workout"), health::WORKOUT);
         // A kind with no page of its own opens the app.
-        assert_eq!(open("calendar", "nonsense"), agenda::HOME);
+        assert_eq!(open("calendar", "nonsense"), crate::calendar::HOME);
         assert_eq!(open("chat", "thread"), crate::chat::THREAD);
     }
 
@@ -233,14 +233,14 @@ mod tests {
     #[test]
     fn agenda_rows_route_by_their_kind_and_an_occurrence_carries_its_instance() {
         let task = route(&RowRef::new("reminders", "task", "t1", ""), "", &[]).unwrap();
-        assert_eq!(task, agenda::routes::task("t1"));
+        assert_eq!(task, crate::reminders::routes::task("t1"));
         let project = route(
             &RowRef::new("reminders", "project", "p1", "Garden"),
             "",
             &[],
         )
         .unwrap();
-        assert_eq!(project, agenda::routes::project("p1", "Garden"));
+        assert_eq!(project, crate::reminders::routes::project("p1", "Garden"));
         let mut row = RowRef::new("calendar", "event", "e1", "");
         row.qualifier = "2026-10-17".to_owned();
         let event = route(&row, "", &[]).unwrap();
@@ -294,7 +294,7 @@ mod tests {
         let cases = [
             ("notes", "notebook", notes::HOME),
             ("photos", "album", photos::SHELF),
-            ("reminders", "project", agenda::PROJECT),
+            ("reminders", "project", crate::reminders::PROJECT),
             ("docs", "folder", docs::DRIVE),
         ];
         for (app, entity, screen) in cases {

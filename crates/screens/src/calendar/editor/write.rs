@@ -12,9 +12,11 @@
 //! with the core's sentence. An all-day event is its civil days, the end
 //! INCLUSIVE (`agenda.proto`).
 
-use super::draft::{Draft, alerts_of, guests_changed, rule_for, same_repeat, times_changed};
 use crate::catalog::act::calendar as act_cal;
 use crate::field::Field;
+use crate::kit::schedule::draft::{
+    Draft, alerts_of, guests_changed, rule_for, same_repeat, times_changed,
+};
 
 /// How a draft's wall clock is placed in time.
 enum Placing {

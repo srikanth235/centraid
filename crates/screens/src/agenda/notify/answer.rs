@@ -16,11 +16,12 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
 use super::desired::{RECEIPT, THREAD};
-use crate::agenda::routes;
+use crate::calendar::routes as calendar_routes;
 use crate::catalog::act;
 use crate::field::Field;
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
+use crate::reminders::routes as reminder_routes;
 use crate::screen::Ctx;
 use crate::strings::{agenda_notify as words, task as task_words};
 
@@ -290,14 +291,14 @@ pub fn handle(
     let locale = ctx.locale();
     match (target, verb) {
         (Target::Task { task_id, .. }, Verb::Open) => {
-            Handled::Open(Box::new(routes::task(&task_id)))
+            Handled::Open(Box::new(reminder_routes::task(&task_id)))
         }
         (Target::Event { instance_key, .. }, Verb::Open) => {
             facts
                 .events
                 .get(&instance_key)
                 .map_or(Handled::Ignored, |event| {
-                    Handled::Open(Box::new(routes::event(
+                    Handled::Open(Box::new(calendar_routes::event(
                         &event.event_id,
                         &instance_key,
                         event.original_start_local.as_deref(),
@@ -309,7 +310,7 @@ pub fn handle(
             // ONLY THE RECEIPT STILL HELD NAMES ITS TASK.
             match held.filter(|held| held.notification.notification_id == answered.notification_id)
             {
-                Some(held) => Handled::Open(Box::new(routes::task(&held.task_id))),
+                Some(held) => Handled::Open(Box::new(reminder_routes::task(&held.task_id))),
                 None => Handled::Ignored,
             }
         }

@@ -6,6 +6,9 @@
 //! Every day here is a fixed one, so no assertion depends on the machine's
 //! clock, and no assertion is on a duration: only on counts and values.
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -32,10 +35,7 @@ struct Rig {
 fn rig(destination: Dest) -> Rig {
     let mut driver = Driver::with_runtime(Runtime::new(
         agenda::registry(),
-        vec![(
-            agenda::TAB.to_owned(),
-            agenda::routes::home(destination, ""),
-        )],
+        vec![(agenda::TAB.to_owned(), routes::home(destination, ""))],
     ));
     driver.start();
     let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
@@ -588,7 +588,7 @@ fn a_long_press_opens_the_add_sheet_at_the_snapped_time_and_writes_nothing() {
         minute: 553,
     }));
     let route = r.opened().expect("a route");
-    assert_eq!(route.screen, agenda::EDITOR);
+    assert_eq!(route.screen, centraid_screens::calendar::EDITOR);
     let Some(wire::route::Args::AgendaEditor(editor)) = route.args else {
         panic!("the editor's arguments");
     };

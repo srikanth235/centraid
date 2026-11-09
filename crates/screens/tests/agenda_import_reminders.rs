@@ -4,6 +4,9 @@
 //! (iOS); its option sheet carries "Include completed reminders" (off) and the verb, in
 //! `ImportsMadeState`'s words; the outcome is said on the import status line, in the import's words.
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::custody::secrets::VaultSecrets;
 use centraid_screens::testing::Driver;
@@ -25,7 +28,7 @@ fn rig(platform: &str) -> Rig {
     let registry = agenda::registry().merge(imports::registry(&VaultSecrets::new()));
     let mut tabs = vec![(
         agenda::TAB.to_owned(),
-        agenda::routes::home(wire::AgendaDestination::Todo, ""),
+        routes::home(wire::AgendaDestination::Todo, ""),
     )];
     tabs.extend(imports::roots());
     let mut d = Driver::with_runtime(Runtime::new(registry, tabs));

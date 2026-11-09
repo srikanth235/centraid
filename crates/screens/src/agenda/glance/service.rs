@@ -38,11 +38,12 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
 use super::snapshot::{self, Inputs};
-use crate::agenda::routes;
+use crate::calendar::routes as calendar_routes;
 use crate::catalog::load::calendar as query_cal;
 use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;
 use crate::kit::read::{Reading, read};
+use crate::reminders::routes as reminder_routes;
 use crate::screen::{Ctx, Screen};
 
 /// The route name of the service.
@@ -187,7 +188,9 @@ impl Service {
 
     fn intent(&mut self, intent: wire::AgendaIntent) -> Vec<wire::Effect> {
         let route = match intent.kind {
-            Some(wire::agenda_intent::Kind::Add(add)) => routes::home_adding(add.title.trim()),
+            Some(wire::agenda_intent::Kind::Add(add)) => {
+                reminder_routes::home_adding(add.title.trim())
+            }
             Some(wire::agenda_intent::Kind::Open(open)) => self.route_for(&open.key),
             None => return Vec::new(),
         };
@@ -209,12 +212,14 @@ impl Service {
                 instance_key,
                 original_start_local,
                 day,
-            }) => routes::event(event_id, instance_key, original_start_local.as_deref(), day),
-            Some(Open::Task { task_id }) => routes::task(task_id),
-            Some(Open::UpNext) => routes::home(wire::AgendaDestination::Day, ""),
-            Some(Open::Reminders) => routes::home(wire::AgendaDestination::Todo, ""),
-            Some(Open::Add) => routes::home_adding(""),
-            None => routes::home(wire::AgendaDestination::Unspecified, ""),
+            }) => {
+                calendar_routes::event(event_id, instance_key, original_start_local.as_deref(), day)
+            }
+            Some(Open::Task { task_id }) => reminder_routes::task(task_id),
+            Some(Open::UpNext) => calendar_routes::home(wire::AgendaDestination::Day),
+            Some(Open::Reminders) => reminder_routes::home(),
+            Some(Open::Add) => reminder_routes::home_adding(""),
+            None => calendar_routes::home(wire::AgendaDestination::Unspecified),
         }
     }
 }

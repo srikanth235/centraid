@@ -7,10 +7,13 @@
 
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, glance, routes};
+use centraid_screens::agenda::{self, glance};
 use centraid_screens::field::Field;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime};
@@ -405,7 +408,7 @@ fn each_key_the_snapshot_offers_opens_its_page() {
     let key = event["open"].as_str().expect("a key");
     assert!(key.starts_with("e:zq-event"), "{key}");
     let route = open_key(&mut d, key);
-    assert_eq!(route.screen, centraid_screens::agenda::EVENT);
+    assert_eq!(route.screen, centraid_screens::calendar::EVENT);
     let Some(wire::route::Args::AgendaEvent(args)) = route.args else {
         panic!("{route:?}")
     };

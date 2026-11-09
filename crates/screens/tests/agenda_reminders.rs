@@ -5,8 +5,11 @@
 
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use todo_support::*;
@@ -153,17 +156,12 @@ fn a_smart_list_page_names_its_colour_and_the_add_sheet_its_plus_opens() {
         assert_eq!(state.color_key, color, "{view:?}");
         assert_eq!(state.add_label, "Add task");
         let route = state.add_route.as_ref().expect("the plus has a sheet");
+        // THE PLUS OPENS REMINDERS' OWN SHEET (round 12), never Calendar's event editor.
         assert_eq!(
-            route.screen,
-            routes::editor(
-                "",
-                "",
-                None,
-                &today(&d),
-                wire::AgendaEditorKind::Unspecified
-            )
-            .screen
+            route,
+            &centraid_screens::reminders::routes::editor(&today(&d))
         );
+        assert_eq!(route.screen, centraid_screens::reminders::EDITOR);
     }
     // A view with no colour of its own draws a plain title.
     let t = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Anytime));

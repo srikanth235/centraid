@@ -4,6 +4,9 @@
 
 mod agenda_event_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use agenda_event_support::{World, asked};
@@ -210,7 +213,8 @@ fn a_new_event_reads_today_and_the_people_and_starts_at_the_next_half_hour_for_a
         (chrome.pick_date.as_str(), chrome.pick_time.as_str()),
         ("Pick a date", "Pick a time")
     );
-    assert_eq!(chrome.kind_label, "What to add");
+    // There is no Event | Task switch, so the chrome carries no label for one (round 10).
+    assert_eq!(chrome.kind_label, "");
 
     // NOTHING TOUCHED, NOTHING SAID: why Save is not armed waits for a change or a Save pressed.
     assert_eq!(data.blocked_reason, "");
@@ -275,17 +279,9 @@ fn save_proposes_in_the_phones_zone_and_a_commit_ends_the_editor() {
 
     let update = world.save(page);
     assert!(world.editor_state(page).dismissed);
-    // An event is the absence of the remembered kind.
-    assert_eq!(
-        asked(&update).len(),
-        1,
-        "one effect: the device forgets a remembered task"
-    );
-    let ops = keychain_ops(&world);
-    assert_eq!(
-        (ops[0].0, ops[0].1.as_str()),
-        (wire::keychain_op::Op::Delete as i32, "agenda_add_kind")
-    );
+    // The editor makes events only, so it remembers no kind and asks the keychain nothing.
+    assert!(asked(&update).is_empty(), "a save asks no one anything");
+    assert!(keychain_ops(&world).is_empty());
 
     // THE MEMBER'S WALL CLOCK AND THE PHONE'S ZONE: 09:00 in London in June is 08:00Z, and reads back as 09:00.
     let made: Vec<_> = world
@@ -373,8 +369,8 @@ fn a_refused_save_keeps_the_draft_says_the_cores_sentence_and_tries_again() {
             .count(),
         1
     );
-    // Nothing was remembered by the refused attempt; only the commit asked the keychain.
-    assert_eq!(keychain_ops(&world).len(), 1);
+    // No save, refused or committed, asks the keychain anything.
+    assert!(keychain_ops(&world).is_empty());
 }
 
 #[test]
@@ -841,13 +837,7 @@ fn the_add_sheet_is_for_events_with_no_switch_and_an_edit_has_none() {
     let edit = world.open_edit(&id, &id, None, "2099-06-15");
     world.send_editor(edit, kind(Kind::Task));
     assert_eq!(world.editor_state(edit).kind, Kind::Event as i32);
-    // ... even when the route names a task.
-    let named = world.driver.push(
-        "calendar",
-        centraid_screens::agenda::routes::editor(&id, &id, None, "2099-06-15", Kind::Task),
-    );
-    assert_eq!(world.editor_state(named).kind, Kind::Event as i32);
-    assert_eq!(world.editor_data(named).heading, "Edit event");
+    assert_eq!(world.editor_data(edit).heading, "Edit event");
 }
 
 #[test]
@@ -1574,8 +1564,8 @@ fn typed_words_that_became_a_place_meanwhile_are_that_place() {
 
 // ---- THE WRITES CARRY THE FIELDS: the act payloads the editor builds. ----
 
-use centraid_screens::agenda::editor::write;
-use centraid_screens::kit::schedule::ops::{NewTask, add_request};
+use centraid_screens::calendar::editor::write;
+use centraid_screens::reminders::ops::{NewTask, add_request};
 
 fn timed_draft() -> wire::AgendaDraft {
     wire::AgendaDraft {

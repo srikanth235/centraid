@@ -1,23 +1,21 @@
-//! WHAT EVERY STATE CARRIES: the band, the day bar, the More sheet's rows and
-//! the fixed words, recomputed on every view so no native view derives one
-//! field from another.
+//! WHAT EVERY STATE OF CALENDAR'S HOME CARRIES: the band, the Calendar's header, the day bar, the
+//! Calendars sheet's rows and the fixed words, recomputed on every view so no native view derives
+//! one field from another.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::grid;
-use crate::agenda::routes;
 use crate::kit::civil;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words::long_day;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
-    agenda_lists as lists, agenda_reminders as reminders, fill, imports, task,
+    agenda_lists as lists, agenda_reminders as reminders, fill,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
 pub const BAND_CALENDAR: &str = "calendar";
-pub const BAND_REMINDERS: &str = "reminders";
 pub const BAND_INVITES: &str = "invites";
 pub const BAND_MORE: &str = "more";
 
@@ -26,71 +24,39 @@ pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
 /// The row that opens the new-calendar sheet (#1173).
 pub const MORE_NEW_CALENDAR: &str = "new-calendar";
-pub const MORE_ANYTIME: &str = "anytime";
-pub const MORE_LOGBOOK: &str = "logbook";
-pub const MORE_REMINDERS: &str = "reminders";
-pub const MORE_TRASH: &str = "trash";
-/// The row that opens the Import reminders option sheet: offered only where the platform has a
-/// reminders source ([`crate::Ctx::reminders_source`]).
-pub const MORE_IMPORT_REMINDERS: &str = "import-reminders";
 
-/// The Tasks places a More row opens as a page.
-pub const TASK_PLACES: [&str; 4] = [MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH];
-
-/// The band, per app (round 10 of #1173), places only (R-CHROME-5). **Calendar**: Calendar, Calendars
-/// (the sheet of calendars to show or hide, Apple's middle key) and Invites (Apple's Inbox; the old
-/// Waiting). **Reminders**: Reminders and More, since Apple's Reminders has no band of places. Calendar
-/// holds Day, Week, Month, List and Year behind its view menu ([`calendar_views`]). SEARCH IS A MODE
-/// OVER THE PLACE, not a place: the destination's tab stays lit while the field is open.
+/// The band (places only, R-CHROME-5): Calendar, Calendars (the sheet of calendars to show or hide,
+/// Apple's middle key) and Invites (Apple's Inbox; the old Waiting). Calendar holds Day, Week, Month,
+/// List and Year behind its view menu ([`calendar_views`]). SEARCH IS A MODE OVER THE PLACE, not a
+/// place: the destination's tab stays lit while the field is open.
 #[must_use]
-pub fn band(
-    locale: Locale,
-    app: super::App,
-    destination: Dest,
-    sheet_up: bool,
-) -> Vec<wire::AgendaBandTab> {
+pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::AgendaBandTab> {
     let tab = |key: &str, label: String, icon: &str, current: bool| wire::AgendaBandTab {
         key: key.to_owned(),
         label,
         icon_key: icon.to_owned(),
         current,
     };
-    match app {
-        super::App::Calendar => vec![
-            tab(
-                BAND_CALENDAR,
-                reminders::band_calendar(locale),
-                "Calendar",
-                grid::is_calendar_view(destination) && !sheet_up,
-            ),
-            tab(
-                BAND_MORE,
-                reminders::band_calendars(locale),
-                "List",
-                sheet_up,
-            ),
-            tab(
-                BAND_INVITES,
-                reminders::band_invites(locale),
-                "Inbox",
-                destination == Dest::Waiting,
-            ),
-        ],
-        super::App::Reminders => vec![
-            tab(
-                BAND_REMINDERS,
-                reminders::band_reminders(locale),
-                "Todo",
-                !sheet_up,
-            ),
-            wire::AgendaBandTab {
-                key: BAND_MORE.to_owned(),
-                label: words::band_more(locale),
-                icon_key: "MoreHoriz".to_owned(),
-                current: sheet_up,
-            },
-        ],
-    }
+    vec![
+        tab(
+            BAND_CALENDAR,
+            reminders::band_calendar(locale),
+            "Calendar",
+            grid::is_calendar_view(destination) && !sheet_up,
+        ),
+        tab(
+            BAND_MORE,
+            reminders::band_calendars(locale),
+            "List",
+            sheet_up,
+        ),
+        tab(
+            BAND_INVITES,
+            reminders::band_invites(locale),
+            "Inbox",
+            destination == Dest::Waiting,
+        ),
+    ]
 }
 
 /// The Calendar's view menu: Day, Week, Month, List (Schedule) and Year, in
@@ -130,17 +96,8 @@ pub fn has_calendar_header(destination: Dest) -> bool {
     matches!(destination, Dest::Day | Dest::Week)
 }
 
-/// Whether the place wears the shared header ([`calendar_header`]) at all: the Calendar's Day and
-/// Week, and Reminders, whose board (`Main.dc.html`) is the same bar with no chip and no layout
-/// key, and the place's own title under it. One model, one view per shell, drawn by both.
-#[must_use]
-pub fn has_place_header(destination: Dest) -> bool {
-    has_calendar_header(destination) || destination == Dest::Todo
-}
-
-/// THE SHARED HEADER (#1173, `Calendar.dc.html` and `Main.dc.html`): the month chip, the layout
-/// key, Day's all-day lane and the Today key's visibility on the Calendar; on Reminders only the
-/// bar and the place's `title`, since there is no month to go back to and no layout to pick. `data` is the
+/// THE CALENDAR'S HEADER (#1173, `Calendar.dc.html`): the month chip, the layout
+/// key, Day's all-day lane and the Today key's visibility. `data` is the
 /// answer the view draws; the lane is TAKEN from its Day column so it is drawn
 /// once. Not `shown` while denied or while a search term is answering.
 pub fn calendar_header(
@@ -151,16 +108,8 @@ pub fn calendar_header(
     shown: bool,
     data: Option<&mut wire::AgendaHomeData>,
 ) -> wire::AgendaCalendarHeader {
-    if !shown || !has_place_header(destination) {
+    if !shown || !has_calendar_header(destination) {
         return wire::AgendaCalendarHeader::default();
-    }
-    if destination == Dest::Todo {
-        return wire::AgendaCalendarHeader {
-            shown: true,
-            layout: destination as i32,
-            title: reminders::reminders_title(locale),
-            ..wire::AgendaCalendarHeader::default()
-        };
     }
     let month = if anchor.is_empty() {
         String::new()
@@ -207,12 +156,7 @@ pub fn toolbar(
     today: &str,
     shown: bool,
 ) -> wire::AgendaToolbar {
-    if !shown
-        || anchor.is_empty()
-        || today.is_empty()
-        || destination == Dest::Todo
-        || has_calendar_header(destination)
-    {
+    if !shown || anchor.is_empty() || today.is_empty() || has_calendar_header(destination) {
         return wire::AgendaToolbar::default();
     }
     // THE PERIOD'S OWN WORDS: a month or a year, and today is in it when the
@@ -250,28 +194,10 @@ fn day_label(locale: Locale, anchor: &str, today: &str) -> String {
     }
 }
 
-/// THE MORE SHEET, AS ROWS (R-1046-5, R-1128-6): every calendar the answer
-/// named, as a show/hide toggle under the Calendars heading, then the Tasks
-/// places under their own, then "What Agenda may read". Never Search, never a
-/// sort or a filter (R-CHROME-4). All and Catch up are not here: All is Day,
-/// Schedule and To-do together, and Catch up is the Overdue group's verb.
+/// CALENDAR'S SHEET ("Calendars"): every calendar as a show/hide toggle, a new calendar, and what
+/// Calendar may read. Never Search, never a sort or a filter (R-CHROME-4).
 #[must_use]
 pub fn more_rows(
-    locale: Locale,
-    app: super::App,
-    calendars: &[wire::AgendaCalendarChoice],
-    can_add_calendar: bool,
-    can_import_reminders: bool,
-) -> Vec<wire::AgendaMoreRow> {
-    if app == super::App::Reminders {
-        return reminders_more_rows(locale, can_import_reminders);
-    }
-    calendar_more_rows(locale, calendars, can_add_calendar)
-}
-
-/// CALENDAR'S SHEET ("Calendars"): every calendar as a show/hide toggle, a new calendar, and what
-/// Calendar may read.
-fn calendar_more_rows(
     locale: Locale,
     calendars: &[wire::AgendaCalendarChoice],
     can_add_calendar: bool,
@@ -324,97 +250,11 @@ fn calendar_more_rows(
     out
 }
 
-/// REMINDERS' SHEET: the places that are not on the home (Anytime, Logbook, Reminders and the trash),
-/// the phone's Reminders import where the platform has one, and what Reminders may read.
-fn reminders_more_rows(locale: Locale, can_import_reminders: bool) -> Vec<wire::AgendaMoreRow> {
-    let mut out: Vec<wire::AgendaMoreRow> = Vec::new();
-    let place = |key: &str, label: String, meta: String, icon: &str, route: wire::Route| {
-        wire::AgendaMoreRow {
-            key: key.to_owned(),
-            spoken: format!("{label}, {meta}"),
-            label,
-            meta,
-            icon_key: icon.to_owned(),
-            route: Some(route),
-            ..wire::AgendaMoreRow::default()
-        }
-    };
-    let places = vec![
-        place(
-            MORE_ANYTIME,
-            task::view_anytime(locale),
-            task::more_anytime_meta(locale),
-            "Layers",
-            routes::todo_list(wire::TodoView::Anytime),
-        ),
-        place(
-            MORE_LOGBOOK,
-            task::view_logbook(locale),
-            task::more_logbook_meta(locale),
-            "Book",
-            routes::todo_list(wire::TodoView::Logbook),
-        ),
-        place(
-            MORE_REMINDERS,
-            task::view_reminders(locale),
-            task::more_reminders_meta(locale),
-            "Bell",
-            routes::todo_list(wire::TodoView::Reminders),
-        ),
-        place(
-            MORE_TRASH,
-            task::trash(locale),
-            task::more_trash_meta(locale),
-            "Trash",
-            routes::trash(),
-        ),
-    ];
-    out.extend(places);
-    // THE REMINDERS IMPORT, beside the Tasks places: an action row that opens its option sheet.
-    // Only where the platform has a Reminders store (iOS).
-    if can_import_reminders {
-        out.push(wire::AgendaMoreRow {
-            key: MORE_IMPORT_REMINDERS.to_owned(),
-            label: imports::reminders_import(locale),
-            spoken: imports::reminders_import(locale),
-            icon_key: "Download".to_owned(),
-            ..wire::AgendaMoreRow::default()
-        });
-    }
-    out.push(wire::AgendaMoreRow {
-        key: MORE_READS.to_owned(),
-        label: reminders::reads_reminders_title(locale),
-        spoken: reminders::reads_reminders_title(locale),
-        ..wire::AgendaMoreRow::default()
-    });
-    out
-}
-
-/// The Import reminders option sheet: its words are the import line's
-/// (`strings::imports`, as `ImportsMadeState` carries them).
-#[must_use]
-pub fn import_reminders_sheet(
-    locale: Locale,
-    completed_on: bool,
-) -> wire::AgendaImportRemindersSheet {
-    wire::AgendaImportRemindersSheet {
-        title: imports::reminders_import(locale),
-        completed_label: imports::completed_toggle(locale),
-        completed_on,
-        import_label: imports::reminders_import(locale),
-    }
-}
-
 /// The screen's fixed words, so a view carries no copy of its own.
 #[must_use]
-pub fn words_of(locale: Locale, app: super::App) -> wire::AgendaChrome {
-    let reminders_app = app == super::App::Reminders;
+pub fn words_of(locale: Locale) -> wire::AgendaChrome {
     wire::AgendaChrome {
-        title: if reminders_app {
-            reminders::reminders_title(locale)
-        } else {
-            words::app_title(locale)
-        },
+        title: words::app_title(locale),
         new_event: words::new_event(locale),
         today: words::today(locale),
         previous_day: words::previous_day(locale),
@@ -425,27 +265,15 @@ pub fn words_of(locale: Locale, app: super::App) -> wire::AgendaChrome {
         retry: words::retry(locale),
         loading: words::loading(locale),
         more_title: words::more_title(locale),
-        reads_title: if reminders_app {
-            reminders::reads_reminders_title(locale)
-        } else {
-            words::reads_title(locale)
-        },
+        reads_title: words::reads_title(locale),
         reads_facts: vec![
             wire::AgendaFact {
                 label: words::reads_fact_reads(locale),
-                detail: if reminders_app {
-                    reminders::reads_reminders_reads(locale)
-                } else {
-                    words::reads_fact_reads_value(locale)
-                },
+                detail: words::reads_fact_reads_value(locale),
             },
             wire::AgendaFact {
                 label: words::reads_fact_writes(locale),
-                detail: if reminders_app {
-                    reminders::reads_reminders_writes(locale)
-                } else {
-                    words::reads_fact_writes_value(locale)
-                },
+                detail: words::reads_fact_writes_value(locale),
             },
             wire::AgendaFact {
                 label: words::reads_fact_leaves(locale),

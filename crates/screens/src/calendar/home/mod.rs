@@ -1,41 +1,29 @@
-//! THE HOME OF CALENDAR AND OF REMINDERS (#1046, #1128, split in round 10 of #1173): one machine
-//! built once for each app ([`App`]), so the two apps share the read, the held answers and the
-//! folds and differ in what the app fixes at build time: the places it allows, its band, its add
-//! action and its sheet. Calendar is Day, Week, Month, List, Year and Invites; Reminders is the
-//! smart lists and My Lists. Search is a mode and the sheet is Calendars or More.
+//! THE HOME OF CALENDAR (#1046, split from Agenda in round 10 of #1173): Day, Week, Month, List, Year
+//! and Invites, with Search and the Calendars sheet.
 //!
-//! The band holds places only (R-CHROME-5): Calendar, Calendars, Invites for Calendar; Reminders and
-//! More for Reminders. The Calendar's views are Day, Week, Month, Schedule and Year behind its
-//! view menu; Day and Week draw an hour grid, Month and Year their cells, all
-//! laid out here ([`grid`]) and only drawn by a shell. To-do is the Inbox and the projects
-//! ([`place`]); it reads tasks and no event, and has no day bar. Search is the
-//! bar under the title (R-CHROME-2), opened by `SearchOpened`, and the More
-//! sheet's rows are computed here ([`chrome::more_rows`]) so both platforms draw
-//! one list. Opening lands on Day, anchored on the `today` the core answers,
-//! never on a device-clock guess.
+//! The band holds places only (R-CHROME-5): Calendar, Calendars and Invites. The views are Day, Week,
+//! Month, Schedule and Year behind its view menu; Day and Week draw an hour grid, Month and Year
+//! their cells, all laid out here ([`grid`]) and only drawn by a shell. Search is the bar under the
+//! title (R-CHROME-2), opened by `SearchOpened`. Opening lands on Day, anchored on the `today` the
+//! core answers, never on a device-clock guess.
 //!
 //! ## What reads and what re-folds
 //!
-//! A read is a WINDOW: the anchor and the place's span (a day, or
-//! [`held::LIST_DAYS`]). Everything else is local and re-folds the held answers:
-//! hiding a calendar, Schedule to Waiting (one window), closing search. A
-//! search term reads the search alone while the window is held. A change event
-//! or a pull clears every held answer and reads again. Loads and writes are
-//! synchronous, so a gesture that writes reads again before the view is drawn.
+//! A read is a WINDOW: the anchor and the place's span (a day, or [`held::LIST_DAYS`]). Everything
+//! else is local and re-folds the held answers: hiding a calendar, Schedule to Waiting, closing
+//! search. A search term reads the search alone while the window is held. A change event or a pull
+//! clears every held answer and reads again.
 //!
 //! ## Rows open pages by their own route
 //!
-//! An event row, a task row, a project row or container, the Plus on the add
-//! sheet, the Overdue verb and the absence notice carry the [`wire::Route`] to
-//! push; this screen never sees the tap.
+//! An event row and a reminder row carry the [`wire::Route`] to push (a reminder's is Reminders' own);
+//! this screen never sees the tap.
 
 mod chrome;
 mod drag;
 mod fold;
 mod grid;
 mod held;
-mod place;
-mod search;
 
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
@@ -43,46 +31,17 @@ use wire::agenda_home_event::Kind as H;
 use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
-pub(in crate::agenda) use self::fold::Hues;
 use self::held::Held;
-use super::calendar::CalendarFollow;
+use super::follow::CalendarFollow;
 use super::routes;
-use super::todo::quick::Quick;
-use super::todo::view::Prefs;
 use crate::kit::civil;
-use crate::kit::schedule::natural::{Chipper, Fields};
-use crate::kit::schedule::ops::{NewTask, Ops};
-use crate::kit::schedule::rows;
+use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{
-    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
-};
-
-/// Where a read stands.
-pub(super) enum Phase {
-    Loading,
-    Failed,
-    /// The vault would not let Agenda read: the kit's gate.
-    Denied(wire::AppQueryDenial),
-    Ready,
-}
-
-/// The quick-add bar: a bare title that lands in the Inbox.
-#[derive(Default)]
-struct QuickAdd {
-    title: String,
-    /// The bar is drawn: the Plus (or Notes' "Send to Agenda") opened it.
-    drawn: bool,
-    focused: bool,
-    /// What the keyboard toolbar has staged for the next add (#1173).
-    staged: Quick,
-    /// The core's clock and the chip's dismissal (#1173 Wave 3).
-    chip: Chipper,
-}
+use crate::strings::{agenda as words, agenda_reminders as reminders};
 
 pub(super) struct Home {
-    app: App,
     phase: Phase,
     destination: Dest,
     /// The day the surface is anchored on; EMPTY until an answer names today.
@@ -98,84 +57,36 @@ pub(super) struct Home {
     /// The Calendar view last used: where the band's Calendar tab returns to.
     last_calendar: Dest,
     sheet: Sheet,
-    /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
-    import_completed: bool,
-    filing_task_id: String,
-    /// The style sheet's draft: the new list, the new calendar or the calendar being edited.
+    /// The style sheet's draft: the new calendar or the calendar being edited.
     style: Option<Draft>,
-    quick: QuickAdd,
-    /// To-do's window, widened by "Show more".
-    limit: u32,
+    /// The status line of a write here (a calendar made, an event moved) and its Undo.
     ops: Ops,
     held: Held,
-    /// The phone's calendar, imported and followed for as long as Agenda is up.
+    /// The phone's calendar, imported and followed for as long as Calendar is up.
     calendar: CalendarFollow,
-    /// The Reminders "Filter and sort" choice, kept on the phone (`todo::view`).
-    prefs: Prefs,
-}
-
-/// Which app a home is, fixed when it is built and never changed (round 10 of #1173).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::agenda) enum App {
-    Calendar,
-    Reminders,
-}
-
-impl App {
-    /// The id the shell wears the app's accent by.
-    pub(in crate::agenda) const fn key(self) -> &'static str {
-        match self {
-            Self::Calendar => "calendar",
-            Self::Reminders => "reminders",
-        }
-    }
-
-    /// Whether the app has this place: Calendar every calendar view and Invites, Reminders its one
-    /// list of lists. A place the app does not have is never moved to.
-    const fn allows(self, destination: Dest) -> bool {
-        match self {
-            Self::Calendar => !matches!(destination, Dest::Todo | Dest::Unspecified),
-            Self::Reminders => matches!(destination, Dest::Todo),
-        }
-    }
 }
 
 /// The registry factory for Calendar's home.
 #[must_use]
-pub fn build_calendar(route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Home::new(&args_of(route), App::Calendar)))
-}
-
-/// The registry factory for Reminders' home.
-#[must_use]
-pub fn build_reminders(route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Home::new(&args_of(route), App::Reminders)))
-}
-
-fn args_of(route: &wire::Route) -> wire::AgendaHomeRoute {
-    match &route.args {
+pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
+    let args = match &route.args {
         Some(wire::route::Args::AgendaHome(args)) => args.clone(),
         _ => wire::AgendaHomeRoute::default(),
-    }
+    };
+    Some(Box::new(Home::new(&args)))
+}
+
+/// Whether Calendar has this place: every calendar view and Invites. A place it does not have is
+/// never moved to.
+const fn allows(destination: Dest) -> bool {
+    !matches!(destination, Dest::Todo | Dest::Unspecified)
 }
 
 impl Home {
-    fn new(args: &wire::AgendaHomeRoute, app: App) -> Self {
-        // SEEDED WORDS (Notes' "Send to Reminders") wait in Reminders' bar, focused.
-        let seed = if app == App::Reminders {
-            args.quick_add_title.trim().to_owned()
-        } else {
-            String::new()
-        };
-        let bar = app == App::Reminders && (!seed.is_empty() || args.open_quick_add);
+    fn new(args: &wire::AgendaHomeRoute) -> Self {
         let named = Dest::try_from(args.destination).unwrap_or(Dest::Unspecified);
-        let destination = match app {
-            App::Reminders => Dest::Todo,
-            App::Calendar if App::Calendar.allows(named) => named,
-            App::Calendar => Dest::Day,
-        };
+        let destination = if allows(named) { named } else { Dest::Day };
         Self {
-            app,
             phase: Phase::Loading,
             destination,
             anchor: String::new(),
@@ -190,21 +101,10 @@ impl Home {
                 Dest::Day
             },
             sheet: Sheet::None,
-            import_completed: false,
-            filing_task_id: String::new(),
             style: None,
-            quick: QuickAdd {
-                drawn: bar,
-                focused: bar,
-                title: seed,
-                staged: Quick::default(),
-                chip: Chipper::default(),
-            },
-            limit: rows::PAGE,
             ops: Ops::default(),
             held: Held::default(),
             calendar: CalendarFollow::new(),
-            prefs: Prefs::default(),
         }
     }
 
@@ -229,10 +129,9 @@ impl Home {
     /// lit tab: a destination picked is the member choosing the list over the
     /// hits.
     fn move_to(&mut self, destination: Dest, ctx: &Ctx) {
-        if !self.app.allows(destination) {
+        if !allows(destination) {
             return;
         }
-        self.shut_quick_add();
         self.close_search();
         self.destination = destination;
         if grid::is_calendar_view(destination) {
@@ -249,11 +148,6 @@ impl Home {
         self.held.search_term = None;
     }
 
-    /// The quick-add bar put away, its words with it: another place, or search.
-    fn shut_quick_add(&mut self) {
-        self.quick = QuickAdd::default();
-    }
-
     fn toggle_calendar(&mut self, id: &str) {
         if let Some(at) = self.hidden.iter().position(|hidden| hidden == id) {
             self.hidden.remove(at);
@@ -266,28 +160,18 @@ impl Home {
         match event {
             H::Refreshed(_) => self.refresh(ctx),
             // Taken before this match: it returns the shell's effects.
-            H::ImportRequested(_) | H::FilterMenuPicked(_) | H::FilterMenuCleared(_) => {}
+            H::ImportRequested(_) => {}
             H::Destination(moved) => {
                 let destination = Dest::try_from(moved.destination).unwrap_or(Dest::Unspecified);
                 self.move_to(destination, ctx);
             }
             H::Band(picked) => match picked.key.as_str() {
                 // The Calendar tab lands on the view the member last used.
-                chrome::BAND_CALENDAR if self.app == App::Calendar => {
-                    self.move_to(self.last_calendar, ctx);
-                }
-                chrome::BAND_REMINDERS if self.app == App::Reminders => {
-                    self.move_to(Dest::Todo, ctx);
-                }
-                chrome::BAND_INVITES if self.app == App::Calendar => {
-                    self.move_to(Dest::Waiting, ctx);
-                }
+                chrome::BAND_CALENDAR => self.move_to(self.last_calendar, ctx),
+                chrome::BAND_INVITES => self.move_to(Dest::Waiting, ctx),
                 chrome::BAND_MORE => self.sheet = Sheet::More,
                 _ => {}
             },
-            // TO-DO HAS NO DAY: the bar is not drawn, and a stray step is nothing.
-            H::DayStepped(_) | H::Today(_) | H::PeriodStepped(_)
-                if self.destination == Dest::Todo => {}
             H::DayStepped(step) => {
                 if self.anchor.is_empty() || step.days == 0 {
                     return;
@@ -305,12 +189,10 @@ impl Home {
                 }
             }
             H::SearchOpened(_) => {
-                self.shut_quick_add();
                 self.search_open = true;
                 self.sheet = Sheet::None;
             }
             H::SearchTerm(typed) => {
-                self.shut_quick_add();
                 self.search_open = true;
                 self.sheet = Sheet::None;
                 self.search_term = typed.term;
@@ -334,71 +216,26 @@ impl Home {
                 }
             }
             H::SheetClosed(_) => {
-                // A calendar's style sheet was opened from More: closing it returns there.
+                // A calendar's style sheet was opened from the Calendars sheet: closing returns there.
                 self.sheet = if matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar) {
                     Sheet::More
                 } else {
                     Sheet::None
                 };
-                self.filing_task_id.clear();
                 self.style = None;
             }
-            // CALENDAR WRITES NO TASK (round 10): a reminder on a day opens in Reminders, so every
-            // task gesture below is Reminders'.
-            H::TaskChecked(_)
-            | H::TaskFlagged(_)
-            | H::TaskDeleted(_)
-            | H::FileRequested(_)
-            | H::FileChosen(_)
-            | H::QuickAddChanged(_)
-            | H::QuickAddChipDismissed(_)
-            | H::QuickAddSubmitted(_)
-            | H::QuickAddOpened(_)
-            | H::TodoEmptyActed(_)
-                if self.app == App::Calendar => {}
+            // THE TICK ON A REMINDER'S DAY (round 12): Reminders' own `complete-task` or
+            // `reopen-task`, sent by the kit's check. A later occurrence of a repeating reminder
+            // has no row to tick, so it is never found here.
             H::TaskChecked(checked) => {
-                if let Some(found) = self.held.find(&checked.task_id) {
+                if let Some(found) = self.held.find_reminder(&checked.task_id) {
                     self.ops.check(ctx, &found);
-                    self.refresh(ctx);
-                }
-            }
-            H::TaskFlagged(flagged) => {
-                if self.held.find(&flagged.task_id).is_some() {
-                    self.ops.flag(ctx, &flagged.task_id, flagged.flagged);
                     self.refresh(ctx);
                 }
             }
             H::StatusActed(_) => {
                 self.ops.undo(ctx);
                 self.refresh(ctx);
-            }
-            H::FileRequested(asked) => {
-                if self.held.find(&asked.task_id).is_some() {
-                    self.sheet = Sheet::File;
-                    self.filing_task_id = asked.task_id;
-                }
-            }
-            H::FileChosen(chosen) => self.file(&chosen.key, ctx),
-            H::QuickAddChanged(typed) => self.quick.title = typed.title,
-            H::QuickAddChipDismissed(_) => {
-                let words = self.quick.title.clone();
-                self.quick.chip.dismiss(&words);
-            }
-            H::QuickAddSubmitted(_) => self.add(ctx),
-            // THE PLUS OPENS THE BAR on the keyboard (R-CHROME-1), on To-do only.
-            H::QuickAddOpened(_) => {
-                if self.destination == Dest::Todo {
-                    self.quick.drawn = true;
-                    self.quick.focused = true;
-                    self.quick.chip.hold(ctx);
-                }
-            }
-            // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep it
-            // open, so nothing the member wrote is thrown away.
-            H::QuickAddClosed(_) => {
-                if self.quick.title.trim().is_empty() {
-                    self.shut_quick_add();
-                }
             }
             H::StyleName(typed) => self.style_name(typed.name),
             H::StyleColor(picked) => {
@@ -412,26 +249,7 @@ impl Home {
                 }
             }
             H::StyleSubmitted(_) => self.submit_style(ctx),
-            // THE IMPORT REMINDERS SHEET (iOS): the switch, then the verb.
-            H::ImportRemindersCompleted(_) => {
-                if self.sheet == Sheet::ImportReminders {
-                    self.import_completed = !self.import_completed;
-                }
-            }
-            H::ImportRemindersSubmitted(_) => self.import_reminders(ctx),
             H::CalendarEdit(asked) => self.edit_calendar(&asked.calendar_id, ctx),
-            // THE EMPTY TO-DO'S ONE ACTION is the new-project sheet.
-            H::TodoEmptyActed(_) => {
-                let acts = self.destination == Dest::Todo
-                    && self
-                        .data(ctx)
-                        .and_then(|data| data.todo)
-                        .and_then(|todo| todo.empty)
-                        .is_some_and(|empty| !empty.action_label.is_empty());
-                if acts {
-                    self.open_sheet(Sheet::NewProject);
-                }
-            }
             // A STRIP DAY, A MONTH CELL OR A YEAR'S MONTH: the anchor moves to the
             // day and the view to the cell's `opens`. A day that is not one is
             // nothing, and no destination keeps the view.
@@ -491,31 +309,14 @@ impl Home {
             },
             H::EventMoved(moved) => self.move_event(ctx, &moved),
             H::EventResized(resized) => self.resize_event(ctx, &resized),
-            // THE SWIPE'S DELETE: to the trash, with Undo.
-            H::TaskDeleted(deleted) => {
-                if self.held.find(&deleted.task_id).is_some() {
-                    self.ops.delete(ctx, &deleted.task_id);
-                    self.refresh(ctx);
-                }
-            }
             // TAKEN IN `update`: the press returns the shell's effect.
             H::SlotPressed(_) => {}
-            // THE KEYBOARD TOOLBAR (#1173): drawn over To-do's bar only.
-            H::QuickTool(picked) if self.toolbar_up() => self.quick.staged.pick_tool(&picked.key),
-            H::QuickDue(picked) if self.toolbar_up() => self.quick.staged.pick_due(&picked.key),
-            H::QuickTag(added) if self.toolbar_up() => self.quick.staged.add_tag(&added.text),
-            H::QuickTool(_) | H::QuickDue(_) | H::QuickTag(_) => {}
-            H::NextPage(_) => {
-                if self.limit < rows::MAX_WINDOW {
-                    self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
-                    self.held.todo = false;
-                    self.read(ctx);
-                }
-            }
+            // Reminders' gestures (filing, the quick add, the lists): a home Calendar does not have.
+            _ => {}
         }
     }
 
-    /// A More row, by its key. A key the sheet does not hold now (a calendar
+    /// A Calendars sheet row, by its key. A key the sheet does not hold now (a calendar
     /// gone since it was drawn) does nothing.
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
         let rows = self.more_rows(ctx);
@@ -524,120 +325,25 @@ impl Home {
         };
         if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
-        } else if row.key == chrome::MORE_IMPORT_REMINDERS {
-            self.import_completed = false;
-            self.sheet = Sheet::ImportReminders;
         } else if row.key == chrome::MORE_NEW_CALENDAR {
             self.open_sheet(Sheet::NewCalendar);
         } else if let Some(id) = row.key.strip_prefix(chrome::MORE_CALENDAR) {
             let id = id.to_owned();
             self.toggle_calendar(&id);
-        } else if chrome::TASK_PLACES.contains(&row.key.as_str()) {
-            // A TASKS PLACE IS A PAGE: the sheet closes, and the shell pushes the row's route.
-            self.sheet = Sheet::None;
         }
     }
 
-    /// The Import reminders sheet's verb: ask the ONE reminders import (`imports.made`'s
-    /// `RemindersRequested`) to read the phone with the sheet's option. It runs without the import
-    /// status banner's offer and says its outcome on the import status line, in the import's own
-    /// words. Only where the platform has a Reminders store; the sheet shuts either way.
-    fn import_reminders(&mut self, ctx: &Ctx) {
-        if self.sheet != Sheet::ImportReminders {
-            return;
-        }
-        let include_completed = std::mem::take(&mut self.import_completed);
-        self.sheet = Sheet::None;
-        if !ctx.reminders_source() {
-            return;
-        }
-        ctx.post(
-            crate::imports::MADE,
-            wire::ScreenEvent {
-                kind: Some(E::ImportsMade(wire::ImportsMadeEvent {
-                    kind: Some(wire::imports_made_event::Kind::RemindersRequested(
-                        wire::imports_made_event::RemindersRequested { include_completed },
-                    )),
-                })),
-            },
-        );
-    }
-
-    /// A filing choice: the write it makes, with the sheet shut.
-    fn file(&mut self, key: &str, ctx: &Ctx) {
-        let id = std::mem::take(&mut self.filing_task_id);
-        self.sheet = Sheet::None;
-        let (Some(found), Some((project, section, label))) = (
-            self.held.find(&id),
-            place::filing(ctx.locale(), &self.held, key),
-        ) else {
-            return;
-        };
-        self.ops
-            .file(ctx, &found, project.as_deref(), section.as_deref(), &label);
-        self.refresh(ctx);
-    }
-
-    /// The bar is drawn on To-do, so its toolbar answers.
-    fn toolbar_up(&self) -> bool {
-        self.destination == Dest::Todo && self.quick.drawn && !self.denied()
-    }
-
-    /// To-do's quick add, landing in the Inbox: the words as typed, or, while
-    /// the date chip shows, the title and day it names, plus what the toolbar
-    /// staged (a staged day wins over a phrase in the words). The bar keeps its
-    /// words and its staging when the vault refuses, and after an add it stays
-    /// drawn and focused for the next one.
-    fn add(&mut self, ctx: &Ctx) {
-        let title = self.quick.title.trim().to_owned();
-        if title.is_empty() || self.denied() || self.destination != Dest::Todo {
-            return;
-        }
-        let inbox = task::inbox(ctx.locale());
-        // THE CORE'S CLOCK, read just now, never the device's. A day the toolbar
-        // staged is the member's explicit pick: it wins, and the words stay as typed.
-        let staged_day = self.quick.staged.due_day(&self.held.today());
-        let fields = if staged_day.is_empty() {
-            self.quick.chip.fields(ctx, &title)
-        } else {
-            Fields {
-                title: title.clone(),
-                due: staged_day,
-                ..Fields::default()
-            }
-        };
-        let new = NewTask {
-            tags: self.quick.staged.tags(),
-            flagged: self.quick.staged.flagged(),
-            ..NewTask::dated(&fields)
-        };
-        if self.ops.add_full(ctx, &new, &inbox).is_some() {
-            self.quick.title.clear();
-            self.quick.chip.clear();
-            self.quick.staged.clear();
-            self.quick.drawn = true;
-            self.quick.focused = true;
-        }
-        self.refresh(ctx);
-    }
-
-    /// A sheet up, with the draft it names: a new list and a new calendar start
-    /// blank. A calendar edit has its own entry ([`Self::edit_calendar`]).
+    /// A sheet up, with the draft it names: a new calendar starts blank. A calendar edit has its
+    /// own entry ([`Self::edit_calendar`]).
     fn open_sheet(&mut self, sheet: Sheet) {
         match sheet {
-            Sheet::NewProject if self.app == App::Reminders => {
-                self.style = Some(Draft::making(Subject::List));
-            }
-            Sheet::NewCalendar if self.app == App::Calendar => {
+            Sheet::NewCalendar => {
                 self.style = Some(Draft::making(Subject::Calendar));
             }
-            Sheet::NewProject | Sheet::NewCalendar | Sheet::File | Sheet::ImportReminders
-                if self.app == App::Calendar && sheet != Sheet::NewCalendar =>
-            {
+            // Reminders' sheets, and the edit, open by their own events.
+            Sheet::NewProject | Sheet::File | Sheet::ImportReminders | Sheet::EditCalendar => {
                 return;
             }
-            Sheet::NewProject | Sheet::NewCalendar => return,
-            Sheet::EditCalendar => return,
             _ => {}
         }
         self.sheet = sheet;
@@ -645,7 +351,7 @@ impl Home {
 
     fn style_name(&mut self, name: String) {
         self.style
-            .get_or_insert_with(|| Draft::making(Subject::List))
+            .get_or_insert_with(|| Draft::making(Subject::Calendar))
             .set_name(name);
     }
 
@@ -690,19 +396,9 @@ impl Home {
 
     /// The data the held answers draw, or `None` when they are not for this state.
     fn data(&self, ctx: &Ctx) -> Option<wire::AgendaHomeData> {
-        let locale = ctx.locale();
-        if self.destination == Dest::Todo && self.active_term().is_none() {
-            return place::fold_shaped(
-                locale,
-                ctx.hour_cycle(),
-                &self.held,
-                self.limit,
-                &self.prefs.options,
-            );
-        }
         let term = self.active_term();
         fold::events(&fold::Fold {
-            locale,
+            locale: ctx.locale(),
             cycle: ctx.hour_cycle(),
             destination: self.destination,
             anchor: &self.anchor,
@@ -711,7 +407,6 @@ impl Home {
             held: &self.held,
             week_start: grid::week_start_of(ctx.region()),
             month_style: self.month_style,
-            read_only_tasks: self.app == App::Calendar,
         })
     }
 
@@ -723,24 +418,7 @@ impl Home {
             .data(ctx)
             .map(|data| data.calendars)
             .unwrap_or_default();
-        chrome::more_rows(
-            ctx.locale(),
-            self.app,
-            &calendars,
-            self.shows_calendars(),
-            ctx.reminders_source(),
-        )
-    }
-
-    /// Whether the Reminders menu is on the page: the Reminders place, with its list showing.
-    fn menu_offered(&self) -> bool {
-        self.destination == Dest::Todo && !self.denied() && self.active_term().is_none()
-    }
-
-    /// The calendars are known (the data is the events' fold, not To-do's), so
-    /// the sheet may offer "New Calendar".
-    fn shows_calendars(&self) -> bool {
-        self.app == App::Calendar
+        chrome::more_rows(ctx.locale(), &calendars, true)
     }
 }
 
@@ -748,20 +426,10 @@ impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_)) => {
-                // SEEDED WORDS wait in the bar: read them against the core's clock.
-                if self.quick.drawn {
-                    self.quick.chip.hold(ctx);
-                }
                 self.refresh(ctx);
                 // THE CALENDAR'S FLAG IS A KEYCHAIN READ and an answer carries no key, so the
                 // choice is read after it has landed, never beside it.
-                let mut effects = self.calendar.attach();
-                if effects.is_empty() {
-                    effects.extend(self.prefs.ask());
-                } else {
-                    self.prefs.defer();
-                }
-                return effects;
+                return self.calendar.attach();
             }
             Some(E::EnvironmentChanged(_)) => self.refresh(ctx),
             // The vault moved: the view reloads, and an event of a writable phone calendar may
@@ -788,42 +456,14 @@ impl Screen for Home {
                         })
                         .unwrap_or_default();
                 }
-                Some(H::FilterMenuPicked(picked)) if self.menu_offered() => {
-                    let mut options = self.prefs.options;
-                    if options.pick(crate::kit::menu::Pick::of(&picked)) {
-                        self.prefs.options = options;
-                        return vec![self.prefs.save()];
-                    }
-                }
-                Some(H::FilterMenuCleared(_)) if self.menu_offered() => {
-                    if self.prefs.options.clear() {
-                        return vec![self.prefs.save()];
-                    }
-                }
-                Some(H::FilterMenuPicked(_) | H::FilterMenuCleared(_)) => {}
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
             Some(E::EffectResult(result)) => {
-                // THE CHOICE'S OWN ANSWER is not the calendar's.
-                if self.prefs.answers(&result) {
-                    return Vec::new();
-                }
-                let keychain = matches!(
-                    result.outcome,
-                    Some(
-                        wire::effect_result::Outcome::Keychain(_)
-                            | wire::effect_result::Outcome::Failed(_)
-                    )
-                );
-                let mut effects = self
+                return self
                     .calendar
                     .on_event(&E::EffectResult(result), ctx)
                     .unwrap_or_default();
-                if keychain {
-                    effects.extend(self.prefs.after_other());
-                }
-                return effects;
             }
             Some(other) => {
                 if let Some(effects) = self.calendar.on_event(&other, ctx) {
@@ -837,7 +477,6 @@ impl Screen for Home {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let todo = self.destination == Dest::Todo;
         let denied = self.denied();
         let mut data = match self.phase {
             Phase::Ready => self.data(ctx),
@@ -882,38 +521,19 @@ impl Screen for Home {
             self.held
                 .search
                 .as_ref()
-                .map(|search| {
-                    let events = search.corrected.as_str();
-                    let tasks = search
-                        .tasks
-                        .as_ref()
-                        .map_or("", |tasks| tasks.corrected.as_str());
-                    if events.is_empty() { tasks } else { events }
-                })
+                .map(|search| search.corrected.as_str())
                 .filter(|words| !words.is_empty())
                 .map(|words| crate::kit::search::corrected(locale, words))
                 .unwrap_or_default()
         } else {
             String::new()
         };
-        let sheet_up = matches!(
-            self.sheet,
-            Sheet::More | Sheet::Reads | Sheet::ImportReminders
-        );
+        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads);
         let today = data
             .as_ref()
             .map(|data| data.today.clone())
             .unwrap_or_else(|| self.held.today());
-        let drawn = self.quick.drawn;
-        let new_event = (!denied && self.app == App::Calendar).then(|| {
-            routes::editor(
-                "",
-                "",
-                None,
-                &self.anchor,
-                wire::AgendaEditorKind::Unspecified,
-            )
-        });
+        let new_event = (!denied).then(|| routes::editor("", "", None, &self.anchor));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaHome(Box::new(
                 wire::AgendaHomeState {
@@ -926,11 +546,10 @@ impl Screen for Home {
                     band: if denied {
                         Vec::new()
                     } else {
-                        chrome::band(locale, self.app, self.destination, sheet_up)
+                        chrome::band(locale, self.destination, sheet_up)
                     },
                     calendar_header: Some(calendar_header),
-                    filter_menu: (self.menu_offered() && data.is_some())
-                        .then(|| self.prefs.options.menu(locale)),
+                    filter_menu: None,
                     calendar_views: if denied || chrome::has_calendar_header(self.destination) {
                         Vec::new()
                     } else {
@@ -944,18 +563,16 @@ impl Screen for Home {
                         &today,
                         !denied && term.is_none(),
                     )),
-                    chrome: Some(chrome::words_of(locale, self.app)),
-                    app_key: self.app.key().to_owned(),
+                    chrome: Some(chrome::words_of(locale)),
+                    app_key: "calendar".to_owned(),
                     more_rows: if denied {
                         Vec::new()
                     } else {
                         chrome::more_rows(
                             locale,
-                            self.app,
                             data.as_ref()
                                 .map_or(&[][..], |data| data.calendars.as_slice()),
-                            data.is_some() && self.shows_calendars(),
-                            ctx.reminders_source(),
+                            data.is_some(),
                         )
                     },
                     search_corrected: corrected,
@@ -964,7 +581,7 @@ impl Screen for Home {
                         crate::kit::search::offer(
                             locale,
                             term.as_deref().unwrap_or_default(),
-                            self.app.key(),
+                            "calendar",
                         )
                     }),
                     status: self
@@ -972,59 +589,17 @@ impl Screen for Home {
                         .status()
                         .cloned()
                         .or_else(|| self.ops.status.clone()),
-                    quick_add: Some({
-                        let mut bar = wire::TodoQuickAdd {
-                            title: self.quick.title.clone(),
-                            can_submit: !self.quick.title.trim().is_empty(),
-                            lands_label: fill(
-                                &sentences::lands_in(locale),
-                                &[("place", &task::inbox(locale))],
-                            ),
-                            // Hidden while search is open, term or not: the bar and its
-                            // Plus would be a second verb over a field that is looking.
-                            shown: todo && !denied && data.is_some() && !self.search_open,
-                            focused: drawn && self.quick.focused,
-                            add_label: task::add_task(locale),
-                            drawn,
-                            // A day the toolbar staged is the date: no second reading.
-                            chip: if self.quick.staged.due_day(&self.held.today()).is_empty() {
-                                self.quick
-                                    .chip
-                                    .reading(locale, ctx.hour_cycle(), &self.quick.title)
-                                    .map(|reading| reading.chip())
-                            } else {
-                                None
-                            },
-                            ..wire::TodoQuickAdd::default()
-                        };
-                        self.quick.staged.fill(locale, &mut bar);
-                        bar
-                    }),
-                    file_choices: if self.sheet == Sheet::File {
-                        place::file_choices(locale, &self.held, &self.filing_task_id)
-                    } else {
-                        Vec::new()
-                    },
+                    quick_add: Some(wire::TodoQuickAdd::default()),
+                    file_choices: Vec::new(),
                     style: self
                         .style
                         .as_ref()
-                        .filter(|_| {
-                            matches!(
-                                self.sheet,
-                                Sheet::NewProject | Sheet::NewCalendar | Sheet::EditCalendar
-                            )
-                        })
+                        .filter(|_| matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar))
                         .map(|draft| Box::new(draft.sheet(locale))),
-                    import_reminders: (self.sheet == Sheet::ImportReminders
-                        && ctx.reminders_source())
-                    .then(|| chrome::import_reminders_sheet(locale, self.import_completed)),
-                    // Calendar's Plus adds an event only; Reminders' Plus opens the quick add.
-                    add_label: if todo {
-                        task::add_task(locale)
-                    } else {
-                        words::new_event(locale)
-                    },
-                    add_opens_quick_add: todo,
+                    import_reminders: None,
+                    // Calendar's Plus adds an event only.
+                    add_label: words::new_event(locale),
+                    add_opens_quick_add: false,
                     new_event,
                     content,
                 },

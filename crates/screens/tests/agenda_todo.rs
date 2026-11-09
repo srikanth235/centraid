@@ -4,10 +4,13 @@
 
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Field;
 use centraid_screens::kit::schedule::rows;
@@ -811,7 +814,10 @@ fn the_overdue_verb_opens_catch_up_on_a_list_page_and_a_project_page() {
             key: group.verb_key.clone(),
         }),
     );
-    assert_eq!(opened_routes(&d), vec![agenda::CATCH_UP.to_owned()]);
+    assert_eq!(
+        opened_routes(&d),
+        vec![centraid_screens::reminders::CATCH_UP.to_owned()]
+    );
 
     // A verb that is not Catch up opens nothing from a list page.
     d.effects.clear();
@@ -834,7 +840,10 @@ fn the_overdue_verb_opens_catch_up_on_a_list_page_and_a_project_page() {
             key: group.verb_key,
         }),
     );
-    assert_eq!(opened_routes(&d), vec![agenda::CATCH_UP.to_owned()]);
+    assert_eq!(
+        opened_routes(&d),
+        vec![centraid_screens::reminders::CATCH_UP.to_owned()]
+    );
 }
 
 #[test]
@@ -1045,4 +1054,35 @@ fn the_board_view_of_the_project_page_is_the_projects_own() {
     assert!(rows(&project_data(d.view(i)).groups).is_empty());
     let board = load_board(&d, load::reminders::BoardView::Project, Some(&garden));
     assert!(board.groups.iter().all(|g| g.tasks.is_empty()));
+}
+
+#[test]
+fn today_opens_with_the_overdue_section_and_leaves_catch_up_where_it_is() {
+    let mut d = reminders_driver();
+    clear_tasks(&d);
+    add(
+        &d,
+        act::reminders::AddTask {
+            title: "Dated today".into(),
+            due: due(&day(&d, 0)),
+            ..Default::default()
+        },
+    );
+    add(
+        &d,
+        act::reminders::AddTask {
+            title: "Late as can be".into(),
+            due: due(&day(&d, -2)),
+            ..Default::default()
+        },
+    );
+    let i = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Today));
+    let groups = list_data(d.view(i)).groups.clone();
+    assert_eq!(
+        groups.first().map(|group| group.title.as_str()),
+        Some("Overdue"),
+        "Overdue is the section at the top of Today"
+    );
+    assert_eq!(groups[0].rows[0].title, "Late as can be");
+    assert_eq!(groups[0].verb_label, "Catch up", "the Catch up page stays");
 }

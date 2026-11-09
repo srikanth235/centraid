@@ -5,8 +5,8 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::Editor;
-use super::draft::{self, Draft, REPEAT_CUSTOM, RULES};
 use crate::kit::schedule::custom::Custom;
+use crate::kit::schedule::draft::{self, Draft, REPEAT_CUSTOM, RULES};
 use crate::kit::schedule::rule_words;
 use crate::strings::Locale;
 use crate::strings::agenda_repeat as words;

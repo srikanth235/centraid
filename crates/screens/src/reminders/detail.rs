@@ -19,9 +19,7 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
-use super::editor::draft::{REPEAT_CUSTOM, normalize_url};
 use super::list::{self, Phase};
-use super::routes;
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
@@ -31,8 +29,10 @@ use crate::kit::read::{self, Reading};
 use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words;
+use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,

@@ -7,14 +7,28 @@
 //! are built once for both. This module names none of Calendar's.
 
 use crate::Registry;
-use crate::agenda::{catch_up, detail, home, list, project, trash};
+pub mod buckets;
+pub mod catch_up;
+pub mod detail;
+pub mod editor;
+pub mod home;
+pub mod list;
+pub mod ops;
+pub mod order;
+pub mod project;
+pub mod quick;
+pub mod routes;
+pub mod trash;
+pub mod view;
 
 /// Reminders' home.
 pub const HOME: &str = "reminders.home";
 /// The Anytime, All, Logbook, Reminders, smart-list and Inbox pages.
 pub const TODO_LIST: &str = "reminders.list";
 pub const PROJECT: &str = "reminders.project";
-pub const TASK: &str = "reminders.task";
+pub const TASK: &str = crate::kit::schedule::routes::TASK;
+/// The new-reminder sheet.
+pub const EDITOR: &str = "reminders.editor";
 pub const CATCH_UP: &str = "reminders.catch_up";
 pub const TRASH: &str = "reminders.trash";
 
@@ -22,10 +36,11 @@ pub const TRASH: &str = "reminders.trash";
 #[must_use]
 pub fn registry() -> Registry {
     Registry::default()
-        .with(HOME, home::build_reminders)
+        .with(HOME, home::build)
         .with(TODO_LIST, list::build)
         .with(PROJECT, project::build)
         .with(TASK, detail::build)
         .with(CATCH_UP, catch_up::build)
+        .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
 }

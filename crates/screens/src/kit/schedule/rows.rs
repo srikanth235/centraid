@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaTaskGroupKind as Kind;
 
-use crate::agenda::routes;
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::schedule::routes;
 use crate::kit::schedule::rule_words;
 use crate::strings::{
     Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,
@@ -21,6 +21,9 @@ use crate::strings::{
 pub const STATUS_OPEN: &str = "open";
 pub const STATUS_DONE: &str = "done";
 pub const STATUS_CANCELLED: &str = "cancelled";
+/// A later occurrence of a repeating reminder that Calendar projects onto its day: open, but with no
+/// row of its own, so its box does not tick (a tap opens the series' reminder in Reminders).
+pub const STATUS_PROJECTED: &str = "projected";
 
 /// The board window, and how far "Show more" may widen it (the manifest's 20…500).
 pub const PAGE: u32 = 100;
@@ -51,7 +54,8 @@ pub struct Context<'a> {
     pub show_project: bool,
     /// How the phone words a time of day; 24-hour until the shell says.
     pub cycle: HourCycle,
-    /// Calendar's reminders on a day (round 10): the row's box does not check it, a tap opens it.
+    /// Every row's box does not check it, a tap opens it. (Calendar's projected occurrences are
+    /// read-only on their own: [`STATUS_PROJECTED`].)
     pub read_only: bool,
 }
 
@@ -154,7 +158,7 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
         can_file: open && !subtask,
         route: Some(routes::task(&task.task_id)),
         flagged: task.flagged,
-        read_only: ctx.read_only,
+        read_only: ctx.read_only || task.status == STATUS_PROJECTED,
         list_color_key: task
             .project_id
             .as_deref()

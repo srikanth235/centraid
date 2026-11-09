@@ -9,7 +9,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::agenda::detail::{self, NEXT_WEEK, NONE, TODAY, TOMORROW, WEEKEND};
+use crate::reminders::detail::{self, NEXT_WEEK, NONE, TODAY, TOMORROW, WEEKEND};
 use crate::strings::{Locale, agenda_tasks as words, task};
 
 /// `TodoQuickTool.key`s.

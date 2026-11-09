@@ -5,10 +5,13 @@
 mod agenda_event_support;
 mod todo_support;
 
+#[allow(clippy::duplicate_mod)]
+#[path = "schedule_routes/mod.rs"]
+mod routes;
 use agenda_event_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::Runtime;
-use centraid_screens::agenda::{self, routes};
+use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::testing::Driver;
 use todo_support as ts;

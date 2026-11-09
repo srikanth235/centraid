@@ -348,7 +348,7 @@ fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor(
 }
 
 #[test]
-fn send_to_agenda_is_a_route_to_agendas_todo_with_the_words_waiting() {
+fn send_to_reminders_is_a_route_to_reminders_with_with_the_words_waiting() {
     let mut d = driver();
     let id = note(&d, "Call the plumber", "tomorrow morning");
     let i = open(&mut d, &id);
@@ -359,8 +359,7 @@ fn send_to_agenda_is_a_route_to_agendas_todo_with_the_words_waiting() {
     );
     assert_eq!(
         state.send_to_agenda,
-        Some(centraid_screens::agenda::routes::home(
-            wire::AgendaDestination::Todo,
+        Some(centraid_screens::notes::routes::send_to_reminders(
             "Call the plumber"
         ))
     );
@@ -370,8 +369,7 @@ fn send_to_agenda_is_a_route_to_agendas_todo_with_the_words_waiting() {
     type_body(&mut d, untitled, "Buy stamps\nand envelopes");
     assert_eq!(
         editor_state(d.view(untitled)).send_to_agenda,
-        Some(centraid_screens::agenda::routes::home(
-            wire::AgendaDestination::Todo,
+        Some(centraid_screens::notes::routes::send_to_reminders(
             "Buy stamps"
         ))
     );
