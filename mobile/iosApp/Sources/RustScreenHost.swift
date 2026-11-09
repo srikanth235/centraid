@@ -462,6 +462,12 @@ struct RustScreenView: View {
                 onClose: pop
             )
             .appAccent("people")
+        case .transfer(let state)?:
+            CoreTransferView(
+                state: state,
+                send: { store.send(instance, .transfer($0)) },
+                onBack: pop
+            )
         case .trash(let state)?:
             CoreTrashView(
                 state: state,

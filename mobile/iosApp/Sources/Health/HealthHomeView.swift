@@ -7,7 +7,7 @@ import SwiftUI
 /// forwards events (Rust makes them: `crates/screens`, module `health`). `AppPlace` owns the
 /// header and the band; `ReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). A row that opens a page carries its `Route` and a tap hands it to `open`. Health has
-/// no create verb and no search: its rows enter by reading the phone's store, which Rust asks
+/// no create verb; its search is a page the band's key opens. Its rows enter by reading the phone's store, which Rust asks
 /// the shell to do (`HealthRead`, `ScreenStore`).
 struct HealthHomeView: View {
     let state: Centraid_Core_V1_HealthHomeState
@@ -33,7 +33,16 @@ struct HealthHomeView: View {
             trailing: nil,
             filter: filter,
             subtitle: subtitle,
-            showsBand: !content.isDenied && !state.band.isEmpty
+            showsBand: !content.isDenied && !state.band.isEmpty,
+            // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own,
+            // reached from the band's search key; the field is never open here.
+            search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
+                field: KitSearchField(),
+                placeholder: chrome.searchPlaceholder,
+                onOpen: { open(chrome.searchRoute) },
+                onTerm: { _ in },
+                onClose: {}
+            )
         ) {
             AppBand(
                 app: "health",

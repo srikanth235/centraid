@@ -28,6 +28,8 @@ import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomFilter
+import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
@@ -55,6 +57,17 @@ internal fun HealthHomeScreen(
         app = "health",
         title = chrome?.title.orEmpty(),
         meta = state.data_?.day_label.orEmpty(),
+        // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own, reached
+        // from the band's search key.
+        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.denied == null }?.let { placeholder ->
+            RoomSearch(
+                field = SearchField(),
+                placeholder = placeholder,
+                onTerm = {},
+                onClose = {},
+                onOpen = { chrome?.search_route?.let(onOpen) },
+            )
+        },
         // THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu.
         filter = state.filter_menu?.let { menu ->
             RoomFilter(

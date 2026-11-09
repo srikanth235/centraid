@@ -48,6 +48,7 @@ pub const HOME: &str = "health.home";
 pub const METRIC: &str = "health.metric";
 pub const WORKOUT: &str = "health.workout";
 pub const CONNECT: &str = "health.connect";
+pub const SEARCH: &str = "health.search";
 
 /// The tab Health's pages are pushed under.
 pub const TAB: &str = "health";
@@ -60,6 +61,7 @@ pub fn registry() -> Registry {
         .with(METRIC, metric::build)
         .with(WORKOUT, workout::build)
         .with(CONNECT, connect::build)
+        .with(SEARCH, crate::shell::search::build_health)
 }
 
 /// A runtime with Health's screens and one tab, `health`, rooted at Today. The
@@ -300,6 +302,15 @@ pub mod routes {
             wire::route::Args::HealthHome(wire::HealthHomeRoute {
                 destination: destination as i32,
             }),
+        )
+    }
+
+    /// Health's search page: the same search as Home's, over Health alone.
+    #[must_use]
+    pub fn search() -> wire::Route {
+        route(
+            super::SEARCH,
+            wire::route::Args::HomeSearch(wire::HomeSearchRoute {}),
         )
     }
 

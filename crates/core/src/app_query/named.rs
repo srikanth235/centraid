@@ -46,6 +46,10 @@ pub(super) fn app_of(kind: &str) -> &'static str {
         "document" | "folder" => "docs",
         "thread" => CHAT,
         "locker_item" => LOCKER,
+        // A transaction opens in Money; a workout (an activity of a workout kind) in Health
+        // (#1173, item 11).
+        "txn" => "money",
+        "activity" => "health",
         _ => "",
     }
 }

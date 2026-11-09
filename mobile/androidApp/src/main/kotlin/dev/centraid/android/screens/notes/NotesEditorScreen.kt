@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.android.kit.AboutChips
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
@@ -154,6 +155,8 @@ public fun NotesEditorScreen(
             skeleton = { RowSkeleton(rows = 4, meta = false) },
         ) { note ->
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
+                AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
                 // THE LINE OVER THE TITLE: the pin when pinned, then "Travel · Edited Wed 4 November".
                 if (state.meta.isNotEmpty()) {
                     Row(

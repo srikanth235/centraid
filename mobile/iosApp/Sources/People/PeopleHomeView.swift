@@ -625,6 +625,13 @@ private struct PeopleHomeSheet: View {
 
     var body: some View {
         OptionSheet(title: state.chrome.moreTitle) {
+            // WHAT PEOPLE MAY READ of the address book (#1173): on, paused, off or refused, and the
+            // one action that fits. Rust decides every word; this draws the row.
+            if state.hasContacts {
+                PeopleContactsRowView(row: state.contacts) {
+                    send(PeopleEvents.home { $0.contactsAction = .init() })
+                }
+            }
             ForEach(state.moreRows, id: \.key) { row in
                 SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
                     send(PeopleEvents.home { $0.sheetClosed = .init() })
