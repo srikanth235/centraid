@@ -340,6 +340,7 @@ impl Screen for Trash {
                 empty: Some(wire::EmptyState {
                     headline: self.spec.copy.empty_headline(locale),
                     body: self.spec.copy.empty_state_body(locale),
+                    icon_key: "Trash".to_owned(),
                     ..wire::EmptyState::default()
                 }),
                 empty_label: if self.spec.empty.is_some() && !items.is_empty() {

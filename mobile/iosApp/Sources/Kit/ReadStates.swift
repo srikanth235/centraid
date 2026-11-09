@@ -193,7 +193,7 @@ struct EmptyStateView: View {
     /// colour, the one sentence, the reason, and at most one action as the app's pill.
     var body: some View {
         VStack(spacing: 10) {
-            if let glyph = CentraidCatalog.byID[accent.appId]?.iconKey {
+            if let glyph = empty.iconKey.isEmpty ? CentraidCatalog.byID[accent.appId]?.iconKey : empty.iconKey {
                 CentraidIconView(iconKey: glyph, tint: accent.text, size: 22)
                     .frame(width: 52, height: 52)
                     .background(accent.wash(dark: scheme == .dark), in: Circle())

@@ -113,7 +113,7 @@ Members read _backup device_; code and docs say _gateway_.
 | Button, action, menu row | 1–2 words, verb first |
 | Status line, outcome | a fragment ("Photo deleted"), never "successfully" |
 | Status line, state | one clause |
-| Empty state | one sentence and at most one action; no feature explanation. Where the phone holds the data, its import is the one action |
+| Empty state | one sentence and at most one action; no feature explanation. Where the phone holds the data, its import is the one action. The glyph on its wash is the app's own, except a trash's, which wears the Trash glyph (`EmptyState.icon_key`) |
 | Banner (offline, degraded) | one sentence: the state, plus one action or one consequence |
 | Error | what happened and what to do, about 12 words or fewer; no apology, no "Please try again." |
 | Settings label + description | the label carries the meaning; the description is one sentence or absent |

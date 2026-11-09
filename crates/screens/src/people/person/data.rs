@@ -482,6 +482,7 @@ pub fn gone(locale: Locale) -> wire::EmptyState {
         body: words::gone_body(locale),
         action_label: words::back(locale),
         import_source: wire::ImportSource::Unspecified as i32,
+        icon_key: String::new(),
     }
 }
 
