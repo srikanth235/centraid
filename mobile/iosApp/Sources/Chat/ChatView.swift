@@ -1319,12 +1319,13 @@ private struct ChatSendButton: View {
 
     var body: some View {
         Button(action: action) {
-            // THE BOARD'S SEND: a round dark-teal key with an up arrow, dimmed while there is
-            // nothing to send.
-            CentraidIconView(iconKey: iconKey, tint: Color.white, size: 18)
+            // THE BOARD'S SEND: a round dark-teal key with a white up arrow. With nothing to send
+            // it is a quiet disc with a legible soft arrow (never the filled key faded: the white
+            // arrow vanished into the pale disc), so it still reads as Send, and the filled key
+            // stays the one filled element.
+            CentraidIconView(iconKey: iconKey, tint: filled ? Color.white : Theme.color("textSoft", scheme), size: 18)
                 .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                .background(Circle().fill(Color(CentraidAsset.shell)))
-                .opacity(filled ? 1 : 0.35)
+                .background(Circle().fill(filled ? Color(CentraidAsset.shell) : Theme.color("lineStrong", scheme)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

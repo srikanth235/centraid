@@ -486,7 +486,7 @@ struct MoneyChoiceSheet: View {
                                     row(choice).padding(.horizontal, 16)
                                 }
                             }
-                            .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                            .sheetCardGround()
                         }
                     } else {
                         ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in

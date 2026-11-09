@@ -33,7 +33,7 @@ pub struct Place {
     pub label: String,
 }
 
-/// The vault's places (the photos app's one places read), A to Z. A refused or
+/// The vault's named places (the photos app's one places read), A to Z. A refused or
 /// failed read is an empty list: an event can still be saved without a place.
 pub fn read_places(ctx: &Ctx) -> Vec<Place> {
     let reading = kit_read::read(
@@ -50,12 +50,12 @@ pub fn read_places(ctx: &Ctx) -> Vec<Place> {
     let mut listed: Vec<Place> = places
         .places
         .into_iter()
+        // ONLY A PLACE THE MEMBER NAMED is offered. A photograph's bare spot ("near Truckee",
+        // "A place with no name yet") is not somewhere an event happens; the event's own place
+        // stays listed by `place_choices` whatever its name.
         .filter_map(|card| {
             let id = card.place?.place_id;
-            let label = card
-                .name
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or(card.phrase);
+            let label = card.name.filter(|name| !name.trim().is_empty())?;
             (!id.is_empty()).then_some(Place { id, label })
         })
         .collect();

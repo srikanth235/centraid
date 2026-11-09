@@ -880,12 +880,13 @@ private fun ScopePill(state: ChatState, onScope: (String) -> Unit) {
 
 @Composable
 private fun SendKey(iconKey: String, label: String, filled: Boolean, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
-    // THE BOARD'S SEND: a round dark-teal key with an up arrow, dimmed while there is nothing to send.
+    // THE BOARD'S SEND: a round dark-teal key with a white up arrow; with nothing to send, a quiet
+    // disc with a legible soft arrow (the faded key lost its arrow), so it still reads as Send.
     Box(
         Modifier
             .size(KitGeometry.ROW_MIN)
             .clip(CircleShape)
-            .background(centraidResource(R.color.centraid_shell).copy(alpha = if (filled) 1f else 0.35f))
+            .background(if (filled) centraidResource(R.color.centraid_shell) else centraidColor("lineStrong"))
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag)
             .semantics {
@@ -894,7 +895,7 @@ private fun SendKey(iconKey: String, label: String, filled: Boolean, tag: String
             },
         contentAlignment = Alignment.Center,
     ) {
-        CentraidIcon(iconKey, tint = Color.White, size = 18.dp)
+        CentraidIcon(iconKey, tint = if (filled) Color.White else centraidColor("textSoft"), size = 18.dp)
     }
 }
 
