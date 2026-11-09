@@ -290,7 +290,8 @@ struct TransferRulesSheet: View {
     var body: some View {
         SheetRoom(
             title: sheet.title,
-            primary: SheetPrimary(label: KitWords.DONE, action: onClose)
+            primary: SheetPrimary(label: KitWords.DONE, action: onClose),
+            fit: true
         ) {
             Text(sheet.subtitle)
                 .centraidType("small")
@@ -307,11 +308,8 @@ struct TransferRulesSheet: View {
                     }
                 }
             }
-            // THE CHOICES ARE ONE CARD ON THE SHEET, as the Download settings board draws them
-            // (the same card `OptionSheet` makes; the last hairline falls outside the clip).
-            .padding(.bottom, -1)
-            .background(Surface.sheetCard)
-            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            // THE CHOICES STAND ON THE SHEET AS ONE GROUP, as `OptionSheet`'s rows do.
+            .sheetRowGroup()
         }
     }
 }

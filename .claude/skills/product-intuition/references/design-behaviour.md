@@ -10,7 +10,7 @@ A mobile screen is one of seven rooms, and nothing else. The room owns the heade
 | --- | --- | --- |
 | `HomeRoom` | the vault lockup, a search key at its trailing edge (every app), the appearance key, widgets and app tiles, one status line, one trailing verb (Settings) | Home |
 | `AppPlace` | the platform navigation bar (back to Home, the app's name, at most two trailing items), no row of chips under it, the app band floating at the foot | Photos grid, Agenda |
-| `PushedPage` | `PlaceHeader`, back to the named parent (a computed `PlaceRef`, never a string), at most one trailing action | album, contact, document, settings sub-page |
+| `PushedPage` | `PlaceHeader`, back to the named parent (a computed `PlaceRef`, never a string), at most one trailing action; a "…" key that opens the platform menu counts as that action | album, contact, document, settings sub-page |
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, at most one ink button, status line hosted inside | confirm delete, pick date, add to album |
 | `SystemPlace` | `PlaceHeader` + `SectionBlock` / `RowsBlock` only; a place root draws the Home band, a sub-page keeps its back key | Settings, Backup |
@@ -28,7 +28,7 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 
 | Slot | Holds | Never |
 | --- | --- | --- |
-| Header, trailing | at most two keys: a glass tool key (the filter menu) and a filled `+` in the app's accent; Select where the app makes nothing | a word, a third key, search, any other menu |
+| Header, trailing | at most two keys: a glass tool key (the filter menu) and a filled `+` in the app's accent; Select where the app makes nothing | a word, a third key, search, any other menu (a "…" that opens the platform menu is allowed on a pushed or stage page, never on an app root) |
 | Header, filter | **the filter is always the funnel**: one button that opens the platform's own menu (SwiftUI `Menu`, Material `DropdownMenu`), in every app that filters or sorts: filters as checked options, a Type / Modified / Label style filter as a submenu, then the sort, then any view choice. Rust finishes the whole menu (`FilterMenu`) and says whether a filter is on (`filtering`): the funnel is then drawn solid, never a dot or a count, and "Clear filters" stands first. A sort or a view never lights it. Ids `<app>-filter-menu`, `<app>-filter-<section>-<option>`. A scope the page is in (a notebook, Money's month) is the title's second line (`HeaderSubtitle`), with a ✕ when it can be cleared | a chip row, a sort sheet, a second sort control, a filter in More |
 | Band, trailing | the search key, id `band-search` on both shells; tapped, the field takes the band's place at the foot, focused and just over the keyboard, with a ✕ that closes search and brings the band back. An app with no search draws no key | a bar under the title, a More row, a header glyph, a place in the plate |
 | Band, zoom | a view of the same things (Photos' Years · Months · All) is a segmented control in the band; away while selecting | a chip, a toggle in More, a second floating bar |
@@ -79,7 +79,8 @@ Width belongs to the control, not to the call: there is no per-call width switch
 - **Pressed is the one interaction state**, under the finger on the control's own rung: never a ripple, a scale or an opacity. A tappable row is a `Button`, never a tap gesture.
 - **Haptics**: one selection tick when the lit tab of an app's band changes; nothing else buzzes. A success haptic fires when the write resolves, never at the tap.
 - **Loading, empty and failure** go through `ReadStateView`; a bare spinner outside the kit is a finding, and an empty state with something to do carries its action.
-- **More and Reads** sheets are `OptionSheet`s; a `NavigationStack` inside a sheet is for a sheet that pushes.
+- **A "…" key opens the platform's own menu** (SwiftUI `Menu`, Material `DropdownMenu`), never a sheet; Rust finishes the rows and their words. The Photos viewer's (Slideshow, Add to album, Adjust location, Download) is the model.
+- **More and Reads** sheets are `OptionSheet`s; a `NavigationStack` inside a sheet is for a sheet that pushes. An `OptionSheet` takes the height of its rows (one fitting detent on iOS, the M3 modal sheet opened at content height on Android), is one surface (the rows stand on the sheet itself, grouped by hairlines with none under the last, no inner card on the sheet's ground) and, on iOS 26, sits on the system's own sheet background.
 
 ## Colour
 

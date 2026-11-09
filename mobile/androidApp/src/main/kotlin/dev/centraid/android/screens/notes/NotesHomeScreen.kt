@@ -468,7 +468,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
     if (state.confirm == null) {
         when (state.sheet) {
             // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
-            NotesSheet.NOTES_SHEET_MORE -> SheetRoom(title = chrome?.more_title.orEmpty(), onDismiss = close) {
+            NotesSheet.NOTES_SHEET_MORE -> SheetRoom(title = chrome?.more_title.orEmpty(), onDismiss = close, expanded = true) {
                 state.more_rows.forEach { row ->
                     SheetRow(row.label, iconKey = row.icon_key, testTag = "notes-more-${row.key}", onTap = {
                         close()
@@ -483,7 +483,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
                 onDismiss = close,
             )
             NotesSheet.NOTES_SHEET_ROW_MENU -> state.menu?.let { menu ->
-                SheetRoom(title = menu.title, onDismiss = close) {
+                SheetRoom(title = menu.title, onDismiss = close, expanded = true) {
                     SheetRow(menu.pin_label, iconKey = "Pin", testTag = "notes-menu-pin", onTap = {
                         onEvent(NotesHomeEvent(pin = NotesHomeEvent.PinToggled(menu.note_id)))
                     })
@@ -496,7 +496,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
                 }
             }
             NotesSheet.NOTES_SHEET_NOTEBOOK_MENU -> state.menu?.let { menu ->
-                SheetRoom(title = menu.title, onDismiss = close) {
+                SheetRoom(title = menu.title, onDismiss = close, expanded = true) {
                     SheetRow(menu.rename_label, iconKey = "Pencil", testTag = "notes-notebook-rename", onTap = {
                         onEvent(NotesHomeEvent(form_opened = NotesHomeEvent.FormOpened(notebook_id = menu.note_id)))
                     })

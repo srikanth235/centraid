@@ -63,7 +63,7 @@ message PhotosLightboxState {
   string next_id = 18;
   // "12 of 184", empty when this photograph is not on the shelf it opened from.
   string position = 19;
-  // The bottom row, and the More sheet's rows, in draw order.
+  // The bottom row, and the rows of the "…" menu (the platform's own), in draw order.
   repeated PhotosLightboxVerb toolbar = 20;
   repeated PhotosLightboxVerb menu = 21;
   repeated PhotosLightboxShareChoice share_choices = 22;
@@ -72,12 +72,16 @@ message PhotosLightboxState {
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
-    // Everything the vault knows: the facts panel.
+    // Everything the vault knows: the details under the photograph, open. The viewer
+    // opens with them closed every time; (i) and a swipe up open them, (i) and a swipe
+    // down close them.
     SHEET_INFO = 2;
     // What leaves the vault, and in what form. A share is a decision about
     // bytes, so it is a sheet with a choice and never a direct hand-off.
     SHEET_SHARE = 3;
-    SHEET_MORE = 4;
+    // 4 was `SHEET_MORE`: the "…" key opens the platform's menu, never a sheet (#1173).
+    reserved 4;
+    reserved "SHEET_MORE";
     // "Adjust location": the place picker.
     SHEET_PLACE = 5;
   }

@@ -52,17 +52,13 @@ struct DocsSheetView: View {
             .accessibilityIdentifier("docs-sheet-\(sheet.kind.rawValue)")
         case let .choices(list)?:
             OptionSheet(title: sheet.title) {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(list.choices, id: \.key) { choice in
-                            SheetRow(
-                                label: choice.label,
-                                selected: choice.selected,
-                                identifier: "docs-choice-\(choice.key)",
-                                onTap: { actions.onChoice(choice.key) }
-                            )
-                        }
-                    }
+                ForEach(list.choices, id: \.key) { choice in
+                    SheetRow(
+                        label: choice.label,
+                        selected: choice.selected,
+                        identifier: "docs-choice-\(choice.key)",
+                        onTap: { actions.onChoice(choice.key) }
+                    )
                 }
             }
             .accessibilityElement(children: .contain)

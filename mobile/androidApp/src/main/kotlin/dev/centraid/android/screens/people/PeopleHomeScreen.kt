@@ -193,7 +193,7 @@ public fun PeopleHomeScreen(
     val dismiss = { onEvent(PeopleHomeEvent(sheet_closed = PeopleHomeEvent.SheetClosed())) }
     // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
     if (state.sheet == PeopleHomeState.Sheet.SHEET_MORE && chrome != null) {
-        SheetRoom(title = chrome.more_title, onDismiss = dismiss) {
+        SheetRoom(title = chrome.more_title, onDismiss = dismiss, expanded = true) {
             state.more_rows.forEach { row ->
                 SheetRow(
                     label = row.label,

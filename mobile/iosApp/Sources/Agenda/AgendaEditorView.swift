@@ -627,23 +627,19 @@ struct AgendaEditorView: View {
         onPick: @escaping (String) -> Void
     ) -> some View {
         OptionSheet(title: title, status: status) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(choices, id: \.key) { choice in
-                        HStack(spacing: 8) {
-                            if !choice.hueKey.isEmpty {
-                                Circle()
-                                    .fill(agendaHue(choice.hueKey, scheme))
-                                    .frame(width: 8, height: 8)
-                            }
-                            SheetRow(label: choice.label, selected: choice.selected || (!chosen.isEmpty && choice.key == chosen), identifier: "\(idPrefix)-\(choice.key)") {
-                                onPick(choice.key)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .modifier(AgendaOptionalLabel(label: choice.accessibilityLabel))
+            ForEach(choices, id: \.key) { choice in
+                HStack(spacing: 8) {
+                    if !choice.hueKey.isEmpty {
+                        Circle()
+                            .fill(agendaHue(choice.hueKey, scheme))
+                            .frame(width: 8, height: 8)
+                    }
+                    SheetRow(label: choice.label, selected: choice.selected || (!chosen.isEmpty && choice.key == chosen), identifier: "\(idPrefix)-\(choice.key)") {
+                        onPick(choice.key)
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .modifier(AgendaOptionalLabel(label: choice.accessibilityLabel))
             }
         }
     }

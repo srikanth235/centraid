@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -209,9 +211,7 @@ private fun LightViewer(
                     if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
                     if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
                 }
-                Chip(icon = "more", label = words.more, light = true) {
-                    onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_MORE))
-                }
+                MoreMenu(state.menu, words.more, onEvent)
             }
             when {
                 failure != null -> ScreenFailure(
@@ -338,15 +338,9 @@ private fun Chrome(
                 if (title.isNotEmpty()) Text(text = title, color = ink, style = centraidType("control"))
                 if (meta.isNotEmpty()) Text(text = meta, color = soft, style = centraidType("small"))
             }
-            if (state.slideshow) {
-                StageVerb(label = words.slideshow_leave, onClick = {
-                    onEvent(PhotosLightboxEvent(slideshow_left = PhotosLightboxEvent.SlideshowLeft()))
-                })
-            } else {
-                Chip(icon = "more", label = words.more) {
-                    onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_MORE))
-                }
-            }
+            StageVerb(label = words.slideshow_leave, onClick = {
+                onEvent(PhotosLightboxEvent(slideshow_left = PhotosLightboxEvent.SlideshowLeft()))
+            })
         }
 
         Box(modifier = Modifier.weight(1f))
@@ -399,6 +393,41 @@ private fun Chrome(
             if (player != null) LightboxTransport(player, words)
             LightboxFilmstrip(state, onEvent)
             Toolbar(state, words, photo.trashed, onEvent, onOpen, soft)
+        }
+    }
+}
+
+/**
+ * THE "…" KEY IS THE PLATFORM'S OWN MENU, never a sheet (#1173): an M3 [DropdownMenu] of Rust's
+ * rows (`menu`). A refusal rides as the row's detail, not as a second phrasing of the same truth.
+ */
+@Composable
+private fun MoreMenu(menu: List<PhotosLightboxVerb>, label: String, onEvent: (PhotosLightboxEvent) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Chip(icon = "more", label = label, light = true) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Surface.card) {
+            menu.forEach { verb ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = if (verb.enabled || verb.why.isEmpty()) verb.label else "${verb.label} \u2014 ${verb.why}",
+                            style = centraidType("control"),
+                            color = when {
+                                !verb.enabled -> Surface.meta
+                                verb.destructive -> centraidColor("net")
+                                else -> Surface.ink
+                            },
+                        )
+                    },
+                    enabled = verb.enabled,
+                    onClick = {
+                        open = false
+                        onEvent(verbEvent(verb))
+                    },
+                    modifier = Modifier.testTag("photos.lightbox.menu.${verb.icon_key}"),
+                )
+            }
         }
     }
 }
@@ -501,7 +530,7 @@ private fun Toolbar(
     }
 }
 
-/** The sheets: info, share, more, the place picker, the album choice, the delete question. */
+/** The sheets: share, the place picker, the album choice, the delete question. */
 @Composable
 private fun Sheets(
     state: PhotosLightboxState,
@@ -519,19 +548,6 @@ private fun Sheets(
 
             PhotosLightboxState.Sheet.SHEET_SHARE -> SheetRoom(title = words.share_title, onDismiss = close) {
                 state.share_choices.forEach { choice -> ShareRow(choice, onEvent) }
-            }
-
-            PhotosLightboxState.Sheet.SHEET_MORE -> SheetRoom(title = "", onDismiss = close) {
-                state.menu.forEach { verb ->
-                    SheetRow(
-                        label = verb.label,
-                        onTap = { onEvent(verbEvent(verb)) },
-                        iconKey = verb.icon_key,
-                        detail = verb.why,
-                        destructive = verb.destructive,
-                        enabled = verb.enabled,
-                    )
-                }
             }
 
             PhotosLightboxState.Sheet.SHEET_PLACE ->

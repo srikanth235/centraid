@@ -154,7 +154,7 @@ struct PhotosLightboxView: View {
                 if !stamp.1.isEmpty { Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta) }
             }
             Spacer()
-            chip(icon: "more", label: state.words.more, light: true) { send(sheetEvent(.more)) }
+            moreMenu(light: true)
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
@@ -248,22 +248,18 @@ struct PhotosLightboxView: View {
                 }
                 .foregroundStyle(Theme.color("onStage", scheme))
                 Spacer()
-                if state.slideshow {
-                    // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
-                    Button {
-                        send(.slideshowLeft(.init()))
-                    } label: {
-                        Text(state.words.slideshowLeave)
-                            .centraidType("control")
-                            .foregroundStyle(Theme.color("onStage", scheme))
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("photos.lightbox.leaveSlideshow")
-                } else {
-                    chip(icon: "more", label: state.words.more) { send(sheetEvent(.more)) }
+                // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
+                Button {
+                    send(.slideshowLeft(.init()))
+                } label: {
+                    Text(state.words.slideshowLeave)
+                        .centraidType("control")
+                        .foregroundStyle(Theme.color("onStage", scheme))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("photos.lightbox.leaveSlideshow")
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
 
@@ -445,12 +441,16 @@ struct PhotosLightboxView: View {
     /// One round plate around one control: 44pt exactly, a plate and not a chip.
     private func chip(icon: String, label: String, light: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            CentraidIconView(iconKey: icon, tint: light ? Surface.ink : Theme.color("onStage", scheme), size: 20)
-                .frame(width: 44, height: 44)
-                .modifier(PhotosStageGlass(shape: Circle(), solid: light ? Surface.card : Theme.color("stageSunken", scheme)))
+            chipFace(icon: icon, light: light)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+
+    private func chipFace(icon: String, light: Bool) -> some View {
+        CentraidIconView(iconKey: icon, tint: light ? Surface.ink : Theme.color("onStage", scheme), size: 20)
+            .frame(width: 44, height: 44)
+            .modifier(PhotosStageGlass(shape: Circle(), solid: light ? Surface.card : Theme.color("stageSunken", scheme)))
     }
 
     // MARK: - The sheets
@@ -481,7 +481,6 @@ struct PhotosLightboxView: View {
         switch state.sheet {
         case .info: return nil
         case .share: return LightboxSheetItem(kind: .share)
-        case .more: return LightboxSheetItem(kind: .more)
         case .place: return LightboxSheetItem(kind: .place)
         default: return nil
         }
@@ -514,18 +513,6 @@ struct PhotosLightboxView: View {
                     .accessibilityIdentifier("photos.lightbox.share.\(choice.precision.rawValue)")
                 }
             }
-            .presentationDetents([.medium])
-        case .more:
-            OptionSheet(title: state.words.more) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(state.menu, id: \.kind.rawValue) { verb in
-                            moreRow(verb)
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.medium, .large])
         case .place:
             PhotosLightboxPlaceSheet(state: state, send: send)
                 .presentationDetents([.medium, .large])
@@ -543,26 +530,25 @@ struct PhotosLightboxView: View {
         }
     }
 
-    /// ONE MENU ROW: a refusal rides as the row's detail under its label rather
-    /// than becoming a second, shorter phrasing of the same truth.
-    private func moreRow(_ verb: Centraid_Core_V1_PhotosLightboxVerb) -> some View {
-        Button {
-            guard verb.enabled else { return }
-            send(verbEvent(verb))
-        } label: {
-            HStack(spacing: 12) {
-                let ink = Theme.color(!verb.enabled ? "textDisabled" : (verb.destructive ? "net" : "text"), scheme)
-                CentraidIconView(iconKey: verb.iconKey, tint: ink, size: 20)
-                Text(verb.enabled ? verb.label : "\(verb.label) — \(verb.why)")
-                    .centraidType("control")
-                    .foregroundStyle(ink)
-                Spacer(minLength: 0)
+    /// THE "…" KEY IS THE PLATFORM'S OWN MENU, never a sheet (#1173): Rust's rows
+    /// (`menu`), a refusal riding as the row's detail rather than a second, shorter
+    /// phrasing of the same truth.
+    private func moreMenu(light: Bool) -> some View {
+        Menu {
+            ForEach(state.menu, id: \.kind.rawValue) { verb in
+                Button(role: verb.destructive ? .destructive : nil) {
+                    send(verbEvent(verb))
+                } label: {
+                    Text(verb.enabled || verb.why.isEmpty ? verb.label : "\(verb.label) \u{2014} \(verb.why)")
+                }
+                .disabled(!verb.enabled)
+                .accessibilityIdentifier("photos.lightbox.menu.\(verb.iconKey)")
             }
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .contentShape(Rectangle())
+        } label: {
+            chipFace(icon: "more", light: light)
         }
-        .buttonStyle(KitRowPress())
-        .disabled(!verb.enabled)
+        .accessibilityLabel(state.words.more)
+        .accessibilityIdentifier("photos.lightbox.more")
     }
 
     private func sheetEvent(_ sheet: Centraid_Core_V1_PhotosLightboxState.Sheet) -> PhotosLightboxSend {
@@ -576,7 +562,7 @@ struct PhotosLightboxView: View {
 
 struct LightboxSheetItem: Identifiable, Equatable {
     enum Kind: String {
-        case info, share, more, place, album, confirm
+        case info, share, place, album, confirm
     }
 
     let kind: Kind

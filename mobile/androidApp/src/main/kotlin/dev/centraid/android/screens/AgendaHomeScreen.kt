@@ -760,6 +760,7 @@ private fun AgendaMoreSheet(
     SheetRoom(
         title = chrome.more_title,
         onDismiss = { onEvent(AgendaHomeEvent(sheet_closed = AgendaHomeEvent.SheetClosed())) },
+        expanded = true,
     ) {
         // THE ROWS ARE THE MACHINE'S (`more_rows`), the same list iOS draws: a
         // calendar row is a toggle with its hue dot, an action row a

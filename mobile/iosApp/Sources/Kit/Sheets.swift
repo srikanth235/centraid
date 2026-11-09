@@ -145,7 +145,9 @@ struct SheetRow: View {
 }
 
 /// A SHEET OF CHOICES — a More sheet, a pick. Rows are `SheetRow`s; choosing
-/// is the row's own event, so the sheet carries no ink button.
+/// is the row's own event, so the sheet carries no ink button. **ONE SURFACE** (#1173): the rows
+/// stand on the sheet itself, grouped by hairlines, with no card of their own, and the sheet takes
+/// the height of its rows (`SheetRoom.fit`), on the system's ground on iOS 26.
 struct OptionSheet<Rows: View>: View {
     let title: String
     var status: String = ""
@@ -158,13 +160,21 @@ struct OptionSheet<Rows: View>: View {
     }
 
     var body: some View {
-        SheetRoom(title: title, status: status) {
-            // THE ROWS ARE ONE CARD ON THE SHEET (#1173); the last row's hairline falls outside
-            // the clip, so a card never ends on a rule.
-            VStack(spacing: 0) { rows() }
-                .padding(.bottom, -1)
-                .background(Surface.sheetCard)
-                .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        SheetRoom(title: title, status: status, fit: true) {
+            // THE LAST ROW'S HAIRLINE FALLS OUTSIDE THE CLIP, so the group never ends on a rule;
+            // the row's own inset is taken back so its words stand under the title's.
+            VStack(spacing: 0) { rows() }.sheetRowGroup()
         }
+    }
+}
+
+extension View {
+    /// THE ROWS OF A CHOICE SHEET AS ONE GROUP ON THE SHEET: no card of their own. The last row's
+    /// hairline falls outside the clip, so the group never ends on a rule, and the row's own inset
+    /// is taken back so its words stand under the title's.
+    func sheetRowGroup() -> some View {
+        padding(.horizontal, -12)
+            .padding(.bottom, -1)
+            .clipped()
     }
 }

@@ -971,52 +971,51 @@ private struct AgendaMoreSheet: View {
     /// toggle with its hue dot, and every tap sends the row's key; a place's
     /// row then pushes its `route`.
     var body: some View {
-        SheetRoom(title: state.chrome.moreTitle, titleIdentifier: "agenda-more-sheet") {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(state.moreRows, id: \.key) { row in
-                        if !row.section.isEmpty {
-                            SectionHeader(title: row.section)
+        SheetRoom(title: state.chrome.moreTitle, titleIdentifier: "agenda-more-sheet", fit: true) {
+            VStack(spacing: 0) {
+                ForEach(state.moreRows, id: \.key) { row in
+                    if !row.section.isEmpty {
+                        SectionHeader(title: row.section)
+                    }
+                    HStack(spacing: 8) {
+                        // A CALENDAR WEARS THE ONE LIST PALETTE and its own icon; an events
+                        // calendar with no list colour keeps its hue dot.
+                        if !row.colorKey.isEmpty {
+                            AgendaListMark(colorKey: row.colorKey, iconKey: row.iconKey)
+                                .padding(.leading, 12)
+                        } else if !row.hueKey.isEmpty {
+                            Circle()
+                                .fill(agendaHue(row.hueKey, scheme))
+                                .frame(width: 8, height: 8)
                         }
-                        HStack(spacing: 8) {
-                            // A CALENDAR WEARS THE ONE LIST PALETTE and its own icon; an events
-                            // calendar with no list colour keeps its hue dot.
-                            if !row.colorKey.isEmpty {
-                                AgendaListMark(colorKey: row.colorKey, iconKey: row.iconKey)
-                                    .padding(.leading, 12)
-                            } else if !row.hueKey.isEmpty {
-                                Circle()
-                                    .fill(agendaHue(row.hueKey, scheme))
-                                    .frame(width: 8, height: 8)
+                        SheetRow(
+                            iconKey: sheetIcon(of: row),
+                            label: row.label,
+                            selected: row.toggle && row.on,
+                            identifier: "agenda-more-\(row.key)"
+                        ) {
+                            send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
+                            if row.hasRoute { open(row.route) }
+                        }
+                        .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
+                        // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.
+                        if !row.editLabel.isEmpty {
+                            let calendarID = String(row.key.dropFirst("calendar-".count))
+                            Button {
+                                send(AgendaEvents.make { $0.calendarEdit = .with { $0.calendarID = calendarID } })
+                            } label: {
+                                CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme), size: 18)
+                                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                                    .contentShape(Rectangle())
                             }
-                            SheetRow(
-                                iconKey: sheetIcon(of: row),
-                                label: row.label,
-                                selected: row.toggle && row.on,
-                                identifier: "agenda-more-\(row.key)"
-                            ) {
-                                send(AgendaEvents.make { $0.moreRow = .with { $0.key = row.key } })
-                                if row.hasRoute { open(row.route) }
-                            }
-                            .accessibilityLabel(row.spoken.isEmpty ? row.label : row.spoken)
-                            // A CALENDAR'S EDIT CONTROL (rename, colour, icon): icon-only, so it is labelled.
-                            if !row.editLabel.isEmpty {
-                                let calendarID = String(row.key.dropFirst("calendar-".count))
-                                Button {
-                                    send(AgendaEvents.make { $0.calendarEdit = .with { $0.calendarID = calendarID } })
-                                } label: {
-                                    CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme), size: 18)
-                                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(row.editLabel)
-                                .accessibilityIdentifier("agenda-calendar-edit-\(calendarID)")
-                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(row.editLabel)
+                            .accessibilityIdentifier("agenda-calendar-edit-\(calendarID)")
                         }
                     }
                 }
             }
+            .sheetRowGroup()
         }
     }
 }

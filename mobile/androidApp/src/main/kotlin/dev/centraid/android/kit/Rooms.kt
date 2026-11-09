@@ -430,8 +430,9 @@ public data class SheetOutline(
  * dialog window, and the activity's flag does not reach one made before it was
  * set, so a sheet holding the 24 words carries the flag itself.
  *
- * **[expanded] true opens at full height** and skips the half detent, for a
- * screen that is a page in a sheet. Defaults leave a sheet as Material draws it.
+ * **[expanded] true skips the half detent**: the sheet opens at the height of its content (a
+ * list of rows, #1173) and at full height when the content is taller, which is also what a
+ * screen that is a page in a sheet wants. Defaults leave a sheet as Material draws it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

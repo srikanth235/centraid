@@ -244,7 +244,6 @@ struct PhotoShelfView: View {
                     shelf { $0.locationChosen = .with { $0.exact = true } }
                 }
             }
-            .presentationDetents([.height(220)])
         }
         .sheet(isPresented: Binding(
             get: { state.hasRename },

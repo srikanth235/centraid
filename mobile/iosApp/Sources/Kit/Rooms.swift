@@ -555,10 +555,16 @@ struct SheetRoom<Content: View>: View {
     /// sheet without replacing its children's ids, which an identifier on the
     /// container does (#1047).
     var titleIdentifier: String = ""
+    /// A SHEET THAT TAKES THE HEIGHT OF ITS CONTENT (the band's More, a pick): one detent, the
+    /// measured height of the room, and the platform's own sheet ground on iOS 26. A list taller
+    /// than the screen scrolls inside it.
+    var fit: Bool = false
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
+    @State private var natural: CGFloat = 0
+    @State private var floor: CGFloat = 0
 
     init(
         title: String,
@@ -566,6 +572,7 @@ struct SheetRoom<Content: View>: View {
         primary: SheetPrimary? = nil,
         outlines: [SheetOutline] = [],
         titleIdentifier: String = "",
+        fit: Bool = false,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
@@ -573,10 +580,33 @@ struct SheetRoom<Content: View>: View {
         self.primary = primary
         self.outlines = outlines
         self.titleIdentifier = titleIdentifier
+        self.fit = fit
         self.content = content
     }
 
     var body: some View {
+        if fit {
+            ScrollView {
+                room
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { natural = $0 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
+            .modifier(SheetPresentation(
+                detents: natural > 0 ? [.height(natural + floor)] : [.medium],
+                systemGround: true
+            ))
+        } else {
+            room
+                // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
+                // floated mid-sheet as a band of `bgElev` between two slabs of the
+                // system's own sheet ground.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .modifier(SheetPresentation())
+        }
+    }
+
+    private var room: some View {
         VStack(alignment: .leading, spacing: 12) {
             // A SHEET THAT DRAWS ITS OWN HEAD (the custom repeat's title with Done beside it)
             // passes no title.
@@ -628,11 +658,7 @@ struct SheetRoom<Content: View>: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.bottom, 16)
-        // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
-        // floated mid-sheet as a band of `bgElev` between two slabs of the
-        // system's own sheet ground.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .modifier(SheetPresentation())
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
@@ -683,17 +709,33 @@ struct SheetPage<Content: View, Foot: View>: View {
 /// hosting controller of its own) can state them again on the sheet's root.
 struct SheetPresentation: ViewModifier {
     var detents: Set<PresentationDetent> = [.medium, .large]
+    /// The platform's own sheet ground on iOS 26 (Liquid Glass); the kit's before it.
+    var systemGround = false
 
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content
-            .presentationBackground(Surface.sheet)
+            .modifier(SheetGround(systemGround: systemGround))
             .presentationDragIndicator(.visible)
             .presentationDetents(detents)
             // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
             // root's (see `Theme.textSizeCap`).
             .dynamicTypeSize(...Theme.textSizeCap)
+    }
+}
+
+/// The ground under a sheet: the kit's `sheet` surface, or the system's own where it is asked for
+/// and the OS draws one (iOS 26's glass).
+private struct SheetGround: ViewModifier {
+    let systemGround: Bool
+
+    func body(content: Content) -> some View {
+        if systemGround, #available(iOS 26.0, *) {
+            content
+        } else {
+            content.presentationBackground(Surface.sheet)
+        }
     }
 }
 

@@ -296,7 +296,6 @@ private struct PhotosHomeSheets: ViewModifier {
                             ) { send(PhotosHomeEvents.make { $0.rung = option.rung }) }
                         }
                     }
-                    .presentationDetents([.medium])
                 }
             }
             // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816): a place NAME is
@@ -311,7 +310,6 @@ private struct PhotosHomeSheets: ViewModifier {
                             send(PhotosHomeEvents.make { $0.copyPlaceChosen = .with { $0.keepLocation = true } })
                         }
                     }
-                    .presentationDetents([.height(220)])
                 }
             }
             // NAMING A NEW ALBUM. The sheet does NOT close itself when Create is

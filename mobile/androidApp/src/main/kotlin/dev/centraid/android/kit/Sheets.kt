@@ -115,6 +115,8 @@ public fun SheetRow(
     selected: Boolean = false,
     testTag: String = "sheet-row",
     enabled: Boolean = true,
+    /** The hairline under the row; a group of rows leaves the last one without. */
+    divider: Boolean = true,
     /** A colour dot in the mark's place (a label wears its colour); it replaces the tile. */
     dot: androidx.compose.ui.graphics.Color? = null,
 ) {
@@ -161,7 +163,9 @@ public fun SheetRow(
             }
             if (selected) CentraidIcon(iconKey = "Check", tint = accent.text, size = 16.dp)
         }
-        Spacer(Modifier.padding(start = if (iconKey != null || dot != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        if (divider) {
+            Spacer(Modifier.padding(start = if (iconKey != null || dot != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        }
     }
 }
 
@@ -176,8 +180,10 @@ public data class SheetOption(
 )
 
 /**
- * A CHOICE IS A SHEET (#1015 D4: content pushes, choices sheet): a titled
- * [SheetRoom] of [SheetRow]s. Picking sends [onPick]; the machine closes it.
+ * A CHOICE IS A SHEET (#1015 D4: content pushes, choices sheet): a titled [SheetRoom] of
+ * [SheetRow]s. Picking sends [onPick]; the machine closes it. **One surface** (#1173): the rows
+ * stand on the sheet itself, grouped by hairlines with none under the last, with no card of their
+ * own, and the sheet takes the height of its rows (it opens fully, never at a half detent).
  */
 @Composable
 public fun OptionSheet(
@@ -187,25 +193,20 @@ public fun OptionSheet(
     onDismiss: () -> Unit,
     status: String = "",
 ) {
-    SheetRoom(title = title, onDismiss = onDismiss, status = status) {
-        // THE ROWS ARE ONE CARD ON THE SHEET (#1173); the last row's hairline falls outside the clip.
-        Column(
-            Modifier
-                .padding(horizontal = KitGeometry.GUTTER)
-                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
-                .background(Surface.sheetCard),
-        ) {
-        options.forEach { option ->
-            SheetRow(
-                label = option.label,
-                iconKey = option.iconKey,
-                detail = option.detail,
-                destructive = option.destructive,
-                selected = option.selected,
-                testTag = "sheet-option-${option.key}",
-                onTap = { onPick(option.key) },
-            )
-        }
+    SheetRoom(title = title, onDismiss = onDismiss, status = status, expanded = true) {
+        Column(Modifier.padding(horizontal = KitGeometry.GUTTER - 12.dp)) {
+            options.forEachIndexed { index, option ->
+                SheetRow(
+                    label = option.label,
+                    iconKey = option.iconKey,
+                    detail = option.detail,
+                    destructive = option.destructive,
+                    selected = option.selected,
+                    testTag = "sheet-option-${option.key}",
+                    divider = index < options.lastIndex,
+                    onTap = { onPick(option.key) },
+                )
+            }
         }
     }
 }
