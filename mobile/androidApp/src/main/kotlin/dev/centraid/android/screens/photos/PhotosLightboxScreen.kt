@@ -32,6 +32,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -194,39 +207,45 @@ private fun LightViewer(
 ) {
     val failure = state.failure
     val denied = state.denied
-    Box(Modifier.fillMaxSize().background(Surface.page)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
+    Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Chip(icon = "ChevronLeft", label = words.close, onClick = onClose, light = true)
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Chip(icon = "ChevronLeft", label = words.close, onClick = onClose, light = true)
-                Column(
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
-                    if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
-                }
-                MoreMenu(state.menu, words.more, onEvent)
+                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
+                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
             }
-            when {
-                failure != null -> ScreenFailure(
-                    sentence = failure.sentence,
-                    remedy = failure.remedy,
-                    modifier = Modifier.padding(KitGeometry.GUTTER),
-                )
-                denied != null -> ScreenFailure(
-                    sentence = denied.title,
-                    remedy = denied.body,
-                    modifier = Modifier.padding(KitGeometry.GUTTER),
-                )
-                else -> {
-                    // THE PHOTOGRAPH'S BAND: the stage on its own ground, what plays or loads over its foot.
-                    Box(Modifier.fillMaxWidth().weight(0.4f).background(centraidColor("stage"))) {
+            MoreMenu(state.menu, words.more, onEvent)
+        }
+        when {
+            failure != null -> ScreenFailure(
+                sentence = failure.sentence,
+                remedy = failure.remedy,
+                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
+            )
+            denied != null -> ScreenFailure(
+                sentence = denied.title,
+                remedy = denied.body,
+                modifier = Modifier.padding(KitGeometry.GUTTER).weight(1f),
+            )
+            else -> DetailsSheetHost(
+                open = infoOpen,
+                onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                details = { if (photo != null) InfoCards(state, photo, words, onEvent) },
+            ) {
+                // THE PHOTOGRAPH ON THE LIGHT PAGE, no black letterbox, with what plays or loads over its foot.
+                Box(Modifier.fillMaxSize()) {
+
                         LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
                         if (photo != null && drawnPath(photo) == null) {
                             // NEVER A BROKEN IMAGE. Each of these is a truthful state.
@@ -268,23 +287,15 @@ private fun LightViewer(
                                 if (player != null) LightboxTransport(player, words)
                             }
                         }
-                    }
-                    Column(Modifier.fillMaxWidth().weight(0.6f).verticalScroll(rememberScrollState())) {
-                        if (photo != null) {
-                            InfoCards(state, photo, words, onEvent)
-                            // THE BAR FLOATS OVER THE FOOT: the last card scrolls clear of it.
-                            Box(Modifier.height(104.dp))
-                        }
-                    }
-                }
+                                    }
             }
         }
+        // THE BAR IS THE PAGE'S LAST ROW: the photograph and the details are laid out above it, so
+        // it never covers the Place card's links.
         if (photo != null) {
             Column(
                 Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
                     .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
                     .padding(bottom = 8.dp),
             ) {
@@ -297,6 +308,61 @@ private fun LightViewer(
             }
         }
         Sheets(state, photo, onEvent)
+    }
+}
+
+/**
+ * THE DETAILS UNDER THE PHOTOGRAPH, as an M3 bottom sheet (#1173): closed, the photograph has the whole
+ * page; open (the (i) key, a swipe up, or a drag of the sheet), the sheet rises from the foot and the
+ * photograph shrinks up to the room that is left above it. A drag down, (i) or Back closes it. Rust's
+ * `sheet` is the one truth: the sheet's own settling is reported back as the event.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailsSheetHost(
+    open: Boolean,
+    onOpenChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    details: @Composable () -> Unit,
+    photo: @Composable () -> Unit,
+) {
+    val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = true)
+    val scaffold = rememberBottomSheetScaffoldState(sheetState)
+    val reported by rememberUpdatedState(onOpenChanged)
+    LaunchedEffect(open) {
+        if (open && sheetState.currentValue != SheetValue.Expanded) sheetState.expand()
+        if (!open && sheetState.currentValue != SheetValue.PartiallyExpanded) sheetState.partialExpand()
+    }
+    LaunchedEffect(sheetState) {
+        snapshotFlow { sheetState.currentValue }.collect { value ->
+            val nowOpen = value == SheetValue.Expanded
+            if (nowOpen != open) reported(nowOpen)
+        }
+    }
+    val density = LocalDensity.current
+    val maxSheet = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+    var container by remember { mutableIntStateOf(0) }
+    BottomSheetScaffold(
+        scaffoldState = scaffold,
+        sheetPeekHeight = 0.dp,
+        sheetContainerColor = Surface.sheet,
+        sheetContent = {
+            Column(Modifier.heightIn(max = maxSheet).verticalScroll(rememberScrollState())) {
+                details()
+                Spacer(Modifier.height(16.dp))
+            }
+        },
+        containerColor = Surface.page,
+        modifier = modifier.onSizeChanged { container = it.height },
+    ) {
+        // THE PHOTOGRAPH SHRINKS UP: it keeps the room above the sheet's top edge.
+        val covered = if (container > 0) {
+            val offset = runCatching { sheetState.requireOffset() }.getOrDefault(container.toFloat())
+            with(density) { (container - offset).coerceAtLeast(0f).toDp() }
+        } else {
+            0.dp
+        }
+        Box(Modifier.fillMaxSize().padding(bottom = covered)) { photo() }
     }
 }
 

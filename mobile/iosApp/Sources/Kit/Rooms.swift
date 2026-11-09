@@ -101,39 +101,6 @@ struct RoomAction {
     let action: () -> Void
 }
 
-/// The search bar while search is closed, for a page that keeps its own field under its
-/// header (Chat's drawer): field-shaped, so it reads as the place to type before it is one.
-/// An app place's search is the band's key instead (`BandSearchKey`).
-struct SearchOpener: View {
-    let placeholder: String
-    var identifier: String = "search-opener"
-    let onOpen: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 8) {
-                CentraidIconView(iconKey: "Search", tint: Theme.color("textFaint", scheme), size: 16)
-                Text(placeholder)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            // A PILL, as the Chats board draws it (#1173): the card colour under a hairline.
-            .background(Surface.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(placeholder)
-        .accessibilityIdentifier(identifier)
-    }
-}
-
 /// A PLACE'S OWN BAR (#1173): the Calendar's header stands in the system bar, a leading chip and
 /// the keys before the app's one verb, and the page draws no title. Values, so a place passes
 /// views and the kit stays ignorant of what they are.

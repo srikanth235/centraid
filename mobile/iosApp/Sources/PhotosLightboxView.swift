@@ -19,6 +19,7 @@ typealias PhotosLightboxSend = Centraid_Core_V1_PhotosLightboxEvent.OneOf_Kind
 struct PhotosLightboxView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let state: Centraid_Core_V1_PhotosLightboxState
     let send: (PhotosLightboxSend) -> Void
@@ -108,14 +109,16 @@ struct PhotosLightboxView: View {
     /// zoom, swipe down), inside its band.
     @ViewBuilder
     private func lightPage(_ model: PhotosLightboxModel) -> some View {
+        // THE VIEWER OPENS PHOTO-ONLY, the details closed every time (Rust's `sheet`): (i) or a swipe
+        // up opens them and the photograph shrinks up, (i) or a swipe down closes them.
+        let infoOpen = state.sheet == .info
         ZStack(alignment: .bottom) {
             Surface.page.ignoresSafeArea()
             VStack(spacing: 0) {
                 lightHeader()
                 switch state.content {
                 case .loading?, nil:
-                    band(model, photo: nil)
-                    Spacer(minLength: 0)
+                    band(model, photo: nil, infoOpen: false)
                 case let .denied(denied)?:
                     DeniedGate(denied)
                 case let .failure(failure)?:
@@ -123,19 +126,22 @@ struct PhotosLightboxView: View {
                         .padding(CentraidGeometry.pageMargin)
                     Spacer(minLength: 0)
                 case let .photo(photo)?:
-                    band(model, photo: photo)
-                    ScrollView {
-                        PhotosLightboxInfo(state: state, photo: photo, send: send)
-                            // THE BAR FLOATS OVER THE FOOT: the last card scrolls clear of it.
-                            .padding(.bottom, 104)
+                    band(model, photo: photo, infoOpen: infoOpen)
+                    if infoOpen {
+                        ScrollView {
+                            PhotosLightboxInfo(state: state, photo: photo, send: send)
+                                .padding(.bottom, 16)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .scrollDismissesKeyboard(.interactively)
+                    // THE BAR NEVER COVERS THE DETAILS: it is the page's last row, so the photograph and
+                    // the cards are laid out above it and the Place card's links are never under it.
+                    lightToolbar(photo)
                 }
             }
-            if case let .photo(photo)? = state.content {
-                lightToolbar(photo)
-            }
         }
+        .animation(reduceMotion ? nil : .timingCurve(0.3, 0, 0.4, 1, duration: CentraidGeometry.durationOne / 1000), value: infoOpen)
         .appAccent("photos")
     }
 
@@ -161,23 +167,24 @@ struct PhotosLightboxView: View {
     }
 
     /// THE PHOTOGRAPH'S BAND: the stage, on its own ground, with what plays or loads over its foot.
-    private func band(_ model: PhotosLightboxModel, photo: Centraid_Core_V1_PhotosLightboxPhoto?) -> some View {
+    private func band(_ model: PhotosLightboxModel, photo: Centraid_Core_V1_PhotosLightboxPhoto?, infoOpen: Bool) -> some View {
         ZStack(alignment: .bottom) {
-            Theme.color("stage", scheme)
+            // THE LIGHT GROUND, no black letterbox: the photograph sits on the page itself.
+            Surface.page
             stage(model)
             if let photo, model.drawablePath == nil {
                 // NEVER A BROKEN IMAGE. Each of these is a truthful state.
                 Text(photo.stageLabel)
                     .centraidType("body")
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.color("onStage", scheme))
+                    .foregroundStyle(Surface.ink)
                     .padding(CentraidGeometry.pageMargin)
                     .allowsHitTesting(false)
                     .frame(maxHeight: .infinity)
             } else if photo == nil, model.framePath(state.photoID) == nil {
                 Text(state.words.opening)
                     .centraidType("small")
-                    .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    .foregroundStyle(Surface.meta)
                     .frame(maxHeight: .infinity)
             }
             if let photo {
@@ -194,7 +201,8 @@ struct PhotosLightboxView: View {
                 .padding(.bottom, 4)
             }
         }
-        .containerRelativeFrame(.vertical) { height, _ in height * 0.4 }
+        // OPEN, THE PHOTOGRAPH SHRINKS UP to a band; closed, it takes the whole page.
+        .modifier(PhotosBandHeight(shrunk: infoOpen))
         .clipped()
     }
 
@@ -220,7 +228,9 @@ struct PhotosLightboxView: View {
             player: media.video,
             live: media.live,
             send: send,
-            onClose: onClose
+            onClose: onClose,
+            infoOpen: state.sheet == .info && !state.slideshow,
+            onInfo: { open in send(sheetEvent(open ? .info : .none)) }
         )
     }
 
@@ -425,7 +435,7 @@ struct PhotosLightboxView: View {
             }
             .frame(minWidth: 44, minHeight: 44)
             .background(
-                light && verb.kind == .info ? Surface.fill : Color.clear,
+                light && verb.kind == .info && verb.on ? Surface.fill : Color.clear,
                 in: Circle()
             )
             .contentShape(Rectangle())
@@ -886,6 +896,21 @@ private struct PhotosStageGlass<S: Shape>: ViewModifier {
             content.glassEffect(.regular, in: shape)
         } else {
             content.background(solid, in: shape)
+        }
+    }
+}
+
+
+/// THE PHOTOGRAPH'S BAND HEIGHT: the whole page while the details are closed, a little over a third
+/// of it while they are open.
+private struct PhotosBandHeight: ViewModifier {
+    let shrunk: Bool
+
+    func body(content: Content) -> some View {
+        if shrunk {
+            content.containerRelativeFrame(.vertical) { height, _ in height * 0.36 }
+        } else {
+            content.frame(maxHeight: .infinity)
         }
     }
 }

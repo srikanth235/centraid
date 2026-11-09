@@ -496,7 +496,14 @@ impl Lightbox {
                 }
             }
             V::DeleteForever => self.confirm = true,
-            V::Info => self.sheet = Sheet::Info,
+            // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
+            V::Info => {
+                self.sheet = if self.sheet == Sheet::Info {
+                    Sheet::None
+                } else {
+                    Sheet::Info
+                };
+            }
             // WHICH LOCATION TRAVELS IS ASKED ONLY OF A PHOTOGRAPH THAT HAS ONE;
             // without a place there is nothing to choose and the copy goes out bare.
             V::Share | V::SendCopy => {
@@ -938,7 +945,7 @@ fn export_sentence(
     }
 }
 
-/// THE BOTTOM ROW AND THE MORE SHEET, as data: every verb live or visibly
+/// THE BOTTOM ROW AND THE "…" MENU, as data: every verb live or visibly
 /// refused with the reason that says which. `refusal` is the write ladder's,
 /// `edit` the editor's.
 fn verbs(
@@ -949,6 +956,7 @@ fn verbs(
     photo_id: &str,
     album_id: &str,
     can_slideshow: bool,
+    info_open: bool,
 ) -> (Vec<wire::PhotosLightboxVerb>, Vec<wire::PhotosLightboxVerb>) {
     let verb = |kind: V, label: String, icon: &str, why: Option<&str>, on: bool| {
         wire::PhotosLightboxVerb {
@@ -1013,7 +1021,7 @@ fn verbs(
             refusal,
             cell.favorite,
         ),
-        verb(V::Info, words::photos_info(locale), "info", None, false),
+        verb(V::Info, words::photos_info(locale), "info", None, info_open),
         edit_verb,
         verb(
             V::Archive,
@@ -1302,6 +1310,7 @@ impl Screen for Lightbox {
             &self.photo_id,
             &self.album_id,
             self.neighbours.len() > 1,
+            self.sheet == Sheet::Info,
         );
         let at = self.position();
         let neighbour = |index: Option<usize>| {
@@ -1419,6 +1428,7 @@ impl Lightbox {
             &self.photo_id,
             &self.album_id,
             self.neighbours.len() > 1,
+            self.sheet == Sheet::Info,
         );
         toolbar
             .iter()

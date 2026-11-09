@@ -1625,6 +1625,22 @@
       "w": 390,
       "x": 470,
       "y": 3480
+    },
+    "PhotoViewerInfo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A photo, details open",
+      "w": 390,
+      "x": 940,
+      "y": 12760
+    },
+    "PhotoViewerInfoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A photo, details open · dark",
+      "w": 390,
+      "x": 940,
+      "y": 12760
     }
   },
   "createdOnFiles": {
@@ -2121,6 +2137,7 @@
     "NoteEditor.dc.html",
     "PhotosLibrary.dc.html",
     "PhotoViewer.dc.html",
+    "PhotoViewerInfo.dc.html",
     "TaskEditor.dc.html",
     "PersonEditor.dc.html",
     "LockerEditor.dc.html",
@@ -2218,6 +2235,7 @@
     "NoteEditorDark.dc.html",
     "PhotosLibraryDark.dc.html",
     "PhotoViewerDark.dc.html",
+    "PhotoViewerInfoDark.dc.html",
     "TaskEditorDark.dc.html",
     "PersonEditorDark.dc.html",
     "LockerEditorDark.dc.html",

@@ -28,6 +28,10 @@ struct PhotosLightboxStage: View {
     let live: LightboxPlayer?
     let send: (PhotosLightboxSend) -> Void
     let onClose: () -> Void
+    /// THE DETAILS UNDER THE PHOTOGRAPH are open (the light viewer). A swipe up opens them and a
+    /// swipe down closes them before it ever closes the viewer; `onInfo` is the same act as (i).
+    var infoOpen = false
+    var onInfo: (Bool) -> Void = { _ in }
 
     /// THE PHOTOGRAPH THE STAGE IS DRAWING, which leads the state by one frame
     /// on a swipe: the incoming frame is already under the member's finger
@@ -170,7 +174,7 @@ struct PhotosLightboxStage: View {
                     let edge = (dx > 0 && previous == nil) || (dx < 0 && next == nil)
                     pageX = edge ? dx / 3 : dx
                 case .vertical:
-                    dismissY = max(0, value.translation.height)
+                    dismissY = infoOpen ? 0 : max(0, value.translation.height)
                 case nil:
                     break
                 }
@@ -196,7 +200,15 @@ struct PhotosLightboxStage: View {
                         send(.moved(.with { $0.photoID = target }))
                     })
                 case .vertical:
-                    if dismissY > dismissDistance || value.predictedEndTranslation.height > dismissDistance * 2 {
+                    let up = value.translation.height < -dismissDistance / 2
+                        || value.predictedEndTranslation.height < -dismissDistance
+                    let down = value.translation.height > dismissDistance / 2
+                    if infoOpen {
+                        // THE DETAILS CLOSE BEFORE THE VIEWER DOES.
+                        if down { onInfo(false) }
+                    } else if up && !state.slideshow {
+                        onInfo(true)
+                    } else if dismissY > dismissDistance || value.predictedEndTranslation.height > dismissDistance * 2 {
                         onClose()
                     } else {
                         settle { dismissY = 0 }
