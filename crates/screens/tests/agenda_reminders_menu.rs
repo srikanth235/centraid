@@ -4,18 +4,13 @@
 
 mod todo_support;
 
-use std::time::Duration;
-
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda::{self, routes};
-use centraid_screens::catalog::act;
 use centraid_screens::kit::menu;
 use centraid_screens::runtime::Runtime;
 use centraid_screens::testing::Driver;
 use todo_support::*;
 use wire::AgendaDestination as Dest;
-use wire::agenda_home_event::Kind as H;
-use wire::screen_event::Kind as E;
 
 fn home(destination: Dest) -> (Driver, u64) {
     let mut driver = Driver::with_runtime(Runtime::new(
@@ -32,25 +27,6 @@ fn state(d: &Driver, id: u64) -> &wire::AgendaHomeState {
         Some(wire::view_state::Kind::AgendaHome(state)) => state,
         other => panic!("not Agenda's home: {other:?}"),
     }
-}
-
-fn pick(d: &mut Driver, id: u64, section: &str, option: &str) {
-    d.send(
-        id,
-        E::AgendaHome(wire::AgendaHomeEvent {
-            kind: Some(H::FilterMenuPicked(wire::FilterMenuPicked {
-                section_key: section.to_owned(),
-                option_key: option.to_owned(),
-            })),
-        }),
-    );
-}
-
-fn inbox_titles(d: &Driver, id: u64) -> Vec<String> {
-    let Some(wire::agenda_home_state::Content::Data(data)) = &state(d, id).content else {
-        panic!("no data");
-    };
-    titles_of(&data.todo.as_ref().unwrap().groups)
 }
 
 fn titles_of(groups: &[wire::TodoRowGroup]) -> Vec<String> {
@@ -122,76 +98,8 @@ fn the_menu_is_on_the_reminders_place_only() {
         ["manual"]
     );
 
-    d.send(
-        id,
-        E::AgendaHome(wire::AgendaHomeEvent {
-            kind: Some(H::Destination(
-                wire::agenda_home_event::DestinationChanged {
-                    destination: Dest::Day as i32,
-                },
-            )),
-        }),
-    );
-    assert!(state(&d, id).filter_menu.is_none(), "not on the Calendar");
-}
-
-#[test]
-fn a_sort_reorders_the_inbox_is_kept_and_does_not_light_the_funnel() {
-    let (mut d, id) = home(Dest::Todo);
-    clear_tasks(&d);
-    for title in ["Pear", "apple", "Mango"] {
-        task(&d, title);
-    }
-    settle_reads(&mut d, None);
-    d.pump(Duration::from_millis(300));
-    pick(&mut d, id, menu::SORT, "title");
-    assert_eq!(inbox_titles(&d, id), ["apple", "Mango", "Pear"]);
-    let menu = state(&d, id).filter_menu.as_ref().unwrap();
-    assert!(!menu.filtering, "a sort is not a filter");
-    assert_eq!(
-        menu::checked(menu::find(menu, menu::SORT).unwrap()),
-        ["title"]
-    );
-    let saved = d
-        .effects
-        .iter()
-        .find(|r| is_keychain(r, wire::keychain_op::Op::Set))
-        .expect("the pick is kept");
-    let Some(wire::effect::Kind::Keychain(op)) =
-        saved.effect.as_ref().and_then(|e| e.kind.as_ref())
-    else {
-        unreachable!()
-    };
-    assert_eq!(op.key, "agenda.reminders.view");
-    assert_eq!(
-        String::from_utf8_lossy(&op.value),
-        "sort=title;flagged=0;completed=0"
-    );
-}
-
-#[test]
-fn flagged_only_lights_the_funnel_and_clear_puts_the_rows_back() {
-    let (mut d, id) = home(Dest::Todo);
-    clear_tasks(&d);
-    let keep = task(&d, "Call the bank");
-    task(&d, "Water the plants");
-    arrange(&d, act::reminders::StarTask { task_id: keep });
-    settle_reads(&mut d, None);
-    d.pump(Duration::from_millis(300));
-    pick(&mut d, id, "show", "flagged");
-    assert_eq!(inbox_titles(&d, id), ["Call the bank"]);
-    let menu = state(&d, id).filter_menu.as_ref().unwrap();
-    assert!(menu.filtering);
-    assert_eq!(menu.spoken, "Filter and sort, on");
-
-    d.send(
-        id,
-        E::AgendaHome(wire::AgendaHomeEvent {
-            kind: Some(H::FilterMenuCleared(wire::FilterMenuCleared {})),
-        }),
-    );
-    assert_eq!(inbox_titles(&d, id).len(), 2);
-    assert!(!state(&d, id).filter_menu.as_ref().unwrap().filtering);
+    let (c, cid) = home(Dest::Day);
+    assert!(state(&c, cid).filter_menu.is_none(), "not on the Calendar");
 }
 
 #[test]

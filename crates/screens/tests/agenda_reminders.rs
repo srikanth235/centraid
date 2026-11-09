@@ -197,8 +197,8 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
         other => panic!("not Agenda's home: {other:?}"),
     };
     let band: Vec<&str> = state.band.iter().map(|t| t.label.as_str()).collect();
-    assert_eq!(band, ["Calendar", "Reminders", "Invites", "More"]);
-    assert!(state.band[1].current);
+    assert_eq!(band, ["Reminders", "More"]);
+    assert!(state.band[0].current);
     assert!(
         state.calendar_views.is_empty(),
         "Reminders has no view menu"

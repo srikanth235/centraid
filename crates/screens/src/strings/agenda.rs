@@ -36,7 +36,7 @@ catalog! {
     plain confirm_skip_title = ("Skip this occurrence?", "Skip this occurrence?");
     plain continues = ("Continues", "Continues");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
-    plain denied_title = ("Agenda cannot read this vault", "Agenda cannot read this vault");
+    plain denied_title = ("Calendar cannot read this vault", "Calendar cannot read this vault");
     plain done = ("Done", "Done");
     plain editor_edit = ("Edit event", "Edit event");
     plain empty_day = ("Nothing on this day.", "Nothing on this day.");
@@ -64,7 +64,7 @@ catalog! {
     plain foot_new = ("A new event starts tentative.", "A new event starts tentative.");
     plain from = ("From", "From");
     plain from_today = ("From today", "From today");
-    plain gone_action = ("Back to Agenda", "Back to Agenda");
+    plain gone_action = ("Back to Calendar", "Back to Calendar");
     plain gone_body = ("It was cancelled, moved or deleted.", "It was cancelled, moved or deleted.");
     plain gone_title = ("This event was removed.", "This event was removed.");
     plain guests_none = ("Nobody else", "Nobody else");
@@ -101,7 +101,7 @@ catalog! {
     plain month_10 = ("October", "October");
     plain month_11 = ("November", "November");
     plain month_12 = ("December", "December");
-    plain more_title = ("More in Agenda", "More in Agenda");
+    plain more_title = ("Calendars", "Calendars");
     plain new_event = ("New event", "New event");
     plain new_task = ("New task", "New task");
     plain next_day = ("Next day", "Next day");

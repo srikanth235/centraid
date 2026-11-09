@@ -54,7 +54,8 @@ public object CentraidCatalog {
         NativeApp(id = "photos", name = "Photos", desc = "Browse and back up your photos.", iconKey = "Camera", colorKey = "amber"),
         NativeApp(id = "locker", name = "Locker", desc = "Private items behind a lock.", iconKey = "Lock", colorKey = "rose"),
         NativeApp(id = "docs", name = "Docs", desc = "Read and organize your documents.", iconKey = "Folder", colorKey = "teal"),
-        NativeApp(id = "agenda", name = "Agenda", desc = "Your calendar, events and plans.", iconKey = "Calendar", colorKey = "forest"),
+        NativeApp(id = "calendar", name = "Calendar", desc = "Your events and invites.", iconKey = "Calendar", colorKey = "forest"),
+        NativeApp(id = "reminders", name = "Reminders", desc = "Your tasks and lists.", iconKey = "Todo", colorKey = "pine"),
         NativeApp(id = "money", name = "Money", desc = "Spending, targets and cash flow.", iconKey = "Coin", colorKey = "indigo"),
         NativeApp(id = "health", name = "Health", desc = "Daily totals and workouts from your phone.", iconKey = "Activity", colorKey = "olive"),
     )
@@ -68,7 +69,8 @@ public object CentraidCatalog {
         "photos" to NativeAppMark(hue = 0xFF904E46L, chipBackground = 0xFFEFE6E4L, markColor = 0xFF894A43L),
         "locker" to NativeAppMark(hue = 0xFF8C4C61L, chipBackground = 0xFFEEE6E8L, markColor = 0xFF894A5FL),
         "docs" to NativeAppMark(hue = 0xFF00707EL, chipBackground = 0xFFDCEBECL, markColor = 0xFF006774L),
-        "agenda" to NativeAppMark(hue = 0xFF397247L, chipBackground = 0xFFE4EBE4L, markColor = 0xFF346841L),
+        "calendar" to NativeAppMark(hue = 0xFF397247L, chipBackground = 0xFFE4EBE4L, markColor = 0xFF346841L),
+        "reminders" to NativeAppMark(hue = 0xFF087668L, chipBackground = 0xFFDFF0ECL, markColor = 0xFF0A7365L),
         "money" to NativeAppMark(hue = 0xFF635A93L, chipBackground = 0xFFE9E8EEL, markColor = 0xFF5F568DL),
         "health" to NativeAppMark(hue = 0xFF666723L, chipBackground = 0xFFE9EAE0L, markColor = 0xFF5E5F20L),
     )
@@ -79,7 +81,8 @@ public object CentraidCatalog {
         "photos" to NativeAppMark(hue = 0xFFD78F85L, chipBackground = 0xFF362826L, markColor = 0xFFD78F85L),
         "locker" to NativeAppMark(hue = 0xFFD48DA2L, chipBackground = 0xFF36272CL, markColor = 0xFFD48DA2L),
         "docs" to NativeAppMark(hue = 0xFF58B4C4L, chipBackground = 0xFF1D2F32L, markColor = 0xFF58B4C4L),
-        "agenda" to NativeAppMark(hue = 0xFF7BB587L, chipBackground = 0xFF242F26L, markColor = 0xFF7BB587L),
+        "calendar" to NativeAppMark(hue = 0xFF7BB587L, chipBackground = 0xFF242F26L, markColor = 0xFF7BB587L),
+        "reminders" to NativeAppMark(hue = 0xFF4FD1BEL, chipBackground = 0xFF17302CL, markColor = 0xFF4FD1BEL),
         "money" to NativeAppMark(hue = 0xFFA39BDAL, chipBackground = 0xFF2C2A37L, markColor = 0xFFA39BDAL),
         "health" to NativeAppMark(hue = 0xFFA8AA66L, chipBackground = 0xFF2D2D20L, markColor = 0xFFA8AA66L),
     )

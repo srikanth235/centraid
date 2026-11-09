@@ -301,7 +301,7 @@ fn no_sealed_value_is_in_any_prompt_a_session_ever_builds() {
         sample.send(session, 1, "What is my Vaultbank login password?");
     }
     let prompts = model.prompts();
-    assert_eq!(prompts.len(), 4);
+    assert_eq!(prompts.len(), 5);
     // The world the phone loads holds the Locker item by its plain rows (the owner's ruling of
     // 2026-10-22), so its title is listed; a sealed value never was in a prompt and so cannot be
     // in an answer (R-1088-3).

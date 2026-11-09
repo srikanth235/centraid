@@ -1,6 +1,6 @@
 // AGENDA'S FIVE QUERIES, AS THE CORE ANSWERS THEM (#1046, #1029).
 //
-// `crates/apps/agenda` runs `upcoming`, `day-context`, `parties` and `search`
+// `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs `upcoming`, `day-context`, `parties` and `search`
 // over the vault — six-plus tables joined and every repeating series expanded by
 // the one recurrence engine (D-1020-S1) — and these are its answers, typed. A
 // shell reaches them through `app_query.proto`'s `AppQueryRequest`, and draws
@@ -22,7 +22,7 @@
 // groups by the member's local day, draws a now line and prints "08:15". So a
 // request states `tz`, and the answer carries the local readings — every
 // occurrence's `local_start`, `local_end` and `local_days`, and the answer's
-// `today` and `now_local` — computed by `crates/apps/agenda`'s `local` module
+// `today` and `now_local` — computed by `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks)'s `local` module
 // against the bundled zone database. A shell reads those strings and does no
 // zone arithmetic; the only civil arithmetic left to it is a weekday from a
 // `YYYY-MM-DD`, which is pure.
@@ -448,7 +448,7 @@ message AgendaSearch {
 // ===========================================================================
 // THE TASKS ARE AGENDA'S (#1128): the board (a bounded window of open work plus
 // the logbook, families nested and the promotion rule applied), one task, the
-// projects, search, catch-up and the trash. `crates/apps/agenda` runs them
+// projects, search, catch-up and the trash. `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs them
 // (`task/queries.rs`) and these are its answers, typed; a shell nests no family,
 // collapses no missed period and groups no place, because each of those in
 // Kotlin or Swift is a second copy of a rule v0 already drifted on.

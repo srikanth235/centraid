@@ -1636,7 +1636,7 @@
       "volume": "year3-agenda",
       "hardware": "ci-linux-x64-4c",
       "spans": [],
-      "consumers": ["crates/apps/agenda/tests/year3.rs"],
+      "consumers": ["crates/apps/calendar/tests/year3.rs"],
       "tolerancePercent": 20,
       "metrics": {
         "upcomingExpansionBound": {
@@ -1658,7 +1658,7 @@
       "volume": "year3-tasks",
       "hardware": "ci-linux-x64-4c",
       "spans": [],
-      "consumers": ["crates/apps/agenda/tests/task_year3.rs"],
+      "consumers": ["crates/apps/reminders/tests/task_year3.rs"],
       "tolerancePercent": 20,
       "metrics": {
         "boardWindow": {

@@ -46,31 +46,14 @@ mod style;
 pub mod todo;
 pub mod trash;
 
-/// Calendar's home.
-pub const HOME: &str = "calendar.home";
-/// Reminders' home.
-pub const REMINDERS_HOME: &str = "reminders.home";
-pub const EVENT: &str = "calendar.event";
-pub const EDITOR: &str = "calendar.editor";
-pub const TODO_LIST: &str = "reminders.list";
-pub const PROJECT: &str = "reminders.project";
-pub const TASK: &str = "reminders.task";
-pub const CATCH_UP: &str = "reminders.catch_up";
-pub const TRASH: &str = "reminders.trash";
+pub use crate::calendar::{EDITOR, EVENT, HOME};
+pub use crate::reminders::{CATCH_UP, HOME as REMINDERS_HOME, PROJECT, TASK, TODO_LIST, TRASH};
 
 /// Every Calendar and Reminders screen, registered under its route name.
 #[must_use]
 pub fn registry() -> Registry {
-    Registry::default()
-        .with(HOME, home::build_calendar)
-        .with(REMINDERS_HOME, home::build_reminders)
-        .with(EVENT, event::build)
-        .with(EDITOR, editor::build)
-        .with(TODO_LIST, list::build)
-        .with(PROJECT, project::build)
-        .with(TASK, detail::build)
-        .with(CATCH_UP, catch_up::build)
-        .with(TRASH, trash::build)
+    crate::calendar::registry()
+        .merge(crate::reminders::registry())
         .with(notify::NAME, notify::build)
 }
 

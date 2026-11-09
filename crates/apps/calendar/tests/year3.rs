@@ -177,7 +177,7 @@ fn a_year3_calendar_trips_the_expansion_bound_and_names_it() {
 }
 
 /// The declared profile, run on demand:
-/// `cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture`.
+/// `cargo test -p centraid-apps-calendar --test year3 -- --ignored --nocapture`.
 #[test]
 #[ignore = "the declared 12,000-event profile; run for the receipt's numbers"]
 fn the_declared_profile() {

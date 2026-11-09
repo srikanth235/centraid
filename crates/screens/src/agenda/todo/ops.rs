@@ -94,6 +94,9 @@ pub struct Ops {
     seq: u64,
     pub status: Option<wire::StatusLine>,
     undo: Option<wire::ActInverse>,
+    /// The app the Undo is sent to: Reminders' for a task, Calendar's for an event rewritten on the
+    /// grid (`changed`).
+    undo_app: Option<String>,
     next_of: Option<NextOf>,
     /// Completions this session, for Today's earned quiet.
     pub completed: u32,
@@ -188,7 +191,10 @@ impl Ops {
         };
         let was_completion = inverse.action == "reopen-task";
         let request = wire::ActRequest {
-            app: act::reminders::APP.to_owned(),
+            app: self
+                .undo_app
+                .take()
+                .unwrap_or_else(|| act::reminders::APP.to_owned()),
             action: inverse.action,
             input: inverse.input,
             invoke_key: String::new(),
@@ -436,6 +442,7 @@ impl Ops {
             action_label: words::undo(ctx.locale()),
             refused: false,
         });
+        self.undo_app = Some(revert.app.clone());
         self.undo = Some(wire::ActInverse {
             action: revert.action,
             input: revert.input,

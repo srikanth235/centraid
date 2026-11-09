@@ -382,7 +382,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
         _ => None,
     });
     assert_eq!(opened.len(), 1);
-    assert_eq!(opened[0].screen, "agenda.task");
+    assert_eq!(opened[0].screen, "reminders.task");
     assert!(chat.state().card_gone_line.is_empty());
     chat.driver.effects.clear();
 

@@ -25,7 +25,7 @@ fn rig(platform: &str) -> Rig {
     let registry = agenda::registry().merge(imports::registry(&VaultSecrets::new()));
     let mut tabs = vec![(
         agenda::TAB.to_owned(),
-        agenda::routes::home(wire::AgendaDestination::Day, ""),
+        agenda::routes::home(wire::AgendaDestination::Todo, ""),
     )];
     tabs.extend(imports::roots());
     let mut d = Driver::with_runtime(Runtime::new(registry, tabs));

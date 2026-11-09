@@ -355,7 +355,6 @@ impl Home {
             | H::QuickAddChipDismissed(_)
             | H::QuickAddSubmitted(_)
             | H::QuickAddOpened(_)
-            | H::StatusActed(_)
             | H::TodoEmptyActed(_)
                 if self.app == App::Calendar => {}
             H::TaskChecked(checked) => {

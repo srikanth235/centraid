@@ -69,7 +69,7 @@ fn opening_reads_the_occurrence_by_its_key_and_names_its_calendar() {
             .as_ref()
             .expect("chrome")
             .back,
-        "Agenda"
+        "Calendar"
     );
     // The route's key defaults to the event id: a page opened with none still finds it.
     let bare = world.open_event(&id, "", None, "");
@@ -229,7 +229,7 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
         panic!("{:?}", state.content)
     };
     assert_eq!(gone.title, "This event was removed.");
-    assert_eq!(gone.action_label, "Back to Agenda");
+    assert_eq!(gone.action_label, "Back to Calendar");
 
     // Skipped since it was picked: the series has no such day any more.
     let series = world.weekdays("Stand-up");
@@ -583,7 +583,7 @@ fn edit_carries_the_editor_route_and_is_not_an_event() {
     let edit = world.event_data(page).actions[0].clone();
     assert_eq!(edit.key, "edit");
     let route = edit.route.expect("the edit action opens the editor");
-    assert_eq!(route.screen, "agenda.editor");
+    assert_eq!(route.screen, "calendar.editor");
     let Some(wire::route::Args::AgendaEditor(args)) = route.args else {
         panic!("not the editor's arguments")
     };

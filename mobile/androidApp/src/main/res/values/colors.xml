@@ -21,10 +21,10 @@
     <color name="centraid_text_meta">#6F6B64</color>
     <color name="centraid_shell">#1F4A45</color>
     <color name="centraid_shell_text">#1F4A45</color>
-    <color name="centraid_app_agenda">#266FC4</color>
-    <color name="centraid_app_agenda_text">#266FC4</color>
-    <color name="centraid_app_agenda_tint">#EEF3FA</color>
-    <color name="centraid_app_agenda_tile">#266FC4</color>
+    <color name="centraid_app_calendar">#266FC4</color>
+    <color name="centraid_app_calendar_text">#266FC4</color>
+    <color name="centraid_app_calendar_tint">#EEF3FA</color>
+    <color name="centraid_app_calendar_tile">#266FC4</color>
     <color name="centraid_app_docs">#087990</color>
     <color name="centraid_app_docs_text">#087990</color>
     <color name="centraid_app_docs_tint">#EBF4F6</color>
@@ -53,6 +53,10 @@
     <color name="centraid_app_photos_text">#A8398A</color>
     <color name="centraid_app_photos_tint">#F8EFF6</color>
     <color name="centraid_app_photos_tile">#A8398A</color>
+    <color name="centraid_app_reminders">#087668</color>
+    <color name="centraid_app_reminders_text">#087668</color>
+    <color name="centraid_app_reminders_tint">#E6F3F0</color>
+    <color name="centraid_app_reminders_tile">#087668</color>
     <color name="centraid_state_amber">#874300</color>
     <color name="centraid_state_amber_text">#874300</color>
     <color name="centraid_state_amber_tint">#FFF6E8</color>

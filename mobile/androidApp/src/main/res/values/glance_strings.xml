@@ -15,7 +15,7 @@
     <string name="glance_shortcut_add_short">New reminder</string>
     <string name="glance_widget_reminders_description">Today\'s and overdue reminders.</string>
     <string name="glance_widget_reminders_name">Reminders</string>
-    <string name="glance_widget_up_next_description">What\'s next today, from your Agenda.</string>
+    <string name="glance_widget_up_next_description">What\'s next today, from your Calendar.</string>
     <string name="glance_widget_up_next_name">Up next</string>
     <string name="glance_widget_unavailable">Open Centraid to see your day</string>
 </resources>

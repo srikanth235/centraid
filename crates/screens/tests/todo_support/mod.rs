@@ -18,6 +18,19 @@ pub fn driver() -> Driver {
     driver
 }
 
+/// A driver whose one tab is rooted at Reminders' home (round 10: the lists are Reminders').
+pub fn reminders_driver() -> Driver {
+    let mut driver = Driver::with_runtime(centraid_screens::Runtime::new(
+        agenda::registry(),
+        vec![(
+            agenda::TAB.to_owned(),
+            agenda::routes::home(wire::AgendaDestination::Todo, ""),
+        )],
+    ));
+    driver.start();
+    driver
+}
+
 /// Write as another surface, and insist it committed.
 pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
     let response = d.act(

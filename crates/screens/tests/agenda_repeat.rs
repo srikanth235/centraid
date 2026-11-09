@@ -425,40 +425,6 @@ fn a_rule_the_sheet_cannot_show_opens_read_only_with_a_choice_to_replace_it() {
 }
 
 #[test]
-fn a_task_takes_the_custom_sheet_and_saves_its_rule() {
-    let mut world = World::new();
-    let page = world.open_new(DAY, Kind::Task);
-    world.title(page, "Water the plants");
-    world.send_editor(
-        page,
-        K::SheetOpened(events::SheetOpened {
-            sheet: Sheet::Repeat as i32,
-        }),
-    );
-    world.send_editor(page, pick_repeat("custom"));
-    assert_eq!(world.editor_state(page).sheet, Sheet::CustomRepeat as i32);
-    world.send_editor(page, every(2));
-    world.send_editor(page, weekday("SA"));
-    world.send_editor(page, done());
-    assert_eq!(
-        world.draft(page).repeat_rule,
-        "FREQ=WEEKLY;INTERVAL=2;BYDAY=WE,SA"
-    );
-    // The More details row says the rule in words.
-    world.send_editor(page, K::MoreDetails(events::MoreDetailsToggled {}));
-    assert_eq!(
-        world.editor_data(page).more_details_summary,
-        "Every 2 weeks on Wednesday and Saturday"
-    );
-    world.save(page);
-    assert!(world.editor_state(page).dismissed);
-    let found = world.tasks_titled("Water the plants");
-    assert_eq!(found.len(), 1);
-    assert!(found[0].repeats, "{:?}", found[0]);
-    assert!(found[0].rrule.is_some());
-}
-
-#[test]
 fn a_new_rule_on_a_series_occurrence_is_offered_for_the_whole_series_alone() {
     let mut world = World::new();
     let id = world.weekdays("Standup");

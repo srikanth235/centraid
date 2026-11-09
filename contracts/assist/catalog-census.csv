@@ -9,7 +9,7 @@ calendar,restore-event,restore,event,direct,no,no
 calendar,attach,attach,event,card,no,no
 calendar,detach,detach,event,card,no,no
 calendar,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
-calendar,create-calendar,create:kind,list,direct,no,no
+calendar,create-calendar,create:kind,list,card,no,no
 calendar,rename-calendar,edit,calendar,direct,yes: crates/screens/src/agenda/style.rs,no
 calendar,style-calendar,edit:color,calendar,direct,yes: crates/screens/src/agenda/style.rs,no
 calendar,add-place,create,event,card,yes: crates/screens/src/agenda/editor.rs,no

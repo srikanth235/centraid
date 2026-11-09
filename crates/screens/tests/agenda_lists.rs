@@ -117,15 +117,6 @@ fn more_row(d: &mut Driver, key: &str) {
     );
 }
 
-fn todo_home(d: &mut Driver) {
-    send_home(
-        d,
-        H::Destination(wire::agenda_home_event::DestinationChanged {
-            destination: wire::AgendaDestination::Todo as i32,
-        }),
-    );
-}
-
 #[test]
 fn a_calendar_is_made_with_a_name_a_colour_and_an_icon() {
     let mut d = driver();
@@ -266,8 +257,7 @@ fn closing_a_calendar_sheet_returns_to_more_and_writes_nothing() {
 
 #[test]
 fn a_list_is_made_with_a_colour_and_an_icon_from_add_list() {
-    let mut d = driver();
-    todo_home(&mut d);
+    let mut d = reminders_driver();
     send_home(
         &mut d,
         H::SheetOpened(wire::agenda_home_event::SheetOpened {
@@ -309,7 +299,7 @@ fn a_list_is_made_with_a_colour_and_an_icon_from_add_list() {
         .find(|row| {
             row.route
                 .as_ref()
-                .is_some_and(|r| r.screen == "agenda.project")
+                .is_some_and(|r| r.screen == "reminders.project")
                 && row.row.as_ref().is_some_and(|r| r.id == made.project_id)
         })
         .expect("the row");

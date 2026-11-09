@@ -7,8 +7,8 @@
     android:background="@drawable/glance_card"
     android:orientation="vertical"
     android:padding="16dp">
-    <TextView android:id="@+id/glance_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_app_agenda_text" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/glance_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_title" android:textStyle="bold" android:textColor="@color/centraid_app_agenda_text" android:maxLines="1" android:visibility="gone" />
+    <TextView android:id="@+id/glance_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_app_reminders_text" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/glance_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_title" android:textStyle="bold" android:textColor="@color/centraid_app_reminders_text" android:maxLines="1" android:visibility="gone" />
     <TextView android:id="@+id/glance_count_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
     <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
     <TextView android:id="@+id/glance_overdue" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_state_red_text" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />

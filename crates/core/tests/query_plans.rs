@@ -862,11 +862,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 62 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 62, "{asked:?}");
+    assert_eq!(asked.len(), 63, "{asked:?}");
 }

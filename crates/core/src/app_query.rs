@@ -1159,7 +1159,7 @@ mod tests {
         }
         match scratch.upcoming("2099-06-01T00:00:00.000Z", "2099-12-01T00:00:00.000Z") {
             Err(CoreError::ReadBoundReached { query, cap }) => {
-                assert_eq!(query, "agenda.upcoming.expansion");
+                assert_eq!(query, "calendar.upcoming.expansion");
                 assert_eq!(cap, centraid_apps_calendar::MAX_TOTAL_INSTANCES);
             }
             other => panic!("a window past the bound answers a bound, not {other:?}"),

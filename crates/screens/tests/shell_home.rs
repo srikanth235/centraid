@@ -719,10 +719,10 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
     let founded = vault("v1", "Personal");
     tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
     let data = data(&d, i);
-    // One widget per app, and Agenda's second while something is owed.
+    // One widget per app, nine apps.
     assert_eq!(
         data.tiles.iter().filter(|t| t.widget == t.app_id).count(),
-        8
+        9
     );
 }
 

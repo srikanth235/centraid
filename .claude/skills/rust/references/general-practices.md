@@ -289,7 +289,7 @@ reproduce -> measure (optimized build) -> find the line -> fix -> measure again 
 This repo has no gate step or test that asserts on a duration (owner ruling 2026-11-04: they flaked on loaded machines and blocked unrelated changes). Measure by hand, and keep what the gate does check deterministic:
 
 - `tests/journeys.json`: the journey ledger of measured ceilings per surface, volume and hardware. A ceiling is tightened freely; widening one needs an `approvedDeviation` note.
-- Year-3 rigs, `#[ignore]`d from normal runs: `crates/apps/<app>/tests/year3.rs`, e.g. `cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture` (agenda, docs, health, money, notes, people, photos). Run them in `--release` for numbers you quote.
+- Year-3 rigs, `#[ignore]`d from normal runs: `crates/apps/<app>/tests/year3.rs`, e.g. `cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture` (calendar, reminders, docs, health, money, notes, people, photos). Run them in `--release` for numbers you quote.
 - Nothing whose cost grows with the vault runs on a request path: page by keyset cursor with `LIMIT`.
 
 ## 13. Final checklist

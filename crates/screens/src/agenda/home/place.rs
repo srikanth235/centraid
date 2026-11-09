@@ -477,6 +477,7 @@ mod tests {
         assert_eq!(
             shape,
             [
+                ("".to_owned(), vec!["Inbox".to_owned()]),
                 (
                     "Home".to_owned(),
                     vec!["Beds".to_owned(), "Garden".to_owned()]
@@ -486,14 +487,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            todo.projects[0].rows[1].row.as_ref().unwrap().meta,
+            todo.projects[1].rows[1].row.as_ref().unwrap().meta,
             "3 tasks"
         );
         assert_eq!(
-            todo.projects[2].rows[0].row.as_ref().unwrap().meta,
+            todo.projects[3].rows[0].row.as_ref().unwrap().meta,
             "1 task"
         );
-        assert_eq!(todo.count_label, "4 projects");
+        assert_eq!(todo.count_label, "");
     }
 
     #[test]

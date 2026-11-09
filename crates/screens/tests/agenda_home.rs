@@ -431,9 +431,9 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
         ["calendar"]
     );
     assert_eq!(state.chrome.as_ref().unwrap().new_event, "New event");
-    // THE HEADER PLUS says Add: its sheet adds an event or a task (R-1128-Z1), and
-    // Day's Plus pushes that sheet, on the anchor day, not the quick-add bar.
-    assert_eq!(state.add_label, "Add");
+    // THE HEADER PLUS says New event: its sheet adds an event, and Day's Plus pushes that sheet,
+    // on the anchor day, not the quick-add bar.
+    assert_eq!(state.add_label, "New event");
     assert!(!state.add_opens_quick_add);
     assert_eq!(
         state.new_event,
@@ -1308,7 +1308,6 @@ fn search_from_waiting_covers_every_event_not_only_the_ones_waiting_on_you() {
 fn each_app_searches_its_own_kind_calendar_events_and_reminders_tasks() {
     let mut r = rig(Dest::Schedule);
     let day = r.day(5);
-    r.task("zq-t", "Zq Book podiatrist", Some(&day));
     r.event("zq-e", "Zq Podiatrist visit", &format!("{day}T09:00"), None);
     r.settle();
     r.open_search();
@@ -1322,6 +1321,8 @@ fn each_app_searches_its_own_kind_calendar_events_and_reminders_tasks() {
     );
     // REMINDERS FINDS TASKS ONLY: a group of tasks, no event and no day.
     let mut t = rig(Dest::Todo);
+    t.task("zq-t", "Zq Book podiatrist", Some(&day));
+    t.settle();
     t.open_search();
     t.term("zq podiatrist");
     let data = t.data();
@@ -1839,7 +1840,7 @@ fn each_home_allows_only_its_own_places() {
 
 #[test]
 fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
-    let mut r = rig(Dest::Todo);
+    let r = rig(Dest::Todo);
     let state = r.state();
     assert_eq!(
         state

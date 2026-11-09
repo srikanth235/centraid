@@ -965,7 +965,7 @@ mod tests {
         let Some(wire::agenda_event_state::Content::Denied(denied)) = state.content else {
             panic!("{:?}", state.content)
         };
-        assert_eq!(denied.title, "Agenda cannot read this vault");
+        assert_eq!(denied.title, "Calendar cannot read this vault");
         assert_eq!(denied.receipt, "consent.revoked");
     }
 

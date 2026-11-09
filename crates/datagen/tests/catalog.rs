@@ -1,10 +1,18 @@
-//! Stage 0: the catalog is derived from the runtime, complete for the eight apps and stable.
+//! Stage 0: the catalog is derived from the runtime, complete for the nine apps and stable.
 
 use centraid_datagen::Catalog;
 use centraid_datagen::catalog::ArgClass;
 
-const APPS: [&str; 8] = [
-    "agenda", "docs", "health", "locker", "money", "notes", "people", "photos",
+const APPS: [&str; 9] = [
+    "calendar",
+    "docs",
+    "health",
+    "locker",
+    "money",
+    "notes",
+    "people",
+    "photos",
+    "reminders",
 ];
 
 #[test]
@@ -32,7 +40,7 @@ fn the_catalog_hash_is_a_function_of_the_catalog() {
 }
 
 #[test]
-fn all_eight_apps_own_kinds_and_tally_is_gone() {
+fn all_nine_apps_own_kinds_and_tally_is_gone() {
     let catalog = Catalog::build().expect("builds");
     let mut apps = catalog.apps.clone();
     apps.sort();

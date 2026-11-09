@@ -25,7 +25,7 @@ fn seed(dir: &std::path::Path, file: &str, extra: &[&str]) -> (Option<i32>, Stri
         // The smallest scenario there is: this test is about the guard, not
         // about the corpus, and seeding seven apps to assert one refusal would
         // put photograph bytes in the way of a unit of behaviour.
-        .args(["--only", "agenda"])
+        .args(["--only", "calendar"])
         .args(extra)
         .output()
         .expect("the seeder binary runs");

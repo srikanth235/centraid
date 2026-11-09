@@ -5,6 +5,7 @@
 
 pub mod agenda;
 pub mod backup;
+pub mod calendar;
 pub mod catalog;
 pub mod chat;
 pub mod custody;
@@ -22,6 +23,7 @@ pub mod people;
 pub mod photos;
 pub mod proof;
 pub mod registry;
+pub mod reminders;
 pub mod runtime;
 pub mod screen;
 pub mod shell;

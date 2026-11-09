@@ -63,7 +63,7 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     let view = trash(d.view(i));
     assert_eq!(view.app_id, "reminders");
     assert_eq!(view.title, "Trash");
-    assert_eq!(view.back_label, "Agenda");
+    assert_eq!(view.back_label, "Reminders");
     let data = trash_data(d.view(i));
     assert_eq!(data.rows.len(), 2);
     assert_eq!(data.count_label, "Trash · 2");
