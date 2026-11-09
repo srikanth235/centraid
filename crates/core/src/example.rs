@@ -223,6 +223,14 @@ fn at(now: i64, days: i64, hour: i64, minute: i64) -> String {
     iso(millis)
 }
 
+/// The same moment as a wall clock, `YYYY-MM-DDTHH:MM:SS`, with no zone and no `Z`: a FLOATING
+/// time, "19:00 wherever the member is". A seeded event is this and never an instant in a zone,
+/// because the zone a seed would name is not the one the phone it lands on is in, and an event
+/// in a zone other than the phone's reads at one hour in the grid and at another in the editor.
+fn wall(now: i64, days: i64, hour: i64, minute: i64) -> String {
+    at(now, days, hour, minute)[..19].to_owned()
+}
+
 /// The date alone, `YYYY-MM-DD`, `days` from the anchor.
 fn day(now: i64, days: i64) -> String {
     iso((now / DAY_MS) * DAY_MS + days * DAY_MS)[..10].to_owned()
@@ -1707,8 +1715,8 @@ fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
 
 fn seed_agenda(seeder: &mut Seeder, now: i64, circle: &people::Circle, rich: bool) {
     let slot = |days: i64, hour: i64, minute: i64, minutes: i64| {
-        let start = at(now, days, hour, minute);
-        let end = at(now, days, hour, minute + minutes);
+        let start = wall(now, days, hour, minute);
+        let end = wall(now, days, hour, minute + minutes);
         (start, end)
     };
     /// One seeded event: title, description, `(starts_at, ends_at)`, rrule.
@@ -1745,7 +1753,7 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, circle: &people::Circle, rich: boo
             "title": summary,
             "starts": dtstart,
             "ends": dtend,
-            "zone": "Etc/UTC",
+            "timing": "floating",
         });
         if let Some(description) = description {
             input["description"] = json!(description);
@@ -1897,9 +1905,9 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
             .collect();
         let mut input = json!({
             "title": title,
-            "starts": at(now, days, hour, minute),
-            "ends": at(now, days, hour, minute + minutes),
-            "zone": "Etc/UTC",
+            "starts": wall(now, days, hour, minute),
+            "ends": wall(now, days, hour, minute + minutes),
+            "timing": "floating",
             "busy": busy,
             "attendees": guests,
             "reminders": [15],
@@ -1918,9 +1926,9 @@ fn seed_busy_week(seeder: &mut Seeder, now: i64, circle: &people::Circle) {
             "event.propose",
             json!({
                 "title": title,
-                "starts": at(now, days, hour, 0),
-                "ends": at(now, days, hour, 45),
-                "zone": "Etc/UTC",
+                "starts": wall(now, days, hour, 0),
+                "ends": wall(now, days, hour, 45),
+                "timing": "floating",
             }),
         );
     }

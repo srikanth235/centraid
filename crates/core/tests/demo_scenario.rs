@@ -260,6 +260,9 @@ fn the_scenario_seeds_whole_and_every_revamped_screen_has_its_data() {
         scenario.count("event", "id", "timing = 'all-day'", vec![]),
         2
     );
+    // NONE OF IT IS IN A ZONE: a seeded event is "19:00 wherever the member is" (floating), so
+    // a phone in any zone reads the same wall clock on its page, grid and editor.
+    assert_eq!(scenario.count("event", "id", "timing = 'zoned'", vec![]), 0);
     assert_eq!(scenario.entities("calendar"), 3);
     assert_eq!(
         scenario.count("event", "id", "calendar_id <> 'calendar:default'", vec![]),
