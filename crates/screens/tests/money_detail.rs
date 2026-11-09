@@ -525,3 +525,124 @@ fn a_term_that_matches_lists_rows_with_the_day_and_a_route() {
         assert_eq!(row.route.as_ref().unwrap().screen, "money.transaction");
     }
 }
+
+fn arrange(d: &centraid_screens::testing::Driver, request: impl Into<wire::ActRequest>) -> String {
+    use centraid_screens::field::Keyed;
+    let response = d.act(
+        request
+            .into()
+            .keyed(format!("arrange:{}", centraid_screens::kit::act::fresh())),
+    );
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "arranging was refused: {}",
+        response.reason
+    );
+    serde_json::from_slice::<serde_json::Value>(&response.output)
+        .ok()
+        .and_then(|v| v["id"].as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn with_link(kind: wire::link_event::Kind) -> wire::screen_event::Kind {
+    txn_event(te::Kind::WithLink(wire::LinkEvent { kind: Some(kind) }))
+}
+
+fn with_fact(v: &wire::ViewState) -> String {
+    txn_data(v)
+        .facts
+        .iter()
+        .find(|f| f.label == "With")
+        .map(|f| f.detail.clone())
+        .expect("a With fact")
+}
+
+#[test]
+fn a_payee_that_names_a_person_is_proposed_and_written_only_when_confirmed() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let id = a_line(&mut d);
+    arrange(
+        &d,
+        act::money::SetDisplayName {
+            transaction_id: id.clone(),
+            title: "UPI Priya Rao 4412".into(),
+        },
+    );
+    let priya = arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Priya Rao".into(),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &id);
+    assert_eq!(with_fact(d.view(i)), "No one");
+    let offer = txn_data(d.view(i)).with_offer.clone().expect("a proposal");
+    assert_eq!(offer.title, "With Priya Rao?");
+    assert_eq!(offer.key, "with");
+    // PROPOSED, NEVER WRITTEN: nothing is linked until Confirm.
+    assert_eq!(with_fact(d.view(i)), "No one");
+    // "Not them" takes the proposal off the page for this sitting.
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::OfferDismissed(te::OfferDismissed {
+            key: "with".into(),
+        })),
+    );
+    assert!(txn_data(d.view(i)).with_offer.is_none());
+    assert_eq!(with_fact(d.view(i)), "No one");
+    // A new sitting proposes again; Confirm writes the link.
+    let j = open(&mut d, &id);
+    event(
+        &mut d,
+        j,
+        txn_event(te::Kind::OfferAccepted(te::OfferAccepted {
+            key: "with".into(),
+        })),
+    );
+    assert_eq!(with_fact(d.view(j)), "Priya Rao");
+    assert!(txn_data(d.view(j)).with_offer.is_none());
+    assert_eq!(
+        txn_state(d.view(j)).status.as_ref().unwrap().sentence,
+        "Saved"
+    );
+    // The picker lists the people, the linked one selected; a tap on it takes the link off.
+    event(
+        &mut d,
+        j,
+        txn_event(te::Kind::Action(te::ActionPicked { key: "with".into() })),
+    );
+    let picker = txn_state(d.view(j)).with_picker.clone().expect("a picker");
+    assert!(picker.open && picker.loaded);
+    let row = picker
+        .candidates
+        .iter()
+        .find(|c| c.id == priya)
+        .expect("the person is offered");
+    assert!(row.selected);
+    event(
+        &mut d,
+        j,
+        with_link(le::Kind::Query(le::QueryChanged { text: "zzz".into() })),
+    );
+    let none = txn_state(d.view(j)).with_picker.clone().unwrap();
+    assert!(none.candidates.is_empty());
+    assert_eq!(none.empty, "No match");
+    event(
+        &mut d,
+        j,
+        with_link(le::Kind::Query(le::QueryChanged {
+            text: "priya".into(),
+        })),
+    );
+    event(
+        &mut d,
+        j,
+        with_link(le::Kind::Pick(le::Picked { id: priya })),
+    );
+    assert!(!txn_state(d.view(j)).with_picker.clone().unwrap().open);
+    assert_eq!(with_fact(d.view(j)), "No one");
+}

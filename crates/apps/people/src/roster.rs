@@ -16,9 +16,9 @@ use centraid_apps_kit::reads::PageDoor;
 
 use crate::Denial;
 use crate::queries::{
-    ListEntry, PersonCard, PersonRow, ROSTER_MAX, ROSTER_MIN, Reminder, asked, dates,
-    last_contacts, list_of, lists, owner_card, people_among, read_circle, read_trashed, reminders,
-    starred, touch_stubs,
+    LinkedPerson, ListEntry, PersonCard, PersonRow, ROSTER_MAX, ROSTER_MIN, Reminder, asked, dates,
+    last_contacts, linked_people, list_of, lists, owner_card, people_among, read_circle,
+    read_trashed, reminders, starred, touch_stubs,
 };
 
 /// What the roster was asked for.
@@ -212,6 +212,15 @@ pub fn load_search(
         row.snippet = hit.snippet.clone();
     }
     Ok((SearchData { people }, None))
+}
+
+/// `links` — the people one transaction, document or photograph is joined to by hand.
+pub fn load_links(
+    door: &dyn PageDoor,
+    entity_id: &str,
+) -> KitResult<(Vec<LinkedPerson>, Option<Denial>)> {
+    let people = asked!(linked_people(door, entity_id), Vec::new());
+    Ok((people, None))
 }
 
 /// `trash` — the reversible shelf.

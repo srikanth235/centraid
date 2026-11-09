@@ -84,6 +84,7 @@ fn covers(query: &Q) -> &'static str {
         Q::PeoplePerson(_) => "people.person",
         Q::PeopleSearch(_) => "people.search",
         Q::PeopleTrash(_) => "people.trash",
+        Q::PeopleLinks(_) => "people.links",
         Q::LockerItems(_) => "locker.items",
         Q::LockerItem(_) => "locker.item",
         Q::LockerSearch(_) => "locker.search",
@@ -221,6 +222,9 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
         }),
         Q::PeopleTrash(wire::PeopleTrashRequest { tz: tz() }),
+        Q::PeopleLinks(wire::PeopleLinksRequest {
+            entity_id: some("person"),
+        }),
         Q::LockerItem(wire::LockerItemRequest {
             item_id: some("locker"),
             tz: tz(),
@@ -858,5 +862,5 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 61, "{asked:?}");
+    assert_eq!(asked.len(), 62, "{asked:?}");
 }

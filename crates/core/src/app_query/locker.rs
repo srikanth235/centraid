@@ -213,6 +213,16 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
             credential_id: passkey.credential_id.unwrap_or_default(),
             algorithm: passkey.algorithm.unwrap_or_default(),
         }),
+        links: data
+            .links
+            .into_iter()
+            .map(|link| wire::LockerLink {
+                id: link.id,
+                kind: link.kind,
+                title: link.title,
+                relation: link.relation,
+            })
+            .collect(),
     }
 }
 

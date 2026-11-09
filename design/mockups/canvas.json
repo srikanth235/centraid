@@ -1689,6 +1689,14 @@
       "w": 390,
       "x": 3810,
       "y": 24000
+    },
+    "PersonLinks.dc.html": {
+      "h": 760,
+      "page": "light",
+      "title": "8 · Person links (Money, Photos, Docs, Locker)",
+      "w": 2070,
+      "x": 0,
+      "y": 24960
     }
   },
   "createdOnFiles": {
@@ -2335,7 +2343,8 @@
     "NotesAboutPage.dc.html",
     "PeopleMoreContacts.dc.html",
     "PeopleImport.dc.html",
-    "HealthSearch.dc.html"
+    "HealthSearch.dc.html",
+    "PersonLinks.dc.html"
   ],
   "pages": [
     {

@@ -170,6 +170,18 @@ message LockerItem {
   // The day the core last opened one of this item's sealed cells or made a
   // code from its seed, in `tz`; empty when it never has (#1146).
   string last_used_local_day = 32;
+  // What the item is linked to (#1173): an account, a place, a person. Plain links, never a sealed value.
+  repeated LockerLink links = 33;
+}
+
+// One link out of a Locker item: an `about` an account, a place or a person, or `with` a person.
+message LockerLink {
+  string id = 1;
+  // `account`, `place` or `person`.
+  string kind = 2;
+  string title = 3;
+  // `about`, or `with` for a person the item is shared with.
+  string relation = 4;
 }
 
 message LockerSecret {

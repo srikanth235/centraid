@@ -100,7 +100,7 @@ mod tests {
         // weak/reused scoring (Q-1047-16), and the access history, deleted with
         // the receipt table (#1146).
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 20);
+        assert_eq!(manifest.actions.len(), 22);
         for name in ["items", "item", "search", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -168,13 +168,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_twenty_eight_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_thirty_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 28);
+        assert_eq!(vault.scopes.len(), 30);
 
         let reveals: Vec<String> = vault
             .scopes
@@ -210,7 +210,7 @@ mod tests {
             vault
                 .scopes
                 .iter()
-                .all(|scope| ["locker", "entity", "flag", "tag", "vault"]
+                .all(|scope| ["locker", "entity", "flag", "tag", "edge", "vault"]
                     .contains(&scope.schema.as_str())),
             "Locker reaches its own tables and the shared verbs, and nothing else"
         );

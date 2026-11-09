@@ -1,4 +1,4 @@
-//! # People — a manifest, five queries, twenty-nine actions
+//! # People — a manifest, six queries, twenty-nine actions
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!

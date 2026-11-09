@@ -661,6 +661,59 @@ fn titles(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Str
     .collect())
 }
 
+/// One person a transaction, a document or a photograph is joined to by hand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedPerson {
+    pub party_id: String,
+    pub name: String,
+    /// The vault's owner: the person the vault is about.
+    pub is_owner: bool,
+}
+
+/// The people ONE thing is joined to, in name order: the live people at the end of its `with`
+/// (a payment), `about` (a document) and `depicts` (a photograph) edges, read through the graph
+/// ([`centraid_apps_kit::graph`]). A person in the trash is not here. Locker's links end at a
+/// person as well, and the door does not serve them to this read: an item's own links are
+/// Locker's read.
+pub(crate) fn linked_people(door: &dyn PageDoor, entity_id: &str) -> KitResult<Vec<LinkedPerson>> {
+    let joined = graph::outgoing(
+        door,
+        WIDE,
+        &[entity_id.to_owned()],
+        "",
+        &["with", "about", "depicts"],
+    )?;
+    let mut ids: Vec<String> = joined.into_iter().map(|link| link.to).collect();
+    ids.sort();
+    ids.dedup();
+    let owner = graph::owner(door)?;
+    let mut people: Vec<LinkedPerson> = Read {
+        name: "people.links.entity",
+        table: "entity",
+        select: "id, title",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .within(
+        WIDE,
+        door,
+        &ids,
+        Some(("kind = ? AND deleted_at IS NULL", vec![text("person")])),
+    )?
+    .iter()
+    .filter_map(|row| {
+        let party_id = text_of(row, "id")?;
+        Some(LinkedPerson {
+            is_owner: owner.as_deref() == Some(party_id.as_str()),
+            name: text_of(row, "title")?,
+            party_id,
+        })
+    })
+    .collect();
+    people.sort_by_cached_key(|person| (person.name.to_lowercase(), person.party_id.clone()));
+    Ok(people)
+}
+
 /// One live note about something.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteAbout {

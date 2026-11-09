@@ -463,6 +463,8 @@ message LockerItemState {
   optional LockerMemoSheet passkey_name = 13;
   // The item is gone from this page (purged): the shell pops.
   bool finished = 14;
+  // THE LINK PICKER (#1173): an account, a place or a person to link the item to. Open while up.
+  LinkPicker link_picker = 15;
 }
 
 message LockerItemChrome {
@@ -515,6 +517,9 @@ message LockerItemData {
   // The hero tile's letter (the LockerItem board): the first letter of `title` in capitals, empty
   // for an empty title. The list rows keep drawing `type_chip`.
   string hero_initial = 20;
+  // "Linked to" (#1173): the account, place and people the item is linked to, behind the wall like
+  // everything here. A link carries no sealed value.
+  LinkSection links = 21;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a
@@ -569,6 +574,8 @@ message LockerItemEvent {
     PasskeyNameSaved passkey_name_saved = 16;
     PasskeyNameClosed passkey_name_closed = 17;
     Refreshed refreshed = 18;
+    // The Linked to section's and picker's events (#1173).
+    LinkEvent link = 19;
   }
 
   message VerbTapped {

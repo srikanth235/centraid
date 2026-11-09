@@ -687,3 +687,80 @@ fn only_the_current_version_says_current_and_none_is_dimmed() {
         1
     );
 }
+
+#[test]
+fn a_document_is_about_people_picked_by_name_and_taken_off_again() {
+    use wire::link_event as le;
+    let mut d = driver();
+    let id = text(&d, "Lease", "words");
+    let maya = id_of(&arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Maya Rao".into(),
+            ..Default::default()
+        },
+    ));
+    arrange(
+        &d,
+        act::people::AddPerson {
+            title: "Ravi Iyer".into(),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &id, "Lease", "");
+    let about = |d: &Driver, i: u64| {
+        document_data(d.view(i))
+            .about
+            .clone()
+            .expect("an About section")
+    };
+    let link = |kind: le::Kind| DD::About(wire::LinkEvent { kind: Some(kind) });
+    let section = about(&d, i);
+    assert_eq!(section.title, "About");
+    assert!(section.rows.is_empty());
+    assert_eq!(section.adds.len(), 1);
+    assert_eq!(section.adds[0].label, "Add person");
+    // The picker lists people by name; typing narrows it.
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Add(le::AddTapped {
+            key: "person".into(),
+        })),
+    );
+    let picker = document_state(d.view(i)).about_picker.clone().unwrap();
+    assert!(picker.open);
+    assert_eq!(picker.title, "Add person");
+    assert!(picker.candidates.len() >= 3, "the owner and the circle");
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Query(le::QueryChanged { text: "RAO".into() })),
+    );
+    let narrowed = document_state(d.view(i)).about_picker.clone().unwrap();
+    assert!(narrowed.candidates.iter().any(|c| c.id == maya));
+    assert!(
+        narrowed
+            .candidates
+            .iter()
+            .all(|c| c.title.to_lowercase().contains("rao"))
+    );
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Pick(le::Picked { id: maya.clone() })),
+    );
+    assert!(!document_state(d.view(i)).about_picker.clone().unwrap().open);
+    let section = about(&d, i);
+    assert_eq!(section.rows.len(), 1);
+    assert_eq!(section.rows[0].title, "Maya Rao");
+    assert_eq!(section.rows[0].remove_label, "Remove Maya Rao");
+    assert!(section.rows[0].route.is_some());
+    // Remove takes the link off.
+    document_send(
+        &mut d,
+        i,
+        link(le::Kind::Remove(le::RemoveTapped { id: maya })),
+    );
+    assert!(about(&d, i).rows.is_empty());
+}

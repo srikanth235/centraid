@@ -32,11 +32,11 @@
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty actions, in the manifest's own order. `set-memo` is the
+/// THE TABLE. Twenty-two actions, in the manifest's own order. `set-memo` is the
 /// seventeenth of v0's (#1047): the memo command existed and no action exposed
 /// it (the handoff's README §8 paper cut). The seven lifecycle actions and the
 /// two tag actions are the vault's shared verbs (#1135).
-pub const ACTIONS: [ActionRow; 20] = [
+pub const ACTIONS: [ActionRow; 22] = [
     act("add-item", "locker.add_item"),
     act("edit-item", "locker.edit_item"),
     act("trash-item", "entity.trash"),
@@ -57,6 +57,9 @@ pub const ACTIONS: [ActionRow; 20] = [
     act("set-memo", "locker.set_memo"),
     confirmed("export", "locker.export"),
     act("reveal", "locker.mark_used"),
+    // A link set by hand (#1173): one edge, shaped by the vault.
+    act("add-link", "edge.add"),
+    act("remove-link", "edge.remove"),
 ];
 
 /// The row for an action name.
@@ -74,7 +77,7 @@ mod tests {
     /// share.
     #[test]
     fn the_table_is_one_command_per_action_and_locker_wraps_no_shared_verb() {
-        assert_eq!(ACTIONS.len(), 20);
+        assert_eq!(ACTIONS.len(), 22);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -94,7 +97,7 @@ mod tests {
             .filter(|row| !row.command.starts_with("locker."))
         {
             assert!(
-                ["entity.", "flag.", "tag."]
+                ["entity.", "flag.", "tag.", "edge."]
                     .iter()
                     .any(|schema| row.command.starts_with(schema)),
                 "{} invokes {}, which is neither Locker's nor a shared verb",

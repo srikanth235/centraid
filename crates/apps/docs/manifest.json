@@ -133,6 +133,16 @@
         "schema": "container",
         "table": "create",
         "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
       }
     ]
   },
@@ -1034,6 +1044,102 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-about",
+      "verb": "link",
+      "kind": "document",
+      "inverse": "remove-about",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "this lease is about Maya",
+        "the school form is about Ravi",
+        "mark the lease as about Maya"
+      ],
+      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-about",
+      "verb": "unlink",
+      "kind": "document",
+      "inverse": "add-about",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "the lease is no longer about Maya",
+        "take Ravi off the school form",
+        "the lease is not about Maya"
+      ],
+      "description": "Take a person off a document through edge.remove (rel about).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {

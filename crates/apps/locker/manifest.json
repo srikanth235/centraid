@@ -148,6 +148,16 @@
         "schema": "vault",
         "table": "edge",
         "verbs": "read"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
       }
     ]
   },
@@ -1190,6 +1200,102 @@
           }
         },
         "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-link",
+      "verb": "link",
+      "kind": "locker_item",
+      "inverse": "remove-link",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link my bank login to the Amex account",
+        "this passport is about Maya",
+        "link the bank login to my home"
+      ],
+      "description": "Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. A link is plain: it carries no sealed value, and it is seen only inside Locker.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about", "with"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-link",
+      "verb": "unlink",
+      "kind": "locker_item",
+      "inverse": "add-link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink my bank login from the Amex account",
+        "take Maya off the passport",
+        "unlink the bank login from my home"
+      ],
+      "description": "Remove one link of an item through edge.remove.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["about", "with"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {

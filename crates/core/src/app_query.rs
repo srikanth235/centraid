@@ -133,6 +133,7 @@ pub(crate) fn answer_recording(
         Q::PeoplePerson(asked) => people::person(vault, &door, &now, asked)?,
         Q::PeopleSearch(asked) => people::search(vault, &door, &now, asked)?,
         Q::PeopleTrash(asked) => people::trash(vault, &door, asked)?,
+        Q::PeopleLinks(asked) => people::links(&door, asked)?,
         Q::NotesLibrary(asked) => notes::library(vault, &door, asked)?,
         Q::NotesNotebooks(_) => notes::notebooks(&door)?,
         Q::NotesJournal(asked) => notes::journal(vault, &door, &now, asked)?,

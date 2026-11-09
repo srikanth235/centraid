@@ -415,3 +415,99 @@ message TrashEvent {
 
   message Dismissed {}
 }
+
+// LINKS, SET BY HAND (#1173, O3): a transaction is With someone, a document is About someone, a
+// photograph shows someone, a Locker item is linked to an account, a place or a person. Rust makes
+// every word and row; the shell draws a section of rows and one picker sheet, the same in all four.
+//
+// One linked thing, or one thing the picker offers.
+message LinkRow {
+  // A person's party id, an account's or a place's.
+  string id = 1;
+  string title = 2;
+  // A small label over the title where a section mixes kinds ("Account", "Place", "Person"), and
+  // "You" on the owner. Empty draws nothing.
+  string meta = 3;
+  // Opens the thing: a person's page. Absent for what no page opens.
+  optional Route route = 4;
+  // "Remove Priya": the remove key's spoken name. Empty draws no key.
+  string remove_label = 5;
+  // On a picker row: the thing is linked now, so a tap takes the link off.
+  bool selected = 6;
+}
+
+// A way to add a link: the label of the row, and the kind of thing it picks.
+message LinkAdd {
+  // `person`, `account` or `place`.
+  string key = 1;
+  // "Add person".
+  string label = 2;
+}
+
+// A link the app proposes and the member confirms: nothing is written until Confirm.
+message LinkOffer {
+  string title = 1;
+  string body = 2;
+  string accept_label = 3;
+  string dismiss_label = 4;
+}
+
+// A titled section of links.
+message LinkSection {
+  string title = 1;
+  repeated LinkRow rows = 2;
+  repeated LinkAdd adds = 3;
+  optional LinkOffer offer = 4;
+  // What the section says with no row ("No one"); empty draws nothing.
+  string empty = 5;
+}
+
+// THE PICKER SHEET: search by name, tap a row to link it, tap a linked one to unlink it.
+message LinkPicker {
+  bool open = 1;
+  string title = 2;
+  // What the member has typed.
+  string query = 3;
+  string placeholder = 4;
+  repeated LinkRow candidates = 5;
+  // What the list says when nothing matches or nothing exists.
+  string empty = 6;
+  bool loaded = 7;
+}
+
+message LinkEvent {
+  oneof kind {
+    // A `LinkAdd.key`: opens the picker for that kind.
+    AddTapped add = 1;
+    // A `LinkRow.id` from the section's remove key.
+    RemoveTapped remove = 2;
+    // A `LinkRow.id` from the picker.
+    Picked pick = 3;
+    QueryChanged query = 4;
+    PickerClosed closed = 5;
+    OfferAccepted accepted = 6;
+    OfferDismissed dismissed = 7;
+  }
+
+  message AddTapped {
+    string key = 1;
+  }
+
+  message RemoveTapped {
+    string id = 1;
+  }
+
+  message Picked {
+    string id = 1;
+  }
+
+  message QueryChanged {
+    string text = 1;
+  }
+
+  message PickerClosed {}
+
+  message OfferAccepted {}
+
+  message OfferDismissed {}
+}

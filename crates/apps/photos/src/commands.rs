@@ -106,8 +106,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-one actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 21] = [
+/// THE TABLE. Twenty-three actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 23] = [
     act("upload", "photo.add"),
     act("edit-photo", "photo.edit"),
     act("retitle-photo", "entity.retitle"),
@@ -131,6 +131,9 @@ pub const ACTIONS: [ActionRow; 21] = [
     act("name-place", "entity.retitle"),
     act("tag-photo", "tag.add"),
     act("untag-photo", "tag.remove"),
+    // A link set by hand (#1173): one edge, shaped by the vault.
+    act("add-person", "edge.add"),
+    act("remove-person", "edge.remove"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -174,7 +177,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
-        assert_eq!(ACTIONS.len(), 21);
+        assert_eq!(ACTIONS.len(), 23);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
