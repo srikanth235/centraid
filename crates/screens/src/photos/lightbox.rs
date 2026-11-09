@@ -945,6 +945,14 @@ fn export_sentence(
     }
 }
 
+/// What the screen's state adds to the verbs: whether a slideshow has somewhere to go, and whether
+/// the details are open (the (i) key is drawn pressed).
+#[derive(Clone, Copy)]
+struct Offers {
+    slideshow: bool,
+    info_open: bool,
+}
+
 /// THE BOTTOM ROW AND THE "…" MENU, as data: every verb live or visibly
 /// refused with the reason that says which. `refusal` is the write ladder's,
 /// `edit` the editor's.
@@ -955,8 +963,7 @@ fn verbs(
     edit: Option<&str>,
     photo_id: &str,
     album_id: &str,
-    can_slideshow: bool,
-    info_open: bool,
+    offers: Offers,
 ) -> (Vec<wire::PhotosLightboxVerb>, Vec<wire::PhotosLightboxVerb>) {
     let verb = |kind: V, label: String, icon: &str, why: Option<&str>, on: bool| {
         wire::PhotosLightboxVerb {
@@ -1021,7 +1028,13 @@ fn verbs(
             refusal,
             cell.favorite,
         ),
-        verb(V::Info, words::photos_info(locale), "info", None, info_open),
+        verb(
+            V::Info,
+            words::photos_info(locale),
+            "info",
+            None,
+            offers.info_open,
+        ),
         edit_verb,
         verb(
             V::Archive,
@@ -1043,7 +1056,7 @@ fn verbs(
         ),
     ];
     let mut menu = Vec::new();
-    if can_slideshow {
+    if offers.slideshow {
         menu.push(verb(
             V::Slideshow,
             words::photos_slideshow(locale),
@@ -1309,8 +1322,10 @@ impl Screen for Lightbox {
             edit.as_deref(),
             &self.photo_id,
             &self.album_id,
-            self.neighbours.len() > 1,
-            self.sheet == Sheet::Info,
+            Offers {
+                slideshow: self.neighbours.len() > 1,
+                info_open: self.sheet == Sheet::Info,
+            },
         );
         let at = self.position();
         let neighbour = |index: Option<usize>| {
@@ -1427,8 +1442,10 @@ impl Lightbox {
             edit.as_deref(),
             &self.photo_id,
             &self.album_id,
-            self.neighbours.len() > 1,
-            self.sheet == Sheet::Info,
+            Offers {
+                slideshow: self.neighbours.len() > 1,
+                info_open: self.sheet == Sheet::Info,
+            },
         );
         toolbar
             .iter()
