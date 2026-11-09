@@ -334,11 +334,14 @@ struct AgendaTodayButton: View {
 
 // MARK: - Check circle
 
-/// A task's round box on a chip or a block; a tap sends `TaskChecked`.
+/// A task's round box on a chip or a block: hollow, or filled once the reminder is ticked off. A tap
+/// sends `TaskChecked` (Reminders' own tick), or, on a later occurrence of a repeating reminder
+/// that has no row to tick, opens the reminder instead.
 private struct AgendaCheckCircle: View {
     let hueKey: String
     let label: String
     let identifier: String
+    var done = false
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -346,6 +349,7 @@ private struct AgendaCheckCircle: View {
         Button(action: action) {
             Circle()
                 .strokeBorder(agendaHue(hueKey, scheme), lineWidth: 1.5)
+                .background(Circle().fill(done ? agendaHue(hueKey, scheme) : Color.clear))
                 .frame(width: AgendaGridMetrics.checkSize, height: AgendaGridMetrics.checkSize)
                 .padding(10)
                 .contentShape(Circle())
@@ -693,8 +697,11 @@ private struct AgendaChipView: View {
                 AgendaCheckCircle(
                     hueKey: chip.hueKey,
                     label: chip.accessibilityLabel,
-                    identifier: "agenda-grid-chip-check-\(chip.taskID)"
-                ) { send(AgendaCalendarEvents.taskChecked(chip.taskID)) }
+                    identifier: "agenda-grid-chip-check-\(chip.taskID)",
+                    done: chip.done
+                ) {
+                    if chip.readOnly, chip.hasRoute { open(chip.route) } else { send(AgendaCalendarEvents.taskChecked(chip.taskID)) }
+                }
             }
             if chip.hasRoute {
                 Button {
@@ -778,8 +785,11 @@ private struct AgendaBlockView: View {
                     AgendaCheckCircle(
                         hueKey: block.hueKey,
                         label: block.accessibilityLabel,
-                        identifier: "agenda-grid-block-check-\(block.taskID)"
-                    ) { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
+                        identifier: "agenda-grid-block-check-\(block.taskID)",
+                        done: block.done
+                    ) {
+                        if block.readOnly, block.hasRoute { open(block.route) } else { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
+                    }
                     // CENTRED ON THE TITLE'S LINE (the title is centred in the block too).
                     .frame(height: height)
                     .padding(.leading, laneWidth >= AgendaGridMetrics.detailFromWidth ? 6 : 3)

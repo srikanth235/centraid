@@ -501,7 +501,9 @@ private fun AllDayChip(
     ) {
         Box(Modifier.width(3.dp).height(CHECK_SIZE).background(hue))
         if (chip.is_task) {
-            CheckCircle(hue, "agenda-grid-chip-check-${chip.task_id}", chip.accessibility_label) { onCheck(chip.task_id) }
+            CheckCircle(hue, "agenda-grid-chip-check-${chip.task_id}", chip.accessibility_label, done = chip.done) {
+                if (chip.read_only) chip.route?.let(onOpen) else onCheck(chip.task_id)
+            }
         }
         Text(
             chip.title,
@@ -514,9 +516,20 @@ private fun AllDayChip(
     }
 }
 
-/** A task's hollow check circle: a tap checks it off (`TaskChecked`). */
+/**
+ * A task's check circle, hollow or filled once the reminder is ticked off: a tap checks it off
+ * (`TaskChecked`, Reminders' own tick), or opens the reminder when the chip is read-only (a later
+ * occurrence of a repeating one, with no row to tick).
+ */
 @Composable
-private fun CheckCircle(hue: Color, tag: String, label: String, modifier: Modifier = Modifier, onPress: () -> Unit) {
+private fun CheckCircle(
+    hue: Color,
+    tag: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    done: Boolean = false,
+    onPress: () -> Unit,
+) {
     Box(
         modifier
             .padding(start = 2.dp)
@@ -530,7 +543,12 @@ private fun CheckCircle(hue: Color, tag: String, label: String, modifier: Modifi
             },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(CHECK_SIZE - 6.dp).border(1.5.dp, hue, CircleShape))
+        Box(
+            Modifier
+                .size(CHECK_SIZE - 6.dp)
+                .then(if (done) Modifier.background(hue, CircleShape) else Modifier)
+                .border(1.5.dp, hue, CircleShape),
+        )
     }
 }
 
@@ -833,7 +851,8 @@ private fun GridBlock(
                 "agenda-grid-block-check-${block.task_id}",
                 block.accessibility_label,
                 Modifier.align(Alignment.CenterStart),
-            ) { onCheck(block.task_id) }
+                done = block.done,
+            ) { if (block.read_only) block.route?.let(onOpen) else onCheck(block.task_id) }
         }
         if (block.movable) {
             // THE FOOT: a drag on it sets the end, snapped to the grid.
