@@ -215,14 +215,15 @@ tinted_tile = "#1B1B1B"
 tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
-# The mark's disc as a share of the iOS tile's width: 0.82 is an outer radius of 49.2
-# on the 120 grid, today's proportions (inner edge and cuts included) scaled up from
-# the old 78% (owner's pick, round 11). 91% left no white gap and looked crowded once
-# iOS masked it and added its glass rim; Apple's own icons sit at 80 to 85%. The
+# The mark's disc as a share of the iOS tile's width: 0.76 is an outer radius of 45.6
+# on the 120 grid, today's proportions (inner edge and cuts included) scaled uniformly.
+# It matches Apple's Watch icon, measured on the iOS 26 home screen: its artwork spans
+# 76% of the tile tall (70% wide with the side button), a margin of about 12%. 91% and
+# 82% left too little white gap once iOS masked the tile and added its glass rim. The
 # masters and the three flat AppIcon PNGs (the pre-iOS-26 fallback) follow it, and so
 # does the layered iOS 26 icon `AppIcon.icon`; Android's adaptive icon keeps its own
 # rule, the 66dp safe zone.
-ios_mark_share = 0.82
+ios_mark_share = 0.76
 
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]

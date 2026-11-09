@@ -204,7 +204,7 @@ pub struct Icon {
     pub themed_tile: String,
     pub themed_glyph: String,
     /// How much of the iOS icon the mark's disc spans, as a share of the tile's
-    /// width (0.82: outer radius 49.2 on the 120 grid). The Android adaptive icon has
+    /// width (0.76: outer radius 45.6 on the 120 grid). The Android adaptive icon has
     /// its own rule (the 66dp safe zone) and ignores this.
     pub ios_mark_share: f64,
 }
