@@ -6,6 +6,7 @@ catalog! {
     plain add_list = ("Add List", "Add List");
     plain afternoon = ("Afternoon", "Afternoon");
     plain band_calendar = ("Calendar", "Calendar");
+    plain band_calendars = ("Calendars", "Calendars");
     plain band_invites = ("Invites", "Invites");
     plain band_reminders = ("Reminders", "Reminders");
     plain clear_completed = ("Clear", "Clear");
@@ -39,6 +40,9 @@ catalog! {
     plain quick_chip_spoken_due = ("Due {when}. Saves as {title}.", "Due {when}. Saves as {title}.");
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain reminders_title = ("Reminders", "Reminders");
+    plain reads_reminders_reads = ("reminders, lists, people", "reminders, lists, people");
+    plain reads_reminders_title = ("What Reminders may read", "What Reminders may read");
+    plain reads_reminders_writes = ("reminders you make", "reminders you make");
     plain row_unflagged = ("Flag removed", "Flag removed");
     plain row_flagged = ("Flagged", "Flagged");
     plain scheduled_empty = ("Nothing is scheduled.", "Nothing is scheduled.");

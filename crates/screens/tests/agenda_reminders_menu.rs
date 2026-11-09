@@ -175,7 +175,7 @@ fn flagged_only_lights_the_funnel_and_clear_puts_the_rows_back() {
     clear_tasks(&d);
     let keep = task(&d, "Call the bank");
     task(&d, "Water the plants");
-    arrange(&d, act::agenda::StarTask { task_id: keep });
+    arrange(&d, act::reminders::StarTask { task_id: keep });
     settle_reads(&mut d, None);
     d.pump(Duration::from_millis(300));
     pick(&mut d, id, "show", "flagged");

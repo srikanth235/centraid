@@ -112,7 +112,8 @@ internal fun AgendaTodoPlace(
     val openNewProject = {
         onEvent(AgendaHomeEvent(sheet_opened = AgendaHomeEvent.SheetOpened(sheet = AgendaHomeState.Sheet.SHEET_NEW_PROJECT)))
     }
-    if (todo.groups.isEmpty() && todo.projects.isEmpty() && empty != null) {
+    // Nothing but the Inbox row in My Lists and an invitation to speak: the day-one screen.
+    if (todo.groups.isEmpty() && todo.projects.all { it.key == "inbox" } && empty != null && empty.headline.isNotEmpty()) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
@@ -160,7 +161,7 @@ internal fun AgendaTodoPlace(
             menu = actions.menu,
         )
         todo.projects.forEach { group ->
-            item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
+            if (group.title.isNotEmpty()) item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
             items(group.rows, key = { "project-${it.row?.id}" }) { project ->
                 project.row?.let { row ->
                     // A LIST IS ITS COLOUR AND ITS OPEN COUNT (#1173).

@@ -29,21 +29,29 @@ use super::tiles::REMINDERS;
 /// Every app, in the order Home reads them. A widget's place is decided by
 /// [`CONTENT_ORDER`] or [`FIRST_RUN_ORDER`], never by arrival: a grid built from
 /// arrival order would reorder itself under the member's thumb as reads landed.
-pub const ORDER: [&str; 8] = [
-    "photos", "docs", "agenda", "notes", "money", "health", "people", "locker",
+pub const ORDER: [&str; 9] = [
+    "photos",
+    "docs",
+    "calendar",
+    "reminders",
+    "notes",
+    "money",
+    "health",
+    "people",
+    "locker",
 ];
 
 /// The widgets in the order they sit once the vault holds something (the Home
 /// board): the day and what is owed, the photographs, the glances, then the two
 /// that read as a line.
 pub const CONTENT_ORDER: [&str; 9] = [
-    "agenda", REMINDERS, "photos", "money", "health", "people", "locker", "notes", "docs",
+    "calendar", REMINDERS, "photos", "money", "health", "people", "locker", "notes", "docs",
 ];
 
 /// The widgets on day one (the First Home board): every app's first move, the
 /// calendar and the photographs first.
-pub const FIRST_RUN_ORDER: [&str; 8] = [
-    "agenda", "photos", "notes", "docs", "people", "money", "health", "locker",
+pub const FIRST_RUN_ORDER: [&str; 9] = [
+    "calendar", REMINDERS, "photos", "notes", "docs", "people", "money", "health", "locker",
 ];
 
 /// Columns on the grid: a small widget takes one, a medium two, a large four.
@@ -64,7 +72,7 @@ pub fn span(size: Size) -> u32 {
 pub fn content_size(widget: &str) -> Size {
     match widget {
         "photos" => Size::Large,
-        "agenda" | REMINDERS | "notes" | "docs" => Size::Medium,
+        "calendar" | REMINDERS | "notes" | "docs" => Size::Medium,
         _ => Size::Small,
     }
 }
@@ -85,7 +93,7 @@ pub fn size_of(widget: &str, status: Status) -> Size {
 #[must_use]
 pub fn height_of(widget: &str) -> u32 {
     match widget {
-        "agenda" | REMINDERS | "photos" => 2,
+        "calendar" | REMINDERS | "photos" => 2,
         _ => 1,
     }
 }
@@ -191,12 +199,7 @@ mod tests {
     fn tile(widget: &str, status: Status) -> wire::HomeTile {
         wire::HomeTile {
             widget: widget.to_owned(),
-            app_id: if widget == REMINDERS {
-                "agenda"
-            } else {
-                widget
-            }
-            .to_owned(),
+            app_id: widget.to_owned(),
             status: status as i32,
             ..wire::HomeTile::default()
         }
@@ -223,15 +226,14 @@ mod tests {
     #[test]
     fn the_content_board_sits_in_the_boards_order_and_rows() {
         // Read in the reading order, folded into the board's: arrival decides nothing.
-        let mut read = of(&ORDER, Status::Content);
-        read.push(tile(REMINDERS, Status::Content));
+        let read = of(&ORDER, Status::Content);
         let folded = fold(read);
         assert_eq!(folded.springboard, wire::HomeSpringboard::Content);
         assert_eq!(order(&folded), CONTENT_ORDER);
         assert_eq!(
             ids(&folded.rows),
             vec![
-                vec!["agenda", "reminders"],
+                vec!["calendar", "reminders"],
                 vec!["photos"],
                 vec!["money", "health", "people", "locker"],
                 vec!["notes", "docs"],
@@ -246,7 +248,7 @@ mod tests {
             let tile = folded.tiles.iter().find(|t| t.widget == widget).unwrap();
             (tile.size(), tile.height)
         };
-        assert_eq!(shape("agenda"), (Size::Medium, 2));
+        assert_eq!(shape("calendar"), (Size::Medium, 2));
         assert_eq!(shape("reminders"), (Size::Medium, 2));
         assert_eq!(shape("photos"), (Size::Large, 2));
         for small in ["money", "health", "people", "locker"] {
@@ -264,10 +266,11 @@ mod tests {
         assert_eq!(
             ids(&folded.rows),
             vec![
-                vec!["agenda", "photos"],
-                vec!["notes", "docs"],
-                vec!["people", "money"],
-                vec!["health", "locker"],
+                vec!["calendar", "reminders"],
+                vec!["photos", "notes"],
+                vec!["docs", "people"],
+                vec!["money", "health"],
+                vec!["locker"],
             ]
         );
         // The calendar and the photographs are tall mediums; the rest one row.
@@ -283,7 +286,7 @@ mod tests {
                 .height
         };
         assert_eq!(
-            (height("agenda"), height("photos"), height("notes")),
+            (height("calendar"), height("photos"), height("notes")),
             (2, 2, 1)
         );
     }
@@ -313,7 +316,7 @@ mod tests {
     #[test]
     fn with_nothing_owed_the_calendar_takes_the_next_widgets_that_fit_beside_it() {
         let folded = fold(of(
-            &["agenda", "photos", "money", "health", "notes"],
+            &["calendar", "photos", "money", "health", "notes"],
             Status::Content,
         ));
         // The photographs need the whole row, so the smalls come up beside the
@@ -321,7 +324,7 @@ mod tests {
         assert_eq!(
             ids(&folded.rows),
             vec![
-                vec!["agenda", "money", "health"],
+                vec!["calendar", "money", "health"],
                 vec!["photos"],
                 vec!["notes"],
             ]
@@ -331,8 +334,7 @@ mod tests {
     #[test]
     fn no_row_is_wider_than_the_grid_and_every_widget_is_in_exactly_one() {
         for status in [Status::Content, Status::Empty, Status::Loading] {
-            let mut read = of(&ORDER, status);
-            read.push(tile(REMINDERS, status));
+            let read = of(&ORDER, status);
             let folded = fold(read);
             let mut seen: Vec<&str> = Vec::new();
             for row in &folded.rows {

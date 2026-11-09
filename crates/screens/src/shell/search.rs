@@ -370,7 +370,7 @@ fn container_kind(locale: Locale, entity: &str, app: &str) -> Option<(String, &'
     Some(match (entity, app) {
         ("notebook", "notes") => (shared::search_kind_notebook(locale), "Book"),
         ("album", "photos") => (shared::search_kind_album(locale), "Image"),
-        ("project", "agenda") => (shared::search_kind_project(locale), "List"),
+        ("project", "reminders") => (shared::search_kind_project(locale), "List"),
         ("folder", "docs") => (shared::search_kind_folder(locale), "Folder"),
         _ => return None,
     })
@@ -387,7 +387,8 @@ fn spoken(parts: &[&str]) -> String {
 
 fn app_label(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::app_agenda(locale),
+        "calendar" => words::app_calendar(locale),
+        "reminders" => words::app_reminders(locale),
         "docs" => words::app_docs(locale),
         "health" => words::app_health(locale),
         "locker" => words::app_locker(locale),
@@ -557,8 +558,8 @@ mod tests {
         let answer = data(vec![
             hit("person", "p1", "Maya", "people"),
             hit("note", "n1", "Cabin list", "notes"),
-            hit("task", "t1", "Book the cabin", "agenda"),
-            hit("event", "e1", "Cabin weekend", "agenda"),
+            hit("task", "t1", "Book the cabin", "reminders"),
+            hit("event", "e1", "Cabin weekend", "calendar"),
             hit("document", "d1", "Lease", "docs"),
         ]);
         let groups: Vec<(&str, u32)> = answer
@@ -568,15 +569,26 @@ mod tests {
             .collect();
         assert_eq!(
             groups,
-            [("docs", 1), ("agenda", 2), ("notes", 1), ("people", 1)]
+            [
+                ("docs", 1),
+                ("calendar", 1),
+                ("reminders", 1),
+                ("notes", 1),
+                ("people", 1)
+            ]
         );
-        let agenda = &answer.groups[1];
-        assert_eq!(agenda.label, "Agenda");
-        assert_eq!(agenda.accessibility_label, "Agenda, 2 results");
+        let calendar = &answer.groups[1];
+        assert_eq!(calendar.label, "Calendar");
+        assert_eq!(calendar.accessibility_label, "Calendar, 1 result");
         assert_eq!(answer.groups[0].accessibility_label, "Docs, 1 result");
-        assert_eq!(agenda.rows[0].kind_label, "Task");
-        assert_eq!(agenda.rows[0].accessibility_label, "Task, Book the cabin");
-        assert_eq!(agenda.rows[1].kind_label, "Event");
+        assert_eq!(calendar.rows[0].kind_label, "Event");
+        let reminders = &answer.groups[2];
+        assert_eq!(reminders.label, "Reminders");
+        assert_eq!(reminders.rows[0].kind_label, "Task");
+        assert_eq!(
+            reminders.rows[0].accessibility_label,
+            "Task, Book the cabin"
+        );
     }
 
     #[test]

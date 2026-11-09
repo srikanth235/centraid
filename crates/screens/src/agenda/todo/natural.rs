@@ -11,9 +11,9 @@
 //! 12 or 24 hour), so a chip reads exactly as the row it becomes will.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::nl_date::{self, Parsed, Repeat, Weekday};
+use centraid_apps_reminders::nl_date::{self, Parsed, Repeat, Weekday};
 
-use crate::catalog::load::agenda as query;
+use crate::catalog::load::calendar as query_cal;
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{Reading as Answered, read};
 use crate::screen::Ctx;
@@ -79,10 +79,14 @@ impl Reading {
 /// nothing is read and an add is the words as typed.
 #[must_use]
 pub fn core_now(ctx: &Ctx) -> Option<String> {
-    match read(ctx, query::DayContext::default(), |answer| match answer {
-        wire::app_query_response::Answer::AgendaDayContext(context) => Some(context),
-        _ => None,
-    }) {
+    match read(
+        ctx,
+        query_cal::DayContext::default(),
+        |answer| match answer {
+            wire::app_query_response::Answer::AgendaDayContext(context) => Some(context),
+            _ => None,
+        },
+    ) {
         Answered::Data(context) if nl_date::Now::parse(&context.now_local).is_some() => {
             Some(context.now_local)
         }

@@ -175,10 +175,10 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     let first = &answer.cards[0];
     assert_eq!(
         (first.app.as_str(), first.entity.as_str()),
-        ("agenda", "task")
+        ("reminders", "task")
     );
     assert_eq!(first.title, "Rotate the tires before the drive");
-    assert!(answer.cards.iter().all(|card| card.app == "agenda"));
+    assert!(answer.cards.iter().all(|card| card.app == "reminders"));
 
     // THE EVENTS, in order: one Activity per looking step, the cards, then the answer. The same
     // queue and the same wire every turn uses.
@@ -186,8 +186,8 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     assert_eq!(
         story(&events),
         [
-            "activity:agenda/find",
-            "activity:agenda/answer",
+            "activity:reminders/find",
+            "activity:reminders/answer",
             "cards:6",
             "answer"
         ]
@@ -252,11 +252,11 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_op
     // One `answer kind=…` turn each, in one chat. (app, entity) per kind, from the kind table.
     let kinds = [
         ("person", "people", "person"),
-        ("event", "agenda", "event"),
+        ("event", "calendar", "event"),
         ("album", "photos", "album"),
         ("notebook", "notes", "notebook"),
         ("folder", "docs", "folder"),
-        ("list", "agenda", "project"),
+        ("list", "reminders", "project"),
         ("note", "notes", "note"),
         ("document", "docs", "document"),
         ("photo", "photos", "photo"),
@@ -534,8 +534,8 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
     assert_eq!(
         story(&sample.drain_assist_events()),
         [
-            "activity:agenda/find",
-            "activity:agenda/do",
+            "activity:reminders/find",
+            "activity:reminders/do",
             "pending:1",
             "answer"
         ],

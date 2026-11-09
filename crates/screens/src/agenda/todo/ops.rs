@@ -66,7 +66,7 @@ impl<'a> NewTask<'a> {
 /// The `add-task` command a staged task writes. Empty text is absent, and a
 /// priority of 0 is none.
 #[must_use]
-pub fn add_request(task: &NewTask) -> act::agenda::AddTask {
+pub fn add_request(task: &NewTask) -> act::reminders::AddTask {
     let text = |value: &str| {
         if value.is_empty() {
             Default::default()
@@ -74,7 +74,7 @@ pub fn add_request(task: &NewTask) -> act::agenda::AddTask {
             crate::field::Field::Is(value.to_owned())
         }
     };
-    act::agenda::AddTask {
+    act::reminders::AddTask {
         title: task.title.to_owned(),
         description: text(task.notes),
         due: text(task.due),
@@ -134,7 +134,7 @@ impl Ops {
         let settled = if open {
             kit_act::act(
                 ctx,
-                act::agenda::CompleteTask {
+                act::reminders::CompleteTask {
                     task_id: task.task_id.clone(),
                 },
                 &key,
@@ -142,7 +142,7 @@ impl Ops {
         } else {
             kit_act::act(
                 ctx,
-                act::agenda::ReopenTask {
+                act::reminders::ReopenTask {
                     task_id: task.task_id.clone(),
                 },
                 &key,
@@ -188,7 +188,7 @@ impl Ops {
         };
         let was_completion = inverse.action == "reopen-task";
         let request = wire::ActRequest {
-            app: act::agenda::APP.to_owned(),
+            app: act::reminders::APP.to_owned(),
             action: inverse.action,
             input: inverse.input,
             invoke_key: String::new(),
@@ -272,7 +272,7 @@ impl Ops {
             let key = kit_act::key(&["add-task-tag", &id, label], self.next_seq());
             let tagged = kit_act::act(
                 ctx,
-                act::agenda::AddTaskTag {
+                act::reminders::AddTaskTag {
                     task_id: id.clone(),
                     label: label.clone(),
                 },
@@ -287,7 +287,7 @@ impl Ops {
             let key = kit_act::key(&["star-task", &id], self.next_seq());
             let starred = kit_act::act(
                 ctx,
-                act::agenda::StarTask {
+                act::reminders::StarTask {
                     task_id: id.clone(),
                 },
                 &key,
@@ -313,7 +313,7 @@ impl Ops {
         // A project without a section CLEARS the section, because a section of
         // another project would be refused; the Inbox clears both.
         let clear = || crate::field::Field::Clear;
-        let request = act::agenda::OrganizeTask {
+        let request = act::reminders::OrganizeTask {
             task_id: task.task_id.clone(),
             project_id: project_id.map_or_else(clear, |id| crate::field::Field::Is(id.to_owned())),
             section_id: match (project_id, section_id) {
@@ -356,7 +356,7 @@ impl Ops {
         let settled = if on {
             kit_act::act(
                 ctx,
-                act::agenda::StarTask {
+                act::reminders::StarTask {
                     task_id: task_id.to_owned(),
                 },
                 &key,
@@ -364,7 +364,7 @@ impl Ops {
         } else {
             kit_act::act(
                 ctx,
-                act::agenda::UnstarTask {
+                act::reminders::UnstarTask {
                     task_id: task_id.to_owned(),
                 },
                 &key,
@@ -394,7 +394,7 @@ impl Ops {
         let key = kit_act::key(&["delete-task", task_id], self.next_seq());
         let settled = kit_act::act(
             ctx,
-            act::agenda::DeleteTask {
+            act::reminders::DeleteTask {
                 task_id: task_id.to_owned(),
             },
             &key,
@@ -449,7 +449,7 @@ impl Ops {
         let key = kit_act::key(&["organize-task", task_id, "position"], self.next_seq());
         let settled = kit_act::act(
             ctx,
-            act::agenda::OrganizeTask {
+            act::reminders::OrganizeTask {
                 task_id: task_id.to_owned(),
                 position: Some(position),
                 ..Default::default()
@@ -474,7 +474,7 @@ impl Ops {
             let key = kit_act::key(&["delete-task", id, "cleared"], self.next_seq());
             let settled = kit_act::act(
                 ctx,
-                act::agenda::DeleteTask {
+                act::reminders::DeleteTask {
                     task_id: id.clone(),
                 },
                 &key,

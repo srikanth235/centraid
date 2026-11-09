@@ -888,7 +888,7 @@ fn a_commit_is_a_pass_and_a_burst_of_them_is_one_more_at_the_end_of_the_debounce
     rig.first_pass(empty());
     let write = |rig: &mut Rig, n: u32| {
         let response = rig.driver.act(
-            act::agenda::AddTask {
+            act::reminders::AddTask {
                 title: format!("task {n}"),
                 ..Default::default()
             }

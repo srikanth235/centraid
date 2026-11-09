@@ -242,7 +242,7 @@ fn key(verb: &str, id: &str) -> String {
 /// The edit that puts a task's due and lead back as they were: the core has no
 /// inverse for an edit, so the one Undo sends is made from what was read.
 fn put_back(task_id: &str, task: &TaskFacts) -> wire::ActRequest {
-    act::agenda::EditTask {
+    act::reminders::EditTask {
         task_id: task_id.to_owned(),
         due: if task.due.is_empty() {
             Field::Clear
@@ -258,7 +258,7 @@ fn put_back(task_id: &str, task: &TaskFacts) -> wire::ActRequest {
 fn edit(ctx: &Ctx, task_id: &str, due: String, lead: Field<i64>) -> Settled {
     kit_act::act(
         ctx,
-        act::agenda::EditTask {
+        act::reminders::EditTask {
             task_id: task_id.to_owned(),
             due: Field::Is(due),
             remind_before_min: lead,
@@ -332,7 +332,7 @@ pub fn handle(
                 Verb::Done => {
                     let settled = kit_act::act(
                         ctx,
-                        act::agenda::CompleteTask {
+                        act::reminders::CompleteTask {
                             task_id: task_id.clone(),
                         },
                         &key("complete-task", &task_id),
@@ -343,7 +343,7 @@ pub fn handle(
                         .clone()
                         .filter(|_| !task.repeats)
                         .map(|inverse| wire::ActRequest {
-                            app: act::agenda::APP.to_owned(),
+                            app: act::reminders::APP.to_owned(),
                             action: inverse.action,
                             input: inverse.input,
                             invoke_key: String::new(),

@@ -152,9 +152,9 @@ fn open_tasks(shell: &Shell) -> u32 {
     shell.d.with_ctx(|ctx| {
         match read::read(
             ctx,
-            load::agenda::Board {
+            load::reminders::Board {
                 limit: 500,
-                ..load::agenda::Board::default()
+                ..load::reminders::Board::default()
             },
             |answer| match answer {
                 Answer::AgendaTaskBoard(board) => board.counts.map(|counts| counts.open),

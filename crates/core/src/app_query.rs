@@ -52,8 +52,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
-use centraid_apps_agenda::queries as agenda;
+use centraid_apps_calendar::queries as agenda;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageCursor, PageRequest};
 use centraid_apps_kit::reads::PageDoor;
@@ -92,6 +92,8 @@ pub(crate) mod photos;
 pub(crate) mod agenda_task;
 // What an event or a task has attached, with its thumbnails (#1173).
 pub(crate) mod agenda_attachments;
+// The reminders a Calendar day shows, read-only (round 10).
+pub(crate) mod agenda_dated;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -152,6 +154,7 @@ pub(crate) fn answer_recording(
         Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
         Q::AgendaTaskSmartCounts(asked) => agenda_task::smart_counts(vault, &door, &now, asked)?,
         Q::AgendaTaskDueRows(asked) => agenda_task::due_rows(vault, &door, &now, asked)?,
+        Q::CalendarDatedReminders(asked) => agenda_dated::dated(vault, &door, &now, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -255,7 +258,7 @@ pub(crate) fn agenda_event(
     let zone = zone_of(vault, &asked.tz)?;
     settle(
         door,
-        centraid_apps_agenda::load_event(
+        centraid_apps_calendar::load_event(
             door,
             &asked.event_id,
             non_empty(&asked.instance_key),
@@ -306,7 +309,7 @@ pub(crate) fn agenda_search(
             let next = if denial.is_none() {
                 data.events
                     .iter()
-                    .map(|event| centraid_apps_agenda::next_occurrence(door, event, now))
+                    .map(|event| centraid_apps_calendar::next_occurrence(door, event, now))
                     .collect::<KitResult<Vec<_>>>()?
             } else {
                 Vec::new()
@@ -314,30 +317,10 @@ pub(crate) fn agenda_search(
             Ok(((data, next, corrected), denial))
         },
     );
-    let answer = settle(door, loaded, |(data, next, corrected)| {
+    // CALENDAR SEARCHES EVENTS ONLY (round 10): the tasks a term finds are Reminders' `search`.
+    settle(door, loaded, |(data, next, corrected)| {
         A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
-    })?;
-    // THE TASKS THE TERM FINDS ride the same answer (#1128): Agenda searches events and tasks
-    // through the one index, and a screen draws one list.
-    let A::AgendaSearch(mut found) = answer else {
-        return Ok(answer);
-    };
-    let tasks = agenda_task::search(
-        vault,
-        door,
-        now,
-        &wire::AgendaTaskSearchRequest {
-            term: asked.term.clone(),
-            limit: asked.limit,
-            tz: asked.tz.clone(),
-        },
-    )?;
-    if let A::AgendaTaskSearch(tasks) = tasks
-        && (!tasks.tasks.is_empty() || !tasks.containers.is_empty())
-    {
-        found.tasks = Some(tasks);
-    }
-    Ok(A::AgendaSearch(found))
+    })
 }
 
 /// An empty string on the wire is the loader's `None`: proto3 has no absent
@@ -822,7 +805,7 @@ fn search_to_wire(
             .map(|event| {
                 let mut hit = event_to_wire(event, zone);
                 if let Some(occurrence) = next.next().flatten() {
-                    hit.next_local_start = local::place(&occurrence, zone)
+                    hit.next_local_start = centraid_apps_calendar::local::place(&occurrence, zone)
                         .map(|placed| placed.local_start)
                         .unwrap_or_default();
                     hit.next_original_start_local =
@@ -839,7 +822,7 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
     // WHERE IT FALLS, before the row is taken apart: the one placement, in the
     // request's zone. A start that does not parse is placed nowhere.
     let all_day = event.semantics() == centraid_vault::time::recurrence::Semantics::AllDay;
-    let placed = local::place(&event, zone).unwrap_or_default();
+    let placed = centraid_apps_calendar::local::place(&event, zone).unwrap_or_default();
     wire::AgendaEvent {
         local_start: placed.local_start,
         local_end: placed.local_end,
@@ -1177,7 +1160,7 @@ mod tests {
         match scratch.upcoming("2099-06-01T00:00:00.000Z", "2099-12-01T00:00:00.000Z") {
             Err(CoreError::ReadBoundReached { query, cap }) => {
                 assert_eq!(query, "agenda.upcoming.expansion");
-                assert_eq!(cap, centraid_apps_agenda::MAX_TOTAL_INSTANCES);
+                assert_eq!(cap, centraid_apps_calendar::MAX_TOTAL_INSTANCES);
             }
             other => panic!("a window past the bound answers a bound, not {other:?}"),
         }

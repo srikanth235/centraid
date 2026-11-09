@@ -119,13 +119,13 @@ pub mod routes {
         }
     }
 
-    /// Agenda's To-do quick add with `title` waiting in it: the "Send to
-    /// Agenda" door. Built as the wire route Agenda's home registers under
-    /// (`agenda.home`), because a screen never names another app's module.
+    /// Reminders' quick add with `title` waiting in it: the "Send to
+    /// Reminders" door. Built as the wire route Reminders' home registers under
+    /// (`reminders.home`), because a screen never names another app's module.
     #[must_use]
     pub fn send_to_agenda(title: &str) -> wire::Route {
         route(
-            "agenda.home",
+            "reminders.home",
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: wire::AgendaDestination::Todo as i32,
                 quick_add_title: title.to_owned(),
@@ -149,7 +149,7 @@ pub mod routes {
                 }),
             ),
             "event" => (
-                "agenda.event",
+                "calendar.event",
                 wire::route::Args::AgendaEvent(wire::AgendaEventRoute {
                     event_id: id.to_owned(),
                     instance_key: String::new(),
@@ -158,7 +158,7 @@ pub mod routes {
                 }),
             ),
             "task" => (
-                "agenda.task",
+                "reminders.task",
                 wire::route::Args::TodoDetail(wire::TodoDetailRoute {
                     task_id: id.to_owned(),
                 }),

@@ -15,7 +15,7 @@ name: agenda-task-from-search
 - inputText: "circle"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-agenda"
+      id: "home-search-group-reminders"
     timeout: 5000
 - tapOn: "Tap the circle to finish me"
 - extendedWaitUntil:
@@ -33,12 +33,12 @@ name: agenda-task-from-search
     commands:
       - back
 - assertVisible:
-    id: "home-search-group-agenda"
+    id: "home-search-group-reminders"
 # Agenda's own search finds the task too, above the event days.
 - tapOn:
     id: "home-search-cancel"
 - tapOn:
-    id: "home-tile-agenda"
+    id: "home-tile-reminders"
 - tapOn:
     id: "agenda-search-open"
 - inputText: "circle"

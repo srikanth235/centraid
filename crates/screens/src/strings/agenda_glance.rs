@@ -36,7 +36,7 @@ catalog! {
     plain up_next_title = ("Up next", "Up next");
     plain widget_reminders_description = ("Today's and overdue reminders.", "Today's and overdue reminders.");
     plain widget_reminders_name = ("Reminders", "Reminders");
-    plain widget_up_next_description = ("What's next today, from your Agenda.", "What's next today, from your Agenda.");
+    plain widget_up_next_description = ("What's next today, from your Calendar.", "What's next today, from your Calendar.");
     plain widget_up_next_name = ("Up next", "Up next");
     counted flagged_label = ("{n} flagged", "{n} flagged");
     counted overdue_label = ("{n} overdue", "{n} overdue");

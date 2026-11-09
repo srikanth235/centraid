@@ -63,11 +63,26 @@ pub use health::{HEALTH_DAYS, WORKOUT_COUNT};
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
 /// [`seed_demo`] also seeds `health` ([`DEMO_APPS`]).
-pub const APPS: [&str; 6] = ["people", "notes", "docs", "photos", "agenda", "money"];
+pub const APPS: [&str; 7] = [
+    "people",
+    "notes",
+    "docs",
+    "photos",
+    "calendar",
+    "reminders",
+    "money",
+];
 
 /// The apps [`seed_demo`] seeds: [`APPS`] and Health, which only the demo has.
-pub const DEMO_APPS: [&str; 7] = [
-    "people", "notes", "docs", "photos", "agenda", "money", "health",
+pub const DEMO_APPS: [&str; 8] = [
+    "people",
+    "notes",
+    "docs",
+    "photos",
+    "calendar",
+    "reminders",
+    "money",
+    "health",
 ];
 
 /// HOW FAR BEFORE "NOW" THE DEMO'S CALLER STARTS THE VAULT'S CLOCK, so the people
@@ -196,9 +211,11 @@ fn seed_scenario(
     if wanted("photos") {
         seed_photos(&mut seeder, now_ms, rich);
     }
-    // THE TASKS ARE AGENDA'S (#1128): one app, so one name to seed them under.
-    if wanted("agenda") {
+    // EVENTS ARE CALENDAR'S AND TASKS ARE REMINDERS' (round 10 of #1173): two apps, two names.
+    if wanted("reminders") {
         seed_tasks(&mut seeder, now_ms, rich);
+    }
+    if wanted("calendar") {
         seed_agenda(&mut seeder, now_ms, &circle, rich);
     }
     if wanted("money") {

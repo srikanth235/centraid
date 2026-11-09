@@ -61,7 +61,7 @@ fn known(instant: &str) -> Option<&str> {
 /// is absent.
 fn minute_if(zone: Option<&FireZone>, instant: Option<&str>) -> String {
     zone.zip(instant)
-        .and_then(|(zone, instant)| centraid_apps_agenda::local::now_local(zone, instant))
+        .and_then(|(zone, instant)| centraid_apps_kit::civil::now_local(zone, instant))
         .unwrap_or_default()
 }
 

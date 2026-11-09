@@ -71,7 +71,15 @@ fn a_term_is_grouped_by_app_in_the_springboards_order_and_every_row_opens_its_pa
         "the example scenario mentions Tahoe"
     );
     let order = [
-        "photos", "docs", "agenda", "notes", "money", "health", "people", "locker",
+        "photos",
+        "docs",
+        "calendar",
+        "reminders",
+        "notes",
+        "money",
+        "health",
+        "people",
+        "locker",
     ];
     let positions: Vec<usize> = found
         .groups

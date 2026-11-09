@@ -814,7 +814,7 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
     assert_eq!(data.draft.as_ref().expect("draft").repeat_key, "custom");
     assert!(!data.show_skip, "the series row has no occurrence to skip");
     world.title(page, "Mine");
-    world.act(act::agenda::EditEvent {
+    world.act(act::calendar::EditEvent {
         event_id: series.clone(),
         title: Some("Theirs".to_owned()),
         ..Default::default()
@@ -834,28 +834,18 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
 }
 
 #[test]
-fn the_add_sheet_has_an_event_task_switch_and_an_edit_has_none() {
+fn the_add_sheet_is_for_events_with_no_switch_and_an_edit_has_none() {
     let mut world = World::new();
     let page = world.open_new("2099-06-17", Kind::Event);
     let state = world.editor_state(page);
     assert_eq!(state.kind, Kind::Event as i32);
     let data = world.editor_data(page);
-    let kinds: Vec<(i32, &str, bool)> = data
-        .kinds
-        .iter()
-        .map(|k| (k.kind, k.label.as_str(), k.selected))
-        .collect();
-    assert_eq!(
-        kinds,
-        [
-            (Kind::Event as i32, "Event", true),
-            (Kind::Task as i32, "Task", false)
-        ]
-    );
+    // Calendar adds events only: no Event | Task switch is offered (round 10).
+    assert!(data.kinds.is_empty());
     assert!(data.show_event_fields);
     assert!(
         world.driver.effects.is_empty(),
-        "a route that names its kind asks no one"
+        "a route asks no one what kind it is"
     );
 
     // AN EDIT IS AN EVENT and says nothing of kinds; a stray pick changes nothing.
@@ -870,7 +860,7 @@ fn the_add_sheet_has_an_event_task_switch_and_an_edit_has_none() {
     assert_eq!(world.editor_state(edit).kind, Kind::Event as i32);
     // ... even when the route names a task.
     let named = world.driver.push(
-        "agenda",
+        "calendar",
         centraid_screens::agenda::routes::editor(&id, &id, None, "2099-06-15", Kind::Task),
     );
     assert_eq!(world.editor_state(named).kind, Kind::Event as i32);
@@ -1473,7 +1463,7 @@ fn an_event_in_another_zone_opens_in_its_own_wall_clock_and_a_zone_change_edits_
 fn a_floating_event_has_no_zone_and_keeps_none_unless_one_is_picked() {
     let mut world = World::new();
     let id = world.propose("Lunch", "2099-06-17T12:00:00", "2099-06-17T13:00:00", |p| {
-        p.timing = Some(act::agenda::ProposeTiming::Floating);
+        p.timing = Some(act::calendar::ProposeTiming::Floating);
         p.zone = Field::Keep;
     });
     let page = world.open_edit(&id, "", None, "2099-06-17");

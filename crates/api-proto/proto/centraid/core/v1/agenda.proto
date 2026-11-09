@@ -378,7 +378,33 @@ message AgendaFollowedGuest {
   string state = 3;
 }
 
-// `agenda.attachments`: one page of what an event or a task has attached (#1173).
+// `calendar.dated-reminders`: the open, one-off reminders that fall due on the local days of a window,
+// read-only (round 10 of #1173: Calendar shows a reminder on its day and opens it in Reminders).
+message CalendarDatedRemindersRequest {
+  // The first and the last local day of the window, `YYYY-MM-DD`.
+  string from = 1;
+  string to = 2;
+  // The zone the days are read in (the file header's rule).
+  string tz = 3;
+}
+
+message CalendarDatedReminders {
+  // The day the vault clock names in `tz`, `YYYY-MM-DD`.
+  string today = 1;
+  repeated CalendarDatedReminder reminders = 2;
+}
+
+// A reminder on its day: its title, due day, due time and nothing else.
+message CalendarDatedReminder {
+  string task_id = 1;
+  string title = 2;
+  // `YYYY-MM-DD`.
+  string due_day = 3;
+  // `HH:MM`, or empty for a date-only due.
+  string due_time = 4;
+}
+
+// `calendar.attachments` and `reminders.attachments`: one page of what an event or a task has attached (#1173).
 message AgendaAttachments {
   repeated AgendaAttachmentRow attachments = 1;
   // The cursor of the next page, as the request's `after` spells it; absent

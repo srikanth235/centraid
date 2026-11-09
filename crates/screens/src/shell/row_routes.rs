@@ -40,7 +40,8 @@ impl RowRef {
 #[must_use]
 pub fn app_home(app: &str) -> Option<wire::Route> {
     Some(match app {
-        "agenda" => agenda::routes::home(wire::AgendaDestination::Day, ""),
+        "calendar" => agenda::routes::home(wire::AgendaDestination::Day, ""),
+        "reminders" => agenda::routes::home(wire::AgendaDestination::Todo, ""),
         "docs" => docs::routes::drive(wire::DocsDestination::All, "", "", ""),
         "health" => health::routes::home(wire::HealthDestination::Today),
         "locker" => locker::routes::home(wire::LockerDestination::Items),
@@ -59,10 +60,12 @@ pub fn app_home(app: &str) -> Option<wire::Route> {
 pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route> {
     let id = row.id.as_str();
     let title = row.title.as_str();
-    match (row.app.as_str(), row.entity.as_str()) {
-        ("agenda", "task") => Some(agenda::routes::task(id)),
-        ("agenda", "project") => Some(agenda::routes::project(id, title)),
-        ("agenda", "event") => Some(agenda::routes::event(id, &row.qualifier, None, "")),
+    // A ROW AN OLDER BUILD STORED UNDER `agenda` is read as the app of its kind (round 10).
+    let app = centraid_vault::roster::legacy(row.app.as_str(), row.entity.as_str());
+    match (app, row.entity.as_str()) {
+        ("reminders", "task") => Some(agenda::routes::task(id)),
+        ("reminders", "project") => Some(agenda::routes::project(id, title)),
+        ("calendar", "event") => Some(agenda::routes::event(id, &row.qualifier, None, "")),
         ("notes", "note") => Some(notes::routes::editor(id)),
         ("notes", "notebook") => Some(notes::routes::home(
             wire::NotesPlace::Notes,
@@ -172,7 +175,7 @@ mod tests {
     fn a_row_opens_the_page_of_its_own_kind() {
         let open =
             |app: &str, entity: &str| screen(route(&RowRef::new(app, entity, "x", "T"), "", &[]));
-        assert_eq!(open("agenda", "task"), agenda::TASK);
+        assert_eq!(open("reminders", "task"), agenda::TASK);
         assert_eq!(open("notes", "note"), notes::EDITOR);
         assert_eq!(open("docs", "document"), docs::DOCUMENT);
         assert_eq!(open("people", "person"), people::PERSON);
@@ -180,7 +183,7 @@ mod tests {
         assert_eq!(open("money", "transaction"), money::TRANSACTION);
         assert_eq!(open("health", "workout"), health::WORKOUT);
         // A kind with no page of its own opens the app.
-        assert_eq!(open("agenda", "nonsense"), agenda::HOME);
+        assert_eq!(open("calendar", "nonsense"), agenda::HOME);
         assert_eq!(open("chat", "thread"), crate::chat::THREAD);
     }
 
@@ -229,11 +232,16 @@ mod tests {
 
     #[test]
     fn agenda_rows_route_by_their_kind_and_an_occurrence_carries_its_instance() {
-        let task = route(&RowRef::new("agenda", "task", "t1", ""), "", &[]).unwrap();
+        let task = route(&RowRef::new("reminders", "task", "t1", ""), "", &[]).unwrap();
         assert_eq!(task, agenda::routes::task("t1"));
-        let project = route(&RowRef::new("agenda", "project", "p1", "Garden"), "", &[]).unwrap();
+        let project = route(
+            &RowRef::new("reminders", "project", "p1", "Garden"),
+            "",
+            &[],
+        )
+        .unwrap();
         assert_eq!(project, agenda::routes::project("p1", "Garden"));
-        let mut row = RowRef::new("agenda", "event", "e1", "");
+        let mut row = RowRef::new("calendar", "event", "e1", "");
         row.qualifier = "2026-10-17".to_owned();
         let event = route(&row, "", &[]).unwrap();
         let Some(wire::route::Args::AgendaEvent(args)) = event.args else {
@@ -244,7 +252,7 @@ mod tests {
             ("e1", "2026-10-17")
         );
         // A kind with no page opens Agenda's home, on Day.
-        let home = route(&RowRef::new("agenda", "tag", "x", ""), "", &[]).unwrap();
+        let home = route(&RowRef::new("calendar", "tag", "x", ""), "", &[]).unwrap();
         let Some(wire::route::Args::AgendaHome(args)) = home.args else {
             panic!("not a home");
         };
@@ -286,7 +294,7 @@ mod tests {
         let cases = [
             ("notes", "notebook", notes::HOME),
             ("photos", "album", photos::SHELF),
-            ("agenda", "project", agenda::PROJECT),
+            ("reminders", "project", agenda::PROJECT),
             ("docs", "folder", docs::DRIVE),
         ];
         for (app, entity, screen) in cases {

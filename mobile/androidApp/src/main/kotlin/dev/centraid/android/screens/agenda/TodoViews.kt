@@ -118,7 +118,9 @@ internal fun TodoRowView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.width(2.dp).height(28.dp))
-            TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}", round = !row.subtask) { onCheck(row.task_id) }
+            TodoCheckBox(row.check, row.check_label, tag = "$idPrefix-check-${row.task_id}", round = !row.subtask) {
+                if (row.read_only) row.route?.let(onOpen) else onCheck(row.task_id)
+            }
             Column(
                 Modifier
                     .weight(1f)
@@ -235,6 +237,8 @@ internal class TodoRowMenu(
 ) {
     fun actions(row: TodoRow, onOpen: (Route) -> Unit, file: (() -> Unit)? = null, fileVerb: String = ""): List<KitRowAction> = buildList {
         add(KitRowAction("details", chrome.details_verb.ifEmpty { KitWords.DETAILS }) { row.route?.let(onOpen) })
+        // CALENDAR'S REMINDER on a day is read-only: it opens in Reminders and nothing else.
+        if (row.read_only) return@buildList
         onFlag?.let { flag ->
             val verb = if (row.flagged) chrome.unflag_verb.ifEmpty { KitWords.UNFLAG } else chrome.flag_verb.ifEmpty { KitWords.FLAG }
             add(KitRowAction("flag", verb, KitRowAction.Tone.Amber) { flag(row.task_id, !row.flagged) })
@@ -468,7 +472,7 @@ internal fun TodoQuickAddBar(
  */
 @Composable
 private fun QuickAddChipView(chip: QuickAddChip, onDismiss: () -> Unit, testTag: String) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("reminders")
     val shape = RoundedCornerShape(BandPolicy.BAND_RADIUS.dp)
     Column(
         Modifier.fillMaxWidth().padding(top = 8.dp),

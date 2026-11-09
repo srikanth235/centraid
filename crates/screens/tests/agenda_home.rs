@@ -146,7 +146,7 @@ impl Rig {
     fn now_local(&self) -> String {
         let today = self.today();
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.read(load::agenda::Upcoming {
+            self.read(load::calendar::Upcoming {
                 from: Some(format!("{today}T00:00:00Z")),
                 to: Some(format!("{}T00:00:00Z", self.day(1))),
             })
@@ -211,7 +211,7 @@ impl Rig {
 
     fn event(&mut self, id: &str, title: &str, starts: &str, ends: Option<&str>) {
         let zone = self.zone.clone();
-        self.write(act::agenda::Propose {
+        self.write(act::calendar::Propose {
             id: Some(id.to_owned()),
             title: title.to_owned(),
             starts: starts.to_owned(),
@@ -223,12 +223,12 @@ impl Rig {
     }
 
     fn all_day(&mut self, id: &str, title: &str, first: &str, last: &str) {
-        self.write(act::agenda::Propose {
+        self.write(act::calendar::Propose {
             id: Some(id.to_owned()),
             title: title.to_owned(),
             starts: first.to_owned(),
             ends: Field::Is(last.to_owned()),
-            timing: Some(act::agenda::ProposeTiming::AllDay),
+            timing: Some(act::calendar::ProposeTiming::AllDay),
             busy: Some(false),
             ..Default::default()
         });
@@ -236,7 +236,7 @@ impl Rig {
 
     fn task(&mut self, id: &str, title: &str, due: Option<&str>) {
         let zone = self.zone.clone();
-        self.write(act::agenda::AddTask {
+        self.write(act::reminders::AddTask {
             id: Some(id.to_owned()),
             title: title.to_owned(),
             due: due.map_or(Field::Keep, |due| Field::Is(due.to_owned())),
@@ -248,7 +248,7 @@ impl Rig {
     /// The owner's party id, and another person's.
     fn people(&self) -> (String, String) {
         let wire::app_query_response::Answer::AgendaParties(parties) =
-            self.read(load::agenda::Parties {})
+            self.read(load::calendar::Parties {})
         else {
             panic!("parties");
         };
@@ -269,7 +269,7 @@ impl Rig {
         self.clear();
         let today = self.today();
         let wire::app_query_response::Answer::AgendaDayContext(context) =
-            self.read(load::agenda::DayContext {
+            self.read(load::calendar::DayContext {
                 from: Some(today.clone()),
                 to: Some(today),
             })
@@ -291,7 +291,7 @@ impl Rig {
             civil::plus_days(&self.today(), 800).expect("day")
         );
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.read(load::agenda::Upcoming {
+            self.read(load::calendar::Upcoming {
                 from: Some("2000-01-01T00:00:00Z".to_owned()),
                 to: Some(far),
             })
@@ -301,17 +301,17 @@ impl Rig {
         let mut seen = std::collections::BTreeSet::new();
         for event in upcoming.events {
             if seen.insert(event.event_id.clone()) {
-                self.write(act::agenda::TrashEvent {
+                self.write(act::calendar::TrashEvent {
                     event_id: event.event_id,
                 });
             }
         }
         for view in [
-            load::agenda::BoardView::All,
-            load::agenda::BoardView::Logbook,
+            load::reminders::BoardView::All,
+            load::reminders::BoardView::Logbook,
         ] {
             let wire::app_query_response::Answer::AgendaTaskBoard(board) =
-                self.read(load::agenda::Board {
+                self.read(load::reminders::Board {
                     limit: 500,
                     view: Some(view),
                     project_id: None,
@@ -320,7 +320,7 @@ impl Rig {
                 panic!("board");
             };
             for task in board.groups.iter().flat_map(|group| &group.tasks) {
-                let done = self.act(act::agenda::DeleteTask {
+                let done = self.act(act::reminders::DeleteTask {
                     task_id: task.task_id.clone(),
                 });
                 assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");
@@ -410,7 +410,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.key.as_str())
             .collect::<Vec<_>>(),
-        ["calendar", "reminders", "invites", "more"]
+        ["calendar", "more", "invites"]
     );
     assert_eq!(
         state
@@ -418,7 +418,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.icon_key.as_str())
             .collect::<Vec<_>>(),
-        ["Calendar", "Todo", "Inbox", "MoreHoriz"]
+        ["Calendar", "List", "Inbox"]
     );
     assert_eq!(
         state
@@ -881,7 +881,7 @@ fn every_occurrence_of_a_series_says_repeats_and_the_label_speaks_the_rest() {
     let mut r = rig(Dest::Schedule);
     let (me, other) = r.people();
     let day = r.day(3);
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-series".to_owned()),
         title: "Zq Survey".to_owned(),
         starts: format!("{day}T08:15"),
@@ -932,7 +932,7 @@ fn waiting_is_your_unanswered_invitations_and_a_birthday_does_not_make_a_day() {
 
     let (me, other) = r.people();
     let day = r.day(2);
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-ask".to_owned()),
         title: "Zq Offsite".to_owned(),
         starts: format!("{day}T09:00"),
@@ -1057,39 +1057,25 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
     let cal_key = format!("calendar-{}", r.data().calendars[0].calendar_id);
     assert_eq!(
         rows.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
-        [
-            cal_key.as_str(),
-            "new-calendar",
-            "anytime",
-            "logbook",
-            "reminders",
-            "trash",
-            "reads"
-        ]
+        [cal_key.as_str(), "new-calendar", "reads"]
     );
     assert_eq!(
         rows[2..]
             .iter()
             .map(|row| row.label.as_str())
             .collect::<Vec<_>>(),
-        [
-            "Anytime",
-            "Logbook",
-            "Reminders",
-            "Trash",
-            "What Agenda may read"
-        ]
+        ["What Calendar may read"]
     );
     // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
     assert_eq!(
         rows.iter()
             .map(|row| row.section.as_str())
             .collect::<Vec<_>>(),
-        ["Calendars", "", "Tasks", "", "", "", ""]
+        ["Calendars", "", ""]
     );
     assert_eq!(
         rows.iter().map(|row| row.toggle).collect::<Vec<_>>(),
-        [true, false, false, false, false, false, false]
+        [true, false, false]
     );
     assert!(
         rows[0].on
@@ -1100,28 +1086,7 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
         rows.iter()
             .all(|row| row.label != "Search" && row.key != "search")
     );
-    assert_eq!(
-        rows[2..6]
-            .iter()
-            .map(|row| row.icon_key.as_str())
-            .collect::<Vec<_>>(),
-        ["Layers", "Book", "Bell", "Trash"]
-    );
-    // WHERE A TASKS PLACE GOES is the row's own route.
-    assert_eq!(
-        rows[2].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Anytime))
-    );
-    assert_eq!(
-        rows[3].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Logbook))
-    );
-    assert_eq!(
-        rows[4].route,
-        Some(agenda::routes::todo_list(wire::TodoView::Reminders))
-    );
-    assert_eq!(rows[5].route, Some(agenda::routes::trash()));
-    assert!(rows[0].route.is_none() && rows[1].route.is_none() && rows[6].route.is_none());
+    assert!(rows[0].route.is_none() && rows[1].route.is_none() && rows[2].route.is_none());
 
     // A CALENDAR ROW TOGGLES; the sheet stays up.
     r.more_row(&cal_key);
@@ -1149,10 +1114,6 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
             .collect::<Vec<_>>(),
         ["Reads", "Writes", "Leaves this phone"]
     );
-    // A TASKS PLACE closes the sheet; the shell pushes its route.
-    r.band("more");
-    r.more_row("logbook");
-    assert_eq!(r.state().sheet, Sheet::None as i32);
     // The sheet closes by its own event too.
     r.band("more");
     r.send(H::SheetClosed(wire::agenda_home_event::SheetClosed {}));
@@ -1171,7 +1132,28 @@ fn to_do_has_no_calendar_rows_in_more() {
             .collect::<Vec<_>>(),
         ["anytime", "logbook", "reminders", "trash", "reads"]
     );
-    assert_eq!(r.state().more_rows[0].section, "Tasks");
+    assert_eq!(r.state().more_rows[0].section, "");
+    // WHERE A PLACE GOES is the row's own route, and a place closes the sheet.
+    let rows = r.state().more_rows.clone();
+    assert_eq!(
+        rows[0].route,
+        Some(agenda::routes::todo_list(wire::TodoView::Anytime))
+    );
+    assert_eq!(
+        rows[1].route,
+        Some(agenda::routes::todo_list(wire::TodoView::Logbook))
+    );
+    assert_eq!(
+        rows[2].route,
+        Some(agenda::routes::todo_list(wire::TodoView::Reminders))
+    );
+    assert_eq!(rows[3].route, Some(agenda::routes::trash()));
+    assert_eq!(
+        rows[4].label, "What Reminders may read",
+        "the sheet says what Reminders may read"
+    );
+    r.more_row("logbook");
+    assert_eq!(r.state().sheet, Sheet::None as i32);
     assert!(
         r.state()
             .more_rows
@@ -1223,11 +1205,11 @@ fn search_opening_reads_nothing_a_term_finds_over_the_rows_and_closing_clears_it
         !r.state().toolbar.as_ref().unwrap().shown,
         "search results are not a window"
     );
-    // ASK is the row at the foot of an answer, scoped to Agenda.
+    // ASK is the row at the foot of an answer, scoped to the app searched from.
     let ask = r.state().search_ask_row.clone().unwrap();
     assert_eq!(ask.label, "Ask about “zq dentist”");
     assert_eq!(ask.question, "Find zq dentist");
-    assert_eq!(ask.scope, "agenda");
+    assert_eq!(ask.scope, "calendar");
 
     r.close_search();
     assert!(!r.state().search_open);
@@ -1253,7 +1235,7 @@ fn search_with_nothing_found_says_so_and_still_offers_ask() {
             ask.question.as_str(),
             ask.scope.as_str()
         ),
-        ("Ask about “zzqxj”", "Find zzqxj", "agenda")
+        ("Ask about “zzqxj”", "Find zzqxj", "calendar")
     );
     // A NEW TERM clears the ask until its own answer lands, here at once.
     r.term("zzq");
@@ -1293,7 +1275,7 @@ fn search_from_waiting_covers_every_event_not_only_the_ones_waiting_on_you() {
     let mut r = rig(Dest::Waiting);
     let (me, other) = r.people();
     let day = r.day(2);
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-w".to_owned()),
         title: "Zq Offsite".to_owned(),
         starts: format!("{day}T09:00"),
@@ -1323,7 +1305,7 @@ fn search_from_waiting_covers_every_event_not_only_the_ones_waiting_on_you() {
 }
 
 #[test]
-fn search_finds_tasks_as_well_as_events_a_group_above_the_days() {
+fn each_app_searches_its_own_kind_calendar_events_and_reminders_tasks() {
     let mut r = rig(Dest::Schedule);
     let day = r.day(5);
     r.task("zq-t", "Zq Book podiatrist", Some(&day));
@@ -1332,15 +1314,24 @@ fn search_finds_tasks_as_well_as_events_a_group_above_the_days() {
     r.open_search();
     r.term("zq podiatrist");
     let data = r.data();
+    // CALENDAR FINDS EVENTS ONLY (round 10).
+    assert!(data.task_hits.is_empty());
+    assert_eq!(
+        mine(data, &["Zq Podiatrist visit"]),
+        [format!("{day}: Zq Podiatrist visit")]
+    );
+    // REMINDERS FINDS TASKS ONLY: a group of tasks, no event and no day.
+    let mut t = rig(Dest::Todo);
+    t.open_search();
+    t.term("zq podiatrist");
+    let data = t.data();
     let group = data.task_hits.first().expect("the tasks group");
     assert_eq!(group.title, "Tasks");
     assert_eq!(group.meta, "1");
     assert_eq!(group.rows[0].title, "Zq Book podiatrist");
     assert_eq!(group.rows[0].route, Some(agenda::routes::task("zq-t")));
-    assert_eq!(
-        mine(data, &["Zq Podiatrist visit"]),
-        [format!("{day}: Zq Podiatrist visit")]
-    );
+    assert!(data.days.is_empty());
+    let mut r = t;
     // TASKS ALONE ARE AN ANSWER: no "nothing matches" over them.
     r.term("zq book podiatrist");
     assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
@@ -1364,7 +1355,7 @@ fn search_finds_tasks_as_well_as_events_a_group_above_the_days() {
 
 #[test]
 fn a_tasks_search_that_corrected_its_words_names_them() {
-    let mut r = rig(Dest::Day);
+    let mut r = rig(Dest::Todo);
     r.task("zq-p", "Zq Book dentist", None);
     r.settle();
     r.open_search();
@@ -1382,9 +1373,9 @@ fn a_tasks_search_that_corrected_its_words_names_them() {
 
 #[test]
 fn search_finds_a_project_by_name_and_a_tap_opens_its_page() {
-    let mut r = rig(Dest::Schedule);
-    r.write(act::agenda::CreateProject {
-        kind: act::agenda::CreateProjectKind::Project,
+    let mut r = rig(Dest::Todo);
+    r.write(act::reminders::CreateProject {
+        kind: act::reminders::CreateProjectKind::Project,
         title: "Zqgarden".to_owned(),
         id: Some("zq-garden".to_owned()),
         ..Default::default()
@@ -1410,7 +1401,7 @@ fn search_finds_a_project_by_name_and_a_tap_opens_its_page() {
 
     // ONLY A PROJECT MATCHED: no "nothing matches" sentence, and Ask still at the foot.
     r.task("zq-other", "Zq Unrelated", None);
-    r.act(act::agenda::DeleteTask {
+    r.act(act::reminders::DeleteTask {
         task_id: "zq-w".to_owned(),
     });
     r.settle();
@@ -1427,8 +1418,8 @@ fn search_finds_a_project_by_name_and_a_tap_opens_its_page() {
 #[test]
 fn to_dos_search_draws_the_containers_too() {
     let mut r = rig(Dest::Todo);
-    r.write(act::agenda::CreateProject {
-        kind: act::agenda::CreateProjectKind::Project,
+    r.write(act::reminders::CreateProject {
+        kind: act::reminders::CreateProjectKind::Project,
         title: "Zqorchard".to_owned(),
         id: Some("zq-orchard".to_owned()),
         ..Default::default()
@@ -1525,7 +1516,7 @@ fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_ret
     assert_eq!(failure.remedy, "Try again");
     assert_eq!(r.state().chrome.as_ref().unwrap().retry, "Try again");
     // The band stands and the data is not an empty list.
-    assert_eq!(r.state().band.len(), 4);
+    assert_eq!(r.state().band.len(), 3);
     r.in_zone("Europe/London");
     assert!(matches!(r.state().content, Some(Content::Data(_))));
     r.in_zone("Not/AZone");
@@ -1643,82 +1634,6 @@ fn schedule_gives_a_day_of_only_tasks_its_own_section_and_waiting_draws_none() {
 }
 
 #[test]
-fn an_empty_day_counts_its_tasks_a_day_with_only_a_task_is_not_nothing() {
-    let mut r = rig(Dest::Day);
-    r.clear_day();
-    assert_eq!(r.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
-    r.task("zq-only", "Zq Buy milk", Some(&r.today()));
-    r.settle();
-    assert_eq!(r.data().empty, wire::AgendaEmpty::None as i32);
-    assert_eq!(
-        tasks_of(section(r.data(), &r.today()).unwrap())[0].title,
-        "Zq Buy milk"
-    );
-    // A box checks it off in place: gone at once, and the sentence is right again.
-    r.check("zq-only");
-    assert_eq!(r.data().empty, wire::AgendaEmpty::NothingOnDay as i32);
-}
-
-#[test]
-fn day_on_today_draws_the_overdue_group_with_its_verb_and_the_notice_an_absence_names() {
-    let mut r = rig(Dest::Day);
-    r.clear();
-    r.task("zq-old", "Zq Pay rent", Some(&r.day(-16)));
-    r.task("zq-b", "Zq Call Ana", Some(&format!("{}T09:00", r.today())));
-    r.settle();
-    let data = r.data();
-    let overdue = data.overdue.as_ref().expect("the Overdue group");
-    assert_eq!(overdue.title, "Overdue");
-    assert_eq!(overdue.verb_label, "Catch up");
-    assert_eq!(overdue.verb_key, "catch_up");
-    assert_eq!(overdue.meta, "1");
-    assert_eq!(overdue.rows[0].due_label, "16 days ago");
-    assert!(overdue.rows[0].overdue);
-    let notice = data.notice.as_ref().expect("the absence notice");
-    assert_eq!(notice.sentence, "You were away 16 days; 1 task came due");
-    assert_eq!(notice.verb_label, "Catch up");
-    assert_eq!(notice.verb_key, "catch_up");
-    // BOTH VERBS OPEN CATCH UP.
-    assert_eq!(data.catch_up, Some(agenda::routes::catch_up()));
-    // The overdue work is above the day and not in it: today's section holds today's task alone.
-    let ids: Vec<&str> = tasks_of(section(data, &r.today()).unwrap())
-        .iter()
-        .map(|t| t.task_id.as_str())
-        .collect();
-    assert_eq!(ids, ["zq-b"]);
-    // More than one: the plural.
-    r.task("zq-old2", "Zq Water bill", Some(&r.day(-9)));
-    r.settle();
-    assert_eq!(
-        r.data().notice.as_ref().unwrap().sentence,
-        "You were away 16 days; 2 tasks came due"
-    );
-
-    // ANOTHER ANCHOR: none of it.
-    r.step(1);
-    assert!(r.data().overdue.is_none() && r.data().notice.is_none());
-    // SCHEDULE draws neither: the Overdue head is Day's.
-    r.destination(Dest::Schedule);
-    r.step(-1);
-    assert!(r.data().overdue.is_none() && r.data().notice.is_none());
-}
-
-#[test]
-fn day_says_nothing_is_on_it_only_when_nothing_is_overdue_alone_is_something() {
-    let mut r = rig(Dest::Day);
-    r.clear_day();
-    r.task("zq-owed", "Zq Pay rent", Some(&r.day(-2)));
-    r.settle();
-    let data = r.data();
-    assert!(data.days.is_empty());
-    assert!(data.overdue.is_some());
-    assert_eq!(data.empty, wire::AgendaEmpty::None as i32);
-    assert_eq!(data.empty_title, "");
-    // NO ABSENCE under a week: no notice.
-    assert!(data.notice.is_none());
-}
-
-#[test]
 fn a_past_day_draws_the_open_tasks_that_came_due_on_it_as_rows_of_it() {
     let mut r = rig(Dest::Day);
     r.task("zq-past", "Zq Pay rent", Some(&r.day(-1)));
@@ -1734,73 +1649,45 @@ fn a_past_day_draws_the_open_tasks_that_came_due_on_it_as_rows_of_it() {
     assert!(section(data, &r.state().anchor_day).unwrap().is_past);
 }
 
-#[test]
-fn a_box_checks_a_task_off_in_place_and_undo_is_the_inverse() {
-    let mut r = rig(Dest::Day);
-    r.task("zq-a", "Zq Call Ana", Some(&r.today()));
-    r.settle();
-    let revision = r.driver.view(r.id).revision;
-    r.check("zq-a");
-    assert!(r.driver.view(r.id).revision > revision);
-    // IN PLACE: gone at once.
-    assert!(mine(r.data(), &["Zq Call Ana"]).is_empty());
-    let status = r.status().unwrap();
-    assert_eq!(status.sentence, "Task done");
-    assert_eq!(status.action_label, "Undo");
-    assert!(!status.refused);
-    // Undo reopens it, and the status line goes.
-    r.send(H::StatusActed(wire::agenda_home_event::StatusActed {}));
-    assert_eq!(
-        mine(r.data(), &["Zq Call Ana"]),
-        [format!("{}: Zq Call Ana", r.today())]
-    );
-    assert!(r.status().is_none());
-    // Checking it again is not a replay of the first.
-    r.check("zq-a");
-    assert!(mine(r.data(), &["Zq Call Ana"]).is_empty());
-    assert_eq!(r.status().unwrap().sentence, "Task done");
-    // A task that is not on screen is not checked.
-    let revision = r.driver.view(r.id).revision;
-    r.check("zq-gone");
-    assert_eq!(r.driver.view(r.id).revision, revision);
-}
-
-#[test]
-fn an_overdue_row_is_checked_off_in_place_too() {
-    let mut r = rig(Dest::Day);
-    r.clear();
-    r.task("zq-o", "Zq Pay rent", Some(&r.day(-2)));
-    r.settle();
-    assert!(r.data().overdue.is_some());
-    r.check("zq-o");
-    assert!(r.data().overdue.is_none());
-}
-
 // ---------------------------------------------------------------------------
 // To-do
 // ---------------------------------------------------------------------------
 
-fn inbox_titles(r: &Rig) -> Vec<String> {
-    r.todo()
-        .groups
+/// The Inbox's task rows, by opening the Inbox list as a member does from My Lists (the home
+/// draws no task, round 10).
+fn inbox_rows(r: &mut Rig) -> Vec<wire::TodoRow> {
+    let page = r.driver.push(
+        agenda::TAB,
+        agenda::routes::todo_list(wire::TodoView::Inbox),
+    );
+    let Some(wire::view_state::Kind::TodoList(state)) = &r.driver.view(page).kind else {
+        panic!("not a list");
+    };
+    let Some(wire::todo_list_state::Content::Data(data)) = &state.content else {
+        panic!("the Inbox has no data");
+    };
+    data.groups
         .iter()
-        .filter(|group| group.title == "Inbox")
-        .flat_map(|group| group.rows.iter().map(|row| row.title.clone()))
+        .flat_map(|group| group.rows.iter().cloned())
         .collect()
+}
+
+fn inbox_titles(r: &mut Rig) -> Vec<String> {
+    inbox_rows(r).into_iter().map(|row| row.title).collect()
 }
 
 #[test]
 fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_those_in_none() {
     let mut r = rig(Dest::Todo);
     r.clear();
-    r.write(act::agenda::CreateProject {
-        kind: act::agenda::CreateProjectKind::Area,
+    r.write(act::reminders::CreateProject {
+        kind: act::reminders::CreateProjectKind::Area,
         title: "Work".to_owned(),
         id: Some("zq-area-work".to_owned()),
         ..Default::default()
     });
-    r.write(act::agenda::CreateProject {
-        kind: act::agenda::CreateProjectKind::Area,
+    r.write(act::reminders::CreateProject {
+        kind: act::reminders::CreateProjectKind::Area,
         title: "Home".to_owned(),
         id: Some("zq-area-home".to_owned()),
         ..Default::default()
@@ -1810,8 +1697,8 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
         ("zq-taxes", "Taxes", None),
         ("zq-launch", "Launch", Some("zq-area-work")),
     ] {
-        r.write(act::agenda::CreateProject {
-            kind: act::agenda::CreateProjectKind::Project,
+        r.write(act::reminders::CreateProject {
+            kind: act::reminders::CreateProjectKind::Project,
             title: title.to_owned(),
             id: Some(id.to_owned()),
             parent: area.map_or(Field::Keep, |area| Field::Is(area.to_owned())),
@@ -1820,14 +1707,15 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
     }
     r.task("zq-idea", "Idea", None);
     r.task("zq-seeds", "Seeds", None);
-    r.write(act::agenda::OrganizeTask {
+    r.write(act::reminders::OrganizeTask {
         task_id: "zq-seeds".to_owned(),
         project_id: Field::Is("zq-garden".to_owned()),
         ..Default::default()
     });
     r.settle();
+    let inbox = inbox_titles(&mut r);
     let todo = r.todo();
-    assert_eq!(inbox_titles(&r), ["Idea"]);
+    assert_eq!(inbox, ["Idea"]);
     let groups: Vec<(&str, Vec<&str>)> = todo
         .projects
         .iter()
@@ -1843,14 +1731,16 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
         })
         .collect();
     // The scenario's own project sits in no area, among "Projects", with ours.
+    // MY LISTS (round 10): the Inbox is the first list, then the areas, then the rest.
+    assert_eq!(groups[0], ("", vec!["Inbox"]));
     assert_eq!(
-        &groups[..2],
+        &groups[1..3],
         [("Home", vec!["Garden"]), ("Work", vec!["Launch"])]
     );
-    assert_eq!(groups[2].0, "Projects");
-    assert!(groups[2].1.contains(&"Taxes"));
-    assert_eq!(groups.len(), 3);
-    let garden = &todo.projects[0].rows[0];
+    assert_eq!(groups[3].0, "Projects");
+    assert!(groups[3].1.contains(&"Taxes"));
+    assert_eq!(groups.len(), 4);
+    let garden = &todo.projects[1].rows[0];
     let row = garden.row.as_ref().unwrap();
     assert_eq!(row.id, "zq-garden");
     assert_eq!(row.meta, "1 task");
@@ -1860,8 +1750,9 @@ fn the_inbox_then_the_projects_by_area_named_areas_a_to_z_then_projects_for_thos
         garden.route,
         Some(agenda::routes::project("zq-garden", "Garden"))
     );
-    let projects: usize = todo.projects.iter().map(|group| group.rows.len()).sum();
-    assert_eq!(todo.count_label, format!("1 task · {projects} projects"));
+    // NO SUMMARY LINE and no inline task on the Reminders home (round 10).
+    assert_eq!(todo.count_label, "");
+    assert!(todo.groups.is_empty());
     assert_eq!(todo.new_project_label, "New project");
     assert_eq!(todo.empty.as_ref().unwrap().headline, "");
     assert!(!r.state().toolbar.as_ref().unwrap().shown);
@@ -1886,7 +1777,64 @@ fn the_empty_to_do_action_is_the_new_project_sheet_and_a_to_do_that_holds_anythi
     r.task("zq-done", "Zq Done", None);
     r.settle();
     r.check("zq-done");
-    assert!(inbox_titles(&r).is_empty());
+    assert!(inbox_titles(&mut r).is_empty());
+}
+
+#[test]
+fn a_reminder_on_its_day_is_a_read_only_row_that_opens_in_reminders_and_calendar_checks_nothing() {
+    let mut r = rig(Dest::Schedule);
+    let day = r.day(1);
+    r.task("zq-ro", "Zq Read only", Some(&day));
+    r.settle();
+    let find = |r: &Rig| -> wire::TodoRow {
+        r.data()
+            .days
+            .iter()
+            .flat_map(tasks_of)
+            .find(|row| row.title == "Zq Read only")
+            .cloned()
+            .expect("the reminder is a row of its day")
+    };
+    let row = find(&r);
+    assert!(row.read_only, "a reminder in Calendar is read-only");
+    // A tap opens it in Reminders.
+    assert_eq!(row.route, Some(agenda::routes::task("zq-ro")));
+    assert_eq!(row.route.as_ref().unwrap().screen, "reminders.task");
+    // CALENDAR WRITES NO TASK: a check, a flag and a delete do nothing and say nothing.
+    r.check("zq-ro");
+    r.send(H::TaskFlagged(wire::agenda_home_event::TaskFlagged {
+        task_id: "zq-ro".to_owned(),
+        flagged: true,
+    }));
+    r.send(H::TaskDeleted(wire::agenda_home_event::TaskDeleted {
+        task_id: "zq-ro".to_owned(),
+    }));
+    r.settle();
+    assert!(r.status().is_none());
+    let row = find(&r);
+    assert_eq!(row.check, wire::TodoCheck::Open as i32);
+    assert!(!row.flagged);
+}
+
+#[test]
+fn each_home_allows_only_its_own_places() {
+    // CALENDAR never moves to Reminders\' place, and Reminders never to a calendar view.
+    let mut c = rig(Dest::Day);
+    c.destination(Dest::Todo);
+    assert_eq!(c.state().destination, Dest::Day as i32);
+    c.band("reminders");
+    assert_eq!(c.state().destination, Dest::Day as i32);
+    assert_eq!(c.state().chrome.as_ref().unwrap().title, "Calendar");
+    assert_eq!(c.state().app_key, "calendar");
+    let mut t = rig(Dest::Todo);
+    t.destination(Dest::Month);
+    assert_eq!(t.state().destination, Dest::Todo as i32);
+    t.band("invites");
+    assert_eq!(t.state().destination, Dest::Todo as i32);
+    assert_eq!(t.state().chrome.as_ref().unwrap().title, "Reminders");
+    assert_eq!(t.state().app_key, "reminders");
+    // A route that names the other app\'s place lands on the app\'s own.
+    assert_eq!(rig(Dest::Month).state().destination, Dest::Month as i32);
 }
 
 #[test]
@@ -1911,6 +1859,16 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
         (tab.label.as_str(), tab.icon_key.as_str()),
         ("Reminders", "Todo")
     );
+    assert_eq!(
+        state
+            .band
+            .iter()
+            .map(|t| t.key.as_str())
+            .collect::<Vec<_>>(),
+        ["reminders", "more"],
+        "Reminders has the fewest places that work"
+    );
+    assert!(state.new_event.is_none(), "Reminders adds no event");
     assert_eq!(state.add_label, "Add task");
     assert!(state.add_opens_quick_add);
     let quick = r.quick();
@@ -1921,11 +1879,12 @@ fn the_band_names_to_do_and_the_plus_adds_a_task_there() {
     assert_eq!(tasks.quick_add_placeholder, "Task name");
     assert_eq!(tasks.file_verb, "Move to project");
     assert_eq!(tasks.show_more, "Show more");
-    // OTHER PLACES: the Plus is the add sheet.
-    r.destination(Dest::Day);
-    assert_eq!(r.state().add_label, "Add");
-    assert!(!r.state().add_opens_quick_add);
-    assert!(!r.quick().shown);
+    // CALENDAR\'S PLUS adds an event: the add sheet, no quick add (round 10).
+    let c = rig(Dest::Day);
+    assert_eq!(c.state().add_label, "New event");
+    assert!(!c.state().add_opens_quick_add);
+    assert!(!c.quick().shown);
+    assert!(c.state().new_event.is_some());
 }
 
 #[test]
@@ -1955,20 +1914,16 @@ fn the_plus_opens_the_quick_add_and_the_keyboard_leaving_an_empty_bar_puts_it_aw
     assert!(r.quick().drawn);
     assert_eq!(r.quick().title, "Buy milk");
     assert!(r.quick().can_submit);
-    // ANOTHER PLACE, OR SEARCH, puts it away.
+    // SEARCH puts it away.
     r.open_search();
     assert!(!r.quick().drawn && !r.quick().shown);
     r.close_search();
-    r.send(H::QuickAddOpened(
+    // The Plus is Reminders\' alone: Calendar ignores it.
+    let mut c = rig(Dest::Day);
+    c.send(H::QuickAddOpened(
         wire::agenda_home_event::QuickAddOpened {},
     ));
-    r.destination(Dest::Schedule);
-    assert!(!r.quick().drawn);
-    // The Plus is To-do's alone.
-    r.send(H::QuickAddOpened(
-        wire::agenda_home_event::QuickAddOpened {},
-    ));
-    assert!(!r.quick().drawn);
+    assert!(!c.quick().drawn);
 }
 
 #[test]
@@ -1987,36 +1942,28 @@ fn quick_add_files_a_bare_title_in_the_inbox_and_the_bar_stays_open_for_the_next
         wire::agenda_home_event::QuickAddSubmitted {},
     ));
     // DRAWN AT ONCE, in the Inbox, with the vault's own row.
-    assert!(inbox_titles(&r).contains(&"Zq Buy milk".to_owned()));
+    assert!(inbox_titles(&mut r).contains(&"Zq Buy milk".to_owned()));
     assert_eq!(r.status().unwrap().sentence, "Added to Inbox");
     assert_eq!(r.quick().title, "");
     assert!(r.quick().drawn);
     // TO-DO DATES NOTHING: the Inbox is for work with no day.
-    let row = r
-        .todo()
-        .groups
+    let row = inbox_rows(&mut r)
         .iter()
-        .flat_map(|g| &g.rows)
         .find(|row| row.title == "Zq Buy milk")
         .unwrap()
         .clone();
     assert_eq!(row.due_label, "");
     // A SECOND SUBMIT with nothing typed files no second task (#1089).
-    let count = r
-        .todo()
-        .groups
+    let count = inbox_rows(&mut r)
         .iter()
-        .flat_map(|g| &g.rows)
         .filter(|row| row.title == "Zq Buy milk")
         .count();
     r.send(H::QuickAddSubmitted(
         wire::agenda_home_event::QuickAddSubmitted {},
     ));
     assert_eq!(
-        r.todo()
-            .groups
+        inbox_rows(&mut r)
             .iter()
-            .flat_map(|g| &g.rows)
             .filter(|row| row.title == "Zq Buy milk")
             .count(),
         count
@@ -2031,18 +1978,16 @@ fn quick_add_files_a_bare_title_in_the_inbox_and_the_bar_stays_open_for_the_next
         wire::agenda_home_event::QuickAddSubmitted {},
     ));
     assert_eq!(
-        r.todo()
-            .groups
+        inbox_rows(&mut r)
             .iter()
-            .flat_map(|g| &g.rows)
             .filter(|row| row.title == "Zq Buy milk")
             .count(),
         count
     );
     // The task is the vault's: it also shows on another surface's read.
-    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::agenda::Board {
+    let wire::app_query_response::Answer::AgendaTaskBoard(board) = r.read(load::reminders::Board {
         limit: 100,
-        view: Some(load::agenda::BoardView::Inbox),
+        view: Some(load::reminders::BoardView::Inbox),
         project_id: None,
     }) else {
         panic!("board");
@@ -2061,11 +2006,11 @@ fn seeded_words_wait_in_the_bar_and_nothing_is_written_until_added() {
     let mut r = rig_with(Dest::Unspecified, "Zq Send to Agenda");
     assert!(r.quick().drawn && r.quick().focused);
     assert_eq!(r.quick().title, "Zq Send to Agenda");
-    assert!(!inbox_titles(&r).contains(&"Zq Send to Agenda".to_owned()));
+    assert!(!inbox_titles(&mut r).contains(&"Zq Send to Agenda".to_owned()));
     r.send(H::QuickAddSubmitted(
         wire::agenda_home_event::QuickAddSubmitted {},
     ));
-    assert!(inbox_titles(&r).contains(&"Zq Send to Agenda".to_owned()));
+    assert!(inbox_titles(&mut r).contains(&"Zq Send to Agenda".to_owned()));
 }
 
 #[test]
@@ -2073,20 +2018,20 @@ fn check_off_says_task_done_with_undo_and_undo_brings_the_row_back() {
     let mut r = rig(Dest::Todo);
     r.task("zq-ana", "Zq Call Ana", None);
     r.settle();
-    assert!(inbox_titles(&r).contains(&"Zq Call Ana".to_owned()));
+    assert!(inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()));
     r.check("zq-ana");
-    assert!(!inbox_titles(&r).contains(&"Zq Call Ana".to_owned()));
+    assert!(!inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()));
     let status = r.status().unwrap();
     assert_eq!(
         (status.sentence.as_str(), status.action_label.as_str()),
         ("Task done", "Undo")
     );
     r.send(H::StatusActed(wire::agenda_home_event::StatusActed {}));
-    assert!(inbox_titles(&r).contains(&"Zq Call Ana".to_owned()));
+    assert!(inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()));
     assert!(r.status().is_none());
     r.check("zq-ana");
     assert!(
-        !inbox_titles(&r).contains(&"Zq Call Ana".to_owned()),
+        !inbox_titles(&mut r).contains(&"Zq Call Ana".to_owned()),
         "again is not a replay of the first"
     );
 }
@@ -2094,7 +2039,7 @@ fn check_off_says_task_done_with_undo_and_undo_brings_the_row_back() {
 #[test]
 fn a_repeating_task_offers_no_undo_and_names_where_its_next_one_landed() {
     let mut r = rig(Dest::Todo);
-    r.write(act::agenda::AddTask {
+    r.write(act::reminders::AddTask {
         id: Some("zq-r".to_owned()),
         title: "Zq Water plants".to_owned(),
         due: Field::Is(r.today()),
@@ -2102,11 +2047,8 @@ fn a_repeating_task_offers_no_undo_and_names_where_its_next_one_landed() {
         ..Default::default()
     });
     r.settle();
-    let row = r
-        .todo()
-        .groups
+    let row = inbox_rows(&mut r)
         .iter()
-        .flat_map(|g| &g.rows)
         .find(|row| row.title == "Zq Water plants")
         .unwrap()
         .clone();
@@ -2127,13 +2069,13 @@ fn a_repeating_task_offers_no_undo_and_names_where_its_next_one_landed() {
 #[test]
 fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbox_at_once() {
     let mut r = rig(Dest::Todo);
-    r.write(act::agenda::CreateProject {
-        kind: act::agenda::CreateProjectKind::Project,
+    r.write(act::reminders::CreateProject {
+        kind: act::reminders::CreateProjectKind::Project,
         title: "Zq Garden".to_owned(),
         id: Some("zq-gp".to_owned()),
         ..Default::default()
     });
-    r.write(act::agenda::CreateSection {
+    r.write(act::reminders::CreateSection {
         title: "Zq Beds".to_owned(),
         parent: "zq-gp".to_owned(),
         id: Some("zq-gs".to_owned()),
@@ -2142,11 +2084,8 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
     r.task("zq-seeds", "Zq Seeds", None);
     r.task("zq-bulbs", "Zq Bulbs", None);
     r.settle();
-    let row = r
-        .todo()
-        .groups
+    let row = inbox_rows(&mut r)
         .iter()
-        .flat_map(|g| &g.rows)
         .find(|row| row.title == "Zq Seeds")
         .unwrap()
         .clone();
@@ -2181,7 +2120,7 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
     assert_eq!(r.state().sheet, Sheet::None as i32);
     assert!(r.state().file_choices.is_empty());
     assert!(
-        !inbox_titles(&r).contains(&"Zq Seeds".to_owned()),
+        !inbox_titles(&mut r).contains(&"Zq Seeds".to_owned()),
         "filed, it leaves the Inbox at once"
     );
     assert_eq!(r.status().unwrap().sentence, "Filed in Zq Garden");
@@ -2193,9 +2132,9 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
         key: "section:zq-gs".to_owned(),
     }));
     assert_eq!(r.status().unwrap().sentence, "Filed in Zq Garden · Zq Beds");
-    assert!(!inbox_titles(&r).contains(&"Zq Bulbs".to_owned()));
+    assert!(!inbox_titles(&mut r).contains(&"Zq Bulbs".to_owned()));
     // The vault holds what the sheet said.
-    let wire::app_query_response::Answer::AgendaTask(detail) = r.read(load::agenda::Task {
+    let wire::app_query_response::Answer::AgendaTask(detail) = r.read(load::reminders::Task {
         task_id: "zq-bulbs".to_owned(),
     }) else {
         panic!("task");
@@ -2215,7 +2154,7 @@ fn filing_is_a_sheet_of_inbox_projects_and_sections_and_the_task_leaves_the_inbo
         key: "project:gone".to_owned(),
     }));
     assert_eq!(r.state().sheet, Sheet::None as i32);
-    assert!(inbox_titles(&r).contains(&"Zq Tools".to_owned()));
+    assert!(inbox_titles(&mut r).contains(&"Zq Tools".to_owned()));
     // A task that is not on screen opens no sheet; a sheet closed by hand drops the task.
     r.send(H::FileRequested(wire::agenda_home_event::FileRequested {
         task_id: "nope".to_owned(),
@@ -2293,31 +2232,22 @@ fn the_window_says_when_it_is_not_everything_and_show_more_widens_it_to_the_ceil
     let todo = r.todo();
     assert_eq!(todo.window_label, "", "the whole Inbox fits now");
     assert!(!todo.can_show_more);
-    assert!(
-        todo.count_label.starts_with("101 tasks"),
-        "{}",
-        todo.count_label
-    );
 }
 
 #[test]
-fn to_do_reads_again_after_a_change() {
+fn reminders_reads_again_after_a_change() {
     let mut r = rig(Dest::Todo);
+    let inbox_count = |r: &Rig| -> usize {
+        r.todo().projects[0].rows[0]
+            .count
+            .parse()
+            .expect("the Inbox row carries its open count")
+    };
+    let before = inbox_count(&r);
     r.task("zq-live", "Zq Live", None);
     r.driver.pump(Duration::from_millis(500));
-    assert!(inbox_titles(&r).contains(&"Zq Live".to_owned()));
-    r.destination(Dest::Day);
-    assert_eq!(r.state().destination, Dest::Day as i32);
-    r.task("zq-live-2", "Zq Live 2", Some(&r.today()));
-    r.driver.pump(Duration::from_millis(500));
-    r.band("reminders");
-    assert!(
-        r.todo()
-            .groups
-            .iter()
-            .flat_map(|g| &g.rows)
-            .any(|row| row.title == "Zq Live 2")
-    );
+    assert_eq!(inbox_count(&r), before + 1);
+    assert!(inbox_titles(&mut r).contains(&"Zq Live".to_owned()));
 }
 
 #[test]

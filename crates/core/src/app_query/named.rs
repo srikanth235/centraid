@@ -41,7 +41,8 @@ pub(super) fn app_of(kind: &str) -> &'static str {
     match kind {
         "person" => "people",
         "note" | "notebook" => "notes",
-        "event" | "calendar" | "task" | "project" | "section" | "area" => "agenda",
+        "event" | "calendar" => "calendar",
+        "task" | "project" | "section" | "area" => "reminders",
         "photo" | "album" => "photos",
         "document" | "folder" => "docs",
         "thread" => CHAT,

@@ -244,7 +244,7 @@ internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
                 DropdownMenuItem(
                     text = { Text(layout.label, style = kitTextStyle(KitType.Row), color = Surface.ink) },
                     trailingIcon = if (current) {
-                        { CentraidIcon("Check", tint = appAccent("agenda").text, size = CHIP_ICON) }
+                        { CentraidIcon("Check", tint = appAccent("calendar").text, size = CHIP_ICON) }
                     } else {
                         null
                     },
@@ -284,7 +284,7 @@ private fun AgendaAllDayLane(
 /** THE FLOATING TODAY KEY: a tonal button over the content's bottom-start, above the band. */
 @Composable
 internal fun AgendaTodayButton(label: String, modifier: Modifier = Modifier, onPress: () -> Unit) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("calendar")
     Box(
         modifier
             .heightIn(min = KitGeometry.ROW_MIN)
@@ -367,7 +367,7 @@ private fun AgendaWeekStripView(strip: AgendaWeekStrip, onEvent: (AgendaHomeEven
 
 @Composable
 private fun StripDay(day: AgendaStripDay, modifier: Modifier, onEvent: (AgendaHomeEvent) -> Unit) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("calendar")
     val quiet = day.is_weekend
     Column(
         modifier
@@ -425,7 +425,7 @@ private fun Dot(color: Color) {
 /** The Week's column heads ("Wed 4"), over the all-day strip, lined up with the hour columns. */
 @Composable
 private fun WeekHeadings(grid: AgendaTimeGrid) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("calendar")
     Row(Modifier.fillMaxWidth()) {
         Spacer(Modifier.width(GUTTER_WIDTH))
         grid.days.forEach { day ->
@@ -578,7 +578,7 @@ private fun HourGrid(
                     modifier = Modifier
                         .offset(x = 2.dp, y = now.minute.minuteDp() - 9.dp)
                         .zIndex(2f)
-                        .background(appAccent("agenda").fill, CircleShape)
+                        .background(appAccent("calendar").fill, CircleShape)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
@@ -639,7 +639,7 @@ private fun DayColumn(
 
 @Composable
 private fun NowLine(minute: Int, spoken: String) {
-    val accent = appAccent("agenda").fill
+    val accent = appAccent("calendar").fill
     Row(
         Modifier
             .fillMaxWidth()
@@ -936,7 +936,7 @@ internal fun AgendaMonthView(
 
 @Composable
 private fun MonthCell(cell: AgendaMonthCell, grid: Boolean, modifier: Modifier, onEvent: (AgendaHomeEvent) -> Unit) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("calendar")
     Column(
         modifier
             .heightIn(min = if (grid) HOUR_HEIGHT * 1.4f else KitGeometry.ROW_MIN)
@@ -1042,7 +1042,7 @@ internal fun AgendaYearView(year: AgendaYearGrid, onEvent: (AgendaHomeEvent) -> 
 
 @Composable
 private fun YearMonth(month: AgendaYearMonth, modifier: Modifier, onEvent: (AgendaHomeEvent) -> Unit) {
-    val accent = appAccent("agenda")
+    val accent = appAccent("calendar")
     Column(
         modifier
             .clickable { pickDay(onEvent, month.first_day, AgendaDestination.AGENDA_DESTINATION_MONTH) }

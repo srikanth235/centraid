@@ -186,7 +186,7 @@ fn homes_roster_is_the_catalogue() {
         .map(|app| app.id.clone())
         .collect();
     assert_eq!(ids, catalogue, "shell/policy.rs ORDER vs [[native.app]]");
-    assert!(!ids.contains("tasks"), "Tasks lives inside Agenda");
+    assert!(!ids.contains("tasks"), "Tasks lives inside Reminders");
 }
 
 #[test]

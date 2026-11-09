@@ -313,7 +313,7 @@ fn with_failures(
         .ok();
     let wall = at
         .zip(zone)
-        .and_then(|(at, zone)| centraid_apps_agenda::local::now_local(&zone, at));
+        .and_then(|(at, zone)| centraid_apps_kit::civil::now_local(&zone, at));
     if let Some((day, time)) = wall.as_deref().and_then(|wall| wall.split_once('T')) {
         answer.failed_unlock_local_day = day.to_owned();
         answer.failed_unlock_local_time = time.to_owned();

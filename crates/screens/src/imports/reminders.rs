@@ -143,11 +143,11 @@ fn rule_of(reminder: &wire::PhoneReminder, has_due: bool) -> (Option<String>, bo
 pub fn request(
     reminder: &wire::PhoneReminder,
     project: Option<&str>,
-) -> (act::agenda::AddTask, bool) {
+) -> (act::reminders::AddTask, bool) {
     let (due, zone) = due_of(reminder);
     let (rule, dropped) = rule_of(reminder, due.is_some());
     let done = reminder.completed.then(|| reminder.completed_at.clone());
-    let task = act::agenda::AddTask {
+    let task = act::reminders::AddTask {
         title: reminder.title.clone(),
         description: if reminder.notes.is_empty() {
             Field::Keep
@@ -170,7 +170,7 @@ pub fn request(
         },
         project_id: project.map_or(Field::Keep, |id| Field::Is(id.to_owned())),
         done_at: done.map_or(Field::Keep, Field::Is),
-        ..act::agenda::AddTask::default()
+        ..act::reminders::AddTask::default()
     };
     (task, dropped)
 }
@@ -179,7 +179,7 @@ pub fn request(
 fn lists_held(ctx: &Ctx) -> Option<HashMap<String, String>> {
     match read::read(
         ctx,
-        load::agenda::Projects::default(),
+        load::reminders::Projects::default(),
         |answer| match answer {
             Answer::AgendaTaskProjects(projects) => Some(projects),
             _ => None,
@@ -225,10 +225,10 @@ fn list_for(
     let key = kit_act::key(&["import-reminder-list", title], kit_act::fresh());
     let made = kit_act::act(
         ctx,
-        act::agenda::CreateProject {
+        act::reminders::CreateProject {
             title: title.clone(),
             color,
-            ..act::agenda::CreateProject::default()
+            ..act::reminders::CreateProject::default()
         },
         &key,
     );
@@ -266,7 +266,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         };
         if reminder.flagged {
             let key = kit_act::key(&["import-reminder-flag", &id], kit_act::fresh());
-            kit_act::act(ctx, act::agenda::StarTask { task_id: id }, &key);
+            kit_act::act(ctx, act::reminders::StarTask { task_id: id }, &key);
         }
     }
     outcome

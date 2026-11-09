@@ -64,7 +64,7 @@ struct Counter {
 
 impl Counter {
     fn reload(&mut self, ctx: &Ctx) {
-        let request = load::agenda::Upcoming::default().into();
+        let request = load::calendar::Upcoming::default().into();
         self.phase = match ctx.load(request) {
             Ok(loaded) => match loaded.answer.and_then(|answer| answer.answer) {
                 Some(wire::app_query_response::Answer::AgendaUpcoming(upcoming)) => {

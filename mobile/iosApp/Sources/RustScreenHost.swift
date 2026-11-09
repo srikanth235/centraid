@@ -184,14 +184,14 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("calendar"))
         case .agendaEditor(let state)?:
             AgendaEditorView(
                 state: state,
                 send: { store.send(instance, .agendaEditor($0)) },
                 onDone: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("calendar"))
         case .todoList(let state)?:
             TodoListView(
                 state: state,
@@ -199,7 +199,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoProject(let state)?:
             TodoProjectView(
                 state: state,
@@ -207,7 +207,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoDetail(let state)?:
             TodoDetailView(
                 state: state,
@@ -215,7 +215,7 @@ struct RustScreenView: View {
                 open: open,
                 onClose: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("reminders"))
         case .todoCatchUp(let state)?:
             TodoCatchUpView(
                 state: state,
@@ -223,7 +223,7 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-            .environment(\.appAccent, AppAccent("agenda"))
+            .environment(\.appAccent, AppAccent("reminders"))
         case .backupHome(let state)?:
             BackupHomeView(
                 state: state,

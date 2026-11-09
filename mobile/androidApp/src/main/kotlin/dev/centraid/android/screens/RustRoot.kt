@@ -527,7 +527,7 @@ internal class RustRoot(
                 onOpen = open,
                 onHome = toHome,
             )
-            event != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            event != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
                 AgendaEventScreen(
                     state = event,
                     onEvent = { send(ScreenEvent(agenda_event = it)) },
@@ -536,13 +536,13 @@ internal class RustRoot(
                     onCall = { uri -> openCall(context, uri) },
                 )
             }
-            editor != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            editor != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
                 AgendaEditorScreen(
                     state = editor,
                     onEvent = { send(ScreenEvent(agenda_editor = it)) },
                 )
             }
-            list != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            list != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
                 TodoListScreen(
                     state = list,
                     onEvent = { send(ScreenEvent(todo_list = it)) },
@@ -550,7 +550,7 @@ internal class RustRoot(
                     onBack = back,
                 )
             }
-            project != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            project != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
                 TodoProjectScreen(
                     state = project,
                     onEvent = { send(ScreenEvent(todo_project = it)) },
@@ -558,7 +558,7 @@ internal class RustRoot(
                     onBack = back,
                 )
             }
-            detail != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            detail != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
                 TodoDetailScreen(
                     state = detail,
                     onEvent = { send(ScreenEvent(todo_detail = it)) },
@@ -567,7 +567,7 @@ internal class RustRoot(
                     onClose = back,
                 )
             }
-            catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "agenda") {
+            catchUp != null -> CompositionLocalProvider(LocalAppAccentId provides "reminders") {
                 TodoCatchUpScreen(
                     state = catchUp,
                     onEvent = { send(ScreenEvent(todo_catch_up = it)) },
@@ -872,7 +872,7 @@ internal class RustRoot(
         const val CHAT_TAB = "chat"
 
         /** The apps a chat can be scoped to (`chat::scopable_apps`), by the prefix of their screens. */
-        val CHAT_SCOPES = setOf("agenda", "docs", "health", "locker", "money", "notes", "people", "photos")
+        val CHAT_SCOPES = setOf("calendar", "docs", "health", "locker", "money", "notes", "people", "photos", "reminders")
     }
 }
 

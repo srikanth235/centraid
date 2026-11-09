@@ -86,7 +86,7 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
     let tomorrow = day(&d, 1);
     let id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Call the dentist".to_owned(),
             due: Field::Is(format!("{tomorrow}T09:00")),
             remind_before_min: Field::Is(0),
@@ -127,7 +127,7 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
     // A deleted task leaves the set.
     arrange(
         &d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );
@@ -142,7 +142,7 @@ fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
     let (soon, later) = (day(&d, 1), day(&d, 4));
     let id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Water plants".to_owned(),
             due: Field::Is(format!("{later}T09:00")),
             remind_before_min: Field::Is(0),

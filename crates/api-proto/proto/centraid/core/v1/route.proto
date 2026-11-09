@@ -186,6 +186,8 @@ enum TodoView {
   TODO_VIEW_TODAY = 5;
   TODO_VIEW_SCHEDULED = 6;
   TODO_VIEW_FLAGGED = 7;
+  // The Inbox, a list among My Lists (round 10): open work filed in no project.
+  TODO_VIEW_INBOX = 8;
 }
 
 // `agenda.home`: lands on `destination` at today, or on Day when unspecified.

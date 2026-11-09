@@ -33,7 +33,7 @@ fn trashed(d: &Driver, title: &str) -> String {
     let id = task(d, title);
     arrange(
         d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );
@@ -44,7 +44,7 @@ fn trashed(d: &Driver, title: &str) -> String {
 fn empty_agendas_trash(d: &mut Driver) {
     let i = d.push(agenda::TAB, routes::trash());
     for id in ids(d.view(i)) {
-        arrange(d, act::agenda::PurgeTask { task_id: id });
+        arrange(d, act::reminders::PurgeTask { task_id: id });
     }
     d.pop(agenda::TAB, i);
 }
@@ -61,7 +61,7 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     let second = trashed(&d, "Pay the deposit");
     let i = d.push(agenda::TAB, routes::trash());
     let view = trash(d.view(i));
-    assert_eq!(view.app_id, "agenda");
+    assert_eq!(view.app_id, "reminders");
     assert_eq!(view.title, "Trash");
     assert_eq!(view.back_label, "Agenda");
     let data = trash_data(d.view(i));
@@ -159,7 +159,7 @@ fn a_confirm_for_a_row_that_left_the_trash_destroys_nothing() {
     // Restored on another surface while the confirm is up.
     arrange(
         &d,
-        act::agenda::RestoreTask {
+        act::reminders::RestoreTask {
             task_id: id.clone(),
         },
     );
@@ -251,14 +251,14 @@ mod kit {
 
     fn restore(_: &str) -> wire::ActRequest {
         // Refused by the core: nothing has this id.
-        act::agenda::RestoreTask {
+        act::reminders::RestoreTask {
             task_id: "no-such-task".into(),
         }
         .into()
     }
 
     fn purge(_: &str) -> wire::ActRequest {
-        act::agenda::CreateProject {
+        act::reminders::CreateProject {
             title: "Purged marker".into(),
             ..Default::default()
         }
@@ -266,7 +266,7 @@ mod kit {
     }
 
     fn empty() -> wire::ActRequest {
-        act::agenda::CreateProject {
+        act::reminders::CreateProject {
             title: "Emptied marker".into(),
             ..Default::default()
         }
@@ -362,7 +362,7 @@ mod kit {
     fn markers(d: &Driver) -> Vec<String> {
         match answer(
             d,
-            centraid_screens::catalog::load::agenda::Projects::default(),
+            centraid_screens::catalog::load::reminders::Projects::default(),
         ) {
             wire::app_query_response::Answer::AgendaTaskProjects(p) => {
                 p.projects.into_iter().map(|p| p.name).collect()

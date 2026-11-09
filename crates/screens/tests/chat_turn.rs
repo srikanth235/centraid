@@ -332,9 +332,9 @@ fn a_write_the_model_parks_is_a_card_in_the_cores_words_and_writes_nothing_until
         pending.steps[0].subtitle
     );
     // THE CARD IS LABELLED AND COLOURED BY THE CORE (#1173): "Proposed change", in the colour of
-    // the app whose row it changes (a task is Agenda's), and nothing is written yet.
+    // the app whose row it changes (a task is Reminders'), and nothing is written yet.
     assert_eq!(pending.title, "Proposed change");
-    assert_eq!(pending.app, "agenda");
+    assert_eq!(pending.app, "reminders");
     assert!(!pending.destructive && pending.more_line.is_empty());
     assert_eq!(task_status(&chat, DRY_CLEANING), "open");
 }
@@ -430,7 +430,7 @@ fn a_card_whose_rows_moved_says_so_and_runs_nothing() {
         .unwrap()
     };
     let mut request =
-        centraid_screens::catalog::act::agenda::CompleteTask { task_id: task }.request();
+        centraid_screens::catalog::act::reminders::CompleteTask { task_id: task }.request();
     request.invoke_key = "test:moved:1".to_owned();
     let moved = chat.driver.act(request);
     assert_eq!(moved.status, wire::ActStatus::Executed as i32, "{moved:?}");

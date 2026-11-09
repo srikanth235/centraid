@@ -93,10 +93,10 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
             p.attendees = Some(serde_json::to_string(&[&me, &priya, &tom]).expect("json"));
         },
     );
-    world.act(act::agenda::Rsvp {
+    world.act(act::calendar::Rsvp {
         event_id: id.clone(),
         person_id: priya.clone(),
-        state: act::agenda::RsvpState::Accepted,
+        state: act::calendar::RsvpState::Accepted,
     });
     let page = world.open_event(&id, &id, None, "2099-06-15");
     let data = world.event_data(page);
@@ -175,7 +175,7 @@ fn a_past_event_says_it_is_past() {
 fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_says_it_repeats() {
     let mut world = World::new();
     let weekend = world.propose("Weekend away", "2099-06-19", "2099-06-21", |p| {
-        p.timing = Some(act::agenda::ProposeTiming::AllDay);
+        p.timing = Some(act::calendar::ProposeTiming::AllDay);
         p.zone = Field::Keep;
     });
     let page = world.open_event(&weekend, &weekend, None, "2099-06-19");
@@ -197,7 +197,7 @@ fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_sa
 
     let series = world.weekdays("Stand-up");
     let me = world.me.clone();
-    world.act(act::agenda::EditEvent {
+    world.act(act::calendar::EditEvent {
         event_id: series.clone(),
         attendees: Some(serde_json::to_string(&[&me]).expect("json")),
         ..Default::default()
@@ -233,11 +233,11 @@ fn an_occurrence_the_answer_does_not_have_is_gone_not_an_error() {
 
     // Skipped since it was picked: the series has no such day any more.
     let series = world.weekdays("Stand-up");
-    world.act(act::agenda::EditOccurrence {
-        action: act::agenda::EditOccurrenceAction::Skip,
+    world.act(act::calendar::EditOccurrence {
+        action: act::calendar::EditOccurrenceAction::Skip,
         event_id: series.clone(),
         original_start: "2099-06-16T10:00:00".to_owned(),
-        scope: act::agenda::EditOccurrenceScope::Occurrence,
+        scope: act::calendar::EditOccurrenceScope::Occurrence,
         ..Default::default()
     });
     let key = format!("{series}:2099-06-16T10:00:00");
@@ -347,7 +347,7 @@ fn a_refused_reply_says_why_and_leaves_the_chip_where_the_vault_has_it() {
     );
     let page = world.open_event(&id, &id, None, "2099-06-15");
     // Cancelled elsewhere while this page is open: the vault refuses the reply.
-    world.act(act::agenda::CancelEvent {
+    world.act(act::calendar::CancelEvent {
         event_id: id.clone(),
     });
     world.send_event(page, rsvp("accepted"));
@@ -559,7 +559,7 @@ fn a_cancel_the_vault_refuses_says_why_and_keeps_the_event_open() {
     );
     let page = world.open_event(&id, &id, None, "2099-06-15");
     // Cancelled elsewhere already: the vault will not cancel it twice.
-    world.act(act::agenda::CancelEvent {
+    world.act(act::calendar::CancelEvent {
         event_id: id.clone(),
     });
     world.send_event(page, action("cancel"));
@@ -602,7 +602,7 @@ fn edit_carries_the_editor_route_and_is_not_an_event() {
     assert_eq!(world.driver.view(page).revision, revision);
     // The shell can push that very route.
     let editor = world.driver.push(
-        "agenda",
+        "calendar",
         wire::Route {
             sheet: false,
             screen: route.screen,
@@ -650,7 +650,7 @@ fn a_change_elsewhere_redraws_the_page_once() {
         |_| {},
     );
     let page = world.open_event(&id, &id, None, "2099-06-15");
-    world.act(act::agenda::EditEvent {
+    world.act(act::calendar::EditEvent {
         event_id: id.clone(),
         title: Some("Design review".to_owned()),
         ..Default::default()
@@ -749,7 +749,7 @@ fn the_detail_names_the_zone_only_when_it_is_not_the_phones() {
 #[test]
 fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
     let mut world = World::new();
-    world.act(act::agenda::FollowCalendar {
+    world.act(act::calendar::FollowCalendar {
         origin: serde_json::json!({
             "ref": "calendar:work", "label": "Work", "device_id": "phone-1"
         })
@@ -803,7 +803,7 @@ fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
 
 /// A place founded through `add-place`: its id and its name.
 fn a_known_place(world: &mut World) -> (String, String) {
-    let done = world.act(act::agenda::AddPlace {
+    let done = world.act(act::calendar::AddPlace {
         title: "Café Roma".to_owned(),
         ..Default::default()
     });

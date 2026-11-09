@@ -247,7 +247,7 @@ fn a_keyed_action_goes_through_act_and_its_key_is_the_vaults() {
     let pair = pair();
     let door = pair.core.assist_door();
     let add = Call {
-        app: "agenda",
+        app: "reminders",
         action: "add-task",
         command: "task.add",
     };

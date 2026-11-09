@@ -161,8 +161,8 @@ fn png(width: u32, height: u32) -> Vec<u8> {
 fn a_completed_turn_is_saved_listed_and_read_back_with_its_cards() {
     let sample = common::chat::sample();
     sample.install(script(&read_tasks()));
-    // The tasks are Agenda's (#1128): the thread is scoped `agenda` and its cards name `agenda`.
-    let session = sample.start("agenda");
+    // The tasks are Reminders': the thread is scoped `reminders` and its cards name `reminders`.
+    let session = sample.start("reminders");
     assert!(
         threads(&sample).is_empty(),
         "nothing is saved before a turn ends"
@@ -182,7 +182,7 @@ fn a_completed_turn_is_saved_listed_and_read_back_with_its_cards() {
     let listed = threads(&sample);
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].thread_id, sent.thread_id);
-    assert_eq!(listed[0].scope_app, "agenda");
+    assert_eq!(listed[0].scope_app, "reminders");
 
     let stored = thread(&sample, &sent.thread_id);
     assert!(stored.found);
@@ -200,7 +200,7 @@ fn a_completed_turn_is_saved_listed_and_read_back_with_its_cards() {
         answer
             .cards
             .iter()
-            .all(|card| card.app == "agenda" && !card.id.is_empty())
+            .all(|card| card.app == "reminders" && !card.id.is_empty())
     );
 }
 

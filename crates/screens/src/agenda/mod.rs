@@ -1,11 +1,14 @@
-//! AGENDA'S SCREENS (#1135): events and to-dos in one app. Every decision a
-//! person sees is made here; SwiftUI and Compose draw [`wire::ViewState`].
+//! THE SCREENS OF CALENDAR AND REMINDERS (#1135, split in round 10 of #1173): two apps that were one
+//! "Agenda". Every decision a person sees is made here; SwiftUI and Compose draw [`wire::ViewState`].
+//! The module keeps its old name because both apps share one home machine ([`home`]), built once for
+//! each app ([`home::App`]); the screen ids, the vault apps and the manifests are two.
 //!
 //! | Screen | Route name | Machine |
 //! |---|---|---|
-//! | Day · Week · Month · Schedule · Year · Waiting · To-do, with Search and More | [`HOME`] | [`home`] |
+//! | Calendar: Day · Week · Month · List · Year · Invites, with Search and Calendars | [`HOME`] | [`home`] |
 //! | One occurrence of an event | [`EVENT`] | [`event`] |
-//! | The add sheet (Event \| Task) and the event editor | [`EDITOR`] | [`editor`] |
+//! | The add sheet and the event editor | [`EDITOR`] | [`editor`] |
+//! | Reminders: the smart lists, My Lists, with Search and More | [`REMINDERS_HOME`] | [`home`] |
 //! | Anytime · All · Logbook · Reminders | [`TODO_LIST`] | [`list`] |
 //! | One project | [`PROJECT`] | [`project`] |
 //! | One task | [`TASK`] | [`detail`] |
@@ -18,10 +21,9 @@
 //!
 //! ## Where this lives
 //!
-//! Not in `crates/apps/agenda`: `centraid-core` depends on that crate for its
-//! readers, and this crate depends on the core for `load` and `act`, so a
-//! screen there would make a cycle. Everything Agenda-specific still has one
-//! home: this module.
+//! Not in `crates/apps/calendar` or `crates/apps/reminders`: `centraid-core` depends on those crates
+//! for their readers, and this crate depends on the core for `load` and `act`, so a screen there
+//! would make a cycle. Everything of the two apps still has one home: this module.
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -44,20 +46,24 @@ mod style;
 pub mod todo;
 pub mod trash;
 
-pub const HOME: &str = "agenda.home";
-pub const EVENT: &str = "agenda.event";
-pub const EDITOR: &str = "agenda.editor";
-pub const TODO_LIST: &str = "agenda.todo_list";
-pub const PROJECT: &str = "agenda.project";
-pub const TASK: &str = "agenda.task";
-pub const CATCH_UP: &str = "agenda.catch_up";
-pub const TRASH: &str = "agenda.trash";
+/// Calendar's home.
+pub const HOME: &str = "calendar.home";
+/// Reminders' home.
+pub const REMINDERS_HOME: &str = "reminders.home";
+pub const EVENT: &str = "calendar.event";
+pub const EDITOR: &str = "calendar.editor";
+pub const TODO_LIST: &str = "reminders.list";
+pub const PROJECT: &str = "reminders.project";
+pub const TASK: &str = "reminders.task";
+pub const CATCH_UP: &str = "reminders.catch_up";
+pub const TRASH: &str = "reminders.trash";
 
-/// Every Agenda screen, registered under its route name.
+/// Every Calendar and Reminders screen, registered under its route name.
 #[must_use]
 pub fn registry() -> Registry {
     Registry::default()
-        .with(HOME, home::build)
+        .with(HOME, home::build_calendar)
+        .with(REMINDERS_HOME, home::build_reminders)
         .with(EVENT, event::build)
         .with(EDITOR, editor::build)
         .with(TODO_LIST, list::build)
@@ -68,9 +74,9 @@ pub fn registry() -> Registry {
         .with(notify::NAME, notify::build)
 }
 
-/// A runtime with Agenda's screens and one tab, `agenda`, rooted at its home.
+/// A runtime with the two apps' screens and one tab, `calendar`, rooted at Calendar's home.
 /// The shell's real runtime composes [`registry`] with the other apps'; this is
-/// what Agenda's own tests drive.
+/// what these apps' own tests drive.
 #[must_use]
 pub fn runtime() -> crate::Runtime {
     crate::Runtime::new(
@@ -82,12 +88,16 @@ pub fn runtime() -> crate::Runtime {
     )
 }
 
-/// The tab Agenda's home is the root of.
-pub const TAB: &str = "agenda";
+/// The tab Calendar's home is the root of.
+pub const TAB: &str = "calendar";
+/// The tab Reminders' home is the root of.
+pub const REMINDERS_TAB: &str = "reminders";
 
 /// The routes Agenda's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{CATCH_UP, EDITOR, EVENT, HOME, PROJECT, TASK, TODO_LIST, TRASH, wire};
+    use super::{
+        CATCH_UP, EDITOR, EVENT, HOME, PROJECT, REMINDERS_HOME, TASK, TODO_LIST, TRASH, wire,
+    };
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -97,11 +107,16 @@ pub mod routes {
         }
     }
 
-    /// Agenda's home, landing on `destination` at today.
+    /// A home, landing on `destination` at today: Calendar's for a calendar place, Reminders' for
+    /// To-do.
     #[must_use]
     pub fn home(destination: wire::AgendaDestination, quick_add_title: &str) -> wire::Route {
         route(
-            HOME,
+            if destination == wire::AgendaDestination::Todo || !quick_add_title.is_empty() {
+                REMINDERS_HOME
+            } else {
+                HOME
+            },
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: destination as i32,
                 quick_add_title: quick_add_title.to_owned(),
@@ -110,12 +125,12 @@ pub mod routes {
         )
     }
 
-    /// To-do with its quick-add bar open, drawn and focused, and holding `title`
+    /// Reminders with its quick-add bar open, drawn and focused, and holding `title`
     /// (which may be empty). Nothing is written until the member taps Add.
     #[must_use]
     pub fn home_adding(title: &str) -> wire::Route {
         route(
-            HOME,
+            REMINDERS_HOME,
             wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
                 destination: wire::AgendaDestination::Todo as i32,
                 quick_add_title: title.to_owned(),

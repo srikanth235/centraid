@@ -4,7 +4,8 @@
 //! `strings::task`'s; the camera roll's grant sentences are `strings::photos`'.
 
 catalog! {
-    plain app_agenda = ("Agenda", "Agenda");
+    plain app_calendar = ("Calendar", "Calendar");
+    plain app_reminders = ("Reminders", "Reminders");
     plain app_people = ("People", "People");
     plain app_photos = ("Photos", "Photos");
     plain in_cloud = (

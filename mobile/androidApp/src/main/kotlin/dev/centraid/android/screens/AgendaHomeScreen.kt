@@ -135,7 +135,7 @@ public fun AgendaHomeScreen(
         // THE DENIED GATE KEEPS THE HEADER AND HAS NO BAND, iOS's shape: there
         // is no Agenda to move around in, search or add to.
         Box(Modifier.fillMaxSize().testTag("agenda-home")) {
-            AppPlace(app = "agenda", title = chrome.title) {
+            AppPlace(app = state.app_key, title = chrome.title) {
                 DeniedGate(denied, Modifier.testTag("agenda-denied"))
             }
         }
@@ -160,7 +160,7 @@ public fun AgendaHomeScreen(
     val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
-            app = "agenda",
+            app = state.app_key,
             title = header?.title?.takeIf { it.isNotEmpty() } ?: chrome.title,
             meta = meta,
             barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },
@@ -206,7 +206,7 @@ public fun AgendaHomeScreen(
             ),
             band = {
                 AppBand(
-                    app = "agenda",
+                    app = state.app_key,
                     tabs = state.band.map { it.toTab() },
                     onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
                     onHome = onHome,

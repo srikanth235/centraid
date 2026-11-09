@@ -1,4 +1,4 @@
-//! Agenda's own sentences: the band, the day bar, events, the editor, the More sheet.
+//! Calendar's own sentences: the band, the day bar, events, the editor, the More sheet.
 
 catalog! {
     plain a11y_cancel = ("Cancel this event", "Cancel this event");
@@ -7,7 +7,7 @@ catalog! {
     plain action_open_map = ("Open in Maps", "Open in Maps");
     plain a11y_open_map = ("Open this location in Maps", "Open this location in Maps");
     plain all_day = ("All day", "All day");
-    plain app_title = ("Agenda", "Agenda");
+    plain app_title = ("Calendar", "Calendar");
     plain band_day = ("Day", "Day");
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
@@ -126,10 +126,10 @@ catalog! {
     plain reads_fact_leaves = ("Leaves this phone", "Leaves this phone");
     plain reads_fact_leaves_value = ("nothing", "nothing");
     plain reads_fact_reads = ("Reads", "Reads");
-    plain reads_fact_reads_value = ("events, calendars, people, tasks", "events, calendars, people, tasks");
+    plain reads_fact_reads_value = ("events, calendars, people, reminders", "events, calendars, people, reminders");
     plain reads_fact_writes = ("Writes", "Writes");
-    plain reads_fact_writes_value = ("events and tasks you make", "events and tasks you make");
-    plain reads_title = ("What Agenda may read", "What Agenda may read");
+    plain reads_fact_writes_value = ("events you make", "events you make");
+    plain reads_title = ("What Calendar may read", "What Calendar may read");
     plain read_incomplete = ("Part of this agenda didn't load.", "Part of this agenda didn't load.");
     plain reminder_at_start = ("At the start", "At the start");
     plain reminder_day = ("1 day before", "1 day before");

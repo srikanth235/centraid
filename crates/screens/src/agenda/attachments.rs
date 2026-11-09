@@ -72,10 +72,20 @@ enum Loaded {
     Failed,
 }
 
+/// Whose attachments a page holds: an event's (Calendar) or a task's (Reminders).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Of {
+    #[default]
+    Event,
+    Task,
+}
+
 /// One item's attachments, as its page holds them.
 #[derive(Debug, Default)]
 pub struct Attachments {
     item_id: String,
+    /// Whose attachments these are: an event's are Calendar's, a task's are Reminders'.
+    of: Of,
     items: Vec<wire::AgendaAttachmentRow>,
     /// The cursor of the next page, as the answer spelled it.
     next: Option<String>,
@@ -88,8 +98,9 @@ pub struct Attachments {
 
 impl Attachments {
     #[must_use]
-    pub fn of(item_id: &str) -> Self {
+    pub fn of(of: Of, item_id: &str) -> Self {
         Self {
+            of,
             item_id: item_id.to_owned(),
             ..Self::default()
         }
@@ -101,18 +112,34 @@ impl Attachments {
         after: Option<String>,
         limit: usize,
     ) -> Reading<wire::AgendaAttachments> {
-        read::read(
-            ctx,
-            load::agenda::Attachments {
-                item_id: self.item_id.clone(),
-                after,
-                limit: u32::try_from(limit).unwrap_or(u32::MAX),
-            },
-            |answer| match answer {
-                Answer::AgendaAttachments(page) => Some(page),
-                _ => None,
-            },
-        )
+        let (item_id, limit) = (
+            self.item_id.clone(),
+            u32::try_from(limit).unwrap_or(u32::MAX),
+        );
+        let pick = |answer| match answer {
+            Answer::AgendaAttachments(page) => Some(page),
+            _ => None,
+        };
+        match self.of {
+            Of::Event => read::read(
+                ctx,
+                load::calendar::Attachments {
+                    item_id,
+                    after,
+                    limit,
+                },
+                pick,
+            ),
+            Of::Task => read::read(
+                ctx,
+                load::reminders::Attachments {
+                    item_id,
+                    after,
+                    limit,
+                },
+                pick,
+            ),
+        }
     }
 
     /// Read the first page again. A read that failed keeps what is shown: only a first
@@ -265,17 +292,14 @@ impl Attachments {
             return;
         };
         let key = kit_act::key(
-            &[act::agenda::Attach::NAME, &self.item_id, &id],
+            &[act::calendar::Attach::NAME, &self.item_id, &id],
             kit_act::fresh(),
         );
-        let attached = kit_act::act(
-            ctx,
-            act::agenda::Attach {
-                from: self.item_id.clone(),
-                to: id,
-            },
-            &key,
-        );
+        let (from, to) = (self.item_id.clone(), id);
+        let attached = match self.of {
+            Of::Event => kit_act::act(ctx, act::calendar::Attach { from, to }, &key),
+            Of::Task => kit_act::act(ctx, act::reminders::Attach { from, to }, &key),
+        };
         if !attached.committed {
             self.refuse(refusal_or(locale, &attached.refusal));
         }
@@ -287,17 +311,14 @@ impl Attachments {
         };
         self.status = None;
         let key = kit_act::key(
-            &[act::agenda::Detach::NAME, &self.item_id, &id],
+            &[act::calendar::Detach::NAME, &self.item_id, &id],
             kit_act::fresh(),
         );
-        let detached = kit_act::act(
-            ctx,
-            act::agenda::Detach {
-                from: self.item_id.clone(),
-                to: id,
-            },
-            &key,
-        );
+        let (from, to) = (self.item_id.clone(), id);
+        let detached = match self.of {
+            Of::Event => kit_act::act(ctx, act::calendar::Detach { from, to }, &key),
+            Of::Task => kit_act::act(ctx, act::reminders::Detach { from, to }, &key),
+        };
         if !detached.committed {
             self.refuse(refusal_or(ctx.locale(), &detached.refusal));
         }

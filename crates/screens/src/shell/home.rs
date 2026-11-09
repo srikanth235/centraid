@@ -457,7 +457,7 @@ impl Home {
                 .map(|kind| wire::HomeTileBody { kind: Some(kind) }),
             accessibility_label: spoken(&open, made),
             open_label: open,
-            route: tile_route(widget, app, made),
+            route: tile_route(app, made),
             ..Default::default()
         }
     }
@@ -733,15 +733,10 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
 /// WHERE A TILE'S TAP GOES: the app's home. Notes opens its shelf when it has
 /// notes and a new note when it has none, and nothing while it is unread; a tile
 /// that is still reading opens nothing.
-fn tile_route(widget: &str, app: &str, made: &Made) -> Option<wire::Route> {
+fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
     use wire::HomeTileStatus as Status;
     match (app, made.status) {
         (_, Status::Loading) => None,
-        // What is owed opens Agenda's to-dos, not its day.
-        ("agenda", _) if widget == tiles::REMINDERS => Some(crate::agenda::routes::home(
-            wire::AgendaDestination::Todo,
-            "",
-        )),
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
         _ => row_routes::app_home(app),
@@ -764,20 +759,17 @@ fn keychain_set(value: &str) -> wire::Effect {
     }))
 }
 
-/// A widget's name: its app's, except Reminders, which is Agenda's second.
-fn widget_name(locale: Locale, widget: &str, app: &str) -> String {
-    if widget == tiles::REMINDERS {
-        words::app_reminders(locale)
-    } else {
-        app_name(locale, app)
-    }
+/// A widget's name: its app's.
+fn widget_name(locale: Locale, _widget: &str, app: &str) -> String {
+    app_name(locale, app)
 }
 
 /// An app's name, by the catalogue's id: Home's tiles and the Backup screen's
 /// rows say it the same way.
 pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::app_agenda(locale),
+        "calendar" => words::app_calendar(locale),
+        "reminders" => words::app_reminders(locale),
         "docs" => words::app_docs(locale),
         "health" => words::app_health(locale),
         "locker" => words::app_locker(locale),
@@ -792,7 +784,8 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
 /// What an empty widget says to do.
 fn empty_copy(locale: Locale, app: &str) -> String {
     match app {
-        "agenda" => words::tile_empty_agenda(locale),
+        "calendar" => words::tile_empty_calendar(locale),
+        "reminders" => words::tile_empty_reminders(locale),
         "docs" => words::tile_empty_docs(locale),
         "health" => words::tile_empty_health(locale),
         "locker" => words::tile_empty_locker(locale),
@@ -889,8 +882,7 @@ mod tests {
             count_label: String::new(),
             body: None,
         };
-        let screen =
-            |app: &str, status| tile_route(app, app, &made(status)).map(|route| route.screen);
+        let screen = |app: &str, status| tile_route(app, &made(status)).map(|route| route.screen);
         assert_eq!(
             screen("notes", Status::Content).as_deref(),
             Some("notes.home")
@@ -904,27 +896,19 @@ mod tests {
         assert_eq!(screen("notes", Status::Unknown), None);
         // Every other app opens even when it is empty or unreadable.
         assert_eq!(
-            screen("agenda", Status::Empty).as_deref(),
-            Some("agenda.home")
+            screen("calendar", Status::Empty).as_deref(),
+            Some("calendar.home")
+        );
+        // Reminders is its own app with its own home.
+        assert_eq!(
+            screen("reminders", Status::Empty).as_deref(),
+            Some("reminders.home")
         );
         assert_eq!(
             screen("photos", Status::Unknown).as_deref(),
             Some("photos.home")
         );
         assert_eq!(screen("photos", Status::Loading), None);
-        // What Agenda is owed opens its to-dos; the day opens its day.
-        let owed = tile_route("reminders", "agenda", &made(Status::Content)).expect("a route");
-        assert_eq!(owed.screen, "agenda.home");
-        assert_eq!(
-            owed.args,
-            crate::agenda::routes::home(wire::AgendaDestination::Todo, "").args
-        );
-        assert_ne!(
-            owed.args,
-            tile_route("agenda", "agenda", &made(Status::Content))
-                .expect("a route")
-                .args
-        );
     }
 
     #[test]

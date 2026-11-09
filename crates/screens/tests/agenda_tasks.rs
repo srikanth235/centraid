@@ -73,7 +73,7 @@ fn labels(choices: &[wire::AgendaChoice]) -> Vec<&str> {
 }
 
 fn project_named(world: &mut World, title: &str) -> String {
-    let response = world.act(act::agenda::CreateProject {
+    let response = world.act(act::reminders::CreateProject {
         title: title.to_owned(),
         ..Default::default()
     });
@@ -611,7 +611,7 @@ fn to_dos_quick_add_takes_the_same_toolbar_and_files_in_the_inbox() {
     assert_eq!(quick.staged_label, "");
     assert!(quick.drawn && quick.focused, "Return keeps the field");
 
-    let found: Vec<wire::AgendaTask> = ts::load_board(&d, load::agenda::BoardView::All, None)
+    let found: Vec<wire::AgendaTask> = ts::load_board(&d, load::reminders::BoardView::All, None)
         .groups
         .into_iter()
         .flat_map(|group| group.tasks)
@@ -679,7 +679,7 @@ fn a_repeating_task_keeps_its_anchor_in_the_date_card() {
     let mut d = ts::driver();
     let id = ts::add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Rent".into(),
             due: ts::due(&ts::day(&d, 3)),
             rule: centraid_screens::field::Field::Is("FREQ=MONTHLY".into()),

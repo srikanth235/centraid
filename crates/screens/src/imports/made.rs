@@ -104,7 +104,8 @@ pub fn summary(fragments: &[String]) -> String {
 pub fn open_label(locale: Locale, app: &str) -> String {
     let name = match app {
         "people" => words::app_people(locale),
-        "agenda" => words::app_agenda(locale),
+        "calendar" => words::app_calendar(locale),
+        "reminders" => words::app_reminders(locale),
         "photos" => words::app_photos(locale),
         _ => return String::new(),
     };
@@ -146,7 +147,7 @@ impl Made {
                     && outcome.added > 0
                 {
                     self.came.push(Came {
-                        app: "agenda",
+                        app: "calendar",
                         sentence: calendar::sentence(ctx.locale(), outcome),
                     });
                 }
@@ -284,7 +285,7 @@ impl Screen for Made {
                     _ => return Vec::new(),
                 };
                 self.came = vec![Came {
-                    app: "agenda",
+                    app: "reminders",
                     sentence,
                 }];
                 self.step = Step::Done;
@@ -295,7 +296,7 @@ impl Screen for Made {
                     let outcome = reminders::run(ctx, &snapshot.reminders, self.include_completed);
                     if outcome.added > 0 {
                         self.came.push(Came {
-                            app: "agenda",
+                            app: "reminders",
                             sentence: reminders::sentence(ctx.locale(), outcome),
                         });
                     }
@@ -375,7 +376,8 @@ mod tests {
     #[test]
     fn the_line_opens_the_first_app_that_received_anything() {
         assert_eq!(open_label(Locale::En, "people"), "Open People");
-        assert_eq!(open_label(Locale::En, "agenda"), "Open Agenda");
+        assert_eq!(open_label(Locale::En, "calendar"), "Open Calendar");
+        assert_eq!(open_label(Locale::En, "reminders"), "Open Reminders");
         assert_eq!(open_label(Locale::En, ""), "");
     }
 }

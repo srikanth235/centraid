@@ -407,20 +407,20 @@ impl Handle {
     }
 
     /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
-    /// (`centraid_apps_agenda::occurrences`) over the owner's view, as the core's door asks it.
+    /// (`centraid_apps_calendar::occurrences`) over the owner's view, as the core's door asks it.
     pub fn events(
         &self,
         from_day: &str,
         to_day: &str,
         tz: &str,
-    ) -> Result<Vec<centraid_apps_agenda::Occurrence>, String> {
+    ) -> Result<Vec<centraid_apps_calendar::Occurrence>, String> {
         let zone = centraid_vault::time::zone::FireZone::named(tz)
             .map_err(|_| format!("{tz} is not a time zone"))?;
         let now = centraid_vault::clock::format_iso_ms(self.clock.get());
         self.vault
             .read(|connection| {
                 let door = TestDoor::new(connection);
-                Ok(centraid_apps_agenda::occurrences(
+                Ok(centraid_apps_calendar::occurrences(
                     &door, from_day, to_day, &now, &zone,
                 ))
             })
@@ -513,7 +513,7 @@ impl Door for Handle {
         from_day: &str,
         to_day: &str,
         tz: &str,
-    ) -> Result<Vec<centraid_apps_agenda::Occurrence>, String> {
+    ) -> Result<Vec<centraid_apps_calendar::Occurrence>, String> {
         Self::events(self, from_day, to_day, tz)
     }
 

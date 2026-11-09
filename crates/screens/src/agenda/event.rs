@@ -42,7 +42,7 @@ use wire::app_query_response::Answer;
 use super::rule_words;
 use wire::screen_event::Kind as E;
 
-use super::attachments::Attachments;
+use super::attachments::{Attachments, Of};
 use super::home::Hues;
 use super::routes;
 use super::todo::rows::hue_role;
@@ -78,7 +78,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     if args.instance_key.is_empty() {
         args.instance_key.clone_from(&args.event_id);
     }
-    let attachments = Attachments::of(&args.event_id);
+    let attachments = Attachments::of(Of::Event, &args.event_id);
     Some(Box::new(EventPage {
         route: args,
         content: Content::Loading,
@@ -117,7 +117,7 @@ impl EventPage {
     /// Read the occurrence. A failed re-read keeps the event on screen: only a
     /// first read that failed has nothing else to show.
     fn reload(&mut self, ctx: &Ctx) {
-        let request = load::agenda::Event {
+        let request = load::calendar::Event {
             event_id: self.route.event_id.clone(),
             instance_key: Some(self.route.instance_key.clone()).filter(|key| !key.is_empty()),
             original_start_local: self
@@ -171,12 +171,12 @@ impl EventPage {
         }
         let (event_id, person_id) = (event.event_id.clone(), you.party_id.clone());
         let state = match partstat {
-            ACCEPTED => act::agenda::RsvpState::Accepted,
-            TENTATIVE => act::agenda::RsvpState::Tentative,
-            _ => act::agenda::RsvpState::Declined,
+            ACCEPTED => act::calendar::RsvpState::Accepted,
+            TENTATIVE => act::calendar::RsvpState::Tentative,
+            _ => act::calendar::RsvpState::Declined,
         };
         let key = kit_act::key(&["rsvp", &event_id, &person_id, partstat], kit_act::fresh());
-        let request = act::agenda::Rsvp {
+        let request = act::calendar::Rsvp {
             event_id,
             person_id,
             state,
@@ -237,12 +237,12 @@ impl EventPage {
             wire::AgendaScope::Series => self.cancel_event(ctx, &event_id),
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
                 let (word, scope) = if scope == wire::AgendaScope::Future {
-                    ("future", act::agenda::EditOccurrenceScope::Future)
+                    ("future", act::calendar::EditOccurrenceScope::Future)
                 } else {
-                    ("occurrence", act::agenda::EditOccurrenceScope::Occurrence)
+                    ("occurrence", act::calendar::EditOccurrenceScope::Occurrence)
                 };
-                let request = act::agenda::EditOccurrence {
-                    action: act::agenda::EditOccurrenceAction::Skip,
+                let request = act::calendar::EditOccurrence {
+                    action: act::calendar::EditOccurrenceAction::Skip,
                     event_id: event_id.clone(),
                     original_start: occurrence.clone(),
                     scope,
@@ -259,7 +259,7 @@ impl EventPage {
     }
 
     fn cancel_event(&mut self, ctx: &Ctx, event_id: &str) {
-        let request = act::agenda::CancelEvent {
+        let request = act::calendar::CancelEvent {
             event_id: event_id.to_owned(),
         };
         let key = kit_act::key(&["cancel-event", event_id], kit_act::fresh());

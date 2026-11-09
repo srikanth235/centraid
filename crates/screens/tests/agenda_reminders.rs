@@ -105,7 +105,7 @@ fn today_holds_what_is_due_today_or_before_and_scheduled_what_has_a_date() {
     clear_tasks(&d);
     let today_id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Due today".into(),
             due: due(&today(&d)),
             ..Default::default()
@@ -113,7 +113,7 @@ fn today_holds_what_is_due_today_or_before_and_scheduled_what_has_a_date() {
     );
     let _later = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Due later".into(),
             due: due(&day(&d, 3)),
             ..Default::default()
@@ -177,7 +177,7 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
     clear_tasks(&d);
     let flagged_id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Flag me".into(),
             due: due(&today(&d)),
             ..Default::default()
@@ -186,7 +186,7 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
     let _ = task(&d, "Plain");
     arrange(
         &d,
-        act::agenda::StarTask {
+        act::reminders::StarTask {
             task_id: flagged_id,
         },
     );
@@ -320,7 +320,7 @@ fn dragging_a_row_renumbers_the_list_and_the_list_draws_in_that_order() {
         .map(|title| {
             add(
                 &d,
-                act::agenda::AddTask {
+                act::reminders::AddTask {
                     title: (*title).into(),
                     project_id: Field::Is(list_id.clone()),
                     ..Default::default()
@@ -363,7 +363,7 @@ fn dragging_a_row_renumbers_the_list_and_the_list_draws_in_that_order() {
     // A task added afterwards lands after the hand-ordered ones.
     let _ = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Delta".into(),
             project_id: Field::Is(list_id.clone()),
             ..Default::default()
@@ -383,7 +383,7 @@ fn completed_work_is_counted_shown_and_cleared() {
     let make = |d: &_, title: &str| {
         add(
             d,
-            act::agenda::AddTask {
+            act::reminders::AddTask {
                 title: title.into(),
                 project_id: Field::Is(list_id.clone()),
                 ..Default::default()
@@ -432,7 +432,7 @@ fn an_imported_red_list_is_drawn_raspberry_and_a_list_never_has_a_state_colour()
     let mut d = driver();
     let red = arrange(
         &d,
-        act::agenda::CreateProject {
+        act::reminders::CreateProject {
             title: "Imported red".into(),
             // What the reminders import writes for a phone's red list.
             color: Field::Is(

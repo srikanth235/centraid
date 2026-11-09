@@ -56,7 +56,7 @@ struct AgendaEditorView: View {
                 KitPillButton(label: chrome.save) {
                     send(event { $0.save = .init() })
                 }
-                .environment(\.appAccent, AppAccent("agenda"))
+                .environment(\.appAccent, AppAccent("calendar"))
                 .disabled(!editorData.canSave)
                 .accessibilityIdentifier("agenda-editor-save")
             }

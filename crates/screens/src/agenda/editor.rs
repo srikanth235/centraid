@@ -118,18 +118,13 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         args.instance_key.clone_from(&args.event_id);
     }
     let create = args.event_id.is_empty();
-    // ONLY A CREATE CAN BE A TASK; anything unnamed is an event.
-    let named =
-        wire::AgendaEditorKind::try_from(args.kind).unwrap_or(wire::AgendaEditorKind::Unspecified);
-    let kind = if create && named == wire::AgendaEditorKind::Task {
-        wire::AgendaEditorKind::Task
-    } else {
-        wire::AgendaEditorKind::Event
-    };
+    // CALENDAR'S EDITOR IS FOR EVENTS (round 10 of #1173): a reminder is added in Reminders, so a
+    // route that names a task still opens an event, and the sheet has no Event or Task switch.
+    let kind = wire::AgendaEditorKind::Event;
     Some(Box::new(Editor {
         mode: if create { Mode::Create } else { Mode::Edit },
         kind,
-        kind_decided: !create || named != wire::AgendaEditorKind::Unspecified,
+        kind_decided: true,
         kind_pending: false,
         route: args,
         phase: Phase::Loading,
@@ -221,7 +216,7 @@ impl Editor {
     fn reload(&mut self, ctx: &Ctx) {
         let upcoming = kit_read::read(
             ctx,
-            load::agenda::Upcoming {
+            load::calendar::Upcoming {
                 from: Some(CALENDARS_ONLY.0.to_owned()),
                 to: Some(CALENDARS_ONLY.1.to_owned()),
             },
@@ -232,7 +227,7 @@ impl Editor {
         );
         let parties = kit_read::read(
             ctx,
-            load::agenda::Parties::default(),
+            load::calendar::Parties::default(),
             |answer| match answer {
                 Answer::AgendaParties(parties) => Some(parties),
                 _ => None,
@@ -242,21 +237,20 @@ impl Editor {
         // series row, which no window lists. Absent there is gone.
         let detail = (self.mode == Mode::Edit).then(|| self.read_event(ctx));
         // THE LISTS A TASK CAN LAND IN: a refused or missing read leaves the Inbox.
-        let projects = if self.is_task() || self.mode == Mode::Create {
-            match kit_read::read(
-                ctx,
-                load::agenda::Projects::default(),
-                |answer| match answer {
-                    Answer::AgendaTaskProjects(projects) => Some(projects),
-                    _ => None,
-                },
-            ) {
-                Reading::Data(projects) => projects.projects,
-                _ => Vec::new(),
-            }
-        } else {
-            Vec::new()
-        };
+        let projects =
+            if self.is_task() || self.mode == Mode::Create {
+                match kit_read::read(ctx, load::reminders::Projects::default(), |answer| {
+                    match answer {
+                        Answer::AgendaTaskProjects(projects) => Some(projects),
+                        _ => None,
+                    }
+                }) {
+                    Reading::Data(projects) => projects.projects,
+                    _ => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            };
         let denial = [
             denial_of(&upcoming),
             denial_of(&parties),
@@ -320,7 +314,7 @@ impl Editor {
     /// edits is the one the event was made in, and a zone picked later keeps it.
     fn read_event(&self, ctx: &Ctx) -> Reading<wire::AgendaEventDetail> {
         let request = |zone: Option<&str>| {
-            let mut request: wire::LoadRequest = load::agenda::Event {
+            let mut request: wire::LoadRequest = load::calendar::Event {
                 event_id: self.route.event_id.clone(),
                 instance_key: Some(self.route.instance_key.clone()).filter(|key| !key.is_empty()),
                 original_start_local: self
@@ -393,11 +387,8 @@ impl Editor {
     /// and the day stay; the draft AND its baseline are reshaped together, so a
     /// switch alone is never a change the member is asked to discard.
     fn pick_kind(&mut self, kind: wire::AgendaEditorKind) {
-        let known = matches!(
-            kind,
-            wire::AgendaEditorKind::Event | wire::AgendaEditorKind::Task
-        );
-        if self.mode != Mode::Create || !known || kind == self.kind {
+        // Only Event is a kind of this editor; a stray pick of anything else is nothing.
+        if self.mode != Mode::Create || kind != wire::AgendaEditorKind::Event || kind == self.kind {
             return;
         }
         self.close_sheet();
@@ -513,9 +504,9 @@ impl Editor {
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
                 let word = scope_word(scope);
                 let wire_scope = if scope == wire::AgendaScope::Future {
-                    act::agenda::EditOccurrenceScope::Future
+                    act::calendar::EditOccurrenceScope::Future
                 } else {
-                    act::agenda::EditOccurrenceScope::Occurrence
+                    act::calendar::EditOccurrenceScope::Occurrence
                 };
                 let request =
                     write::override_occurrence(&event_id, &occurrence, wire_scope, &draft, &base);
@@ -624,7 +615,7 @@ impl Editor {
         let request = write::skip_occurrence(
             &event_id,
             &occurrence,
-            act::agenda::EditOccurrenceScope::Occurrence,
+            act::calendar::EditOccurrenceScope::Occurrence,
         );
         let key = kit_act::key(
             &[
@@ -1510,20 +1501,10 @@ impl Editor {
         }
     }
 
-    /// The Event | Task switch, the kind in hand marked.
-    fn kinds(&self, locale: Locale) -> Vec<wire::AgendaKindChoice> {
-        [
-            (wire::AgendaEditorKind::Event, words::kind_event(locale)),
-            (wire::AgendaEditorKind::Task, words::kind_task(locale)),
-        ]
-        .into_iter()
-        .map(|(kind, label)| wire::AgendaKindChoice {
-            kind: kind as i32,
-            selected: kind == self.kind,
-            accessibility_label: label.clone(),
-            label,
-        })
-        .collect()
+    /// No Event | Task switch since the split: the add sheet adds an event, so there is nothing to
+    /// choose between and the shells draw no switch.
+    fn kinds(&self, _locale: Locale) -> Vec<wire::AgendaKindChoice> {
+        Vec::new()
     }
 
     /// A repeat preset named for the day the event starts on.

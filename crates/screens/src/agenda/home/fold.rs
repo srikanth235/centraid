@@ -69,6 +69,8 @@ pub struct Fold<'a> {
     /// weeks begin.
     pub week_start: WeekStart,
     pub month_style: wire::AgendaMonthStyle,
+    /// Calendar's reminders are read-only rows that open in Reminders (round 10).
+    pub read_only_tasks: bool,
 }
 
 /// The calendar's colour role by id: People's convention, so no view converts
@@ -207,6 +209,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
     // THE DAY'S HEAD NAMES THE DAY, so a row says its time only.
     task_ctx.day_in_head = true;
     task_ctx.cycle = fold.cycle;
+    task_ctx.read_only = fold.read_only_tasks;
     let due_on = if dated {
         tasks_by_day(held, &in_range)
     } else {
@@ -947,6 +950,7 @@ mod tests {
             held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
+            read_only_tasks: false,
         })
         .unwrap()
     }
@@ -1152,6 +1156,7 @@ mod tests {
             held: &held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
+            read_only_tasks: false,
         })
         .unwrap();
         let row = rows_of(&data)[0].clone();

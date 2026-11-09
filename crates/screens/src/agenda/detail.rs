@@ -19,7 +19,7 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
-use super::attachments::Attachments;
+use super::attachments::{Attachments, Of};
 use super::editor::custom::{Custom, Done};
 use super::editor::draft::{REPEAT_CUSTOM, normalize_url};
 use super::list::{self, Phase};
@@ -86,7 +86,7 @@ struct Typed {
 }
 
 impl Draft for Typed {
-    const ACTION: &'static str = act::agenda::EditTask::NAME;
+    const ACTION: &'static str = act::reminders::EditTask::NAME;
 
     fn subject(&self) -> &str {
         &self.id
@@ -108,7 +108,7 @@ impl Draft for Typed {
             return None;
         }
         Some(
-            act::agenda::EditTask {
+            act::reminders::EditTask {
                 task_id: self.id.clone(),
                 title: title.then(|| self.title.trim().to_owned()),
                 description: match (notes, self.notes.trim().is_empty()) {
@@ -169,7 +169,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         open_field: String::new(),
         ops: Ops::default(),
         finished: false,
-        attachments: Attachments::of(&args.task_id),
+        attachments: Attachments::of(Of::Task, &args.task_id),
         custom: None,
     }))
 }
@@ -196,7 +196,7 @@ impl Detail {
     fn reload(&mut self, ctx: &Ctx) {
         let detail = read::read(
             ctx,
-            load::agenda::Task {
+            load::reminders::Task {
                 task_id: self.task_id.clone(),
             },
             |answer| match answer {
@@ -206,7 +206,7 @@ impl Detail {
         );
         let projects = read::read(
             ctx,
-            load::agenda::Projects::default(),
+            load::reminders::Projects::default(),
             |answer| match answer {
                 Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,
@@ -280,12 +280,12 @@ impl Detail {
         task: &wire::AgendaTask,
         field: &str,
         value: &str,
-        edit: act::agenda::EditTask,
+        edit: act::reminders::EditTask,
     ) {
         self.write(
             ctx,
             edit,
-            &[act::agenda::EditTask::NAME, &task.task_id, field, value],
+            &[act::reminders::EditTask::NAME, &task.task_id, field, value],
         );
     }
 
@@ -296,7 +296,7 @@ impl Detail {
             return;
         };
         let today = self.today();
-        let base = || act::agenda::EditTask {
+        let base = || act::reminders::EditTask {
             task_id: task.task_id.clone(),
             ..Default::default()
         };
@@ -309,7 +309,7 @@ impl Detail {
                             &task,
                             WHEN,
                             key,
-                            act::agenda::EditTask {
+                            act::reminders::EditTask {
                                 due: Field::Clear,
                                 ..base()
                             },
@@ -322,7 +322,7 @@ impl Detail {
                         &task,
                         WHEN,
                         &day,
-                        act::agenda::EditTask {
+                        act::reminders::EditTask {
                             due: Field::Is(due),
                             ..base()
                         },
@@ -337,7 +337,7 @@ impl Detail {
                         &task,
                         TIME,
                         key,
-                        act::agenda::EditTask { due, ..base() },
+                        act::reminders::EditTask { due, ..base() },
                     );
                 }
             }
@@ -347,7 +347,7 @@ impl Detail {
                 }
                 if key == NONE {
                     if task.remind_before_min.is_some() {
-                        let edit = act::agenda::EditTask {
+                        let edit = act::reminders::EditTask {
                             remind_before_min: Field::Clear,
                             ..base()
                         };
@@ -359,7 +359,7 @@ impl Detail {
                     .filter(|lead| REMINDER_LEADS.contains(lead))
                     .filter(|lead| task.remind_before_min != Some(i64::from(*lead)))
                 {
-                    let edit = act::agenda::EditTask {
+                    let edit = act::reminders::EditTask {
                         remind_before_min: Field::Is(i64::from(lead)),
                         ..base()
                     };
@@ -382,7 +382,7 @@ impl Detail {
                             &task,
                             REPEATS,
                             key,
-                            act::agenda::EditTask {
+                            act::reminders::EditTask {
                                 rule: Field::Clear,
                                 ..base()
                             },
@@ -393,7 +393,7 @@ impl Detail {
                         return;
                     };
                     if task.rrule.as_deref() != Some(rule) {
-                        let edit = act::agenda::EditTask {
+                        let edit = act::reminders::EditTask {
                             rule: Field::Is((*rule).to_owned()),
                             ..base()
                         };
@@ -403,13 +403,13 @@ impl Detail {
             }
             ANCHOR => {
                 let anchor = match key {
-                    SCHEDULED => act::agenda::OrganizeTaskAnchor::Scheduled,
-                    COMPLETION => act::agenda::OrganizeTaskAnchor::Completion,
+                    SCHEDULED => act::reminders::OrganizeTaskAnchor::Scheduled,
+                    COMPLETION => act::reminders::OrganizeTaskAnchor::Completion,
                     _ => return,
                 };
                 let current = task.recurrence_anchor.as_deref().unwrap_or(SCHEDULED);
                 if task.repeats && current != key {
-                    let request = act::agenda::OrganizeTask {
+                    let request = act::reminders::OrganizeTask {
                         task_id: task.task_id.clone(),
                         anchor: Some(anchor),
                         ..Default::default()
@@ -417,7 +417,12 @@ impl Detail {
                     self.write(
                         ctx,
                         request,
-                        &[act::agenda::OrganizeTask::NAME, &task.task_id, ANCHOR, key],
+                        &[
+                            act::reminders::OrganizeTask::NAME,
+                            &task.task_id,
+                            ANCHOR,
+                            key,
+                        ],
                     );
                 }
             }
@@ -430,7 +435,7 @@ impl Detail {
                         .filter(|level| (1..=3).contains(level))
                 };
                 if let Some(level) = level.filter(|level| *level != task.priority.clamp(0, 3)) {
-                    let edit = act::agenda::EditTask {
+                    let edit = act::reminders::EditTask {
                         priority: Some(level),
                         ..base()
                     };
@@ -440,7 +445,7 @@ impl Detail {
             EFFORT => {
                 if key == NONE {
                     if task.effort_min.is_some() {
-                        let edit = act::agenda::EditTask {
+                        let edit = act::reminders::EditTask {
                             effort_min: Field::Clear,
                             ..base()
                         };
@@ -452,7 +457,7 @@ impl Detail {
                     .filter(|minutes| EFFORTS.contains(minutes))
                     .filter(|minutes| task.effort_min != Some(*minutes))
                 {
-                    let edit = act::agenda::EditTask {
+                    let edit = act::reminders::EditTask {
                         effort_min: Field::Is(minutes),
                         ..base()
                     };
@@ -477,7 +482,7 @@ impl Detail {
             // A TAG CHIP IS ITS OWN REMOVAL: tapping it untags.
             TAGS => {
                 if let Some(tag) = task.tags.iter().find(|tag| tag.concept_id == key) {
-                    let request = act::agenda::RemoveTaskTag {
+                    let request = act::reminders::RemoveTaskTag {
                         task_id: task.task_id.clone(),
                         label: tag.label.clone(),
                     };
@@ -485,7 +490,7 @@ impl Detail {
                         ctx,
                         request,
                         &[
-                            act::agenda::RemoveTaskTag::NAME,
+                            act::reminders::RemoveTaskTag::NAME,
                             &task.task_id,
                             &tag.concept_id,
                         ],
@@ -525,7 +530,7 @@ impl Detail {
         };
         // A project without a section CLEARS the section: a section of another
         // project would be refused. The Inbox clears both.
-        let request = act::agenda::OrganizeTask {
+        let request = act::reminders::OrganizeTask {
             task_id: task.task_id.clone(),
             project_id: project_id.map_or(Field::Clear, Field::Is),
             section_id: section_id.map_or(Field::Clear, Field::Is),
@@ -535,7 +540,12 @@ impl Detail {
         self.write(
             ctx,
             request,
-            &[act::agenda::OrganizeTask::NAME, &task.task_id, PROJECT, key],
+            &[
+                act::reminders::OrganizeTask::NAME,
+                &task.task_id,
+                PROJECT,
+                key,
+            ],
         );
     }
 
@@ -547,13 +557,13 @@ impl Detail {
         let locale = ctx.locale();
         match asking {
             Asking::Delete => {
-                let request = act::agenda::DeleteTask {
+                let request = act::reminders::DeleteTask {
                     task_id: task.task_id.clone(),
                 };
                 if self.write(
                     ctx,
                     request,
-                    &[act::agenda::DeleteTask::NAME, &task.task_id],
+                    &[act::reminders::DeleteTask::NAME, &task.task_id],
                 ) {
                     self.finished = true;
                     // The words are gone with the task: leaving saves nothing.
@@ -562,13 +572,13 @@ impl Detail {
                 }
             }
             Asking::Release => {
-                let request = act::agenda::CancelTask {
+                let request = act::reminders::CancelTask {
                     task_id: task.task_id.clone(),
                 };
                 if self.write(
                     ctx,
                     request,
-                    &[act::agenda::CancelTask::NAME, &task.task_id],
+                    &[act::reminders::CancelTask::NAME, &task.task_id],
                 ) {
                     self.ops.status = Some(say(words::task_released(locale)));
                 }
@@ -617,7 +627,7 @@ impl Detail {
                 };
                 if civil::iso_weekday_of(&picked.day).is_some() && picked.day != task.due_day {
                     let due = with_time(&task, &picked.day);
-                    let edit = act::agenda::EditTask {
+                    let edit = act::reminders::EditTask {
                         task_id: task.task_id.clone(),
                         due: Field::Is(due),
                         ..Default::default()
@@ -636,7 +646,7 @@ impl Detail {
                     task.due_day.clone()
                 };
                 if is_clock(&picked.time) && picked.time != task.due_time && !day.is_empty() {
-                    let edit = act::agenda::EditTask {
+                    let edit = act::reminders::EditTask {
                         task_id: task.task_id.clone(),
                         due: Field::Is(format!("{day}T{}", picked.time)),
                         ..Default::default()
@@ -653,14 +663,14 @@ impl Detail {
             Some(D::TagAdded(added)) => {
                 let label = added.label.trim().to_owned();
                 if let Some(task) = self.task().filter(|_| !label.is_empty()) {
-                    let request = act::agenda::AddTaskTag {
+                    let request = act::reminders::AddTaskTag {
                         task_id: task.task_id.clone(),
                         label: label.clone(),
                     };
                     self.write(
                         ctx,
                         request,
-                        &[act::agenda::AddTaskTag::NAME, &task.task_id, &label],
+                        &[act::reminders::AddTaskTag::NAME, &task.task_id, &label],
                     );
                 }
             }
@@ -693,7 +703,7 @@ impl Detail {
                 else {
                     return;
                 };
-                let request = act::agenda::AddTask {
+                let request = act::reminders::AddTask {
                     title: title.clone(),
                     parent_id: Field::Is(task.task_id.clone()),
                     ..Default::default()
@@ -701,7 +711,7 @@ impl Detail {
                 self.write(
                     ctx,
                     request,
-                    &[act::agenda::AddTask::NAME, &task.task_id, "sub", &title],
+                    &[act::reminders::AddTask::NAME, &task.task_id, "sub", &title],
                 );
             }
             Some(D::Delete(_)) => self.asking = Asking::Delete,
@@ -729,7 +739,7 @@ impl Detail {
         let rule = custom.rule(&task.due_day);
         self.custom = None;
         if let Some(rule) = rule.filter(|rule| task.rrule.as_deref() != Some(rule.as_str())) {
-            let edit = act::agenda::EditTask {
+            let edit = act::reminders::EditTask {
                 task_id: task.task_id.clone(),
                 rule: Field::Is(rule),
                 ..Default::default()

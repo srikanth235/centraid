@@ -72,14 +72,14 @@ fn submit(d: &mut Driver) {
 }
 
 fn calendars(d: &Driver) -> Vec<wire::AgendaCalendar> {
-    match answer(d, load::agenda::Upcoming::default()) {
+    match answer(d, load::calendar::Upcoming::default()) {
         wire::app_query_response::Answer::AgendaUpcoming(upcoming) => upcoming.calendars,
         other => panic!("upcoming answered {other:?}"),
     }
 }
 
 fn projects(d: &Driver) -> Vec<wire::AgendaTaskProject> {
-    load_board(d, load::agenda::BoardView::Anytime, None).projects
+    load_board(d, load::reminders::BoardView::Anytime, None).projects
 }
 
 fn choices(d: &Driver) -> Vec<wire::AgendaCalendarChoice> {
@@ -199,9 +199,9 @@ fn a_calendar_is_renamed_and_restyled_and_its_icon_cleared() {
     let mut d = driver();
     let id = id_of(&arrange(
         &d,
-        act::agenda::CreateCalendar {
+        act::calendar::CreateCalendar {
             title: "Work".to_owned(),
-            color: centraid_screens::field::Field::Is(act::agenda::CreateCalendarColor::Violet),
+            color: centraid_screens::field::Field::Is(act::calendar::CreateCalendarColor::Violet),
             icon: centraid_screens::field::Field::Is("Book".to_owned()),
             ..Default::default()
         },
@@ -428,7 +428,7 @@ fn the_vaults_refusal_is_the_status_line_and_the_sheet_keeps_its_words() {
     // The list is trashed elsewhere while the sheet is up.
     arrange(
         &d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );

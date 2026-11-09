@@ -68,7 +68,7 @@ fn a_task_reminder_says_when_it_is_for_and_where_it_lives() {
     assert_eq!(n.body, "Tomorrow at 09:00 · Inbox");
     assert_eq!(
         (n.category_id.as_str(), n.thread_id.as_str()),
-        ("task", "agenda")
+        ("task", "reminders")
     );
     assert!(!n.immediate);
     assert_eq!(

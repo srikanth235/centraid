@@ -62,7 +62,7 @@ fn submit_home(d: &mut Driver, id: u64) {
 }
 
 fn open_task(d: &Driver, title: &str) -> wire::AgendaTask {
-    let board = load_board(d, load::agenda::BoardView::All, None);
+    let board = load_board(d, load::reminders::BoardView::All, None);
     board
         .groups
         .iter()
@@ -73,7 +73,7 @@ fn open_task(d: &Driver, title: &str) -> wire::AgendaTask {
 }
 
 fn no_task(d: &Driver, title: &str) {
-    let board = load_board(d, load::agenda::BoardView::All, None);
+    let board = load_board(d, load::reminders::BoardView::All, None);
     assert!(
         board
             .groups
@@ -215,7 +215,7 @@ fn the_project_pages_quick_add_reads_dates_the_same_way() {
         i,
         pe::Kind::QuickAddSubmitted(pe::QuickAddSubmitted {}),
     );
-    let board = load_board(&d, load::agenda::BoardView::Project, Some(&garden));
+    let board = load_board(&d, load::reminders::BoardView::Project, Some(&garden));
     let task = board
         .groups
         .iter()
@@ -240,7 +240,7 @@ fn the_project_pages_quick_add_reads_dates_the_same_way() {
         i,
         pe::Kind::QuickAddSubmitted(pe::QuickAddSubmitted {}),
     );
-    let board = load_board(&d, load::agenda::BoardView::Project, Some(&garden));
+    let board = load_board(&d, load::reminders::BoardView::Project, Some(&garden));
     let task = board
         .groups
         .iter()

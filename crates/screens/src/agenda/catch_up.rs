@@ -61,7 +61,7 @@ impl CatchUp {
         self.incomplete = false;
         let catch_up = read::read(
             ctx,
-            load::agenda::CatchUp::default(),
+            load::reminders::CatchUp::default(),
             |answer| match answer {
                 Answer::AgendaTaskCatchUp(catch_up) => Some(catch_up),
                 _ => None,
@@ -69,7 +69,7 @@ impl CatchUp {
         );
         let projects = read::read(
             ctx,
-            load::agenda::Projects::default(),
+            load::reminders::Projects::default(),
             |answer| match answer {
                 Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,

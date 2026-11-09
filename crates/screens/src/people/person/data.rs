@@ -106,7 +106,7 @@ pub const HERO_LOG: &str = "log";
 fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route> {
     let (screen, args) = match item.kind.as_str() {
         "event" => (
-            "agenda.event",
+            "calendar.event",
             wire::route::Args::AgendaEvent(wire::AgendaEventRoute {
                 event_id: item.id.clone(),
                 instance_key: String::new(),
@@ -120,7 +120,7 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
             }),
         ),
         "task" => (
-            "agenda.task",
+            "reminders.task",
             wire::route::Args::TodoDetail(wire::TodoDetailRoute {
                 task_id: item.id.clone(),
             }),
@@ -180,8 +180,8 @@ pub fn vault(
         .filter_map(|item| {
             let route = vault_route(item, today)?;
             let (app_key, kind_label) = match item.kind.as_str() {
-                "event" => ("agenda", words::vault_kind_event(locale)),
-                "task" => ("agenda", words::vault_kind_task(locale)),
+                "event" => ("calendar", words::vault_kind_event(locale)),
+                "task" => ("reminders", words::vault_kind_task(locale)),
                 "document" => ("docs", words::vault_kind_document(locale)),
                 "txn" => ("money", words::vault_kind_payment(locale)),
                 "photo" => ("photos", words::vault_kind_photo(locale)),
@@ -664,10 +664,10 @@ mod tests {
                 ))
                 .collect::<Vec<_>>(),
             [
-                ("agenda", "Event", "Lunch with Ada"),
-                ("agenda", "Event", "Christmas"),
-                ("agenda", "Event", "Standing call"),
-                ("agenda", "Task", "Send Ada the book"),
+                ("calendar", "Event", "Lunch with Ada"),
+                ("calendar", "Event", "Christmas"),
+                ("calendar", "Event", "Standing call"),
+                ("reminders", "Task", "Send Ada the book"),
                 ("notes", "Note", "Loves chess, hates tea"),
                 ("docs", "Doc", "Menu.pdf"),
                 ("docs", "Doc", "Passport scan"),
@@ -749,9 +749,9 @@ mod tests {
         assert_eq!(
             routed,
             [
-                ("agenda.event", "ev@2026-11-07".to_owned()),
-                ("agenda.event", "ev2@2026-11-09".to_owned()),
-                ("agenda.task", "tk".to_owned()),
+                ("calendar.event", "ev@2026-11-07".to_owned()),
+                ("calendar.event", "ev2@2026-11-09".to_owned()),
+                ("reminders.task", "tk".to_owned()),
                 ("notes.editor", "nt:false".to_owned()),
                 ("docs.document", "dc:Menu.pdf".to_owned()),
             ],

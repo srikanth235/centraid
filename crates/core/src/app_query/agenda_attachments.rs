@@ -10,7 +10,7 @@
 use std::collections::BTreeMap;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::{AttachmentRow, load_attachments};
+use centraid_apps_calendar::AttachmentRow;
 use centraid_apps_kit::page::{PageCursor, PageRequest};
 use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::text_of;
@@ -24,19 +24,26 @@ const CURSOR_SEPARATOR: char = '\u{1f}';
 
 /// `agenda.attachments`: one page of what `item_id` has attached. `after` is the cursor of the
 /// page before, as its answer's `next` spelled it.
+/// Whose attachments: an event's (Calendar's) or a task's (Reminders').
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Of {
+    Event,
+    Task,
+}
+
 pub(crate) fn attachments(
     door: &VaultDoor<'_>,
+    of: Of,
     item_id: &str,
     after: Option<(String, String)>,
     limit: u32,
 ) -> Result<Answer> {
     let limit = usize::try_from(limit).unwrap_or(usize::MAX).max(1);
-    let loaded = load_attachments(
-        door,
-        item_id,
-        after.map(|(sort_key, pk)| PageCursor { sort_key, pk }),
-        limit,
-    )
+    let after = after.map(|(sort_key, pk)| PageCursor { sort_key, pk });
+    let loaded = match of {
+        Of::Event => centraid_apps_calendar::load_attachments(door, item_id, after, limit),
+        Of::Task => centraid_apps_reminders::load_attachments(door, item_id, after, limit),
+    }
     .and_then(|(data, denial)| {
         let thumbnails = if denial.is_some() {
             BTreeMap::new()

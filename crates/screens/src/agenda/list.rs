@@ -61,13 +61,13 @@ pub(super) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
 /// `board` for `view` (and `project`), in the device's zone.
 pub(super) fn board(
     ctx: &Ctx,
-    view: load::agenda::BoardView,
+    view: load::reminders::BoardView,
     project_id: Option<String>,
     limit: u32,
 ) -> Reading<wire::AgendaTaskBoard> {
     read::read(
         ctx,
-        load::agenda::Board {
+        load::reminders::Board {
             limit,
             project_id,
             view: Some(view),
@@ -166,8 +166,8 @@ struct List {
 }
 
 impl List {
-    fn board_view(&self) -> load::agenda::BoardView {
-        use load::agenda::BoardView as B;
+    fn board_view(&self) -> load::reminders::BoardView {
+        use load::reminders::BoardView as B;
         match self.view {
             // The smart lists are folds over the All board (#1173).
             wire::TodoView::All
@@ -176,6 +176,7 @@ impl List {
             | wire::TodoView::Flagged => B::All,
             wire::TodoView::Logbook => B::Logbook,
             wire::TodoView::Reminders => B::Reminders,
+            wire::TodoView::Inbox => B::Inbox,
             _ => B::Anytime,
         }
     }
@@ -201,6 +202,7 @@ impl List {
             | wire::TodoView::Flagged => wire::AgendaTaskView::All,
             wire::TodoView::Logbook => wire::AgendaTaskView::Logbook,
             wire::TodoView::Reminders => wire::AgendaTaskView::Reminders,
+            wire::TodoView::Inbox => wire::AgendaTaskView::Inbox,
             _ => wire::AgendaTaskView::Anytime,
         };
         view as i32
@@ -214,6 +216,7 @@ impl List {
             wire::TodoView::Flagged => reminders::smart_flagged(locale),
             wire::TodoView::Logbook => words::view_logbook(locale),
             wire::TodoView::Reminders => words::view_reminders(locale),
+            wire::TodoView::Inbox => words::inbox(locale),
             _ => words::view_anytime(locale),
         }
     }
@@ -231,6 +234,7 @@ impl List {
             wire::TodoView::Flagged => reminders::flagged_empty(locale),
             wire::TodoView::Logbook => words::logbook_empty(locale),
             wire::TodoView::Reminders => words::reminders_empty(locale),
+            wire::TodoView::Inbox => words::inbox_empty(locale),
             _ => words::anytime_empty(locale),
         }
     }

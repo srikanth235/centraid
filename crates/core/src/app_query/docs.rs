@@ -15,7 +15,6 @@
 //!   drawn inline, the rule Photos' held thumbnails use (#1047).
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
 use centraid_apps_docs as docs;
 use centraid_apps_docs::kind::{self, Kind, Surface, TypeFilter};
 use centraid_apps_docs::phone::{self, Modified, Shelf, Sort, View};
@@ -23,6 +22,7 @@ use centraid_apps_docs::queries::{
     ArmCount, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
 };
 use centraid_apps_kit::Denial;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;

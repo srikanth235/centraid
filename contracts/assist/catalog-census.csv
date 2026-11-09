@@ -1,34 +1,19 @@
 app,action,verb,kind,chat_surface,reachable_from_screen_today,reachable_from_chat_today
-agenda,propose,create,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
-agenda,rsvp,respond,event,card,yes: crates/screens/src/agenda/event.rs,no
-agenda,edit-event,edit,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
-agenda,edit-occurrence,reschedule,event,card,yes: crates/screens/src/agenda/editor.rs,no
-agenda,cancel-event,cancel,event,direct,yes: crates/screens/src/agenda/event.rs,yes
-agenda,trash-event,delete,event,direct,no,no
-agenda,restore-event,restore,event,direct,no,no
-agenda,attach,attach,event,card,no,no
-agenda,detach,detach,event,card,no,no
-agenda,add-task,create,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,edit-task,edit,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
-agenda,complete-task,complete,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,reopen-task,reopen,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,cancel-task,cancel,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,organize-task,add_to,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,delete-task,delete,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
-agenda,purge-task,purge,task,card,yes: crates/screens/src/agenda/trash.rs,no
-agenda,restore-task,restore,task,direct,yes: crates/screens/src/agenda/trash.rs,yes
-agenda,create-project,create,list,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
-agenda,rename-list,edit,list,direct,no,no
-agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/ops.rs,no
-agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
-agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
-agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
-agenda,star-task,star,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
-agenda,unstar-task,unstar,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
-agenda,create-calendar,create:kind,list,direct,no,no
-agenda,style-container,edit:color,list,direct,no,no
-agenda,add-place,create,event,card,yes: crates/screens/src/agenda/editor.rs,no
-agenda,record-calendar-push,import:items,event,card,yes: crates/screens/src/agenda/calendar.rs,no
+calendar,propose,create,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
+calendar,rsvp,respond,event,card,yes: crates/screens/src/agenda/event.rs,no
+calendar,edit-event,edit,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
+calendar,edit-occurrence,reschedule,event,card,yes: crates/screens/src/agenda/editor.rs,no
+calendar,cancel-event,cancel,event,direct,yes: crates/screens/src/agenda/event.rs,yes
+calendar,trash-event,delete,event,direct,no,no
+calendar,restore-event,restore,event,direct,no,no
+calendar,attach,attach,event,card,no,no
+calendar,detach,detach,event,card,no,no
+calendar,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
+calendar,create-calendar,create:kind,list,direct,no,no
+calendar,rename-calendar,edit,calendar,direct,yes: crates/screens/src/agenda/style.rs,no
+calendar,style-calendar,edit:color,calendar,direct,yes: crates/screens/src/agenda/style.rs,no
+calendar,add-place,create,event,card,yes: crates/screens/src/agenda/editor.rs,no
+calendar,record-calendar-push,import:items,event,card,yes: crates/screens/src/agenda/calendar.rs,no
 docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
 docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
 docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
@@ -178,3 +163,22 @@ photos,tag-photo,tag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
 photos,untag-photo,untag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
 photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
+reminders,add-task,create,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,edit-task,edit,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
+reminders,complete-task,complete,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,reopen-task,reopen,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,cancel-task,cancel,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,organize-task,add_to,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,delete-task,delete,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
+reminders,purge-task,purge,task,card,yes: crates/screens/src/agenda/trash.rs,no
+reminders,restore-task,restore,task,direct,yes: crates/screens/src/agenda/trash.rs,yes
+reminders,create-project,create,list,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+reminders,rename-list,edit,list,direct,no,no
+reminders,create-section,create,section,card,yes: crates/screens/src/agenda/todo/ops.rs,no
+reminders,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
+reminders,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
+reminders,star-task,star,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
+reminders,unstar-task,unstar,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,no
+reminders,style-container,edit:color,list,direct,no,no
+reminders,attach,attach,task,card,no,no
+reminders,detach,detach,task,card,no,no

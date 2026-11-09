@@ -243,7 +243,7 @@ struct AgendaEventView: View {
                             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                             .background {
                                 if choice.selected {
-                                    Capsule().fill(AppAccent("agenda").fill)
+                                    Capsule().fill(AppAccent("calendar").fill)
                                 } else {
                                     Capsule().fill(Surface.card)
                                     Capsule().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline)

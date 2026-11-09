@@ -251,16 +251,16 @@ fn flatten(tasks: &[wire::AgendaTask], into: &mut Vec<wire::AgendaTask>) {
 fn tasks(shell: &Shell) -> Vec<wire::AgendaTask> {
     let mut all = Vec::new();
     for view in [
-        load::agenda::BoardView::All,
-        load::agenda::BoardView::Logbook,
+        load::reminders::BoardView::All,
+        load::reminders::BoardView::Logbook,
     ] {
         shell.d.with_ctx(|ctx| {
             if let Reading::Data(board) = read::read(
                 ctx,
-                load::agenda::Board {
+                load::reminders::Board {
                     limit: 500,
                     view: Some(view),
-                    ..load::agenda::Board::default()
+                    ..load::reminders::Board::default()
                 },
                 |answer| match answer {
                     Answer::AgendaTaskBoard(board) => Some(board),
@@ -280,7 +280,7 @@ fn projects(shell: &Shell) -> Vec<wire::AgendaTaskProject> {
     shell.d.with_ctx(|ctx| {
         match read::read(
             ctx,
-            load::agenda::Projects::default(),
+            load::reminders::Projects::default(),
             |answer| match answer {
                 Answer::AgendaTaskProjects(projects) => Some(projects),
                 _ => None,

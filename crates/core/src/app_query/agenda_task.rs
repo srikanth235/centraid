@@ -11,10 +11,10 @@
 //! member's day ends.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::task;
-use centraid_apps_agenda::task::local::{self, Civil};
-use centraid_apps_agenda::task::queries::{ProjectRow, SectionRow, TaskRow};
-use centraid_apps_agenda::task::views::{self, GroupKind, Placed, View};
+use centraid_apps_reminders::task;
+use centraid_apps_reminders::task::local::{self, Civil};
+use centraid_apps_reminders::task::queries::{ProjectRow, SectionRow, TaskRow};
+use centraid_apps_reminders::task::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
@@ -352,7 +352,10 @@ pub(crate) fn search(
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
         // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS, and the correction
         // treats the two as one answer.
-        let entities = named::entities_of(centraid_apps_agenda::task::queries::TASK_KIND, "agenda");
+        let entities = named::entities_of(
+            centraid_apps_reminders::task::queries::TASK_KIND,
+            "reminders",
+        );
         Ok(Ok(corrected_search(
             &search,
             &entities,
@@ -382,7 +385,7 @@ pub(crate) fn search(
                     return Ok(((data, Vec::new()), denial));
                 }
                 let (found, denial) =
-                    named::of_app(&search, "agenda", term, limit.min(named::CONTAINER_ROWS));
+                    named::of_app(&search, "reminders", term, limit.min(named::CONTAINER_ROWS));
                 Ok(((data, found), denial))
             },
         )))

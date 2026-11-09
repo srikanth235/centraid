@@ -267,7 +267,7 @@ impl Editor {
         let key = kit_act::key(&["add-place", &name], kit_act::fresh());
         let settled = kit_act::act(
             ctx,
-            act::agenda::AddPlace {
+            act::calendar::AddPlace {
                 title: name,
                 ..Default::default()
             },

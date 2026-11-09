@@ -1080,8 +1080,13 @@ mod tests {
     #[test]
     fn an_unknown_app_is_the_requests_fault() {
         assert_eq!(scope_of("").unwrap(), None);
-        assert_eq!(scope_of("agenda").unwrap(), Some(App::Agenda));
-        // There is no `tasks` app: the tasks are Agenda's (#1128).
+        assert_eq!(scope_of("calendar").unwrap(), Some(App::Calendar));
+        assert_eq!(scope_of("reminders").unwrap(), Some(App::Reminders));
+        // There is no `agenda` app any more (round 10), and no `tasks` app: the tasks are Reminders'.
+        assert!(matches!(
+            scope_of("agenda"),
+            Err(CoreError::InvalidRequest { .. })
+        ));
         assert!(matches!(
             scope_of("tasks"),
             Err(CoreError::InvalidRequest { .. })

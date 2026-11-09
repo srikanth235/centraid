@@ -15,27 +15,27 @@ use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, task as words};
+use crate::strings::{Locale, agenda_reminders::reminders_title, task as words};
 
-/// Agenda's trash, as the kit's screen takes it.
+/// Reminders' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
-    app: act::agenda::APP,
+    app: act::reminders::APP,
     icon_key: "Todo",
     copy: TrashCopy {
         purge_body: Some(words::trash_purge_body),
         ..TrashCopy::KIT
     },
-    back_label: words::app_title,
+    back_label: reminders_title,
     denied,
     load: trashed,
     restore: |id| {
-        act::agenda::RestoreTask {
+        act::reminders::RestoreTask {
             task_id: id.to_owned(),
         }
         .into()
     },
     purge: Some(|id| {
-        act::agenda::PurgeTask {
+        act::reminders::PurgeTask {
             task_id: id.to_owned(),
         }
         .into()
@@ -59,10 +59,14 @@ fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
 
 /// `agenda.trash`: the trashed tasks, most recently trashed first.
 fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
-    let reading = read::read(ctx, load::agenda::Trash::default(), |answer| match answer {
-        Answer::AgendaTaskTrash(trash) => Some(trash),
-        _ => None,
-    });
+    let reading = read::read(
+        ctx,
+        load::reminders::Trash::default(),
+        |answer| match answer {
+            Answer::AgendaTaskTrash(trash) => Some(trash),
+            _ => None,
+        },
+    );
     match reading {
         Reading::Data(trash) => Reading::Data(
             trash

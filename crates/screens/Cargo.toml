@@ -16,7 +16,8 @@ path = "src/lib.rs"
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
 # Quick add reads a typed date with the app's own `nl_date` parser (#1173).
-centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-apps-calendar = { path = "../apps/calendar" }
+centraid-apps-reminders = { path = "../apps/reminders" }
 # The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
 # the docs crate's one `folder_path` (#1135).
 centraid-apps-docs = { path = "../apps/docs" }

@@ -1,4 +1,4 @@
-//! AGENDA'S NOTIFICATIONS (#1173): the view-less service `agenda.notify` that
+//! AGENDA'S NOTIFICATIONS (#1173): the view-less service `reminders.notify` that
 //! decides which reminders the phone should hold and says it, whole, every time
 //! the set changes.
 //!

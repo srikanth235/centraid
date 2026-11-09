@@ -32,7 +32,7 @@ catalog! {
     );
     plain denied_title = ("Notes cannot read this vault", "Notes cannot read this vault");
     plain domain_docs = ("Docs", "Docs");
-    plain domain_events = ("Agenda", "Agenda");
+    plain domain_events = ("Calendar", "Calendar");
     plain domain_locker = ("Locker", "Locker");
     plain domain_notes = ("Notes", "Notes");
     plain domain_other = ("Other", "Other");
@@ -147,7 +147,7 @@ catalog! {
     plain search_placeholder = ("Search notes", "Search notes");
     plain section_notes = ("Notes", "Notes");
     plain section_pinned = ("Pinned", "Pinned");
-    plain send_to_agenda = ("Send to Agenda", "Send to Agenda");
+    plain send_to_agenda = ("Send to Reminders", "Send to Reminders");
     plain show_every_note = ("Show every note", "Show every note");
     plain sort_created = ("Date created", "Date created");
     plain sort_title = ("Sort notes", "Sort notes");

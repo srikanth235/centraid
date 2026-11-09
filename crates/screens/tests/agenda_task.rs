@@ -71,7 +71,7 @@ fn phase(v: &wire::ViewState) -> Phase {
 fn rent(d: &Driver) -> String {
     add(
         d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Rent".into(),
             description: Field::Is("Standing order".into()),
             due: due(&format!("{}T09:00", day(d, 4))),
@@ -90,11 +90,11 @@ fn the_fields_are_computed_and_repeats_is_the_cores_sentence() {
     let due_day = day(&d, 4);
     let id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Rent".into(),
             due: due(&format!("{due_day}T09:00")),
             rule: Field::Is("FREQ=MONTHLY".into()),
-            anchor: Some(act::agenda::AddTaskAnchor::Completion),
+            anchor: Some(act::reminders::AddTaskAnchor::Completion),
             remind_before_min: Field::Is(30),
             ..Default::default()
         },
@@ -158,7 +158,7 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
     let mut d = driver();
     let id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Bins".into(),
             due: due(&day(&d, 2)),
             remind_before_min: Field::Is(0),
@@ -220,7 +220,7 @@ fn a_task_no_live_row_has_is_drawn_as_gone_not_as_a_failed_read() {
     // A trashed task is gone too.
     let id = task(&d, "Doomed");
     let page = open(&mut d, &id);
-    arrange(&d, act::agenda::DeleteTask { task_id: id });
+    arrange(&d, act::reminders::DeleteTask { task_id: id });
     d.pump(Duration::from_millis(400));
     assert!(matches!(
         detail(d.view(page)).content,
@@ -410,7 +410,7 @@ fn a_save_the_core_refuses_keeps_the_words_and_says_its_sentence() {
     // The task is deleted behind the page's back, so the save is refused.
     arrange(
         &d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );
@@ -431,7 +431,7 @@ fn a_vault_change_never_overwrites_typing_and_the_fields_refresh_around_the_word
     // Another surface moves the task's priority while the member types.
     arrange(
         &d,
-        act::agenda::EditTask {
+        act::reminders::EditTask {
             task_id: id.clone(),
             priority: Some(2),
             ..Default::default()
@@ -464,7 +464,7 @@ fn a_clean_page_adopts_what_another_surface_wrote() {
     let i = open(&mut d, &id);
     arrange(
         &d,
-        act::agenda::EditTask {
+        act::reminders::EditTask {
             task_id: id,
             title: Some("Rent (new)".into()),
             ..Default::default()
@@ -767,7 +767,7 @@ fn a_choice_reopened_on_a_later_visit_is_not_a_replay_of_an_earlier_one() {
     d.pop(agenda::TAB, first);
     arrange(
         &d,
-        act::agenda::EditTask {
+        act::reminders::EditTask {
             task_id: id.clone(),
             priority: Some(0),
             ..Default::default()
@@ -814,7 +814,7 @@ fn a_refused_field_write_says_the_cores_sentence_on_the_status_line() {
     let i = open(&mut d, &id);
     arrange(
         &d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );
@@ -898,7 +898,7 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
     let parent = task(&d, "Move house");
     let boxes = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Boxes".into(),
             parent_id: Field::Is(parent.clone()),
             ..Default::default()
@@ -906,7 +906,7 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
     );
     let van = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Van".into(),
             parent_id: Field::Is(parent.clone()),
             ..Default::default()

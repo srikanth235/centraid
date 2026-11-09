@@ -87,7 +87,7 @@ impl Project {
     fn reload(&mut self, ctx: &Ctx) {
         self.phase = Phase::of(list::board(
             ctx,
-            load::agenda::BoardView::Project,
+            load::reminders::BoardView::Project,
             Some(self.project_id.clone()),
             rows::MAX_WINDOW,
         ));
@@ -120,7 +120,7 @@ impl Project {
     fn load_completed(&mut self, ctx: &Ctx) {
         self.completed = match list::board(
             ctx,
-            load::agenda::BoardView::Logbook,
+            load::reminders::BoardView::Logbook,
             None,
             rows::MAX_WINDOW,
         ) {
@@ -400,7 +400,7 @@ impl Project {
         }
         let made = self.ops.created(
             ctx,
-            act::agenda::CreateSection {
+            act::reminders::CreateSection {
                 parent: self.project_id.clone(),
                 title: name.clone(),
                 ..Default::default()
@@ -423,7 +423,7 @@ impl Project {
         }
         self.ops.created(
             ctx,
-            act::agenda::RenameList {
+            act::reminders::RenameList {
                 list_id: self.project_id.clone(),
                 title: name.clone(),
             },

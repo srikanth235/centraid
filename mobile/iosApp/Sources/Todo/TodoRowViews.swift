@@ -66,6 +66,8 @@ struct TodoRowView: View {
         var actions = [
             KitRowAction(id: "details", label: chrome.detailsVerb, iconKey: "FileText") { onPick(row.route) },
         ]
+        // CALENDAR'S REMINDER on a day is read-only: it opens in Reminders and nothing else.
+        if row.readOnly { return actions }
         if let onFlag {
             actions.append(
                 KitRowAction(id: "flag", label: row.flagged ? chrome.unflagVerb : chrome.flagVerb, iconKey: "Flag", tone: .amber) {
@@ -104,7 +106,7 @@ struct TodoRowView: View {
                 label: row.checkLabel,
                 identifier: "\(identifierPrefix)-check-\(row.taskID)",
                 round: !row.subtask
-            ) { onCheck(row.taskID) }
+            ) { if row.readOnly { onPick(row.route) } else { onCheck(row.taskID) } }
                 .padding(-Self.boxOverhang)
                 .padding(.top, 1)
             Button { onPick(row.route) } label: {
@@ -376,7 +378,7 @@ struct QuickAddChipView: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let accent = AppAccent("agenda")
+        let accent = AppAccent("reminders")
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 CentraidIconView(iconKey: chip.repeats ? "Repeat" : "Calendar", tint: accent.text, size: 14)

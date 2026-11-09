@@ -462,7 +462,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "centraid-apps-agenda"
+name = "centraid-apps-calendar"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
@@ -582,10 +582,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-apps-reminders"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-apps-kit",
+ "centraid-ontology",
+ "centraid-search",
+ "centraid-vault",
+ "rusqlite",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-kit",
  "centraid-search",
  "centraid-vault",
@@ -640,7 +653,7 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "centraid-api-proto",
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-docs",
  "centraid-apps-health",
  "centraid-apps-kit",
@@ -649,6 +662,7 @@ dependencies = [
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",
+ "centraid-apps-reminders",
  "centraid-assist",
  "centraid-blobs",
  "centraid-gateway",
@@ -803,7 +817,7 @@ name = "centraid-nativetools"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-kit",
  "centraid-apps-locker",
  "centraid-assist",
@@ -841,9 +855,10 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
  "centraid-api-proto",
- "centraid-apps-agenda",
+ "centraid-apps-calendar",
  "centraid-apps-docs",
  "centraid-apps-locker",
+ "centraid-apps-reminders",
  "centraid-assist",
  "centraid-core",
  "centraid-design",

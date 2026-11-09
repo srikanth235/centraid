@@ -497,6 +497,6 @@ mod tests {
     fn agenda_has_its_typed_builders() {
         let file = generate(&root()).unwrap();
         assert!(file.contains("pub struct Propose {"));
-        assert!(file.contains("pub mod agenda {"));
+        assert!(file.contains("pub mod calendar {"));
     }
 }

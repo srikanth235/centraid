@@ -2,7 +2,7 @@ import SwiftUI
 
 /// AN APP'S COLOUR, as the three values the design gives it (#1173).
 ///
-/// One hook for every screen that wears an app: `AppAccent("agenda")`. The shell's places
+/// One hook for every screen that wears an app: `AppAccent("calendar")`. The shell's places
 /// (`home`, `chat`, `backup`) and any id this table does not know wear the shell's teal, so a
 /// new app is never an unstyled one.
 ///
@@ -29,7 +29,7 @@ struct AppAccent: Equatable {
 
     init(_ appId: String) {
         switch appId {
-        case "agenda": self.init(appId, CentraidAsset.appAgenda, CentraidAsset.appAgendaText, CentraidAsset.appAgendaTile, CentraidAsset.appAgendaTint)
+        case "calendar": self.init(appId, CentraidAsset.appCalendar, CentraidAsset.appCalendarText, CentraidAsset.appCalendarTile, CentraidAsset.appCalendarTint)
         case "docs": self.init(appId, CentraidAsset.appDocs, CentraidAsset.appDocsText, CentraidAsset.appDocsTile, CentraidAsset.appDocsTint)
         case "health": self.init(appId, CentraidAsset.appHealth, CentraidAsset.appHealthText, CentraidAsset.appHealthTile, CentraidAsset.appHealthTint)
         case "locker": self.init(appId, CentraidAsset.appLocker, CentraidAsset.appLockerText, CentraidAsset.appLockerTile, CentraidAsset.appLockerTint)
@@ -37,6 +37,7 @@ struct AppAccent: Equatable {
         case "notes": self.init(appId, CentraidAsset.appNotes, CentraidAsset.appNotesText, CentraidAsset.appNotesTile, CentraidAsset.appNotesTint)
         case "people": self.init(appId, CentraidAsset.appPeople, CentraidAsset.appPeopleText, CentraidAsset.appPeopleTile, CentraidAsset.appPeopleTint)
         case "photos": self.init(appId, CentraidAsset.appPhotos, CentraidAsset.appPhotosText, CentraidAsset.appPhotosTile, CentraidAsset.appPhotosTint)
+        case "reminders": self.init(appId, CentraidAsset.appReminders, CentraidAsset.appRemindersText, CentraidAsset.appRemindersTile, CentraidAsset.appRemindersTint)
         default: self.init("", CentraidAsset.shell, CentraidAsset.shellText, CentraidAsset.shell, nil)
         }
     }

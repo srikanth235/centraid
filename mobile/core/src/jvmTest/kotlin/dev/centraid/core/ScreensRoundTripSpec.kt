@@ -49,11 +49,11 @@ class ScreensRoundTripSpec : StringSpec({
             navigation.band!!.tabs.map { it.tab to it.selected } shouldBe
                 listOf("home" to true, "chat" to false, "backup" to false)
             // Home's widgets sit in the board's order (`CONTENT_ORDER`, crates/screens/src/shell/policy.rs):
-            // Reminders is Agenda's second widget, so Agenda is named twice.
+            // Calendar and Reminders are two apps with a tile each.
             val home = screens.views.value[root.instance]!!.home!!
             home.data_!!.tiles.map { it.app_id } shouldBe
                 listOf(
-                    "agenda", "agenda", "photos", "money", "health", "people", "locker", "notes", "docs",
+                    "calendar", "reminders", "photos", "money", "health", "people", "locker", "notes", "docs",
                 )
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()

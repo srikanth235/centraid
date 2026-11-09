@@ -147,7 +147,7 @@ fn the_list_reads_its_view_and_names_it() {
     let idea = task(&d, "Someday idea");
     let dated = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Dated work".into(),
             due: due(&day(&d, 3)),
             ..Default::default()
@@ -252,7 +252,7 @@ fn a_check_on_a_later_visit_is_not_a_replay_of_the_same_check_on_an_earlier_one(
     d.pop(agenda::TAB, first);
     arrange(
         &d,
-        act::agenda::ReopenTask {
+        act::reminders::ReopenTask {
             task_id: id.clone(),
         },
     );
@@ -267,7 +267,7 @@ fn a_repeating_task_names_its_next_date_and_offers_no_undo() {
     clear_tasks(&d);
     let water = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Water the plants".into(),
             due: due(&day(&d, 2)),
             rule: Field::Is("FREQ=WEEKLY".into()),
@@ -295,7 +295,7 @@ fn reminders_name_a_moment_when_the_core_supplies_one_else_the_day() {
     let tomorrow = day(&d, 1);
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Call".into(),
             due: due(&format!("{tomorrow}T09:00")),
             remind_before_min: Field::Is(30),
@@ -304,7 +304,7 @@ fn reminders_name_a_moment_when_the_core_supplies_one_else_the_day() {
     );
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Bins".into(),
             due: due(&day(&d, 2)),
             remind_before_min: Field::Is(0),
@@ -387,7 +387,7 @@ fn a_refused_check_says_the_cores_sentence_and_keeps_the_list() {
     // The task is trashed behind the screen's back; its row is still drawn.
     arrange(
         &d,
-        act::agenda::DeleteTask {
+        act::reminders::DeleteTask {
             task_id: id.clone(),
         },
     );
@@ -421,7 +421,7 @@ fn a_project_draws_its_unsectioned_work_then_every_section_each_with_add_task() 
     let beds = section(&d, &garden, "Beds");
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Order seeds".into(),
             project_id: Field::Is(garden.clone()),
             ..Default::default()
@@ -718,7 +718,7 @@ fn checking_a_project_row_completes_it_and_undo_brings_it_back() {
     let garden = project(&d, "Garden");
     let id = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Order seeds".into(),
             project_id: Field::Is(garden.clone()),
             ..Default::default()
@@ -748,7 +748,7 @@ fn a_projects_rows_follow_changes_made_elsewhere() {
     let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
     arrange(
         &d,
-        act::agenda::RenameList {
+        act::reminders::RenameList {
             list_id: garden.clone(),
             title: "Orchard".into(),
         },
@@ -764,7 +764,7 @@ fn a_projects_rows_follow_changes_made_elsewhere() {
 fn overdue(d: &centraid_screens::testing::Driver, title: &str, days_ago: i64) -> String {
     add(
         d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: title.into(),
             due: due(&day(d, -days_ago)),
             ..Default::default()
@@ -791,7 +791,7 @@ fn the_overdue_verb_opens_catch_up_on_a_list_page_and_a_project_page() {
     let garden = project(&d, "Garden");
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Late bulbs".into(),
             project_id: Field::Is(garden.clone()),
             due: due(&day(&d, -3)),
@@ -845,7 +845,7 @@ fn catch_up_piles_what_came_due_and_names_the_absence() {
     // Repeating and behind, and repeating and on time.
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Water".into(),
             due: due(&day(&d, -3)),
             rule: Field::Is("FREQ=DAILY".into()),
@@ -854,7 +854,7 @@ fn catch_up_piles_what_came_due_and_names_the_absence() {
     );
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Rent".into(),
             due: due(&day(&d, 4)),
             rule: Field::Is("FREQ=MONTHLY".into()),
@@ -894,7 +894,7 @@ fn complete_all_asks_then_completes_the_pile_and_says_its_count() {
     let second = overdue(&d, "Call", 5);
     let water = add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Water".into(),
             due: due(&day(&d, -3)),
             rule: Field::Is("FREQ=DAILY".into()),
@@ -1034,7 +1034,7 @@ fn the_board_view_of_the_project_page_is_the_projects_own() {
     let other = project(&d, "House");
     add(
         &d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: "Mop".into(),
             project_id: Field::Is(other),
             ..Default::default()
@@ -1042,6 +1042,6 @@ fn the_board_view_of_the_project_page_is_the_projects_own() {
     );
     let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
     assert!(rows(&project_data(d.view(i)).groups).is_empty());
-    let board = load_board(&d, load::agenda::BoardView::Project, Some(&garden));
+    let board = load_board(&d, load::reminders::BoardView::Project, Some(&garden));
     assert!(board.groups.iter().all(|g| g.tasks.is_empty()));
 }

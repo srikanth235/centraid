@@ -145,6 +145,9 @@ message AgendaHomeState {
     // More's "Import reminders".
     SHEET_IMPORT_REMINDERS = 8;
   }
+  // Which app this home is (round 10 of #1173): `calendar` or `reminders`. The shell wears that
+  // app's accent and names it on the band; it decides nothing else from it.
+  string app_key = 40;
 }
 
 // The Import reminders option sheet: one switch and one verb. Its words are
@@ -1961,6 +1964,9 @@ message TodoRow {
   // `design/tokens.toml`) for the check circle and the dot; empty when the
   // task is in no list.
   string list_color_key = 18;
+  // The row is Calendar's reminder, shown on its day (round 10): its box does not check it off,
+  // a tap on the box or the row pushes `route` (Reminders' page for it).
+  bool read_only = 19;
 }
 
 // A group of rows under one head.

@@ -88,12 +88,21 @@ dark_text = "#7FC4B8"
 # the same way for the others. `tile` is the bright colour on tiles and icons where it is
 # not the accent (Notes: Apple Notes yellow, content, so it does not change in
 # dark).
-[app.agenda]
+[app.calendar]
 light = "#266FC4"
 dark_fill = "#3077CD"
 dark_text = "#569EF7"
 tint = "#EEF3FA"
 dark_tint = "#202F41"
+
+# Reminders (round 10): a pine teal. Not red, amber or green (overdue, soon and done are state
+# colours in this app), and a hue clear of Docs' petrol and the shell's deep teal.
+[app.reminders]
+light = "#087668"
+dark_fill = "#12806F"
+dark_text = "#4FD1BE"
+tint = "#E6F3F0"
+dark_tint = "#17302C"
 
 [app.notes]
 light = "#8C6802"
@@ -565,9 +574,9 @@ dark_chip = "#1d2f32"
 dark_mark = "#58b4c4"
 
 [[native.app]]
-id = "agenda"
-name = "Agenda"
-desc = "Your calendar, events and plans."
+id = "calendar"
+name = "Calendar"
+desc = "Your events and invites."
 icon_key = "Calendar"
 color_key = "forest"
 light_hue = "#397247"
@@ -576,6 +585,19 @@ light_mark = "#346841"
 dark_hue = "#7bb587"
 dark_chip = "#242f26"
 dark_mark = "#7bb587"
+
+[[native.app]]
+id = "reminders"
+name = "Reminders"
+desc = "Your tasks and lists."
+icon_key = "Todo"
+color_key = "pine"
+light_hue = "#087668"
+light_chip = "#dff0ec"
+light_mark = "#0a7365"
+dark_hue = "#4fd1be"
+dark_chip = "#17302c"
+dark_mark = "#4fd1be"
 
 [[native.app]]
 id = "money"
@@ -626,6 +648,7 @@ colors = [
   { light = "#1E4C80", text = "#2D71BE" },
   { light = "#1F4A36", text = "#A2D8BF" },
   { light = "#1F4A45", text = "#7FC4B8", fill = "#2E7268", line = "#7FC4B8" },
+  { light = "#087668", text = "#4FD1BE", fill = "#12806F", line = "#4FD1BE" },
   { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
   { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
   { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
