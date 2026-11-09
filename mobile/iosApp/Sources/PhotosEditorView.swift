@@ -295,7 +295,7 @@ struct PhotosEditorView: View {
             Text(state.straightenLabel)
                 .kitType(.row)
                 .foregroundStyle(editing ? Surface.ink : Surface.meta)
-            Slider(value: angle, in: -limit...limit, step: 1)
+            straightenSlider(angle, limit: limit)
                 .tint(accent.fill)
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .disabled(!editing)
@@ -307,6 +307,17 @@ struct PhotosEditorView: View {
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+    }
+
+    /// THE STRAIGHTEN SLIDER fills from zero toward the thumb, as the board draws it, where the
+    /// system slider of iOS 26 has a neutral value; before it, the plain slider fills from the left.
+    @ViewBuilder
+    private func straightenSlider(_ angle: Binding<Double>, limit: Double) -> some View {
+        if #available(iOS 26, *) {
+            Slider(value: angle, in: -limit...limit, step: 1, neutralValue: 0) { EmptyView() }
+        } else {
+            Slider(value: angle, in: -limit...limit, step: 1)
+        }
     }
 
     private var editBar: some View {
