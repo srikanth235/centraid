@@ -7,7 +7,8 @@ mod todo_support;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::agenda::{self, routes, todo::rows};
+use centraid_screens::agenda::{self, routes};
+use centraid_screens::kit::schedule::rows;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Field;
 use centraid_screens::strings::Locale;
