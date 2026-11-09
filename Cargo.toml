@@ -57,7 +57,7 @@ proptest = "1"
 # and the preupdate hook, which a system libsqlite3 almost never carries.
 # `hooks` gives the commit/rollback hooks the commit guard needs; `functions`
 # the applier's scalar helpers.
-rusqlite = { version = "0.40", features = [
+rusqlite = { version = "0.41", features = [
   "bundled",
   "session",
   "hooks",

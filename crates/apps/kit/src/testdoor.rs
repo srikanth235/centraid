@@ -154,11 +154,7 @@ impl PageDoor for TestDoor<'_> {
                 PageBindValue::Null => rusqlite::types::Value::Null,
             })
             .collect();
-        let columns: Vec<String> = prepared
-            .column_names()
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
+        let columns: Vec<String> = prepared.column_names().map(str::to_owned).collect();
         let mut rows = prepared
             .query(rusqlite::params_from_iter(binds))
             .map_err(|error| KitError::Door(format!("{error} in {}", query.name)))?;

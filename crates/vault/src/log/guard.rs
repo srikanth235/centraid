@@ -207,11 +207,10 @@ impl Vault {
         &self,
         body: impl FnOnce(&CommitTx<'_>) -> Result<T>,
     ) -> Result<CommitResult<T>> {
-        let connection = self.connection();
-
         if self.depth.get() > 0 {
+            let connection = self.connection();
             let tx = CommitTx {
-                connection,
+                connection: &connection,
                 producer: RefCell::new(String::new()),
                 pending: &self.pending,
             };
@@ -223,25 +222,31 @@ impl Vault {
             });
         }
 
-        connection
+        self.connection()
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(|error| VaultError::from_sqlite("opening a commit", error))?;
         self.depth.set(1);
 
         // THE HOOK IS INSTALLED INSIDE THE TRANSACTION and removed before the
         // guard returns, so a read between commits carries no hook at all and
-        // one commit's census can never absorb another's.
+        // one commit's census can never absorb another's. The `HookGuard` is what
+        // makes "before the guard returns" hold on every path, including a failing
+        // COMMIT and a panicking body.
         let census: Census = Arc::new(Mutex::new(Tally::default()));
-        if let Err(error) = install_hook(connection, &census) {
-            self.depth.set(0);
-            let _ = connection.execute_batch("ROLLBACK");
-            return Err(error);
-        }
+        let hook = match HookGuard::install(self, &census) {
+            Ok(hook) => hook,
+            Err(error) => {
+                self.depth.set(0);
+                let _ = self.connection().execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        };
 
         *self.pending.borrow_mut() = Pending::default();
         let outcome = (|| -> Result<T> {
+            let connection = self.connection();
             let tx = CommitTx {
-                connection,
+                connection: &connection,
                 producer: RefCell::new("unnamed".to_owned()),
                 pending: &self.pending,
             };
@@ -249,8 +254,8 @@ impl Vault {
             // The index is part of the commit: a change and its search rows
             // land together or not at all.
             let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
-            crate::index::reindex(connection, &owed)?;
-            bump_writes(connection, &census, &self.clock().now_text())?;
+            crate::index::reindex(&connection, &owed)?;
+            bump_writes(&connection, &census, &self.clock().now_text())?;
             Ok(value)
         })();
 
@@ -259,13 +264,13 @@ impl Vault {
 
         match outcome {
             Ok(value) => {
-                connection
+                self.connection()
                     .execute_batch("COMMIT")
                     .map_err(|error| VaultError::from_sqlite("committing", error))?;
                 // READ AFTER THE COMMIT, and cleared only then. A census read
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
-                let tally = take_census(connection, &census);
+                let tally = hook.take(&census)?;
                 let rows = tally.rows;
                 let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
@@ -276,11 +281,11 @@ impl Vault {
                 })
             }
             Err(error) => {
-                let _ = connection.execute_batch("ROLLBACK");
+                let _ = self.connection().execute_batch("ROLLBACK");
                 // A ROLLBACK REPORTS NOTHING. The hook fired for every row the
                 // body wrote and none of those rows exists any more, so the
                 // census is dropped rather than returned.
-                let _ = take_census(connection, &census);
+                let _ = hook.take(&census);
                 Err(error)
             }
         }
@@ -365,26 +370,70 @@ pub(crate) fn install_without_rowid_census(connection: &Connection) -> Result<()
     Ok(())
 }
 
-/// Point the connection's `update_hook` at `census` for the length of a commit.
-fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
-    let shared = Arc::clone(census);
-    connection.update_hook(Some(
-        move |_action: Action, _database: &str, table: &str, _row_id: i64| {
-            if !is_reportable(table) {
-                return;
-            }
-            if let Ok(mut held) = shared.lock() {
-                if held.muted {
-                    return;
-                }
-                held.rows += 1;
-                if !held.tables.contains(table) {
-                    held.tables.insert(table.to_owned());
-                }
-            }
-        },
-    ))?;
-    Ok(())
+/// The census hook, installed on the vault's connection for the length of one commit.
+///
+/// rusqlite 0.41 takes `update_hook` on `&mut Connection`, and the vault's connection is behind
+/// a `RefCell` ([`crate::file::Held`]) so the exclusive borrow is taken here and only here:
+/// once to install, once to remove, with no shared borrow alive in between at either moment.
+/// The guard removes the hook when it is dropped, so no exit from a commit (a failing COMMIT,
+/// a panicking body) can leave one installed to write into a finished commit's census.
+struct HookGuard<'v> {
+    vault: &'v Vault,
+    installed: bool,
+}
+
+impl<'v> HookGuard<'v> {
+    fn install(vault: &'v Vault, census: &Census) -> Result<Self> {
+        let shared = Arc::clone(census);
+        vault.with_exclusive_connection(|connection| {
+            connection.update_hook(Some(
+                move |_action: Action, _database: &str, table: &str, _row_id: i64| {
+                    if !is_reportable(table) {
+                        return;
+                    }
+                    if let Ok(mut held) = shared.lock() {
+                        if held.muted {
+                            return;
+                        }
+                        held.rows += 1;
+                        if !held.tables.contains(table) {
+                            held.tables.insert(table.to_owned());
+                        }
+                    }
+                },
+            ))
+        })?;
+        Ok(Self {
+            vault,
+            installed: true,
+        })
+    }
+
+    /// Take the census and remove the hook.
+    ///
+    /// The hook is removed FIRST: the closure owns a clone of the `Arc`, and
+    /// leaving it installed would leave one commit's set alive to be written to by
+    /// the next statement on this connection.
+    fn take(mut self, census: &Census) -> Result<Tally> {
+        self.remove()?;
+        Ok(take_census(&self.vault.connection(), census))
+    }
+
+    fn remove(&mut self) -> Result<()> {
+        if self.installed {
+            self.installed = false;
+            self.vault.with_exclusive_connection(|connection| {
+                connection.update_hook(None::<fn(Action, &str, &str, i64)>)
+            })?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for HookGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.remove();
+    }
 }
 
 /// Count this commit as a write when it changed something a screen reads: `vault.writes` one
@@ -426,13 +475,8 @@ fn set_muted(census: &Census, muted: bool) {
     }
 }
 
-/// Take the census and remove the hook.
-///
-/// The hook is removed FIRST: the closure owns a clone of the `Arc`, and
-/// leaving it installed would leave one commit's set alive to be written to by
-/// the next statement on this connection.
+/// Take the census the hook gathered (the hook is already removed: [`HookGuard::take`]).
 fn take_census(connection: &Connection, census: &Census) -> Tally {
-    let _ = connection.update_hook(None::<fn(Action, &str, &str, i64)>);
     let mut tally = match census.lock() {
         Ok(mut held) => std::mem::take(&mut *held),
         Err(_) => Tally::default(),

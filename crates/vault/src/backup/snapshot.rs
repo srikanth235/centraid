@@ -298,7 +298,7 @@ pub fn copy(vault: &Vault, scratch_dir: &Path) -> Result<Copied> {
         rand::random::<u64>()
     ));
     remove_copy(&path)?;
-    backup_into(vault.connection(), &path)?;
+    backup_into(&vault.connection(), &path)?;
     Ok(Copied { path, taken_at_ms })
 }
 
