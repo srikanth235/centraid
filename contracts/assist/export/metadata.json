@@ -3355,6 +3355,42 @@
         "verb": "untag"
       },
       {
+        "action": "import-notes",
+        "also": [],
+        "app": "notes",
+        "bulk": true,
+        "chat": "card",
+        "command": "note.import",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "import my Obsidian notes",
+          "bring in these Markdown files",
+          "import a folder of notes"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "export-notes",
+        "also": [],
+        "app": "notes",
+        "bulk": true,
+        "chat": "card",
+        "command": "note.export",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "export my notes as Markdown",
+          "save a notebook as Markdown files",
+          "back up my notes to files"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "add-person",
         "also": [],
         "app": "people",
@@ -3841,6 +3877,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "import"
+      },
+      {
+        "action": "import-vcf",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "person.import_vcf",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "import my contacts file",
+          "bring in this vcf",
+          "import vCards"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "export-vcf",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "person.export_vcf",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "export my people as vcf",
+          "save a list as vCards",
+          "back up my contacts to a file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
       },
       {
         "action": "upload",
