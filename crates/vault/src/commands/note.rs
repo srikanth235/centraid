@@ -416,7 +416,7 @@ fn notebook_named(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<String> {
         .connection()
         .query_row(
             "SELECT id FROM entity WHERE kind = 'notebook' AND deleted_at IS NULL
-                AND lower(title) = lower(?1) ORDER BY n LIMIT 1",
+                AND title = ?1 COLLATE NOCASE ORDER BY created_at, id LIMIT 1",
             [title],
             |row| row.get(0),
         )
