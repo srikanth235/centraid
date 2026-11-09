@@ -158,7 +158,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kinds",
         "note",
-        "Words with a title: the body, its format, and the notebook it is in. A note about something is a memo.",
+        "Words with a title: the body, its format, and the notebook it is in. A note about you is a journal entry; a note about anything else shows with its subject.",
     ),
     (
         "kinds",
