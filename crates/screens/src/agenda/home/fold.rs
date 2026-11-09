@@ -41,10 +41,10 @@ use super::grid::{self, WeekStart};
 use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
+use crate::kit::civil::{self, HourCycle};
+use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words;
 use crate::kit::schedule::style;
-use crate::kit::schedule::rows;
-use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
 
 const CANCELLED: &str = "cancelled";
@@ -836,26 +836,6 @@ fn days_of(event: &wire::AgendaEvent) -> Vec<String> {
 
 pub(super) fn start_day(event: &wire::AgendaEvent) -> &str {
     event.local_start.get(..10).unwrap_or_default()
-}
-
-/// `Wednesday 11 March`, or the input when it is not a day.
-#[must_use]
-pub fn long_day(locale: Locale, day: &str) -> String {
-    let weekday = match civil::iso_weekday_of(day) {
-        Some(1) => words::weekday_full_mon(locale),
-        Some(2) => words::weekday_full_tue(locale),
-        Some(3) => words::weekday_full_wed(locale),
-        Some(4) => words::weekday_full_thu(locale),
-        Some(5) => words::weekday_full_fri(locale),
-        Some(6) => words::weekday_full_sat(locale),
-        Some(7) => words::weekday_full_sun(locale),
-        _ => return day.to_owned(),
-    };
-    format!(
-        "{weekday} {} {}",
-        civil::day_of_month_of(day).unwrap_or_default(),
-        civil::month_of(locale, day)
-    )
 }
 
 #[cfg(test)]

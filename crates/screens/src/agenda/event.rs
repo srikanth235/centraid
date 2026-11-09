@@ -39,17 +39,17 @@ use wire::agenda_event_event::Kind as K;
 use wire::agenda_event_state::Sheet;
 use wire::app_query_response::Answer;
 
-use crate::kit::schedule::rule_words;
+use crate::kit::schedule::rule_words::{self, long_day};
 use wire::screen_event::Kind as E;
 
-use crate::kit::schedule::attachments::{Attachments, Of};
 use super::home::Hues;
 use super::routes;
-use crate::kit::schedule::rows::hue_role;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::schedule::attachments::{Attachments, Of};
+use crate::kit::schedule::rows::hue_role;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
@@ -761,32 +761,6 @@ pub fn scope_word(scope: wire::AgendaScope) -> &'static str {
         wire::AgendaScope::Future => "future",
         _ => "series",
     }
-}
-
-/// `Wednesday 11 March`, or the input when it is not a day.
-#[must_use]
-pub fn long_day(locale: Locale, day: &str) -> String {
-    let weekday = match civil::iso_weekday_of(day) {
-        Some(1) => words::weekday_full_mon(locale),
-        Some(2) => words::weekday_full_tue(locale),
-        Some(3) => words::weekday_full_wed(locale),
-        Some(4) => words::weekday_full_thu(locale),
-        Some(5) => words::weekday_full_fri(locale),
-        Some(6) => words::weekday_full_sat(locale),
-        Some(7) => words::weekday_full_sun(locale),
-        _ => return day.to_owned(),
-    };
-    let Some(dom) = civil::day_of_month_of(day) else {
-        return day.to_owned();
-    };
-    fill(
-        &event_words::day_long(locale),
-        &[
-            ("weekday", &weekday),
-            ("day", &dom.to_string()),
-            ("month", &civil::month_of(locale, day)),
-        ],
-    )
 }
 
 /// "Wednesday 11 March", or a range when the occurrence spans days.

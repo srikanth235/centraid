@@ -14,9 +14,9 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::container::{LIST_COLORS, LIST_ICONS};
 
-use crate::kit::schedule::ops::Ops;
 use crate::catalog::act;
 use crate::field::Field;
+use crate::kit::schedule::ops::Ops;
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda_lists as words};
 

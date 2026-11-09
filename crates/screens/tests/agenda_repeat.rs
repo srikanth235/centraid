@@ -9,8 +9,8 @@ mod agenda_event_support;
 
 use agenda_event_support::World;
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::kit::schedule::repeat::{self, End, Freq, MonthMode, Spec};
 use centraid_screens::field::Field;
+use centraid_screens::kit::schedule::repeat::{self, End, Freq, MonthMode, Spec};
 use wire::agenda_editor_event::Kind as K;
 use wire::agenda_editor_state::Sheet;
 use wire::{AgendaEditorKind as Kind, AgendaScope as Scope};

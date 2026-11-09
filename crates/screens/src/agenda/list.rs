@@ -11,14 +11,14 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 use wire::todo_list_event::Kind as L;
 
-use super::home::long_day;
 use super::todo::buckets;
-use crate::kit::schedule::ops::Ops;
-use crate::kit::schedule::rows::{self, Context};
 use super::todo::view::Prefs;
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};
+use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::rows::{self, Context};
+use crate::kit::schedule::rule_words::long_day;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, agenda_reminders as reminders, agenda_todo, fill, task as words};
 

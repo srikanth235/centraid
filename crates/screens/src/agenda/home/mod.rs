@@ -44,17 +44,16 @@ use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
 pub(in crate::agenda) use self::fold::Hues;
-pub(crate) use self::fold::long_day;
 use self::held::Held;
 use super::calendar::CalendarFollow;
 use super::routes;
-use crate::kit::schedule::style::{Draft, Subject};
-use crate::kit::schedule::natural::{Chipper, Fields};
-use crate::kit::schedule::ops::{NewTask, Ops};
 use super::todo::quick::Quick;
-use crate::kit::schedule::rows;
 use super::todo::view::Prefs;
 use crate::kit::civil;
+use crate::kit::schedule::natural::{Chipper, Fields};
+use crate::kit::schedule::ops::{NewTask, Ops};
+use crate::kit::schedule::rows;
+use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,

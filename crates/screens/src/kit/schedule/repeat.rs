@@ -16,6 +16,83 @@ use centraid_vault::time::{Freq as VaultFreq, MonthlyBasis, RepeatEnd, RepeatSpe
 
 use crate::kit::civil;
 
+/// What the repeat pickers write: the presets and the custom key.
+pub const REPEAT_NONE: &str = "none";
+pub const REPEAT_DAILY: &str = "daily";
+pub const REPEAT_WEEKLY: &str = "weekly";
+pub const REPEAT_BIWEEKLY: &str = "biweekly";
+pub const REPEAT_MONTHLY: &str = "monthly";
+pub const REPEAT_YEARLY: &str = "yearly";
+pub const REPEAT_CUSTOM: &str = "custom";
+
+/// The rule each preset writes, in the order the sheet lists them. The member
+/// reads the label, never these.
+pub const RULES: [(&str, &str); 5] = [
+    (REPEAT_DAILY, "FREQ=DAILY"),
+    (REPEAT_WEEKLY, "FREQ=WEEKLY"),
+    (REPEAT_BIWEEKLY, "FREQ=WEEKLY;INTERVAL=2"),
+    (REPEAT_MONTHLY, "FREQ=MONTHLY"),
+    (REPEAT_YEARLY, "FREQ=YEARLY"),
+];
+
+/// The rule a preset key writes, or `None` for "does not repeat" and a rule the
+/// editor keeps as it is.
+#[must_use]
+pub fn rule_of(key: &str) -> Option<&'static str> {
+    RULES
+        .iter()
+        .find(|(preset, _)| *preset == key)
+        .map(|(_, rule)| *rule)
+}
+
+/// A task's address as it will be saved: a full `http` or `https` address
+/// stays, a bare domain gets `https://`, and anything else is refused (`None`).
+/// A blank is no address, which is `Some("")`.
+#[must_use]
+pub fn normalize_url(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Some(String::new());
+    }
+    if text.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let (scheme, body) = if lower.starts_with("https://") {
+        ("https://", text.get(8..)?)
+    } else if lower.starts_with("http://") {
+        ("http://", text.get(7..)?)
+    } else {
+        // No scheme: a bare domain. A colon before the path is only a port;
+        // `mailto:`, `javascript:` and `ftp://` are not web addresses.
+        let head = text.split(['/', '?', '#']).next().unwrap_or_default();
+        if let Some((_, after)) = head.rsplit_once(':')
+            && (after.is_empty() || !after.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return None;
+        }
+        ("https://", text)
+    };
+    let authority = body.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority.rsplit('@').next().unwrap_or_default();
+    let host = host
+        .rsplit_once(':')
+        .filter(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(host, |(name, _)| name);
+    let labels: Vec<&str> = host.split('.').collect();
+    let valid = host.eq_ignore_ascii_case("localhost")
+        || (labels.len() >= 2
+            && labels.iter().all(|label| {
+                !label.is_empty()
+                    && !label.starts_with('-')
+                    && !label.ends_with('-')
+                    && label
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            }));
+    valid.then(|| format!("{scheme}{body}"))
+}
+
 /// The seven day tokens, Monday first.
 pub const WEEKDAYS: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 /// The ordinals "On the" offers: first to fourth, and last (`-1`). The vault's

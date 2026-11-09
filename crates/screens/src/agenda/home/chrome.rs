@@ -5,11 +5,11 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
-use super::fold::long_day;
 use super::grid;
 use crate::agenda::routes;
-use crate::kit::schedule::rows;
 use crate::kit::civil;
+use crate::kit::schedule::rows;
+use crate::kit::schedule::rule_words::long_day;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
     agenda_lists as lists, agenda_reminders as reminders, fill, imports, task,

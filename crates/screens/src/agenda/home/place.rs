@@ -11,10 +11,10 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::held::Held;
 use crate::agenda::routes;
-use crate::kit::schedule::style;
-use crate::kit::schedule::rows;
 use crate::agenda::todo::view::Options;
 use crate::kit::civil::HourCycle;
+use crate::kit::schedule::rows;
+use crate::kit::schedule::style;
 use crate::strings::{
     Locale, agenda_home as sentences, agenda_reminders as reminders, task as words,
 };

@@ -7,6 +7,7 @@
 //! each other (`screens-per-app-layout`).
 
 pub mod attachments;
+pub mod custom;
 pub mod natural;
 pub mod ops;
 pub mod repeat;

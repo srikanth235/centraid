@@ -33,11 +33,11 @@ use wire::app_query_response::Answer;
 
 use super::grid::{self, WeekStart};
 use super::{App, Home, Phase};
-use crate::kit::schedule::rows;
 use crate::catalog::load::calendar as query_cal;
 use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;
 use crate::kit::read::{Reading, read};
+use crate::kit::schedule::rows;
 use crate::screen::Ctx;
 
 /// Schedule's and Waiting's reach from the anchor, in days.

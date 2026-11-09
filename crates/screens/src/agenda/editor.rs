@@ -64,9 +64,9 @@
 //! ignores everything after it: the core remembers no key, and a second Save
 //! would file the event again.
 
-pub(super) mod custom;
 pub(super) mod draft;
 mod fields;
+mod repeat_sheet;
 pub mod write;
 
 use centraid_api_proto::core_v1 as wire;
@@ -80,15 +80,15 @@ use self::draft::{
     REPEAT_MONTHLY, REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use super::event::{
-    calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
+    calendar_hue, is_series_occurrence, person_hue, reminder_label, scope_word, scopes,
 };
-use crate::kit::schedule::rule_words;
-use crate::kit::schedule::ops::{NewTask, Ops};
-use crate::kit::schedule::rows;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::schedule::ops::{NewTask, Ops};
+use crate::kit::schedule::rows;
+use crate::kit::schedule::rule_words::{self, long_day};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_repeat as repeat_words,
@@ -183,7 +183,7 @@ struct Editor {
     /// The More details row is open (a new task).
     more_open: bool,
     /// The Custom repeat sheet's working rule, while it is open.
-    custom: Option<custom::Custom>,
+    custom: Option<crate::kit::schedule::custom::Custom>,
     /// What the place and zone searches hold.
     place_query: String,
     /// A place the member TYPED and the vault does not hold yet: it is founded when the event
@@ -1554,7 +1554,7 @@ impl Editor {
                     .or_else(|| {
                         draft::rule_for(draft)
                             .and_then(|rule| crate::kit::schedule::repeat::from_rrule(&rule, day))
-                            .map(|spec| custom::summary(locale, &spec))
+                            .map(|spec| crate::kit::schedule::custom::summary(locale, &spec))
                     })
                     .unwrap_or_else(|| editor_words::repeat_custom(locale))
             }

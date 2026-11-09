@@ -11,16 +11,16 @@ use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
-use crate::kit::schedule::style::{self, Draft, Subject};
-use crate::kit::schedule::natural::{Chipper, Fields};
-use crate::kit::schedule::ops::{NewTask, Ops};
 use super::todo::order;
 use super::todo::quick::Quick;
-use crate::kit::schedule::rows::{self, Context};
 use super::todo::view::{Prefs, Sort};
 use crate::catalog::{act, load};
 use crate::kit::civil::HourCycle;
 use crate::kit::read;
+use crate::kit::schedule::natural::{Chipper, Fields};
+use crate::kit::schedule::ops::{NewTask, Ops};
+use crate::kit::schedule::rows::{self, Context};
+use crate::kit::schedule::style::{self, Draft, Subject};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_lists as words_lists, agenda_reminders as reminders, agenda_todo, task as words,

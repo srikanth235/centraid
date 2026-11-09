@@ -14,7 +14,7 @@ use centraid_vault::time::rrule::{self, DAY_TOKENS, DayRule, Freq, RuleShape, Sh
 
 use crate::kit::civil;
 use crate::strings::agenda_repeat as words;
-use crate::strings::{Locale, agenda as day_words, fill};
+use crate::strings::{Locale, agenda as day_words, agenda_event as event_words, fill};
 
 /// The full name of a weekday token: `Monday`.
 #[must_use]
@@ -339,4 +339,30 @@ pub fn stored(locale: Locale, rule: &str) -> String {
 #[must_use]
 pub fn repeats(rule: Option<&str>) -> bool {
     rule.is_some_and(|rule| rrule::shape(rule).is_some())
+}
+
+/// `Wednesday 11 March`, or the input when it is not a day.
+#[must_use]
+pub fn long_day(locale: Locale, day: &str) -> String {
+    let weekday = match civil::iso_weekday_of(day) {
+        Some(1) => day_words::weekday_full_mon(locale),
+        Some(2) => day_words::weekday_full_tue(locale),
+        Some(3) => day_words::weekday_full_wed(locale),
+        Some(4) => day_words::weekday_full_thu(locale),
+        Some(5) => day_words::weekday_full_fri(locale),
+        Some(6) => day_words::weekday_full_sat(locale),
+        Some(7) => day_words::weekday_full_sun(locale),
+        _ => return day.to_owned(),
+    };
+    let Some(dom) = civil::day_of_month_of(day) else {
+        return day.to_owned();
+    };
+    fill(
+        &event_words::day_long(locale),
+        &[
+            ("weekday", &weekday),
+            ("day", &dom.to_string()),
+            ("month", &civil::month_of(locale, day)),
+        ],
+    )
 }
