@@ -193,25 +193,33 @@ pub fn contrast_ratio(foreground: &str, background: &str) -> Option<f64> {
 pub struct Icon {
     pub light_tile: String,
     pub light_edge: String,
+    /// The bottom of the light ground in the layered iOS 26 icon (`AppIcon.icon`); `light_tile` is its top.
+    pub light_tile_bottom: String,
     pub dark_tile: String,
+    /// The dark appearance's ground in the layered icon, top and bottom.
+    pub dark_ground_top: String,
+    pub dark_ground_bottom: String,
     pub tinted_tile: String,
     pub tinted_mark: String,
     pub themed_tile: String,
     pub themed_glyph: String,
     /// How much of the iOS icon the mark's disc spans, as a share of the tile's
-    /// width. Apple's grid puts the outer circle at about three quarters; the
-    /// Android adaptive icon has its own rule (the 66dp safe zone) and ignores this.
+    /// width (0.9083: outer radius 54.5 on the 120 grid). The Android adaptive icon has
+    /// its own rule (the 66dp safe zone) and ignores this.
     pub ios_mark_share: f64,
 }
 
 impl Icon {
     /// Every colour by field name, for the well-formed-hex check.
     #[must_use]
-    pub fn colours(&self) -> [(&'static str, &str); 7] {
+    pub fn colours(&self) -> [(&'static str, &str); 10] {
         [
             ("light_tile", &self.light_tile),
             ("light_edge", &self.light_edge),
+            ("light_tile_bottom", &self.light_tile_bottom),
             ("dark_tile", &self.dark_tile),
+            ("dark_ground_top", &self.dark_ground_top),
+            ("dark_ground_bottom", &self.dark_ground_bottom),
             ("tinted_tile", &self.tinted_tile),
             ("tinted_mark", &self.tinted_mark),
             ("themed_tile", &self.themed_tile),
@@ -689,8 +697,8 @@ impl Tokens {
                 problems.push(format!("[type.{step}] is missing"));
             }
         }
-        if !(0.4..=0.9).contains(&self.icon.ios_mark_share) {
-            problems.push("[icon] ios_mark_share is not between 0.4 and 0.9".to_owned());
+        if !(0.4..=0.95).contains(&self.icon.ios_mark_share) {
+            problems.push("[icon] ios_mark_share is not between 0.4 and 0.95".to_owned());
         }
         if self.scale.values().any(|step| step.size == 0) || self.radius.card == 0 {
             problems.push("a type size or the card radius is zero".to_owned());

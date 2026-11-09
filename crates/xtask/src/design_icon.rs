@@ -4,7 +4,7 @@
 //! quarters around an open square heart, on a tile. The geometry is the board's,
 //! on a 120 grid centred on (60, 60):
 //!
-//! * a circle of radius 34, cut on the diagonals by 5-unit gaps;
+//! * a circle of radius 34, cut on the diagonals by 5-unit gaps (the iOS icon grows all of it by `ios_mark_share`);
 //! * an open square heart, 21.2 on a side with a 2-unit round-joined edge, whose
 //!   corners sit on the cuts;
 //! * the cuts and the heart are NOT drawn in a tile colour: each quarter is one
@@ -23,6 +23,14 @@
 //!   universal icon in iOS 26's three appearances (any, dark, tinted). These are
 //!   opaque full-bleed squares: the system draws the mask and the edge, so the
 //!   white tile's hairline is a master-SVG detail only.
+//! * `mobile/iosApp/Resources/AppIcon.icon`: the layered Icon Composer icon iOS 26
+//!   draws with Liquid Glass (#1173): a cool-white ground (a navy-to-black one in
+//!   dark), the four quarters as flat brand-colour SVG layers in two depth groups
+//!   (teal and blue in front of orange and pink), glass on, layer-colour shadows.
+//!   The system adds the frosted tile, lit rim, specular and the shadows between
+//!   layers; the artwork is flat colour only. Xcode's `actool` also writes the
+//!   pre-iOS-26 fallback from it, and the flat appiconset above is what an OS
+//!   without Liquid Glass shows. Same geometry as the PNGs (`ios_mark_share`).
 //! * Android, all vector, no raster: an adaptive icon (`mipmap-anydpi-v26`) with
 //!   a foreground drawable, a background colour and a `monochrome` layer for
 //!   themed icons, and a vector fallback for API 24 and 25 (`mipmap-anydpi`),
@@ -51,10 +59,11 @@ const SAMPLES: u32 = 4;
 
 const SVG_DIR: &str = "design/icon";
 const APPICON_SET: &str = "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset";
+const ICON_BUNDLE: &str = "mobile/iosApp/Resources/AppIcon.icon";
 const ANDROID_RES: &str = "mobile/androidApp/src/main/res";
 
 /// The directories whose every file this module writes.
-pub const OWNED: [&str; 2] = [SVG_DIR, APPICON_SET];
+pub const OWNED: [&str; 3] = [SVG_DIR, APPICON_SET, ICON_BUNDLE];
 
 /// The four quarters, in the board's drawing order, with the `[brand]` key of
 /// each and its quarter turns clockwise from the right-hand quarter.
@@ -346,6 +355,62 @@ fn legacy_xml(palette: &Palette, round: bool) -> String {
     )
 }
 
+// --- The layered iOS 26 icon ----------------------------------------------
+
+/// The canvas of a layer, in px: the 1024 square the PNGs use.
+const LAYER_PX: f64 = 1024.0;
+
+/// `#RRGGBB` as Icon Composer's `srgb:r,g,b,a` colour.
+fn srgb(hex: &str) -> Result<String> {
+    let [r, g, b] = rgb(hex)?;
+    let part = |value: u8| format!("{:.5}", f64::from(value) / 255.0);
+    Ok(format!("srgb:{},{},{},1.00000", part(r), part(g), part(b)))
+}
+
+/// One quarter's layer: a 1024 canvas with the quarter in its flat colour, the
+/// mark grown about the centre by `grown`.
+fn layer_svg(turns: u32, colour: &str, grown: f64) -> String {
+    let scale = grown * LAYER_PX / GRID;
+    let offset = LAYER_PX / 2.0 - CENTRE * scale;
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1024\" height=\"1024\" viewBox=\"0 0 1024 1024\">\n  <path d=\"{}\" fill=\"{colour}\"/>\n</svg>\n",
+        path_data(turns, offset, scale)
+    )
+}
+
+/// `icon.json`: the ground (light, with a dark specialization) and two depth groups.
+fn icon_json(tokens: &Tokens) -> Result<String> {
+    let gradient = |top: &str, bottom: &str| -> Result<String> {
+        Ok(format!(
+            "{{\n    \"linear-gradient\" : [\n      \"{}\",\n      \"{}\"\n    ]\n  }}",
+            srgb(top)?,
+            srgb(bottom)?
+        ))
+    };
+    let icon = &tokens.icon;
+    let group = |keys: [&str; 2]| {
+        let layers = keys
+            .iter()
+            .map(|key| {
+                format!(
+                    "        {{\n          \"glass\" : true,\n          \"image-name\" : \"{key}.svg\",\n          \"name\" : \"{key}\"\n        }}"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+        format!(
+            "    {{\n      \"layers\" : [\n{layers}\n      ],\n      \"shadow\" : {{\n        \"kind\" : \"layer-color\",\n        \"opacity\" : 0.35\n      }}\n    }}"
+        )
+    };
+    Ok(format!(
+        "{{\n  \"fill\" : {},\n  \"fill-specializations\" : [\n    {{\n      \"appearance\" : \"dark\",\n      \"value\" : {}\n    }}\n  ],\n  \"groups\" : [\n{},\n{}\n  ],\n  \"supported-platforms\" : {{\n    \"squares\" : \"shared\"\n  }}\n}}\n",
+        gradient(&icon.light_tile, &icon.light_tile_bottom)?,
+        gradient(&icon.dark_ground_top, &icon.dark_ground_bottom)?,
+        group(["teal", "blue"]),
+        group(["orange", "pink"]),
+    ))
+}
+
 // --- The PNGs --------------------------------------------------------------
 
 /// The colour of one sample at a grid point, tile when the point is on no quarter.
@@ -455,6 +520,14 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
         tile_svg(&themed, None, 1.0),
     );
     text(format!("{SVG_DIR}/centraid-mark.svg"), mark_svg(&light));
+
+    text(format!("{ICON_BUNDLE}/icon.json"), icon_json(tokens)?);
+    for (key, turns) in QUARTERS {
+        text(
+            format!("{ICON_BUNDLE}/Assets/{key}.svg"),
+            layer_svg(turns, &brand(tokens, key)?, grown),
+        );
+    }
 
     text(format!("{APPICON_SET}/Contents.json"), appiconset_json());
     let mut png = |name: &str, palette: &Palette| -> Result<()> {
@@ -654,7 +727,7 @@ mod tests {
                     "{name} {key}"
                 );
             }
-            for (u, v) in [(0.0, 0.0), (20.0, 20.0), (-50.0, -50.0), (0.0, 40.0)] {
+            for (u, v) in [(0.0, 0.0), (20.0, 20.0), (-33.0, -33.0), (0.0, 35.0)] {
                 assert_eq!(
                     pixel(&pixels, size, CENTRE + u * grown, CENTRE + v * grown),
                     *tile,
@@ -785,6 +858,11 @@ mod tests {
             "design/icon/centraid-tinted.svg",
             "design/icon/centraid-themed.svg",
             "design/icon/centraid-mark.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/icon.json",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/teal.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/orange.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/blue.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/pink.svg",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Light.png",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png",
