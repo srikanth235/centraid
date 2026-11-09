@@ -281,7 +281,7 @@ impl Runtime {
             .extend(said.effects.into_iter().filter(Self::withdraws_prompt));
     }
 
-    /// Select `tab`. The tab that goes out of view is told (`Hidden`) so a
+    /// Select `tab`. The tab that goes out of view is told (`TabHidden`) so a
     /// screen with an OS prompt up withdraws it.
     fn select(state: &mut State, core: &dyn ScreenCtx, tab: &str, out: &mut wire::ScreenUpdate) {
         if state.selected == tab {
@@ -300,7 +300,7 @@ impl Runtime {
                 core,
                 id,
                 wire::ScreenEvent {
-                    kind: Some(wire::screen_event::Kind::Hidden(wire::Hidden {})),
+                    kind: Some(wire::screen_event::Kind::TabHidden(wire::TabHidden {})),
                 },
                 out,
             );

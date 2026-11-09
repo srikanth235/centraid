@@ -249,7 +249,7 @@ message ScreenEvent {
     // RUNTIME-ORIGINATED: the screen's tab went out of view (another tab was
     // selected) while the screen stays on its stack. A screen with an OS prompt
     // out withdraws it; a shell never sends it.
-    Hidden hidden = 12;
+    TabHidden tab_hidden = 12;
     // RUNTIME-ORIGINATED: the assistant's running turn said something (a token,
     // the cards, the answer). Only a screen that opts in (`hears_assist`, the
     // chat) hears it; a shell never sends it.
@@ -364,7 +364,7 @@ message Announced {
 
 message Left {}
 
-message Hidden {}
+message TabHidden {}
 
 message DataChanged {
   repeated string tables = 1;

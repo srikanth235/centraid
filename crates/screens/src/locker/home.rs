@@ -948,7 +948,7 @@ impl Screen for Home {
                 let step = self.wall.left();
                 self.walled(ctx, step)
             }
-            Some(E::Hidden(_)) => {
+            Some(E::TabHidden(_)) => {
                 self.pending = None;
                 let step = self.wall.hidden();
                 self.walled(ctx, step)

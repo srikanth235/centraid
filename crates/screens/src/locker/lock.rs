@@ -55,7 +55,7 @@ impl Screen for Lock {
                 let step = self.wall.left();
                 self.walled(step)
             }
-            Some(E::Hidden(_)) => {
+            Some(E::TabHidden(_)) => {
                 let step = self.wall.hidden();
                 self.walled(step)
             }

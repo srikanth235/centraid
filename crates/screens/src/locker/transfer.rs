@@ -359,7 +359,7 @@ impl Screen for Export {
                     self.walled(ctx, step)
                 }
             },
-            Some(left @ (E::Left(_) | E::Hidden(_))) => {
+            Some(left @ (E::Left(_) | E::TabHidden(_))) => {
                 // THE EXPORT'S OWN OWNER CHECK goes down with the screen too; its late
                 // answer finds the phase idle and is ignored.
                 let mut effects = self.withdraw_check(matches!(left, E::Left(_)));
@@ -811,7 +811,7 @@ impl Screen for Import {
                 let step = self.wall.left();
                 self.walled(ctx, step)
             }
-            Some(E::Hidden(_)) => {
+            Some(E::TabHidden(_)) => {
                 let step = self.wall.hidden();
                 self.walled(ctx, step)
             }

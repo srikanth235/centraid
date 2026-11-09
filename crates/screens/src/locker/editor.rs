@@ -665,7 +665,7 @@ impl Screen for Editor {
                 let step = self.wall.left();
                 self.walled(ctx, step)
             }
-            Some(E::Hidden(_)) => {
+            Some(E::TabHidden(_)) => {
                 let step = self.wall.hidden();
                 self.walled(ctx, step)
             }
