@@ -47,10 +47,18 @@
 //! # A VAULT THAT STAYED, ASKED FOR AGAIN (R-1047-R6)
 //!
 //! `RestoreRequest.indices` names the indices an earlier restore answered as
-//! `unclaimed`, and the scan then visits exactly those. Whatever the scan, **a
-//! vault this phone already holds is never touched**: its directory already
-//! has a `vault.db`, so it is not asked about, not laid down again under the
-//! core that has it open, and not answered.
+//! `unclaimed`, and the scan then visits exactly those.
+//!
+//! # THE SAME PHONE (#1173, item 22)
+//!
+//! **A vault this phone already holds is replaced, not skipped.** Its directory
+//! has a `vault.db` that is an older copy of the head the gateway holds; the
+//! restore lays the head down beside it, checks it and claims it like any other,
+//! and then the held file, its WAL and its ledger give way to the restored
+//! ones. There is no other phone to hand the vault to, so nothing is frozen and
+//! no "moved to your other phone" is recorded: that marker is only for a real
+//! move, where a claim from another directory supersedes a phone that is not
+//! this one. A held vault the gateway holds no head for is left as it is.
 //!
 //! # A VAULT IS NAMED `vault.db` ONLY ONCE IT IS CLAIMED AND KEPT
 //!
@@ -214,13 +222,12 @@ fn run_controlled(
             });
         let found = keyring.and_then(|keyring| {
             scan.checkpoint()?;
-            // A VAULT THIS PHONE ALREADY HOLDS IS NEVER TOUCHED (R-1047-R6),
-            // and for the gap it is a hit.
-            if vault_dir(&root, &keyring).join(HELD).exists() {
-                return Ok(true);
-            }
+            // A VAULT THIS PHONE ALREADY HOLDS IS A HIT FOR THE GAP, and when
+            // the gateway holds a head for it too, the restore replaces the
+            // copy (the module header, "the same phone").
+            let held = vault_dir(&root, &keyring).join(HELD).exists();
             scan.check(keyring, &root, index)
-                .map(|checked| checked.map(|one| staged.push(one)).is_some())
+                .map(|checked| checked.map(|one| staged.push(one)).is_some() || held)
         });
         found
             .map_err(|error| scan.checkpoint().err().unwrap_or(error))
@@ -522,6 +529,10 @@ impl Scan<'_> {
         let plane = Plane::of(&kept);
         let ledger = plane.ledger()?;
         ledger.reset().map_err(plane_error)?;
+        // THE SAME PHONE: a copy this one held is an older copy of this vault,
+        // and its marker of a move, if it ever had one, is not the truth of the
+        // vault restored over it.
+        ledger.clear_moved(&gateway_id).map_err(plane_error)?;
         let now = now_ms();
         ledger
             .put_destination(&Destination {
@@ -586,6 +597,13 @@ impl Scan<'_> {
             Err(error) => tracing::warn!(%error, "a restore's derivatives did not all come back"),
         }
 
+        // A held copy's write-ahead log must not be replayed onto the file that
+        // replaces it.
+        for suffix in ["-wal", "-shm"] {
+            let mut stale = kept.as_os_str().to_owned();
+            stale.push(suffix);
+            let _ = std::fs::remove_file(PathBuf::from(stale));
+        }
         std::fs::rename(&staged.file, &kept).map_err(|error| CoreError::Invariant {
             context: format!("keeping the restored vault as {}: {error}", kept.display()),
         })?;

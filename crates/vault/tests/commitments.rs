@@ -656,7 +656,7 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                     }
                 }
             }
-            assert_eq!(tried, Rel::ALL.len() * Kind::ALL.len() * Kind::ALL.len());
+            assert_eq!(tried, 9 * Kind::ALL.len() * Kind::ALL.len());
             // A label names a relation, and only `related` has one.
             let bad_label = c.execute(
                 "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES ('from:person', 'related', 'to:person', 'to:tag', ?1)",

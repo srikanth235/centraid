@@ -195,10 +195,7 @@ impl World {
     }
 
     fn edge(&self, from: &str, rel: &str, to: &str) {
-        self.ok(
-            "edge.add",
-            json!({ "from": from, "rel": rel, "to": to }),
-        );
+        self.ok("edge.add", json!({ "from": from, "rel": rel, "to": to }));
     }
 }
 
@@ -255,11 +252,8 @@ fn a_document_a_line_a_photograph_and_a_login_may_be_joined_to_a_person_and_noth
         "a photograph depicts a person, not a document"
     );
     assert!(
-        w.refused(
-            "edge.add",
-            json!({ "from": doc, "rel": "with", "to": ada })
-        )
-        .contains("cannot be"),
+        w.refused("edge.add", json!({ "from": doc, "rel": "with", "to": ada }))
+            .contains("cannot be"),
         "a document is `about` a person, never `with` one"
     );
     assert!(
@@ -364,10 +358,7 @@ fn a_merge_keeps_what_the_loser_was_the_subject_of() {
     w.edge(&line, "with", &ada2);
     w.edge(&photo, "depicts", &ada2);
     w.edge(&login, "about", &ada2);
-    w.ok(
-        "person.merge",
-        json!({ "from": ada2, "into": ada }),
-    );
+    w.ok("person.merge", json!({ "from": ada2, "into": ada }));
     for (from, rel) in [
         (&doc, "about"),
         (&line, "with"),
@@ -455,17 +446,17 @@ fn a_person_is_not_found_by_a_memo_about_a_line_or_a_login_that_is_with_them() {
     let memo = w.note("m3", "marmosetwalnut said hi");
     w.edge(&memo, "about", &touch);
     assert!(w.found_by("marmosetwalnut", &ada));
-    // And the incremental text is what a rebuild writes.
+    // And a rebuild from the rows finds exactly what the incremental index did.
     w.scratch
         .vault
-        .read(|c| {
-            let rebuilt = centraid_vault::index::text_of(c, &ada, centraid_vault::model::Kind::Person)?.unwrap_or_default();
-            let again = centraid_vault::index::text_of(c, &ada, centraid_vault::model::Kind::Person)?.unwrap_or_default();
-            assert_eq!(rebuilt, again);
-            assert!(!rebuilt.contains("zebracornflake"));
-            assert!(!rebuilt.contains("quokkapineapple"));
-            assert!(rebuilt.contains("marmosetwalnut"));
+        .commit(|tx| {
+            centraid_vault::index::rebuild(tx.connection())?;
             Ok(())
         })
-        .expect("the text");
+        .expect("rebuilds");
+    assert!(
+        !w.found_by("zebracornflake", &ada) && !w.found_by("quokkapineapple", &ada),
+        "a rebuild does not read a memo on a line or a login into the person"
+    );
+    assert!(w.found_by("marmosetwalnut", &ada));
 }
