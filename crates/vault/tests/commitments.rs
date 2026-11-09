@@ -566,7 +566,7 @@ fn every_column_that_rents_a_blob_says_whose_the_bytes_are() {
 
 /// The shapes `edge_shape` is seeded with, written out once more so the table,
 /// the trigger and the spec are three witnesses of one list.
-const SHAPES: [(&str, &str, &str); 13] = [
+const SHAPES: [(&str, &str, &str); 20] = [
     ("contains", "album", "photo"),
     ("contains", "list", "person"),
     ("tagged", "*", "tag"),
@@ -580,6 +580,13 @@ const SHAPES: [(&str, &str, &str); 13] = [
     ("attendee", "event", "person"),
     ("with", "activity", "person"),
     ("related", "person", "person"),
+    ("with", "txn", "person"),
+    ("about", "document", "person"),
+    ("depicts", "photo", "person"),
+    ("about", "locker_item", "account"),
+    ("about", "locker_item", "place"),
+    ("about", "locker_item", "person"),
+    ("with", "locker_item", "person"),
 ];
 
 fn shape_allows(rel: &str, from: &str, to: &str) -> bool {
@@ -649,7 +656,7 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                     }
                 }
             }
-            assert_eq!(tried, 8 * Kind::ALL.len() * Kind::ALL.len());
+            assert_eq!(tried, Rel::ALL.len() * Kind::ALL.len() * Kind::ALL.len());
             // A label names a relation, and only `related` has one.
             let bad_label = c.execute(
                 "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES ('from:person', 'related', 'to:person', 'to:tag', ?1)",

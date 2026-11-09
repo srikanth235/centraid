@@ -67,7 +67,7 @@ CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
 CREATE TABLE edge (
   from_id    TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   rel        TEXT NOT NULL CHECK (rel IN
-               ('contains','tagged','about','links','attached','attendee','with','related')),
+               ('contains','tagged','about','links','attached','attendee','with','related','depicts')),
   to_id      TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   label_id   TEXT REFERENCES entity(id) ON DELETE CASCADE,
   position   REAL,
@@ -793,7 +793,14 @@ INSERT INTO edge_shape (rel, from_kind, to_kind) VALUES
   ('attached', '*', 'photo'),
   ('attendee', 'event', 'person'),
   ('with', 'activity', 'person'),
-  ('related', 'person', 'person');
+  ('related', 'person', 'person'),
+  ('with', 'txn', 'person'),
+  ('about', 'document', 'person'),
+  ('depicts', 'photo', 'person'),
+  ('about', 'locker_item', 'account'),
+  ('about', 'locker_item', 'place'),
+  ('about', 'locker_item', 'person'),
+  ('with', 'locker_item', 'person');
 
 INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES
   ('flag:starred', 'flag', 'Starred', '2026-10-21T00:00:00.000Z', '2026-10-21T00:00:00.000Z'),

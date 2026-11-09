@@ -7,9 +7,12 @@
 //! than a constraint.
 //!
 //! Adding or removing an `about` or `links` edge **touches the entity at its
-//! start**: the note whose words the edge is part of. The entity it points at
-//! is re-indexed, not touched, because the notes about it are part of what it
-//! is found by.
+//! start when that is a note**: the note whose words the edge is part of. The
+//! entity it points at is re-indexed, not touched, because the notes about it
+//! are part of what it is found by. A document, a line or a Locker item that is
+//! `about` a person, or a photograph that `depicts` one, is not a note: the edge
+//! is not part of its words, so it keeps its place in Recents, and an `anchor`
+//! (a place in a note's text) is refused on it.
 
 use crate::commands::entity::{lookup, lookup_live, require};
 use crate::commands::tag::ensure_concept;
@@ -66,7 +69,7 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Some("only what a list or album holds has a place in it".to_owned())
     } else if given("state") && rel != Rel::Attendee {
         Some("only an invitee has an answer".to_owned())
-    } else if given("anchor") && !rel.belongs_to_note() {
+    } else if given("anchor") && !(rel.belongs_to_note() && from.kind == Kind::Note) {
         Some("only a note's own words point at a place in the text".to_owned())
     } else if related && fold_label(ctx.required_str("label")?).is_empty() {
         Some("say how they are related".to_owned())
@@ -125,11 +128,11 @@ pub(crate) fn put(
             ctx.now
         ],
     )?;
-    if rel.belongs_to_note() {
+    if rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
         ctx.mark_for_index(to);
     }
-    mark_labelled(ctx, from, rel, to);
+    mark_labelled(ctx, from, rel, to)?;
     Ok(())
 }
 
@@ -137,15 +140,32 @@ pub(crate) fn put(
 /// label of both people it joins ([`crate::index::text_of`]): putting such an
 /// edge in place or taking it away changes their text without changing them.
 /// A participant is also found by the notes about the activity they were with.
-fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) {
+fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) -> Result<()> {
     match rel {
-        Rel::Contains | Rel::With => ctx.mark_for_index(to),
+        Rel::Contains => ctx.mark_for_index(to),
+        // Only a touch's participants are found by the notes about it; a line
+        // or a Locker item that is `with` someone adds nothing to their text.
+        Rel::With if is_kind(ctx, from, Kind::Activity)? => ctx.mark_for_index(to),
         Rel::Related => {
             ctx.mark_for_index(from);
             ctx.mark_for_index(to);
         }
         _ => {}
     }
+    Ok(())
+}
+
+fn is_kind(ctx: &CommandCtx<'_, '_>, id: &str, kind: Kind) -> Result<bool> {
+    let found: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM entity WHERE id = ?1 AND kind = ?2",
+        [id, kind.as_str()],
+        |row| row.get(0),
+    )?;
+    Ok(found == 1)
+}
+
+fn is_note(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<bool> {
+    is_kind(ctx, id, Kind::Note)
 }
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -202,12 +222,12 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "DELETE FROM edge WHERE from_id = ?1 AND rel = ?2 AND to_id = ?3 AND ifnull(label_id, '') = ?4",
         rusqlite::params![from, rel.as_str(), to, label_id],
     )?;
-    if removed > 0 && rel.belongs_to_note() {
+    if removed > 0 && rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
         ctx.mark_for_index(to);
     }
     if removed > 0 {
-        mark_labelled(ctx, from, rel, to);
+        mark_labelled(ctx, from, rel, to)?;
     }
     Ok(serde_json::json!({ "removed": removed > 0 }))
 }
@@ -250,7 +270,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "from": { "type": "string", "minLength": 1 },
                 "rel": { "type": "string",
-                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related"] },
+                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related", "depicts"] },
                 "to": { "type": "string", "minLength": 1 },
                 "label": { "type": ["string", "null"], "maxLength": 200 },
                 "position": { "type": ["number", "null"] },
@@ -276,7 +296,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "from": { "type": "string", "minLength": 1 },
                 "rel": { "type": "string",
-                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related"] },
+                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related", "depicts"] },
                 "to": { "type": "string", "minLength": 1 },
                 "label": { "type": ["string", "null"], "maxLength": 200 }
               }

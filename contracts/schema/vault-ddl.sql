@@ -307,7 +307,7 @@ CREATE TABLE document (
 CREATE TABLE edge (
   from_id    TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   rel        TEXT NOT NULL CHECK (rel IN
-               ('contains','tagged','about','links','attached','attendee','with','related')),
+               ('contains','tagged','about','links','attached','attendee','with','related','depicts')),
   to_id      TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   label_id   TEXT REFERENCES entity(id) ON DELETE CASCADE,
   position   REAL,

@@ -49,8 +49,12 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
         "SELECT e.to_id FROM edge e JOIN entity n ON n.id = e.from_id
           WHERE e.from_id = ?1 AND e.rel = 'about' AND n.kind = 'note'",
     )?;
-    let mut with = connection
-        .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
+    // Only a touch's participants are found by the notes about it: a line or a Locker item
+    // that is `with` someone is not part of their text.
+    let mut with = connection.prepare_cached(
+        "SELECT w.to_id FROM edge w JOIN entity a ON a.id = w.from_id
+          WHERE w.from_id = ?1 AND w.rel = 'with' AND a.kind = 'activity'",
+    )?;
     for id in touched {
         let targets = about
             .query_map([id], |row| row.get::<_, String>(0))?

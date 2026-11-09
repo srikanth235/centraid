@@ -68,7 +68,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "edge",
-        "A typed, directed join of two entities: contains, tagged, about, links, attached, attendee, with, related.",
+        "A typed, directed join of two entities: contains, tagged, about, links, attached, attendee, with, related, depicts.",
     ),
     (
         "kernel",

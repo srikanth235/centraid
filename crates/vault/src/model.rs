@@ -189,10 +189,11 @@ pub enum Rel {
     Attendee,
     With,
     Related,
+    Depicts,
 }
 
 impl Rel {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Contains,
         Self::Tagged,
         Self::About,
@@ -201,6 +202,7 @@ impl Rel {
         Self::Attendee,
         Self::With,
         Self::Related,
+        Self::Depicts,
     ];
 
     #[must_use]
@@ -214,6 +216,7 @@ impl Rel {
             Self::Attendee => "attendee",
             Self::With => "with",
             Self::Related => "related",
+            Self::Depicts => "depicts",
         }
     }
 

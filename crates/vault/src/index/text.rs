@@ -215,6 +215,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
             "SELECT n.body FROM edge w
                JOIN edge e ON e.to_id = w.from_id AND e.rel = 'about'
                JOIN entity ne ON ne.id = e.from_id AND ne.deleted_at IS NULL
+               JOIN entity wa ON wa.id = w.from_id AND wa.kind = 'activity'
                JOIN note n ON n.id = e.from_id
               WHERE w.rel = 'with' AND w.to_id = ?1
               ORDER BY ne.created_at, ne.id",
