@@ -105,6 +105,7 @@ struct RustScreenView: View {
                 screen.appAccent(appId)
             }
         }
+        .environment(\.placeHome, { shell.popToRoot() })
     }
 
     /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets

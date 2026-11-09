@@ -24,7 +24,7 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 
 ## App roots
 
-**One way home.** The band holds the Home key, up to four places and the search key. Back chevrons appear only on pages you drill into. The shell band lists Home, Chat and Backup, never an installed app; every app is a tile on Home. A locked Locker keeps the whole band (Home and the plate of its places, dimmed with none lit, no search): a tap on a place starts the unlock and lands there once it opens.
+**One way home.** The band holds the Home key, up to four places and the search key. Back chevrons appear only on pages you drill into. A swipe in from the leading edge of an app root (the trailing edge in right-to-left) is the Home key too: on iOS the root states it itself, since hiding the back chevron also puts the system swipe away; on Android it is the system back gesture, which pops the root. **Under the title an app root draws at most the subtitle and one control row** (a view picker leading, its stepper trailing): the period or scope and its count are the subtitle ("November 2026 · 8 events"), never also a heading or a second line in the content. The shell band lists Home, Chat and Backup, never an installed app; every app is a tile on Home. A locked Locker keeps the whole band (Home and the plate of its places, dimmed with none lit, no search): a tap on a place starts the unlock and lands there once it opens.
 
 | Slot | Holds | Never |
 | --- | --- | --- |

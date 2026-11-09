@@ -210,6 +210,43 @@ struct PlaceDrawsShellLine: PreferenceKey {
     static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
+/// WHERE THE EDGE SWIPE OF AN APP ROOT GOES: Home. The shell states it once on the pages it hosts.
+private struct PlaceHomeKey: EnvironmentKey {
+    static var defaultValue: (() -> Void)? { nil }
+}
+
+extension EnvironmentValues {
+    var placeHome: (() -> Void)? {
+        get { self[PlaceHomeKey.self] }
+        set { self[PlaceHomeKey.self] = newValue }
+    }
+}
+
+/// THE LEADING EDGE OF AN APP ROOT: a swipe in from it returns to Home, the same act as the band's
+/// Home key. A root has no back chevron, and hiding the system's back button also puts its edge
+/// swipe away, so the root says its own. Leading, so it is the right edge in a right-to-left
+/// language; a thin strip inside the page margin, so no row under it loses its tap.
+private struct EdgeSwipeHome: View {
+    @Environment(\.placeHome) private var home
+    @Environment(\.layoutDirection) private var direction
+
+    var body: some View {
+        if let home {
+            Color.clear
+                .frame(width: 16)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 24)
+                        .onEnded { drag in
+                            let inward = direction == .rightToLeft ? -drag.translation.width : drag.translation.width
+                            if inward > 64, abs(drag.translation.height) < inward { home() }
+                        }
+                )
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
@@ -271,6 +308,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())
+        .overlay(alignment: .leading) { EdgeSwipeHome() }
         .environment(\.appAccent, AppAccent(app))
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)

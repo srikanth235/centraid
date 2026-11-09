@@ -49,6 +49,7 @@ struct AgendaHomeView: View {
                 onClose: { send(AgendaEvents.make { $0.searchClosed = .init() }) }
             ),
             filter: filter,
+            subtitle: toolbarSubtitle(state, eventCountText),
             bar: header.map { header in
                 PlaceBar(
                     leading: AnyView(AgendaMonthChip(header: header, send: send)),
@@ -77,6 +78,8 @@ struct AgendaHomeView: View {
             )
         } content: {
             VStack(spacing: 0) {
+                // ONE CONTROL ROW (#1173): the view menu, then ‹ › at the end. The period and its
+                // event count are the header's subtitle, so nothing here repeats them.
                 if !state.calendarViews.isEmpty {
                     AgendaViewMenu(
                         views: state.calendarViews,
@@ -87,17 +90,15 @@ struct AgendaHomeView: View {
                         },
                         pickStyle: { style in
                             send(AgendaEvents.make { $0.monthStyle = .with { $0.style = style } })
-                        }
+                        },
+                        trailing: state.toolbar.shown ? AnyView(
+                            AgendaStepper(chrome: state.chrome, stepsPeriod: stepsPeriod(state), send: send)
+                        ) : nil
                     )
-                }
-                if state.toolbar.shown {
-                    AgendaToolbarView(
-                        toolbar: state.toolbar,
-                        eventCountText: eventCountText,
-                        chrome: state.chrome,
-                        stepsPeriod: stepsPeriod(state),
-                        send: send
-                    )
+                } else if state.toolbar.shown {
+                    AgendaStepper(chrome: state.chrome, stepsPeriod: stepsPeriod(state), send: send)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
                 ReadStateView(
                     content: content,
@@ -225,6 +226,13 @@ struct AgendaHomeView: View {
         case let .denied(denied)?: return .gated(denied)
         case let .data(home)?: return .data(home)
         }
+    }
+
+    /// THE HEADER'S SUBTITLE (HeaderSubtitle): the period, then how many events it holds.
+    private func toolbarSubtitle(_ state: Centraid_Core_V1_AgendaHomeState, _ count: String) -> SubtitleSlot? {
+        guard state.toolbar.shown else { return nil }
+        let words = [state.toolbar.rangeLabel, count].filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
+        return SubtitleSlot(subtitle: .with { $0.label = words; $0.spoken = words })
     }
 
     /// THE APP BAR'S WORDS FOR THE EVENTS DRAWN ("3 events"): Rust's `event_count_label`, which
@@ -384,41 +392,23 @@ private struct CalendarImportButton: View {
 
 // MARK: - Toolbar
 
-/// The day bar of Month, Year and the lists: range label and ‹ ›. Today is the floating key (`AgendaTodayButton`).
-private struct AgendaToolbarView: View {
-    let toolbar: Centraid_Core_V1_AgendaToolbar
-    /// Rust's `event_count_label`, drawn with the month ("May 2026 · 3 events").
-    let eventCountText: String
+/// The ‹ › of Month, Year and the lists, stepping a period or a day. Today is the floating key
+/// (`AgendaTodayButton`); the range and the count are the header's subtitle.
+private struct AgendaStepper: View {
     let chrome: Centraid_Core_V1_AgendaChrome
     /// Week, Month and Year step a whole period (`PeriodStepped`); the rest step a day.
     let stepsPeriod: Bool
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(toolbar.rangeLabel)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 8) {
-                KitStepper(
-                    previousLabel: chrome.previousDay,
-                    nextLabel: chrome.nextDay,
-                    previousIdentifier: "agenda-previous-day",
-                    nextIdentifier: "agenda-next-day",
-                    onPrevious: { step(-1) },
-                    onNext: { step(1) }
-                )
-                Spacer(minLength: 0)
-                Text([toolbar.monthLabel, eventCountText].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-            }
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
+        KitStepper(
+            previousLabel: chrome.previousDay,
+            nextLabel: chrome.nextDay,
+            previousIdentifier: "agenda-previous-day",
+            nextIdentifier: "agenda-next-day",
+            onPrevious: { step(-1) },
+            onNext: { step(1) }
+        )
     }
 
     private func step(_ by: Int32) {

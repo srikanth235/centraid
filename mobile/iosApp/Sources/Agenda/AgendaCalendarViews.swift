@@ -125,9 +125,21 @@ struct AgendaViewMenu: View {
     var month: Centraid_Core_V1_AgendaMonthGrid?
     let pick: (Centraid_Core_V1_AgendaDestination) -> Void
     let pickStyle: (Centraid_Core_V1_AgendaMonthStyle) -> Void
+    /// THE ONE CONTROL ROW (#1173): the period's ‹ › share the view menu's row, at its end.
+    var trailing: AnyView? = nil
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        HStack(spacing: 8) {
+            menu
+            Spacer(minLength: 0)
+            if let trailing { trailing }
+        }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 4)
+    }
+
+    private var menu: some View {
         Menu {
             Picker(label, selection: viewSelection) {
                 ForEach(views, id: \.key) { view in
@@ -160,8 +172,6 @@ struct AgendaViewMenu: View {
         }
         .accessibilityLabel(label)
         .accessibilityIdentifier("agenda-view-menu")
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var viewSelection: Binding<String> {

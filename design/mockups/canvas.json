@@ -1609,6 +1609,22 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "CalendarMonth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar (Month view)",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "CalendarMonthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar (Month view) · dark",
+      "w": 390,
+      "x": 470,
+      "y": 3480
     }
   },
   "createdOnFiles": {
@@ -2067,6 +2083,7 @@
     "PairCheck.dc.html",
     "BackupRunning.dc.html",
     "Calendar.dc.html",
+    "CalendarMonth.dc.html",
     "Main.dc.html",
     "RemindersFilterMenu.dc.html",
     "Today.dc.html",
@@ -2163,6 +2180,7 @@
     "PairCheckDark.dc.html",
     "BackupRunningDark.dc.html",
     "CalendarDark.dc.html",
+    "CalendarMonthDark.dc.html",
     "MainDark.dc.html",
     "RemindersFilterMenuDark.dc.html",
     "TodayDark.dc.html",

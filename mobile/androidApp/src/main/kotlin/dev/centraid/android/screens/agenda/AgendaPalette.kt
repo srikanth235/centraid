@@ -119,7 +119,7 @@ internal fun AgendaViewMenu(
     onStyle: (AgendaMonthStyle) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
-    Box(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+    Box {
         Row(
             Modifier
                 .heightIn(min = KitGeometry.ROW_MIN)
