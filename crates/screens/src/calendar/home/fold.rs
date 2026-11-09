@@ -248,12 +248,6 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
         });
     }
 
-    // THE OVERDUE REMINDERS, above the day (Apple's Calendar): Day on today, and nowhere else.
-    let on_today = dated && fold.destination == Dest::Day && anchor == today;
-    let overdue = on_today
-        .then(|| overdue_group(locale, held, &task_ctx))
-        .flatten();
-
     let drawn: HashSet<&str> = sections_out
         .iter()
         .flat_map(|section| &section.items)
@@ -275,6 +269,23 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                 .any(|item| matches!(item.kind, Some(wire::agenda_row_item::Kind::NowLine(_)))),
         })
         .unwrap_or_default();
+
+    // THE OVERDUE REMINDERS, above the day (Apple's Calendar): Day on today, and nowhere else. The
+    // list draws them as a group; the hour grid, which has no list, leads its all-day lane with them.
+    let on_today = dated && fold.destination == Dest::Day && anchor == today;
+    let overdue = on_today
+        .then(|| overdue_group(locale, held, &task_ctx))
+        .flatten();
+    let overdue_tasks: Vec<&wire::AgendaTask> = if on_today {
+        held.reminders
+            .iter()
+            .flat_map(|board| &board.groups)
+            .filter(|group| group.kind == wire::AgendaTaskGroupKind::Overdue as i32)
+            .flat_map(|group| &group.tasks)
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     // THE CALENDAR'S GRIDS (#1173): Day and Week draw the strip and the hour
     // grid, Month its cells, Year its twelve months; none under a search, which
@@ -298,6 +309,7 @@ pub fn events(fold: &Fold) -> Option<wire::AgendaHomeData> {
                 style: fold.month_style,
                 by_day: &by_day,
                 due_on: &due_on,
+                overdue: &overdue_tasks,
                 birthdays: &birthdays,
                 hues: &hues,
                 tasks: &task_ctx,

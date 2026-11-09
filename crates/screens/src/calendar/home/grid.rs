@@ -325,6 +325,9 @@ pub struct Input<'a> {
     pub style: wire::AgendaMonthStyle,
     pub by_day: &'a BTreeMap<String, Vec<&'a wire::AgendaEvent>>,
     pub due_on: &'a BTreeMap<&'a str, Vec<&'a wire::AgendaTask>>,
+    /// The overdue reminders, drawn in the all-day lane of Day on today (the hour grid has no list
+    /// to lead with): oldest first, each saying how long ago.
+    pub overdue: &'a [&'a wire::AgendaTask],
     pub birthdays: &'a HashMap<String, Vec<&'a wire::AgendaBirthday>>,
     pub hues: &'a Hues<'a>,
     pub tasks: &'a rows::Context<'a>,
@@ -598,6 +601,31 @@ fn chips_of(input: &Input, day: &str) -> Vec<wire::AgendaGridChip> {
                 ..wire::AgendaGridChip::default()
             }),
     );
+    // OVERDUE REMINDERS lead Day's lane on today, in the attention tone (never red), each with its
+    // box and how long ago in its spoken label.
+    if input.destination == Dest::Day && day == input.today {
+        out.splice(
+            0..0,
+            input.overdue.iter().map(|task| {
+                let title = input.task_title(task);
+                let how_long = rows::due_label(input.locale, task, input.tasks);
+                wire::AgendaGridChip {
+                    key: format!("task:overdue:{}", task.task_id),
+                    hue_key: "stateAmber".to_owned(),
+                    is_task: true,
+                    task_id: task.task_id.clone(),
+                    route: Some(crate::kit::schedule::routes::task(&task.task_id)),
+                    accessibility_label: format!(
+                        "{title}{SEPARATOR}{}{SEPARATOR}{how_long}",
+                        task::group_overdue(input.locale)
+                    ),
+                    title,
+                    done: false,
+                    read_only: false,
+                }
+            }),
+        );
+    }
     out.extend(
         input
             .tasks_on(day)
@@ -1091,6 +1119,7 @@ mod tests {
                 style: wire::AgendaMonthStyle::Grid,
                 by_day: &self.by_day,
                 due_on: &self.due_on,
+                overdue: &[],
                 birthdays: &self.birthdays,
                 hues: &self.hues,
                 tasks: &self.tasks,

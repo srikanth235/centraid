@@ -1906,6 +1906,31 @@ fn today_draws_the_overdue_reminders_above_the_day_and_no_other_day_does() {
     assert!(overdue.verb_label.is_empty() && overdue.verb_key.is_empty());
     assert!(r.data().notice.is_none());
     assert!(overdue.rows.iter().all(|row| !row.read_only && row.overdue));
+    // THE HOUR GRID HAS NO LIST, so Day's all-day lane leads with the same reminders as chips, in the
+    // attention tone, each with its own box.
+    let lane = &r
+        .state()
+        .calendar_header
+        .as_ref()
+        .expect("the header")
+        .all_day;
+    let chips: Vec<&wire::AgendaGridChip> = lane
+        .iter()
+        .filter(|chip| chip.title.starts_with("Zq") && chip.key.starts_with("task:overdue:"))
+        .collect();
+    assert_eq!(
+        chips
+            .iter()
+            .map(|chip| chip.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Zq Renew passport", "Zq Call dentist"]
+    );
+    assert!(
+        chips
+            .iter()
+            .all(|chip| chip.is_task && !chip.read_only && !chip.done)
+    );
+    assert_eq!(chips[0].hue_key, "stateAmber");
     // A tick clears one from the group.
     r.check("zq-older");
     r.settle();

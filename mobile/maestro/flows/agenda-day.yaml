@@ -1,8 +1,7 @@
 # Agenda's band and the Calendar's views (#1128, #1173): Calendar · Reminders ·
 # Invites · More on the band; Calendar opens on Day, an hour grid under the week
-# strip, and its view menu reaches Week, Month, List and Year. A task due on a
-# day is checked off where it stands, with the status line's Undo to take it
-# back.
+# strip, and its view menu reaches Week, Month, List and Year. A reminder due on a
+# day is ticked where it stands, with the status line's Undo to take it back.
 #
 # A VAULT-HOLDING INSTALL, as `home.yaml`. Re-runnable: the check is undone
 # before the flow ends, so the vault is left as it was. The check-off steps
@@ -26,7 +25,8 @@ name: agenda-day
     id: "agenda-week-strip"
 - assertVisible:
     id: "agenda-time-grid"
-# A dated reminder on the day is read-only: its row opens in Reminders, and Calendar checks nothing off.
+# A dated reminder on the day ticks where it stands (Reminders' own complete-task, so the row stays
+# on its day, filled, with the status line's Undo), and its row opens it in Reminders.
 # The layout key (Day and Week's header) lists the views: Month is a grid of whole weeks, Year
 # twelve months, and List draws the same rows over the coming days. The month chip goes back to
 # the Month; Month, Year and List keep the view menu.
