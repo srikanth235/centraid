@@ -1317,13 +1317,13 @@ impl Editor {
             },
             start_label: day_time(&draft.start_day, &draft.start_time),
             end_label: day_time(&draft.end_day, &draft.end_time),
-            start_day_label: long_day(locale, &draft.start_day),
+            start_day_label: civil::short_day(locale, &draft.start_day),
             start_time_label: if draft.all_day {
                 String::new()
             } else {
                 civil::time_for(locale, &draft.start_time, cycle)
             },
-            end_day_label: long_day(locale, &draft.end_day),
+            end_day_label: civil::short_day(locale, &draft.end_day),
             end_time_label: if draft.all_day {
                 String::new()
             } else {

@@ -286,7 +286,7 @@ fn save_proposes_in_the_phones_zone_and_a_commit_ends_the_editor() {
     );
     assert_eq!(data.reminder_label, "30 minutes before");
     assert_eq!(data.start_label, "Monday 15 June · 09:00");
-    assert_eq!(data.start_day_label, "Monday 15 June");
+    assert_eq!(data.start_day_label, "Mon 15 Jun");
     assert_eq!(data.start_time_label, "09:00");
     assert_eq!(data.end_time_label, "10:00");
 
@@ -896,7 +896,7 @@ fn a_sheet_opened_on_task_is_a_title_and_a_due_day_all_day_until_a_time_is_wante
     let draft = data.draft.clone().expect("draft");
     assert_eq!(draft.start_day, "2099-06-17");
     assert!(draft.all_day);
-    assert_eq!(data.start_day_label, "Wednesday 17 June");
+    assert_eq!(data.start_day_label, "Wed 17 Jun");
     assert_eq!(data.start_time_label, "");
     assert!(!data.can_save);
     // Nothing typed: leaving is done, not a question.

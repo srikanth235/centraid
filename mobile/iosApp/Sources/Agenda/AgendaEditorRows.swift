@@ -135,6 +135,7 @@ struct AgendaTileWhenRow<Faces: View>: View {
             Text(key)
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
+                .lineLimit(1)
             Spacer(minLength: 8)
             faces()
         }

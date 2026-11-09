@@ -157,6 +157,17 @@ pub fn short_date(locale: Locale, day: &str) -> String {
     }
 }
 
+/// `Wed 4 Nov`: the weekday, the day and the short month on ONE line, the way the editor's date
+/// rows and the boards write a day a person picks; the input when it is not a day.
+#[must_use]
+pub fn short_day(locale: Locale, day: &str) -> String {
+    let weekday = weekday_short(locale, day);
+    if weekday.is_empty() || day_of_month_of(day).is_none() {
+        return day.to_owned();
+    }
+    format!("{weekday} {}", short_date(locale, day))
+}
+
 /// `March` out of a `YYYY-MM-…` stamp, or empty.
 #[must_use]
 pub fn month_of(locale: Locale, stamp: &str) -> String {

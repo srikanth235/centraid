@@ -517,8 +517,11 @@ struct AgendaEditorView: View {
 
     /// Rust's words as the tap that opens a picker.
     private func pickerFace(_ words: String, hint: String, identifier: String, action: @escaping () -> Void) -> some View {
+        // ONE LINE: the day is the short "Wed 4 Nov" and the pair sits on the board's row.
         KitLink(label: words, identifier: identifier, action: action)
             .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityHint(hint)
     }
 
