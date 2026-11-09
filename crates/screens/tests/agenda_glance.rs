@@ -137,7 +137,7 @@ fn the_counts_say_every_open_task_when_the_rows_are_only_a_window() {
         before["today_count"].as_u64().expect("a count"),
     );
     answer_glance(&mut d, done());
-    let overdue = centraid_screens::agenda::todo::rows::MAX_WINDOW as usize + 20;
+    let overdue = centraid_screens::kit::schedule::rows::MAX_WINDOW as usize + 20;
     for n in 0..overdue {
         arrange(
             &d,
@@ -184,7 +184,7 @@ fn the_rows_are_the_earliest_due_in_a_vault_bigger_than_the_boards_window() {
         );
     };
     add("Zq earliest, made first".to_owned(), "1999-12-30");
-    for n in 0..centraid_screens::agenda::todo::rows::MAX_WINDOW as usize + 20 {
+    for n in 0..centraid_screens::kit::schedule::rows::MAX_WINDOW as usize + 20 {
         add(format!("Zq later {n}"), "2000-01-01");
     }
     add("Zq second, made last".to_owned(), "1999-12-31");

@@ -8,7 +8,7 @@ use wire::AgendaDestination as Dest;
 use super::fold::long_day;
 use super::grid;
 use crate::agenda::routes;
-use crate::agenda::todo::rows;
+use crate::kit::schedule::rows;
 use crate::kit::civil;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,

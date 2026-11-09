@@ -15,12 +15,12 @@ use centraid_api_proto::core_v1 as wire;
 use super::Editor;
 use super::draft::{self, Draft, REPEAT_CUSTOM, RULES};
 use super::fields::choice;
-use super::repeat::{
+use crate::kit::schedule::repeat::{
     self, End, Freq, LAST_DAY, MAX_COUNT, MAX_INTERVAL, MonthMode, ORDINALS, Problem, Spec,
     WEEKDAYS,
 };
 use crate::agenda::event::long_day;
-use crate::agenda::rule_words::{self, weekday_full};
+use crate::kit::schedule::rule_words::{self, weekday_full};
 use crate::kit::civil;
 use crate::strings::agenda_repeat as words;
 use crate::strings::{Locale, agenda as day_words};

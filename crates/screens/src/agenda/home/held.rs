@@ -33,7 +33,7 @@ use wire::app_query_response::Answer;
 
 use super::grid::{self, WeekStart};
 use super::{App, Home, Phase};
-use crate::agenda::todo::rows;
+use crate::kit::schedule::rows;
 use crate::catalog::load::calendar as query_cal;
 use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;

@@ -12,8 +12,8 @@ use wire::screen_event::Kind as E;
 use wire::todo_catch_up_event::Kind as C;
 
 use super::list::{self, Phase};
-use super::todo::ops::Ops;
-use super::todo::rows::{self, Context};
+use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::rows::{self, Context};
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
 use crate::kit::read::{self, Reading};

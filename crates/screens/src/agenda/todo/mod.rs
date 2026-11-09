@@ -2,9 +2,6 @@
 //! To-do, the list pages, a project and Catch up.
 
 pub mod buckets;
-pub mod natural;
-pub mod ops;
 pub mod order;
 pub mod quick;
-pub mod rows;
 pub mod view;

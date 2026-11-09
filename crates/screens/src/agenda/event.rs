@@ -31,7 +31,7 @@
 //! (only when free: busy is what every event is), time zone (only when the event's own zone is
 //! not the phone's), travel time (only when set) and calendar. The guests the phone's own
 //! calendar states for a followed event are a read-only list with the reply in words. The
-//! attachments section is [`super::attachments`]'s: photos and files, added, opened and removed
+//! attachments section is [`crate::kit::schedule::attachments`]'s: photos and files, added, opened and removed
 //! from here.
 
 use centraid_api_proto::core_v1 as wire;
@@ -39,13 +39,13 @@ use wire::agenda_event_event::Kind as K;
 use wire::agenda_event_state::Sheet;
 use wire::app_query_response::Answer;
 
-use super::rule_words;
+use crate::kit::schedule::rule_words;
 use wire::screen_event::Kind as E;
 
-use super::attachments::{Attachments, Of};
+use crate::kit::schedule::attachments::{Attachments, Of};
 use super::home::Hues;
 use super::routes;
-use super::todo::rows::hue_role;
+use crate::kit::schedule::rows::hue_role;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};

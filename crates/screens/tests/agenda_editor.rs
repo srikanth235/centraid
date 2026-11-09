@@ -620,7 +620,7 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
         .rrule
         .expect("a rule");
     let summary =
-        centraid_screens::agenda::rule_words::of_rule(Locale::En, &rule).expect("a summary");
+        centraid_screens::kit::schedule::rule_words::of_rule(Locale::En, &rule).expect("a summary");
     assert_eq!(
         data.repeats.last().expect("custom last").label,
         summary,
@@ -1575,7 +1575,7 @@ fn typed_words_that_became_a_place_meanwhile_are_that_place() {
 // ---- THE WRITES CARRY THE FIELDS: the act payloads the editor builds. ----
 
 use centraid_screens::agenda::editor::write;
-use centraid_screens::agenda::todo::ops::{NewTask, add_request};
+use centraid_screens::kit::schedule::ops::{NewTask, add_request};
 
 fn timed_draft() -> wire::AgendaDraft {
     wire::AgendaDraft {

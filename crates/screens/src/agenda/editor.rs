@@ -67,7 +67,6 @@
 pub(super) mod custom;
 pub(super) mod draft;
 mod fields;
-pub mod repeat;
 pub mod write;
 
 use centraid_api_proto::core_v1 as wire;
@@ -83,9 +82,9 @@ use self::draft::{
 use super::event::{
     calendar_hue, is_series_occurrence, long_day, person_hue, reminder_label, scope_word, scopes,
 };
-use super::rule_words;
-use super::todo::ops::{NewTask, Ops};
-use super::todo::rows;
+use crate::kit::schedule::rule_words;
+use crate::kit::schedule::ops::{NewTask, Ops};
+use crate::kit::schedule::rows;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
@@ -1554,7 +1553,7 @@ impl Editor {
                 stored
                     .or_else(|| {
                         draft::rule_for(draft)
-                            .and_then(|rule| repeat::from_rrule(&rule, day))
+                            .and_then(|rule| crate::kit::schedule::repeat::from_rrule(&rule, day))
                             .map(|spec| custom::summary(locale, &spec))
                     })
                     .unwrap_or_else(|| editor_words::repeat_custom(locale))

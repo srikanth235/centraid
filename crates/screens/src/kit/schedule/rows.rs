@@ -12,7 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaTaskGroupKind as Kind;
 
 use crate::agenda::routes;
-use crate::agenda::rule_words;
+use crate::kit::schedule::rule_words;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{
     Locale, agenda_reminders as reminders, agenda_tasks as card_words, task as words,

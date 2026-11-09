@@ -6,7 +6,7 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::held::Held;
 use crate::agenda::routes;
-use crate::agenda::todo::rows;
+use crate::kit::schedule::rows;
 use crate::strings::{Locale, agenda as words, shared};
 
 /// The index entity a project container carries.

@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use centraid_screens::agenda::rule_words::{of_rule, stored};
+use centraid_screens::kit::schedule::rule_words::{of_rule, stored};
 use centraid_screens::strings::Locale;
 
 fn said(rule: &str) -> String {

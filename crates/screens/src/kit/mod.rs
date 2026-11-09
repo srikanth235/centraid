@@ -9,6 +9,7 @@ pub mod links;
 pub mod menu;
 pub mod money;
 pub mod read;
+pub mod schedule;
 pub mod search;
 pub mod secret;
 pub mod transfer;

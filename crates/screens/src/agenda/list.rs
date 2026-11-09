@@ -13,8 +13,8 @@ use wire::todo_list_event::Kind as L;
 
 use super::home::long_day;
 use super::todo::buckets;
-use super::todo::ops::Ops;
-use super::todo::rows::{self, Context};
+use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::rows::{self, Context};
 use super::todo::view::Prefs;
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;

@@ -11,8 +11,8 @@ use centraid_api_proto::core_v1 as wire;
 
 use super::held::Held;
 use crate::agenda::routes;
-use crate::agenda::style;
-use crate::agenda::todo::rows;
+use crate::kit::schedule::style;
+use crate::kit::schedule::rows;
 use crate::agenda::todo::view::Options;
 use crate::kit::civil::HourCycle;
 use crate::strings::{

@@ -14,7 +14,7 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::container::{LIST_COLORS, LIST_ICONS};
 
-use super::todo::ops::Ops;
+use crate::kit::schedule::ops::Ops;
 use crate::catalog::act;
 use crate::field::Field;
 use crate::screen::Ctx;
@@ -22,7 +22,7 @@ use crate::strings::{Locale, agenda_lists as words};
 
 /// What the sheet makes or edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Subject {
+pub enum Subject {
     List,
     Calendar,
 }
@@ -38,7 +38,7 @@ struct Initial {
 
 /// The sheet's draft.
 #[derive(Clone, Debug)]
-pub(super) struct Draft {
+pub struct Draft {
     subject: Subject,
     /// `None` while making one.
     initial: Option<Initial>,
@@ -50,7 +50,7 @@ pub(super) struct Draft {
 
 impl Draft {
     /// A new list or calendar: no name, the palette's first colour, no icon.
-    pub(super) fn making(subject: Subject) -> Self {
+    pub fn making(subject: Subject) -> Self {
         Self {
             subject,
             initial: None,
@@ -61,7 +61,7 @@ impl Draft {
     }
 
     /// An existing list or calendar, from what it stored.
-    pub(super) fn editing(
+    pub fn editing(
         subject: Subject,
         id: &str,
         name: &str,
@@ -86,19 +86,19 @@ impl Draft {
         }
     }
 
-    pub(super) fn set_name(&mut self, name: String) {
+    pub fn set_name(&mut self, name: String) {
         self.name = name;
     }
 
     /// A palette key picks its swatch; anything else is nothing.
-    pub(super) fn pick_color(&mut self, key: &str) {
+    pub fn pick_color(&mut self, key: &str) {
         if LIST_COLORS.contains(&key) {
             self.color = key.to_owned();
         }
     }
 
     /// A curated icon key picks it; an empty key clears it; anything else is nothing.
-    pub(super) fn pick_icon(&mut self, key: &str) {
+    pub fn pick_icon(&mut self, key: &str) {
         if key.is_empty() {
             self.icon = None;
         } else if LIST_ICONS.contains(&key) {
@@ -126,12 +126,12 @@ impl Draft {
 
     /// Create or Save is armed by a name. An edit stays armed with nothing changed (the
     /// board's Save is solid); a submit that changes nothing writes nothing and closes.
-    pub(super) fn can_submit(&self) -> bool {
+    pub fn can_submit(&self) -> bool {
         !self.name.trim().is_empty()
     }
 
     /// The sheet, as a shell draws it.
-    pub(super) fn sheet(&self, locale: Locale) -> wire::AgendaStyleSheet {
+    pub fn sheet(&self, locale: Locale) -> wire::AgendaStyleSheet {
         let editing = self.initial.is_some();
         wire::AgendaStyleSheet {
             title: match (self.subject, editing) {
@@ -180,7 +180,7 @@ impl Draft {
     /// Make or change it, one write at a time, the status line saying what
     /// happened (or the vault's refusal). Returns whether every write committed,
     /// so the sheet shuts only then and a refused sheet keeps the member's words.
-    pub(super) fn submit(&self, ctx: &Ctx, ops: &mut Ops) -> bool {
+    pub fn submit(&self, ctx: &Ctx, ops: &mut Ops) -> bool {
         if !self.can_submit() {
             return false;
         }
@@ -263,7 +263,7 @@ impl Draft {
 /// The icon a list or calendar wears: its stored key when it is one of the curated
 /// set, else none (a key the set lacks would draw as a blank mark).
 #[must_use]
-pub(super) fn icon_of(stored: Option<&str>) -> String {
+pub fn icon_of(stored: Option<&str>) -> String {
     stored
         .filter(|key| LIST_ICONS.contains(key))
         .map(str::to_owned)

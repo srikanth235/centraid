@@ -10,7 +10,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use super::rows::{self, Context};
+use crate::kit::schedule::rows::{self, Context};
 use crate::kit::civil;
 use crate::strings::{Locale, agenda_reminders as reminders, task as words};
 

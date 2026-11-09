@@ -64,7 +64,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Map, Value, json};
 
-use crate::agenda::todo::rows;
+use crate::kit::schedule::rows;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda, agenda_glance as words, fill, shared, task as task_words};
 

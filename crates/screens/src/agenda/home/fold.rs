@@ -41,9 +41,9 @@ use super::grid::{self, WeekStart};
 use super::held::{Held, range_of, span_of};
 use super::search;
 use crate::agenda::routes;
-use crate::agenda::rule_words;
-use crate::agenda::style;
-use crate::agenda::todo::rows;
+use crate::kit::schedule::rule_words;
+use crate::kit::schedule::style;
+use crate::kit::schedule::rows;
 use crate::kit::civil::{self, HourCycle};
 use crate::strings::{Locale, agenda as words, agenda_home as sentences, fill, task};
 

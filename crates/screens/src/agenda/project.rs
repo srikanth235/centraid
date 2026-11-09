@@ -1,6 +1,6 @@
 //! ONE PROJECT (`agenda.project`): its work in no section, then every section
 //! in its order — an empty section drawn too, with its own "Add task" — "Add
-//! section", "Rename" and "Edit List" (name, colour and icon: [`super::style`]).
+//! section", "Rename" and "Edit List" (name, colour and icon: [`crate::kit::schedule::style`]).
 //!
 //! A quick add here is one write: `add-task` filed in the project and, when
 //! the member pointed a section's "Add task" at it, in that section.
@@ -11,12 +11,12 @@ use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
 use super::list::{self, Phase};
-use super::style::{self, Draft, Subject};
-use super::todo::natural::{Chipper, Fields};
-use super::todo::ops::{NewTask, Ops};
+use crate::kit::schedule::style::{self, Draft, Subject};
+use crate::kit::schedule::natural::{Chipper, Fields};
+use crate::kit::schedule::ops::{NewTask, Ops};
 use super::todo::order;
 use super::todo::quick::Quick;
-use super::todo::rows::{self, Context};
+use crate::kit::schedule::rows::{self, Context};
 use super::todo::view::{Prefs, Sort};
 use crate::catalog::{act, load};
 use crate::kit::civil::HourCycle;

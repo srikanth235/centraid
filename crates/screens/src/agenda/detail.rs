@@ -19,14 +19,14 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
-use super::attachments::{Attachments, Of};
+use crate::kit::schedule::attachments::{Attachments, Of};
 use super::editor::custom::{Custom, Done};
 use super::editor::draft::{REPEAT_CUSTOM, normalize_url};
 use super::list::{self, Phase};
 use super::routes;
-use super::rule_words;
-use super::todo::ops::Ops;
-use super::todo::rows::{self, Context};
+use crate::kit::schedule::rule_words;
+use crate::kit::schedule::ops::Ops;
+use crate::kit::schedule::rows::{self, Context};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
