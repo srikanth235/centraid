@@ -219,7 +219,8 @@ fn scope_of(app: &str) -> Result<Option<App>> {
     if app.is_empty() {
         return Ok(None);
     }
-    App::from_id(app)
+    // A thread an older build scoped to `agenda` reopens in Calendar (round 10 split the app).
+    App::from_id(centraid_vault::roster::legacy(app, ""))
         .map(Some)
         .ok_or_else(|| invalid(format!("`{app}` is not an app the assistant reads")))
 }
@@ -1083,10 +1084,11 @@ mod tests {
         assert_eq!(scope_of("calendar").unwrap(), Some(App::Calendar));
         assert_eq!(scope_of("reminders").unwrap(), Some(App::Reminders));
         // There is no `agenda` app any more (round 10), and no `tasks` app: the tasks are Reminders'.
-        assert!(matches!(
-            scope_of("agenda"),
-            Err(CoreError::InvalidRequest { .. })
-        ));
+        assert_eq!(
+            scope_of("agenda").unwrap(),
+            Some(App::Calendar),
+            "an older thread reopens"
+        );
         assert!(matches!(
             scope_of("tasks"),
             Err(CoreError::InvalidRequest { .. })

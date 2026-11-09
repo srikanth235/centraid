@@ -8,12 +8,8 @@ catalog! {
     plain a11y_open_map = ("Open this location in Maps", "Open this location in Maps");
     plain all_day = ("All day", "All day");
     plain app_title = ("Calendar", "Calendar");
-    plain band_day = ("Day", "Day");
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
-    plain band_schedule = ("Schedule", "Schedule");
-    plain band_todo = ("To-do", "To-do");
-    plain band_waiting = ("Waiting", "Waiting");
     plain block_calendar = ("No calendar to save this to.", "No calendar to save this to.");
     plain block_range = ("An event must end after it starts.", "An event must end after it starts.");
     plain block_title = ("Add a title to save.", "Add a title to save.");
@@ -81,9 +77,7 @@ catalog! {
     plain join_call = ("Join call", "Join call");
     plain keep_editing = ("Keep editing", "Keep editing");
     plain keep_it = ("Keep it", "Keep it");
-    plain kind_event = ("Event", "Event");
     plain kind_switch = ("What to add", "What to add");
-    plain kind_task = ("Task", "Task");
     plain loading = ("Opening your agenda", "Opening your agenda");
     plain meta_call = ("call", "call");
     plain meta_guest = ("guest", "guest");
@@ -122,7 +116,6 @@ catalog! {
     plain quick_add = ("Add", "Add");
     plain quick_discard = ("Discard", "Discard");
     plain rail_calendars = ("Calendars", "Calendars");
-    plain rail_tasks = ("Tasks", "Tasks");
     plain reads_fact_leaves = ("Leaves this phone", "Leaves this phone");
     plain reads_fact_leaves_value = ("nothing", "nothing");
     plain reads_fact_reads = ("Reads", "Reads");
