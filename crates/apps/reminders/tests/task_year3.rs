@@ -123,7 +123,7 @@ fn the_board_walks_every_open_task_and_the_trash_is_on_no_list() {
 }
 
 /// The declared profile, run on demand:
-/// `cargo test -p centraid-apps-agenda --test task_year3 -- --ignored --nocapture`.
+/// `cargo test -p centraid-apps-reminders --test task_year3 -- --ignored --nocapture`.
 #[test]
 #[ignore = "the declared 15,000-task profile; run for the receipt's numbers"]
 fn the_declared_profile() {

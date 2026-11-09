@@ -6,7 +6,7 @@
 //! time. This emitter writes the one file that holds them as types instead:
 //!
 //! ```text
-//! act::agenda::Propose { title, starts, ..Default::default() }  -> ActRequest
+//! act::calendar::Propose { title, starts, ..Default::default() }  -> ActRequest
 //! load::tasks::Board { view, ..Default::default() }             -> LoadRequest
 //! ```
 //!

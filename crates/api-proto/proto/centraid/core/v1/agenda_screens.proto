@@ -1468,7 +1468,7 @@ message AgendaRowTile {
   string key = 1;
   // A catalogue icon key (`Calendar`, `Clock`, `MapPin`).
   string icon_key = 2;
-  // A colour token name (`appAgenda`, `stateRed`, `listBlue`, `textMeta`).
+  // A colour token name (`appCalendar`, `stateRed`, `listBlue`, `textMeta`).
   string color_key = 3;
 }
 

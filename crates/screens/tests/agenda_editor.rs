@@ -1308,7 +1308,7 @@ fn the_places(world: &World) -> Vec<(String, String)> {
 
 /// A place the member named, founded through `add-place`: its id.
 fn found_place(world: &mut World, title: &str) -> String {
-    let done = world.act(act::agenda::AddPlace {
+    let done = world.act(act::calendar::AddPlace {
         title: title.to_owned(),
         ..Default::default()
     });

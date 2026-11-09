@@ -1611,24 +1611,24 @@ fn chrome(locale: Locale) -> wire::AgendaEditorChrome {
 }
 
 /// THE BOARD'S COLOUR TILES for the event editor's rows (`EventEditorRows`): the times and the
-/// calendar in Agenda's blue, the place, availability in the list blue, the zone and the
-/// travel time in Agenda's blue too (a state colour only ever says a state) and the rest in the
+/// calendar in Calendar's blue, the place, availability in the list blue, the zone and the
+/// travel time in Calendar's blue too (a state colour only ever says a state) and the rest in the
 /// neutral grey.
 fn row_tiles() -> Vec<wire::AgendaRowTile> {
-    const AGENDA: &str = "appAgenda";
+    const CALENDAR: &str = "appCalendar";
     const GREY: &str = "textMeta";
     [
-        ("start", "Calendar", AGENDA),
-        ("end", "Clock", AGENDA),
+        ("start", "Calendar", CALENDAR),
+        ("end", "Clock", CALENDAR),
         ("repeat", "Repeat", GREY),
-        ("calendar", "CalendarBlank", AGENDA),
+        ("calendar", "CalendarBlank", CALENDAR),
         ("guests", "Users", GREY),
-        ("location", "MapPin", AGENDA),
+        ("location", "MapPin", CALENDAR),
         ("reminder", "Bell", GREY),
         ("second_reminder", "Bell", GREY),
         ("availability", "Check", "listBlue"),
-        ("zone", "Globe", AGENDA),
-        ("travel", "Clock", AGENDA),
+        ("zone", "Globe", CALENDAR),
+        ("travel", "Clock", CALENDAR),
         ("link", "OpenExternal", GREY),
     ]
     .into_iter()

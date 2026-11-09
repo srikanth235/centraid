@@ -1086,7 +1086,7 @@ fn design_scale_swift(tokens: &Tokens, assets: &[ColorAsset]) -> String {
         "// The redesign's type scale and radii (#1173), in points, and the names of its\n",
     );
     out.push_str("// colour sets in `Resources/Assets.xcassets`. Light and dark are built into\n");
-    out.push_str("// each set, so `Color(CentraidAsset.appAgenda)` follows the appearance.\n\n");
+    out.push_str("// each set, so `Color(CentraidAsset.appCalendar)` follows the appearance.\n\n");
     out.push_str("import CoreGraphics\n\n");
     out.push_str("public enum CentraidScale {\n");
     for (name, step) in &tokens.scale {
