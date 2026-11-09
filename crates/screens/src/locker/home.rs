@@ -781,7 +781,7 @@ impl Home {
             tab(
                 "generate",
                 words::band_generate(locale),
-                "Sparkle",
+                "Repeat",
                 self.destination == D::Generate,
             ),
             tab("more", words::band_more(locale), "MoreHoriz", false),
