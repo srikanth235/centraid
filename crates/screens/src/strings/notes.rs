@@ -156,6 +156,38 @@ catalog! {
     plain title = ("Notes", "Notes");
     plain title_placeholder = ("Title", "Title");
     plain trash_label = ("Trash", "Trash");
+    plain more_export = ("Export", "Export");
+    plain more_import = ("Import", "Import");
+    plain transfer_choose_files_action = ("Choose files", "Choose files");
+    plain transfer_choose_folder_action = ("Choose folder", "Choose folder");
+    plain transfer_choose_again_action = ("Choose again", "Choose again");
+    plain transfer_export_all = ("All notes", "All notes");
+    plain transfer_export_done = ("Exported {n} notes", "Exported {n} notes");
+    plain transfer_export_failed = ("Could not export", "Could not export");
+    plain transfer_export_headline = ("Choose what to export", "Choose what to export");
+    plain transfer_export_lede = (
+        "Markdown files in one archive. Links stay as [[links]].",
+        "Markdown files in one archive. Links stay as [[links]]."
+    );
+    plain transfer_export_title = ("Export notes", "Export notes");
+    plain transfer_import_action = ("Import {n} notes", "Import {n} notes");
+    plain transfer_import_done = ("Imported {n} notes", "Imported {n} notes");
+    plain transfer_import_failed = ("Could not import", "Could not import");
+    plain transfer_import_headline = ("Choose what to import", "Choose what to import");
+    plain transfer_import_lede = (
+        "Markdown or text files, or a folder. Links and tags come along.",
+        "Markdown or text files, or a folder. Links and tags come along."
+    );
+    plain transfer_import_nothing = ("No notes in that choice", "No notes in that choice");
+    plain transfer_import_ready = ("Ready to import", "Ready to import");
+    plain transfer_import_title = ("Import notes", "Import notes");
+    plain transfer_row_ignored = ("Not notes", "Not notes");
+    plain transfer_row_links = ("Links", "Links");
+    plain transfer_row_notebooks = ("Notebooks", "Notebooks");
+    plain transfer_row_notes = ("Notes", "Notes");
+    plain transfer_row_skipped = ("Already here", "Already here");
+    plain transfer_row_tags = ("Tags", "Tags");
+    plain transfer_row_unlinked = ("Links to nothing yet", "Links to nothing yet");
     plain unfiled_row = ("Unfiled", "Unfiled");
     plain undo = ("Undo", "Undo");
     plain unpin = ("Unpin", "Unpin");

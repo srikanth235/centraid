@@ -822,6 +822,7 @@ dependencies = [
 name = "centraid-screens"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "base64 0.22.1",
  "centraid-api-proto",
  "centraid-apps-agenda",
  "centraid-apps-docs",

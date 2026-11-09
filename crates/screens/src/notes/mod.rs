@@ -26,12 +26,15 @@ pub mod fold;
 pub mod history;
 pub mod home;
 pub(crate) mod rich;
+pub mod transfer;
 pub mod trash;
 
 pub const HOME: &str = "notes.home";
 pub const EDITOR: &str = "notes.editor";
 pub const HISTORY: &str = "notes.history";
 pub const TRASH: &str = "notes.trash";
+pub const IMPORT: &str = "notes.import";
+pub const EXPORT: &str = "notes.export";
 
 /// The tab Notes' pages are pushed under.
 pub const TAB: &str = "notes";
@@ -44,6 +47,8 @@ pub fn registry() -> Registry {
         .with(EDITOR, editor::build)
         .with(HISTORY, history::build)
         .with(TRASH, trash::build)
+        .with(IMPORT, transfer::build_import)
+        .with(EXPORT, transfer::build_export)
 }
 
 /// A runtime with Notes' screens and one tab, `notes`, rooted at its home. The
@@ -104,7 +109,7 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HISTORY, HOME, TRASH, wire};
+    use super::{EDITOR, EXPORT, HISTORY, HOME, IMPORT, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -223,6 +228,18 @@ pub mod routes {
             wire::route::Args::NotesHistory(wire::NotesHistoryRoute {
                 note_id: note_id.to_owned(),
                 note_title: note_title.to_owned(),
+            }),
+        )
+    }
+
+    /// The kit's transfer screen on Notes' Markdown, either way; `back` names the page it was
+    /// pushed from.
+    #[must_use]
+    pub fn transfer(export: bool, back: &str) -> wire::Route {
+        route(
+            if export { EXPORT } else { IMPORT },
+            wire::route::Args::Transfer(wire::TransferRoute {
+                back_label: back.to_owned(),
             }),
         )
     }
