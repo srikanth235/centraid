@@ -357,6 +357,7 @@ fn read(
                 from: p.text("from")?,
                 to: p.text("to")?,
                 tz,
+                overdue_before: p.text("overdue_before")?,
             },
         )?,
         ("calendar", "attachments") => app_query::agenda_attachments::attachments(

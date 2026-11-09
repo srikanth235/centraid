@@ -61,11 +61,32 @@ mod tests {
         }
     }
 
-    /// THE SPLIT, AS A SCOPE (round 10): Calendar READS `task` and acts on no `task.*` command, and
-    /// reads no table a reminder alone needs.
+    /// LEAST PRIVILEGE (rounds 10 and 12): a reminder on a Calendar day can be ticked complete and
+    /// ticked back there, as in Apple's Calendar, but the write is REMINDERS' OWN `complete-task` and
+    /// `reopen-task`, sent by the screen under Reminders' name. So Calendar READS `task` (a title, a
+    /// due day and time, the state) and holds no general task write and no complete or uncomplete
+    /// permission either: no scope on `task` but the read, no `task.*` command, no action of that
+    /// kind among its fifteen.
     #[test]
-    fn calendar_reads_reminders_and_writes_none() {
+    fn calendar_reads_reminders_and_holds_no_task_write_the_tick_is_reminders() {
         let vault = manifest().vault.as_ref().expect("reach");
+        for scope in &vault.scopes {
+            if scope.table.as_deref() == Some("task") || scope.schema == "task" {
+                assert!(
+                    scope.verbs == ScopeVerbs::Read && scope.schema == "vault",
+                    "Calendar's only scope on a task is the read: {}.{:?}",
+                    scope.schema,
+                    scope.table
+                );
+            }
+        }
+        for action in &manifest().actions {
+            assert!(
+                !action.name.contains("task") && !action.command.contains("task"),
+                "Calendar names no task action, complete and uncomplete included: {}",
+                action.name
+            );
+        }
         assert!(vault.scopes.iter().any(|s| s.schema == "vault"
             && s.table.as_deref() == Some("task")
             && s.verbs == ScopeVerbs::Read));

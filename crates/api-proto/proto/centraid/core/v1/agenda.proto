@@ -378,14 +378,19 @@ message AgendaFollowedGuest {
   string state = 3;
 }
 
-// `calendar.dated-reminders`: the open, one-off reminders that fall due on the local days of a window,
-// read-only (round 10 of #1173: Calendar shows a reminder on its day and opens it in Reminders).
+// `calendar.dated-reminders`: the dated reminders that fall due on the local days of a window, open and
+// ticked, every occurrence of a repeating one among them, and (when asked) the overdue ones (rounds 10
+// and 12 of #1173: Calendar shows a reminder on its day, ticks it there with Reminders' own action and
+// opens it in Reminders).
 message CalendarDatedRemindersRequest {
   // The first and the last local day of the window, `YYYY-MM-DD`.
   string from = 1;
   string to = 2;
   // The zone the days are read in (the file header's rule).
   string tz = 3;
+  // When set, the open reminders due on a day before it are answered too, oldest first, marked
+  // `overdue`: Day on today asks with today.
+  string overdue_before = 4;
 }
 
 message CalendarDatedReminders {
@@ -394,7 +399,7 @@ message CalendarDatedReminders {
   repeated CalendarDatedReminder reminders = 2;
 }
 
-// A reminder on its day: its title, due day, due time and nothing else.
+// A reminder on its day: its title, due day, due time, state and nothing else.
 message CalendarDatedReminder {
   string task_id = 1;
   string title = 2;
@@ -402,6 +407,15 @@ message CalendarDatedReminder {
   string due_day = 3;
   // `HH:MM`, or empty for a date-only due.
   string due_time = 4;
+  // Ticked off.
+  bool done = 5;
+  // Part of a repeating series.
+  bool repeats = 6;
+  // A later occurrence the series' rule names: `task_id` is the series' open row, not this day's, so
+  // there is nothing to tick on it.
+  bool projected = 7;
+  // Open and due before the request's `overdue_before`.
+  bool overdue = 8;
 }
 
 // `calendar.attachments` and `reminders.attachments`: one page of what an event or a task has attached (#1173).

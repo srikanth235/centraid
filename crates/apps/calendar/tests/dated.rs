@@ -1,8 +1,8 @@
-//! WHAT CALENDAR READS OF A REMINDER (round 10 of #1173): a title, a due day and time, read-only, in
-//! the zone the device states; open and one-off only; and nothing else of the task. Against a vault
-//! the product founds.
+//! WHAT CALENDAR READS OF A REMINDER (rounds 10 and 12 of #1173): a title, a due day and time, its
+//! state and whether it repeats, in the zone the device states; every occurrence of a repeating one;
+//! the overdue ones when asked; and nothing else of the task. Against a vault the product founds.
 
-use centraid_apps_calendar::load_dated_reminders;
+use centraid_apps_calendar::{DatedReminder, load_dated_reminders};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_vault::commands::Registry;
 use centraid_vault::time::zone::FireZone;
@@ -53,8 +53,27 @@ impl World {
     }
 }
 
+fn read_window(
+    world: &World,
+    from: &str,
+    to: &str,
+    overdue_before: &str,
+    zone: &FireZone,
+) -> Vec<DatedReminder> {
+    world
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            let (rows, denial) =
+                load_dated_reminders(&door, from, to, overdue_before, zone).expect("reads");
+            assert!(denial.is_none());
+            Ok(rows)
+        })
+        .expect("a read")
+}
+
 #[test]
-fn a_day_shows_the_open_one_off_reminders_due_on_it_in_the_devices_zone() {
+fn a_day_shows_the_open_and_the_ticked_reminders_due_on_it_in_the_devices_zone() {
     let world = World::new();
     let dated = world.id(
         "task.add",
@@ -68,43 +87,109 @@ fn a_day_shows_the_open_one_off_reminders_due_on_it_in_the_devices_zone() {
     let _undated = world.id("task.add", json!({ "title": "Someday" }));
     let done = world.id("task.add", json!({ "title": "Done", "due": "2026-03-10" }));
     world.id("task.complete", json!({ "id": done }));
-    let _repeating = world.id(
+    let kolkata = FireZone::named("Asia/Kolkata").expect("a zone");
+    let utc = FireZone::named("Etc/UTC").expect("a zone");
+
+    let tenth = read_window(&world, "2026-03-10", "2026-03-10", "", &utc);
+    let titles: Vec<&str> = tenth.iter().map(|row| row.title.as_str()).collect();
+    assert_eq!(titles, ["Done", "File the taxes", "Call Mum"], "{tenth:?}");
+    assert_eq!(tenth[1].task_id, dated);
+    assert_eq!(tenth[1].due_time, "");
+    assert_eq!(tenth[2].due_time, "23:30");
+    assert!(tenth[0].done, "a ticked reminder stays on its day, ticked");
+    assert!(!tenth[1].done && !tenth[1].repeats && !tenth[1].projected && !tenth[1].overdue);
+
+    let week = read_window(&world, "2026-03-09", "2026-03-15", "", &kolkata);
+    let call = week
+        .iter()
+        .find(|row| row.task_id == late)
+        .expect("on the week");
+    assert_eq!(
+        (call.due_day.as_str(), call.due_time.as_str()),
+        ("2026-03-11", "05:00")
+    );
+    assert_eq!(week.len(), 3, "no undated reminder: {week:?}");
+}
+
+#[test]
+fn every_occurrence_of_a_repeating_reminder_is_on_its_day() {
+    let world = World::new();
+    let water = world.id(
         "task.add",
         json!({ "title": "Water", "due": "2026-03-10", "rule": "FREQ=DAILY" }),
     );
-    let kolkata = FireZone::named("Asia/Kolkata").expect("a zone");
     let utc = FireZone::named("Etc/UTC").expect("a zone");
-    world
-        .vault
-        .read(|connection| {
-            let door = TestDoor::new(connection);
-            let (tenth, denial) =
-                load_dated_reminders(&door, "2026-03-10", "2026-03-10", &utc).expect("reads");
-            assert!(denial.is_none());
-            let titles: Vec<&str> = tenth.iter().map(|row| row.title.as_str()).collect();
-            assert_eq!(titles, ["File the taxes", "Call Mum"], "{tenth:?}");
-            assert_eq!(tenth[0].task_id, dated);
-            assert_eq!(tenth[0].due_time, "");
-            assert_eq!(tenth[1].due_time, "23:30");
+    let week = read_window(&world, "2026-03-09", "2026-03-15", "", &utc);
+    let days: Vec<&str> = week.iter().map(|row| row.due_day.as_str()).collect();
+    assert_eq!(
+        days,
+        [
+            "2026-03-10",
+            "2026-03-11",
+            "2026-03-12",
+            "2026-03-13",
+            "2026-03-14",
+            "2026-03-15"
+        ],
+        "{week:?}"
+    );
+    assert!(week.iter().all(|row| row.task_id == water && row.repeats));
+    // The series' open row is the first; the rest are the rule's, with no row of their own to tick.
+    assert!(!week[0].projected);
+    assert!(week[1..].iter().all(|row| row.projected));
+    // A window after the open row still names the series' days.
+    let later = read_window(&world, "2026-04-01", "2026-04-02", "", &utc);
+    assert_eq!(later.len(), 2, "{later:?}");
+    assert!(later.iter().all(|row| row.projected));
+}
 
-            let (week, _) =
-                load_dated_reminders(&door, "2026-03-09", "2026-03-15", &kolkata).expect("reads");
-            let call = week
-                .iter()
-                .find(|row| row.task_id == late)
-                .expect("on the week");
-            assert_eq!(
-                (call.due_day.as_str(), call.due_time.as_str()),
-                ("2026-03-11", "05:00")
-            );
-            assert_eq!(
-                week.len(),
-                2,
-                "no undated, completed or repeating reminder: {week:?}"
-            );
-            Ok(())
-        })
-        .expect("a read");
+#[test]
+fn a_timed_weekly_reminder_names_each_week_at_its_time() {
+    let world = World::new();
+    world.id(
+        "task.add",
+        json!({ "title": "Bins", "due": "2026-03-09T08:30:00.000Z", "rule": "FREQ=WEEKLY" }),
+    );
+    let utc = FireZone::named("Etc/UTC").expect("a zone");
+    let month = read_window(&world, "2026-03-01", "2026-03-31", "", &utc);
+    let days: Vec<(&str, &str)> = month
+        .iter()
+        .map(|row| (row.due_day.as_str(), row.due_time.as_str()))
+        .collect();
+    assert_eq!(
+        days,
+        [
+            ("2026-03-09", "08:30"),
+            ("2026-03-16", "08:30"),
+            ("2026-03-23", "08:30"),
+            ("2026-03-30", "08:30")
+        ],
+        "{month:?}"
+    );
+}
+
+#[test]
+fn the_overdue_ones_come_only_when_asked_and_oldest_first() {
+    let world = World::new();
+    world.id("task.add", json!({ "title": "Older", "due": "2026-03-01" }));
+    world.id("task.add", json!({ "title": "Old", "due": "2026-03-08" }));
+    world.id("task.add", json!({ "title": "Today", "due": "2026-03-10" }));
+    let done = world.id("task.add", json!({ "title": "Done", "due": "2026-03-02" }));
+    world.id("task.complete", json!({ "id": done }));
+    let utc = FireZone::named("Etc/UTC").expect("a zone");
+
+    let plain = read_window(&world, "2026-03-10", "2026-03-10", "", &utc);
+    assert_eq!(plain.len(), 1, "{plain:?}");
+    let asked = read_window(&world, "2026-03-10", "2026-03-10", "2026-03-10", &utc);
+    let titles: Vec<(&str, bool)> = asked
+        .iter()
+        .map(|row| (row.title.as_str(), row.overdue))
+        .collect();
+    assert_eq!(
+        titles,
+        [("Today", false), ("Older", true), ("Old", true)],
+        "overdue ones are open, due before the day, and never today's own: {asked:?}"
+    );
 }
 
 #[test]
@@ -112,13 +197,5 @@ fn a_window_that_does_not_parse_answers_nothing() {
     let world = World::new();
     world.id("task.add", json!({ "title": "x", "due": "2026-03-10" }));
     let utc = FireZone::named("Etc/UTC").expect("a zone");
-    world
-        .vault
-        .read(|connection| {
-            let (rows, _) = load_dated_reminders(&TestDoor::new(connection), "soon", "later", &utc)
-                .expect("reads");
-            assert!(rows.is_empty());
-            Ok(())
-        })
-        .expect("a read");
+    assert!(read_window(&world, "soon", "later", "", &utc).is_empty());
 }

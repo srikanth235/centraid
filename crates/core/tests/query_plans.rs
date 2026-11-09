@@ -160,6 +160,7 @@ fn requests(word: &str) -> Vec<Q> {
             from: "2025-06-01".to_owned(),
             to: "2025-06-07".to_owned(),
             tz: tz(),
+            overdue_before: "2025-06-07".to_owned(),
         }),
         Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest { tz: tz() }),
         Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {

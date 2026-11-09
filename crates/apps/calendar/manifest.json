@@ -2,12 +2,12 @@
   "manifestVersion": 1,
   "id": "calendar",
   "name": "Calendar",
-  "description": "Your events and invites as a projection of the personal vault: upcoming events from the vault's events, expanded from their rules in the zone the device states, with the reminders that fall on each day shown read-only. Reminders is its own app: a reminder opens there and Calendar never writes one.",
+  "description": "Your events and invites as a projection of the personal vault: upcoming events from the vault's events, expanded from their rules in the zone the device states, with the reminders that fall on each day, every occurrence of a repeating one and the overdue ones on today. Reminders is its own app: a reminder opens there, and ticking one on a day is Reminders' own action, so Calendar holds no task write.",
   "version": "1.0.0",
   "iconKey": "Calendar",
   "colorKey": "forest",
   "vault": {
-    "why": "Shows your upcoming schedule and lets you propose, move, and respond to events. It reads the title, due date and state of your reminders to show them on their day, and never changes one.",
+    "why": "Shows your upcoming schedule and lets you propose, move, and respond to events. It reads the title, due date and state of your reminders to show them on their day, and never changes one itself: a tick on a day is sent to Reminders.",
     "scopes": [
       {
         "schema": "vault",
@@ -1302,7 +1302,7 @@
       "name": "dated-reminders",
       "kind": "task",
       "figures": ["reminders"],
-      "description": "The open reminders that fall due in a window of days: the title, due day, due time and state of each, read-only, so a day can show them. A reminder opens in Reminders.",
+      "description": "The dated reminders that fall due in a window of days: the title, due day, due time and state of each, every occurrence of a repeating one, and, when asked, the open ones overdue, so a day can show them. A reminder is ticked and opened in Reminders, never here.",
       "input": {
         "type": "object",
         "properties": {
@@ -1313,6 +1313,9 @@
           "to": {
             "type": "string",
             "minLength": 10
+          },
+          "overdue_before": {
+            "type": "string"
           }
         },
         "required": ["from", "to"],
