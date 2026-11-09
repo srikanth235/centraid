@@ -137,6 +137,8 @@ internal fun NotesRichBody(
         chipGround = accent.wash(centraidDark()),
         codeGround = Surface.fill,
         missing = StateColor.Red.text,
+        missingGround = StateColor.Red.tint,
+        trashedGround = Surface.fill,
     )
     val drawn = if (rich != null && rich.body_length == field.text.length) rich else null
     val transformation = remember(drawn, palette) {
@@ -182,18 +184,22 @@ internal fun NotesRichBody(
             decorationBox = { inner ->
                 Box(
                     Modifier.drawBehind {
-                        // THE PLATES OF THE LIVE CHIPS, rounded, behind the text.
+                        // THE PLATES OF THE CHIPS, rounded, behind the text: the app's wash when live,
+                        // the red tint when the note is missing, the page's grey when it is trashed.
                         val result = layout ?: return@drawBehind
                         if (drawn == null || result.layoutInput.text.length != field.text.length) return@drawBehind
                         drawn.spans.take(MARK_LIMIT).forEach { span ->
                             val chip = span.chip ?: return@forEach
                             if (span.style != NotesRichStyle.NOTES_RICH_STYLE_LINK) return@forEach
                             if (chip.kind != NotesLinkChipKind.NOTES_LINK_CHIP_KIND_NOTE) return@forEach
-                            if (chip.resolution != NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED) return@forEach
                             val range = span.range ?: return@forEach
                             val box = result.span(range.start, range.end) ?: return@forEach
                             drawRoundRect(
-                                color = palette.chipGround,
+                                color = when (chip.resolution) {
+                                    NotesLinkResolution.NOTES_LINK_RESOLUTION_TRASHED -> palette.trashedGround
+                                    NotesLinkResolution.NOTES_LINK_RESOLUTION_MISSING -> palette.missingGround
+                                    else -> palette.chipGround
+                                },
                                 topLeft = Offset(box.topLeft.x, box.top),
                                 size = Size(box.width, box.height),
                                 cornerRadius = CornerRadius(8.dp.toPx()),
@@ -316,6 +322,8 @@ private data class NotesRichPalette(
     val chipGround: Color,
     val codeGround: Color,
     val missing: Color,
+    val missingGround: Color,
+    val trashedGround: Color,
 )
 
 private fun NotesTextRange?.within(length: Int): IntRange? {
@@ -405,12 +413,10 @@ private fun styleSpan(
                 val hair = SpanStyle(color = Color.Transparent, fontSize = 1.sp)
                 style(hair, at.first..at.first + 1)
                 style(hair, at.last - 1..at.last)
-                // THE LIVE CHIP'S PLATE (drawn behind the text) has air each side, carried by the
+                // EVERY CHIP'S PLATE (drawn behind the text) has air each side, carried by the
                 // hidden brackets, so the words never move.
-                if (chip.resolution == NotesLinkResolution.NOTES_LINK_RESOLUTION_RESOLVED) {
-                    style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.first..at.first)
-                    style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.last - 1..at.last - 1)
-                }
+                style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.first..at.first)
+                style(SpanStyle(letterSpacing = CHIP_PAD.sp), at.last - 1..at.last - 1)
                 style(SpanStyle(letterSpacing = (CHIP_ICON + CHIP_ICON_GAP).sp), at.first + 1..at.first + 1)
             }
         }

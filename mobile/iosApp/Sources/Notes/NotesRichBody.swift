@@ -243,20 +243,23 @@ struct NotesRichBody: UIViewRepresentable {
                         for bracket in [open, close] {
                             storage.addAttributes([.font: palette.bracketFace, .foregroundColor: UIColor.clear], range: bracket)
                         }
-                        let live = chip.resolution == .resolved
-                        // THE LIVE CHIP IS A ROUNDED PLATE with a little air each side (the board's
-                        // 8-point pad): the hidden brackets carry it, so the text never moves.
-                        if live {
-                            storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: open.location, length: 1))
-                            storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: close.location, length: 1))
-                        }
+                        // EVERY CHIP IS A ROUNDED PLATE with a little air each side (the board's 8-point
+                        // pad): the app's wash when it is live, the state's red tint when the note is
+                        // missing, the page's grey when it is in the trash. The hidden brackets carry
+                        // the air, so the text never moves.
+                        storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: open.location, length: 1))
+                        storage.addAttribute(.kern, value: palette.chipPad, range: NSRange(location: close.location, length: 1))
                         storage.addAttribute(
                             .kern,
                             value: palette.chipIcon + palette.chipIconGap,
                             range: NSRange(location: open.location + 1, length: 1)
                         )
                         iconed = true
-                        ground = live ? palette.chipGround : nil
+                        switch chip.resolution {
+                        case .trashed: ground = palette.trashedGround
+                        case .missing: ground = palette.missingGround
+                        default: ground = palette.chipGround
+                        }
                     }
                 }
                 let tint = chip.resolution == .trashed ? palette.faint : (chip.resolution == .missing ? palette.missing : palette.accentText)
@@ -326,6 +329,9 @@ struct NotesRichPalette {
     let bodyInk: UIColor
     let accentText: UIColor
     let chipGround: UIColor
+    /// The plates of a link to a missing note and of one to a trashed note.
+    let missingGround: UIColor
+    let trashedGround: UIColor
     let codeGround: UIColor
     let missing: UIColor
     let checkFill: UIColor
@@ -356,6 +362,8 @@ struct NotesRichPalette {
         bodyInk = UIColor(Surface.body)
         accentText = UIColor(accent.text)
         chipGround = UIColor(accent.wash(dark: scheme == .dark))
+        missingGround = UIColor(StateColor.red.tint)
+        trashedGround = UIColor(Surface.fill)
         codeGround = UIColor(Surface.fill)
         missing = UIColor(StateColor.red.text)
         checkFill = UIColor(accent.fill)
