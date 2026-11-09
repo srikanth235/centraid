@@ -420,6 +420,9 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
                 tx.rule_offer?.let { offer ->
                     item(key = "offer-rule") { OfferCard(offer, "rule", onEvent) }
                 }
+                tx.with_offer?.let { offer ->
+                    item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
+                }
                 items(tx.actions, key = { "act-${it.key}" }) { action ->
                     CentraidRow(
                         title = action.label,
@@ -436,6 +439,9 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         }
     }
     val data2 = state.data_
+    state.with_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(MoneyTransactionEvent(with_link = link)) }
+    }
     when (state.sheet) {
         MoneyTransactionState.Sheet.SHEET_CATEGORY -> MoneyChoiceSheet(
             title = data2?.category_sheet_title.orEmpty(),

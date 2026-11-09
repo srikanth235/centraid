@@ -447,7 +447,7 @@ impl Lightbox {
                     },
                 );
             }
-            Outcome::Accepted | Outcome::Dismissed | Outcome::Moved => {}
+            Outcome::Moved => {}
         }
     }
 

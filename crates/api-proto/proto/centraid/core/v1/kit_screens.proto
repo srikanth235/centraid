@@ -444,22 +444,15 @@ message LinkAdd {
   string label = 2;
 }
 
-// A link the app proposes and the member confirms: nothing is written until Confirm.
-message LinkOffer {
-  string title = 1;
-  string body = 2;
-  string accept_label = 3;
-  string dismiss_label = 4;
-}
-
 // A titled section of links.
 message LinkSection {
   string title = 1;
   repeated LinkRow rows = 2;
   repeated LinkAdd adds = 3;
-  optional LinkOffer offer = 4;
   // What the section says with no row ("No one"); empty draws nothing.
   string empty = 5;
+  reserved 4;
+  reserved "offer";
 }
 
 // THE PICKER SHEET: search by name, tap a row to link it, tap a linked one to unlink it.
@@ -485,8 +478,6 @@ message LinkEvent {
     Picked pick = 3;
     QueryChanged query = 4;
     PickerClosed closed = 5;
-    OfferAccepted accepted = 6;
-    OfferDismissed dismissed = 7;
   }
 
   message AddTapped {
@@ -506,8 +497,4 @@ message LinkEvent {
   }
 
   message PickerClosed {}
-
-  message OfferAccepted {}
-
-  message OfferDismissed {}
 }

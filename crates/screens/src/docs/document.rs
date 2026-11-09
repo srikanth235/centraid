@@ -168,7 +168,7 @@ impl Document {
                     },
                 );
             }
-            Outcome::Accepted | Outcome::Dismissed | Outcome::Moved => {}
+            Outcome::Moved => {}
         }
     }
 

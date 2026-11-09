@@ -802,7 +802,7 @@ impl Item {
                     link_words::removed(locale),
                 )
             }
-            Outcome::Accepted | Outcome::Dismissed | Outcome::Moved => return Vec::new(),
+            Outcome::Moved => return Vec::new(),
         };
         if settled.committed {
             self.status = shared::status(sentence);

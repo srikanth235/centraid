@@ -92,6 +92,11 @@ struct DocsDocumentView: View {
                                 }
                                 surface(document)
                                 infoCard(document)
+                                if document.hasAbout {
+                                    LinkSectionView(section: document.about, send: { link in
+                                        send(Self.event { $0.about = link })
+                                    }, open: open)
+                                }
                                 if !document.facts.isEmpty {
                                     SectionHeader(title: state.chrome.factsHeading)
                                     // Ids prefixed per list, so a second list added here never collides
@@ -122,6 +127,7 @@ struct DocsDocumentView: View {
         .sheet(isPresented: sheetBinding(state)) {
             DocsSheetView(sheet: state.sheet, actions: sheetActions())
         }
+        .linkPickerSheet(state.aboutPicker) { link in send(Self.event { $0.about = link }) }
         .background {
             Color.clear.sheet(isPresented: Binding(
                 get: { state.hasConfirm },

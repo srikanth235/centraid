@@ -668,6 +668,11 @@ internal fun DocsDocumentScreen(
                     }
                 }
                 item(key = "info") { DocsInfoCard(document, onOpen) }
+                document.about?.let { about ->
+                    item(key = "about") {
+                        dev.centraid.android.kit.LinkSectionView(about, { link -> onEvent(DocsDocumentEvent(about = link)) }, onOpen)
+                    }
+                }
                 if (document.facts.isNotEmpty()) {
                     item(key = "facts-head") { Heading(chrome?.facts_heading.orEmpty()) }
                     items(document.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
@@ -682,6 +687,9 @@ internal fun DocsDocumentScreen(
             }
             }
         }
+    }
+    state.about_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(DocsDocumentEvent(about = link)) }
     }
     DocsSheetView(
         state.sheet,

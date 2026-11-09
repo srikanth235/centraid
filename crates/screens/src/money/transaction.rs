@@ -128,8 +128,6 @@ impl Transaction {
         match self.links.update(event, &linked, ctx) {
             Outcome::Add { id, .. } => self.set_with(ctx, &id, true),
             Outcome::Remove { id } => self.set_with(ctx, &id, false),
-            Outcome::Accepted => self.accept(OFFER_WITH, ctx),
-            Outcome::Dismissed => self.dismiss(OFFER_WITH),
             Outcome::Moved => {}
         }
     }
@@ -437,17 +435,7 @@ impl Transaction {
             .with_proposal
             .as_ref()
             .filter(|_| !self.dismissed.iter().any(|k| k == OFFER_WITH))
-            .map(|person| {
-                let offer = links::offer(locale, &person.name);
-                wire::MoneyOffer {
-                    key: OFFER_WITH.to_owned(),
-                    title: offer.title,
-                    body: offer.body,
-                    detail: String::new(),
-                    accept_label: offer.accept_label,
-                    dismiss_label: offer.dismiss_label,
-                }
-            });
+            .map(|person| links::offer(locale, &person.name));
         let mut notes = Vec::new();
         if answer.seen_times > 1 {
             notes.push(fold::with_n(words::seen_times(locale), answer.seen_times));

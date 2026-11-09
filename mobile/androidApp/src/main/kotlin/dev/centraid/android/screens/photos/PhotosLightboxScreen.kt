@@ -241,7 +241,7 @@ private fun LightViewer(
                 open = infoOpen,
                 onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                details = { if (photo != null) InfoCards(state, photo, words, onEvent) },
+                details = { if (photo != null) InfoCards(state, photo, words, onEvent, onOpen) },
             ) {
                 // THE PHOTOGRAPH ON THE LIGHT PAGE, no black letterbox, with what plays or loads over its foot.
                 Box(Modifier.fillMaxSize()) {
@@ -626,6 +626,9 @@ private fun Sheets(
             -> Unit
         }
     }
+    state.people_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PhotosLightboxEvent(people = link)) }
+    }
     val album = state.album_choice
     if (album != null && album.open_) {
         PhotosAlbumChoiceSheet(album) { event -> onEvent(PhotosLightboxEvent(album_choice = event)) }
@@ -701,6 +704,7 @@ private fun InfoCards(
     photo: PhotosLightboxPhoto,
     words: PhotosLightboxWords,
     onEvent: (PhotosLightboxEvent) -> Unit,
+    onOpen: (Route) -> Unit,
 ) {
     var caption by remember(state.photo_id) { mutableStateOf(photo.caption) }
     var tag by remember(state.photo_id) { mutableStateOf("") }
@@ -766,6 +770,16 @@ private fun InfoCards(
                     }
                 }
             }
+        }
+
+        // WHO IS IN IT, by hand: a section of its own (#1173).
+        photo.people?.let { people ->
+            dev.centraid.android.kit.LinkSectionView(
+                people,
+                { link -> onEvent(PhotosLightboxEvent(people = link)) },
+                onOpen,
+                padded = false,
+            )
         }
 
         // PLACE AND LABELS, one card. WHERE, in words, never a coordinate; "Copy exact location"

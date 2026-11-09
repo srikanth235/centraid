@@ -103,10 +103,6 @@ pub enum Outcome {
     Add { kind: Kind, id: String },
     /// Take the link to `id` off.
     Remove { id: String },
-    /// The member confirmed the proposal.
-    Accepted,
-    /// The member waved the proposal off.
-    Dismissed,
 }
 
 #[derive(Clone, Debug)]
@@ -245,8 +241,6 @@ impl Links {
                 self.open = None;
                 Outcome::Moved
             }
-            Some(E::Accepted(_)) => Outcome::Accepted,
-            Some(E::Dismissed(_)) => Outcome::Dismissed,
             None => Outcome::Moved,
         }
     }
@@ -276,7 +270,6 @@ impl Links {
             title,
             rows,
             adds: self.adds(locale),
-            offer: None,
             empty,
         }
     }
@@ -322,7 +315,7 @@ impl Links {
 
 /// The people one transaction, document or photograph is joined to (`people.links`).
 pub fn read_people(ctx: &Ctx, entity_id: &str) -> Reading<Vec<wire::PeopleLinked>> {
-    match read::read(
+    read::read(
         ctx,
         load::people::Links {
             entity_id: entity_id.to_owned(),
@@ -331,11 +324,7 @@ pub fn read_people(ctx: &Ctx, entity_id: &str) -> Reading<Vec<wire::PeopleLinked
             Answer::PeopleLinks(links) => Some(links.people),
             _ => None,
         },
-    ) {
-        Reading::Data(people) => Reading::Data(people),
-        Reading::Denied(denial) => Reading::Denied(denial),
-        Reading::Failed => Reading::Failed,
-    }
+    )
 }
 
 /// A person's row in a section: their name, "You" on the owner, a key to take the link off, and
@@ -392,12 +381,14 @@ pub fn person_route(party_id: &str, name: &str) -> wire::Route {
     }
 }
 
-/// A proposal as an offer: "With Priya?", and the member's two choices.
+/// A proposal as Money's offer: "With Priya?", and the member's two choices.
 #[must_use]
-pub fn offer(locale: Locale, name: &str) -> wire::LinkOffer {
-    wire::LinkOffer {
+pub fn offer(locale: Locale, name: &str) -> wire::MoneyOffer {
+    wire::MoneyOffer {
+        key: "with".to_owned(),
         title: fill(&words::offer_title(locale), &[("name", name)]),
         body: fill(&words::offer_body(locale), &[("name", name)]),
+        detail: String::new(),
         accept_label: words::offer_confirm(locale),
         dismiss_label: words::offer_dismiss(locale),
     }
