@@ -413,6 +413,11 @@ fn names_something(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<bool> {
     Ok(held > 0)
 }
 
+/// A name safe as a file name (the export's stem).
+pub(crate) fn portable_stem(title: &str) -> String {
+    portable::file_stem(title)
+}
+
 fn notebook_named(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<String> {
     let found: Option<String> = ctx
         .connection()

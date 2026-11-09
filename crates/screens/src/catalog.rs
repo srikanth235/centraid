@@ -4381,6 +4381,50 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.
+        #[derive(Clone, Debug, Default)]
+        pub struct ImportVcf {
+            pub cards: String,
+            pub dry_run: Option<bool>,
+            pub merge: Option<bool>,
+        }
+        impl ImportVcf {
+            pub const NAME: &str = "import-vcf";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("cards".to_owned(), text(self.cards));
+                if let Some(it) = self.dry_run { map.insert("dry_run".to_owned(), flag(it)); }
+                if let Some(it) = self.merge { map.insert("merge".to_owned(), flag(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ImportVcf> for wire::ActRequest {
+            fn from(value: ImportVcf) -> Self {
+                value.request()
+            }
+        }
+
+        /// Answer everyone, or one list's people, as vCards in one file through person.export_vcf. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportVcf {
+            pub list_id: Option<String>,
+        }
+        impl ExportVcf {
+            pub const NAME: &str = "export-vcf";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.list_id { map.insert("list_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportVcf> for wire::ActRequest {
+            fn from(value: ExportVcf) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod photos {

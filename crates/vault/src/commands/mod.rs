@@ -59,6 +59,7 @@ pub mod money;
 pub mod note;
 pub mod note_portable;
 pub mod person;
+pub mod person_portable;
 pub mod person_reminder;
 pub mod photo;
 pub mod place;
