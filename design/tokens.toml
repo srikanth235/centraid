@@ -209,6 +209,11 @@ tinted_tile = "#1B1B1B"
 tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
+# The mark's disc as a share of the iOS tile's width (582 of 1024 px was 57%, which
+# left the icon small beside Fitness and Files; Apple's grid puts the outer circle
+# near 78%). The masters and the three AppIcon PNGs follow it; Android's adaptive icon
+# keeps its own rule, the 66dp safe zone.
+ios_mark_share = 0.78
 
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]
