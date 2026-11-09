@@ -193,3 +193,83 @@ fn a_device_that_imported_follows_a_burst_of_changes_as_one_silent_pass() {
         ["Ana"]
     );
 }
+
+fn row(d: &Driver, i: u64) -> wire::PeopleContactsRow {
+    home_state(d.view(i)).contacts.clone().expect("the row")
+}
+
+#[test]
+fn the_phone_contacts_row_says_on_off_paused_and_no_access_and_its_action_fits() {
+    use wire::people_contacts_row::State;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    // Never turned on: Off, and the action turns it on (the import, which may ask the OS).
+    let off = row(&d, i);
+    assert_eq!(
+        (
+            off.state,
+            off.state_label.as_str(),
+            off.action_label.as_str()
+        ),
+        (State::Off as i32, "Off", "Turn on")
+    );
+    send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
+    assert_eq!(kinds(&d), ["read:ask=true"]);
+    d.answer_effect(snapshot(vec![
+        contact("Ada Lovelace", "lookup:ada", "555 0100", ""),
+        contact("Sam Park", "local:sam", "", ""),
+    ]));
+    let on = row(&d, i);
+    assert_eq!(on.state, State::Following as i32);
+    assert_eq!(on.action_label, "Pause");
+    assert!(on.detail.starts_with("2 followed"), "{}", on.detail);
+    d.effects.clear();
+
+    // Pause: the follow stops, the store is no longer watched, and the keychain says paused.
+    send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
+    assert_eq!(kinds(&d), ["keychain:2", "watch:false"]);
+    let paused = row(&d, i);
+    assert_eq!(
+        (paused.state, paused.action_label.as_str()),
+        (State::Paused as i32, "Resume")
+    );
+    d.effects.clear();
+
+    // Resume: watched again and a pass at once.
+    send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
+    assert_eq!(kinds(&d), ["keychain:2", "watch:true"]);
+    assert_eq!(row(&d, i).state, State::Following as i32);
+}
+
+#[test]
+fn a_phone_that_refused_the_address_book_says_so_and_the_action_opens_settings() {
+    use wire::people_contacts_row::State;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.answer_effect(O::Failed(wire::EffectFailed {
+        reason: "contacts access not given".into(),
+        denied: true,
+        cancelled: false,
+    }));
+    let denied = row(&d, i);
+    assert_eq!(
+        (
+            denied.state,
+            denied.state_label.as_str(),
+            denied.action_label.as_str()
+        ),
+        (State::Denied as i32, "No access", "Settings")
+    );
+    d.effects.clear();
+    send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
+    assert!(matches!(
+        d.effects
+            .last()
+            .and_then(|e| e.effect.as_ref())
+            .and_then(|e| e.kind.as_ref()),
+        Some(F::VaultCommand(_))
+    ));
+}

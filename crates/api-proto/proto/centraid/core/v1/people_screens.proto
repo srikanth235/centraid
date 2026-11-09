@@ -100,6 +100,9 @@ message PeopleHomeState {
   // counts (All · Starred · Overdue, one picked) and its order (Recently added ·
   // Name). Unset on Touch, over search and while denied.
   optional FilterMenu filter_menu = 18;
+  // THE "PHONE CONTACTS" ROW OF MORE (#1173, item 20): what People may read of the address
+  // book, drawn above the rows. Unset while denied.
+  optional PeopleContactsRow contacts = 19;
 
   enum Sheet {
     // No sheet is open.
@@ -108,6 +111,30 @@ message PeopleHomeState {
     // 2 was SHEET_ORDER: the order is a section of the filter menu.
     reserved 2;
     reserved "SHEET_ORDER";
+  }
+}
+
+// What People may read of the phone's address book: whether it follows, how many it follows,
+// when it last looked, and the one action that fits (pause, resume, turn on, or Settings when
+// the phone refused access).
+message PeopleContactsRow {
+  // "Phone contacts".
+  string title = 1;
+  State state = 2;
+  // "On", "Paused", "Off", "No access".
+  string state_label = 3;
+  // "12 followed · Updated 3 min ago", or empty.
+  string detail = 4;
+  // "Pause", "Resume", "Turn on" or "Settings"; the tap is `contacts_action`.
+  string action_label = 5;
+  string accessibility_label = 6;
+
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_FOLLOWING = 1;
+    STATE_PAUSED = 2;
+    STATE_OFF = 3;
+    STATE_DENIED = 4;
   }
 }
 
@@ -339,6 +366,8 @@ message PeopleHomeEvent {
     // ---- the header's filter menu ----
     FilterMenuPicked filter_menu_picked = 13;
     FilterMenuCleared filter_menu_cleared = 14;
+    // The Phone contacts row's one action: pause, resume, turn on, or open Settings.
+    ContactsActionTapped contacts_action = 15;
   }
 
   // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
@@ -373,6 +402,8 @@ message PeopleHomeEvent {
   }
 
   message ImportContactsTapped {}
+
+  message ContactsActionTapped {}
 }
 
 // ---------------------------------------------------------------------------
