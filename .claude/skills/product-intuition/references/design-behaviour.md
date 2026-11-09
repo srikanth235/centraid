@@ -38,6 +38,19 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 
 An app has one home. Agenda was two homes of one app until round 10; Calendar (Calendar · Calendars · Invites) and Reminders (Reminders · More) are two apps with a home each, and Tasks is not an app of its own: the tasks are Reminders'.
 
+## Reminders on a Calendar day, and Overdue
+
+Calendar follows Apple's: a dated reminder is a row of its day, and the day is where it can be ticked (owner, 2026-11-09, "follow Apple"). The write is always **Reminders' own**: Calendar holds no task write and no complete or uncomplete permission, so a tick is the `complete-task` or `reopen-task` Reminders registered, sent by the screen under Reminders' name.
+
+| Moment | Draws | Never |
+| --- | --- | --- |
+| A dated reminder on a Calendar day | a row (Day's list, Week's and Day's hour grid, an all-day chip) with its check circle in the list's colour; a tap on the circle ticks it, a tap on the row opens it in Reminders | a Calendar-owned write, a second Reminders page |
+| A ticked reminder | stays on its day with a filled circle; the circle un-ticks it; the status line says "Task done" with Undo, in the words Reminders uses | the row vanishing, a toast |
+| A repeating reminder | every occurrence on its day: the open one is the real row and ticks; a later one is the series' projection, drawn read-only (its circle opens the reminder instead of ticking) | one row for the whole series, a tick on an occurrence that has no row |
+| Overdue on Calendar | Day on today: an Overdue group above the day, oldest first, each row saying how long ago, ticking like any other; no Catch up verb (that page is Reminders') | the group on any other day, in red beyond the state colour |
+| Overdue in Reminders | the Today list opens with an Overdue section at the top, its Catch up verb leading to the Catch up page; the Catch up page stays where it is | a separate "You were away" notice: Apple has none, so there is none |
+| The Reminders home | the smart lists, My Lists, the Inbox's count (the true total of open reminders in it, never the board window's), and the filter funnel, which stays | a count that stops at 100 |
+
 ## Status line
 
 State is reported on **one status line** and never a toast. It is a single persistent line docked at the foot of the place directly above its band, or at the foot of a pushed page, sheet or editor, which draw no band. It is a sentence in the small style (the refusal tone when refused), updated in place: no stacking, no overlay, no auto-dismiss animation, no dot, at most one inline text action. The shell's import line takes the same seat: progress, then outcome, one action, and a close key once the work is done. No badge counts, red dots, bounces or parallax.

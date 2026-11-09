@@ -818,6 +818,22 @@
       "x": 1410,
       "y": 3480
     },
+    "RemindersToday.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Today, Overdue first",
+      "w": 390,
+      "x": 0,
+      "y": 25960
+    },
+    "CalendarReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "A day with reminders: tick, repeat, overdue",
+      "w": 390,
+      "x": 470,
+      "y": 25960
+    },
     "ListDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2160,6 +2176,8 @@
     "RemindersFilterMenu.dc.html",
     "Today.dc.html",
     "List.dc.html",
+    "RemindersToday.dc.html",
+    "CalendarReminders.dc.html",
     "Details.dc.html",
     "Swipe.dc.html",
     "ListStyle.dc.html",
