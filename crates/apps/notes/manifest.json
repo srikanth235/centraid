@@ -46,6 +46,11 @@
       },
       {
         "schema": "vault",
+        "table": "vault",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "event",
         "verbs": "read"
       },

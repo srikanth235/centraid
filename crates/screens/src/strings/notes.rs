@@ -51,6 +51,9 @@ catalog! {
     );
     plain file_title = ("File into notebook", "File into notebook");
     plain file_verb = ("File into notebook", "File into notebook");
+    plain about_chip = ("About · {subject}", "About · {subject}");
+    plain filter_about_events = ("About events", "About events");
+    plain filter_about_people = ("About people", "About people");
     plain filter_pinned = ("Pinned", "Pinned");
     plain filter_title = ("Show", "Show");
     plain history_empty_body = (

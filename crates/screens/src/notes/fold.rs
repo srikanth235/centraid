@@ -83,6 +83,7 @@ struct Parts<'a> {
     check_total: u32,
     check_done: u32,
     runs: Vec<wire::NotesTextRun>,
+    about: Vec<wire::NotesAboutChip>,
 }
 
 fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
@@ -136,7 +137,38 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
         accessibility_label: spoken,
         notebook_id: parts.notebook_ids.first().cloned().unwrap_or_default(),
         route: Some(routes::editor(parts.note_id)),
+        about: parts.about,
     }
+}
+
+/// A note's subjects as chips: "About · Maya", each opening the subject in its own app. A
+/// subject of a kind with no page of its own is not a chip; an untitled one is not named.
+#[must_use]
+pub fn about_chips(locale: Locale, cards: &[wire::NotesCard]) -> Vec<wire::NotesAboutChip> {
+    cards
+        .iter()
+        .filter_map(|card| {
+            let title = card
+                .title
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())?;
+            let route = routes::subject(
+                &card.entity,
+                &card.id,
+                title,
+                card.subtitle.as_deref().unwrap_or_default(),
+            )?;
+            let label = fill(&words::about_chip(locale), &[("subject", title)]);
+            Some(wire::NotesAboutChip {
+                id: card.id.clone(),
+                kind: card.entity.clone(),
+                accessibility_label: label.clone(),
+                label,
+                route: Some(route),
+            })
+        })
+        .collect()
 }
 
 /// A library (or trash) row.
@@ -160,6 +192,7 @@ pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
             check_total: row.check_total,
             check_done: row.check_done,
             runs: Vec::new(),
+            about: about_chips(locale, &row.about),
         },
     )
 }
@@ -185,6 +218,7 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
             check_total: hit.check_total,
             check_done: hit.check_done,
             runs: runs_of(&hit.snippet),
+            about: Vec::new(),
         },
     )
 }

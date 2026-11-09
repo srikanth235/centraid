@@ -12,13 +12,33 @@
 //! served to a read that is not Locker's, so nothing here filters it again and
 //! nothing here can leak it.
 
-use centraid_ontology::graph::{COLUMN_LINKS, Via};
+use centraid_ontology::graph::COLUMN_LINKS;
+pub use centraid_ontology::graph::Via;
 
 use crate::error::KitResult;
 use crate::reads::{FanOutBound, PageDoor, in_list, read_pages};
 use crate::row::Row;
 use crate::row::text_of;
 use crate::statement::{PageBindValue, PageOrder, PageQuery};
+
+/// The vault's owner: the one person every "about me" edge ends at. None before a vault is
+/// founded. The app's manifest must read `vault`.
+///
+/// # Errors
+///
+/// The kit's own refusals; a door's refusal is `KitError::Door`.
+pub fn owner(door: &dyn PageDoor) -> KitResult<Option<String>> {
+    let page = door.page(
+        &PageQuery::new(
+            "graph.owner",
+            "self_id",
+            "vault",
+            PageOrder::asc("self_id", "self_id"),
+        ),
+        &crate::page::PageRequest::first(1),
+    )?;
+    Ok(page.rows.first().and_then(|row| text_of(row, "self_id")))
+}
 
 /// One join, read: the id at each end and how it is stored.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

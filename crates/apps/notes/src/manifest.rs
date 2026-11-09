@@ -193,17 +193,17 @@ mod tests {
         );
     }
 
-    /// TWENTY-SEVEN SCOPES: twelve reads over the vault's tables, and **fifteen
+    /// TWENTY-EIGHT SCOPES: thirteen reads over the vault's tables, and **fifteen
     /// `act` scopes**, one per distinct command the seventeen actions invoke.
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed: a sixteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_seven_scopes_with_one_act_scope_per_command() {
+    fn it_declares_twenty_eight_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Notes declares its reach");
-        assert_eq!(vault.scopes.len(), 27);
+        assert_eq!(vault.scopes.len(), 28);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -249,7 +249,7 @@ mod tests {
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 12);
+        assert_eq!(reads, 13);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone.

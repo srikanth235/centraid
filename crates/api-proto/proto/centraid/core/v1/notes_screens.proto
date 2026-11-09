@@ -175,6 +175,20 @@ message NotesNoteRow {
   string notebook_id = 9;
   // Where a tap goes: the editor on this note.
   Route route = 10;
+  // What the note is about, as chips ("About · Maya"): empty for a plain note.
+  repeated NotesAboutChip about = 11;
+}
+
+// One subject of a note, drawn as a chip on its card and over the note. A tap opens the
+// subject in its own app.
+message NotesAboutChip {
+  string id = 1;
+  // `person`, `event`, `task`, `document`: the shell picks the glyph.
+  string kind = 2;
+  // "About · Maya".
+  string label = 3;
+  string accessibility_label = 4;
+  Route route = 5;
 }
 
 message NotesLibrarySection {
@@ -454,6 +468,8 @@ message NotesEditorState {
   // Where the caret goes after a core edit (Return); a shell applies a `seq`
   // once.
   optional NotesEditorSelection selection = 14;
+  // What the note is about, above its words (#1173): chips that open the subject.
+  repeated NotesAboutChip about = 15;
 }
 
 message NotesEditorTag {

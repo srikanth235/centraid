@@ -220,6 +220,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         pinned: false,
         tags: Vec::new(),
         meta: String::new(),
+        about: Vec::new(),
         status: None,
         said: false,
         undo: None,
@@ -257,6 +258,8 @@ struct Editor {
     tags: Vec<(String, String)>,
     /// The line over the title: "Travel · Edited Wed 4 November".
     meta: String,
+    /// What the note is about (#1173): the chips over its words, each opening the subject.
+    about: Vec<wire::NotesAboutChip>,
     /// A pin's refusal.
     status: Option<String>,
     /// `status` holds an editing sentence (item checked, no such note), which
@@ -327,6 +330,7 @@ impl Editor {
                     .map(|tag| (tag.concept_id.clone(), tag.label.clone()))
                     .collect();
                 self.meta = Self::meta_of(ctx, &note);
+                self.about = fold::about_chips(ctx.locale(), &note.about);
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -1343,6 +1347,11 @@ impl Screen for Editor {
                 })
                 .collect(),
             rich: None,
+            about: if exists {
+                self.about.clone()
+            } else {
+                Vec::new()
+            },
             selection: self.selection.map(|caret| wire::NotesEditorSelection {
                 caret,
                 seq: self.selection_seq,

@@ -3,20 +3,23 @@
 //!
 //! A note is an `entity` (its title, its trash, its clock) and a `note` row (its
 //! words, its format, its notebook); a notebook is an `entity` and a `container`;
-//! a pin and a tag are `tagged` edges; a link, a memo and an attachment are
+//! a pin and a tag are `tagged` edges; a link, a subject and an attachment are
 //! `links`, `about` and `attached` edges; a version is a `revision`. Every read
 //! here is one table at a time — a window over `entity`, then the rows each
 //! decoration needs, bounded by the ids the window already returned — because
 //! the paged door's one shape is a keyset page of one table.
 //!
-//! ## The shelf is the notes that are about nothing
+//! ## The shelf is every note but the journal's
 //!
-//! A **memo** is a note with an `about` edge: a People journal entry, a note on a
-//! task. It belongs to what it is about, so the library, the trash shelf, the
-//! tag chips, `search` and the powerbox leave it out, the Journal place shows
-//! it, and `note` opens it by id all the same ([`crate::journal`]). The
-//! exclusion runs after the window, so `truncated` is measured on what the vault
-//! returned, and `notes` may hold fewer rows than `window` while it is true.
+//! A **journal entry** is a note with an `about` edge to the owner: a People journal
+//! entry. It belongs to the Journal, so the library, the trash shelf, the tag chips,
+//! `search` and the powerbox leave it out, the Journal place shows it, and `note`
+//! opens it by id all the same ([`crate::journal`]). A note about anything else (a
+//! person, an event, a task, a document) is the member's note: it is on the shelf with
+//! its subjects ([`about_of`], read through the graph), and the funnel can narrow the
+//! shelf to the notes about people or about events. The exclusion runs after the
+//! window, so `truncated` is measured on what the vault returned, and `notes` may hold
+//! fewer rows than `window` while it is true.
 //!
 //! ## Pinned is read beside the window, not out of it
 //!
@@ -32,6 +35,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
+use centraid_apps_kit::graph;
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, Read, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
@@ -41,7 +45,7 @@ use centraid_search::{Answer, EachRequest, Principal, Search, SearchError, Searc
 use crate::Denial;
 use crate::cards::{self, RefCard};
 use crate::derive::{CheckTally, check_of, preview_of};
-use crate::journal::{MEMO_BOUND, read_memo_ids};
+use crate::journal::{MEMO_BOUND, read_journal_ids};
 
 /// The `library` and `journal` window, as the manifest declares it.
 pub const WINDOW_MIN: usize = 20;
@@ -140,6 +144,9 @@ pub struct LibraryRow {
     pub references: Vec<ReferenceEntry>,
     pub backlinks: Vec<BacklinkEntry>,
     pub tags: Vec<TagChip>,
+    /// What the note is about (a person, an event, a task, a document), read through the
+    /// graph: live subjects only, the owner never (that makes a journal entry).
+    pub about: Vec<RefCard>,
 }
 
 /// What `library` answers.
@@ -586,6 +593,44 @@ fn links_of(
     Ok((references, backlinks))
 }
 
+/// WHAT EACH NOTE IS ABOUT (#1173 item 19): its `about` edges, read through the graph and not
+/// by a second walk of `edge`, resolved to cards. A trashed or missing subject is left out, and
+/// so is the owner: a note about the owner is a journal entry and says so by where it is.
+///
+/// # Errors
+///
+/// The kit's own refusals; a door's refusal is `KitError::Door`.
+pub fn about_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Vec<RefCard>>> {
+    if ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let owner = graph::owner(door)?;
+    let joined: Vec<_> = graph::outgoing(door, JOIN_FAN_OUT, ids, "note", &["about"])?
+        .into_iter()
+        .filter(|join| join.via == graph::Via::Edge && Some(&join.to) != owner.as_ref())
+        .collect();
+    let subjects: Vec<String> = joined.iter().map(|join| join.to.clone()).collect();
+    let cards = cards::resolve(door, &subjects)?;
+    let mut by_note: BTreeMap<String, Vec<RefCard>> = BTreeMap::new();
+    for join in joined {
+        let Some(card) = cards
+            .get(&join.to)
+            .filter(|card| card.status == cards::CardStatus::Live)
+        else {
+            continue;
+        };
+        by_note.entry(join.from).or_default().push(card.clone());
+    }
+    for subjects in by_note.values_mut() {
+        subjects.sort_by(|left, right| {
+            left.title
+                .cmp(&right.title)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+    }
+    Ok(by_note)
+}
+
 fn notebook_names(books: &[Notebook], note: &NoteRow) -> (Vec<String>, Vec<String>) {
     let Some(id) = &note.notebook_id else {
         return (Vec::new(), Vec::new());
@@ -610,6 +655,7 @@ fn library_rows(
     let mut tags = tags_of(door, ids)?;
     let mut attachments = centraid_apps_kit::attached::of(door, ids)?;
     let (mut references, mut backlinks) = links_of(door, ids)?;
+    let mut about = about_of(door, ids)?;
 
     let mut facets: BTreeMap<String, String> = BTreeMap::new();
     let rows: Vec<LibraryRow> = ids
@@ -640,6 +686,7 @@ fn library_rows(
                 references: references.remove(&note.id).unwrap_or_default(),
                 backlinks: backlinks.remove(&note.id).unwrap_or_default(),
                 tags: chips,
+                about: about.remove(&note.id).unwrap_or_default(),
             }
         })
         .collect();
@@ -692,7 +739,7 @@ fn library_body(door: &dyn PageDoor, window: usize) -> KitResult<LibraryData> {
         Some(("kind = ? AND deleted_at IS NULL", note_kind())),
     )?;
     let trashed = door.page(&trash_statement(), &PageRequest::first(SHELF_ROWS))?;
-    let memos: BTreeSet<String> = read_memo_ids(door)?.into_iter().collect();
+    let memos: BTreeSet<String> = read_journal_ids(door)?.into_iter().collect();
     let books = notebooks(door)?;
 
     // MEASURED PRE-EXCLUSION ON PURPOSE (#834): the window is what the vault
@@ -816,7 +863,7 @@ fn search_body(
     principal: &Principal,
     term: &str,
 ) -> KitResult<SearchData> {
-    let request = SearchRequest::new("note", term, SEARCH_ROWS).excluding(read_memo_ids(door)?);
+    let request = SearchRequest::new("note", term, SEARCH_ROWS).excluding(read_journal_ids(door)?);
     let answer = match search.query(principal, &request) {
         Ok(answer) => answer,
         // A term of punctuation is not a refusal: the member typed `---`.
@@ -964,7 +1011,7 @@ pub fn load_journal(
 }
 
 fn journal_body(door: &dyn PageDoor, window: usize) -> KitResult<JournalData> {
-    let memos = read_memo_ids(door)?;
+    let memos = read_journal_ids(door)?;
     let empty = JournalData {
         window,
         ..JournalData::default()
@@ -1045,9 +1092,8 @@ pub fn about_statement(subject_id: &str) -> PageQuery {
 /// carries the `about` edges. The one read every surface asks "what has been
 /// written about this?" through, so no caller walks the edges itself.
 ///
-/// A note about a thing is a memo, so the library leaves it out and this reads
-/// the set the other way round, by subject ([`load_journal`] reads it by
-/// nobody). Live notes only, newest by `updated_at`, a preview and a checklist
+/// The library shows a note about a thing with its subject; this reads the set the
+/// other way round, by subject. Live notes only, newest by `updated_at`, a preview and a checklist
 /// tally each and never a full body (`note` opens one whole).
 ///
 /// # Errors
@@ -1145,7 +1191,7 @@ pub fn load_link_targets(
     if term.is_empty() {
         return Ok((LinkTargetsData::default(), None));
     }
-    let memos = match read_memo_ids(door) {
+    let memos = match read_journal_ids(door) {
         Ok(ids) => ids,
         Err(KitError::Door(message)) => {
             return Ok((LinkTargetsData::default(), Some(denial(message))));
@@ -1189,7 +1235,7 @@ pub fn load_targets_each(
     if term.is_empty() {
         return Ok((Vec::new(), None));
     }
-    let memos = match read_memo_ids(door) {
+    let memos = match read_journal_ids(door) {
         Ok(ids) => ids,
         Err(KitError::Door(message)) => return Ok((Vec::new(), Some(denial(message)))),
         Err(other) => return Err(other),

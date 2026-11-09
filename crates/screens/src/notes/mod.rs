@@ -129,6 +129,48 @@ pub mod routes {
         )
     }
 
+    /// A subject a note is about, opened in its own app: a person, an event, a task or a
+    /// document. An event opens on the day of its first start (`starts`, its card's subtitle). Built as the wire route that app registers under, because a screen never
+    /// names another app's module. None for a kind that has no page of its own.
+    #[must_use]
+    pub fn subject(kind: &str, id: &str, title: &str, starts: &str) -> Option<wire::Route> {
+        let (screen, args) = match kind {
+            "person" => (
+                "people.person",
+                wire::route::Args::PeoplePerson(wire::PeoplePersonRoute {
+                    party_id: id.to_owned(),
+                    name: title.to_owned(),
+                    log_touch: false,
+                }),
+            ),
+            "event" => (
+                "agenda.event",
+                wire::route::Args::AgendaEvent(wire::AgendaEventRoute {
+                    event_id: id.to_owned(),
+                    instance_key: String::new(),
+                    original_start_local: None,
+                    day: starts.get(..10).unwrap_or_default().to_owned(),
+                }),
+            ),
+            "task" => (
+                "agenda.task",
+                wire::route::Args::TodoDetail(wire::TodoDetailRoute {
+                    task_id: id.to_owned(),
+                }),
+            ),
+            "document" => (
+                "docs.document",
+                wire::route::Args::DocsDocument(wire::DocsDocumentRoute {
+                    document_id: id.to_owned(),
+                    title: title.to_owned(),
+                    parent: String::new(),
+                }),
+            ),
+            _ => return None,
+        };
+        Some(route(screen, args))
+    }
+
     /// Notes' home on `place`; a notebook id (or `unfiled_only`) filters the
     /// Notes place, and `notebook_name` rides along for the heading.
     #[must_use]
