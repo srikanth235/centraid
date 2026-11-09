@@ -1533,15 +1533,96 @@ fn the_places(world: &World) -> Vec<(String, String)> {
         .filter_map(|card| {
             Some((
                 card.place?.place_id,
-                card.name.filter(|n| !n.is_empty()).unwrap_or(card.phrase),
+                card.name.filter(|n| !n.trim().is_empty())?,
             ))
         })
         .collect()
 }
 
+/// A place the member named, founded through `add-place`: its id.
+fn found_place(world: &mut World, title: &str) -> String {
+    let done = world.act(act::agenda::AddPlace {
+        title: title.to_owned(),
+        ..Default::default()
+    });
+    let output: serde_json::Value = serde_json::from_slice(&done.output).expect("json output");
+    output["id"].as_str().expect("the id").to_owned()
+}
+
+/// The ids of the example vault's places the member never named (a photograph's bare spot).
+fn unnamed_places(world: &World) -> Vec<String> {
+    let wire::app_query_response::Answer::PhotosPlaces(places) =
+        world.load(centraid_screens::catalog::load::photos::Places::default())
+    else {
+        panic!("places answered something else");
+    };
+    places
+        .places
+        .into_iter()
+        .filter(|card| card.name.as_deref().is_none_or(|n| n.trim().is_empty()))
+        .filter_map(|card| card.place.map(|place| place.place_id))
+        .collect()
+}
+
+#[test]
+fn a_location_sheet_offers_only_places_the_member_named() {
+    let mut world = World::new();
+    let unnamed = unnamed_places(&world);
+    assert!(
+        !unnamed.is_empty(),
+        "the example vault has photograph spots with no name"
+    );
+    let page = world.open_new("2099-06-17", Kind::Event);
+    world.title(page, "Dinner");
+    world.send_editor(page, sheet(Sheet::Location));
+    // No place is named yet: the sheet is the search and nothing else; typing offers the words.
+    assert!(world.editor_data(page).places.is_empty());
+    world.send_editor(page, place_search("Harbour Cafe"));
+    let typed = world.editor_data(page).places.clone();
+    assert_eq!(typed.len(), 1, "{typed:?}");
+    assert_eq!(typed[0].label, "Use “Harbour Cafe”");
+
+    // A named place is offered, and no photograph spot is, whatever the phrase it has.
+    let named = found_place(&mut world, "Harbour Cafe");
+    let page = world.open_new("2099-06-18", Kind::Event);
+    world.send_editor(page, sheet(Sheet::Location));
+    let listed = world.editor_data(page).places.clone();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert_eq!(
+        (listed[0].key.as_str(), listed[0].label.as_str()),
+        (named.as_str(), "Harbour Cafe")
+    );
+    assert!(listed.iter().all(|c| !unnamed.contains(&c.key)));
+    assert!(listed.iter().all(|c| c.label != "A place with no name yet"));
+}
+
+#[test]
+fn an_event_already_at_an_unnamed_place_still_shows_it_chosen() {
+    let mut world = World::new();
+    let spot = unnamed_places(&world).remove(0);
+    let at = world.propose(
+        "Picnic",
+        "2099-06-15T12:00:00",
+        "2099-06-15T13:00:00",
+        |p| p.place_id = Field::Is(spot.clone()),
+    );
+    let page = world.open_edit(&at, &at, None, "2099-06-15");
+    world.send_editor(page, sheet(Sheet::Location));
+    let listed = world.editor_data(page).places.clone();
+    let here = listed
+        .iter()
+        .find(|c| c.key == spot)
+        .unwrap_or_else(|| panic!("the event's own place is listed: {listed:?}"));
+    assert!(here.selected, "{listed:?}");
+    assert_eq!(listed.len(), 1, "{listed:?}");
+}
+
 #[test]
 fn a_location_is_picked_from_the_vaults_places_searched_and_cleared() {
     let mut world = World::new();
+    for title in ["Harbour Cafe", "Aunt Lena's house"] {
+        found_place(&mut world, title);
+    }
     let known = the_places(&world);
     assert!(known.len() >= 2, "the example vault has places: {known:?}");
     let (first_id, first_name) = known[0].clone();
