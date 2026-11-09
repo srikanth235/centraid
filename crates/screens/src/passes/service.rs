@@ -36,7 +36,7 @@ use crate::strings::{backup, backup_home};
 
 /// The pseudo-table the core announces when the backup ledger moved
 /// (`centraid_core` `phone::backup_reads::TABLE`).
-const LEDGER_TABLE: &str = "backup";
+pub(crate) const LEDGER_TABLE: &str = "backup";
 
 /// What the core asked for again, as the roll names it: the hash in hex, the
 /// form the stage door's answer carries.

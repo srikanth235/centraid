@@ -295,6 +295,85 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
     );
 }
 
+/// A gateway in the phone's ledger, as a pairing leaves it, and the announcement the core
+/// makes after a door that moves the ledger (a forget of nobody still announces).
+fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) {
+    use centraid_vault::backup::ledger::Destination;
+    let core = phone
+        .shelf
+        .core_of(vault)
+        .expect("the vault's core is open");
+    let ledger = core.plane().ledger().expect("the ledger opens");
+    let now = u64::try_from(centraid_core::example::now_ms()).expect("a clock");
+    ledger
+        .put_destination(&Destination {
+            gateway_id: "gw-zq".to_owned(),
+            addrs: vec!["127.0.0.1:8443".to_owned()],
+            cert_der: vec![1, 2, 3],
+            token: "zq".to_owned(),
+            epoch: 1,
+            label: "Studio".to_owned(),
+            paired_at_ms: now,
+            last_seen_ms: Some(now),
+            last_ack_ms: acked_at_ms,
+        })
+        .expect("the gateway is recorded");
+    if let Some(at) = acked_at_ms {
+        ledger
+            .set_head_acked("gw-zq", at)
+            .expect("the head is acknowledged");
+    }
+    let _ = core.call(&wire::Request {
+        kind: Some(wire::request::Kind::ForgetDestination(
+            wire::ForgetDestinationRequest {
+                gateway_id: "gw-nobody".to_owned(),
+            },
+        )),
+    });
+    phone.driver.pump(Duration::from_millis(800));
+}
+
+fn backup_line(phone: &Phone) -> wire::HomeBackupLine {
+    state(phone)
+        .bar
+        .and_then(|bar| bar.backup)
+        .expect("a line under the vault")
+}
+
+/// HOME'S LINE IS THE BACKUP LANE'S READING, NOT A VALUE TOLD ONCE: it was told when Home
+/// opened and when the shelf or a pass woke the service, so a pairing (which wakes neither)
+/// left "Not backed up. Pair a backup device." under a vault that Settings and the Backup page
+/// already called paired. A move of the ledger is a move of the line.
+#[test]
+fn the_backup_line_follows_the_ledger_after_a_pairing_and_after_an_acknowledgement() {
+    let dir = scratch();
+    lay_down(&dir, "a", "Alpha");
+    let mut phone = Phone::standard(&dir);
+    launched(&mut phone);
+    let a = phone.holdings().foreground;
+    assert_eq!(
+        backup_line(&phone).status,
+        "Not backed up. Pair a backup device."
+    );
+
+    pair_in_the_ledger(&mut phone, &a, None);
+    let line = backup_line(&phone);
+    assert_eq!(line.status, "Not backed up yet");
+    assert!(
+        line.route.is_none(),
+        "a paired vault no longer leads to pairing"
+    );
+
+    let now = u64::try_from(centraid_core::example::now_ms()).expect("a clock");
+    pair_in_the_ledger(&mut phone, &a, Some(now));
+    assert!(
+        backup_line(&phone).status.starts_with("Backed up")
+            || backup_line(&phone).status.starts_with("Backing up"),
+        "{:?}",
+        backup_line(&phone).status
+    );
+}
+
 #[test]
 fn a_launch_asks_for_the_first_pass_on_the_vaults_it_opened_and_a_restore_for_its_first_snapshot() {
     let dir = scratch();
