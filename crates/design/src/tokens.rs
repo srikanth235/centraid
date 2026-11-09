@@ -204,7 +204,7 @@ pub struct Icon {
     pub themed_tile: String,
     pub themed_glyph: String,
     /// How much of the iOS icon the mark's disc spans, as a share of the tile's
-    /// width (0.9083: outer radius 54.5 on the 120 grid). The Android adaptive icon has
+    /// width (0.82: outer radius 49.2 on the 120 grid). The Android adaptive icon has
     /// its own rule (the 66dp safe zone) and ignores this.
     pub ios_mark_share: f64,
 }
@@ -697,8 +697,8 @@ impl Tokens {
                 problems.push(format!("[type.{step}] is missing"));
             }
         }
-        if !(0.4..=0.95).contains(&self.icon.ios_mark_share) {
-            problems.push("[icon] ios_mark_share is not between 0.4 and 0.95".to_owned());
+        if !(0.4..=0.9).contains(&self.icon.ios_mark_share) {
+            problems.push("[icon] ios_mark_share is not between 0.4 and 0.9".to_owned());
         }
         if self.scale.values().any(|step| step.size == 0) || self.radius.card == 0 {
             problems.push("a type size or the card radius is zero".to_owned());

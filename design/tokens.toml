@@ -215,13 +215,14 @@ tinted_tile = "#1B1B1B"
 tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
-# The mark's disc as a share of the iOS tile's width: 0.9083 is an outer radius of
-# 54.5 on the 120 grid, today's proportions (inner edge and cuts included) scaled to
-# fill the tile (owner's pick, round 11: it floated in a white frame at 78%). The
+# The mark's disc as a share of the iOS tile's width: 0.82 is an outer radius of 49.2
+# on the 120 grid, today's proportions (inner edge and cuts included) scaled up from
+# the old 78% (owner's pick, round 11). 91% left no white gap and looked crowded once
+# iOS masked it and added its glass rim; Apple's own icons sit at 80 to 85%. The
 # masters and the three flat AppIcon PNGs (the pre-iOS-26 fallback) follow it, and so
 # does the layered iOS 26 icon `AppIcon.icon`; Android's adaptive icon keeps its own
 # rule, the 66dp safe zone.
-ios_mark_share = 0.9083
+ios_mark_share = 0.82
 
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]
