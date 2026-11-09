@@ -640,7 +640,11 @@ struct AgendaTimeGridView: View {
             Text(now.label)
                 .centraidType("annotLabelOn")
                 .foregroundStyle(Color.white)
-                .padding(.horizontal, 6)
+                // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
+                // less its padding, so it scales down to fit rather than truncating.
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(accent.fill, in: Capsule())
                 .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
