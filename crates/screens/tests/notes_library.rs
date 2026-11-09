@@ -154,7 +154,10 @@ fn the_menu_holds_a_filter_to_show_and_a_sort_and_the_chip_row_is_gone() {
     let show = menu::find(&built, "show").unwrap();
     assert_eq!(show.title, "Show");
     assert_eq!(show.kind, wire::menu_section::Kind::Multi as i32);
-    assert_eq!(option_keys(show), ["pinned"]);
+    assert_eq!(
+        option_keys(show),
+        ["pinned", "about-people", "about-events"]
+    );
     assert_eq!(show.options[0].label, "Pinned");
     let sort = menu::find(&built, menu::SORT).unwrap();
     assert_eq!(sort.kind, wire::menu_section::Kind::Single as i32);
@@ -767,7 +770,7 @@ fn a_change_re_reads_the_place_keeping_it_drawn() {
 }
 
 #[test]
-fn more_is_a_sheet_that_holds_trash_alone_and_the_same_tab_is_nothing() {
+fn more_is_a_sheet_of_import_export_and_trash_and_the_same_tab_is_nothing() {
     let mut d = clean();
     note(&d, "One", "1");
     let i = home(&mut d, wire::NotesPlace::Notes);
@@ -779,8 +782,15 @@ fn more_is_a_sheet_that_holds_trash_alone_and_the_same_tab_is_nothing() {
         .iter()
         .map(|row| (row.key.as_str(), row.label.as_str()))
         .collect();
-    assert_eq!(rows, [("trash", "Trash")]);
-    assert_eq!(state.more_rows[0].route, Some(routes::trash()));
+    assert_eq!(
+        rows,
+        [
+            ("import", "Import"),
+            ("export", "Export"),
+            ("trash", "Trash")
+        ]
+    );
+    assert_eq!(state.more_rows[2].route, Some(routes::trash()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,
