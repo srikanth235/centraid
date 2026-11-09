@@ -40,11 +40,11 @@ impl World {
         vault
             .commit(|tx| {
                 tx.set_producer("test.fixture");
-                tx.connection().execute(
-                    "INSERT INTO locker_key (key_id, created_at) VALUES ('k1', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                Ok(())
+                centraid_apps_kit::fixtures::locker_key(tx.connection(), "k1").map_err(|error| {
+                    centraid_vault::VaultError::Invariant {
+                        context: error.to_string(),
+                    }
+                })
             })
             .expect("key");
         Self {
@@ -114,11 +114,11 @@ fn documents_payments_and_photographs_of_a_person_are_in_their_vault_and_a_login
             );
             w.vault
                 .read(|c| {
-                    Ok(c.query_row(
-                        "SELECT entity_id FROM source WHERE external_id = ?1",
-                        [external],
-                        |row| row.get::<_, String>(0),
-                    )?)
+                    centraid_apps_kit::fixtures::followed_entity(c, external).map_err(|error| {
+                        centraid_vault::VaultError::Invariant {
+                            context: error.to_string(),
+                        }
+                    })
                 })
                 .expect("a line")
         })

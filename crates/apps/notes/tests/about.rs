@@ -143,19 +143,11 @@ fn the_journal_set_does_not_count_what_is_about_everything_else() {
     w.vault
         .commit(|tx| {
             tx.set_producer("test.fixture");
-            for n in 0..1_200 {
-                let task = format!("task-{n:05}");
-                tx.insert_entity(&task, centraid_vault::model::Kind::Task, "t", "2026-01-01T00:00:00.000Z")?;
-                tx.connection().execute(
-                    "INSERT INTO task (id, status) VALUES (?1, 'open')",
-                    [&task],
-                )?;
-                tx.connection().execute(
-                    "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES (?1, 'about', ?2, '2026-01-01T00:00:00.000Z')",
-                    [&task, &maya],
-                )?;
-            }
-            Ok(())
+            centraid_apps_kit::fixtures::tasks_about(tx.connection(), &maya, 1_200).map_err(
+                |error| centraid_vault::VaultError::Invariant {
+                    context: error.to_string(),
+                },
+            )
         })
         .expect("seeds");
     let note = w.id("note.create", json!({ "title": "Today", "body": "x" }));

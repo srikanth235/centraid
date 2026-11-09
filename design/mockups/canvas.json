@@ -1609,6 +1609,54 @@
       "w": 1200,
       "x": 3840,
       "y": 0
+    },
+    "NotesImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import notes",
+      "w": 390,
+      "x": 1410,
+      "y": 24000
+    },
+    "NotesAbout.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Notes about",
+      "w": 390,
+      "x": 1890,
+      "y": 24000
+    },
+    "NotesAboutPage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Note about",
+      "w": 390,
+      "x": 2370,
+      "y": 24000
+    },
+    "PeopleMoreContacts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · People more",
+      "w": 390,
+      "x": 2850,
+      "y": 24000
+    },
+    "PeopleImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import people",
+      "w": 390,
+      "x": 3330,
+      "y": 24000
+    },
+    "HealthSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Health search",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
     }
   },
   "createdOnFiles": {
@@ -2245,7 +2293,13 @@
     "AndroidChatDark.dc.html",
     "AndroidRecoveryKeyDark.dc.html",
     "AgendaWidgetsDark.dc.html",
-    "AgendaQuickAddChipDark.dc.html"
+    "AgendaQuickAddChipDark.dc.html",
+    "NotesImport.dc.html",
+    "NotesAbout.dc.html",
+    "NotesAboutPage.dc.html",
+    "PeopleMoreContacts.dc.html",
+    "PeopleImport.dc.html",
+    "HealthSearch.dc.html"
   ],
   "pages": [
     {
