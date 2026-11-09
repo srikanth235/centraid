@@ -10,7 +10,8 @@ struct CoreTransferView: View {
     let send: (Centraid_Core_V1_TransferEvent) -> Void
     let onBack: () -> Void
 
-    @Environment(\.appAccent) private var accent
+    /// The page's own accent: this view sits outside the environment it sets for its content.
+    private var accent: AppAccent { AppAccent(state.appID) }
 
     private func tapped(_ key: String) {
         var event = Centraid_Core_V1_TransferEvent()

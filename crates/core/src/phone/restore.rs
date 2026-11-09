@@ -280,6 +280,7 @@ fn run_controlled(
     // cannot take that one back, so the claimed vaults are answered and the
     // rest named.
     let mut vaults = Vec::new();
+    let left_alone = newer.len();
     let mut unclaimed = std::mem::take(&mut newer);
     let mut first_refusal = None;
     for mut one in staged {
@@ -298,7 +299,7 @@ fn run_controlled(
         }
     }
     if vaults.is_empty()
-        && unclaimed.is_empty()
+        && left_alone == 0
         && let Some(error) = first_refusal
     {
         return Err(error);
