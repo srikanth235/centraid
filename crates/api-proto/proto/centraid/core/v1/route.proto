@@ -89,6 +89,7 @@ message Route {
     PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    TransferRoute transfer = 901;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeRoute backup_home = 1450;
     // ---- the shell: chat (1600-1699) ----
@@ -488,6 +489,13 @@ message PeopleEditorRoute {
 
 // `<app>.trash`: the kit's one trash screen; the screen name says which app.
 message TrashRoute {}
+
+// `<app>.import` and `<app>.export` (#1173, items 14 and 20): the kit's one transfer screen
+// (Notes' Markdown, People's vCards); the screen name says which app and which way.
+message TransferRoute {
+  // The title of the page it was pushed from: its back control says it.
+  string back_label = 1;
+}
 
 // `backup.home`: the Backup screen. No arguments.
 message BackupHomeRoute {}

@@ -63,6 +63,8 @@ measurement.log
 measurement.record
 note.create
 note.edit
+note.export
+note.import
 note.move
 note.restore_version
 person.add

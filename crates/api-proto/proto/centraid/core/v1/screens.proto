@@ -315,6 +315,7 @@ message ScreenEvent {
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
+    TransferEvent transfer = 901;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
@@ -442,6 +443,7 @@ message ViewState {
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    TransferView transfer = 901;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
     // ---- the shell (1000-1999): chat (1600-1699) ----
@@ -865,6 +867,12 @@ message OwnerChecked {
 message PickBytes {
   // Media types or extensions the picker offers; empty is any file.
   repeated string accept = 1;
+  // Several files at once (#1173): each comes back in `BytesPicked.files`.
+  bool multiple = 2;
+  // A folder, read whole (#1173): every file in it and below it that `accept` names comes back
+  // in `BytesPicked.files`, each named by its path below the folder, so a folder of notes is
+  // notebooks. Wins over `multiple`.
+  bool folder = 3;
 }
 
 // The picked file. The bytes are the member's own and may be secrets in the
@@ -874,6 +882,15 @@ message BytesPicked {
   string name = 2;
   string media_type = 3;
   bytes content = 4;
+  // The files of a `multiple` or `folder` pick (`name` is the path below the folder, `/`
+  // separated). Empty for a single pick, whose one file is the four fields above.
+  repeated PickedBytes files = 5;
+}
+
+message PickedBytes {
+  string name = 1;
+  string media_type = 2;
+  bytes content = 3;
 }
 
 message SaveFile {

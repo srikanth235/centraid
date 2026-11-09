@@ -3682,6 +3682,48 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Read Markdown and text files as notes through note.import: [[links]] become links, #tags become tags, a folder becomes a notebook. With dry_run it only says what would happen.
+        #[derive(Clone, Debug, Default)]
+        pub struct ImportNotes {
+            pub files: String,
+            pub dry_run: Option<bool>,
+        }
+        impl ImportNotes {
+            pub const NAME: &str = "import-notes";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("files".to_owned(), text(self.files));
+                if let Some(it) = self.dry_run { map.insert("dry_run".to_owned(), flag(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ImportNotes> for wire::ActRequest {
+            fn from(value: ImportNotes) -> Self {
+                value.request()
+            }
+        }
+
+        /// Answer the member's notes, or one notebook's, as Markdown files in an archive through note.export. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportNotes {
+            pub notebook_id: Option<String>,
+        }
+        impl ExportNotes {
+            pub const NAME: &str = "export-notes";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.notebook_id { map.insert("notebook_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportNotes> for wire::ActRequest {
+            fn from(value: ExportNotes) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod people {

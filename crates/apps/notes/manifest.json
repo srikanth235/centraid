@@ -90,6 +90,16 @@
         "verbs": "act"
       },
       {
+        "schema": "note",
+        "table": "import",
+        "verbs": "act"
+      },
+      {
+        "schema": "note",
+        "table": "export",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -949,6 +959,77 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "import-notes",
+      "verb": "log",
+      "bulk": true,
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "command": "note.import",
+      "phrasings": [
+        "import my Obsidian notes",
+        "bring in these Markdown files",
+        "import a folder of notes"
+      ],
+      "description": "Read Markdown and text files as notes through note.import: [[links]] become links, #tags become tags, a folder becomes a notebook. With dry_run it only says what would happen.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "string",
+            "description": "A JSON array of {path, text}: each file's path relative to the picked folder, and its text."
+          },
+          "dry_run": { "type": "boolean" }
+        },
+        "required": ["files"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "export-notes",
+      "verb": "log",
+      "bulk": true,
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "command": "note.export",
+      "phrasings": [
+        "export my notes as Markdown",
+        "save a notebook as Markdown files",
+        "back up my notes to files"
+      ],
+      "description": "Answer the member's notes, or one notebook's, as Markdown files in an archive through note.export. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["notebook"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

@@ -57,6 +57,7 @@ pub mod locker;
 pub mod measurement;
 pub mod money;
 pub mod note;
+pub mod note_portable;
 pub mod person;
 pub mod person_reminder;
 pub mod photo;

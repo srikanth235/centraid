@@ -118,6 +118,8 @@ notes,attach,attach,note,card,no,no
 notes,detach,detach,note,card,no,no
 notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
+notes,import-notes,log,note,card,no,no
+notes,export-notes,log,note,card,no,no
 people,add-person,create,person,direct,yes: crates/screens/src/people/editor.rs,yes
 people,edit-person,edit,person,direct,yes: crates/screens/src/people/editor.rs,yes
 people,set-cadence,edit:cadence,person,direct,yes: crates/screens/src/people/editor.rs,yes
