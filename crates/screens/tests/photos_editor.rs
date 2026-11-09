@@ -623,3 +623,36 @@ fn the_editor_only_crops_rotates_and_flips_and_saves_a_new_photograph() {
         "an edit of the original"
     );
 }
+
+#[test]
+fn a_straighten_crops_to_the_frame_the_turned_photograph_fills() {
+    // Level, or an unknown shape: nothing to cut.
+    assert_eq!(editor::inscribed_crop(1.5, 0, 0), None);
+    assert_eq!(editor::inscribed_crop(0.0, 0, 7), None);
+    for (ratio, quarters, degrees) in [(1.5, 0, 7), (1.5, 0, -15), (1.5, 1, 9), (0.75, 0, 4)] {
+        let fit = editor::inscribed_crop(ratio, quarters, degrees).expect("a crop");
+        // Centred, and smaller than the grown box.
+        assert!((fit.x - (1.0 - fit.w) / 2.0).abs() < 1e-9 && fit.w < 1.0 && fit.h < 1.0);
+        // Every corner of the crop, turned back, lies inside the photograph.
+        let (a, b) = if quarters % 2 == 1 {
+            (1.0, ratio)
+        } else {
+            (ratio, 1.0)
+        };
+        let (box_w, box_h) = editor::rotated_box(a, b, degrees);
+        let radians = f64::from(degrees).to_radians();
+        for (fx, fy) in [(fit.x, fit.y), (fit.x + fit.w, fit.y + fit.h)] {
+            let (x, y) = ((fx - 0.5) * box_w, (fy - 0.5) * box_h);
+            let (u, v) = (
+                x * radians.cos() + y * radians.sin(),
+                -x * radians.sin() + y * radians.cos(),
+            );
+            assert!(
+                u.abs() <= a / 2.0 + 1e-9 && v.abs() <= b / 2.0 + 1e-9,
+                "{ratio} {degrees}"
+            );
+        }
+        // And it keeps the photograph's own shape.
+        assert!(((fit.w * box_w) / (fit.h * box_h) - a / b).abs() < 1e-9);
+    }
+}
