@@ -71,6 +71,7 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.VaultHeader
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
@@ -141,14 +142,10 @@ public fun HomeScreen(
     val openBackup = { onEvent(HomeEvent(backup = HomeEvent.BackupPressed())) }
     val search: () -> Unit = { bar?.search_route?.let(onOpen) }
     val settings: (() -> Unit)? = state.bar?.settings_route?.let { route -> { onOpen(route) } }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(centraidColor("bg")),
-    ) {
-        // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
-        // drawn above the three-branch switch on purpose: a Home that failed to
-        // read still has to say which vault failed.
+    // AT THE LARGEST TEXT THE LOCKUP IS TALL: it scrolls with the page (the first thing in it)
+    // instead of staying pinned and taking a third of the screen.
+    val scrolling = rememberLargestText()
+    val lockup: @Composable () -> Unit = {
         if (bar != null) {
             VaultHeader(
                 bar = bar,
@@ -166,6 +163,16 @@ public fun HomeScreen(
                 onSettings = settings,
             )
         }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(centraidColor("bg")),
+    ) {
+        // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
+        // drawn above the three-branch switch on purpose: a Home that failed to
+        // read still has to say which vault failed.
+        if (!scrolling) lockup()
         StatusRibbon(state.status, onEvent)
         val data = state.data_
         // THE PAGE TAKES THE SLACK, THE BAND TAKES ITS OWN HEIGHT. The band is
@@ -175,10 +182,10 @@ public fun HomeScreen(
         Box(Modifier.weight(1f)) {
             when {
                 failure != null -> FailureBody(failure)
-                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen)
+                data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null)
                 data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
-                    DayOne(data, state.loading_label, onOpen)
-                else -> SpringboardGrid(data, state.loading_label, onOpen)
+                    DayOne(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
+                else -> SpringboardGrid(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
             }
         }
         // THE IMPORT'S LINE, on the band (product-intuition/references/design-behaviour.md § Status line).
@@ -533,19 +540,16 @@ private val PAGE_MARGIN = CentraidGeometry.PAGE_MARGIN.dp
 
 /** THE WIDGET GRID in the page's scroll (`WidgetGrid`), with the board's margin. */
 @Composable
-private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
+private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
     // WHICH widgets are drawn and in WHICH rows both arrive decided: `grid_rows`
     // is the machine's packing over every widget, so this file looks each id up
     // and draws it. Nothing here is allowed to disagree with `HomeView.swift`,
     // because neither of them chooses.
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = PAGE_MARGIN)
-            .padding(top = 10.dp, bottom = 24.dp),
-    ) {
-        WidgetGrid(data, loading, onOpen)
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        header?.invoke()
+        Column(Modifier.padding(horizontal = PAGE_MARGIN).padding(top = 10.dp, bottom = 24.dp)) {
+            WidgetGrid(data, loading, onOpen)
+        }
     }
 }
 
@@ -557,22 +561,21 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
  * about the vault, and an unanswered read has not earned it.
  */
 @Composable
-private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(PAGE_MARGIN)
-            .testTag("home-day-one"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
-        Text(
-            data.day_one_body,
-            style = centraidType("small"),
-            color = centraidColor("textSoft"),
-        )
-        WidgetGrid(data, loading, onOpen)
+private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("home-day-one")) {
+        header?.invoke()
+        Column(
+            Modifier.padding(PAGE_MARGIN),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
+            Text(
+                data.day_one_body,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+            )
+            WidgetGrid(data, loading, onOpen)
+        }
     }
 }
 

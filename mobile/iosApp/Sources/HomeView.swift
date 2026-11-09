@@ -44,6 +44,7 @@ struct HomeView: View {
 
 /// Home over the screen store, so a Rust push redraws it.
 private struct HomeRoot: View {
+    @Environment(\.isLargestText) private var largestText
     @ObservedObject var shell: ShellModel
     @ObservedObject var store: ScreenStore
     @Binding var chatTyping: Bool
@@ -104,7 +105,7 @@ private struct HomeRoot: View {
         // THE LOCKUP FLOATS TOO, on Home only (Chat and Backup draw their own
         // headers): the page scrolls under it, and on iOS 26 the system's scroll
         // edge effect keeps it legible over whatever passes beneath.
-        .floatingTopBar(shown: shell.tab == .home) {
+        .floatingTopBar(shown: shell.tab == .home && !largestText) {
             VaultHeader(bar: home.bar, shell: shell, store: store)
         }
         // THE BAND FLOATS OVER THE PAGE, as every app's band does: the page scrolls under its
@@ -163,6 +164,11 @@ private struct HomeRoot: View {
         // THE LOCKUP (`VaultHeader`) FLOATS OVER THE PAGE from `body`, so the
         // springboard scrolls under it; a Home that failed to read still says
         // which vault failed.
+        // AT THE LARGEST TEXT THE LOCKUP IS TALL ENOUGH TO COVER THE TILES it would float over, so it
+        // scrolls with the page (the first thing in it) instead of staying pinned.
+        let scrolling: AnyView? = largestText && shell.tab == .home
+            ? AnyView(VaultHeader(bar: home.bar, shell: shell, store: store))
+            : nil
         if home.hasStatus {
             StatusRibbon(status: home.status, store: store)
         }
@@ -170,15 +176,15 @@ private struct HomeRoot: View {
         // sentence; it does NOT render an empty springboard.
         switch home.content {
         case .loading, .none:
-            Springboard(data: Centraid_Core_V1_HomeData(), shell: shell)
+            Springboard(data: Centraid_Core_V1_HomeData(), shell: shell, header: scrolling)
         case let .failure(failure):
             FailureBody(failure: failure)
         case let .data(data):
             VStack(alignment: .leading, spacing: 0) {
                 if data.springboard == .firstRun {
-                    DayOne(data: data, shell: shell)
+                    DayOne(data: data, shell: shell, header: scrolling)
                 } else {
-                    Springboard(data: data, shell: shell)
+                    Springboard(data: data, shell: shell, header: scrolling)
                 }
             }
         }
@@ -286,9 +292,12 @@ private struct FailureBody: View {
 private struct Springboard: View {
     let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
+    /// The lockup, when it scrolls with the page (the largest text sizes).
+    var header: AnyView?
 
     var body: some View {
         ScrollView {
+            header
             WidgetGrid(data: data, shell: shell)
                 .padding(.horizontal, pageMargin)
                 .padding(.top, 10)
@@ -306,10 +315,12 @@ private struct Springboard: View {
 private struct DayOne: View {
     let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
+    var header: AnyView?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollView {
+            header
             VStack(alignment: .leading, spacing: 12) {
                 Text(data.dayOneTitle)
                     .centraidType("title")
