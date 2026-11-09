@@ -57,13 +57,13 @@ enum StateColor: CaseIterable {
     }
 }
 
-/// THE TYPE SCALE (#1173): titles 34 bold, sections 20, rows 16, meta 13, plus the 12pt group
+/// THE TYPE SCALE (#1173): titles 34 bold, the centred heroes' title 24 bold, sections 20, rows 16, meta 13, plus the 12pt group
 /// head and the 11pt badge, both in capitals. Sizes and weights are `CentraidScale`, the
 /// generated file; the face is the one the shell ships (`centraidTypeFaces`), so a weight with
 /// no file of its own draws at the nearest face that has one (700 draws at the semibold file).
 /// Each rung scales with Dynamic Type through the same path as every other role.
 enum KitType: String, CaseIterable {
-    case title, section, row, meta, group, badge
+    case title, hero, section, row, meta, group, badge
 
     /// The role name `Theme.style` resolves.
     var role: String { "kit\(rawValue.prefix(1).uppercased())\(rawValue.dropFirst())" }
@@ -71,6 +71,7 @@ enum KitType: String, CaseIterable {
     var size: CGFloat {
         switch self {
         case .title: CentraidScale.titleSize
+        case .hero: CentraidScale.heroSize
         case .section: CentraidScale.sectionSize
         case .row: CentraidScale.rowSize
         case .meta: CentraidScale.metaSize
@@ -82,6 +83,7 @@ enum KitType: String, CaseIterable {
     var weight: Int {
         switch self {
         case .title: CentraidScale.titleWeight
+        case .hero: CentraidScale.heroWeight
         case .section: CentraidScale.sectionWeight
         case .row: CentraidScale.rowWeight
         case .meta: CentraidScale.metaWeight
@@ -93,6 +95,7 @@ enum KitType: String, CaseIterable {
     var caps: Bool {
         switch self {
         case .title: CentraidScale.titleCaps
+        case .hero: CentraidScale.heroCaps
         case .section: CentraidScale.sectionCaps
         case .row: CentraidScale.rowCaps
         case .meta: CentraidScale.metaCaps
@@ -102,7 +105,7 @@ enum KitType: String, CaseIterable {
     }
 
     /// The line box: a tight title, an open row.
-    var lineHeight: CGFloat { (size * (self == .title || self == .section ? 1.18 : 1.32)).rounded() }
+    var lineHeight: CGFloat { (size * (self == .title || self == .hero || self == .section ? 1.18 : 1.32)).rounded() }
 
     /// The style `Theme.style` hands back for this rung. Weight snaps to a face that exists.
     var style: CentraidTypeStyle {

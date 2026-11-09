@@ -807,7 +807,7 @@ internal fun LockerItemScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     item.title,
-                                    style = kitTextStyle(KitType.Title),
+                                    style = kitTextStyle(KitType.Hero),
                                     color = Surface.ink,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 )

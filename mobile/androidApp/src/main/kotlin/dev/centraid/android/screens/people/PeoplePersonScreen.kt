@@ -276,7 +276,7 @@ private fun Hero(person: PeoplePersonData) {
         Avatar(person.avatar, size = 96)
         KitText(
             person.name,
-            KitType.Title,
+            KitType.Hero,
             Surface.ink,
             modifier = Modifier.padding(top = 10.dp).semantics { heading() },
         )

@@ -98,7 +98,7 @@ public enum class StateColor {
 }
 
 /**
- * THE TYPE SCALE (#1173): titles 34 bold, sections 20, rows 16, meta 13, plus the 12pt group head
+ * THE TYPE SCALE (#1173): titles 34 bold, the centred heroes' title 24 bold, sections 20, rows 16, meta 13, plus the 12pt group head
  * and the 11pt badge, both in capitals. Sizes and weights are the generated [CentraidScale]; the
  * face is the shell's own, so a weight with no file of its own draws at the nearest face that
  * has one (700 draws at the semibold file). The size follows the font scale, capped at the root.
@@ -109,6 +109,7 @@ public enum class KitType(
     public val caps: Boolean,
 ) {
     Title(CentraidScale.titleSize, CentraidScale.titleWeight, CentraidScale.titleCaps),
+    Hero(CentraidScale.heroSize, CentraidScale.heroWeight, CentraidScale.heroCaps),
     Section(CentraidScale.sectionSize, CentraidScale.sectionWeight, CentraidScale.sectionCaps),
     Row(CentraidScale.rowSize, CentraidScale.rowWeight, CentraidScale.rowCaps),
     Meta(CentraidScale.metaSize, CentraidScale.metaWeight, CentraidScale.metaCaps),
@@ -123,7 +124,7 @@ public fun kitTextStyle(rung: KitType): TextStyle {
     // The face and its leading come from an existing role of the same weight, so the line box and
     // the font family stay the shell's; the size and weight are the scale's.
     val base = centraidType(if (rung.weight >= 600) "control" else "body")
-    val lineFactor = if (rung == KitType.Title || rung == KitType.Section) 1.18f else 1.32f
+    val lineFactor = if (rung == KitType.Title || rung == KitType.Hero || rung == KitType.Section) 1.18f else 1.32f
     return base.copy(
         fontFamily = base.fontFamily ?: FontFamily.Default,
         fontSize = rung.size.sp,

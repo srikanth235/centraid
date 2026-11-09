@@ -162,7 +162,7 @@ struct LockerItemView: View {
             LockerHeroTile(letter: item.heroInitial)
             HStack(spacing: 6) {
                 Text(item.title)
-                    .kitType(.title)
+                    .kitType(.hero)
                     .foregroundStyle(Surface.ink)
                     .multilineTextAlignment(.center)
                 if !item.starLabel.isEmpty {

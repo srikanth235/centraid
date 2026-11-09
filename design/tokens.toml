@@ -215,6 +215,11 @@ themed_glyph = "#22374A"
 size = 34
 weight = 700
 
+# The hero title: the Locker item's and the Person's centred hero, one rung under the page title.
+[type.hero]
+size = 24
+weight = 700
+
 [type.section]
 size = 20
 weight = 700

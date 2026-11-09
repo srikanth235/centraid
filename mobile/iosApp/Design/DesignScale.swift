@@ -13,6 +13,9 @@ public enum CentraidScale {
     public static let groupSize: CGFloat = 12
     public static let groupWeight = 600
     public static let groupCaps = true
+    public static let heroSize: CGFloat = 24
+    public static let heroWeight = 700
+    public static let heroCaps = false
     public static let metaSize: CGFloat = 13
     public static let metaWeight = 400
     public static let metaCaps = false

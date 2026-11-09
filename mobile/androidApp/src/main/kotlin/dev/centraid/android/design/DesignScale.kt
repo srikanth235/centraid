@@ -12,6 +12,9 @@ public object CentraidScale {
     public const val groupSize: Float = 12f
     public const val groupWeight: Int = 600
     public const val groupCaps: Boolean = true
+    public const val heroSize: Float = 24f
+    public const val heroWeight: Int = 700
+    public const val heroCaps: Boolean = false
     public const val metaSize: Float = 13f
     public const val metaWeight: Int = 400
     public const val metaCaps: Boolean = false
