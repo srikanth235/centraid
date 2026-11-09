@@ -54,7 +54,8 @@ message ChatState {
   string copy_label = 17;
   // The last turn is over and can be asked again.
   bool can_retry = 18;
-  // The thread has something in it: New chat is drawn.
+  // The chat is a saved one (it has a thread): New chat's pencil is drawn. A fresh
+  // conversation has no pencil.
   bool can_new_chat = 19;
   // What waits in the composer, oldest first.
   repeated ChatAttachment pending = 20;
@@ -69,6 +70,7 @@ message ChatState {
   ChatModelStep vision_step = 27;
   // The composer cannot send until the photo reader is fetched or the photo removed.
   bool vision_blocked = 28;
+  // The Chats page is showing (a page of its own, back to the chat); it was a drawer.
   bool drawer_open = 29;
   // Past chats, newest activity first, or the chats a search found.
   repeated ChatThreadItem threads = 30;

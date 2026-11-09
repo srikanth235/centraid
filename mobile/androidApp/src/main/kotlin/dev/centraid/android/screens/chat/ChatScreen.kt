@@ -82,7 +82,9 @@ import centraid.core.v1.Route
 import centraid.core.v1.Confirm
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidMark
+import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.SearchField
+import dev.centraid.android.kit.SearchFoot
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
@@ -101,8 +103,9 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * THE CHAT TAB (#1135, lane I), drawn from Rust's `ChatState`. Android's twin of iOS's `ChatView`:
- * a header (the drawer's key, the chat's title and where it runs, a menu), the thread or the
- * model's step, the composer, and the drawer of past chats over it. It owns no word, no count and
+ * a header (the chat's title and where it runs, the Chats key and, inside a saved chat, New
+ * chat's pencil), the thread or the model's step, the composer, and the Chats page of past chats
+ * over it. It owns no word, no count and
  * no decision: every label is in [ChatState], every tap is a [ChatEvent], and a card's tap is
  * answered by Rust with a page to push.
  *
@@ -134,7 +137,7 @@ internal fun ChatScreen(
         Column(Modifier.fillMaxSize().imePadding()) {
             ChatHeader(
                 state,
-                onDrawer = { onEvent(ChatEvent(drawer = ChatEvent.DrawerToggled(opened = true))) },
+                onChats = { onEvent(ChatEvent(drawer = ChatEvent.DrawerToggled(opened = true))) },
                 onNewChat = { onEvent(ChatEvent(new_chat = ChatEvent.NewChat())) },
                 onRename = { renaming = state.thread_id to state.title },
                 onDelete = { deleting = state.thread_id },
@@ -173,7 +176,7 @@ internal fun ChatScreen(
             }
         }
         if (state.drawer_open) {
-            ChatDrawer(
+            ChatsPage(
                 state,
                 onEvent,
                 onDelete = { deleting = it },
@@ -304,21 +307,20 @@ private fun KeyButton(iconKey: String, label: String, tag: String, enabled: Bool
 @Composable
 private fun ChatHeader(
     state: ChatState,
-    onDrawer: () -> Unit,
+    onChats: () -> Unit,
     onNewChat: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    // THE BOARD'S HEADER: a round key at each end (the drawer, New chat), the title and the vault
-    // line centred between them, no rule under it. Rename and Delete moved off the old "more"
-    // menu to a long press on the title.
+    // THE BOARD'S HEADER: the title and the vault line, round keys at the trailing edge (Chats,
+    // then New chat only inside a saved chat), no rule under it. Rename and Delete are a long
+    // press on the title.
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        KeyButton("Menu", state.drawer_label, "chat-drawer", plate = true, onClick = onDrawer)
         Box(Modifier.weight(1f)) {
             Column(
                 Modifier
@@ -360,7 +362,10 @@ private fun ChatHeader(
                 )
             }
         }
-        KeyButton("PenLine", state.new_chat_label, "chat-new", enabled = state.can_new_chat, plate = true, onClick = onNewChat)
+        KeyButton("History", state.drawer_label, "chat-chats", plate = true, onClick = onChats)
+        if (state.can_new_chat) {
+            KeyButton("PenLine", state.new_chat_label, "chat-new", plate = true, onClick = onNewChat)
+        }
     }
 }
 
@@ -1078,11 +1083,14 @@ private fun RenameSheet(state: ChatState, initial: String, onSave: (String) -> U
     }
 }
 
-// ------------------------------------------------------------------- the drawer --
+// ------------------------------------------------------------------ the Chats page --
 
-/** THE PAST CHATS, sliding in from the left over the thread: the lesser of 320dp and 84% of the width. */
+/**
+ * THE PAST CHATS, a page of their own over the thread: a chevron back to the chat, the list newest
+ * first, and the search key at the foot where every app keeps it. No band is drawn under it.
+ */
 @Composable
-private fun ChatDrawer(
+private fun ChatsPage(
     state: ChatState,
     onEvent: (ChatEvent) -> Unit,
     onDelete: (String) -> Unit,
@@ -1091,109 +1099,75 @@ private fun ChatDrawer(
 ) {
     val close = { onEvent(ChatEvent(drawer = ChatEvent.DrawerToggled(opened = false))) }
     androidx.activity.compose.BackHandler(onBack = { close() })
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val width: Dp = minOf(320.dp, maxWidth * 0.84f)
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(centraidColor("scrim"))
-                .clickable(onClick = { close() })
-                .testTag("chat-drawer-scrim"),
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Surface.plainPage)
+            .testTag("chat-chats-page"),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+            KeyButton("ChevronLeft", state.close_label, "chat-chats-back", plate = true, onClick = close)
+        }
+        Text(
+            state.drawer_label,
+            style = kitTextStyle(KitType.Title),
+            color = Surface.ink,
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { heading() },
         )
-        Column(
-            Modifier
-                .width(width)
-                .fillMaxHeight()
-                .background(Surface.plainPage)
-                .testTag("chat-drawer-panel"),
-        ) {
-            Text(
-                state.drawer_label,
-                style = kitTextStyle(KitType.Title),
-                color = Surface.ink,
-                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp).semantics { heading() },
-            )
-            // NEW CHAT IS THE OUTLINED PILL under the title, then the search (the ChatList board).
-            Box(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
-                OutlineButton(label = state.new_chat_label, testTag = "chat-drawer-new") {
-                    onEvent(ChatEvent(new_chat = ChatEvent.NewChat()))
-                }
-            }
-            val search = state.drawer_search
-            if (search != null && search.open_) {
-                CentraidSearchField(
-                    field = SearchField(open_ = true, term = search.term, corrected = search.corrected, corrected_label = search.corrected_label),
-                    placeholder = state.drawer_search_placeholder,
-                    onTerm = { onEvent(ChatEvent(drawer_search_term = ChatEvent.DrawerSearchTerm(term = it))) },
-                    onClose = { onEvent(ChatEvent(drawer_search_closed = ChatEvent.DrawerSearchClosed())) },
-                    label = state.drawer_search_placeholder,
-                    closeLabel = state.close_label,
-                    testTag = "chat-drawer-search",
-                )
-            } else {
-                SearchPill(state.drawer_search_placeholder, "chat-drawer-search-open") {
-                    onEvent(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
-                }
-            }
-            LazyColumn(Modifier.weight(1f)) {
-                if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {
-                    item(key = "empty") {
-                        Text(
-                            state.threads_empty_line,
-                            style = kitTextStyle(KitType.Meta),
-                            color = Surface.meta,
-                            modifier = Modifier.padding(KitGeometry.GUTTER),
-                        )
-                    }
-                }
-                itemsIndexed(state.threads, key = { _, row -> row.thread_id }) { _, row ->
-                    ThreadRow(
-                        row,
-                        onOpen = { onEvent(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = row.thread_id, title = row.title))) },
-                        onRename = { onRename(row.thread_id, row.title) },
-                        onDelete = { onDelete(row.thread_id) },
-                        state = state,
+        LazyColumn(Modifier.weight(1f)) {
+            if (state.threads.isEmpty() && state.threads_empty_line.isNotEmpty()) {
+                item(key = "empty") {
+                    Text(
+                        state.threads_empty_line,
+                        style = kitTextStyle(KitType.Meta),
+                        color = Surface.meta,
+                        modifier = Modifier.padding(KitGeometry.GUTTER).testTag("chat-chats-empty"),
                     )
                 }
             }
-            if (state.can_delete_all) {
-                Text(
-                    state.delete_all_label,
-                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
-                    color = StateColor.Red.text,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = KitGeometry.ROW_MIN)
-                        .clickable(onClick = onDeleteAll)
-                        .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-                        .testTag("chat-drawer-delete-all"),
+            itemsIndexed(state.threads, key = { _, row -> row.thread_id }) { _, row ->
+                ThreadRow(
+                    row,
+                    onOpen = { onEvent(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = row.thread_id, title = row.title))) },
+                    onRename = { onRename(row.thread_id, row.title) },
+                    onDelete = { onDelete(row.thread_id) },
+                    state = state,
                 )
             }
+            if (state.can_delete_all) {
+                item(key = "delete-all") {
+                    Text(
+                        state.delete_all_label,
+                        style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                        color = StateColor.Red.text,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .clickable(onClick = onDeleteAll)
+                            .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
+                            .testTag("chat-chats-delete-all"),
+                    )
+                }
+            }
         }
-    }
-}
-
-/** THE DRAWER'S SEARCH, closed: a pill on the card colour under a hairline, as the Chats board draws it. */
-@Composable
-private fun SearchPill(label: String, tag: String, onClick: () -> Unit) {
-    val shape = CircleShape
-    Row(
-        Modifier
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
-            .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .clip(shape)
-            .background(Surface.card)
-            .border(KitGeometry.HAIRLINE, Surface.border, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-            .testTag(tag)
-            .semantics { role = Role.Button },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        CentraidIcon("Search", tint = centraidColor("textFaint"), size = 16.dp)
-        Text(label, style = centraidType("body"), color = centraidColor("textFaint"), maxLines = 1)
+        val search = state.drawer_search
+        SearchFoot(
+            RoomSearch(
+                field = SearchField(
+                    open_ = search?.open_ == true,
+                    term = search?.term.orEmpty(),
+                    corrected = search?.corrected.orEmpty(),
+                    corrected_label = search?.corrected_label.orEmpty(),
+                ),
+                placeholder = state.drawer_search_placeholder,
+                onTerm = { onEvent(ChatEvent(drawer_search_term = ChatEvent.DrawerSearchTerm(term = it))) },
+                onClose = { onEvent(ChatEvent(drawer_search_closed = ChatEvent.DrawerSearchClosed())) },
+                label = state.drawer_search_placeholder,
+                closeLabel = state.close_label,
+                onOpen = { onEvent(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened())) },
+            ),
+            testTag = "chat-chats-search",
+        )
     }
 }
 

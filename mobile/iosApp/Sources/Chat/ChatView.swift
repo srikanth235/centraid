@@ -14,16 +14,16 @@ import UIKit
 /// band still at the foot, and a card pushes the real row's route onto the
 /// shell's stack, so back returns here.
 ///
-/// **THE HEADER IS THE CHAT'S OWN** (R-CHAT-2): the drawer's control on the
-/// left, the open chat's title with the vault beside it in the middle, and a
-/// menu on the right (New chat, Rename, Delete). It replaces the vault lockup
-/// this tab used to stack above a "Chat" title — the vault is named on the second
-/// line, and switching it is Home's.
+/// **THE HEADER IS THE CHAT'S OWN** (R-CHAT-2): the open chat's title with the
+/// vault beside it, the Chats key at the trailing edge and, only inside a chat
+/// already begun, New chat's pencil beside it. The tab opens to a ready new
+/// conversation. It replaces the vault lockup this tab used to stack above a
+/// "Chat" title — the vault is named on the second line, and switching it is Home's.
 ///
-/// **THE DRAWER** slides in from the left over the thread and the composer and
-/// stops short of the band, so Home is always one press away and the Chat tab
-/// pressed again only shuts it. Past chats are newest first with how long ago;
-/// the open one is marked; a swipe reveals Delete, which asks first.
+/// **THE CHATS PAGE** is a page of its own, a chevron back to the chat, drawn in
+/// place of the thread and the composer with no band under it (so nothing overlaps
+/// it). Past chats are newest first with how long ago; the open one is marked; a swipe
+/// reveals Delete, which asks first; search is the foot's key, as in every app.
 ///
 /// **ONE FILLED INK ELEMENT.** The composer's Send (Stop while a turn runs) is
 /// the only one. Everything else is ink over paper: outlined actions, raised
@@ -75,7 +75,7 @@ struct ChatView: View {
                 ChatHeader(
                     state: state,
                     onBack: onBack,
-                    onDrawer: {
+                    onChats: {
                         focused = false
                         chat.toggleDrawer(true)
                     },
@@ -100,17 +100,13 @@ struct ChatView: View {
                     Spacer(minLength: 0)
                 }
             }
-            // Behind the drawer the chat is not there for a screen reader.
+            // Behind the Chats page the chat is not there for a screen reader.
             .accessibilityHidden(state.drawerOpen)
 
             if state.drawerOpen {
-                ChatDrawer(
+                ChatsPage(
                     state: state,
-                    onClose: { chat.toggleDrawer(false) },
-                    onNewChat: {
-                        draft = ""
-                        chat.newChat()
-                    },
+                    onBack: { chat.toggleDrawer(false) },
                     onOpen: { chat.openThread($0.threadID, title: $0.title) },
                     onDelete: { deleting = DeleteTarget(id: $0.threadID, title: $0.title) },
                     onDeleteAll: { deletingAll = true },
@@ -118,13 +114,15 @@ struct ChatView: View {
                     onSearchTerm: { chat.drawerSearch($0) },
                     onSearchClose: { chat.closeDrawerSearch() }
                 )
-                .transition(reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
                 .zIndex(1)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .animation(reduceMotion ? nil : ChatMotion.entry, value: state.drawerOpen)
-        .onChange(of: focused) { _, now in typing = now }
+        // THE BAND STEPS ASIDE while the composer has the keyboard and while the Chats page is up.
+        .onChange(of: focused) { _, now in typing = now || state.drawerOpen }
+        .onChange(of: state.drawerOpen) { _, open in typing = focused || open }
         .onDisappear { typing = false }
         .accessibilityIdentifier("chat")
         // A RENAME IS A SHEET HOLDING THE FIELD, Save its one ink button.
@@ -380,24 +378,22 @@ private struct DeleteTarget: Identifiable {
     let title: String
 }
 
-/// THE CHAT'S HEADER: the drawer's control on the left, the open chat's title
-/// and where it runs in the middle, and a menu on the right. Ink on paper and
+/// THE CHAT'S HEADER: the open chat's title and where it runs in the middle, the
+/// Chats key and, inside a chat begun, New chat at the trailing edge. Ink on paper and
 /// outlined, never filled: the composer's Send is this screen's one filled
 /// element.
 private struct ChatHeader: View {
     let state: Centraid_Core_V1_ChatState
     let onBack: (() -> Void)?
-    let onDrawer: () -> Void
+    let onChats: () -> Void
     let onNewChat: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        // THE BOARD'S HEADER (Chat.dc.html): a round glass key at each end, the drawer's at the
-        // leading edge and New chat's at the trailing one, the title and the vault line centred
-        // between them, and no rule under it. Rename and Delete moved off the old "⋮" menu to a
-        // long press on the title.
+        // THE BOARD'S HEADER (Chat.dc.html): the title and the vault line, round glass keys at the
+        // trailing edge, and no rule under it. Rename and Delete are a long press on the title.
         HStack(alignment: .center, spacing: 10) {
             if let onBack {
                 KitIconKey(
@@ -408,14 +404,6 @@ private struct ChatHeader: View {
                     action: onBack
                 )
             }
-            KitIconKey(
-                iconKey: "Menu",
-                label: state.drawerLabel,
-                glass: true,
-                identifier: "chat-drawer",
-                action: onDrawer
-            )
-
             VStack(alignment: .center, spacing: 0) {
                 Text(verbatim: state.title)
                     .centraidType("smallStrong")
@@ -446,14 +434,24 @@ private struct ChatHeader: View {
                 }
             }
 
+            // CHATS, then NEW CHAT only inside a chat already begun: a fresh conversation has
+            // nothing to start over from.
             KitIconKey(
-                iconKey: "PenLine",
-                label: state.newChatLabel,
+                iconKey: "History",
+                label: state.drawerLabel,
                 glass: true,
-                identifier: "chat-new",
-                action: onNewChat
+                identifier: "chat-chats",
+                action: onChats
             )
-            .disabled(!state.canNewChat)
+            if state.canNewChat {
+                KitIconKey(
+                    iconKey: "PenLine",
+                    label: state.newChatLabel,
+                    glass: true,
+                    identifier: "chat-new",
+                    action: onNewChat
+                )
+            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin - 8)
         .padding(.top, 8)
@@ -461,100 +459,46 @@ private struct ChatHeader: View {
     }
 }
 
-// MARK: - The drawer
+// MARK: - The Chats page
 
-/// THE PAST CHATS, sliding in from the left over the thread.
-///
-/// Width is the lesser of 320 and 84% of the screen, so a sliver of the chat
-/// stays to tap away to; the scrim is the system's own `scrim` role. The new-chat
-/// row is outlined, the open chat is marked by an ink rule and a sunken ground,
-/// and Delete is a swipe away and asks first. Entry is the 280 ms curve, which
-/// the caller's transition and animation own and reduced motion replaces with a
-/// fade.
-private struct ChatDrawer: View {
+/// THE PAST CHATS, a page of their own over the thread: a chevron back to the chat, the list
+/// newest first, and the search key at the foot where every app keeps it. No band is drawn
+/// under it, so nothing overlaps; the open chat is marked by an ink rule and a sunken ground,
+/// and Delete is a swipe away and asks first.
+private struct ChatsPage: View {
     let state: Centraid_Core_V1_ChatState
-    let onClose: () -> Void
-    let onNewChat: () -> Void
+    let onBack: () -> Void
     let onOpen: (Centraid_Core_V1_ChatThreadItem) -> Void
     let onDelete: (Centraid_Core_V1_ChatThreadItem) -> Void
     let onDeleteAll: () -> Void
-    /// The drawer's search (#1097): the opener, the field's terms, its close.
     let onSearchOpen: () -> Void
     let onSearchTerm: (String) -> Void
     let onSearchClose: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = min(320, proxy.size.width * 0.84)
-            ZStack(alignment: .leading) {
-                Theme.color("scrim", scheme)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onClose)
-                    .accessibilityHidden(true)
-                panel(width: width)
-            }
-        }
-    }
-
-    private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(verbatim: state.drawerLabel)
-                .kitType(.title)
-                .foregroundStyle(Surface.ink)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-                .accessibilityAddTraits(.isHeader)
-
-            // THE BOARD'S NEW CHAT: a full-width pill outlined and lettered in the shell's teal.
-            Button(action: onNewChat) {
-                HStack(spacing: 8) {
-                    CentraidIconView(iconKey: "Plus", tint: Color(CentraidAsset.shell), size: 16)
-                    Text(verbatim: state.newChatLabel)
-                        .font(.system(size: CentraidScale.rowSize, weight: .semibold))
-                        .foregroundStyle(Color(CentraidAsset.shell))
-                }
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(Capsule().strokeBorder(Color(CentraidAsset.shell), lineWidth: 1))
-                .contentShape(Capsule())
+            HStack(spacing: 10) {
+                KitIconKey(
+                    iconKey: "ChevronLeft",
+                    label: state.closeLabel,
+                    glass: true,
+                    identifier: "chat-chats-back",
+                    action: onBack
+                )
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-                .accessibilityIdentifier("chat-drawer-new")
-
-            // THE SHARED SEARCH FIELD, above the list and not in it: the line
-            // that says what was corrected lives inside the field, so rows that
-            // arrive below it never move what the member is reading (#1097).
-            Group {
-                if state.drawerSearch.open {
-                    CentraidSearchField(
-                        field: state.drawerSearch.kitField,
-                        placeholder: state.drawerSearchPlaceholder,
-                        identifier: "chat-drawer-search",
-                        onTerm: onSearchTerm,
-                        onClose: onSearchClose
-                    )
-                } else {
-                    SearchOpener(
-                        placeholder: state.drawerSearchPlaceholder,
-                        identifier: "chat-drawer-search-open",
-                        onOpen: onSearchOpen
-                    )
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.horizontal, CentraidGeometry.pageMargin - 8)
+            .padding(.top, 8)
+            KitHeader(title: state.drawerLabel)
 
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 8)
-                    .accessibilityIdentifier("chat-drawer-empty")
+                    .accessibilityIdentifier("chat-chats-empty")
                 Spacer(minLength: 0)
             } else {
                 List {
@@ -580,43 +524,45 @@ private struct ChatDrawer: View {
                             .accessibilityAction(named: state.deleteLabel) { onDelete(row) }
                             .accessibilityIdentifier("chat-thread-row")
                     }
+                    if state.canDeleteAll {
+                        Button(action: onDeleteAll) {
+                            Text(verbatim: state.deleteAllLabel)
+                                .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                                .foregroundStyle(StateColor.red.text)
+                                .padding(.horizontal, CentraidGeometry.pageMargin)
+                                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("chat-chats-delete-all")
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .accessibilityIdentifier("chat-drawer-list")
-
-                if state.canDeleteAll {
-                    Button(action: onDeleteAll) {
-                        Text(verbatim: state.deleteAllLabel)
-                            .font(.system(size: CentraidScale.metaSize, weight: .semibold))
-                            .foregroundStyle(StateColor.red.text)
-                            .padding(.horizontal, 12)
-                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(Surface.line)
-                            .frame(height: CentraidGeometry.hairline)
-                    }
-                    .accessibilityIdentifier("chat-drawer-delete-all")
-                }
+                .accessibilityIdentifier("chat-chats-list")
             }
         }
-        .frame(width: width, alignment: .leading)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Surface.plainPage.ignoresSafeArea(edges: .top))
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Surface.line)
-                .frame(width: CentraidGeometry.hairline)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Surface.plainPage.ignoresSafeArea())
+        // THE SEARCH KEY AT THE FOOT, as a pushed page keeps it: the field takes its place.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SearchFoot(
+                search: SearchSlot(
+                    field: state.drawerSearch.kitField,
+                    placeholder: state.drawerSearchPlaceholder,
+                    onOpen: onSearchOpen,
+                    onTerm: onSearchTerm,
+                    onClose: onSearchClose
+                ),
+                identifier: "chat-chats-search"
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .accessibilityIdentifier("chat-drawer-panel")
+        .accessibilityIdentifier("chat-chats-page")
     }
 }
 

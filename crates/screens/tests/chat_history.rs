@@ -736,3 +736,21 @@ fn a_conversation_found_by_search_opens_as_a_chat_page_with_its_messages() {
     }
     panic!("the stored chat never opened");
 }
+
+#[test]
+fn the_pencil_is_drawn_only_inside_a_saved_chat_and_the_chats_page_closes_on_a_pick() {
+    let mut chat = with_history(&["first question", "second question"]);
+    // The second question's chat is the open one, so New chat is offered.
+    assert!(chat.state().can_new_chat);
+    // A fresh conversation has none.
+    chat.event(C::NewChat(wire::chat_event::NewChat {}));
+    assert!(!chat.state().can_new_chat && chat.state().thread_id.is_empty());
+    // The Chats page lists both; opening one closes the page and brings the pencil back.
+    toggle(&mut chat, true);
+    let state = chat.state();
+    assert!(state.drawer_open && state.threads.len() == 2 && !state.can_new_chat);
+    let id = state.threads[1].thread_id.clone();
+    open_thread(&mut chat, &id);
+    let state = chat.state();
+    assert!(!state.drawer_open && state.can_new_chat && state.thread_id == id);
+}

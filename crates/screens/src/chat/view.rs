@@ -243,7 +243,9 @@ impl Chat {
                 && self.asked.is_some()
                 && !empty
                 && !self.retry_loses_an_attachment(),
-            can_new_chat: ready && (!empty || !self.thread_id.is_empty()),
+            // NEW CHAT is the pencil, drawn only inside a chat already saved: a fresh conversation
+            // has nothing to start over from.
+            can_new_chat: ready && !self.thread_id.is_empty(),
             pending: if ready {
                 self.pending
                     .iter()
