@@ -287,14 +287,14 @@ public fun KitCheckBox(
 }
 
 /**
- * THE SWITCH'S COLOURS: `accent` when on, a `bgSunken` track with a
+ * THE SWITCH'S COLOURS: the app's colour when on, a `bgSunken` track with a
  * `lineStrong` edge when off. A disabled switch goes to `textDisabled`.
  */
 @Composable
 public fun kitSwitchColors(): SwitchColors = SwitchDefaults.colors(
     checkedThumbColor = centraidColor("onAccent"),
-    checkedTrackColor = centraidColor("accent"),
-    checkedBorderColor = centraidColor("accent"),
+    checkedTrackColor = appAccent().fill,
+    checkedBorderColor = appAccent().fill,
     uncheckedThumbColor = centraidColor("textSoft"),
     uncheckedTrackColor = centraidColor("bgSunken"),
     uncheckedBorderColor = centraidColor("lineStrong"),

@@ -335,16 +335,16 @@ struct KitCheckBox: View {
 // MARK: - Switch
 
 private struct KitToggleStyle: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.appAccent) private var accent
 
     func body(content: Content) -> some View {
-        content.tint(Theme.color("accent", scheme))
+        content.tint(accent.fill)
     }
 }
 
 extension View {
-    /// A SWITCH IN `accent` WHEN ON. The system switch's green is nobody's
-    /// palette; accent is the one "on" in the kit.
+    /// A SWITCH IN THE APP'S COLOUR WHEN ON, as every board draws it (the Money carry switch is navy,
+    /// the Photos one magenta). The system switch's green is nobody's palette.
     func kitToggle() -> some View {
         modifier(KitToggleStyle())
     }
