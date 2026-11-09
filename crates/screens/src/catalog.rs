@@ -5225,7 +5225,7 @@ pub mod act {
             }
         }
 
-        /// Star a task through flag.set: Agenda calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.
+        /// Star a task through flag.set: Reminders calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.
         #[derive(Clone, Debug, Default)]
         pub struct StarTask {
             pub task_id: String,

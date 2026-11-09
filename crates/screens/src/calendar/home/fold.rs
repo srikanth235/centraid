@@ -551,10 +551,9 @@ pub(super) fn task_key(task: &wire::AgendaTask, day: &str) -> String {
     }
 }
 
-/// THE OPEN TASKS DUE ON EACH DAY OF THE WINDOW, in the core's order: the TODAY
-/// board (overdue work belongs to the day it was due, and shows there only when
-/// that day is in the window; today's own Overdue group draws it otherwise) and
-/// the UPCOMING board's days.
+/// THE REMINDERS DUE ON EACH DAY OF THE WINDOW, in the core's order: the open ones, the ticked ones
+/// (which stay on their day) and every occurrence of a repeating one. Overdue reminders that are due
+/// on a day of the window are among them; today's own Overdue group draws the rest.
 fn tasks_by_day<'a>(
     held: &'a Held,
     window: &HashSet<&str>,
@@ -569,9 +568,10 @@ fn tasks_by_day<'a>(
             continue;
         }
         for task in &group.tasks {
+            // A ticked reminder stays on its day, and a series' occurrences share the series' id,
+            // so a row is told apart by its id and its day.
             if window.contains(task.due_day.as_str())
-                && rows::is_open(task)
-                && seen.insert(task.task_id.as_str())
+                && seen.insert((task.task_id.as_str(), task.due_day.as_str()))
             {
                 out.entry(task.due_day.as_str()).or_default().push(task);
             }

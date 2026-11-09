@@ -17,8 +17,8 @@ use centraid_screens::agenda::{self, glance};
 use centraid_screens::field::Field;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime};
-use serde_json::Value;
 use reminders_support::arrange;
+use serde_json::Value;
 use wire::screen_event::Kind as E;
 
 fn runtime() -> Runtime {

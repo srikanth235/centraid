@@ -115,40 +115,43 @@ fn read(
     let top = wall_iso(add_wall_days(high, 2), false);
     let mut found: Vec<Found> = Vec::new();
 
-    // THE ROWS DUE IN THE WINDOW: open and ticked, one-off and a series' own occurrence.
-    let page = door.page(
-        &PageQuery::new(
-            "calendar.dated.tasks",
-            "id, due, status, rule",
-            "task",
-            PageOrder::asc("due", "id"),
-        )
-        .filter(
-            "status IN ('open', 'done') AND due >= ? AND due < ?",
-            vec![text(&bottom), text(&top)],
-        ),
-        &PageRequest {
-            limit: DATED_MAX,
-            after: None,
-        },
-    )?;
-    for row in &page.rows {
-        let (Some(id), Some(due)) = (text_of(row, "id"), text_of(row, "due")) else {
-            continue;
-        };
-        let Some((day, time)) = placed(&due, zone) else {
-            continue;
-        };
-        if day.as_str() >= from && day.as_str() <= to {
-            found.push(Found {
-                id,
-                day,
-                time,
-                done: text_of(row, "status").as_deref() == Some("done"),
-                repeats: text_of(row, "rule").is_some_and(|rule| !rule.is_empty()),
-                projected: false,
-                overdue: false,
-            });
+    // THE ROWS DUE IN THE WINDOW: the open ones, and the ticked ones, which stay on their day. Two
+    // reads, one status each, so each is the index's own order (a `status IN` would sort).
+    for status in ["open", "done"] {
+        let page = door.page(
+            &PageQuery::new(
+                "calendar.dated.tasks",
+                "id, due, status, rule",
+                "task",
+                PageOrder::asc("due", "id"),
+            )
+            .filter(
+                "status = ? AND due >= ? AND due < ?",
+                vec![text(status), text(&bottom), text(&top)],
+            ),
+            &PageRequest {
+                limit: DATED_MAX,
+                after: None,
+            },
+        )?;
+        for row in &page.rows {
+            let (Some(id), Some(due)) = (text_of(row, "id"), text_of(row, "due")) else {
+                continue;
+            };
+            let Some((day, time)) = placed(&due, zone) else {
+                continue;
+            };
+            if day.as_str() >= from && day.as_str() <= to {
+                found.push(Found {
+                    id,
+                    day,
+                    time,
+                    done: status == "done",
+                    repeats: text_of(row, "rule").is_some_and(|rule| !rule.is_empty()),
+                    projected: false,
+                    overdue: false,
+                });
+            }
         }
     }
 

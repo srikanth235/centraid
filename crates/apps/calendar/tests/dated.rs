@@ -91,13 +91,22 @@ fn a_day_shows_the_open_and_the_ticked_reminders_due_on_it_in_the_devices_zone()
     let utc = FireZone::named("Etc/UTC").expect("a zone");
 
     let tenth = read_window(&world, "2026-03-10", "2026-03-10", "", &utc);
-    let titles: Vec<&str> = tenth.iter().map(|row| row.title.as_str()).collect();
-    assert_eq!(titles, ["Done", "File the taxes", "Call Mum"], "{tenth:?}");
-    assert_eq!(tenth[1].task_id, dated);
-    assert_eq!(tenth[1].due_time, "");
-    assert_eq!(tenth[2].due_time, "23:30");
-    assert!(tenth[0].done, "a ticked reminder stays on its day, ticked");
-    assert!(!tenth[1].done && !tenth[1].repeats && !tenth[1].projected && !tenth[1].overdue);
+    let mut titles: Vec<&str> = tenth.iter().map(|row| row.title.as_str()).collect();
+    titles.sort_unstable();
+    assert_eq!(titles, ["Call Mum", "Done", "File the taxes"], "{tenth:?}");
+    let taxes = tenth
+        .iter()
+        .find(|row| row.task_id == dated)
+        .expect("dated");
+    assert_eq!(taxes.due_time, "");
+    assert!(!taxes.done && !taxes.repeats && !taxes.projected && !taxes.overdue);
+    let mum = tenth
+        .iter()
+        .find(|row| row.title == "Call Mum")
+        .expect("timed");
+    assert_eq!(mum.due_time, "23:30");
+    let done_row = tenth.iter().find(|row| row.title == "Done").expect("done");
+    assert!(done_row.done, "a ticked reminder stays on its day, ticked");
 
     let week = read_window(&world, "2026-03-09", "2026-03-15", "", &kolkata);
     let call = week

@@ -106,6 +106,8 @@ fn a_page_opened_afterwards_reads_the_choice_and_wears_it() {
         ["apple", "Mango", "Pear"],
         "the core's own order until the choice is read"
     );
+    // The home's own read answers first (nothing stored there), then the page's.
+    d.answer_effect(keychain(false, ""));
     d.answer_effect(keychain(true, "sort=title;flagged=0;completed=0"));
     assert_eq!(
         titles_of(&list_data(d.view(all)).groups),
