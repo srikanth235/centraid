@@ -115,7 +115,7 @@ struct AgendaCustomRepeatSheetView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        .sheetCardGround()
     }
 
     /// THE FREQUENCY SEGMENTS: equal keys on one plate, the chosen one raised and in the app's ink.
@@ -269,7 +269,7 @@ struct AgendaCustomRepeatSheetView: View {
                     }
                 }
             }
-            .background(Surface.sheetCard, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+            .sheetCardGround()
         }
     }
 
@@ -393,7 +393,7 @@ struct AgendaSearchChoiceSheet: View {
                         .accessibilityLabel(choice.accessibilityLabel.isEmpty ? choice.label : choice.accessibilityLabel)
                     }
                 }
-                .background(Surface.sheetCard)
+                .sheetCardGround()
                 .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
             }
         }

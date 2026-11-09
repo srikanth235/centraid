@@ -674,10 +674,7 @@ struct SheetRoom<Content: View>: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
-            .modifier(SheetPresentation(
-                detents: natural > 0 ? [.height(natural + floor)] : [.medium],
-                systemGround: true
-            ))
+            .modifier(SheetPresentation(detents: natural > 0 ? [.height(natural + floor)] : [.medium]))
         } else {
             room
                 // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
@@ -760,11 +757,11 @@ struct SheetPage<Content: View, Foot: View>: View {
         NavigationStack {
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Surface.sheet.ignoresSafeArea())
+                .sheetPageGround()
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     foot()
                         .frame(maxWidth: .infinity)
-                        .background(Surface.sheet.ignoresSafeArea(edges: .bottom))
+                        .sheetPageGround(edges: .bottom)
                 }
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
@@ -791,14 +788,11 @@ struct SheetPage<Content: View, Foot: View>: View {
 /// hosting controller of its own) can state them again on the sheet's root.
 struct SheetPresentation: ViewModifier {
     var detents: Set<PresentationDetent> = [.medium, .large]
-    /// The platform's own sheet ground on iOS 26 (Liquid Glass); the kit's before it.
-    var systemGround = false
-
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content
-            .modifier(SheetGround(systemGround: systemGround))
+            .modifier(SheetGround())
             .presentationDragIndicator(.visible)
             .presentationDetents(detents)
             // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
@@ -807,13 +801,12 @@ struct SheetPresentation: ViewModifier {
     }
 }
 
-/// The ground under a sheet: the kit's `sheet` surface, or the system's own where it is asked for
-/// and the OS draws one (iOS 26's glass).
+/// THE GROUND UNDER EVERY SHEET: the system's own on iOS 26 (Liquid Glass), and the kit's cream
+/// `sheet` surface only before it. Fixed here, once, so no sheet states its own ground and none
+/// lays a slab of its own colour on the glass (the owner's ruling, #1173).
 private struct SheetGround: ViewModifier {
-    let systemGround: Bool
-
     func body(content: Content) -> some View {
-        if systemGround, #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             content
         } else {
             content.presentationBackground(Surface.sheet)
@@ -876,6 +869,28 @@ struct KitInkButton: View {
 }
 
 extension View {
+    /// A SHEET PAGE'S GROUND: the system's glass on iOS 26 (nothing drawn), the kit's `sheet`
+    /// surface before it.
+    @ViewBuilder
+    func sheetPageGround(edges: Edge.Set = .all) -> some View {
+        if #available(iOS 26, *) {
+            self
+        } else {
+            self.background(Surface.sheet.ignoresSafeArea(edges: edges))
+        }
+    }
+
+    /// A GROUPED CARD INSIDE A SHEET: on iOS 26 the system's own grouped fill over the glass (no
+    /// cream slab), the kit's `sheetCard` before it.
+    @ViewBuilder
+    func sheetCardGround(_ shape: some Shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)) -> some View {
+        if #available(iOS 26, *) {
+            self.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
+        } else {
+            self.background(Surface.sheetCard, in: shape)
+        }
+    }
+
     /// A PAGE THAT SCROLLS UNDER GLASS KEYS WITH CONTENT OF ITS OWN (a hero's round keys) takes a
     /// hard top edge on iOS 26: the content stops at the bar's edge instead of showing through the
     /// glass behind the back and Edit keys. Earlier systems draw no such edge, so nothing changes.
