@@ -52,6 +52,9 @@ struct ChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft = ""
     @FocusState private var focused: Bool
+    /// The on-screen keyboard is up. Focus alone is not enough: with a hardware
+    /// keyboard the field has focus and no keyboard shows, so the band stays.
+    @State private var keyboardUp = false
     /// A chat the member is renaming, with the name being typed.
     @State private var renaming = false
     @State private var renameText = ""
@@ -120,9 +123,16 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .animation(reduceMotion ? nil : ChatMotion.entry, value: state.drawerOpen)
-        // THE BAND STEPS ASIDE while the composer has the keyboard and while the Chats page is up.
-        .onChange(of: focused) { _, now in typing = now || state.drawerOpen }
-        .onChange(of: state.drawerOpen) { _, open in typing = focused || open }
+        // THE BAND STEPS ASIDE while the on-screen keyboard is up and while the Chats page is up.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardUp = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardUp = false
+        }
+        .onChange(of: keyboardUp) { _, up in typing = (up && focused) || state.drawerOpen }
+        .onChange(of: focused) { _, now in typing = (now && keyboardUp) || state.drawerOpen }
+        .onChange(of: state.drawerOpen) { _, open in typing = (focused && keyboardUp) || open }
         .onDisappear { typing = false }
         .accessibilityIdentifier("chat")
         // A RENAME IS A SHEET HOLDING THE FIELD, Save its one ink button.
