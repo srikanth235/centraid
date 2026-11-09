@@ -1726,6 +1726,35 @@
           }
         }
       }
+    },
+    {
+      "name": "links",
+      "kind": "person",
+      "figures": ["people"],
+      "description": "The people one transaction, document or photograph is joined to by hand, in name order: a payment's `with`, a document's `about`, a photograph's `depicts`. A person in the trash is left out; a Locker item's links are Locker's own read and never answered here.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the transaction, document or photograph."
+          }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [

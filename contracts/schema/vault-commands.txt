@@ -75,6 +75,8 @@ person.add_note
 person.add_relationship
 person.add_task
 person.edit
+person.export_vcf
+person.import_vcf
 person.log_interaction
 person.merge
 person.move

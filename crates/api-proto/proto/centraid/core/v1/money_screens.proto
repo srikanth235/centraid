@@ -496,6 +496,8 @@ message MoneyTransactionState {
   }
   optional Confirm confirm = 8;
   Sheet sheet = 9;
+  // THE "WITH" PICKER (#1173): who the line was with, picked by name. Open while the sheet is up.
+  LinkPicker with_picker = 13;
   // The name being typed in the name sheet.
   string name_draft = 10;
   MoneyPageChrome chrome = 11;
@@ -523,6 +525,9 @@ message MoneyTransactionData {
   repeated StatusChip chips = 6;
   optional MoneyOffer transfer_offer = 7;
   optional MoneyOffer rule_offer = 8;
+  // The person the payee is, PROPOSED ("With Priya?"): written only when the member confirms
+  // (#1173). Its `key` is `with`.
+  optional MoneyOffer with_offer = 20;
   // "Seen 6 times", "Repeats every month".
   repeated string notes = 9;
   repeated MoneyAction actions = 10;
@@ -566,6 +571,8 @@ message MoneyTransactionEvent {
     OfferDismissed offer_dismissed = 9;
     ConfirmAccepted confirm_accepted = 10;
     ConfirmDismissed confirm_dismissed = 11;
+    // The "With" picker's own events (#1173).
+    LinkEvent with_link = 31;
   }
 
   message ActionPicked {

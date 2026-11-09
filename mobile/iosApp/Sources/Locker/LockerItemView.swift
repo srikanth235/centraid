@@ -110,6 +110,22 @@ struct LockerItemView: View {
             .modifier(SheetPresentation(detents: ConfirmSheet.detents))
         }
         .sheet(isPresented: Binding(
+            get: { state.linkPicker.open },
+            set: { isOpen in
+                if !isOpen, state.linkPicker.open {
+                    send(LockerItemEvents.make { $0.link = .with { $0.closed = .init() } })
+                }
+            }
+        )) {
+            // A SHEET IS ITS OWN PRESENTATION: it carries its own shield, like the memo.
+            LockerShield(secure: state.secure) {
+                LinkPickerSheet(picker: state.linkPicker) { link in
+                    send(LockerItemEvents.make { $0.link = link })
+                }
+            }
+            .modifier(SheetPresentation())
+        }
+        .sheet(isPresented: Binding(
             get: { state.hasMemo },
             set: { isOpen in if !isOpen, state.hasMemo { send(LockerItemEvents.make { $0.memoClosed = .init() }) } }
         )) {
@@ -212,6 +228,11 @@ struct LockerItemView: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 8)
             }
+        }
+        if item.hasLinks {
+            LinkSectionView(section: item.links, send: { link in
+                send(LockerItemEvents.make { $0.link = link })
+            }, open: open)
         }
         if !item.tags.isEmpty {
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))

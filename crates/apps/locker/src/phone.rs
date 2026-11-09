@@ -151,6 +151,25 @@ const TAGGED_EDGES: Read = Read {
     column: "from_id",
 };
 
+/// The edges out of one item that are links: what it is `about` or `with`. Named for Locker, so
+/// the door serves them here and to no other app.
+const LINK_EDGES: Read = Read {
+    name: "locker.phone.links",
+    table: "edge",
+    select: "from_id, to_id, rel",
+    order: ("from_id", "to_id"),
+    column: "from_id",
+};
+
+/// The far end of a link: its kind and its words, live ones only.
+const LINK_ENDS: Read = Read {
+    name: "locker.phone.link_ends",
+    table: "entity",
+    select: "id, kind, title",
+    order: ("id", "id"),
+    column: "id",
+};
+
 /// The words the tags are: the `tag` concepts' titles.
 const TAG_WORDS: Read = Read {
     name: "locker.phone.labels",
@@ -327,6 +346,20 @@ pub struct ItemData {
     pub fields: Vec<PhoneField>,
     pub addresses: Vec<Address>,
     pub passkey: Option<Passkey>,
+    /// What the item is linked to: an account, a place, a person. Plain links, read here
+    /// behind the wall and nowhere else.
+    pub links: Vec<ItemLink>,
+}
+
+/// One link out of an item: where it points and how.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemLink {
+    pub id: String,
+    /// `account`, `place` or `person`.
+    pub kind: String,
+    pub title: String,
+    /// The edge: `about`, or `with` for a person.
+    pub relation: String,
 }
 
 /// One custom field; a sealed value is absent and `present` says whether one
@@ -507,6 +540,7 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             created_at: text_of(row, "created_at"),
             has_private_key: truthy(row, "has_private_key"),
         });
+    let links = item_links(door, item_id)?;
     let memo = row.memo.clone();
     let alias = decorations.alias.get(item_id).cloned();
     Ok(Some(ItemData {
@@ -518,7 +552,72 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
         fields,
         addresses,
         passkey,
+        links,
     }))
+}
+
+/// What one item is linked to: the live accounts, places and people at the end of its `about` and
+/// `with` edges, accounts first, then places, then people, each in name order.
+fn item_links(door: &dyn PageDoor, item_id: &str) -> KitResult<Vec<ItemLink>> {
+    let edges = LINK_EDGES.of(
+        door,
+        &[item_id.to_owned()],
+        Some((
+            "rel IN (?, ?)",
+            vec![
+                PageBindValue::Text("about".to_owned()),
+                PageBindValue::Text("with".to_owned()),
+            ],
+        )),
+    )?;
+    let mut ends: Vec<String> = edges
+        .iter()
+        .filter_map(|edge| text_of(edge, "to_id"))
+        .collect();
+    ends.sort();
+    ends.dedup();
+    let kinds: BTreeMap<String, (String, String)> = read_chunked(
+        &LINK_ENDS,
+        door,
+        &ends,
+        Some((
+            "kind IN (?, ?, ?) AND deleted_at IS NULL",
+            vec![
+                PageBindValue::Text("account".to_owned()),
+                PageBindValue::Text("place".to_owned()),
+                PageBindValue::Text("person".to_owned()),
+            ],
+        )),
+    )?
+    .iter()
+    .filter_map(|row| {
+        Some((
+            text_of(row, "id")?,
+            (text_of(row, "kind")?, text_of(row, "title")?),
+        ))
+    })
+    .collect();
+    let mut links: Vec<ItemLink> = edges
+        .iter()
+        .filter_map(|edge| {
+            let id = text_of(edge, "to_id")?;
+            let (kind, title) = kinds.get(&id)?.clone();
+            Some(ItemLink {
+                id,
+                kind,
+                title,
+                relation: text_of(edge, "rel")?,
+            })
+        })
+        .collect();
+    let rank = |kind: &str| match kind {
+        "account" => 0,
+        "place" => 1,
+        _ => 2,
+    };
+    links.sort_by_cached_key(|link| (rank(&link.kind), link.title.to_lowercase(), link.id.clone()));
+    links.dedup_by(|a, b| a.id == b.id && a.relation == b.relation);
+    Ok(links)
 }
 
 /// The rows a search answers for the caller's `limit`: a zero is

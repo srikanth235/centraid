@@ -15,16 +15,20 @@ use super::fold::{self, Phase};
 use super::rows;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, money as words};
+use crate::strings::{Locale, fill, links as link_words, money as words};
 
 const ACTION_CATEGORY: &str = "category";
 const ACTION_NAME: &str = "name";
 const ACTION_UNLINK: &str = "unlink";
 const ACTION_VOID: &str = "void";
+/// The "With" row (#1173): who the line was with, picked by name.
+const ACTION_WITH: &str = "with";
 const OFFER_TRANSFER: &str = "transfer";
 const OFFER_RULE: &str = "rule";
+const OFFER_WITH: &str = "with";
 
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
@@ -43,12 +47,17 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         confirm_void: false,
         status: None,
         dismissed: Vec::new(),
+        links: Links::new(&[Kind::Person]),
     }))
 }
 
 struct Loaded {
     txn: wire::MoneyTransaction,
     categories: wire::MoneyCategories,
+    /// The people the line was with (`people.links`).
+    with: Vec<wire::PeopleLinked>,
+    /// The person the payee names, PROPOSED and never written until the member confirms.
+    with_proposal: Option<links::Person>,
 }
 
 struct Transaction {
@@ -59,8 +68,10 @@ struct Transaction {
     name_draft: String,
     confirm_void: bool,
     status: Option<wire::StatusLine>,
-    /// Offers the member waved off this sitting: `transfer`, `rule`.
+    /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
     dismissed: Vec<String>,
+    /// The "With" row's picker and the people it lists.
+    links: Links,
 }
 
 impl Transaction {
@@ -80,13 +91,80 @@ impl Transaction {
             Answer::MoneyCategories(x) => Some(x),
             _ => None,
         });
-        self.phase = match (txn, categories) {
-            (Reading::Data(txn), Reading::Data(categories)) if txn.found => {
-                Phase::Ready(Loaded { txn, categories })
+        let with = links::read_people(ctx, &self.txn_id);
+        self.phase = match (txn, categories, with) {
+            (Reading::Data(txn), Reading::Data(categories), Reading::Data(with)) if txn.found => {
+                let linked: Vec<String> = with.iter().map(|p| p.party_id.clone()).collect();
+                let voided = txn.flags.contains(&(Flag::Void as i32));
+                let with_proposal = if voided || !linked.is_empty() {
+                    None
+                } else {
+                    let people = self.links.people(ctx);
+                    links::propose(&[&txn.display_name, &txn.raw], people, &linked).cloned()
+                };
+                Phase::Ready(Loaded {
+                    txn,
+                    categories,
+                    with,
+                    with_proposal,
+                })
             }
-            (Reading::Denied(_), _) => Phase::Denied,
+            (Reading::Denied(_), _, _) => Phase::Denied,
             _ => Phase::Failed,
         };
+    }
+
+    /// The ids of the people the line is with now.
+    fn with_ids(&self) -> Vec<String> {
+        self.phase
+            .data()
+            .map(|loaded| loaded.with.iter().map(|p| p.party_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// One event of the "With" picker. Nothing is written until a person is picked or confirmed.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.with_ids();
+        match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id, .. } => self.set_with(ctx, &id, true),
+            Outcome::Remove { id } => self.set_with(ctx, &id, false),
+            Outcome::Moved => {}
+        }
+    }
+
+    /// Put a person on the line, or take them off.
+    fn set_with(&mut self, ctx: &Ctx, person_id: &str, on: bool) {
+        let from = self.txn_id.clone();
+        let to = person_id.to_owned();
+        if on {
+            self.submit(
+                ctx,
+                act::money::AddWith {
+                    from,
+                    rel: act::money::AddWithRel::With,
+                    to,
+                    ..Default::default()
+                },
+                link_words::saved(ctx.locale()),
+            );
+        } else {
+            self.submit(
+                ctx,
+                act::money::RemoveWith {
+                    from,
+                    rel: act::money::RemoveWithRel::With,
+                    to,
+                    ..Default::default()
+                },
+                link_words::removed(ctx.locale()),
+            );
+        }
+    }
+
+    fn dismiss(&mut self, key: &str) {
+        if !self.dismissed.iter().any(|k| k == key) {
+            self.dismissed.push(key.to_owned());
+        }
     }
 
     /// Submit one write and read again; the verdict is the status line.
@@ -120,6 +198,15 @@ impl Transaction {
                 words::done_unlinked(ctx.locale()),
             ),
             ACTION_VOID => self.confirm_void = true,
+            ACTION_WITH => {
+                let linked = self.with_ids();
+                let open = wire::LinkEvent {
+                    kind: Some(wire::link_event::Kind::Add(wire::link_event::AddTapped {
+                        key: Kind::Person.key().to_owned(),
+                    })),
+                };
+                self.links.update(&open, &linked, ctx);
+            }
             _ => {}
         }
     }
@@ -142,6 +229,12 @@ impl Transaction {
                     },
                     words::done_linked(locale),
                 );
+            }
+            OFFER_WITH => {
+                let Some(person) = loaded.with_proposal.clone() else {
+                    return;
+                };
+                self.set_with(ctx, &person.id, true);
             }
             OFFER_RULE => {
                 let Some(offer) = loaded.txn.rule_proposal.clone() else {
@@ -208,11 +301,8 @@ impl Transaction {
             }
             Some(T::SheetClosed(_)) => self.sheet = Sheet::None,
             Some(T::OfferAccepted(accepted)) => self.accept(&accepted.key, ctx),
-            Some(T::OfferDismissed(dismissed)) => {
-                if !self.dismissed.contains(&dismissed.key) {
-                    self.dismissed.push(dismissed.key);
-                }
-            }
+            Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
+            Some(T::WithLink(link)) => self.link_event(&link, ctx),
             Some(T::ConfirmAccepted(_)) if self.confirm_void => {
                 self.confirm_void = false;
                 self.submit(
@@ -270,6 +360,13 @@ impl Transaction {
                     answer.display_name.clone()
                 },
                 action: ACTION_NAME.to_owned(),
+                ..Default::default()
+            },
+            // WHO THE LINE WAS WITH is a fact the member changes, like the category (#1173).
+            wire::MoneyFact {
+                label: link_words::section_with(locale),
+                detail: links::names(locale, &loaded.with),
+                action: ACTION_WITH.to_owned(),
                 ..Default::default()
             },
         ];
@@ -334,6 +431,11 @@ impl Transaction {
                 accept_label: words::rule_accept(locale),
                 dismiss_label: words::not_now(locale),
             });
+        let with_offer = loaded
+            .with_proposal
+            .as_ref()
+            .filter(|_| !self.dismissed.iter().any(|k| k == OFFER_WITH))
+            .map(|person| links::offer(locale, &person.name));
         let mut notes = Vec::new();
         if answer.seen_times > 1 {
             notes.push(fold::with_n(words::seen_times(locale), answer.seen_times));
@@ -372,6 +474,13 @@ impl Transaction {
                 false,
             ),
         ];
+        actions.push(action(
+            ACTION_WITH,
+            link_words::section_with(locale),
+            "Users",
+            !voided,
+            false,
+        ));
         if answer.transferred_with.is_some() {
             actions.push(action(
                 ACTION_UNLINK,
@@ -429,6 +538,7 @@ impl Transaction {
             chips: rows::chips(locale, flags, answer.category_id.is_some()),
             transfer_offer,
             rule_offer,
+            with_offer,
             notes,
             actions,
             category_options,
@@ -484,6 +594,7 @@ impl Screen for Transaction {
                         destructive: true,
                     }),
                     sheet: self.sheet as i32,
+                    with_picker: Some(self.links.picker(locale, &self.with_ids())),
                     name_draft: self.name_draft.clone(),
                     chrome: Some(fold::chrome(
                         locale,

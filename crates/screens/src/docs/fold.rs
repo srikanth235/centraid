@@ -410,6 +410,7 @@ pub fn document(
         .map(|drive| folders::nodes(locale, &drive.folders, &view.title))
         .unwrap_or_default();
     wire::DocsDocumentData {
+        about: None,
         surface: Some(surface),
         facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),

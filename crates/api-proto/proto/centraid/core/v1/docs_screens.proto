@@ -588,6 +588,8 @@ message DocsDocumentState {
   reserved "asking";
   // THE SCREEN IS DONE — the document was deleted forever here. The shell pops.
   bool dismissed = 14;
+  // THE "ABOUT" PICKER (#1173): who the document is about, picked by name.
+  LinkPicker about_picker = 15;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -657,6 +659,8 @@ message DocsDocumentData {
   string subtitle = 18;
   // "Labels", the info card's row. Its chips are `row.labels`.
   string labels_heading = 19;
+  // "About" (#1173): the people the document is about.
+  LinkSection about = 20;
 }
 
 // The row that opens the version history.
@@ -744,6 +748,8 @@ message DocsDocumentEvent {
     LabelDraftEdited label_draft = 10;
     Confirmed confirmed = 11;
     Dismissed dismissed = 12;
+    // The About section's and picker's events (#1173).
+    LinkEvent about = 13;
   }
 
   message Refreshed {}

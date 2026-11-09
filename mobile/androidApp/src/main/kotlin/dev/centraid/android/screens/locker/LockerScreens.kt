@@ -851,6 +851,11 @@ internal fun LockerItemScreen(
                             }
                         }
                     }
+                    item.links?.let { links ->
+                        item(key = "links") {
+                            dev.centraid.android.kit.LinkSectionView(links, { link -> onEvent(LockerItemEvent(link = link)) }, onOpen)
+                        }
+                    }
                     if (item.tags.isNotEmpty()) {
                         item(key = "tags") {
                             SectionHeader(SectionHead(title = item.tags_label))
@@ -901,6 +906,9 @@ internal fun LockerItemScreen(
                 },
                 onDismiss = { menuOpen = false },
             )
+        }
+        state.link_picker?.takeIf { it.open_ }?.let { picker ->
+            dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(LockerItemEvent(link = link)) }
         }
         state.confirm?.let { confirm ->
             ConfirmSheet(

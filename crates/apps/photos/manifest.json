@@ -1126,6 +1126,102 @@
           }
         }
       }
+    },
+    {
+      "name": "add-person",
+      "verb": "link",
+      "kind": "photo",
+      "inverse": "remove-person",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "Maya is in the beach photo",
+        "tag Ravi in this picture",
+        "tag Maya in the beach photo"
+      ],
+      "description": "Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["depicts"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-person",
+      "verb": "unlink",
+      "kind": "photo",
+      "inverse": "add-person",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "Maya is not in the beach photo",
+        "take Ravi off this picture",
+        "untag Maya from the beach photo"
+      ],
+      "description": "Take a person off a photograph through edge.remove (rel depicts).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["depicts"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "queries": [

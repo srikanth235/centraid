@@ -48,6 +48,8 @@ docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions
 docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
 docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
+docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
+docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,direct,no,yes
@@ -78,6 +80,8 @@ locker,clear-passkey,delete,locker_passkey,card,yes: crates/screens/src/locker/i
 locker,set-memo,edit,locker_item,card,yes: crates/screens/src/locker/item.rs,no
 locker,export,reveal,locker_item,card,no,no
 locker,reveal,reveal,locker_item,direct,no,no
+locker,add-link,link,locker_item,card,yes: crates/screens/src/locker/item.rs,no
+locker,remove-link,unlink,locker_item,card,yes: crates/screens/src/locker/item.rs,no
 money,add-account,create,account,direct,yes: crates/screens/src/money/accounts.rs,no
 money,edit-account,edit,account,direct,yes: crates/screens/src/money/accounts.rs,no
 money,close-account,archive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
@@ -101,6 +105,8 @@ money,add-category,create,category,direct,yes: crates/screens/src/money/categori
 money,merge-category,merge,category,card,yes: crates/screens/src/money/categories.rs,no
 money,archive-category,archive,category,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
 money,unarchive-category,unarchive,category,direct,yes: crates/screens/src/money/categories.rs,no
+money,add-with,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,remove-with,unlink,transaction,card,yes: crates/screens/src/money/transaction.rs,no
 notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
@@ -170,3 +176,5 @@ photos,set-place,edit,place,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,name-place,edit,place,card,yes: crates/screens/src/photos/places.rs,no
 photos,tag-photo,tag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
 photos,untag-photo,untag,photo,direct,yes: crates/screens/src/photos/lightbox.rs,no
+photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
+photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no

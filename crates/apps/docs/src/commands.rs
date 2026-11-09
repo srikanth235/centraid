@@ -105,8 +105,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Nineteen actions, nineteen commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 19] = [
+/// THE TABLE. Twenty-one actions, twenty-one commands, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 21] = [
     act("upload", "document.add"),
     // The Add sheet's "Text" (#1047): words in, a text document out.
     act("create-text", "document.create_text"),
@@ -129,6 +129,9 @@ pub const ACTIONS: [ActionRow; 19] = [
     act("create-folder", "container.create"),
     act("rename-folder", "entity.retitle"),
     act("delete-folder", "entity.trash"),
+    // A link set by hand (#1173): one edge, shaped by the vault.
+    act("add-about", "edge.add"),
+    act("remove-about", "edge.remove"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -172,7 +175,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_document_verbs_are_the_documents_own() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 21);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -196,7 +199,10 @@ mod tests {
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["container", "document", "entity", "flag", "tag"]);
+        assert_eq!(
+            schemas,
+            ["container", "document", "edge", "entity", "flag", "tag"]
+        );
     }
 
     #[test]
@@ -238,7 +244,7 @@ mod tests {
     /// family. Widening it would hand Docs every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 17);
+        assert_eq!(act_scope_tables().len(), 19);
         assert!(act_scope_tables().contains(&("document", "add")));
         assert!(!act_scope_tables().contains(&("person", "merge")));
     }

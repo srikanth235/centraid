@@ -58,6 +58,8 @@ const DOCS: &[Row] = &[
     ("unstar", "star", Input::Same),
     ("tag", "untag", Input::Same),
     ("untag", "tag", Input::Same),
+    ("add-about", "remove-about", Input::Same),
+    ("remove-about", "add-about", Input::Same),
 ];
 const LOCKER: &[Row] = &[
     ("add-item", "trash-item", Input::Created),
@@ -70,6 +72,8 @@ const LOCKER: &[Row] = &[
     ("unarchive-item", "archive-item", Input::Same),
     ("add-tag", "remove-tag", Input::Same),
     ("remove-tag", "add-tag", Input::Same),
+    ("add-link", "remove-link", Input::Same),
+    ("remove-link", "add-link", Input::Same),
 ];
 const HEALTH: &[Row] = &[
     ("log-workout", "delete-workout", Input::Created),
@@ -81,6 +85,8 @@ const MONEY: &[Row] = &[
     ("reopen-account", "close-account", Input::Same),
     ("add-rule", "delete-rule", Input::Created),
     ("link-transfer", "unlink-transfer", Input::Id),
+    ("add-with", "remove-with", Input::Same),
+    ("remove-with", "add-with", Input::Same),
 ];
 const NOTES: &[Row] = &[
     ("create-note", "delete-note", Input::Created),
@@ -121,6 +127,8 @@ const PHOTOS: &[Row] = &[
     ("remove-from-album", "add-to-album", Input::Same),
     ("tag-photo", "untag-photo", Input::Same),
     ("untag-photo", "tag-photo", Input::Same),
+    ("add-person", "remove-person", Input::Same),
+    ("remove-person", "add-person", Input::Same),
 ];
 
 fn rows(app: &str) -> &'static [Row] {

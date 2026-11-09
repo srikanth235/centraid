@@ -144,6 +144,7 @@ pub mod docs;
 pub mod health;
 pub mod home;
 pub mod imports;
+pub mod links;
 pub mod locker;
 pub mod money;
 pub mod notes;

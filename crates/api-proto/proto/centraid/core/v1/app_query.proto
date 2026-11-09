@@ -113,6 +113,8 @@ message AppQueryRequest {
     PeoplePersonRequest people_person = 22;
     PeopleSearchRequest people_search = 23;
     PeopleTrashRequest people_trash = 24;
+    // The people one thing is joined to (#1173): a line's `with`, a document's `about`, a photograph's `depicts`.
+    PeopleLinksRequest people_links = 28;
     // Locker (#1047): 60-69. Metadata only; a secret is the session's.
     LockerItemsRequest locker_items = 60;
     LockerItemRequest locker_item = 61;
@@ -212,6 +214,7 @@ message AppQueryResponse {
     PeoplePerson people_person = 22;
     PeopleSearch people_search = 23;
     PeopleTrash people_trash = 24;
+    PeopleLinks people_links = 28;
     LockerItems locker_items = 60;
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;

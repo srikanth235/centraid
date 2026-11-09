@@ -68,6 +68,8 @@ message PhotosLightboxState {
   repeated PhotosLightboxVerb menu = 21;
   repeated PhotosLightboxShareChoice share_choices = 22;
   PhotosLightboxWords words = 23;
+  // THE PEOPLE PICKER (#1173): who is in the photograph, picked by name. Open while the sheet is up.
+  LinkPicker people_picker = 24;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -134,6 +136,8 @@ message PhotosLightboxPhoto {
   string stage_label = 24;
   // The stage's spoken name for the photograph: its caption, else the noun.
   string spoken = 25;
+  // "People in this photo" (#1173): who the member says is in it, by hand. Nothing recognises a face.
+  LinkSection people = 26;
 }
 
 message PhotosLightboxFact {
@@ -276,6 +280,8 @@ message PhotosLightboxEvent {
     SlideshowLeft slideshow_left = 14;
     Confirmed confirmed = 15;
     ConfirmDismissed confirm_dismissed = 16;
+    // The people section's and picker's events (#1173).
+    LinkEvent people = 17;
   }
 
   message Refreshed {}

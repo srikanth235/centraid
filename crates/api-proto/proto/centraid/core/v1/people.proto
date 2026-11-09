@@ -342,3 +342,23 @@ message PeopleTrash {
   // The shelf is longer than its 500-row window.
   bool truncated = 2;
 }
+
+// `people.links`: the people ONE thing is joined to, by hand (#1173): a transaction is `with`
+// them, a document is `about` them, a photograph `depicts` them. A Locker item's links are
+// Locker's own read, behind its wall, and are never answered here.
+message PeopleLinksRequest {
+  // The transaction, document or photograph.
+  string entity_id = 1;
+}
+
+message PeopleLinks {
+  // In name order; a person in the trash is not here.
+  repeated PeopleLinked people = 1;
+}
+
+message PeopleLinked {
+  string party_id = 1;
+  string name = 2;
+  // The vault's owner: the person the vault is about.
+  bool is_owner = 3;
+}

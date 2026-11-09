@@ -606,6 +606,13 @@ fn read(
             },
         )?,
 
+        ("people", "links") => app_query::people::links(
+            door,
+            &wire::PeopleLinksRequest {
+                entity_id: p.text("entity_id")?,
+            },
+        )?,
+
         ("people", "trash") => {
             app_query::people::trash(vault, door, &wire::PeopleTrashRequest { tz })?
         }

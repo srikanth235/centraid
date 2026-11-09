@@ -58,6 +58,7 @@ struct MoneyTransactionView: View {
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.withPicker) { link in send(event { $0.withLink = link }) }
     }
 
     @ViewBuilder
@@ -114,6 +115,7 @@ struct MoneyTransactionView: View {
         }
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
+        if transaction.hasWithOffer { offer(transaction.withOffer, key: "with") }
         // THE ACTIONS ARE ALTERNATIVES: one stack.
         KitChoiceStack {
             ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in

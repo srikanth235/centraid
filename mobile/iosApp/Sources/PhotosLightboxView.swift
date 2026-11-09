@@ -47,6 +47,7 @@ struct PhotosLightboxView: View {
         .sheet(item: sheetBinding) { item in
             sheet(item.kind)
         }
+        .linkPickerSheet(state.peoplePicker) { link in send(.people(link)) }
         .onChange(of: model.mediaKey, initial: true) { _, _ in
             media.update(
                 videoPath: model.videoPath,
@@ -129,7 +130,7 @@ struct PhotosLightboxView: View {
                     band(model, photo: photo, infoOpen: infoOpen)
                     if infoOpen {
                         ScrollView {
-                            PhotosLightboxInfo(state: state, photo: photo, send: send)
+                            PhotosLightboxInfo(state: state, photo: photo, send: send, open: open)
                                 .padding(.bottom, 16)
                         }
                         .scrollDismissesKeyboard(.interactively)
@@ -640,6 +641,7 @@ private struct PhotosLightboxInfo: View {
     let state: Centraid_Core_V1_PhotosLightboxState
     let photo: Centraid_Core_V1_PhotosLightboxPhoto
     let send: (PhotosLightboxSend) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     @State private var caption = ""
     @State private var captionFor = ""
@@ -696,6 +698,11 @@ private struct PhotosLightboxInfo: View {
                         }
                     }
                     .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                }
+
+                // WHO IS IN IT, by hand: a section of its own (#1173).
+                if photo.hasPeople {
+                    LinkSectionView(section: photo.people, send: { link in send(.people(link)) }, open: open, padded: false)
                 }
 
                 // PLACE AND LABELS, one card.

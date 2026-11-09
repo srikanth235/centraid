@@ -2077,6 +2077,42 @@
         "verb": "delete"
       },
       {
+        "action": "add-about",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "remove-about",
+        "kind": "document",
+        "phrasings": [
+          "this lease is about Maya",
+          "the school form is about Ravi",
+          "mark the lease as about Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "remove-about",
+        "also": [],
+        "app": "docs",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "add-about",
+        "kind": "document",
+        "phrasings": [
+          "the lease is no longer about Maya",
+          "take Ravi off the school form",
+          "the lease is not about Maya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "record-days",
         "also": [],
         "app": "health",
@@ -2633,6 +2669,42 @@
         "verb": "reveal"
       },
       {
+        "action": "add-link",
+        "also": [],
+        "app": "locker",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "remove-link",
+        "kind": "locker_item",
+        "phrasings": [
+          "link my bank login to the Amex account",
+          "this passport is about Maya",
+          "link the bank login to my home"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "remove-link",
+        "also": [],
+        "app": "locker",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "add-link",
+        "kind": "locker_item",
+        "phrasings": [
+          "unlink my bank login from the Amex account",
+          "take Maya off the passport",
+          "unlink the bank login from my home"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "add-account",
         "also": [],
         "app": "money",
@@ -3045,6 +3117,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "unarchive"
+      },
+      {
+        "action": "add-with",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "remove-with",
+        "kind": "transaction",
+        "phrasings": [
+          "mark the coffee payment as with Priya",
+          "this payment was with Maya",
+          "put Priya on the coffee payment"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "remove-with",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "add-with",
+        "kind": "transaction",
+        "phrasings": [
+          "take Priya off the coffee payment",
+          "this payment was not with Maya",
+          "this coffee payment was not with Priya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       },
       {
         "action": "create-note",
@@ -4291,6 +4399,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "untag"
+      },
+      {
+        "action": "add-person",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "remove-person",
+        "kind": "photo",
+        "phrasings": [
+          "Maya is in the beach photo",
+          "tag Ravi in this picture",
+          "tag Maya in the beach photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "remove-person",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "add-person",
+        "kind": "photo",
+        "phrasings": [
+          "Maya is not in the beach photo",
+          "take Ravi off this picture",
+          "untag Maya from the beach photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       }
     ],
     "queries": [
@@ -4812,6 +4956,14 @@
         ],
         "kind": "person",
         "query": "trash"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "people"
+        ],
+        "kind": "person",
+        "query": "links"
       },
       {
         "app": "photos",

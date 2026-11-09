@@ -36,10 +36,11 @@ use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::secret::Secrets;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, locker as words};
+use crate::strings::{Locale, fill, links as link_words, locker as words};
 
 /// The product's reveal window, in seconds (`REVEAL_WINDOW_MS`).
 const REVEAL_SECONDS: u32 = 30;
@@ -112,6 +113,10 @@ struct Item {
     /// A chat card's member action, run once after the first load under an open
     /// Locker.
     follow: String,
+    /// The Linked to section's picker (#1173).
+    links: Links,
+    /// The vault's owner, read once an item links to a person, so the row can say "You".
+    owner_id: Option<String>,
 }
 
 impl Item {
@@ -129,6 +134,8 @@ impl Item {
             memo: None,
             field: None,
             passkey_name: None,
+            links: Links::new(&[Kind::Account, Kind::Place, Kind::Person]),
+            owner_id: None,
         }
     }
 
@@ -152,6 +159,16 @@ impl Item {
                 _ => None,
             },
         );
+        if let Reading::Data((Some(found), _)) = &item
+            && found.links.iter().any(|link| link.kind == "person")
+        {
+            self.owner_id = self
+                .links
+                .people(ctx)
+                .iter()
+                .find(|person| person.is_owner)
+                .map(|person| person.id.clone());
+        }
         self.loaded = match item {
             Reading::Data((item, today)) => Phase::Ready(Loaded { item, today }),
             Reading::Denied(denial) => Phase::Denied(denial),
@@ -213,6 +230,8 @@ impl Item {
         self.memo = None;
         self.field = None;
         self.passkey_name = None;
+        self.links.close();
+        self.owner_id = None;
         ctx.cancel_timer(TICK);
         let mut effects = self.secrets.hide_all(ctx);
         effects.extend(self.secrets.clear_clip(ctx));
@@ -743,9 +762,98 @@ impl Item {
         self.reload(ctx)
     }
 
+    /// One event of the Linked to section or its picker: a link is written or taken off, and the
+    /// page reads again. No link carries a sealed value; the command refuses one.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(item) = self.item().filter(|item| !item.trashed).cloned() else {
+            return Vec::new();
+        };
+        let linked: Vec<String> = item.links.iter().map(|link| link.id.clone()).collect();
+        let from = self.id();
+        let locale = ctx.locale();
+        let (settled, sentence) = match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id, .. } => (
+                self.submit(
+                    ctx,
+                    "add-link",
+                    act::locker::AddLink {
+                        from,
+                        rel: act::locker::AddLinkRel::About,
+                        to: id,
+                    },
+                ),
+                link_words::saved(locale),
+            ),
+            Outcome::Remove { id } => {
+                let Some(link) = item.links.iter().find(|link| link.id == id) else {
+                    return Vec::new();
+                };
+                let rel = if link.relation == "with" {
+                    act::locker::RemoveLinkRel::With
+                } else {
+                    act::locker::RemoveLinkRel::About
+                };
+                (
+                    self.submit(
+                        ctx,
+                        "remove-link",
+                        act::locker::RemoveLink { from, rel, to: id },
+                    ),
+                    link_words::removed(locale),
+                )
+            }
+            Outcome::Moved => return Vec::new(),
+        };
+        if settled.committed {
+            self.status = shared::status(sentence);
+            self.undo = None;
+        }
+        self.reload(ctx)
+    }
+
+    /// The Linked to section: an account, a place, a person, each row saying which.
+    fn link_section(&self, locale: Locale, item: &wire::LockerItem) -> wire::LinkSection {
+        let rows = item
+            .links
+            .iter()
+            .map(|link| {
+                let meta = match (link.kind.as_str(), link.relation.as_str()) {
+                    ("account", _) => link_words::kind_account(locale),
+                    ("place", _) => link_words::kind_place(locale),
+                    (_, "with") => link_words::kind_with(locale),
+                    _ => link_words::kind_person(locale),
+                };
+                let is_person = link.kind == "person";
+                wire::LinkRow {
+                    id: link.id.clone(),
+                    title: if self.owner_id.as_deref() == Some(link.id.as_str()) {
+                        link_words::you(locale)
+                    } else {
+                        link.title.clone()
+                    },
+                    meta,
+                    route: is_person.then(|| links::person_route(&link.id, &link.title)),
+                    remove_label: fill(&link_words::remove(locale), &[("name", &link.title)]),
+                    selected: false,
+                }
+            })
+            .collect();
+        let mut section = self.links.section(
+            locale,
+            link_words::section_linked(locale),
+            rows,
+            String::new(),
+        );
+        if item.trashed {
+            section.adds.clear();
+        }
+        section
+    }
+
     fn event(&mut self, event: wire::LockerItemEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match event.kind {
+            Some(I::Link(link)) => self.link_event(&link, ctx),
             Some(I::Verb(verb)) => self.verb(ctx, &verb.key, &verb.verb),
             Some(I::Action(action)) => self.action(ctx, &action.key),
             Some(I::Confirmed(_)) => self.confirmed(ctx),
@@ -944,6 +1052,7 @@ impl Item {
             actions
         };
         wire::LockerItemData {
+            links: Some(self.link_section(locale, item)),
             title: item.title.clone(),
             type_chip: kind.chip(locale),
             hero_initial: types::initial(&item.title),
@@ -1761,6 +1870,16 @@ impl Screen for Item {
                     memo: self.memo_sheet(locale),
                     field_sheet: self.field_sheet(locale),
                     passkey_name: self.passkey_sheet(locale),
+                    link_picker: Some(
+                        self.links.picker(
+                            locale,
+                            &item
+                                .map(|item| {
+                                    item.links.iter().map(|l| l.id.clone()).collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default(),
+                        ),
+                    ),
                     finished: false,
                 },
             ))),

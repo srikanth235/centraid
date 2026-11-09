@@ -27,9 +27,10 @@ use super::rename::Rename;
 use super::{Phase, denied, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, docs as words, shared};
+use crate::strings::{Locale, docs as words, links as link_words, shared};
 
 /// `docs.drive`'s smallest window: the rail is whole whatever the window.
 const RAIL_WINDOW: u32 = 20;
@@ -39,6 +40,9 @@ const RAIL_WINDOW: u32 = 20;
 struct Answered {
     document: wire::DocsDocument,
     drive: Option<wire::DocsDrive>,
+    /// The people the document is about (`people.links`); a read that does not land leaves the
+    /// section out rather than the page.
+    about: Option<Vec<wire::PeopleLinked>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,6 +71,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         rename: None,
         dismissed: false,
+        links: Links::new(&[Kind::Person]),
     }))
 }
 
@@ -83,6 +88,8 @@ struct Document {
     rename: Option<Rename>,
     /// The document was deleted forever here: the shell pops.
     dismissed: bool,
+    /// The About section's picker (#1173).
+    links: Links,
 }
 
 impl Document {
@@ -111,6 +118,7 @@ impl Document {
                 _ => None,
             },
         );
+        let about = links::read_people(ctx, &self.document_id);
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
                 document,
@@ -118,10 +126,50 @@ impl Document {
                     Reading::Data(drive) => Some(drive),
                     _ => None,
                 },
+                about: match about {
+                    Reading::Data(people) => Some(people),
+                    _ => None,
+                },
             }),
             Reading::Denied(denial) => Phase::Denied(denial),
             Reading::Failed => Phase::Failed,
         };
+    }
+
+    /// The ids of the people the document is about now.
+    fn about_ids(&self) -> Vec<String> {
+        self.phase
+            .data()
+            .and_then(|answered| answered.about.as_ref())
+            .map(|people| people.iter().map(|p| p.party_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// One event of the About section or its picker.
+    fn about_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.about_ids();
+        let id = self.document_id.clone();
+        match self.links.update(event, &linked, ctx) {
+            Outcome::Add { id: person, .. } => {
+                self.write(
+                    ctx,
+                    act::docs::AddAbout {
+                        from: id,
+                        to: person,
+                    },
+                );
+            }
+            Outcome::Remove { id: person } => {
+                self.write(
+                    ctx,
+                    act::docs::RemoveAbout {
+                        from: id,
+                        to: person,
+                    },
+                );
+            }
+            Outcome::Moved => {}
+        }
     }
 
     fn row(&self) -> Option<&wire::DocsDocumentRow> {
@@ -337,6 +385,7 @@ impl Document {
             }
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
+            Some(D::About(link)) => self.about_event(&link, ctx),
             None => {}
         }
         Vec::new()
@@ -478,6 +527,17 @@ impl Screen for Document {
                     &answered.document,
                     answered.drive.as_ref(),
                 );
+                // THE ABOUT SECTION (#1173): who the document is about, on a live document.
+                if let (Some(people), Some(row)) = (answered.about.as_ref(), data.row.as_ref())
+                    && !row.trashed
+                {
+                    data.about = Some(self.links.section(
+                        locale,
+                        link_words::section_about(locale),
+                        links::person_rows(locale, people),
+                        String::new(),
+                    ));
+                }
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id
@@ -502,6 +562,7 @@ impl Screen for Document {
                     sheet,
                     chrome: Some(self.chrome(locale)),
                     dismissed: self.dismissed,
+                    about_picker: Some(self.links.picker(locale, &self.about_ids())),
                 },
             )),
             ..wire::ViewState::default()

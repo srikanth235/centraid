@@ -196,6 +196,27 @@ pub(crate) fn person(
     )
 }
 
+/// `people.links`: the people one transaction, document or photograph is joined to by hand
+/// (#1173), through the same graph read People's "In your vault" uses.
+pub(crate) fn links(door: &VaultDoor<'_>, asked: &wire::PeopleLinksRequest) -> Result<Answer> {
+    settle(
+        door,
+        people::roster::load_links(door, &asked.entity_id),
+        |linked| {
+            Answer::PeopleLinks(wire::PeopleLinks {
+                people: linked
+                    .into_iter()
+                    .map(|person| wire::PeopleLinked {
+                        party_id: person.party_id,
+                        name: person.name,
+                        is_owner: person.is_owner,
+                    })
+                    .collect(),
+            })
+        },
+    )
+}
+
 pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
