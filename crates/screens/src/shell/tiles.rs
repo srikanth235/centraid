@@ -264,7 +264,7 @@ fn docs_tile(locale: Locale, drive: &wire::DocsDrive) -> Made {
     )
 }
 
-// -- agenda -------------------------------------------------------------------
+// -- calendar and reminders -------------------------------------------------------------------
 
 fn midnight(day: &str) -> Option<String> {
     civil::epoch_day_of(day).map(|_| format!("{day}T00:00:00Z"))

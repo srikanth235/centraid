@@ -16,7 +16,7 @@ Notes is 6 queries and 17 actions over the vault's one model ([#1135](https://gi
 
 ## What is Notes' and what is shared
 
-Notes does not wrap a shared verb. What only a note has is `note.create`, `note.edit` (title, body, format), `note.move` (into a notebook, or out of one) and `note.restore_version`; every other action names the shared verb directly — `entity.trash` and `entity.restore` for a note or a notebook, `entity.retitle` to rename a notebook, `container.create` for a notebook, `flag.set` / `flag.clear` for a pin, `tag.add` / `tag.remove`, `edge.add` / `edge.remove` for a link or an attachment. `send-to-tasks` is the one action making two invocations: Agenda's `task.add`, then `edge.add` joining the task to the note with an `about` edge.
+Notes does not wrap a shared verb. What only a note has is `note.create`, `note.edit` (title, body, format), `note.move` (into a notebook, or out of one) and `note.restore_version`; every other action names the shared verb directly — `entity.trash` and `entity.restore` for a note or a notebook, `entity.retitle` to rename a notebook, `container.create` for a notebook, `flag.set` / `flag.clear` for a pin, `tag.add` / `tag.remove`, `edge.add` / `edge.remove` for a link or an attachment. `send-to-tasks` is the one action making two invocations: Reminders' `task.add`, then `edge.add` joining the task to the note with an `about` edge.
 
 An edit that changes the body writes the words it replaced as a `revision`; a restore swaps one in and keeps what it replaced; an edit or a restore that lands on the words already there writes nothing. A body over 64 KiB is refused.
 

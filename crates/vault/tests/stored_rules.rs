@@ -13,7 +13,7 @@
 //! - the rule is never rewritten or dropped behind the member's back.
 //!
 //! The apps' and screens' halves (the event at its anchor, the detail, the
-//! read-only Custom editor) are in `crates/apps/agenda/tests/stored_rules.rs`
+//! read-only Custom editor) are in `crates/apps/calendar/tests/stored_rules.rs` and `crates/apps/reminders/tests/stored_rules.rs`
 //! and `crates/screens/tests/agenda_repeat.rs`.
 
 mod common;

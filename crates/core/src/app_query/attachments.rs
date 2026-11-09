@@ -1,7 +1,7 @@
 //! `agenda.attachments` (#1173): what ONE event or task has attached, a page at a time, each row
 //! with the file that draws its thumbnail when this phone holds one.
 //!
-//! The page itself is `crates/apps/agenda`'s `load_attachments`. The thumbnails are the core's: the
+//! The page itself is `crates/apps/calendar`'s or `crates/apps/reminders`' `load_attachments`. The thumbnails are the core's: the
 //! vault resolves a held picture beside a page of `photo` or `document` rows
 //! (`PageQuery::with_held_thumbnail`, the rule Photos' and Docs' tiles use), so a thumbnail asks
 //! one extra page per kind for the page's own ids, and never a store lookup per attachment of the
@@ -125,5 +125,5 @@ fn thumbnails(
 }
 
 #[cfg(test)]
-#[path = "agenda_attachments_tests.rs"]
+#[path = "attachments_tests.rs"]
 mod tests;

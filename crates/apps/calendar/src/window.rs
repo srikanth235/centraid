@@ -1,11 +1,11 @@
 //! THE EVENTS OF A RANGE OF LOCAL DAYS, one row per occurrence, in the member's zone (#1088, R-1088-8).
 //!
-//! Agenda's `upcoming` already answers what is on: it reads the window and the recurring
+//! Calendar's `upcoming` already answers what is on: it reads the window and the recurring
 //! anchors, expands every repeating series into its occurrences, drops the cancelled and the
 //! trashed, and places each occurrence on the member's calendar in the request's zone
 //! ([`crate::local::place`]). A reader that only needs *what is on when* (the assistant's
 //! read model, which groups by local day and says "tomorrow at 9") asks this function and
-//! gets exactly those rows, so it cannot disagree with the Agenda tab: there is one
+//! gets exactly those rows, so it cannot disagree with the Calendar tab: there is one
 //! implementation of "which days does this occupy", the one the screens use.
 //!
 //! The harness door and the core's door both call [`occurrences`] over their own
@@ -46,7 +46,7 @@ fn day_wall(day: &str) -> Option<WallTime> {
 
 /// Every occurrence that occupies at least one civil day of `from_day..=to_day` (`YYYY-MM-DD`,
 /// days of `zone`), repeating series expanded, cancelled and trashed events left out, in the
-/// order Agenda lists them.
+/// order Calendar lists them.
 ///
 /// # Errors
 ///

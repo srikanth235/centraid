@@ -3,7 +3,7 @@
 //!
 //! An attachment is an `attached` edge from the thing to a `document` or a
 //! `photo`, and the edge has no id of its own: the attached file's id is its
-//! identity (`edge.remove` takes the three ends). Notes, Agenda and Tasks each
+//! identity (`edge.remove` takes the three ends). Notes, Calendar and Reminders each
 //! show their attachments the same way, so the read is written once: the edges
 //! of a window of ids, which of their far ends are live, their blobs and sizes,
 //! one table at a time.

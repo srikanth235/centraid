@@ -3,7 +3,7 @@
 //! pressed button writes through the one door and leaves a receipt with Undo,
 //! and a deleted task leaves the set.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -13,7 +13,7 @@ use centraid_screens::agenda;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
 use centraid_screens::testing::Driver;
-use todo_support::*;
+use reminders_support::*;
 use wire::NotificationVerb as Verb;
 use wire::screen_event::Kind as E;
 

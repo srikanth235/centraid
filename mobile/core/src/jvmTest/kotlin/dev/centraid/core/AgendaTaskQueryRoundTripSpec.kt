@@ -32,7 +32,7 @@ import java.time.ZoneId
  * promotion rule and collapses a repeating task's missed periods, and v0 did
  * the civil arithmetic — "today", "overdue", Upcoming's days — on the phone in
  * the host zone. The `agenda_task_*` arms of `app_query` run Agenda's task loaders
- * (`crates/apps/agenda`, since the tasks are Agenda's, #1128) in the core and
+ * (`crates/apps/reminders`, since the tasks are Reminders', #1128) in the core and
  * answer every civil reading in the zone the request states, so `commonMain`
  * draws strings.
  *

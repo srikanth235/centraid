@@ -10,7 +10,7 @@
 // TYPED, NOT JSON. `commonMain` has no JSON dependency and Wire and
 // SwiftProtobuf already decode everything else the core says, so the answers
 // are messages. Every message here mirrors one Rust struct in
-// `crates/apps/agenda/src/queries.rs`, field for field; `crates/core`'s
+// `crates/apps/calendar/src/queries.rs` and `crates/apps/reminders/src/queries.rs`, field for field; `crates/core`'s
 // `app_query` module is the one conversion, and a field that moved moves there.
 //
 // Instants are the vault's own text form, `YYYY-MM-DDTHH:MM:SS.mmmZ`, and days

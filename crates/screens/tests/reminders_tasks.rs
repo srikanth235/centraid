@@ -2,19 +2,19 @@
 //! grouped cards (#1173), through the door a shell uses. Every assertion is a
 //! value or a count, never a duration.
 
-mod agenda_event_support;
-mod todo_support;
+mod calendar_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
 mod routes;
-use agenda_event_support::World;
+use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::Runtime;
 use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::testing::Driver;
-use todo_support as ts;
+use reminders_support as ts;
 use wire::AgendaEditorKind as Kind;
 use wire::agenda_home_event::Kind as H;
 use wire::screen_event::Kind as E;

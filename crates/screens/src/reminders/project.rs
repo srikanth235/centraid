@@ -1,4 +1,4 @@
-//! ONE PROJECT (`agenda.project`): its work in no section, then every section
+//! ONE PROJECT (`reminders.project`): its work in no section, then every section
 //! in its order — an empty section drawn too, with its own "Add task" — "Add
 //! section", "Rename" and "Edit List" (name, colour and icon: [`crate::kit::schedule::style`]).
 //!

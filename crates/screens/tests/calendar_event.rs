@@ -2,11 +2,11 @@
 //! every fact in the words the screen chose, the member's reply, Edit, and Cancel
 //! with its confirm and its scope sheet. Ports `AgendaEventSpec`.
 
-mod agenda_event_support;
+mod calendar_support;
 
 use std::time::Duration;
 
-use agenda_event_support::{World, ZONE};
+use calendar_support::{World, ZONE};
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
@@ -841,7 +841,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
             kind: Some(action("open_map")),
         }),
     );
-    let asked = agenda_event_support::asked(&update);
+    let asked = calendar_support::asked(&update);
     let [wire::effect::Kind::OpenMap(open)] = asked.as_slice() else {
         panic!("one OpenMap effect: {asked:?}")
     };
@@ -863,5 +863,5 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
             kind: Some(action("open_map")),
         }),
     );
-    assert!(agenda_event_support::asked(&update).is_empty());
+    assert!(calendar_support::asked(&update).is_empty());
 }

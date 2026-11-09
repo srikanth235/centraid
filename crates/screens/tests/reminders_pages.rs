@@ -3,7 +3,7 @@
 //! list, the swipe's Delete, drag to reorder, show and clear completed, a list's
 //! colour on the one palette, and Catch up's new title.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -12,7 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
-use todo_support::*;
+use reminders_support::*;
 use wire::todo_list_event as le;
 use wire::todo_project_event as pe;
 

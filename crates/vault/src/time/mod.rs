@@ -21,7 +21,7 @@
 //! ## The three sentences of the DST policy
 //!
 //! Every reader of civil time — the task lifecycle's rollover here, Agenda's
-//! expansion and its local days (`crates/apps/agenda`) — goes through them:
+//! expansion and its local days (`crates/apps/calendar`, `crates/apps/reminders`) — goes through them:
 //!
 //! 1. A **nonexistent** wall time moves FORWARD by the gap, as RFC 5545 section
 //!    3.3.5 reads it (02:30 New York on the spring-forward day is 03:30 EDT),

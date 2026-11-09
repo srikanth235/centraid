@@ -1,5 +1,5 @@
 //! THE KIT'S ONE TRASH SCREEN (#1015 D1: Empty trash everywhere an app can
-//! destroy), the app a [`TrashSpec`] (law 2): Agenda's `agenda.trash` and every
+//! destroy), the app a [`TrashSpec`] (law 2): Reminders' `reminders.trash` and every
 //! other app's `<app>.trash` are this machine over their own spec.
 //!
 //! A list of deleted rows the spec's `load` reads, restore as a write with no
@@ -149,7 +149,7 @@ impl TrashCopy {
 
 /// ONE APP'S TRASH, as the parameter the one trash screen takes.
 pub struct TrashSpec {
-    /// `agenda`: the app, and the prefix of the screen name `agenda.trash`.
+    /// `reminders`: the app, and the prefix of the screen name `reminders.trash`.
     pub app: &'static str,
     /// The kit's glyph for a row.
     pub icon_key: &'static str,

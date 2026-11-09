@@ -41,7 +41,7 @@ SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read 
 
 The rulings a reader of this crate meets first:
 
-- **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Agenda's and `ActionRow::pending_schema` names them until that lane lands.
+- **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Reminders' and Calendar's and `ActionRow::pending_schema` names them until that lane lands.
 - **Four actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.
 - **A person holds what is written about them alone**: their notes, touches and yearly dates go to the trash and are purged with them; a task about them stays.
 - **`people.limit` is 20-10,000**, the widest window in the tree and the manifest's own; the walk reports `truncated` when it filled.

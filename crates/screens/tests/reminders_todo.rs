@@ -2,7 +2,7 @@
 //! uses. Ports of the `TasksSpec` cases for `agenda.task_list`, `agenda.task.project` and
 //! `agenda.task.catch_up`, plus the behaviours the old architecture only implied.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -15,7 +15,7 @@ use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Field;
 use centraid_screens::kit::schedule::rows;
 use centraid_screens::strings::Locale;
-use todo_support::*;
+use reminders_support::*;
 use wire::todo_catch_up_event as cu;
 use wire::todo_list_event as le;
 use wire::todo_project_event as pe;

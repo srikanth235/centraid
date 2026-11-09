@@ -36,7 +36,7 @@ import java.time.ZoneId
  * `upcoming` joins six-plus tables and expands every repeating series — had
  * nothing to draw from but a page read of one table, and a Kotlin expansion
  * would have been a second recurrence engine (D-1020-S1). `app_query` (20) is
- * the arm: the core runs `crates/apps/agenda`'s loader and answers a TYPED
+ * the arm: the core runs `crates/apps/calendar`'s loader and answers a TYPED
  * message, which Wire decodes like everything else the core says.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault

@@ -1,9 +1,9 @@
-//! ONE EVENT ON THE PHONE (`agenda.event`, #1046, #1135): what it is, who is
+//! ONE EVENT ON THE PHONE (`calendar.event`, #1046, #1135): what it is, who is
 //! coming, the member's reply, Edit, and Cancel.
 //!
 //! ## The occurrence is read by its key
 //!
-//! The read is `agenda.event` for the route's `event_id` and occurrence, so an
+//! The read is `calendar.event` for the route's `event_id` and occurrence, so an
 //! occurrence far from any window is found, and the answer names its calendar,
 //! so nothing else is read. An answer with no event is [`wire::AgendaGone`]:
 //! cancelled, moved or deleted since it was picked.
@@ -874,7 +874,7 @@ pub fn calendar_hue(calendar_id: Option<&str>, calendar: Option<&wire::AgendaCal
 
 #[cfg(test)]
 mod tests {
-    //! The gate: a vault that will not let Agenda read is a state to draw, not an
+    //! The gate: a vault that will not let Calendar read is a state to draw, not an
     //! error. No example vault revokes a grant, so the door is a stub that refuses.
 
     use std::time::Duration;

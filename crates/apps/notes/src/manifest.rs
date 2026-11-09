@@ -177,7 +177,7 @@ mod tests {
     }
 
     /// NOTES' ACTIONS INVOKE ITS OWN `note` COMMANDS AND THE SHARED VERBS — and
-    /// the one command Agenda owes — and the table says so. What each command
+    /// the one command Reminders owes — and the table says so. What each command
     /// wrote is the commit's own census, not a list a manifest carries (V3).
     #[test]
     fn the_actions_invoke_the_note_commands_the_shared_verbs_and_agendas_task_add() {

@@ -19,7 +19,7 @@
 //! **A tap opens the photo or file where it lives.** A row carries the route of Photos' viewer
 //! or of the Docs page; the shell pushes it, and this section names no screen of its own.
 //!
-//! Reads are `agenda.attachments`, a keyset page. The first page is read again after every
+//! Reads are `calendar.attachments` or `reminders.attachments`, a keyset page. The first page is read again after every
 //! change (as many rows as are shown, up to the page maximum); Show more reads the next.
 
 use centraid_api_proto::core_v1 as wire;
@@ -37,7 +37,7 @@ use crate::strings::{Locale, agenda as agenda_words, agenda_event as words, fill
 
 /// Rows a first read asks for, and a Show more.
 const PAGE: usize = 30;
-/// The most rows one `agenda.attachments` page answers (the read's own maximum).
+/// The most rows one `calendar.attachments` or `reminders.attachments` page answers (the read's own maximum).
 const PAGE_MAX: usize = 100;
 /// The reason a shell gives when this phone has no picker to offer.
 pub const UNAVAILABLE: &str = "unavailable";

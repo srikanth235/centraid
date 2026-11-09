@@ -2,10 +2,11 @@
 //! routes that open them. Calendar owns events and invites: Day, Week, Month, List, Year and Invites
 //! on its [`HOME`], one occurrence ([`EVENT`]) and the add sheet and event editor ([`EDITOR`]).
 //!
-//! The machines behind them are in `crate::agenda`, the module the two apps share because the home,
-//! the attachments page, the style sheet, the repeat words and the notification and widget services
-//! are built once for both. This module names none of Reminders': a reminder on a Calendar day carries
-//! the route Reminders registered for it, as data.
+//! Everything of the app is here: its home, the event page, the editor and the phone calendar's
+//! follow. What it shares with Reminders (the rows of a reminder on a day, the repeat rule and its
+//! sheet, the attachments page, the style sheet) is the kit's `kit::schedule`; a reminder on a
+//! Calendar day carries the route Reminders registered for it, as data, and this module names none
+//! of Reminders' own.
 
 use crate::Registry;
 pub mod editor;

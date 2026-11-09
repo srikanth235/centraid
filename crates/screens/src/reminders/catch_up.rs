@@ -1,4 +1,4 @@
-//! CATCH UP (`agenda.catch_up`) — the pressure valve, reachable any day: what
+//! CATCH UP (`reminders.catch_up`) — the pressure valve, reachable any day: what
 //! came due, what repeats and is behind, what has sat 90 days. One bulk verb
 //! per pile, "Complete all", behind a confirm.
 //!

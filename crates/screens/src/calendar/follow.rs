@@ -29,7 +29,7 @@
 //!
 //! ## Following ([`CalendarFollow`])
 //!
-//! A screen that lives as long as Agenda does (its home) hosts one
+//! A screen that lives as long as Calendar does (its home) hosts one
 //! [`CalendarFollow`]. The member's Import tap asks the OS for permission and
 //! imports; from then on this device FOLLOWS: a [`wire::PhoneWatch`] makes the
 //! shell report each change of the calendar store, bursts are coalesced (the
@@ -71,7 +71,7 @@ use crate::kit::civil;
 use crate::screen::Ctx;
 use crate::strings::{Locale, agenda as words, agenda_calendar as calendar_words, fill};
 
-/// THE WINDOW READ: a week back, so the day-one Agenda has its recent past, and
+/// THE WINDOW READ: a week back, so the day-one Calendar has its recent past, and
 /// two months on.
 pub const DAYS_BACK: u32 = 7;
 pub const DAYS_ON: u32 = 62;

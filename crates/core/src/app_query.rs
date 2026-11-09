@@ -34,7 +34,7 @@
 //!
 //! A shell's shared layer has no calendar (`agenda.proto`'s header), so every
 //! local reading — an occurrence's wall clock and days, today, now — is
-//! computed here, in the request's `tz`, by `crates/apps/agenda`'s `local`
+//! computed here, in the request's `tz`, by `crates/apps/calendar`'s `local`
 //! module. [`zone_of`] is the rule: the stated IANA name, else the vault's own
 //! ([`Vault::time_zone`]), else a refusal. It is never the host's clock and
 //! never UTC by default — the same two tiers, and no third, that
@@ -88,12 +88,12 @@ pub(crate) mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
 // and the correction.
 pub(crate) mod photos;
-// Tasks' arm (#1046): its conversions and tests, beside this one.
-pub(crate) mod agenda_task;
+// Reminders' arm (#1046): its conversions and tests, beside this one.
+pub(crate) mod reminders;
 // What an event or a task has attached, with its thumbnails (#1173).
-pub(crate) mod agenda_attachments;
-// The reminders a Calendar day shows, read-only (round 10).
-pub(crate) mod agenda_dated;
+pub(crate) mod attachments;
+// The reminders a Calendar day shows (rounds 10 and 12).
+pub(crate) mod calendar_dated;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -122,11 +122,11 @@ pub(crate) fn answer_recording(
     let now = vault.clock().now_text();
     let door = VaultDoor::new(vault);
     let answer = match query {
-        Q::AgendaUpcoming(asked) => agenda_upcoming(vault, &door, &now, asked)?,
-        Q::AgendaDayContext(asked) => agenda_day_context(vault, &door, &now, asked)?,
-        Q::AgendaParties(_) => agenda_parties(&door)?,
-        Q::AgendaEvent(asked) => agenda_event(vault, &door, &now, asked)?,
-        Q::AgendaSearch(asked) => agenda_search(vault, &door, &now, asked)?,
+        Q::AgendaUpcoming(asked) => calendar_upcoming(vault, &door, &now, asked)?,
+        Q::AgendaDayContext(asked) => calendar_day_context(vault, &door, &now, asked)?,
+        Q::AgendaParties(_) => calendar_parties(&door)?,
+        Q::AgendaEvent(asked) => calendar_event(vault, &door, &now, asked)?,
+        Q::AgendaSearch(asked) => calendar_search(vault, &door, &now, asked)?,
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
         Q::DocsSearch(asked) => docs::search(vault, &door, &now, asked)?,
         Q::DocsDocument(asked) => docs::document(vault, &door, &now, asked)?,
@@ -145,16 +145,16 @@ pub(crate) fn answer_recording(
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
         Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
         Q::NotesAbout(asked) => notes::about(vault, &door, asked)?,
-        Q::AgendaTaskBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
-        Q::AgendaTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
-        Q::AgendaTaskProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
-        Q::AgendaTaskSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
-        Q::AgendaTaskCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
-        Q::AgendaTaskReminders(asked) => agenda_task::reminders(vault, &door, &now, asked)?,
-        Q::AgendaTaskTrash(asked) => agenda_task::trash(vault, &door, asked)?,
-        Q::AgendaTaskSmartCounts(asked) => agenda_task::smart_counts(vault, &door, &now, asked)?,
-        Q::AgendaTaskDueRows(asked) => agenda_task::due_rows(vault, &door, &now, asked)?,
-        Q::CalendarDatedReminders(asked) => agenda_dated::dated(vault, &door, &now, asked)?,
+        Q::AgendaTaskBoard(asked) => reminders::board(vault, &door, &now, asked)?,
+        Q::AgendaTask(asked) => reminders::task(vault, &door, &now, asked)?,
+        Q::AgendaTaskProjects(asked) => reminders::projects(vault, &door, &now, asked)?,
+        Q::AgendaTaskSearch(asked) => reminders::search(vault, &door, &now, asked)?,
+        Q::AgendaTaskCatchUp(asked) => reminders::catch_up(vault, &door, &now, asked)?,
+        Q::AgendaTaskReminders(asked) => reminders::reminders(vault, &door, &now, asked)?,
+        Q::AgendaTaskTrash(asked) => reminders::trash(vault, &door, asked)?,
+        Q::AgendaTaskSmartCounts(asked) => reminders::smart_counts(vault, &door, &now, asked)?,
+        Q::AgendaTaskDueRows(asked) => reminders::due_rows(vault, &door, &now, asked)?,
+        Q::CalendarDatedReminders(asked) => calendar_dated::dated(vault, &door, &now, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -196,7 +196,7 @@ pub(crate) fn answer_recording(
 type Answer = wire::app_query_response::Answer;
 
 /// `agenda.upcoming`: the window's events, placed on the member's calendar.
-pub(crate) fn agenda_upcoming(
+pub(crate) fn calendar_upcoming(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -218,7 +218,7 @@ pub(crate) fn agenda_upcoming(
 }
 
 /// `agenda.day-context`: the facts that decorate a calendar day.
-pub(crate) fn agenda_day_context(
+pub(crate) fn calendar_day_context(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -240,7 +240,7 @@ pub(crate) fn agenda_day_context(
 }
 
 /// `agenda.parties`: the pickable people of the invite picker.
-pub(crate) fn agenda_parties(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn calendar_parties(door: &VaultDoor<'_>) -> Result<Answer> {
     use wire::app_query_response::Answer as A;
     settle(door, agenda::load_parties(door), |data| {
         A::AgendaParties(parties_to_wire(data))
@@ -248,7 +248,7 @@ pub(crate) fn agenda_parties(door: &VaultDoor<'_>) -> Result<Answer> {
 }
 
 /// One event, or one occurrence of a repeating one (the screens' detail read).
-pub(crate) fn agenda_event(
+pub(crate) fn calendar_event(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -285,7 +285,7 @@ pub(crate) fn agenda_event(
 }
 
 /// `agenda.search`: events by their words, with the occurrence a hit opens.
-pub(crate) fn agenda_search(
+pub(crate) fn calendar_search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -768,7 +768,7 @@ fn cell_of(value: Value) -> Cell {
 }
 
 // ---------------------------------------------------------------------------
-// The conversion: `crates/apps/agenda`'s rows as `agenda.proto` spells them.
+// The conversion: `crates/apps/calendar`'s rows as `agenda.proto` spells them.
 // ONE place, so a field that moved is one edit.
 // ---------------------------------------------------------------------------
 
@@ -1574,7 +1574,7 @@ mod tests {
             .expect("the vault is open");
     }
 
-    /// `agenda_event` (#1029): one occurrence by its key, placed in `tz`, with
+    /// `calendar_event` (#1029): one occurrence by its key, placed in `tz`, with
     /// the `today`/`now_local` a detail draws beside it; an unknown id answers
     /// an absent event, never an error.
     #[test]
@@ -1597,10 +1597,10 @@ mod tests {
                     tz: TZ.to_owned(),
                 },
             ))
-            .expect("agenda_event answers")
+            .expect("calendar_event answers")
         {
             wire::app_query_response::Answer::AgendaEvent(detail) => detail,
-            other => panic!("agenda_event answered as {other:?}"),
+            other => panic!("calendar_event answered as {other:?}"),
         };
         let detail = ask(&series, &format!("{series}:2099-06-08T07:00:00"));
         let event = detail.event.expect("the occurrence is there");

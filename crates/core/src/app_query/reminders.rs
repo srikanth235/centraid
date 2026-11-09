@@ -1,4 +1,4 @@
-//! THE TASK HALF OF AGENDA'S ARM OF THE APP QUERY (#1046): `crates/apps/agenda`' `task` loaders, asked
+//! REMINDERS' ARM OF THE APP QUERY (#1046): `crates/apps/reminders`' `task` loaders, asked
 //! through [`super::VaultDoor`] and spelled as `agenda.proto` spells them.
 //!
 //! The board, the families, the recurrence facts, every civil reading and
@@ -616,5 +616,5 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
 }
 
 #[cfg(test)]
-#[path = "agenda_task_tests.rs"]
+#[path = "reminders_tests.rs"]
 mod tests;

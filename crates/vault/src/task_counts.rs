@@ -9,14 +9,14 @@
 //! **What is counted is what the board draws**: the open ROOTS of live tasks. A
 //! subtask of an open, live parent belongs to its parent; an unfinished child
 //! of a closed or trashed parent is a root of its own (the promotion rule,
-//! `crates/apps/agenda`'s `board`).
+//! `crates/apps/reminders`' `board`).
 //!
 //! **What this statement cannot read is a repeating task's due.** Its effective
 //! due is the next open period, which the one recurrence engine computes in
 //! Rust, so a task with a `rule` is left out of `overdue` and `today` here and
 //! counted by the caller; it is in `flagged`, which no due decides.
 //!
-//! **A stored due has three spellings** (`crates/apps/agenda`'s `local`):
+//! **A stored due has three spellings** (`crates/apps/reminders`' `local`):
 //!
 //! | Stored | Read as |
 //! |---|---|

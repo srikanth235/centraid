@@ -141,7 +141,7 @@ pub struct TaskRow {
     pub attachments: Vec<Attachment>,
     pub references: Vec<Reference>,
     pub tags: Vec<TaskTag>,
-    /// Tagged with the starred flag: Agenda's Flag (#1173).
+    /// Tagged with the starred flag: Reminders' Flag (#1173).
     pub flagged: bool,
     pub recurrence: RecurrenceFacts,
     /// Only on a root: the family below it, in the open board's order.
@@ -861,7 +861,7 @@ fn read_decorations(
         let kind = text_of(end, "kind").unwrap_or_default();
         if rel == "tagged" {
             // A flag (starred, pinned, archived) is not a tag a member typed. The
-            // starred one is Agenda's Flag.
+            // starred one is Reminders' Flag.
             if kind == "flag" && to == Flag::Starred.id() {
                 decorations.flagged.insert(task);
             } else if kind == "tag" {

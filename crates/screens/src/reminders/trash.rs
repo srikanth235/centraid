@@ -1,10 +1,10 @@
-//! AGENDA'S TRASH: the kit's one trash screen, Agenda's to-dos as its
+//! REMINDERS' TRASH: the kit's one trash screen, Reminders' to-dos as its
 //! parameter (law 2).
 //!
 //! `delete-task` puts a task and its subtasks in the trash for 30 days,
 //! `restore-task` brings back what that gesture trashed, and `purge-task`
 //! destroys a trashed task and the subtasks trashed with it now (#1015 D1:
-//! "Delete forever" wherever an app can destroy). There is no Agenda action
+//! "Delete forever" wherever an app can destroy). There is no Reminders action
 //! that empties the whole trash, so no "Empty trash": the purge sweep erases the
 //! rest at 30 days, and the screen says nothing it cannot do.
 
@@ -48,7 +48,7 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     trash::build(&SPEC)
 }
 
-/// The gate drawn when the vault will not let Agenda read its tasks.
+/// The gate drawn when the vault will not let Reminders read its tasks.
 fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {
         title: words::denied_title(locale),
@@ -57,7 +57,7 @@ fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     }
 }
 
-/// `agenda.trash`: the trashed tasks, most recently trashed first.
+/// `reminders.trash`: the trashed tasks, most recently trashed first.
 fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
     let reading = read::read(
         ctx,

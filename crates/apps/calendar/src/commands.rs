@@ -146,7 +146,7 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
     centraid_apps_kit::actions::find(ACTIONS, action)
 }
 
-/// The `act` scopes Agenda declares, derived from the action table: one per
+/// The `act` scopes Calendar declares, derived from the action table: one per
 /// distinct command, as `(schema, name)`.
 #[must_use]
 pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {

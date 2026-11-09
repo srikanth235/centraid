@@ -5,11 +5,11 @@
 //! (C1..C12) has its own test, driven through a real vault and the runtime: snapshots and answers
 //! go in, the effects asked and the vault's rows come out.
 
-mod agenda_event_support;
+mod calendar_support;
 
 use std::time::Duration;
 
-use agenda_event_support::World;
+use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::calendar::follow::CalendarFollow;
 use centraid_screens::catalog::{act, load};

@@ -128,7 +128,7 @@ pub struct Inputs<'a> {
     pub upcoming: &'a wire::AgendaUpcoming,
     /// The open tasks the rows are drawn from: the earliest due (overdue and
     /// today) and the timed ones due today or tomorrow, each read in due order
-    /// over every open task (`agenda.task.due-rows`), never a window of the
+    /// over every open task (`reminders.due-rows`), never a window of the
     /// newest. Their number says nothing about how many tasks there are.
     pub tasks: &'a [wire::AgendaTask],
     /// How the phone words a time of day.

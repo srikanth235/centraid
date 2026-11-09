@@ -3,7 +3,7 @@
 //! trash laws, generically — the kit laws are driven through specs of their own,
 //! so every app's trash can lean on them.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -17,7 +17,7 @@ use centraid_screens::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
 use centraid_screens::strings::Locale;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime};
-use todo_support::*;
+use reminders_support::*;
 use wire::trash_event::{self as te, Kind as T};
 
 fn confirm_of(v: &wire::ViewState) -> Option<&wire::Confirm> {

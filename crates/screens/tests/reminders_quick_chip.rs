@@ -3,7 +3,7 @@
 //! Dates are relative to the core's own `today`, read from the vault under
 //! test; nothing here reads a clock or asserts on one.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -13,7 +13,7 @@ use centraid_screens::agenda;
 use centraid_screens::catalog::load;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Runtime, agenda::TAB};
-use todo_support::*;
+use reminders_support::*;
 use wire::AgendaDestination as Dest;
 use wire::agenda_home_event as he;
 use wire::agenda_home_event::Kind as H;

@@ -2,14 +2,14 @@
 //! math, the explicit save and which command each save is, dirty leave, scope
 //! and skip, and the Event | Task switch. Ports `AgendaEditorSpec`.
 
-mod agenda_event_support;
+mod calendar_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
 mod routes;
 use std::time::Duration;
 
-use agenda_event_support::{World, asked};
+use calendar_support::{World, asked};
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
@@ -858,7 +858,7 @@ fn an_edit_whose_event_is_gone_says_so_and_a_failed_first_read_is_a_failure() {
         panic!("{:?}", world.editor_state(failed).content)
     };
     assert_eq!(failure.sentence, "Part of this didn't arrive. Try again.");
-    world.zone(agenda_event_support::ZONE);
+    world.zone(calendar_support::ZONE);
     world.send_editor(
         failed,
         K::Refreshed(wire::agenda_editor_event::Refreshed {}),

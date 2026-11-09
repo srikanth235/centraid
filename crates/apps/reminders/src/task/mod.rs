@@ -1,7 +1,7 @@
-//! # The task half of Agenda — one promotion rule, no ceiling
+//! # Reminders' reads of a task — one promotion rule, no ceiling
 //!
 //! Tasks were folded into Agenda (#1128): one mini app, one crate, one manifest. `task` is a vault
-//! entity kind and a chat kind; this module is Agenda's reads of it.
+//! entity kind and a chat kind; this module is Reminders' reads of it.
 //!
 //! Its doctrine, from the board's own header (#1020, wave 4 census §A7):
 //!

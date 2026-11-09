@@ -3,12 +3,12 @@
 //! or a document and attaches them. Nothing here streams a byte: the shell's half is answered by
 //! value, as a shell answers it.
 
-mod agenda_event_support;
+mod calendar_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
 mod routes;
-use agenda_event_support::World;
+use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};

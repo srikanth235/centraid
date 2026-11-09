@@ -3,7 +3,7 @@
 //! ## One zone source, moved here so there is only one
 //!
 //! [`FireZone`] and [`ZoneUnset`] are the one resolution of a zone name:
-//! recurrence, the task lifecycle and Agenda (`crates/apps/agenda`) all read
+//! recurrence, the task lifecycle and Calendar and Reminders (`crates/apps/calendar`, `crates/apps/reminders`) all read
 //! it, and a second reader would be exactly the drift one zone source
 //! prevents. It lives at the bottom of the crate graph so every app above the
 //! vault can reach it.

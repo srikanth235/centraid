@@ -2,7 +2,7 @@
 //! `TasksSpec` detail cases and the kit's autosave laws, which this page is the
 //! law's one user in the to-do half of Agenda.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -17,7 +17,7 @@ use centraid_screens::kit::schedule::rows;
 use centraid_screens::reminders::detail;
 use centraid_screens::strings::Locale;
 use centraid_screens::testing::Driver;
-use todo_support::*;
+use reminders_support::*;
 use wire::autosave::Phase;
 use wire::todo_detail_event as de;
 

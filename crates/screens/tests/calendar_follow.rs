@@ -4,11 +4,11 @@
 //! runs) are Rust's. Ports `CalendarImportRuleSpec` and `CalendarFollowSpec`,
 //! and the part of `PhoneFollowSpec` that pins Agenda's calendar pass.
 
-mod agenda_event_support;
+mod calendar_support;
 
 use std::time::Duration;
 
-use agenda_event_support::World;
+use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::calendar::follow::{self as calendar, CalendarFollow};
 use centraid_screens::kit::civil;

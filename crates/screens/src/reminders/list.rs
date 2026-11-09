@@ -1,5 +1,5 @@
 //! ANYTIME, ALL, LOGBOOK, REMINDERS — one screen, the view a parameter (law 2),
-//! each reached from Home's More sheet (`agenda.todo_list`).
+//! each reached from Home's More sheet (`reminders.list`).
 //!
 //! Open views check a row off ("Task done", Undo); the Logbook's box reopens,
 //! because a done row is drawn in the Logbook only (owner ruling). The board is
@@ -49,7 +49,7 @@ impl<T> Phase<T> {
     }
 }
 
-/// The gate drawn when the vault will not let Agenda read the tasks.
+/// The gate drawn when the vault will not let Reminders read the tasks.
 pub(super) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {
         title: words::denied_title(locale),

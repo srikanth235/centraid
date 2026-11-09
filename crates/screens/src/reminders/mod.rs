@@ -2,9 +2,10 @@
 //! owns tasks and lists: the smart lists and My Lists on its [`HOME`], a list ([`TODO_LIST`]), a project
 //! ([`PROJECT`]), a task ([`TASK`]), Catch up ([`CATCH_UP`]) and the trash ([`TRASH`]).
 //!
-//! The machines behind them are in `crate::agenda`, the module the two apps share because the home,
-//! the attachments page, the style sheet, the repeat words and the notification and widget services
-//! are built once for both. This module names none of Calendar's.
+//! Everything of the app is here: its home, the lists, a project, a task, the new-reminder sheet,
+//! Catch up and the trash. What it shares with Calendar (the rows of a reminder, the repeat rule and
+//! its sheet, the attachments page, the style sheet) is the kit's `kit::schedule`; this module names
+//! none of Calendar's.
 
 use crate::Registry;
 pub mod buckets;

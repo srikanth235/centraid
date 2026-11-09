@@ -2,7 +2,7 @@
 //! place only, its picks kept in the keychain, and the choice worn by the home, the smart-list
 //! pages and a list's own page.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -12,7 +12,7 @@ use centraid_screens::agenda;
 use centraid_screens::kit::menu;
 use centraid_screens::runtime::Runtime;
 use centraid_screens::testing::Driver;
-use todo_support::*;
+use reminders_support::*;
 use wire::AgendaDestination as Dest;
 
 fn home(destination: Dest) -> (Driver, u64) {

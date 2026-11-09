@@ -10,7 +10,7 @@
 //! input is its command's input, verbatim.
 //!
 //! **`send-to-tasks` is the one action making TWO invocations**: `task.add`
-//! (Agenda's) and then `edge.add` joining the
+//! (Reminders') and then `edge.add` joining the
 //! task to the note with an `about` edge, which is conditional on the task having
 //! landed.
 //!
@@ -238,7 +238,7 @@ mod tests {
     }
 
     /// Every command an action names is one the vault registers: `send-to-tasks`'
-    /// `task.add` is Agenda's.
+    /// `task.add` is Reminders'.
     #[test]
     fn every_action_names_a_command_the_vault_registers() {
         let registry =

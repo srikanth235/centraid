@@ -1,4 +1,4 @@
-//! THE TASK PAGE (`agenda.task`) — an editor (#1015 D3: autosave everywhere,
+//! THE TASK PAGE (`reminders.task`) — an editor (#1015 D3: autosave everywhere,
 //! close = done).
 //!
 //! The title and the notes are typed, so they autosave ([`Autosave`]: 900 ms,

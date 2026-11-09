@@ -64,5 +64,3 @@ An instant with no zone, an unknown zone and a wall clock the zone skips are ref
 cargo test -p centraid-apps-calendar                     # unit + parity + trash + lower bound + year-3
 cargo test -p centraid-apps-calendar --test year3 -- --ignored --nocapture
 ```
-
-The parity fixtures under `contracts/apps/agenda/` are **frozen goldens** read by `tests/parity.rs`, captured from an independent implementation and never typed by hand — see [`contracts/README.md`](../../../contracts/README.md).

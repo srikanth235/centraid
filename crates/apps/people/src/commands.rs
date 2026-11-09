@@ -9,7 +9,7 @@
 //! are both `person.edit`), and an action's input is its command's input,
 //! verbatim.
 //!
-//! **Three commands are Agenda's**, which owns events and tasks:
+//! **Three commands are Reminders' and Calendar's**, which own tasks and events:
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
@@ -259,8 +259,8 @@ mod tests {
         );
     }
 
-    /// Every command an action names is one the vault registers, Agenda's three
-    /// included.
+    /// Every command an action names is one the vault registers, Reminders' and Calendar's
+    /// three included.
     #[test]
     fn every_action_names_a_command_the_vault_registers() {
         let registry =

@@ -2,7 +2,7 @@
 //! (name, colour, icon) from Reminders' "Add List", from a list's "Edit List"
 //! and from More's calendar rows, through the door a shell uses.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -12,7 +12,7 @@ use centraid_screens::agenda;
 use centraid_screens::catalog::{act, load};
 use centraid_screens::testing::Driver;
 use centraid_vault::commands::container::{LIST_COLORS, LIST_ICONS};
-use todo_support::*;
+use reminders_support::*;
 use wire::agenda_home_event::Kind as H;
 use wire::agenda_home_state::{Content, Sheet};
 use wire::todo_project_event as pe;

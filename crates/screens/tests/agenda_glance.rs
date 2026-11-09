@@ -5,7 +5,7 @@
 //! bar holding the title, and a widget tap opens the page the core names for the
 //! key it offered (and Agenda's home for any other). Effects are counted; nothing here measures time.
 
-mod todo_support;
+mod reminders_support;
 
 #[allow(clippy::duplicate_mod)]
 #[path = "schedule_routes/mod.rs"]
@@ -18,7 +18,7 @@ use centraid_screens::field::Field;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime};
 use serde_json::Value;
-use todo_support::arrange;
+use reminders_support::arrange;
 use wire::screen_event::Kind as E;
 
 fn runtime() -> Runtime {
@@ -106,7 +106,7 @@ fn a_new_task_asks_for_one_new_snapshot() {
     d.start();
     answer_glance(&mut d, done());
     let title = "Zq glance reminder";
-    let today = todo_support::today(&d);
+    let today = reminders_support::today(&d);
     arrange(
         &d,
         centraid_screens::catalog::act::reminders::AddTask {
@@ -208,7 +208,7 @@ fn a_change_of_hour_cycle_rebuilds_the_snapshot_in_the_phones_words() {
     let mut d = Driver::with_runtime(runtime());
     d.start();
     answer_glance(&mut d, done());
-    let today = todo_support::today(&d);
+    let today = reminders_support::today(&d);
     arrange(
         &d,
         centraid_screens::catalog::act::reminders::AddTask {
@@ -242,7 +242,7 @@ fn the_runtime_relays_a_commit_to_the_service_once() {
     let mut d = Driver::with_runtime(runtime());
     d.start();
     answer_glance(&mut d, done());
-    let today = todo_support::today(&d);
+    let today = reminders_support::today(&d);
     arrange(
         &d,
         centraid_screens::catalog::act::reminders::AddTask {
@@ -307,7 +307,7 @@ fn add_a_reminder_opens_reminders_with_the_title_in_the_quick_add_bar() {
     assert_eq!(*routes_opened[0], routes::home_adding("Buy oat milk"));
     // Nothing was written: no task has the title.
     assert!(
-        todo_support::load_board(
+        reminders_support::load_board(
             &d,
             centraid_screens::catalog::load::reminders::BoardView::All,
             None
@@ -365,7 +365,7 @@ fn busy_day() -> (Driver, String) {
     let mut d = Driver::with_runtime(runtime());
     d.start();
     answer_glance(&mut d, done());
-    let today = todo_support::today(&d);
+    let today = reminders_support::today(&d);
     arrange(
         &d,
         centraid_screens::catalog::act::calendar::Propose {

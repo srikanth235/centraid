@@ -900,7 +900,7 @@
         "flag the taxes",
         "mark buy milk as flagged"
       ],
-      "description": "Star a task through flag.set: Agenda calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.",
+      "description": "Star a task through flag.set: Reminders calls the starred flag Flag, and a flagged task joins the Flagged list. Idempotent.",
       "confirmation": "none",
       "input": {
         "type": "object",
