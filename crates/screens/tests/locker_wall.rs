@@ -671,3 +671,100 @@ fn a_cancelled_unlock_forgets_the_place_and_the_button_lands_on_items() {
         wire::LockerDestination::Items as i32
     );
 }
+
+fn cancels(d: &Driver, from: usize) -> usize {
+    effects_of(d, from)
+        .iter()
+        .filter(|kind| matches!(kind, wire::effect::Kind::OwnerCheck(check) if check.cancel && !check.ask))
+        .count()
+}
+
+#[test]
+fn leaving_locker_before_answering_takes_the_prompt_down_and_a_late_answer_is_ignored() {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    d.start();
+    // A second Locker page asks at once, as opening Locker from Home does.
+    let page = d.push(locker::TAB, routes::home(wire::LockerDestination::Items));
+    assert!(matches!(
+        effects_of(&d, 1).as_slice(),
+        [wire::effect::Kind::OwnerCheck(check)] if check.ask
+    ));
+    let before = d.effects.len();
+    // THE MEMBER GOES BACK TO HOME before answering the OS prompt.
+    d.pop(locker::TAB, page);
+    assert_eq!(
+        cancels(&d, before),
+        1,
+        "one withdrawal, for the page that asked"
+    );
+    let withdrawal = &d.effects[before];
+    assert_eq!(withdrawal.instance, page);
+    // The late answer (the OS passing it after the screen was gone) opens nothing.
+    let stale = d.effects.remove(1);
+    assert_eq!(stale.instance, page);
+    let late = d.try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+        instance: page,
+        event: Some(wire::ScreenEvent {
+            kind: Some(E::EffectResult(wire::EffectResult {
+                effect_id: stale.effect_id,
+                outcome: Some(passed(wire::Biometry::Face)),
+            })),
+        }),
+    }));
+    assert!(late.is_err(), "the closed screen takes no answer");
+    let state = session(
+        &d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
+    );
+    assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
+}
+
+#[test]
+fn a_prompt_answered_already_is_not_withdrawn_on_leaving() {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    let id = open_home(&mut d);
+    assert!(wall_of(&d, id).is_none());
+    let page = d.push(locker::TAB, routes::home(wire::LockerDestination::Items));
+    let before = d.effects.len();
+    d.pop(locker::TAB, page);
+    assert_eq!(
+        cancels(&d, before),
+        0,
+        "nothing was up, so nothing is withdrawn"
+    );
+}
+
+#[test]
+fn selecting_another_tab_drops_a_pending_unlock() {
+    let mut d = Driver::keyed(centraid_screens::Runtime::new(
+        locker::registry(),
+        vec![
+            (
+                locker::TAB.to_owned(),
+                routes::home(wire::LockerDestination::Items),
+            ),
+            ("elsewhere".to_owned(), routes::lock()),
+        ],
+    ));
+    login(&d, "i1", "Bank");
+    d.start();
+    let asked = d.effects.len();
+    assert!(asked >= 1);
+    let before = d.effects.len();
+    d.nav(wire::nav_event::Kind::SelectTab(wire::NavSelectTab {
+        tab: "elsewhere".to_owned(),
+    }));
+    assert_eq!(cancels(&d, before), 1);
+    let wall = wall_of(&d, home_instance(&d)).expect("a wall again");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    // THE ANSWER THAT LANDS AFTERWARDS IS DROPPED: the OS passing the check
+    // after the member left opens nothing.
+    d.answer_effect(passed(wire::Biometry::Face));
+    let state = session(
+        &d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
+    );
+    assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
+}

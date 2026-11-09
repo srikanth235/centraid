@@ -12,6 +12,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import centraid.core.v1.Biometry
+import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectResult
 import centraid.core.v1.OwnerCheck
 import centraid.core.v1.OwnerChecked
@@ -79,6 +80,12 @@ internal object OwnerPrompt {
      * unrecognised touch is not an answer: the prompt stays up and says so itself.
      */
     suspend fun check(context: Context, ask: OwnerCheck): EffectResult {
+        // THE MEMBER LEFT LOCKER BEFORE ANSWERING: the prompt is cancelled (its
+        // callback answers `ERROR_CANCELED`, a cancel Rust ignores as late).
+        if (ask.cancel) {
+            cancelPending()
+            return EffectResult(done = EffectDone())
+        }
         val (available, biometry) = capability(context)
         fun answer(outcome: OwnerChecked.Outcome) =
             EffectResult(owner_checked = OwnerChecked(available = available, biometry = biometry, outcome = outcome))
@@ -102,12 +109,27 @@ internal object OwnerPrompt {
             // itself is the way out of a biometric that fails.
             .setAllowedAuthenticators(authenticators())
             .build()
+        var prompt: BiometricPrompt? = null
         val raised = runCatching {
             // The prompt is the main thread's: this effect is performed from composition's scope.
-            BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)
+            prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
+            pending = prompt
+            prompt?.authenticate(info)
         }
         if (raised.isFailure) outcome.complete(OwnerChecked.Outcome.OUTCOME_FAILED)
-        return answer(outcome.await())
+        try {
+            return answer(outcome.await())
+        } finally {
+            if (pending === prompt) pending = null
+        }
+    }
+
+    /** The prompt that is up, so a `cancel` can take it down. Main thread only. */
+    private var pending: BiometricPrompt? = null
+
+    private fun cancelPending() {
+        pending?.cancelAuthentication()
+        pending = null
     }
 
     /** `BiometricPrompt`'s error codes, as Rust's outcome table names them. */

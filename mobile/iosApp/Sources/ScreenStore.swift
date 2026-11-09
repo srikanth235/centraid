@@ -367,6 +367,12 @@ final class ScreenStore: ObservableObject {
 
     /// Queue `request` behind what its screen asked before, and run the queue.
     private func enqueue(_ request: Centraid_Core_V1_EffectRequest) {
+        // A WITHDRAWN PROMPT JUMPS THE QUEUE: it exists to end the owner check the queue is
+        // waiting on, so it cannot wait behind it.
+        if case .ownerCheck(let check)? = request.effect.kind, check.cancel {
+            Task { await perform(request) }
+            return
+        }
         queues[request.instance, default: []].append(request)
         drain(request.instance)
     }

@@ -297,7 +297,7 @@ impl Wall {
                 );
                 // THE MEMBER LOCKED: no notice, the wall is the answer.
                 let was_open = self.phase == Phase::Open;
-                self.asking = false;
+                let effects = self.withdraw();
                 if self.phase != Phase::Unavailable {
                     self.phase = Phase::Locked;
                 }
@@ -305,11 +305,14 @@ impl Wall {
                 if was_open {
                     self.failed = Failed::default();
                 }
-                Step::change(if was_open {
-                    Change::Closed
-                } else {
-                    Change::None
-                })
+                Step {
+                    effects,
+                    change: if was_open {
+                        Change::Closed
+                    } else {
+                        Change::None
+                    },
+                }
             }
             None => Step::default(),
         }
@@ -332,7 +335,40 @@ impl Wall {
             reason: words::prompt_reason(locale),
             title: words::prompt_title(locale),
             subtitle: words::prompt_subtitle(locale),
+            cancel: false,
         }))
+    }
+
+    /// DROP A PENDING UNLOCK: the member left (or relocked) before answering the
+    /// OS prompt. What the wall awaited is forgotten, so an answer that lands
+    /// afterwards is a late one and is ignored, and the shell is asked to take
+    /// the prompt down (Face ID's sheet must not stay over Home). Nothing is
+    /// asked when no prompt is out.
+    fn withdraw(&mut self) -> Vec<wire::Effect> {
+        let out = self.asking;
+        self.asking = false;
+        self.probing = false;
+        if self.phase == Phase::Unlocking {
+            self.phase = Phase::Locked;
+        }
+        if !out {
+            return Vec::new();
+        }
+        vec![effect(wire::effect::Kind::OwnerCheck(wire::OwnerCheck {
+            cancel: true,
+            ..Default::default()
+        }))]
+    }
+
+    /// The screen's tab went out of view with the Locker still on its stack:
+    /// the pending unlock is dropped, as it is when the screen is popped.
+    pub fn hidden(&mut self) -> Step {
+        Step::ask(self.withdraw())
+    }
+
+    /// The screen is being popped (`Left`): the pending unlock is dropped.
+    pub fn left(&mut self) -> Step {
+        Step::ask(self.withdraw())
     }
 
     /// The shell answered an effect. `Step::default()` when it was not ours.
@@ -452,8 +488,7 @@ impl Wall {
                 _ => Step::default(),
             };
         }
-        self.asking = false;
-        self.probing = false;
+        let effects = self.withdraw();
         let was_open = self.phase == Phase::Open;
         if self.phase != Phase::Unavailable {
             self.phase = Phase::Locked;
@@ -462,11 +497,14 @@ impl Wall {
             // What the last unlock cleared was told; the core now says none.
             self.failed = Failed::default();
         }
-        Step::change(if was_open {
-            Change::Closed
-        } else {
-            Change::None
-        })
+        Step {
+            effects,
+            change: if was_open {
+                Change::Closed
+            } else {
+                Change::None
+            },
+        }
     }
 
     /// A reveal (or any session step) answered LOCKED: idle ended the session

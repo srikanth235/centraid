@@ -943,7 +943,15 @@ impl Screen for Home {
             Some(E::Left(_)) => {
                 self.secrets.conceal();
                 self.generator.forget();
-                Vec::new()
+                // THE FACE ID SHEET MUST NOT OUTLIVE LOCKER: a pending unlock is dropped.
+                self.pending = None;
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::Hidden(_)) => {
+                self.pending = None;
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }

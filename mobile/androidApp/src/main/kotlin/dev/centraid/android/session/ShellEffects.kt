@@ -115,7 +115,8 @@ internal class ShellEffects(
         }
         scope.launch {
             screens.effects.collect { request ->
-                if (request.effect?.model_download != null) {
+                // A WITHDRAWN PROMPT JUMPS THE QUEUE: it ends the owner check the queue is waiting on.
+                if (request.effect?.model_download != null || request.effect?.owner_check?.cancel == true) {
                     scope.launch { run(request) }
                 } else {
                     queueOf(request.instance).send(request)

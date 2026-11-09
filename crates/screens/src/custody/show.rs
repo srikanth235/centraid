@@ -98,6 +98,7 @@ impl Show {
             reason: words::show_again_reason(locale),
             title: words::show_again_reason(locale),
             subtitle: String::new(),
+            cancel: false,
         }))]
     }
 
