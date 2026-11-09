@@ -178,7 +178,11 @@ private struct HomeRoot: View {
         case .loading, .none:
             Springboard(data: Centraid_Core_V1_HomeData(), shell: shell, header: scrolling)
         case let .failure(failure):
-            FailureBody(failure: failure)
+            // A HOME THAT FAILED STILL NAMES ITS VAULT, scrolled or pinned.
+            VStack(alignment: .leading, spacing: 0) {
+                scrolling
+                FailureBody(failure: failure)
+            }
         case let .data(data):
             VStack(alignment: .leading, spacing: 0) {
                 if data.springboard == .firstRun {

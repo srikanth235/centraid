@@ -656,3 +656,59 @@ fn a_straighten_crops_to_the_frame_the_turned_photograph_fills() {
         assert!(((fit.w * box_w) / (fit.h * box_h) - a / b).abs() < 1e-9);
     }
 }
+
+#[test]
+fn an_untouched_crop_follows_the_straighten_and_a_chosen_one_stays() {
+    let (mut d, at, _) = opened(b"editor-straighten-fit");
+    let crop_of = |d: &Driver| state_of(d, at).plan.expect("plan").crop;
+    let straighten = |d: &mut Driver, degrees: i32| {
+        send(d, at, ev::Kind::Straighten(ev::Straightened { degrees }));
+    };
+    // The vault knows this photograph is 400 x 300: a straighten crops to what the turn fills.
+    straighten(&mut d, 7);
+    let fit = editor::inscribed_crop(400.0 / 300.0, 0, 7);
+    assert!(fit.is_some() && fit != Some(FULL_CROP));
+    assert_eq!(crop_of(&d), fit);
+    // Another angle refits; level goes back to the full frame.
+    straighten(&mut d, -4);
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 0, -4));
+    straighten(&mut d, 0);
+    assert_eq!(crop_of(&d), Some(FULL_CROP));
+    // A crop the member moved stays put through the next straighten.
+    straighten(&mut d, 5);
+    send(
+        &mut d,
+        at,
+        ev::Kind::CropMoved(ev::CropMoved { dx: 0.02, dy: 0.0 }),
+    );
+    let moved = crop_of(&d);
+    straighten(&mut d, 9);
+    assert_eq!(crop_of(&d), moved);
+    // Picking "Original" gives the crop back to the straighten.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Ratio(ev::RatioChosen {
+            ratio: Ratio::Original as i32,
+            frame_ratio: 1.4,
+        }),
+    );
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 0, 9));
+    // A picked ratio is the member's: the next straighten leaves it.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Ratio(ev::RatioChosen {
+            ratio: Ratio::Square as i32,
+            frame_ratio: 1.4,
+        }),
+    );
+    let square = crop_of(&d);
+    straighten(&mut d, 3);
+    assert_eq!(crop_of(&d), square);
+    // A quarter turn resets the crop to the whole frame, then fits it to the straighten again.
+    send(&mut d, at, ev::Kind::Rotate(ev::Rotated {}));
+    assert_eq!(crop_of(&d), editor::inscribed_crop(400.0 / 300.0, 1, 3));
+    send(&mut d, at, ev::Kind::Reset(ev::Reset {}));
+    assert_eq!(crop_of(&d), Some(FULL_CROP));
+}

@@ -181,7 +181,11 @@ public fun HomeScreen(
         // it is a flex peer.
         Box(Modifier.weight(1f)) {
             when {
-                failure != null -> FailureBody(failure)
+                // A HOME THAT FAILED STILL NAMES ITS VAULT, scrolled or pinned.
+                failure != null -> Column {
+                    if (scrolling) lockup()
+                    FailureBody(failure)
+                }
                 data == null -> SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null)
                 data.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN ->
                     DayOne(data, state.loading_label, onOpen, header = if (scrolling) lockup else null)
