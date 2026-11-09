@@ -477,7 +477,7 @@ struct DocsVersionsView: View {
 
     var body: some View {
         // THE BOARD (DocVersions): the title large in the page, the versions in one white card.
-        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {

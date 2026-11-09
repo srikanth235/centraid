@@ -26,8 +26,8 @@ struct AgendaEventView: View {
 
     var body: some View {
         let chrome = state.chrome
-        // THE EVENT'S OWN NAME IS THE LARGE TITLE (#1173): the bar carries only the chevron.
-        PushedPage(title: "", parentTitle: chrome.back, onBack: onBack) {
+        // THE EVENT'S OWN NAME IS THE TITLE, inline in the top row beside the chevron (round 9).
+        PushedPage(title: { if case let .data(d)? = state.content { return d.title } else { return "" } }(), parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             if case let .gone(gone)? = state.content {
@@ -202,13 +202,6 @@ struct AgendaEventView: View {
 
     private func header(_ detail: Centraid_Core_V1_AgendaEventData) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(detail.title)
-                    .kitType(.title)
-                    .foregroundStyle(detail.isPast ? Surface.meta : Surface.ink)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-            }
             Text(detail.dateLabel)
                 .centraidType("body")
                 .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))

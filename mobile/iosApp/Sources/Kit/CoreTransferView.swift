@@ -24,7 +24,6 @@ struct CoreTransferView: View {
             title: state.title,
             parentTitle: state.backLabel,
             onBack: onBack,
-            showsTitle: true,
             meta: ""
         ) {
             EmptyView()

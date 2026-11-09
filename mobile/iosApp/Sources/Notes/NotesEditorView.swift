@@ -554,7 +554,7 @@ struct NotesHistoryView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {

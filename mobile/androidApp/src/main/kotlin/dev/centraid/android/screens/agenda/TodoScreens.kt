@@ -59,9 +59,11 @@ internal fun TodoListScreen(
     val heading = if (state.color_key.isEmpty()) null else agendaTokenColor(state.color_key)
     val addRoute = state.add_route
     PushedPage(
-        title = if (heading == null) state.title else "",
+        title = state.title,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        titleColor = heading,
+        titleTag = "tasks-list-title",
         trailing = if (addRoute != null && state.add_label.isNotEmpty()) {
             RoomAction("Plus", state.add_label, "tasks-list-add") { onOpen(addRoute) }
         } else {
@@ -80,17 +82,7 @@ internal fun TodoListScreen(
                     EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-list")) {
-                        // THE LARGE TITLE IN THE SMART LIST'S COLOUR (#1173), its date line under it.
-                        heading?.let { color ->
-                            item(key = "title") {
-                                KitText(
-                                    state.title,
-                                    KitType.Title,
-                                    color,
-                                    Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("tasks-list-title"),
-                                )
-                            }
-                        }
+                        // THE TITLE IS IN THE TOP ROW, in the smart list's colour (round 9); its date line is first.
                         if (list.subtitle.isNotEmpty()) {
                             item(key = "subtitle") {
                                 Text(list.subtitle, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.padding(KitGeometry.GUTTER))
@@ -146,6 +138,8 @@ internal fun TodoProjectScreen(
         title = state.title,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        titleColor = agendaListColor(data?.list_color_key.orEmpty()),
+        titleIcon = data?.icon_key.orEmpty(),
         trailing = if (addSection.isNotEmpty()) {
             RoomAction("FolderPlus", addSection, "tasks-add-section") { onEvent(TodoProjectEvent(add_section = TodoProjectEvent.AddSectionRequested())) }
         } else {
@@ -171,18 +165,7 @@ internal fun TodoProjectScreen(
                         }
                     }
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-project"), state = listState) {
-                        // THE TITLE IN THE LIST'S COLOUR (#1173).
-                        listColor?.let { color ->
-                            item(key = "title") {
-                                Row(Modifier.padding(horizontal = KitGeometry.GUTTER), verticalAlignment = Alignment.CenterVertically) {
-                                    // THE LIST'S OWN ICON beside its name (#1173 wave 2).
-                                    if (project.icon_key.isNotEmpty()) {
-                                        CentraidIcon(project.icon_key, tint = color, size = 24.dp, modifier = Modifier.padding(end = 8.dp))
-                                    }
-                                    Text(state.title, style = centraidType("title"), color = color)
-                                }
-                            }
-                        }
+                        // THE TITLE, in the list's colour with its own icon, is in the top row (round 9).
                         if (project.count_label.isNotEmpty()) {
                             item(key = "count") {
                                 Text(project.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
@@ -325,7 +308,7 @@ internal fun TodoCatchUpScreen(
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = "", parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
+    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack, titleTag = "tasks-catch-up-title") {
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -338,15 +321,7 @@ internal fun TodoCatchUpScreen(
                     EmptyStateView(empty, onAction = null)
                 } else {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-catch-up")) {
-                        // THE BOARD'S LARGE TITLE, the head line under it.
-                        item(key = "title") {
-                            Text(
-                                chrome?.title.orEmpty(),
-                                style = centraidType("title"),
-                                color = centraidColor("text"),
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).semantics { heading() }.testTag("tasks-catch-up-title"),
-                            )
-                        }
+                        // THE TITLE IS IN THE TOP ROW (round 9); the head line is first.
                         if (catchUp.head.isNotEmpty()) {
                             item(key = "head") {
                                 Text(catchUp.head, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))

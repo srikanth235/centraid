@@ -18,7 +18,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(content: content, onRetry: nil) { data in

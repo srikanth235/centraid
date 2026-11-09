@@ -38,7 +38,7 @@ struct TodoListView: View {
     var body: some View {
         // THE TITLE IS THE PAGE'S OWN, LARGE, IN THE SMART LIST'S COLOUR (#1173): the bar
         // carries the back chevron and the plus, and no small title.
-        PushedPage(title: heading == nil ? state.title : "", parentTitle: state.chrome.back, onBack: onBack) {
+        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack, titleColor: heading, titleIdentifier: "tasks-list-title") {
             if state.hasAddRoute, !state.addLabel.isEmpty {
                 RoomTrailing(
                     action: RoomAction(iconKey: "Plus", label: state.addLabel, identifier: "tasks-list-add") {
@@ -56,15 +56,6 @@ struct TodoListView: View {
                 ) { list in
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
-                            if let color = heading {
-                                Text(state.title)
-                                    .kitType(.title)
-                                    .foregroundStyle(color)
-                                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                                    .accessibilityAddTraits(.isHeader)
-                                    .accessibilityIdentifier("tasks-list-title")
-                                    .todoPlainRow()
-                            }
                             if !list.subtitle.isEmpty {
                                 Text(list.subtitle)
                                     .centraidType("small")
@@ -170,7 +161,14 @@ struct TodoProjectView: View {
     }
 
     var body: some View {
-        PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
+        // THE TITLE, in the list's colour with its own icon, is inline in the top row (round 9).
+        PushedPage(
+            title: state.title,
+            parentTitle: state.chrome.back,
+            onBack: onBack,
+            titleColor: { if case let .data(p) = content { return AgendaPalette.list(p.listColorKey) } else { return nil } }(),
+            titleIcon: { if case let .data(p) = content { return p.iconKey } else { return "" } }()
+        ) {
             if case let .data(project) = content, project.found {
                 HStack(spacing: 4) {
                     // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
@@ -200,20 +198,6 @@ struct TodoProjectView: View {
                 ) { project in
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
-                            // THE TITLE IN THE LIST'S COLOUR (#1173), with the list's own icon beside it.
-                            if let color = AgendaPalette.list(project.listColorKey) {
-                                HStack(spacing: 8) {
-                                    if !project.iconKey.isEmpty {
-                                        CentraidIconView(iconKey: project.iconKey, tint: color, size: 24)
-                                    }
-                                    Text(state.title)
-                                        .centraidType("title")
-                                        .foregroundStyle(color)
-                                }
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                                .accessibilityHidden(true)
-                                .todoPlainRow()
-                            }
                             if !project.countLabel.isEmpty {
                                 TodoCountLine(count: project.countLabel, window: "")
                                     .todoPlainRow()
@@ -350,7 +334,7 @@ struct TodoCatchUpView: View {
     }
 
     var body: some View {
-        PushedPage(title: "", parentTitle: state.chrome.back, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -361,13 +345,6 @@ struct TodoCatchUpView: View {
                 ) { catchUp in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            // THE BOARD'S LARGE TITLE, the head line under it.
-                            Text(state.chrome.title)
-                                .kitType(.title)
-                                .foregroundStyle(Surface.ink)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                                .accessibilityAddTraits(.isHeader)
-                                .accessibilityIdentifier("tasks-catch-up-title")
                             if !catchUp.head.isEmpty {
                                 Text(catchUp.head)
                                     .centraidType("small")

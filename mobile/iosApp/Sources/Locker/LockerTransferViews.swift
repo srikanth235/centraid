@@ -45,7 +45,7 @@ struct LockerExportView: View {
 
     var body: some View {
         LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: state.chrome.backLabel, send: sendWall, onWords: onWords, onBack: onBack) {
-            PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
+            PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 EmptyView()
             } content: {
                 LockerShield(secure: state.secure) {

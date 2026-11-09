@@ -90,16 +90,16 @@ public fun PhotoShelfScreen(
         modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // THE TITLE AT 34 with its count under it (#1173).
-        Column {
-            KitText(state.title, KitType.Title, Surface.ink, maxLines = 2)
-            if (!data?.count_label.isNullOrEmpty()) KitText(data?.count_label.orEmpty(), KitType.Meta, Surface.meta, maxLines = 1)
-        }
+        // THE TITLE AT 34 with its count under it, IN THE SAME ROW as the keys (#1173, round 9).
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Column(Modifier.weight(1f)) {
+                KitText(state.title, KitType.Title, Surface.ink, maxLines = 2)
+                if (!data?.count_label.isNullOrEmpty()) KitText(data?.count_label.orEmpty(), KitType.Meta, Surface.meta, maxLines = 1)
+            }
             if (selecting) {
                 KitLink(
                     label = chrome?.done_label.orEmpty(),

@@ -32,7 +32,7 @@ struct MoneyAccountsView: View {
         // presents one sheet at a time. On its own it is the page's.
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
         let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: addLabel,
@@ -175,7 +175,6 @@ struct MoneyRulesView: View {
             title: state.chrome.title,
             parentTitle: state.chrome.backLabel,
             onBack: onBack,
-            showsTitle: true,
             meta: content.loaded?.limitLine ?? ""
         ) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
@@ -343,7 +342,7 @@ struct MoneyCategoriesView: View {
         let sheetBinding = moneySheetBinding(isOpen) { send(event { $0.sheetClosed = .init() }) }
         let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
         let pageConfirm = moneySheetBinding(state.hasConfirm && !isOpen) { send(event { $0.confirmDismissed = .init() }) }
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
                 label: addLabel,

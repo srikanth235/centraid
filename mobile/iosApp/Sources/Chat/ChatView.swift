@@ -486,11 +486,18 @@ private struct ChatsPage: View {
                     identifier: "chat-chats-back",
                     action: onBack
                 )
+                // THE TITLE IS IN THE TOP ROW beside the chevron (#1173, round 9).
+                Text(state.drawerLabel)
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("kit-header-title")
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin - 8)
             .padding(.top, 8)
-            KitHeader(title: state.drawerLabel)
+            .padding(.bottom, 8)
 
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)

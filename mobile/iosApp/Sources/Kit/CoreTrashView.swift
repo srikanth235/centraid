@@ -39,7 +39,6 @@ struct CoreTrashView: View {
             title: state.title,
             parentTitle: state.backLabel,
             onBack: onBack,
-            showsTitle: true,
             meta: countLabel
         ) {
             EmptyView()

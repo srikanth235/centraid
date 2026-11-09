@@ -27,7 +27,7 @@ struct MoneySearchView: View {
 
     var body: some View {
         let chrome = state.chrome
-        PushedPage(title: chrome.title, parentTitle: chrome.backLabel, onBack: onBack, showsTitle: true) {
+        PushedPage(title: chrome.title, parentTitle: chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(alignment: .leading, spacing: 0) {

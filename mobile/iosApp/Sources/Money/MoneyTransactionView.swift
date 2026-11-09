@@ -378,7 +378,7 @@ struct MoneyRecurringView: View {
     let onBack: () -> Void
 
     var body: some View {
-        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack, showsTitle: true) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(

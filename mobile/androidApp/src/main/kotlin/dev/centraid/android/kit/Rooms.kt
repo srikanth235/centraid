@@ -204,32 +204,38 @@ public fun AppPlace(
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("$app-place")) {
-        // THE HEADER (#1173): at most two keys on the right (the tonal filter key, then the
-        // filled accent `+`), then the title at 34 bold with the scope under it.
+        // THE HEADER (#1173, round 9): THE TITLE SITS IN THE TOP ROW, large at the leading edge
+        // with the scope under it, and at most two keys at the trailing end (the tonal filter
+        // key, then the filled accent `+`). A place's own bar (the Calendar's month chip) is one
+        // control row under the title.
+        val showsTitle = barLeading == null || barShowsTitle
         Row(
-            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
+            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            if (barLeading != null) {
-                barLeading.invoke()
-                // THE KEYS STAY AT THE END even when the leading slot draws nothing (Reminders).
-                Spacer(Modifier.weight(1f))
+            Column(Modifier.weight(1f).padding(top = 2.dp)) {
+                if (showsTitle) RoomTitle(title)
+                if (showsTitle && meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, Surface.meta)
+                }
+                if (showsTitle && subtitle != null) RoomSubtitleLine(subtitle)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                barActions?.invoke()
+                if (barLeading == null) barActions?.invoke()
                 if (lead != null) HeaderVerb(lead)
                 if (filter != null) FilterMenuButton(app, filter)
                 if (trailing != null) HeaderVerb(trailing)
             }
         }
-        if (barLeading == null || barShowsTitle) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).padding(bottom = 8.dp)) {
-                RoomTitle(title)
-                if (meta.isNotEmpty()) {
-                    KitText(meta, KitType.Meta, Surface.meta)
-                }
-                if (subtitle != null) RoomSubtitleLine(subtitle)
+        if (barLeading != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                barLeading.invoke()
+                barActions?.invoke()
             }
         }
         BandStage(
@@ -300,10 +306,16 @@ public fun PushedPage(
     backSpoken: String? = null,
     /** A scope line under the title (Trash's "3 items"): the machine's, empty for none. */
     meta: String = "",
+    /** The title in a colour of the page's own (a smart list's, a list's), with its glyph before it. */
+    titleColor: androidx.compose.ui.graphics.Color? = null,
+    titleIcon: String = "",
+    titleTag: String? = null,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
+        // THE TITLE IS IN THE TOP ROW (#1173, round 9): the back chevron, the title inline beside
+        // it, the page's keys at the end; the scope line, if any, under the title.
         Row(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -316,14 +328,26 @@ public fun PushedPage(
                 "room-back",
                 onPress = onBack,
             )
-            Spacer(Modifier.weight(1f))
+            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (titleIcon.isNotEmpty() && titleColor != null) {
+                        CentraidIcon(titleIcon, tint = titleColor, size = 20.dp, modifier = Modifier.padding(end = 6.dp))
+                    }
+                    KitText(
+                        title,
+                        KitType.Section,
+                        titleColor ?: Surface.ink,
+                        modifier = Modifier.semantics { heading() }.let { if (titleTag != null) it.testTag(titleTag) else it },
+                        maxLines = 1,
+                    )
+                }
+                if (meta.isNotEmpty()) {
+                    KitText(meta, KitType.Meta, Surface.meta, Modifier.testTag("page-meta"))
+                }
+            }
             if (filter != null) FilterMenuButton(app, filter)
             if (more != null) HeaderVerb(more)
             if (trailing != null) HeaderVerb(trailing)
-        }
-        RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
-        if (meta.isNotEmpty()) {
-            KitText(meta, KitType.Meta, Surface.meta, Modifier.padding(horizontal = KitGeometry.GUTTER).testTag("page-meta"))
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)

@@ -111,6 +111,49 @@ struct PlaceBar {
     var showsTitle = false
 }
 
+/// THE TITLE IN THE TOP ROW (#1173, round 9): an app root's title is large at the leading edge of
+/// the system bar, on the same row as the trailing keys (iOS 26 Photos' "Library"); the scope line
+/// is drawn under it in the page (`KitHeader` with an empty title). The bar's own item, with no
+/// glass plate behind it.
+struct RootBarTitle: ToolbarContent {
+    let title: String
+
+    var body: some ToolbarContent {
+        if #available(iOS 26, *) {
+            ToolbarItem(placement: .topBarLeading) { label }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { label }
+        }
+    }
+
+    private var label: some View {
+        Text(title)
+            .kitType(.title)
+            .foregroundStyle(Surface.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("kit-header-title")
+    }
+}
+
+extension View {
+    /// An app root's title in the bar's top row, large at the leading edge (see `RootBarTitle`).
+    func kitRootTitle(_ title: String) -> some View {
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar { RootBarTitle(title: title) }
+    }
+
+    /// A pushed page's title inline in the bar, beside the back chevron.
+    func kitInlineTitle(_ title: String) -> some View {
+        self.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 /// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
 struct RoomTrailing: View {
     let action: RoomAction?
@@ -264,12 +307,22 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.content = content
     }
 
+    private var showsBarTitle: Bool { bar == nil || bar?.showsTitle == true }
+
     var body: some View {
         VStack(spacing: 0) {
-            // THE HEADER IS THE PAGE'S: the title at 34 bold, the scope under it. The system bar
-            // above carries only the keys (the glass filter and the filled accent `+`) and a
-            // back chevron where the place was pushed.
-            if bar == nil || bar?.showsTitle == true { KitHeader(title: title, subtitle: subtitle) }
+            // THE HEADER IS THE BAR'S TOP ROW: the title at 34 bold at the leading edge, the keys
+            // (the glass filter and the filled accent `+`) at the trailing, nothing else.
+            // THE TITLE IS IN THE BAR'S TOP ROW (`RootBarTitle`); the scope line is first here, and a
+            // place's own bar (the Calendar's month chip) is one control row under it.
+            if showsBarTitle { KitHeader(title: "", subtitle: subtitle) }
+            if let bar {
+                HStack(spacing: 0) {
+                    bar.leading.environment(\.appAccent, AppAccent(app))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -284,11 +337,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
-            if let bar {
-                ToolbarItem(placement: .topBarLeading) {
-                    bar.leading.environment(\.appAccent, AppAccent(app))
-                }
-            }
+            if showsBarTitle { RootBarTitle(title: title) }
             ToolbarItemGroup(placement: .primaryAction) {
                 if let bar { bar.actions.environment(\.appAccent, AppAccent(app)) }
                 if let lead { RoomTrailing(action: lead, app: app) }
@@ -384,10 +433,12 @@ struct PushedPage<Trailing: View, Content: View>: View {
     let title: String
     let parentTitle: String
     let onBack: () -> Void
-    /// The kit's own pages (Trash, Settings) draw the title large in the page, with `meta`
-    /// under it; a page that heads itself (a document, an editor) leaves this off.
-    var showsTitle: Bool = false
+    /// A scope line under the bar (Trash's "3 items"); the title itself is always the bar's, inline.
     var meta: String = ""
+    /// A colour of the page's own for the title (a smart list's, a list's), with its glyph before it.
+    var titleColor: Color? = nil
+    var titleIcon: String = ""
+    var titleIdentifier: String? = nil
     let trailing: () -> Trailing
     let content: () -> Content
 
@@ -397,29 +448,33 @@ struct PushedPage<Trailing: View, Content: View>: View {
         title: String,
         parentTitle: String,
         onBack: @escaping () -> Void,
-        showsTitle: Bool = false,
         meta: String = "",
+        titleColor: Color? = nil,
+        titleIcon: String = "",
+        titleIdentifier: String? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.parentTitle = parentTitle
         self.onBack = onBack
-        self.showsTitle = showsTitle
         self.meta = meta
+        self.titleColor = titleColor
+        self.titleIcon = titleIcon
+        self.titleIdentifier = titleIdentifier
         self.trailing = trailing
         self.content = content
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsTitle { KitHeader(title: title, meta: meta) }
+            if !meta.isEmpty { KitHeader(title: "", meta: meta) }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Surface.page.ignoresSafeArea())
-            .navigationTitle(showsTitle ? "" : title)
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
@@ -435,6 +490,20 @@ struct PushedPage<Trailing: View, Content: View>: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(KitWords.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
+                }
+                if let titleColor {
+                    // THE TITLE IN THE PAGE'S OWN COLOUR, still inline in the top row.
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 6) {
+                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor, size: 20) }
+                            Text(title)
+                                .kitType(.section)
+                                .foregroundStyle(titleColor)
+                                .lineLimit(1)
+                                .accessibilityAddTraits(.isHeader)
+                                .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
             }

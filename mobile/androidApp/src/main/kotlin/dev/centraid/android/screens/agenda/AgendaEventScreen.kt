@@ -76,8 +76,8 @@ internal fun AgendaEventScreen(
 ) {
     val chrome = state.chrome
     PushedPage(
-        // THE EVENT'S OWN NAME IS THE LARGE TITLE (#1173): the bar carries only the chevron.
-        title = "",
+        // THE EVENT'S OWN NAME IS THE TITLE, in the top row beside the chevron (round 9).
+        title = state.data_?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         status = state.status?.sentence.orEmpty(),
@@ -130,12 +130,6 @@ private fun EventBody(
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
-            KitText(
-                data.title,
-                KitType.Title,
-                if (data.is_past) Surface.meta else Surface.ink,
-                modifier = Modifier.semantics { heading() },
-            )
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
             if (data.calendar_name.isNotEmpty()) {

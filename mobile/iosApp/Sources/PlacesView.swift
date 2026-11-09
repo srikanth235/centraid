@@ -30,9 +30,7 @@ struct PlacesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                // THE TITLE AT 34 (#1173), then Cards · Map as one segmented control.
-                KitHeader(title: state.title)
-                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                // THE TITLE IS INLINE IN THE BAR (#1173, round 9); then Cards · Map as one segmented control.
                 // THE BOARD'S CONTROL IS THE WIDTH OF THE PAGE, the two segments equal.
                 KitSegmented(
                     options: [
@@ -78,7 +76,8 @@ struct PlacesView: View {
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
         .background(Surface.page.ignoresSafeArea())
         .appAccent("photos")
-        .navigationTitle("")
+        .navigationTitle(state.title)
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: Binding(
             get: { state.hasNameSheet },
             set: { shown in if !shown, state.hasNameSheet { event { $0.nameDismissed = .init() } } }

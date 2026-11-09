@@ -50,7 +50,7 @@ struct PhotoShelfView: View {
             VStack(alignment: .leading, spacing: 12) {
                 // THE TITLE AT 34 with its count under it (#1173); Empty trash and the
                 // selection's count sit beside the count line.
-                KitHeader(title: state.title, meta: countLabel)
+                KitHeader(title: "", meta: countLabel)
                 header
                     .padding(.horizontal, CentraidGeometry.pageMargin)
 
@@ -159,7 +159,9 @@ struct PhotoShelfView: View {
         // THE PAGE'S GROUND: the card page, the photographs edge to edge.
         .background(Surface.page.ignoresSafeArea())
         .appAccent("photos")
-        .navigationTitle("")
+        // THE TITLE IS INLINE IN THE BAR'S TOP ROW beside the back chevron (#1173, round 9).
+        .navigationTitle(state.title)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if state.hasAlbum, !state.album.trashed {
                 ToolbarItem(placement: .primaryAction) {
