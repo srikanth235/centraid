@@ -114,6 +114,8 @@ struct SheetRow: View {
                     Text(label)
                         .kitType(.row)
                         .foregroundStyle(ink)
+                        // A SENTENCE WRAPS, never ends in an ellipsis (the Downloads sheet's choices).
+                        .fixedSize(horizontal: false, vertical: true)
                     if !detail.isEmpty {
                         Text(detail)
                             .kitType(.meta)

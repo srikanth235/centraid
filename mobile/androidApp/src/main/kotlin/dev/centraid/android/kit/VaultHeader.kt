@@ -34,6 +34,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.CentraidScale
 
 /**
  * THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
@@ -273,20 +274,32 @@ public fun TransferRulesSheet(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    SheetRoom(title = sheet.title, onDismiss = onDismiss) {
+    SheetRoom(
+        title = sheet.title,
+        onDismiss = onDismiss,
+        primary = SheetPrimary(label = KitWords.DONE, onPress = onDismiss),
+    ) {
         Text(
             sheet.subtitle,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
         )
-        sheet.choices.forEach { choice ->
-            SheetRow(
-                label = choice.sentence,
-                selected = choice.picked,
-                testTag = "transfer-rule-" + choice.stored,
-                onTap = { onPick(choice.stored) },
-            )
+        // THE CHOICES ARE ONE CARD ON THE SHEET, as the Download settings board draws them.
+        Column(
+            Modifier
+                .padding(horizontal = KitGeometry.GUTTER)
+                .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                .background(Surface.sheetCard),
+        ) {
+            sheet.choices.forEach { choice ->
+                SheetRow(
+                    label = choice.sentence,
+                    selected = choice.picked,
+                    testTag = "transfer-rule-" + choice.stored,
+                    onTap = { onPick(choice.stored) },
+                )
+            }
         }
     }
 }
