@@ -38,6 +38,7 @@ fn pick(d: &mut Driver, i: u64, name: &str, body: &str) {
             name: name.to_owned(),
             media_type: String::new(),
             content: body.as_bytes().to_vec(),
+            ..Default::default()
         },
     ));
 }

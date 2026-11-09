@@ -42,7 +42,7 @@ message NotesHomeState {
   reserved "chips";
   // Search is the field under the title; its answer replaces the shelf.
   NotesSearchState search = 12;
-  // More holds Trash alone.
+  // More holds Import, Export and Trash.
   repeated NotesMoreRow more_rows = 13;
   NotesSheet sheet = 14;
   // The sheet's content, by which sheet is open.

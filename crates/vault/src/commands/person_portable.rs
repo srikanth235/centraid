@@ -65,17 +65,19 @@ fn split_unescaped(value: &str, sep: char) -> Vec<String> {
     let mut escaped = false;
     for c in value.chars() {
         if escaped {
-            parts.last_mut().map(|p| {
-                p.push('\\');
-                p.push(c);
-            });
+            if let Some(part) = parts.last_mut() {
+                part.push('\\');
+                part.push(c);
+            }
             escaped = false;
         } else if c == '\\' {
             escaped = true;
         } else if c == sep {
             parts.push(String::new());
         } else {
-            parts.last_mut().map(|p| p.push(c));
+            if let Some(part) = parts.last_mut() {
+                part.push(c);
+            }
         }
     }
     parts.iter().map(|part| unescape(part)).collect()

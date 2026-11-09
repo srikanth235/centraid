@@ -376,13 +376,6 @@ fn source_files(ctx: &CommandCtx<'_, '_>) -> Vec<SourceFile> {
         .collect()
 }
 
-fn pre_import(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let too_long = source_files(ctx)
-        .iter()
-        .any(|file| file.text.len() > BODY_BUDGET_BYTES);
-    Ok(too_long.then(|| "A note this long cannot be imported.".to_owned()))
-}
-
 /// Whether a live note already has these words under this title.
 fn already_there(ctx: &CommandCtx<'_, '_>, parsed: &Parsed) -> Result<bool> {
     let held: i64 = ctx.connection().query_row(
@@ -454,7 +447,13 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .unwrap_or(false);
     let files = source_files(ctx);
     let total = files.len();
-    let parsed: Vec<Parsed> = files.iter().filter_map(portable::parse).collect();
+    // A file longer than a note may be is not imported, and is counted with the files that are not
+    // notes: one big file never costs a folder its other notes.
+    let parsed: Vec<Parsed> = files
+        .iter()
+        .filter(|file| file.text.len() <= BODY_BUDGET_BYTES)
+        .filter_map(portable::parse)
+        .collect();
     let ignored = total - parsed.len();
     let mut fresh: Vec<Parsed> = Vec::new();
     let mut skipped = 0_usize;
@@ -662,10 +661,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "note_is_live_and_version_is_its_own",
         check: pre_restore_version,
     }];
-    const IMPORT: &[CommandCondition] = &[CommandCondition {
-        predicate: "files_are_notes_within_budget",
-        check: pre_import,
-    }];
     vec![
         CommandDefinition::plain(
             "note.import",
@@ -680,7 +675,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               }
             }"#,
             Idempotency::Idempotent,
-            IMPORT,
+            &[],
             import,
         ),
         CommandDefinition::plain(

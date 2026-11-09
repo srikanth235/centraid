@@ -12,7 +12,7 @@
 //!   closing search reads nothing and clears the term.
 //! - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
 //!   action beside the filter button, search the bar under it, and More holds
-//!   Trash alone.
+//!   Import, Export and Trash.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
 //! - **Contacts** import and follow here ([`ContactsFollow`]): the day-one empty

@@ -88,7 +88,7 @@ message PeopleHomeState {
   // Search is the field under the title; while a term is answered its rows
   // replace the surface.
   PeopleSearchState search = 12;
-  // SHEET_MORE's rows: Trash alone (R-CHROME-4).
+  // SHEET_MORE's rows: Import, Export and Trash, never search, sort or a filter (R-CHROME-4).
   repeated PeopleMoreRow more_rows = 13;
   Sheet sheet = 14;
   // What a write did, a refusal's sentence, or how an import went; the screen

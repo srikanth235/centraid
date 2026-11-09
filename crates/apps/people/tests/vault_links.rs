@@ -147,6 +147,10 @@ fn documents_payments_and_photographs_of_a_person_are_in_their_vault_and_a_login
         .0
         .person
         .expect("a sheet");
+    assert!(
+        sheet.touches.is_empty(),
+        "a payment with someone is no touch: it is not in their log"
+    );
     let mut seen: Vec<(String, String)> = sheet
         .vault
         .items

@@ -155,3 +155,28 @@ fn the_journal_set_does_not_count_what_is_about_everything_else() {
     let ids = w.read(|door| read_journal_ids(door).expect("reads"));
     assert_eq!(ids, [note], "only the owner's edges are walked");
 }
+
+#[test]
+fn a_hundred_and_more_notes_about_the_same_few_things_keep_every_chip() {
+    let w = World::new();
+    let maya = w.id("person.add", json!({ "title": "Maya" }));
+    let dinner = w.id("person.add", json!({ "title": "Dinner crowd" }));
+    let ids: Vec<String> = (0..130)
+        .map(|n| {
+            w.id(
+                "note.create",
+                json!({ "title": format!("Note {n}"), "body": "x" }),
+            )
+        })
+        .collect();
+    for (n, id) in ids.iter().enumerate() {
+        w.join(id, if n % 2 == 0 { &maya } else { &dinner });
+    }
+    let (library, denial) = w.read(|door| load_library(door, Some(200)).expect("folds"));
+    assert!(denial.is_none());
+    assert_eq!(library.notes.len(), 130);
+    assert!(
+        library.notes.iter().all(|row| row.about.len() == 1),
+        "every note, past the card ceiling, still names its subject"
+    );
+}

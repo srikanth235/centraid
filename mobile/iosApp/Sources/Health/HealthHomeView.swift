@@ -31,9 +31,6 @@ struct HealthHomeView: View {
             app: "health",
             title: chrome.title,
             trailing: nil,
-            filter: filter,
-            subtitle: subtitle,
-            showsBand: !content.isDenied && !state.band.isEmpty,
             // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own,
             // reached from the band's search key; the field is never open here.
             search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
@@ -42,7 +39,10 @@ struct HealthHomeView: View {
                 onOpen: { open(chrome.searchRoute) },
                 onTerm: { _ in },
                 onClose: {}
-            )
+            ),
+            filter: filter,
+            subtitle: subtitle,
+            showsBand: !content.isDenied && !state.band.isEmpty
         ) {
             AppBand(
                 app: "health",

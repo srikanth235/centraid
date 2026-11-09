@@ -84,6 +84,8 @@ fn matches_are_proposals_nothing_is_written_until_confirmed_and_a_second_import_
         "{preview}"
     );
     assert_eq!(preview["proposals"][0], "Maya Rao");
+    // A card matched by a number names the person it would merge into.
+    assert!(preview["proposals"].as_array().unwrap().len() == 1);
     assert_eq!(
         w.count("SELECT COUNT(*) FROM person"),
         before,

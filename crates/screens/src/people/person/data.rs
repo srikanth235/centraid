@@ -187,6 +187,12 @@ pub fn vault(
                 "photo" => ("photos", words::vault_kind_photo(locale)),
                 _ => ("notes", words::vault_kind_note(locale)),
             };
+            // A photograph or a payment with no title is still a row: it is called its kind.
+            let title = if item.title.trim().is_empty() {
+                kind_label.clone()
+            } else {
+                item.title.clone()
+            };
             let when = if item.kind == "event" {
                 event_when(locale, cycle, item)
             } else if item.kind == "document" && !item.via.is_empty() {
@@ -201,20 +207,16 @@ pub fn vault(
                 accessibility_label: if when.is_empty() {
                     fill(
                         &words::vault_a11y_undated(locale),
-                        &[("kind", &kind_label), ("title", &item.title)],
+                        &[("kind", &kind_label), ("title", &title)],
                     )
                 } else {
                     fill(
                         &words::vault_a11y(locale),
-                        &[
-                            ("kind", &kind_label),
-                            ("title", &item.title),
-                            ("when", &when),
-                        ],
+                        &[("kind", &kind_label), ("title", &title), ("when", &when)],
                     )
                 },
                 kind_label,
-                title: item.title.clone(),
+                title,
                 when_label: when,
                 route: Some(route),
             })

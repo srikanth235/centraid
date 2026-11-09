@@ -834,13 +834,18 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The most cards one import takes.
 const VCARD_MAX: usize = 20_000;
 
+/// A person's nickname, role and birthday: the fields a card may fill.
+type Fields = (Option<String>, Option<String>, Option<String>);
+
 /// What the vault already holds of the people a file may name: their names and the points they
 /// are reached at, folded to the keys two spellings share.
 struct Known {
     by_name: BTreeMap<String, String>,
+    /// A person's own name, for saying whom a card would merge into.
+    titles: BTreeMap<String, String>,
     by_point: BTreeMap<(String, String), String>,
     /// A person's own fields and points, for what a card would add.
-    fields: BTreeMap<String, (Option<String>, Option<String>, Option<String>)>,
+    fields: BTreeMap<String, Fields>,
     points: BTreeSet<(String, String, String)>,
 }
 
@@ -848,6 +853,7 @@ fn known_people(ctx: &CommandCtx<'_, '_>) -> Result<Known> {
     let c = ctx.connection();
     let mut known = Known {
         by_name: BTreeMap::new(),
+        titles: BTreeMap::new(),
         by_point: BTreeMap::new(),
         fields: BTreeMap::new(),
         points: BTreeSet::new(),
@@ -873,6 +879,7 @@ fn known_people(ctx: &CommandCtx<'_, '_>) -> Result<Known> {
             .by_name
             .entry(crate::model::fold_label(&title))
             .or_insert_with(|| id.clone());
+        known.titles.insert(id.clone(), title);
         known.fields.insert(id, (nickname, role, birthday));
     }
     let mut points = c.prepare_cached(
@@ -1025,7 +1032,16 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 } else {
                     merged += 1;
                     if proposals.len() < 5 {
-                        proposals.push(card.name.clone());
+                        // Whom it merges into, when that is not the name the card carries: a
+                        // number or an address can name a different person.
+                        let into = known.titles.get(&person).cloned().unwrap_or_default();
+                        proposals.push(
+                            if crate::model::fold_label(&into) == name_key || into.is_empty() {
+                                card.name.clone()
+                            } else {
+                                format!("{} → {into}", card.name)
+                            },
+                        );
                     }
                     if !dry_run {
                         let c = ctx.connection();

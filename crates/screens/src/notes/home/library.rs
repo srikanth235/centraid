@@ -3,7 +3,7 @@
 //! into a notebook and trashes.
 //!
 //! THE ROOM'S GRAMMAR (R-CHROME-1…4): New note is the header's one action next to
-//! the filter button, search the bar under it, and More holds Trash alone — never
+//! the filter button, search the bar under it, and More holds Import, Export and Trash — never
 //! search, sort or a filter. The button opens ONE menu ([`Library::filter_menu`]:
 //! Pinned and the tags to show, the order to sort by), and the notebook the
 //! library was opened on is the title's second line ([`Library::subtitle`]), whose

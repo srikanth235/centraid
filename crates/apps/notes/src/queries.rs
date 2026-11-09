@@ -609,8 +609,15 @@ pub fn about_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<Strin
         .into_iter()
         .filter(|join| join.via == graph::Via::Edge && Some(&join.to) != owner.as_ref())
         .collect();
-    let subjects: Vec<String> = joined.iter().map(|join| join.to.clone()).collect();
-    let cards = cards::resolve(door, &subjects)?;
+    // Each subject once, resolved a card's ceiling at a time: one edge per note would otherwise
+    // spend the ceiling on repeats and leave later subjects looking missing.
+    let mut subjects: Vec<String> = joined.iter().map(|join| join.to.clone()).collect();
+    subjects.sort_unstable();
+    subjects.dedup();
+    let mut cards = BTreeMap::new();
+    for chunk in subjects.chunks(cards::MAX_REFS) {
+        cards.extend(cards::resolve(door, chunk)?);
+    }
     let mut by_note: BTreeMap<String, Vec<RefCard>> = BTreeMap::new();
     for join in joined {
         let Some(card) = cards

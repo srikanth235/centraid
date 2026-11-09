@@ -50,35 +50,48 @@ pub struct Joined {
     pub via: Via,
 }
 
-/// `column IN ids` over one table, under the caller's own predicate, to the end of the bound.
-fn read_in(
-    door: &dyn PageDoor,
-    bound: FanOutBound,
-    name: &str,
-    table: &str,
-    select: &str,
-    order: (&str, &str),
-    column: &str,
-    ids: &[String],
-    extra: Option<(String, Vec<PageBindValue>)>,
-) -> KitResult<Vec<Row>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let fragment = in_list(column, ids)?;
-    let (predicate, bind) = match extra {
-        Some((clause, mut bind)) => {
-            bind.extend(fragment.bind);
-            (format!("{clause} AND {}", fragment.sql), bind)
+/// One `column IN ids` read: which table, what to select, how to order, and which column the
+/// ids name.
+struct Lookup<'a> {
+    name: &'a str,
+    table: &'a str,
+    select: &'a str,
+    order: (&'a str, &'a str),
+    column: &'a str,
+}
+
+impl Lookup<'_> {
+    /// The rows, under the caller's own predicate, to the end of the bound.
+    fn read(
+        &self,
+        door: &dyn PageDoor,
+        bound: FanOutBound,
+        ids: &[String],
+        extra: Option<(String, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
         }
-        None => (fragment.sql, fragment.bind),
-    };
-    read_pages(
-        door,
-        &PageQuery::new(name, select, table, PageOrder::asc(order.0, order.1))
+        let fragment = in_list(self.column, ids)?;
+        let (predicate, bind) = match extra {
+            Some((clause, mut bind)) => {
+                bind.extend(fragment.bind);
+                (format!("{clause} AND {}", fragment.sql), bind)
+            }
+            None => (fragment.sql, fragment.bind),
+        };
+        read_pages(
+            door,
+            &PageQuery::new(
+                self.name,
+                self.select,
+                self.table,
+                PageOrder::asc(self.order.0, self.order.1),
+            )
             .filter(&predicate, bind),
-        bound,
-    )
+            bound,
+        )
+    }
 }
 
 fn rel_clause(rels: &[&str]) -> (String, Vec<PageBindValue>) {
@@ -108,17 +121,15 @@ pub fn incoming(
     let mut out = Vec::new();
     if !rels.is_empty() {
         let (clause, bind) = rel_clause(rels);
-        for row in read_in(
-            door,
-            bound,
-            "graph.in",
-            "edge",
-            "from_id, to_id, rel",
-            ("to_id", "from_id"),
-            "to_id",
-            &ids,
-            Some((clause, bind)),
-        )? {
+        for row in (Lookup {
+            name: "graph.in",
+            table: "edge",
+            select: "from_id, to_id, rel",
+            order: ("to_id", "from_id"),
+            column: "to_id",
+        })
+        .read(door, bound, &ids, Some((clause, bind)))?
+        {
             if let (Some(from), Some(to), Some(relation)) = (
                 text_of(&row, "from_id"),
                 text_of(&row, "to_id"),
@@ -135,17 +146,15 @@ pub fn incoming(
     }
     for link in COLUMN_LINKS.iter().filter(|link| link.to_kind == to_kind) {
         let select = format!("id, {}", link.column);
-        for row in read_in(
-            door,
-            bound,
-            "graph.column.in",
-            link.table,
-            &select,
-            ("id", "id"),
-            link.column,
-            &ids,
-            None,
-        )? {
+        for row in (Lookup {
+            name: "graph.column.in",
+            table: link.table,
+            select: &select,
+            order: ("id", "id"),
+            column: link.column,
+        })
+        .read(door, bound, &ids, None)?
+        {
             if let Some(from) = text_of(&row, "id") {
                 out.push(Joined {
                     from,
@@ -177,17 +186,15 @@ pub fn outgoing(
     let mut out = Vec::new();
     if !rels.is_empty() && !ids.is_empty() {
         let (clause, bind) = rel_clause(rels);
-        for row in read_in(
-            door,
-            bound,
-            "graph.out",
-            "edge",
-            "from_id, to_id, rel",
-            ("from_id", "to_id"),
-            "from_id",
-            ids,
-            Some((clause, bind)),
-        )? {
+        for row in (Lookup {
+            name: "graph.out",
+            table: "edge",
+            select: "from_id, to_id, rel",
+            order: ("from_id", "to_id"),
+            column: "from_id",
+        })
+        .read(door, bound, ids, Some((clause, bind)))?
+        {
             if let (Some(from), Some(to), Some(relation)) = (
                 text_of(&row, "from_id"),
                 text_of(&row, "to_id"),
@@ -204,17 +211,15 @@ pub fn outgoing(
     }
     for link in COLUMN_LINKS.iter().filter(|link| link.table == from_kind) {
         let select = format!("id, {}", link.column);
-        for row in read_in(
-            door,
-            bound,
-            "graph.column.out",
-            link.table,
-            &select,
-            ("id", "id"),
-            "id",
-            ids,
-            None,
-        )? {
+        for row in (Lookup {
+            name: "graph.column.out",
+            table: link.table,
+            select: &select,
+            order: ("id", "id"),
+            column: "id",
+        })
+        .read(door, bound, ids, None)?
+        {
             if let (Some(from), Some(to)) = (text_of(&row, "id"), text_of(&row, link.column)) {
                 out.push(Joined {
                     from,

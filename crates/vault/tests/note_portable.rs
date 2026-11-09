@@ -158,3 +158,20 @@ fn the_export_is_an_archive_of_markdown_files_with_links_as_written() {
         (Some("Trip.zip"), Some(2))
     );
 }
+
+#[test]
+fn one_file_too_big_for_a_note_is_left_out_and_the_rest_are_imported() {
+    let w = World::new();
+    let big = "x".repeat(70 * 1024);
+    let done = w.ok(
+        "note.import",
+        json!({ "files": [
+            { "path": "Huge.md", "text": big },
+            { "path": "Small.md", "text": "fine" },
+        ] }),
+    );
+    assert_eq!(
+        (done["notes"].as_i64(), done["ignored"].as_i64()),
+        (Some(1), Some(1))
+    );
+}

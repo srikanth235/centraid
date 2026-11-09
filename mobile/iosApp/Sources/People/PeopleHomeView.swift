@@ -617,7 +617,7 @@ private struct PeopleTouchList: View {
 
 // MARK: - Sheets
 
-/// More: Rust's rows (Trash — never search, sort or a filter).
+/// More: Rust's rows (Phone contacts, Import, Export, Trash — never search, sort or a filter).
 private struct PeopleHomeSheet: View {
     let state: Centraid_Core_V1_PeopleHomeState
     let send: (Centraid_Core_V1_PeopleHomeEvent) -> Void

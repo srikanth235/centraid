@@ -1686,21 +1686,6 @@ pub fn live_photo_count(connection: &Connection) -> KitResult<i64> {
         .map_err(door)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::instant;
-
-    #[test]
-    fn the_span_is_three_civil_years_in_the_vaults_text_form() {
-        assert_eq!(instant(0, 10), "2024-01-01T00:00:00.000Z");
-        let last = instant(9, 10);
-        assert!(last.starts_with("2026-"), "{last}");
-        // A leap day exists in 2024 and is walked through.
-        assert_eq!(instant(59 * 1_440, 1_576_800), "2024-02-29T00:00:00.000Z");
-        assert_eq!(instant(60 * 1_440, 1_576_800), "2024-03-01T00:00:00.000Z");
-    }
-}
-
 /// A Locker key row, the way a founded vault with Locker set up holds one: a key id and nothing
 /// else (`K` is never a file). A test that adds a Locker item needs it.
 ///
@@ -1758,4 +1743,19 @@ pub fn followed_entity(connection: &Connection, external_id: &str) -> KitResult<
             |row| row.get(0),
         )
         .map_err(door)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::instant;
+
+    #[test]
+    fn the_span_is_three_civil_years_in_the_vaults_text_form() {
+        assert_eq!(instant(0, 10), "2024-01-01T00:00:00.000Z");
+        let last = instant(9, 10);
+        assert!(last.starts_with("2026-"), "{last}");
+        // A leap day exists in 2024 and is walked through.
+        assert_eq!(instant(59 * 1_440, 1_576_800), "2024-02-29T00:00:00.000Z");
+        assert_eq!(instant(60 * 1_440, 1_576_800), "2024-03-01T00:00:00.000Z");
+    }
 }

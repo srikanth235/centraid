@@ -194,7 +194,7 @@ mod tests {
     }
 
     /// TWENTY-EIGHT SCOPES: thirteen reads over the vault's tables, and **fifteen
-    /// `act` scopes**, one per distinct command the seventeen actions invoke.
+    /// `act` scopes**, one per distinct command the nineteen actions invoke.
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed: a sixteenth action with no scope is an action the grant does

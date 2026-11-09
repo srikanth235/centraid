@@ -1199,3 +1199,35 @@ fn restoring_onto_a_phone_that_holds_an_older_copy_replaces_it_and_freezes_nothi
     let next = drain(&phone_after, at_home());
     assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
 }
+
+/// **A COPY THAT RAN WRITES ITS BACKUP LACKS IS NOT REPLACED** (#1173, item 22). The ruling
+/// replaces an OLDER copy; one this phone has written to since its last backup is the newer, and a
+/// restore over it would lose those writes. It is left as it is and answered as unclaimed, and the
+/// gateway's writer is not moved.
+#[test]
+fn restoring_onto_a_phone_whose_copy_is_newer_than_the_backup_leaves_that_copy_alone() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before");
+    drain(&old, at_home());
+
+    let here = tempfile::tempdir().expect("a directory");
+    let first = restore(here.path(), &gateway);
+    let held = PathBuf::from(&first.vaults[0].path);
+    let epoch = gateway.writer(&vault_id()).0;
+
+    // The phone writes and does not back up.
+    let phone_now = reopen(&held);
+    note(&phone_now, "Unbacked", "written since the last backup");
+    drop(phone_now);
+    let with_the_note = rows(&held);
+
+    let again = restore(here.path(), &gateway);
+    assert!(again.vaults.is_empty(), "nothing was replaced: {again:?}");
+    assert_eq!(again.unclaimed.len(), 1, "{again:?}");
+    assert!(again.unclaimed[0].reason.contains("newer"), "{again:?}");
+    assert_eq!(rows(&held), with_the_note, "the copy kept its writes");
+    assert_eq!(gateway.writer(&vault_id()).0, epoch, "no claim was made");
+}
