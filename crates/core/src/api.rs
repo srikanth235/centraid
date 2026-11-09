@@ -1177,6 +1177,16 @@ mod tests {
                 serde_json::json!({"from": "lk1", "rel": rel, "to": to}),
             );
         }
+        // A note that links the item: following the link from Notes goes nowhere, because the
+        // edge and the item are not served to Notes.
+        let note = id(run(
+            "note.create",
+            serde_json::json!({"title": "Banking", "body": "see the login"}),
+        ));
+        run(
+            "edge.add",
+            serde_json::json!({"from": note, "rel": "links", "to": "lk1"}),
+        );
         let ask = |name: &str, to: Option<&str>| {
             let mut asked = query(&["from_id", "to_id"], "from_id", "to_id");
             asked.name = name.to_owned();
@@ -1217,8 +1227,12 @@ mod tests {
         }
         assert_eq!(
             ask("locker.phone.tags", None).rows.len(),
-            4,
-            "Locker's own read sees its four links"
+            5,
+            "Locker's own read sees its four links and the note's link into it"
+        );
+        assert!(
+            ask("notes.library", Some("lk1")).rows.is_empty(),
+            "a link into the Locker is not followed from Notes"
         );
         let _ = std::fs::remove_dir_all(&scratch);
     }

@@ -460,3 +460,46 @@ fn a_person_is_not_found_by_a_memo_about_a_line_or_a_login_that_is_with_them() {
     );
     assert!(w.found_by("marmosetwalnut", &ada));
 }
+
+// ---------------------------------------------------------------------------
+// The Locker guards (O4)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn no_sealed_value_goes_into_an_edge_label_or_anchor() {
+    let w = World::new();
+    let (ada, bob) = (w.person("Ada"), w.person("Bob"));
+    let note = w.note("N", "body");
+    let login = w.locker("item_bank");
+    let sealed = ciphertext("item_bank");
+    assert!(
+        w.refused(
+            "edge.add",
+            json!({ "from": ada, "rel": "related", "to": bob, "label": format!("mum {sealed}") })
+        )
+        .contains("sealed"),
+        "a relation's label"
+    );
+    assert!(
+        w.refused(
+            "edge.add",
+            json!({ "from": note, "rel": "links", "to": login,
+                    "anchor": { "exact": sealed.clone(), "start": 0 } })
+        )
+        .contains("sealed"),
+        "the anchor of a link into the Locker"
+    );
+    // The link itself, with an anchor in the note's own words, is the member's to make.
+    w.ok(
+        "edge.add",
+        json!({ "from": note, "rel": "links", "to": login,
+                "anchor": { "exact": "the bank", "start": 0 } }),
+    );
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM edge WHERE anchor LIKE '%lk1:%' OR label_id LIKE '%lk1:%'",
+            &[]
+        ),
+        0
+    );
+}

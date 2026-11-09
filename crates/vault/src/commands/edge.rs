@@ -57,6 +57,11 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             to.kind.noun()
         )));
     }
+    if carries_a_sealed_value(ctx) {
+        return Ok(Some(
+            "a link carries no sealed value: say it in your own words".to_owned(),
+        ));
+    }
     let given = |key: &str| ctx.input.get(key).is_some_and(|value| !value.is_null());
     let related = rel == Rel::Related;
     let refusal = if related != given("label") {
@@ -77,6 +82,27 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         None
     };
     Ok(refusal)
+}
+
+/// Whether a word of the edge's label, or of any string in its anchor, is a Locker
+/// ciphertext (#1173, O4). An edge is read by every app that may read edges, so a sealed
+/// value in a label or an anchor would leave the wall by being a word of a link. Nothing
+/// legitimate says one: a label names a relation, an anchor names a place in a note's text.
+fn carries_a_sealed_value(ctx: &CommandCtx<'_, '_>) -> bool {
+    fn sealed_in(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::String(text) => text
+                .split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ',' | ';'))
+                .any(crate::custody::locker_key::is_locker_ciphertext),
+            serde_json::Value::Array(items) => items.iter().any(sealed_in),
+            serde_json::Value::Object(map) => map.values().any(sealed_in),
+            _ => false,
+        }
+    }
+    ["label", "anchor"]
+        .iter()
+        .filter_map(|key| ctx.input.get(key))
+        .any(sealed_in)
 }
 
 /// What an edge may carry beyond its two ends and its label.
