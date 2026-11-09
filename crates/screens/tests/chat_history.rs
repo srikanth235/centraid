@@ -334,12 +334,12 @@ fn a_search_asks_the_chat_which_waits_for_the_model_then_asks_once_in_a_new_chat
         .host()
         .install(script(&read_tasks()));
     chat.event(C::Asked(wire::chat_event::Asked {
-        scope: "agenda".to_owned(),
+        scope: "reminders".to_owned(),
         question: "Tell me about “dentist”".to_owned(),
     }));
     chat.perform();
     let state = chat.state();
-    assert_eq!(state.scope_app, "agenda");
+    assert_eq!(state.scope_app, "reminders");
     assert_eq!(
         state.messages.len(),
         2,
@@ -382,7 +382,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
         _ => None,
     });
     assert_eq!(opened.len(), 1);
-    assert_eq!(opened[0].screen, "agenda.task");
+    assert_eq!(opened[0].screen, "reminders.task");
     assert!(chat.state().card_gone_line.is_empty());
     chat.driver.effects.clear();
 
@@ -390,7 +390,7 @@ fn a_tapped_card_opens_its_row_and_a_card_whose_row_is_gone_says_so() {
     let gone = chat.state().messages[1].cards[1].id.clone();
     for (n, action) in ["delete-task", "purge-task"].into_iter().enumerate() {
         let done = chat.driver.act(wire::ActRequest {
-            app: "agenda".to_owned(),
+            app: "reminders".to_owned(),
             action: action.to_owned(),
             input: [(
                 "id".to_owned(),
@@ -674,7 +674,7 @@ fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_r
         .install(script(&read_tasks()));
     let id = chat.driver.push(
         centraid_screens::chat::TAB,
-        centraid_screens::chat::routes::ask("Tell me about “tasks”", "agenda"),
+        centraid_screens::chat::routes::ask("Tell me about “tasks”", "reminders"),
     );
     // the shell's first event for any chat instance: it names the models directory
     chat.driver.send(
@@ -693,7 +693,7 @@ fn a_search_asks_as_a_page_of_its_own_and_the_question_is_put_once_the_chat_is_r
             panic!()
         };
         if state.messages.len() == 2 && !state.streaming {
-            assert_eq!(state.scope_app, "agenda");
+            assert_eq!(state.scope_app, "reminders");
             assert_eq!(state.messages[0].text, "Tell me about “tasks”");
             return;
         }

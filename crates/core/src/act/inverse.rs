@@ -28,10 +28,15 @@ pub(crate) enum Input {
 type Row = (&'static str, &'static str, Input);
 
 /// `(action, its inverse, where the inverse's input comes from)`.
-const AGENDA: &[Row] = &[
+const CALENDAR: &[Row] = &[
     ("propose", "cancel-event", Input::Created),
     ("trash-event", "restore-event", Input::Id),
     ("restore-event", "trash-event", Input::Id),
+    ("attach", "detach", Input::Same),
+    ("detach", "attach", Input::Same),
+];
+
+const REMINDERS: &[Row] = &[
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
     ("add-task", "delete-task", Input::Created),
@@ -133,7 +138,7 @@ const PHOTOS: &[Row] = &[
 
 fn rows(app: &str) -> &'static [Row] {
     match app {
-        "agenda" => AGENDA,
+        "calendar" => CALENDAR,
         "docs" => DOCS,
         "health" => HEALTH,
         "locker" => LOCKER,
@@ -141,6 +146,7 @@ fn rows(app: &str) -> &'static [Row] {
         "notes" => NOTES,
         "people" => PEOPLE,
         "photos" => PHOTOS,
+        "reminders" => REMINDERS,
         _ => &[],
     }
 }
@@ -261,7 +267,7 @@ mod tests {
     fn the_input_comes_from_the_shell_or_the_commands_output() {
         let minted: Map<String, Value> =
             serde_json::from_str(r#"{"id":"t1","title":"x"}"#).unwrap();
-        let (action, input) = of("agenda", "add-task", &minted, &Value::Null).expect("undoable");
+        let (action, input) = of("reminders", "add-task", &minted, &Value::Null).expect("undoable");
         assert_eq!(
             (action, Value::Object(input)),
             ("delete-task", serde_json::json!({"id":"t1"}))
@@ -269,9 +275,9 @@ mod tests {
 
         let unminted: Map<String, Value> = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
         let output = serde_json::json!({"id":"made"});
-        let (_, input) = of("agenda", "add-task", &unminted, &output).expect("undoable");
+        let (_, input) = of("reminders", "add-task", &unminted, &output).expect("undoable");
         assert_eq!(Value::Object(input), serde_json::json!({"id":"made"}));
-        assert!(of("agenda", "add-task", &unminted, &Value::Null).is_none());
+        assert!(of("reminders", "add-task", &unminted, &Value::Null).is_none());
 
         let flag: Map<String, Value> =
             serde_json::from_str(r#"{"id":"i","flag":"starred"}"#).unwrap();
@@ -279,7 +285,7 @@ mod tests {
         assert_eq!(action, "unstar-item");
         assert_eq!(Value::Object(input), Value::Object(flag));
 
-        assert!(of("agenda", "purge-task", &minted, &Value::Null).is_none());
+        assert!(of("reminders", "purge-task", &minted, &Value::Null).is_none());
         let (action, _) = of("health", "delete-workout", &minted, &Value::Null).expect("undoable");
         assert_eq!(action, "restore-workout");
     }

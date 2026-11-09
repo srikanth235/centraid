@@ -17,7 +17,7 @@ use centraid_api_proto::core_v1 as wire;
 use super::{Home, grid};
 use crate::agenda::event::is_series_occurrence;
 use crate::agenda::routes;
-use crate::catalog::act::agenda as command;
+use crate::catalog::act::calendar as command_cal;
 use crate::field::Field;
 use crate::kit::civil;
 use crate::screen::Ctx;
@@ -48,24 +48,24 @@ fn write(event: &wire::AgendaEvent, times: &Times, zone: &str) -> wire::ActReque
     let ends = Field::Is(format!("{}:00", times.end));
     let zone = Field::Is(zone.to_owned());
     if is_series_occurrence(event) {
-        command::EditOccurrence {
-            action: command::EditOccurrenceAction::Override,
+        command_cal::EditOccurrence {
+            action: command_cal::EditOccurrenceAction::Override,
             event_id: event.event_id.clone(),
             original_start: event.original_start_local.clone().unwrap_or_default(),
-            scope: command::EditOccurrenceScope::Occurrence,
+            scope: command_cal::EditOccurrenceScope::Occurrence,
             starts,
             ends,
             zone,
-            ..command::EditOccurrence::default()
+            ..command_cal::EditOccurrence::default()
         }
         .into()
     } else {
-        command::EditEvent {
+        command_cal::EditEvent {
             event_id: event.event_id.clone(),
             starts,
             ends,
             zone,
-            ..command::EditEvent::default()
+            ..command_cal::EditEvent::default()
         }
         .into()
     }

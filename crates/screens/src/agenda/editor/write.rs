@@ -13,7 +13,7 @@
 //! INCLUSIVE (`agenda.proto`).
 
 use super::draft::{Draft, alerts_of, guests_changed, rule_for, same_repeat, times_changed};
-use crate::catalog::act::agenda as act;
+use crate::catalog::act::calendar as act_cal;
 use crate::field::Field;
 
 /// How a draft's wall clock is placed in time.
@@ -84,15 +84,15 @@ fn non_blank(text: &str) -> Option<String> {
 
 /// `propose`: a new event.
 #[must_use]
-pub fn propose(draft: &Draft) -> act::Propose {
+pub fn propose(draft: &Draft) -> act_cal::Propose {
     let times = Times::of(draft);
-    act::Propose {
+    act_cal::Propose {
         title: draft.title.trim().to_owned(),
         description: non_blank(&draft.notes).map_or(Field::Keep, Field::Is),
         zone: times.zone(false),
         timing: match times.placing {
-            Placing::AllDay => Some(act::ProposeTiming::AllDay),
-            Placing::Floating => Some(act::ProposeTiming::Floating),
+            Placing::AllDay => Some(act_cal::ProposeTiming::AllDay),
+            Placing::Floating => Some(act_cal::ProposeTiming::Floating),
             Placing::Zoned(_) => None,
         },
         ends: Field::Is(times.ends),
@@ -113,7 +113,7 @@ pub fn propose(draft: &Draft) -> act::Propose {
         } else {
             Field::Is(reminders(draft))
         },
-        ..act::Propose::default()
+        ..act_cal::Propose::default()
     }
 }
 
@@ -125,10 +125,10 @@ pub fn edit_event(
     draft: &Draft,
     base: &Draft,
     owner_ids: &[String],
-) -> act::EditEvent {
-    let mut edit = act::EditEvent {
+) -> act_cal::EditEvent {
+    let mut edit = act_cal::EditEvent {
         event_id: event_id.to_owned(),
-        ..act::EditEvent::default()
+        ..act_cal::EditEvent::default()
     };
     if draft.title.trim() != base.title.trim() {
         edit.title = Some(draft.title.trim().to_owned());
@@ -140,8 +140,8 @@ pub fn edit_event(
         let times = Times::of(draft);
         edit.zone = times.zone(true);
         edit.timing = match times.placing {
-            Placing::AllDay => Some(act::EditEventTiming::AllDay),
-            Placing::Floating => Some(act::EditEventTiming::Floating),
+            Placing::AllDay => Some(act_cal::EditEventTiming::AllDay),
+            Placing::Floating => Some(act_cal::EditEventTiming::Floating),
             Placing::Zoned(_) => None,
         };
         edit.ends = Field::Is(times.ends);
@@ -188,23 +188,23 @@ pub fn edit_event(
 pub fn override_occurrence(
     event_id: &str,
     original_start: &str,
-    scope: act::EditOccurrenceScope,
+    scope: act_cal::EditOccurrenceScope,
     draft: &Draft,
     base: &Draft,
-) -> act::EditOccurrence {
-    let mut edit = act::EditOccurrence {
-        action: act::EditOccurrenceAction::Override,
+) -> act_cal::EditOccurrence {
+    let mut edit = act_cal::EditOccurrence {
+        action: act_cal::EditOccurrenceAction::Override,
         event_id: event_id.to_owned(),
         original_start: original_start.to_owned(),
         scope,
-        ..act::EditOccurrence::default()
+        ..act_cal::EditOccurrence::default()
     };
     if times_changed(draft, base) {
         let times = Times::of(draft);
         edit.zone = times.zone(true);
         edit.timing = match times.placing {
-            Placing::AllDay => Some(act::EditOccurrenceTiming::AllDay),
-            Placing::Floating => Some(act::EditOccurrenceTiming::Floating),
+            Placing::AllDay => Some(act_cal::EditOccurrenceTiming::AllDay),
+            Placing::Floating => Some(act_cal::EditOccurrenceTiming::Floating),
             Placing::Zoned(_) => None,
         };
         edit.ends = Field::Is(times.ends);
@@ -224,13 +224,13 @@ pub fn override_occurrence(
 pub fn skip_occurrence(
     event_id: &str,
     original_start: &str,
-    scope: act::EditOccurrenceScope,
-) -> act::EditOccurrence {
-    act::EditOccurrence {
-        action: act::EditOccurrenceAction::Skip,
+    scope: act_cal::EditOccurrenceScope,
+) -> act_cal::EditOccurrence {
+    act_cal::EditOccurrence {
+        action: act_cal::EditOccurrenceAction::Skip,
         event_id: event_id.to_owned(),
         original_start: original_start.to_owned(),
         scope,
-        ..act::EditOccurrence::default()
+        ..act_cal::EditOccurrence::default()
     }
 }

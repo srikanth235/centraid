@@ -9,7 +9,7 @@
 //! ([`super::zone_of`]'s rule).
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_locker::phone::{self, ItemData, Listed};
 use centraid_vault::Vault;
@@ -29,7 +29,7 @@ fn answered<T>(
     match loaded {
         Err(KitError::Door(message)) => settle(
             door,
-            Ok(((), Some(centraid_apps_agenda::denial_of(message)))),
+            Ok(((), Some(centraid_apps_kit::denial_of(message)))),
             |()| unreachable!("a denial carries no data"),
         ),
         other => settle(door, other.map(|value| (value, None)), data),

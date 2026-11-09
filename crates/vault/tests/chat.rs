@@ -109,12 +109,12 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
     let saved = w.ok(
         "thread.save_turn",
         json!({
-          "scope_app": "agenda",
+          "scope_app": "calendar",
           "turn": {
             "question": { "text": "what   is due\ntoday?", "attachments": [
               { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL }] },
             "answer": { "outcome": "answered", "text": "Rent.", "record_json": "{\"read\":1}",
-                        "cards": [card("agenda", "task", "t1")] }
+                        "cards": [card("reminders", "task", "t1")] }
           }
         }),
     );
@@ -138,7 +138,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
     assert_eq!(
         w.text("SELECT scope FROM thread WHERE id = ?1", &[thread])
             .as_deref(),
-        Some("agenda")
+        Some("calendar")
     );
     // The thumbnail is rented from the blob plane; the card is a snapshot in the answer's own row.
     assert_eq!(
@@ -155,7 +155,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
         )
         .unwrap();
     let cards: Value = serde_json::from_str(&cards).unwrap();
-    assert_eq!(cards[0]["app"], "agenda");
+    assert_eq!(cards[0]["app"], "reminders");
     assert_eq!(cards[0]["id"], "t1");
     // The reader gives it back whole.
     let stored = w
@@ -168,7 +168,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
     assert_eq!(stored.messages[1].cards[0].row_id, "t1");
     assert_eq!(stored.messages[0].attachments[0].form, "image");
     assert!(stored.messages[0].attachments[0].thumbnail_path.is_some());
-    assert_eq!(stored.thread.scope_app.as_deref(), Some("agenda"));
+    assert_eq!(stored.thread.scope_app.as_deref(), Some("calendar"));
 }
 
 #[test]
@@ -309,9 +309,9 @@ fn the_roster_is_the_schemas_not_a_check() {
         input["scope_app"] = scope;
         w.run("thread.save_turn", input).status
     };
-    assert_eq!(attempt(json!(null), "agenda"), CommandStatus::Executed);
+    assert_eq!(attempt(json!(null), "reminders"), CommandStatus::Executed);
     // Health and Locker are apps a card names and a scope (the owner's rulings of 2026-10-22 and
-    // 2026-10-24); there is no `tasks` app, the tasks are Agenda's (#1128).
+    // 2026-10-24); there is no `tasks` app, the tasks are Reminders'.
     assert_ne!(attempt(json!(null), "tasks"), CommandStatus::Executed);
     assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
     assert_eq!(attempt(json!(null), "health"), CommandStatus::Executed);
@@ -469,6 +469,17 @@ fn a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole
             .chat_card_row_exists("weather", "note", &note)
             .unwrap()
     );
+    // A card an older build stored as `agenda` is read as the app of its kind (round 10).
+    let task = w.ok("task.add", json!({ "title": "T" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(vault.chat_card_row_exists("agenda", "task", &task).unwrap());
+    assert!(
+        vault
+            .chat_card_row_exists("reminders", "task", &task)
+            .unwrap()
+    );
     assert!(
         !vault
             .chat_card_row_exists("locker", "locker_item", "no-such-item")
@@ -524,9 +535,15 @@ fn the_ddl_holds_no_app_word_and_a_threads_scope_is_a_bare_column() {
     assert!(thread.contains("scope TEXT,") && !thread.contains("CHECK"));
     // `health` is also the word of a phone store a followed origin names (`follow.system`); it is
     // the one roster word the DDL spells, as a store and never as an app.
+    // `calendar` is likewise a container kind (`'area','calendar'`, the generated `calendar_kind`):
+    // the kind of the container the Calendar app keeps its events in, and never the app.
     let outside_stores: String = ddl
         .lines()
-        .filter(|line| !line.contains("system IN ("))
+        .filter(|line| {
+            !line.contains("system IN (")
+                && !line.contains("'area','calendar'")
+                && !line.contains("AS ('calendar')")
+        })
         .collect::<Vec<_>>()
         .join("\n");
     for app in centraid_vault::roster::APPS {

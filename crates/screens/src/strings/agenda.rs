@@ -1,4 +1,4 @@
-//! Agenda's own sentences: the band, the day bar, events, the editor, the More sheet.
+//! Calendar's own sentences: the band, the day bar, events, the editor, the More sheet.
 
 catalog! {
     plain a11y_cancel = ("Cancel this event", "Cancel this event");
@@ -7,13 +7,9 @@ catalog! {
     plain action_open_map = ("Open in Maps", "Open in Maps");
     plain a11y_open_map = ("Open this location in Maps", "Open this location in Maps");
     plain all_day = ("All day", "All day");
-    plain app_title = ("Agenda", "Agenda");
-    plain band_day = ("Day", "Day");
+    plain app_title = ("Calendar", "Calendar");
     plain band_home = ("Home", "Home");
     plain band_more = ("More", "More");
-    plain band_schedule = ("Schedule", "Schedule");
-    plain band_todo = ("To-do", "To-do");
-    plain band_waiting = ("Waiting", "Waiting");
     plain block_calendar = ("No calendar to save this to.", "No calendar to save this to.");
     plain block_range = ("An event must end after it starts.", "An event must end after it starts.");
     plain block_title = ("Add a title to save.", "Add a title to save.");
@@ -36,7 +32,7 @@ catalog! {
     plain confirm_skip_title = ("Skip this occurrence?", "Skip this occurrence?");
     plain continues = ("Continues", "Continues");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
-    plain denied_title = ("Agenda cannot read this vault", "Agenda cannot read this vault");
+    plain denied_title = ("Calendar cannot read this vault", "Calendar cannot read this vault");
     plain done = ("Done", "Done");
     plain editor_edit = ("Edit event", "Edit event");
     plain empty_day = ("Nothing on this day.", "Nothing on this day.");
@@ -64,7 +60,7 @@ catalog! {
     plain foot_new = ("A new event starts tentative.", "A new event starts tentative.");
     plain from = ("From", "From");
     plain from_today = ("From today", "From today");
-    plain gone_action = ("Back to Agenda", "Back to Agenda");
+    plain gone_action = ("Back to Calendar", "Back to Calendar");
     plain gone_body = ("It was cancelled, moved or deleted.", "It was cancelled, moved or deleted.");
     plain gone_title = ("This event was removed.", "This event was removed.");
     plain guests_none = ("Nobody else", "Nobody else");
@@ -81,9 +77,7 @@ catalog! {
     plain join_call = ("Join call", "Join call");
     plain keep_editing = ("Keep editing", "Keep editing");
     plain keep_it = ("Keep it", "Keep it");
-    plain kind_event = ("Event", "Event");
     plain kind_switch = ("What to add", "What to add");
-    plain kind_task = ("Task", "Task");
     plain loading = ("Opening your agenda", "Opening your agenda");
     plain meta_call = ("call", "call");
     plain meta_guest = ("guest", "guest");
@@ -101,7 +95,7 @@ catalog! {
     plain month_10 = ("October", "October");
     plain month_11 = ("November", "November");
     plain month_12 = ("December", "December");
-    plain more_title = ("More in Agenda", "More in Agenda");
+    plain more_title = ("Calendars", "Calendars");
     plain new_event = ("New event", "New event");
     plain new_task = ("New task", "New task");
     plain next_day = ("Next day", "Next day");
@@ -122,14 +116,13 @@ catalog! {
     plain quick_add = ("Add", "Add");
     plain quick_discard = ("Discard", "Discard");
     plain rail_calendars = ("Calendars", "Calendars");
-    plain rail_tasks = ("Tasks", "Tasks");
     plain reads_fact_leaves = ("Leaves this phone", "Leaves this phone");
     plain reads_fact_leaves_value = ("nothing", "nothing");
     plain reads_fact_reads = ("Reads", "Reads");
-    plain reads_fact_reads_value = ("events, calendars, people, tasks", "events, calendars, people, tasks");
+    plain reads_fact_reads_value = ("events, calendars, people, reminders", "events, calendars, people, reminders");
     plain reads_fact_writes = ("Writes", "Writes");
-    plain reads_fact_writes_value = ("events and tasks you make", "events and tasks you make");
-    plain reads_title = ("What Agenda may read", "What Agenda may read");
+    plain reads_fact_writes_value = ("events you make", "events you make");
+    plain reads_title = ("What Calendar may read", "What Calendar may read");
     plain read_incomplete = ("Part of this agenda didn't load.", "Part of this agenda didn't load.");
     plain reminder_at_start = ("At the start", "At the start");
     plain reminder_day = ("1 day before", "1 day before");

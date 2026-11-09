@@ -13,7 +13,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
 | `home-settings-open` | Home | the framed settings key right of search: opens Settings, where the appearance is chosen (#1173; the appearance key retired into it) |
-| `home-tile-reminders` | Home | the Reminders widget, Agenda's second: what is owed today; `home-tile-agenda` is the day (#1173) |
+| `home-tile-reminders` | Home | the Reminders tile: what is owed today (round 10 of #1173: Calendar and Reminders are two apps, `home-tile-calendar` is the day) |
 | `backup-over` | Backup | the "Back up over" row: the rule's short word, opening its three sentences |
 | `backup-last-good` | Backup | "Last good backup …", drawn while the backup device has not answered |
 | `backup-restore` | Backup | "Restore my vaults": Home's own restore |
@@ -61,7 +61,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `room-subtitle`, `room-subtitle-clear` | Notes (the notebook the library is scoped to, with its ✕ `room-subtitle-clear`), Money (the month, tappable: opens the month sheet) | the title's second line, which replaced the notebook and month chips |
 | `photos-grain-<years\|months\|all>` | Photos | one segment of the zoom control in the band (Years · Months · All), between the folded place key and the search key; `photos-band-places` is that folded key, which brings the plate of places back |
 | `agenda-search` | Agenda | Agenda's search field once open, at the foot in the band's place; it finds events, tasks and projects: the projects whose name matched as `search-container-schedule.project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |
-| `agenda-band-<key>` | Agenda | one band place, keyed on the machine's key: `calendar`, `reminders`, `invites`, `more` (#1173); `agenda-band-home` is the home capsule |
+| `calendar-band-<key>` / `reminders-band-<key>` | Calendar / Reminders | one band place, keyed on the machine's key: `calendar`, `invites`, `more` (the Calendars sheet) in Calendar; `reminders`, `more` in Reminders; `<app>-band-home` is the home capsule. The selectors below that begin `agenda-` are the shared home view's and stay (the two apps draw one view) |
 | `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
 | `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
 | `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |

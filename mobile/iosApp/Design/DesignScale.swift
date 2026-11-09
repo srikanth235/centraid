@@ -2,7 +2,7 @@
 //
 // The redesign's type scale and radii (#1173), in points, and the names of its
 // colour sets in `Resources/Assets.xcassets`. Light and dark are built into
-// each set, so `Color(CentraidAsset.appAgenda)` follows the appearance.
+// each set, so `Color(CentraidAsset.appCalendar)` follows the appearance.
 
 import CoreGraphics
 
@@ -46,10 +46,10 @@ public enum CentraidAsset {
     public static let textMeta = "CentraidTextMeta"
     public static let shell = "CentraidShell"
     public static let shellText = "CentraidShellText"
-    public static let appAgenda = "CentraidAppAgenda"
-    public static let appAgendaText = "CentraidAppAgendaText"
-    public static let appAgendaTint = "CentraidAppAgendaTint"
-    public static let appAgendaTile = "CentraidAppAgendaTile"
+    public static let appCalendar = "CentraidAppCalendar"
+    public static let appCalendarText = "CentraidAppCalendarText"
+    public static let appCalendarTint = "CentraidAppCalendarTint"
+    public static let appCalendarTile = "CentraidAppCalendarTile"
     public static let appDocs = "CentraidAppDocs"
     public static let appDocsText = "CentraidAppDocsText"
     public static let appDocsTint = "CentraidAppDocsTint"
@@ -78,6 +78,10 @@ public enum CentraidAsset {
     public static let appPhotosText = "CentraidAppPhotosText"
     public static let appPhotosTint = "CentraidAppPhotosTint"
     public static let appPhotosTile = "CentraidAppPhotosTile"
+    public static let appReminders = "CentraidAppReminders"
+    public static let appRemindersText = "CentraidAppRemindersText"
+    public static let appRemindersTint = "CentraidAppRemindersTint"
+    public static let appRemindersTile = "CentraidAppRemindersTile"
     public static let stateAmber = "CentraidStateAmber"
     public static let stateAmberText = "CentraidStateAmberText"
     public static let stateAmberTint = "CentraidStateAmberTint"

@@ -74,7 +74,7 @@ impl Phone {
         seeded.sort();
         seeded.dedup();
         for event_id in seeded {
-            self.write(act::agenda::TrashEvent { event_id });
+            self.write(act::calendar::TrashEvent { event_id });
         }
     }
 
@@ -92,7 +92,7 @@ impl Phone {
 
     fn upcoming(&self, from: &str, to: &str) -> wire::AgendaUpcoming {
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.read(load::agenda::Upcoming {
+            self.read(load::calendar::Upcoming {
                 from: Some(from.to_owned()),
                 to: Some(to.to_owned()),
             })
@@ -144,7 +144,7 @@ impl Phone {
         to: &str,
         rule: Option<&str>,
     ) {
-        self.write(act::agenda::Propose {
+        self.write(act::calendar::Propose {
             id: Some(id.to_owned()),
             title: title.to_owned(),
             starts: format!("{day}T{from}"),

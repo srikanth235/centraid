@@ -147,7 +147,7 @@ impl Scratch {
     /// `agenda.attachments`, asked as the screens ask it: through `load`.
     fn page(&self, item: &str, after: &str, limit: u32) -> wire::AgendaAttachments {
         let mut request: wire::LoadRequest = wire::LoadRequest {
-            app: "agenda".to_owned(),
+            app: "calendar".to_owned(),
             query: "attachments".to_owned(),
             limit,
             after: after.to_owned(),

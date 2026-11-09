@@ -207,8 +207,8 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
     let Some(wire::assist_response::Kind::Started(started)) = assist(
         &opened,
         wire::assist_request::Kind::Start(wire::AssistStartRequest {
-            // Agenda's scope covers tasks (R-1128-F2); the cards still name the domain.
-            app: "agenda".to_owned(),
+            // Reminders' scope covers tasks (R-1128-F2); the cards still name the domain.
+            app: "reminders".to_owned(),
             ..wire::AssistStartRequest::default()
         }),
     )
@@ -240,7 +240,7 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
         answer
             .cards
             .iter()
-            .all(|card| card.app == "agenda" && card.entity == "task")
+            .all(|card| card.app == "reminders" && card.entity == "task")
     );
 
     let kinds: Vec<&'static str> = opened
@@ -674,7 +674,7 @@ fn the_real_model_answers_questions_over_the_scenario() {
         ask(session(""), 1, question);
     }
     // A scoped chat and a follow-up that depends on the turn before it.
-    let agenda = session("agenda");
+    let agenda = session("reminders");
     ask(agenda, 1, "What's overdue?");
     ask(agenda, 2, "And what is due today?");
 

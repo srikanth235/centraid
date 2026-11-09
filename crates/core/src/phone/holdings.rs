@@ -47,12 +47,7 @@ pub(crate) struct Held {
 #[must_use]
 pub(crate) fn kinds_of(app: &str) -> (&'static [&'static str], &'static [&'static str]) {
     match app {
-        "agenda" => (
-            &[
-                "event", "task", "calendar", "list", "project", "section", "area",
-            ],
-            &["event", "task"],
-        ),
+        "calendar" => (&["event", "calendar"], &["event"]),
         "docs" => (&["document", "folder"], &["document"]),
         "health" => (&["activity", "activity_kind", "workout_kind"], &[]),
         "locker" => (&["locker_item"], &["locker_item"]),
@@ -60,6 +55,7 @@ pub(crate) fn kinds_of(app: &str) -> (&'static [&'static str], &'static [&'stati
         "notes" => (&["note", "notebook"], &["note"]),
         "people" => (&["person", "relation"], &["person"]),
         "photos" => (&["photo", "album", "place"], &["photo"]),
+        "reminders" => (&["task", "list", "project", "section", "area"], &["task"]),
         _ => (&[], &[]),
     }
 }

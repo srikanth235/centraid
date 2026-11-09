@@ -9,7 +9,7 @@ A mobile screen is one of seven rooms, and nothing else. The room owns the heade
 | Room | Anatomy | Examples |
 | --- | --- | --- |
 | `HomeRoom` | the vault lockup, a search key at its trailing edge (every app), the appearance key, widgets and app tiles, one status line, one trailing verb (Settings) | Home |
-| `AppPlace` | **the title in the top row**: the app's name large at the leading edge on the same row as at most two trailing keys (iOS 26 Photos' "Library"), the scope line (`HeaderSubtitle`) directly under it, no empty band and no row of chips under it, the app band floating at the foot | Photos grid, Agenda |
+| `AppPlace` | **the title in the top row**: the app's name large at the leading edge on the same row as at most two trailing keys (iOS 26 Photos' "Library"), the scope line (`HeaderSubtitle`) directly under it, no empty band and no row of chips under it, the app band floating at the foot | Photos grid, Calendar, Reminders |
 | `PushedPage` | `PlaceHeader` with **the title inline in the same row as the back chevron** (Contacts style; a list's own colour and glyph allowed), back to the named parent (a computed `PlaceRef`, never a string), at most one trailing action; a "…" key that opens the platform menu counts as that action | album, contact, document, settings sub-page |
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, at most one ink button, status line hosted inside | confirm delete, pick date, add to album |
@@ -36,7 +36,7 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 | Band, places | two to four places, then More | a filter |
 | More | Trash, Import, Export, alternate views, "What X may read": machine rows | Search, Sort, a filter |
 
-An app may have two homes: Agenda is one app with Calendar · Reminders · Invites · More, and Tasks is not an app of its own.
+An app has one home. Agenda was two homes of one app until round 10; Calendar (Calendar · Calendars · Invites) and Reminders (Reminders · More) are two apps with a home each, and Tasks is not an app of its own: the tasks are Reminders'.
 
 ## Status line
 
@@ -52,7 +52,7 @@ Search says what it searched for, and offers the assistant when it found nothing
 | --- | --- | --- |
 | The core corrected a typo (the exact answer had fewer than three rows and a word a slip away added some) | one line directly over the open field (under it on Home's search page and the Chats page): "Including results for “sunscreen”" (`SEARCH_CORRECTED`, id `search-corrected`), drawn once per field component; the machine puts `SearchField.corrected` in state | a banner, a toast, a second row of results, the line over an exact answer or when the corrected words added no row, or over rows for a term since changed |
 | Home's search, matched or not | the Ask row at the foot of the answer: “Ask about “zzqx”” (`SEARCH_ASK_ABOUT`, id `search-ask-about`). The shell switches to the Chat tab, unscoped, and sends "Find zzqx". The machine finishes the whole row (`SearchAsk`: label, question, scope) in `SearchField.ask_row`. Drawn only where the shell has a Chat tab (iOS today) | a second sentence, a button inside a row, an action in the empty state |
-| An app's own search (Notes, People, Docs, Agenda including tasks, Photos, Money) | the same Ask row whenever the machine put one in `SearchField.ask_row`; it opens the chat scoped to the app searched from, with the typed text as the question. One `SearchAskRow` per shell. **Locker's search never offers it**: its term can itself be a secret | a second presentation, a row the view decides to add |
+| An app's own search (Notes, People, Docs, Calendar for events, Reminders for tasks, Photos, Money) | the same Ask row whenever the machine put one in `SearchField.ask_row`; it opens the chat scoped to the app searched from, with the typed text as the question. One `SearchAskRow` per shell. **Locker's search never offers it**: its term can itself be a secret | a second presentation, a row the view decides to add |
 | A search matched the name of a notebook, album, project or Docs folder | one container row per match above that app's result rows: its kit glyph, the title and the kind in a soft word, id `search-container-<entity>-<id>`. One `SearchContainerRow` component per platform; the machine finishes the words, glyph and reference (`SearchContainer`), and a tap opens it through the shell's one row router. A matched container is an answer: the no-match sentence is not drawn over it | a second router, a row of the view's own, "nothing found" over a notebook that was found |
 
 ## Controls
@@ -88,7 +88,7 @@ Width belongs to the control, not to the call: there is no per-call width switch
 **Colour has one job each.**
 
 - An app's colour marks that app: its tile, its accent (the filled `+`, selected states in its own pages) and its content markers. Anything shown from another app uses that app's colour.
-- State colours only mean state: red, amber and green appear in words and badges to say overdue, pending or done, never as decoration. An app colour is chosen so it never collides with a state that appears inside the app (Calendar red is out of Agenda because overdue is red; Money is not green because income is). Inside Health every metric wears the Health colour.
+- State colours only mean state: red, amber and green appear in words and badges to say overdue, pending or done, never as decoration. An app colour is chosen so it never collides with a state that appears inside the app (Calendar red is out of Calendar because overdue is red, so Calendar keeps the logo blue; Reminders is a pine teal clear of every state colour; Money is not green because income is). Inside Health every metric wears the Health colour.
 - The shell's colour (Welcome, Home, Chat, Backup) is its own and is not an app's.
 - Lists, calendars and categories draw from one shared palette, only as dots, bars, tiles and big titles. There are no red, amber or green lists; an imported red list becomes raspberry.
 - Colour is never the only channel: every app mark is told apart by silhouette alone.

@@ -43,7 +43,7 @@
 		<string>_centraid-gateway._tcp</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Centraid copies your calendar's events into Agenda, in your own vault on this phone.</string>
+	<string>Centraid copies your calendar's events into Calendar, in your own vault on this phone.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.</string>
 	<key>NSContactsUsageDescription</key>
@@ -57,7 +57,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Centraid copies your open reminders into Agenda, in your own vault on this phone.</string>
+	<string>Centraid copies your open reminders into Reminders, in your own vault on this phone.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans_470Book.ttf</string>

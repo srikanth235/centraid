@@ -19,7 +19,7 @@ centraid-apps-kit = { path = "../kit" }
 centraid-search = { path = "../../search" }
 # THE ONE ZONE ENGINE, for the Journal's local days (#1046). `time` is
 # SQL-free and pure; this crate reaches `FireZone` and the instant parser and
-# nothing else, as `crates/apps/agenda` does.
+# nothing else, as `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) does.
 centraid-vault = { path = "../../vault" }
 serde.workspace = true
 serde_json.workspace = true

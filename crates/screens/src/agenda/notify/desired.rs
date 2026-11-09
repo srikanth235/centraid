@@ -25,8 +25,10 @@ pub const WINDOW_DAYS: i64 = 14;
 /// The most notifications held at once. iOS keeps at most 64 pending; the rest
 /// is headroom for the receipt of a button just pressed.
 pub const CAP: usize = 48;
-/// The thread every Agenda notification is grouped under.
-pub const THREAD: &str = "agenda";
+/// The thread a reminder's notifications are grouped under (Reminders, round 10 of #1173).
+pub const THREAD: &str = "reminders";
+/// The thread an event's alerts are grouped under (Calendar).
+pub const EVENT_THREAD: &str = "calendar";
 /// A task's buttons are on this category; a repeating task's are not the same.
 pub const TASK: &str = "task";
 pub const TASK_REPEATING: &str = "task.repeating";
@@ -148,6 +150,7 @@ pub fn desired(inputs: &Inputs) -> Vec<wire::PendingNotification> {
 
 fn pending(
     zone: &FireZone,
+    thread: &str,
     id: String,
     fire_ms: i64,
     title: String,
@@ -162,7 +165,7 @@ fn pending(
         title,
         body,
         category_id: category.to_owned(),
-        thread_id: THREAD.to_owned(),
+        thread_id: thread.to_owned(),
         immediate: false,
     }
 }
@@ -195,6 +198,7 @@ fn tasks(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pending
             .map_or_else(|| task_words::inbox(locale), |p| p.name.clone());
         out.push(pending(
             zone,
+            THREAD,
             format!("task|{}|{}|{fire_local}", inputs.vault_id, task.task_id),
             fire_ms,
             titled(task_words::untitled, locale, &task.title),
@@ -239,6 +243,7 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
             let day = civil::relative_day(locale, start_day, fire_day);
             out.push(pending(
                 zone,
+                EVENT_THREAD,
                 format!("event|{}|{}|{minutes}", inputs.vault_id, event.instance_key),
                 fire_ms,
                 titled(

@@ -82,7 +82,8 @@ fn what(locale: Locale, app: &wire::AppHolding) -> String {
     let counted = |words: String, count: u64| fill(&words, &[("count", &grouped(count))]);
     let n = app.items;
     match app.app_id.as_str() {
-        "agenda" => counted(words::backup_app_agenda(locale, n), n),
+        "calendar" => counted(words::backup_app_calendar(locale, n), n),
+        "reminders" => counted(words::backup_app_reminders(locale, n), n),
         "docs" => counted(words::backup_app_docs(locale, n), n),
         "health" => fill(
             &words::backup_app_health(locale),

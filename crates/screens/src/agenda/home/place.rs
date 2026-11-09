@@ -82,24 +82,17 @@ pub fn fold_shaped(
         }
     };
     let root_count = rows::root_count(&groups);
-    let mut parts = Vec::new();
-    if root_count > 0 {
-        parts.push(rows::count(locale, root_count));
-    }
-    if !answer.projects.is_empty() {
-        parts.push(sentences::project_count(
-            locale,
-            answer.projects.len() as u64,
-        ));
-    }
+    let _ = root_count;
     Some(wire::AgendaHomeData {
         today: board.today.clone(),
         catch_up: Some(routes::catch_up()),
         todo: Some(wire::AgendaTodo {
-            groups,
-            projects: project_groups,
+            // REMINDERS HAS NO INLINE TASKS AND NO SUMMARY LINE (round 10): the Inbox is a list
+            // among My Lists, and a task is opened from its list.
+            groups: Vec::new(),
+            projects: lists_with_inbox(locale, &project_groups, board),
             empty: Some(empty),
-            count_label: parts.join(" · "),
+            count_label: String::new(),
             window_label: if board.truncated {
                 sentences::window_count(locale, u64::from(board.window))
             } else {
@@ -207,6 +200,43 @@ fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire:
             wire::TodoView::Logbook,
         ),
     ]
+}
+
+/// MY LISTS (round 10): the Inbox first, as a list among the others (Apple's default "Reminders" list),
+/// then the areas and projects. Its count is the open roots filed in no project.
+fn lists_with_inbox(
+    locale: Locale,
+    groups: &[wire::TodoProjectGroup],
+    board: &wire::AgendaTaskBoard,
+) -> Vec<wire::TodoProjectGroup> {
+    let open = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .filter(|task| rows::is_open(task))
+        .count();
+    let count = rows::count(locale, open);
+    let inbox = words::inbox(locale);
+    let mut out = vec![wire::TodoProjectGroup {
+        key: "inbox".to_owned(),
+        title: String::new(),
+        rows: vec![wire::TodoProjectRow {
+            row: Some(wire::ListRow {
+                id: "inbox".to_owned(),
+                title: inbox.clone(),
+                accessibility_label: format!("{inbox}, {count}"),
+                hue_key: "slate".to_owned(),
+                meta: count,
+                ..wire::ListRow::default()
+            }),
+            route: Some(routes::todo_list(wire::TodoView::Inbox)),
+            list_color_key: "graphite".to_owned(),
+            count: open.to_string(),
+            icon_key: "Inbox".to_owned(),
+        }],
+    }];
+    out.extend(groups.iter().cloned());
+    out
 }
 
 /// Named areas A→Z, then the projects in none.
@@ -447,6 +477,7 @@ mod tests {
         assert_eq!(
             shape,
             [
+                ("".to_owned(), vec!["Inbox".to_owned()]),
                 (
                     "Home".to_owned(),
                     vec!["Beds".to_owned(), "Garden".to_owned()]
@@ -456,14 +487,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            todo.projects[0].rows[1].row.as_ref().unwrap().meta,
+            todo.projects[1].rows[1].row.as_ref().unwrap().meta,
             "3 tasks"
         );
         assert_eq!(
-            todo.projects[2].rows[0].row.as_ref().unwrap().meta,
+            todo.projects[3].rows[0].row.as_ref().unwrap().meta,
             "1 task"
         );
-        assert_eq!(todo.count_label, "4 projects");
+        assert_eq!(todo.count_label, "");
     }
 
     #[test]

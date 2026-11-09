@@ -34,7 +34,7 @@ fn an_event(world: &mut World) -> String {
 }
 
 fn a_task(world: &mut World, url: Option<&str>) -> String {
-    let done = world.act(act::agenda::AddTask {
+    let done = world.act(act::reminders::AddTask {
         title: "Book flights".to_owned(),
         url: url.map_or(Field::Keep, |url| Field::Is(url.to_owned())),
         ..Default::default()
@@ -110,16 +110,33 @@ fn attached(
     after: Option<String>,
     limit: u32,
 ) -> wire::AgendaAttachments {
-    let wire::app_query_response::Answer::AgendaAttachments(page) =
-        world.load(load::agenda::Attachments {
-            item_id: item.to_owned(),
-            after,
-            limit,
-        })
-    else {
-        panic!("attachments answered something else");
+    // An event's attachments are Calendar's to read and a task's are Reminders': ask the one that
+    // holds the item.
+    let ask = |of_task: bool| {
+        let answer = if of_task {
+            world.load(load::reminders::Attachments {
+                item_id: item.to_owned(),
+                after: after.clone(),
+                limit,
+            })
+        } else {
+            world.load(load::calendar::Attachments {
+                item_id: item.to_owned(),
+                after: after.clone(),
+                limit,
+            })
+        };
+        let wire::app_query_response::Answer::AgendaAttachments(page) = answer else {
+            panic!("attachments answered something else");
+        };
+        page
     };
-    page
+    let events = ask(false);
+    if events.attachments.is_empty() {
+        ask(true)
+    } else {
+        events
+    }
 }
 
 /// A document of fake bytes, attached to `item` as another surface would.
@@ -133,7 +150,7 @@ fn attach_document(world: &mut World, item: &str, title: &str, seed: char) -> St
     });
     let output: serde_json::Value = serde_json::from_slice(&done.output).expect("json output");
     let id = output["id"].as_str().expect("the id").to_owned();
-    world.act(act::agenda::Attach {
+    world.act(act::calendar::Attach {
         from: item.to_owned(),
         to: id.clone(),
     });
@@ -370,7 +387,7 @@ fn attachments_are_paged_and_show_more_appends_the_next_page() {
             ..Default::default()
         });
         let output: serde_json::Value = serde_json::from_slice(&done.output).expect("json");
-        world.act(act::agenda::Attach {
+        world.act(act::calendar::Attach {
             from: id.clone(),
             to: output["id"].as_str().expect("id").to_owned(),
         });

@@ -8,10 +8,10 @@
 //! is placed from the latests in it. A shell does no date arithmetic (#1046's rule, RP-K-2).
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
 use centraid_apps_health::civil::{format_day, parse_day, utc_instant};
 use centraid_apps_health::figures::{Bucket, Metric};
 use centraid_apps_health::queries::{self, Range, TrendRange, Workout};
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::page::{PageCursor, PageRequest};
 use centraid_vault::Vault;

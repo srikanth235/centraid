@@ -44,7 +44,7 @@ struct TodoListView: View {
                     action: RoomAction(iconKey: "Plus", label: state.addLabel, identifier: "tasks-list-add") {
                         open(state.addRoute)
                     },
-                    app: "agenda"
+                    app: "reminders"
                 )
             }
         } content: {
@@ -275,6 +275,7 @@ struct TodoProjectView: View {
         )) {
             AgendaStyleSheetView(
                 style: state.style,
+                appKey: "reminders",
                 onName: { name in send(event { $0.styleName = .with { $0.name = name } }) },
                 onColor: { key in send(event { $0.styleColor = .with { $0.key = key } }) },
                 onIcon: { key in send(event { $0.styleIcon = .with { $0.key = key } }) },

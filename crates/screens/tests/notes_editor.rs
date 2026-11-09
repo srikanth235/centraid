@@ -355,7 +355,7 @@ fn send_to_agenda_is_a_route_to_agendas_todo_with_the_words_waiting() {
     let state = editor_state(d.view(i));
     assert_eq!(
         state.chrome.as_ref().unwrap().send_to_agenda_label,
-        "Send to Agenda"
+        "Send to Reminders"
     );
     assert_eq!(
         state.send_to_agenda,

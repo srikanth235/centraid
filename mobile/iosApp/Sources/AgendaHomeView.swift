@@ -35,7 +35,7 @@ struct AgendaHomeView: View {
         let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
-            app: "agenda",
+            app: state.appKey,
             title: header?.title.isEmpty == false ? header?.title ?? "" : state.chrome.title,
             trailing: addAction(state, denied: content.isDenied),
             // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
@@ -60,7 +60,7 @@ struct AgendaHomeView: View {
             showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
-                app: "agenda",
+                app: state.appKey,
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
@@ -183,6 +183,7 @@ struct AgendaHomeView: View {
         )) {
             AgendaStyleSheetView(
                 style: state.style,
+                appKey: state.appKey,
                 onName: { name in send(AgendaEvents.make { $0.styleName = .with { $0.name = name } }) },
                 onColor: { key in send(AgendaEvents.make { $0.styleColor = .with { $0.key = key } }) },
                 onIcon: { key in send(AgendaEvents.make { $0.styleIcon = .with { $0.key = key } }) },
@@ -193,7 +194,7 @@ struct AgendaHomeView: View {
         // THE SHEETS WEAR AGENDA'S BLUE (the boards' Create, Save and Import reminders): the accent
         // is set on the screen that presents them, so a sheet's ink button no longer falls back to
         // the shell's teal.
-        .environment(\.appAccent, AppAccent("agenda"))
+        .environment(\.appAccent, AppAccent(state.appKey))
         // NO IDENTIFIER ON THE WHOLE SCREEN: one set here replaces every
         // descendant's, and the flows tap `agenda-band-*`, `agenda-row-*`.
     }
@@ -573,8 +574,8 @@ private struct AgendaNoticeView: View {
 
 // MARK: - To-do
 
-/// THE TO-DO PLACE: the Inbox's groups, then the projects by area, then the
-/// new-project verb at the foot — whatever the list holds.
+/// REMINDERS' HOME: the smart-list cards, then My Lists (the Inbox first, then the lists by
+/// area), then the new-list verb at the foot. No task is drawn here: a task is opened from its list.
 private struct AgendaTodoList: View {
     let home: Centraid_Core_V1_AgendaHomeData
     let state: Centraid_Core_V1_AgendaHomeState
@@ -611,7 +612,9 @@ private struct AgendaTodoList: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 ForEach(todo.projects, id: \.key) { group in
-                    SectionHeader(title: group.title, count: UInt32(group.rows.count))
+                    if !group.title.isEmpty {
+                        SectionHeader(title: group.title, count: UInt32(group.rows.count))
+                    }
                     ForEach(group.rows, id: \.row.id) { project in
                         let row = project.row
                         Button { open(project.route) } label: {

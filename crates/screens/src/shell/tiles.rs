@@ -119,19 +119,14 @@ fn content(count: u32, capped: bool, one: String, many: String, body: Body) -> M
     }
 }
 
-/// Read one app's widgets: one, except Agenda's two (the day, and what is owed
-/// when anything is). Each is keyed by its widget id.
+/// Read one app's widget, keyed by its widget id.
 #[must_use]
 pub fn read(ctx: &Ctx, app: &str) -> Vec<(&'static str, Made)> {
     match app {
         "photos" => vec![("photos", photos(ctx))],
         "docs" => vec![("docs", docs(ctx))],
-        "agenda" => {
-            let (day, owed) = agenda(ctx);
-            let mut out = vec![("agenda", day)];
-            out.extend(owed.map(|owed| (REMINDERS, owed)));
-            out
-        }
+        "calendar" => vec![("calendar", calendar(ctx))],
+        "reminders" => vec![(REMINDERS, reminders(ctx))],
         "notes" => vec![("notes", notes(ctx))],
         "money" => vec![("money", money(ctx))],
         "health" => vec![("health", health(ctx))],
@@ -141,7 +136,7 @@ pub fn read(ctx: &Ctx, app: &str) -> Vec<(&'static str, Made)> {
     }
 }
 
-/// The widget of what Agenda is owed today: an app's colour, a place of its own.
+/// The widget of what Reminders is owed today.
 pub const REMINDERS: &str = "reminders";
 
 // -- photos -------------------------------------------------------------------
@@ -283,13 +278,6 @@ struct Due {
 }
 
 impl Due {
-    fn none() -> Self {
-        Self {
-            count: 0,
-            titles: Vec::new(),
-        }
-    }
-
     fn of(board: &wire::AgendaTaskBoard) -> Self {
         use wire::AgendaTaskGroupKind as Kind;
         let count = board
@@ -363,7 +351,7 @@ fn event_title(locale: Locale, event: &wire::AgendaEvent) -> String {
 fn today_of(ctx: &Ctx) -> Option<String> {
     match read::read(
         ctx,
-        load::agenda::DayContext::default(),
+        load::calendar::DayContext::default(),
         |answer| match answer {
             Answer::AgendaDayContext(context) => Some(context),
             _ => None,
@@ -374,21 +362,18 @@ fn today_of(ctx: &Ctx) -> Option<String> {
     }
 }
 
-/// THE CALENDAR WIDGET AND THE REMINDERS WIDGET, from Agenda's own upcoming
-/// window and its Today board: the next occurrence of whatever repeats is the
-/// core's recurrence engine's to say, so nothing here expands a series. A DUE
-/// READ THAT DID NOT LAND COSTS THE DAY ITS REMINDERS AND NOTHING ELSE: the
-/// events are the calendar, what is owed rides in the other widget.
-fn agenda(ctx: &Ctx) -> (Made, Option<Made>) {
+/// THE CALENDAR WIDGET, from Calendar's own upcoming window: the next occurrence of whatever repeats
+/// is the core's recurrence engine's to say, so nothing here expands a series.
+fn calendar(ctx: &Ctx) -> Made {
     let Some(today) = today_of(ctx) else {
-        return (unknown(), None);
+        return unknown();
     };
     let Some(to) = civil::plus_days(&today, WINDOW_DAYS + 1).and_then(|day| midnight(&day)) else {
-        return (unknown(), None);
+        return unknown();
     };
     let Reading::Data(upcoming) = read::read(
         ctx,
-        load::agenda::Upcoming {
+        load::calendar::Upcoming {
             from: None,
             to: Some(to),
         },
@@ -397,13 +382,19 @@ fn agenda(ctx: &Ctx) -> (Made, Option<Made>) {
             _ => None,
         },
     ) else {
-        return (unknown(), None);
+        return unknown();
     };
+    calendar_tile(ctx.locale(), ctx.hour_cycle(), &upcoming)
+}
+
+/// THE REMINDERS WIDGET, from Reminders' own Today board (round 10 of #1173: Reminders is an app,
+/// so its tile is always there, with its own invitation when nothing is owed).
+fn reminders(ctx: &Ctx) -> Made {
     let board = read::read(
         ctx,
-        load::agenda::Board {
+        load::reminders::Board {
             limit: 100,
-            view: Some(load::agenda::BoardView::Today),
+            view: Some(load::reminders::BoardView::Today),
             project_id: None,
         },
         |answer| match answer {
@@ -411,7 +402,10 @@ fn agenda(ctx: &Ctx) -> (Made, Option<Made>) {
             _ => None,
         },
     );
-    agenda_tile(ctx.locale(), ctx.hour_cycle(), &upcoming, board.data())
+    match board.data() {
+        Some(board) => reminders_tile(ctx.locale(), board),
+        None => unknown(),
+    }
 }
 
 /// The day's full name, "Wednesday", or empty for a day that does not parse.
@@ -432,18 +426,32 @@ fn weekday_long(locale: Locale, day: &str) -> String {
 /// How many of today's events a calendar widget lists; the rest are counted.
 pub const DAY_EVENTS: usize = 2;
 
-/// The calendar widget's tile, and the reminders widget's when anything is
-/// owed. The calendar's count is the occurrences of the next [`COUNT_DAYS`] days
-/// plus what is owed today, so its spoken label agrees with the lines in it; the
-/// reminders' is what is owed.
-fn agenda_tile(
-    locale: Locale,
-    cycle: HourCycle,
-    upcoming: &wire::AgendaUpcoming,
-    board: Option<&wire::AgendaTaskBoard>,
-) -> (Made, Option<Made>) {
+/// The reminders widget's tile: what is owed today, or the invitation when nothing is.
+fn reminders_tile(locale: Locale, board: &wire::AgendaTaskBoard) -> Made {
+    let owed = Due::of(board);
+    let (one, many) = (
+        words::tile_reminders_due(locale),
+        words::tile_reminders_due(locale),
+    );
+    if owed.count == 0 {
+        return empty_with(0, one, many);
+    }
+    content(
+        owed.count,
+        false,
+        one,
+        many,
+        Body::Reminders(wire::home_tile_body::Reminders {
+            titles: owed.titles.clone(),
+            caption: crate::strings::shared::today(locale),
+        }),
+    )
+}
+
+/// The calendar widget's tile. Its count is the occurrences of the next [`COUNT_DAYS`] days, so its
+/// spoken label agrees with the lines in it.
+fn calendar_tile(locale: Locale, cycle: HourCycle, upcoming: &wire::AgendaUpcoming) -> Made {
     let (today, now) = (upcoming.today.as_str(), upcoming.now_local.as_str());
-    let owed = board.map_or(Due::none(), Due::of);
     let live: Vec<&wire::AgendaEvent> = upcoming
         .events
         .iter()
@@ -453,20 +461,8 @@ fn agenda_tile(
         words::tile_agenda_count(locale),
         words::tile_agenda_count(locale),
     );
-    let reminders = (owed.count > 0).then(|| {
-        content(
-            owed.count,
-            false,
-            words::tile_reminders_due(locale),
-            words::tile_reminders_due(locale),
-            Body::Reminders(wire::home_tile_body::Reminders {
-                titles: owed.titles.clone(),
-                caption: crate::strings::shared::today(locale),
-            }),
-        )
-    });
-    if live.is_empty() && owed.count == 0 {
-        return (empty_with(0, one, many), None);
+    if live.is_empty() {
+        return empty_with(0, one, many);
     }
     // TODAY'S: what is still to come on the day, or still running (an all-day
     // run that covers it).
@@ -497,7 +493,7 @@ fn agenda_tile(
             &[("n", &rest.to_string())],
         )
     } else {
-        words::app_agenda(locale)
+        words::app_calendar(locale)
     };
     let horizon = civil::plus_days(today, COUNT_DAYS);
     let week = live
@@ -508,8 +504,8 @@ fn agenda_tile(
                 .is_none_or(|horizon| first_day(event) < horizon)
         })
         .count();
-    let count = u32::try_from(week).unwrap_or(u32::MAX) + owed.count;
-    let calendar = content(
+    let count = u32::try_from(week).unwrap_or(u32::MAX);
+    content(
         count,
         false,
         one,
@@ -522,8 +518,7 @@ fn agenda_tile(
             events,
             foot,
         }),
-    );
-    (calendar, reminders)
+    )
 }
 
 // -- notes --------------------------------------------------------------------
@@ -946,13 +941,7 @@ mod tests {
 
     /// The calendar widget alone, with nothing owed.
     fn agenda_of(events: Vec<wire::AgendaEvent>) -> Made {
-        agenda_tile(
-            Locale::En,
-            HourCycle::default(),
-            &upcoming(events),
-            Some(&board(&[], &[])),
-        )
-        .0
+        calendar_tile(Locale::En, HourCycle::default(), &upcoming(events))
     }
 
     fn agenda_body(made: &Made) -> &wire::home_tile_body::Agenda {
@@ -998,7 +987,7 @@ mod tests {
                 ("Lease call", "11:45")
             ]
         );
-        assert_eq!(body.foot, "Agenda \u{b7} 2 more");
+        assert_eq!(body.foot, "Calendar \u{b7} 2 more");
         // The count is what the spoken label says: four events in the week.
         assert_eq!(count(&made), 4);
         assert_eq!(made.count_label, "on your plate");
@@ -1010,7 +999,7 @@ mod tests {
             timed("a", "Lunch", "2026-06-15T11:15", ""),
             timed("b", "Call", "2026-06-15T11:45", ""),
         ]);
-        assert_eq!(agenda_body(&two).foot, "Agenda");
+        assert_eq!(agenda_body(&two).foot, "Calendar");
         // An event on a later day is in the week and not in the day.
         let later = agenda_of(vec![timed("a", "Survey", "2026-06-17T08:15", "")]);
         assert_eq!(later.status, Status::Content);
@@ -1093,17 +1082,14 @@ mod tests {
     }
 
     #[test]
-    fn what_is_owed_is_its_own_widget_with_its_count_and_the_first_three_titles() {
-        let (calendar, reminders) = agenda_tile(
+    fn what_is_owed_is_the_reminders_widget_with_its_count_and_the_first_three_titles() {
+        let reminders = reminders_tile(
             Locale::En,
-            HourCycle::default(),
-            &upcoming(vec![timed("e", "Dentist", "2026-06-15T14:00", "")]),
-            Some(&board(
+            &board(
                 &["File the taxes"],
                 &["Call Mum", "Water the plants", "Pay rent"],
-            )),
+            ),
         );
-        let reminders = reminders.expect("something is owed");
         assert_eq!(reminders.status, Status::Content);
         // Overdue first, then today's; four are owed and three are named.
         assert_eq!(count(&reminders), 4);
@@ -1116,54 +1102,26 @@ mod tests {
             ["File the taxes", "Call Mum", "Water the plants"]
         );
         assert_eq!(body.caption, "Today");
-        // The calendar's own count agrees with both widgets: one event and four due.
-        assert_eq!(count(&calendar), 5);
     }
 
     #[test]
-    fn nothing_owed_is_no_reminders_widget_and_a_due_read_that_failed_costs_only_that() {
-        let (_, none) = agenda_tile(
-            Locale::En,
-            HourCycle::default(),
-            &upcoming(vec![]),
-            Some(&board(&[], &[])),
-        );
-        assert!(none.is_none());
+    fn nothing_owed_is_the_reminders_widget_empty_and_the_calendar_counts_only_events() {
+        let none = reminders_tile(Locale::En, &board(&[], &[]));
+        assert_eq!(none.status, Status::Empty);
+        assert_eq!(count(&none), 0);
         let events = vec![timed("e", "Dentist", "2026-06-15T14:00", "")];
-        let (calendar, none) =
-            agenda_tile(Locale::En, HourCycle::default(), &upcoming(events), None);
-        assert!(none.is_none());
+        let calendar = calendar_tile(Locale::En, HourCycle::default(), &upcoming(events));
         assert_eq!(calendar.status, Status::Content);
         assert_eq!(lines(agenda_body(&calendar)), [("Dentist", "14:00")]);
-    }
-
-    #[test]
-    fn tasks_owed_and_no_event_is_content_with_an_empty_day() {
-        let (calendar, reminders) = agenda_tile(
-            Locale::En,
-            HourCycle::default(),
-            &upcoming(vec![]),
-            Some(&board(&[], &["Call Mum"])),
-        );
-        assert_eq!(calendar.status, Status::Content);
-        let body = agenda_body(&calendar);
-        assert!(body.events.is_empty());
-        assert_eq!(body.foot, "No events today");
         assert_eq!(count(&calendar), 1);
-        assert!(reminders.is_some());
     }
 
     #[test]
-    fn nothing_coming_up_and_nothing_owed_is_empty_with_a_zero_count_and_no_reminders() {
-        let (made, reminders) = agenda_tile(
-            Locale::En,
-            HourCycle::default(),
-            &upcoming(vec![]),
-            Some(&board(&[], &[])),
-        );
+    fn nothing_coming_up_is_empty_with_a_zero_count() {
+        let made = calendar_tile(Locale::En, HourCycle::default(), &upcoming(vec![]));
         assert_eq!(made.status, Status::Empty);
         assert_eq!(count(&made), 0);
-        assert!(made.body.is_none() && reminders.is_none());
+        assert!(made.body.is_none());
         assert_eq!(made.count_label, "on your plate");
         // An event that is over leaves the same: nothing to say.
         let over = agenda_of(vec![timed(

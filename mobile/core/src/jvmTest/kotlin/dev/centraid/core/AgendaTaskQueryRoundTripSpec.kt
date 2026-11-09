@@ -175,9 +175,9 @@ class AgendaTaskQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One write, as a screen makes it (`act` on agenda); answers its `id`, if any of its output. */
+        /** One write, as a screen makes it (`act` on reminders); answers its `id`, if any of its output. */
         suspend fun CentraidCore.write(action: String, input: String, key: String): String {
-            val output = act("agenda", action, input, key)
+            val output = act("reminders", action, input, key)
             return Regex("\"id\":\"([^\"]+)\"")
                 .find(output)
                 ?.groupValues

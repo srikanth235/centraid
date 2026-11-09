@@ -1754,7 +1754,7 @@ fn holding(app: &str, items: u64, bytes: u64) -> wire::AppHolding {
 /// The design's backed-up phone: eight apps, 5.0 GB, all of it acknowledged.
 fn eight_apps() -> Vec<wire::AppHolding> {
     vec![
-        holding("agenda", 640, 6 * MB),
+        holding("calendar", 640, 6 * MB),
         holding("docs", 58, 412 * MB),
         wire::AppHolding {
             workouts: 96,
@@ -1858,7 +1858,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
             ("Notes", "312 notes · 38 MB", "Backed up"),
             ("Money", "3,412 transactions · 21 MB", "Backed up"),
             ("People", "418 people · 14 MB", "Backed up"),
-            ("Agenda", "640 events and tasks · 6 MB", "Backed up"),
+            ("Calendar", "640 events · 6 MB", "Backed up"),
             ("Health", "731 days, 96 workouts · 3 MB", "Backed up"),
         ]
     );
@@ -1924,7 +1924,7 @@ fn a_row_says_what_waits_and_never_more_than_was_acknowledged() {
         (notes.status.as_str(), notes.waiting),
         ("3 edits waiting", true)
     );
-    assert_eq!(row("agenda").status, "1 edit waiting");
+    assert_eq!(row("calendar").status, "1 edit waiting");
     assert_eq!(row("money").status, "Backed up");
 
     // NEVER ACKNOWLEDGED: no row says "Backed up".

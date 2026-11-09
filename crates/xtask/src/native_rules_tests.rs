@@ -249,7 +249,7 @@ fn registry(root: &Path) {
     write(
         root,
         "crates/screens/src/agenda/mod.rs",
-        "pub const HOME: &str = \"agenda.home\";\npub fn registry() -> Registry { Registry::default().with(HOME, home::build) }\n",
+        "pub const HOME: &str = \"calendar.home\";\npub fn registry() -> Registry { Registry::default().with(HOME, home::build) }\n",
     );
     write(
         root,
@@ -265,7 +265,7 @@ fn a_shell_that_spells_a_screen_id_is_caught() {
     write(
         &root,
         "mobile/iosApp/Sources/Shell.swift",
-        "if route.screen == \"agenda.home\" { }\n",
+        "if route.screen == \"calendar.home\" { }\n",
     );
     write(
         &root,
@@ -275,7 +275,7 @@ fn a_shell_that_spells_a_screen_id_is_caught() {
     let report = native_spells_no_screen_id(&root);
     let text = findings(&report);
     assert_eq!(report.findings.len(), 2, "{text}");
-    assert!(text.contains("Shell.swift:1: spells the screen id \"agenda.home\""));
+    assert!(text.contains("Shell.swift:1: spells the screen id \"calendar.home\""));
     assert!(text.contains("Shell.kt:1"));
 }
 
@@ -286,7 +286,7 @@ fn the_widget_and_shared_swift_folders_are_scanned_and_generated_code_is_not() {
     write(
         &root,
         "mobile/iosApp/Widgets/W.swift",
-        "let screen = \"agenda.home\"\n",
+        "let screen = \"calendar.home\"\n",
     );
     write(
         &root,
@@ -296,7 +296,7 @@ fn the_widget_and_shared_swift_folders_are_scanned_and_generated_code_is_not() {
     write(
         &root,
         "mobile/iosApp/Sources/Generated/G.swift",
-        "let screen = \"agenda.home\"\n",
+        "let screen = \"calendar.home\"\n",
     );
     let report = native_spells_no_screen_id(&root);
     let text = findings(&report);
@@ -311,7 +311,7 @@ fn a_shell_that_draws_the_route_it_was_given_is_clean() {
     write(
         &root,
         "mobile/iosApp/Sources/Shell.swift",
-        "// \"agenda.home\" is Rust's\nstore.push(row.route)\n",
+        "// \"calendar.home\" is Rust's\nstore.push(row.route)\n",
     );
     let report = native_spells_no_screen_id(&root);
     assert!(report.findings.is_empty(), "{}", findings(&report));

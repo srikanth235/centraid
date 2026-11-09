@@ -181,7 +181,7 @@ private fun EventBody(
                                 .weight(1f)
                                 .heightIn(min = KitGeometry.ROW_MIN)
                                 .clip(shape)
-                                .background(if (choice.selected) appAccent("agenda").fill else Surface.card, shape)
+                                .background(if (choice.selected) appAccent("calendar").fill else Surface.card, shape)
                                 .then(if (choice.selected) Modifier else Modifier.border(1.dp, Surface.line, shape))
                                 .clickable(enabled = choice.enabled) {
                                     onEvent(AgendaEventEvent(rsvp = AgendaEventEvent.RsvpPicked(partstat = choice.partstat)))

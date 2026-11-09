@@ -39,13 +39,14 @@ use wire::screen_event::Kind as E;
 
 use super::snapshot::{self, Inputs};
 use crate::agenda::routes;
-use crate::catalog::load::agenda as query;
+use crate::catalog::load::calendar as query_cal;
+use crate::catalog::load::reminders as query_rem;
 use crate::kit::civil;
 use crate::kit::read::{Reading, read};
 use crate::screen::{Ctx, Screen};
 
 /// The route name of the service.
-pub const NAME: &str = "agenda.glance";
+pub const NAME: &str = "calendar.glance";
 
 /// The timer that rebuilds the document when it goes stale.
 const ROLLOVER: &str = "glance.rollover";
@@ -228,7 +229,7 @@ fn pick_context(answer: Answer) -> Option<wire::AgendaDayContext> {
 /// The document for what the vault in front holds now.
 fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
     let unavailable = || snapshot::unavailable_with_opens(ctx.locale(), ctx.zone());
-    let Reading::Data(context) = read(ctx, query::DayContext::default(), pick_context) else {
+    let Reading::Data(context) = read(ctx, query_cal::DayContext::default(), pick_context) else {
         return unavailable();
     };
     // THE WINDOW IS PADDED A DAY EITHER SIDE, as `home/held.rs` explains: the
@@ -245,7 +246,7 @@ fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
     }
     let Reading::Data(upcoming) = read(
         ctx,
-        query::Upcoming {
+        query_cal::Upcoming {
             from: Some(before),
             to: Some(after),
         },
@@ -260,10 +261,10 @@ fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
     // board's window is the newest, which a vault with more open work than the
     // window holds would not make the earliest): overdue then today for the
     // reminders, and the timed tasks of today and tomorrow for up next.
-    let due_rows = |window: query::DueRowsWindow, limit: u32| {
+    let due_rows = |window: query_rem::DueRowsWindow, limit: u32| {
         read(
             ctx,
-            query::DueRows {
+            query_rem::DueRows {
                 limit,
                 window: Some(window),
             },
@@ -273,10 +274,11 @@ fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
             },
         )
     };
-    let Reading::Data(now_rows) = due_rows(query::DueRowsWindow::Now, DUE_ROWS) else {
+    let Reading::Data(now_rows) = due_rows(query_rem::DueRowsWindow::Now, DUE_ROWS) else {
         return unavailable();
     };
-    let Reading::Data(ahead_rows) = due_rows(query::DueRowsWindow::TimedAhead, AHEAD_ROWS) else {
+    let Reading::Data(ahead_rows) = due_rows(query_rem::DueRowsWindow::TimedAhead, AHEAD_ROWS)
+    else {
         return unavailable();
     };
     // A read for another day than the one the rest was read on (the clock crossed
@@ -295,10 +297,14 @@ fn document(ctx: &Ctx) -> (Vec<u8>, snapshot::Opens) {
     // open work than the window holds. A count for another day than the one
     // the rest was read on (the clock crossed midnight between the reads) is
     // not a figure for this document.
-    let Reading::Data(counts) = read(ctx, query::SmartCounts::default(), |answer| match answer {
-        Answer::AgendaTaskSmartCounts(counts) => Some(counts),
-        _ => None,
-    }) else {
+    let Reading::Data(counts) = read(
+        ctx,
+        query_rem::SmartCounts::default(),
+        |answer| match answer {
+            Answer::AgendaTaskSmartCounts(counts) => Some(counts),
+            _ => None,
+        },
+    ) else {
         return unavailable();
     };
     if counts.today_day != context.today {

@@ -146,7 +146,7 @@ internal fun AgendaViewMenu(
                         null
                     },
                     trailingIcon = if (view.current) {
-                        { CentraidIcon("Check", tint = appAccent("agenda").text, size = 18.dp) }
+                        { CentraidIcon("Check", tint = appAccent("calendar").text, size = 18.dp) }
                     } else {
                         null
                     },
@@ -164,7 +164,7 @@ internal fun AgendaViewMenu(
                     DropdownMenuItem(
                         text = { Text(choice.label, style = kitTextStyle(KitType.Row), color = Surface.ink) },
                         trailingIcon = if (choice.current) {
-                            { CentraidIcon("Check", tint = appAccent("agenda").text, size = 18.dp) }
+                            { CentraidIcon("Check", tint = appAccent("calendar").text, size = 18.dp) }
                         } else {
                             null
                         },

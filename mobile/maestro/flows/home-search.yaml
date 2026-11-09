@@ -13,10 +13,10 @@ name: home-search
 - tapOn:
     id: "home-search-field"
 - inputText: "circle"
-# Grouped by app: the Agenda group heads the one hit.
+# Grouped by app: the Reminders group heads the one hit.
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-agenda"
+      id: "home-search-group-reminders"
     timeout: 5000
 - assertVisible: "Tap the circle to finish me"
 # A row opens in its own app; back lands on the results it left.
@@ -34,7 +34,7 @@ name: home-search
     commands:
       - back
 - assertVisible:
-    id: "home-search-group-agenda"
+    id: "home-search-group-reminders"
 # Cancel goes home; the picked term comes back as a recent search.
 - tapOn:
     id: "home-search-cancel"

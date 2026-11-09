@@ -17,7 +17,8 @@ catalog! {
     plain backup_ago_minute = ("1 minute ago", "1 minute ago");
     plain backup_ago_minutes = ("{n} minutes ago", "{n} minutes ago");
     plain backup_ago_now = ("just now", "just now");
-    counted backup_app_agenda = ("{count} event or task", "{count} events and tasks");
+    counted backup_app_calendar = ("{count} event", "{count} events");
+    counted backup_app_reminders = ("{count} reminder", "{count} reminders");
     plain backup_app_backed_up = ("Backed up", "Backed up");
     plain backup_app_detail = ("{what} · {size}", "{what} · {size}");
     counted backup_app_docs = ("{count} document", "{count} documents");

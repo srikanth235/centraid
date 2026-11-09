@@ -56,7 +56,7 @@ import dev.centraid.design.CentraidCatalog
 // four), how tall, and the rows they sit in. This file draws what it sends and
 // decides none of it; `HomeView.swift`'s `WidgetGrid` reads the same fields. A
 // widget wears the colour of the app it shows (`app_id`); `widget` is its
-// identity, because Agenda has two (the day, and what is owed).
+// identity (one per app since Calendar and Reminders split).
 
 private const val COLUMNS = 4
 private val GAP = 14.dp
@@ -152,7 +152,7 @@ private fun WidgetCard(tile: HomeTile, loading: String, onOpen: (Route) -> Unit)
             .background(Surface.card)
             // A WIDGET WITH NO ROUTE (still reading, or could not be) is not a control.
             .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
-            // Keyed on the widget: Agenda's two are `home-tile-agenda` and
+            // Keyed on the widget: Calendar's and Reminders' are `home-tile-calendar` and
             // `home-tile-reminders`. The label carries the live count; the id does not.
             .testTag("home-tile-${tile.widget}")
             .semantics { contentDescription = tile.accessibility_label },

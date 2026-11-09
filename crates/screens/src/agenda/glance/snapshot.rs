@@ -80,7 +80,7 @@ pub const MAX_ID: usize = 64;
 pub const MAX_BYTES: usize = 8 * 1024;
 
 const ELLIPSIS: char = '\u{2026}';
-const TINT_AGENDA: &str = "agenda";
+const TINT_AGENDA: &str = "calendar";
 const TINT_RED: &str = "red";
 
 /// The key that opens Agenda's Day.

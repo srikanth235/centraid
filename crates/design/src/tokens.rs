@@ -25,9 +25,17 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-/// The eight apps, by the id their section carries in `[app.*]`.
-pub const APP_IDS: [&str; 8] = [
-    "agenda", "notes", "people", "docs", "money", "locker", "health", "photos",
+/// The nine apps, by the id their section carries in `[app.*]`.
+pub const APP_IDS: [&str; 9] = [
+    "calendar",
+    "reminders",
+    "notes",
+    "people",
+    "docs",
+    "money",
+    "locker",
+    "health",
+    "photos",
 ];
 
 /// The three state colours (`[state.*]`).
@@ -536,7 +544,7 @@ impl Tokens {
     }
 
     /// The dark fill and dark text of every accent, by a name that says which:
-    /// `app.agenda`, `state.red`, `shell`.
+    /// `app.calendar`, `state.red`, `shell`.
     pub fn accents(&self) -> Vec<(String, &Accent)> {
         let mut out = vec![("shell".to_owned(), &self.shell)];
         out.extend(
@@ -704,7 +712,7 @@ impl Tokens {
             problems.push("a type size or the card radius is zero".to_owned());
         }
 
-        // The legacy catalogue names each of the eight apps once.
+        // The legacy catalogue names each of the nine apps once.
         same_set(
             "[[native.app]]",
             self.native.app.iter().map(|app| app.id.as_str()).collect(),
@@ -820,8 +828,8 @@ impl Tokens {
 }
 
 /// The ids of the legacy catalogue, which predates and differs from `APP_IDS`
-/// only in order: the same eight apps.
-const APP_IDS_LEGACY: [&str; 8] = APP_IDS;
+/// only in order: the same nine apps.
+const APP_IDS_LEGACY: [&str; 9] = APP_IDS;
 
 /// A colour a native role may hold: `#RRGGBB`, `#RRGGBBAA` or `rgba(r,g,b,a)`.
 /// Channels are 0 to 255 and the alpha 0 to 1.
@@ -903,7 +911,7 @@ mod tests {
     #[test]
     fn the_committed_tokens_parse_and_satisfy_every_rule() {
         let tokens = committed();
-        assert_eq!(tokens.app.len(), 8);
+        assert_eq!(tokens.app.len(), 9);
         assert_eq!(tokens.state.len(), 3);
         assert_eq!(tokens.list.len(), 8);
         assert_eq!(tokens.brand.len(), 4);
@@ -911,14 +919,15 @@ mod tests {
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
         assert_eq!(tokens.icons.len(), 150);
-        assert_eq!(tokens.native.app.len(), 8);
+        assert_eq!(tokens.native.app.len(), 9);
     }
 
     #[test]
     fn the_decided_values_are_the_ones_in_the_issue() {
         let tokens = committed();
         let light = |id: &str| tokens.app[id].light.as_str();
-        assert_eq!(light("agenda"), "#266FC4");
+        assert_eq!(light("calendar"), "#266FC4");
+        assert_eq!(light("reminders"), "#087668");
         assert_eq!(light("notes"), "#8C6802");
         assert_eq!(tokens.app["notes"].tile.as_deref(), Some("#F5C431"));
         assert_eq!(light("people"), "#7638AD");
@@ -1015,7 +1024,7 @@ mod tests {
         let icons = committed_text("design/icons.toml");
         let broken = text.replacen("\"#266FC4\"", "\"#26C4\"", 1);
         let error = Tokens::parse(&broken, &icons).expect_err("a short hex is refused");
-        assert!(error.to_string().contains("app.agenda.light"), "{error}");
+        assert!(error.to_string().contains("app.calendar.light"), "{error}");
     }
 
     #[test]

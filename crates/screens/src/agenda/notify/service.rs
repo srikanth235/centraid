@@ -24,7 +24,7 @@ use crate::screen::{Ctx, Screen};
 use crate::strings::agenda_reminders as reminders;
 
 /// The route name of the service.
-pub const NAME: &str = "agenda.notify";
+pub const NAME: &str = "reminders.notify";
 
 /// How many reminders one read looks at (the query's own ceiling).
 const TASK_LIMIT: u32 = 500;
@@ -129,7 +129,7 @@ impl Service {
     fn read(ctx: &Ctx) -> Option<Loaded> {
         let Reading::Data(board) = read::read(
             ctx,
-            load::agenda::Reminders { limit: TASK_LIMIT },
+            load::reminders::Reminders { limit: TASK_LIMIT },
             |answer| match answer {
                 Answer::AgendaTaskReminders(board) => Some(board),
                 _ => None,
@@ -141,7 +141,7 @@ impl Service {
             civil::plus_days(&board.today, desired::WINDOW_DAYS + 1).and_then(|d| midnight(&d))?;
         let Reading::Data(upcoming) = read::read(
             ctx,
-            load::agenda::Upcoming {
+            load::calendar::Upcoming {
                 from: None,
                 to: Some(to),
             },

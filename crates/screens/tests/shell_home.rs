@@ -75,19 +75,22 @@ fn home_is_the_root_of_the_home_tab_and_reads_every_app_in_the_grid_order() {
     // THE WIDGET FOLD'S ORDER, not the order the apps were read in. What is owed
     // is its own widget while anything is, so the seeded vault may or may not
     // have one: take it out and the rest are the board's.
-    let order: Vec<&str> = data
-        .tiles
-        .iter()
-        .map(|t| t.widget.as_str())
-        .filter(|widget| *widget != "reminders")
-        .collect();
+    let order: Vec<&str> = data.tiles.iter().map(|t| t.widget.as_str()).collect();
     assert_eq!(
         order,
         [
-            "agenda", "photos", "money", "health", "people", "locker", "notes", "docs"
+            "calendar",
+            "reminders",
+            "photos",
+            "money",
+            "health",
+            "people",
+            "locker",
+            "notes",
+            "docs"
         ]
     );
-    // Every widget wears an app: its own, or Agenda's for what is owed.
+    // Every widget wears its own app.
     for tile in &data.tiles {
         assert!(
             tile.widget == tile.app_id || tile.widget == "reminders",
@@ -180,7 +183,7 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
     // What is owed today is its own widget, in Agenda's colour, right after the
     // calendar, naming its tasks and opening Agenda's to-dos.
     let reminders = tile_of(&data, "reminders");
-    assert_eq!(reminders.app_id, "agenda");
+    assert_eq!(reminders.app_id, "reminders");
     assert_eq!(reminders.name, "Reminders");
     assert_eq!(reminders.size(), wire::HomeTileSize::Medium);
     assert_eq!(reminders.height, 2);
@@ -198,11 +201,11 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
             .unwrap(),
         data.tiles
             .iter()
-            .position(|t| t.widget == "agenda")
+            .position(|t| t.widget == "calendar")
             .unwrap()
             + 1
     );
-    let calendar = tile_of(&data, "agenda");
+    let calendar = tile_of(&data, "calendar");
     let Some(wire::home_tile_body::Kind::Agenda(day)) =
         calendar.body.as_ref().and_then(|b| b.kind.as_ref())
     else {
@@ -716,10 +719,10 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
     let founded = vault("v1", "Personal");
     tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));
     let data = data(&d, i);
-    // One widget per app, and Agenda's second while something is owed.
+    // One widget per app, nine apps.
     assert_eq!(
         data.tiles.iter().filter(|t| t.widget == t.app_id).count(),
-        8
+        9
     );
 }
 

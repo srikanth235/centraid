@@ -623,7 +623,7 @@ pub fn follow_request(
     records: &[&EventRecord],
     complete: bool,
     device: &str,
-) -> act::agenda::FollowCalendar {
+) -> act::calendar::FollowCalendar {
     let records: Vec<Value> = records
         .iter()
         .map(|record| {
@@ -635,7 +635,7 @@ pub fn follow_request(
             })
         })
         .collect();
-    act::agenda::FollowCalendar {
+    act::calendar::FollowCalendar {
         origin: json!({
             "ref": origin.id,
             "label": origin.label,
@@ -1118,7 +1118,7 @@ impl CalendarFollow {
         let failed = verdicts.iter().any(|verdict| !verdict.ok);
         let mut kept = 0_u32;
         if verdicts.iter().any(|verdict| verdict.ok) {
-            let request = act::agenda::RecordCalendarPush {
+            let request = act::calendar::RecordCalendarPush {
                 items: push::pushed_items(&verdicts).to_string(),
             };
             let key = kit_act::key(

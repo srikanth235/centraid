@@ -5,7 +5,7 @@ import SwiftUI
 // in what order, how wide (small is one of four columns, medium two, large all
 // four), how tall, and the rows they sit in. These views draw what it sends and
 // decide none of it. A widget wears the colour of the app it shows (`app_id`);
-// `widget` is its identity, because Agenda has two (the day, and what is owed).
+// `widget` is its identity (one per app since Calendar and Reminders split).
 
 /// The grid's stated geometry: four columns, the board's gap and one row's floor.
 private enum WidgetGeometry {
@@ -136,7 +136,7 @@ private struct WidgetCard: View {
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
         .buttonStyle(.plain)
-        // Keyed on the widget: Agenda's two are `home-tile-agenda` and
+        // Keyed on the widget: Calendar's and Reminders' are `home-tile-calendar` and
         // `home-tile-reminders`. The label carries the live count; the id does not.
         .accessibilityIdentifier("home-tile-\(tile.widget)")
         .accessibilityLabel(tile.accessibilityLabel)

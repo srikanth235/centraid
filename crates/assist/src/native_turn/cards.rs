@@ -7,7 +7,7 @@
 //! | kind | app | entity | a tap opens |
 //! |---|---|---|---|
 //! | person | people | `person` | the person |
-//! | event | agenda | `event` | the event |
+//! | event | calendar | `event` | the event |
 //! | task | tasks | `task` | the task |
 //! | note | notes | `note` | the note |
 //! | document | docs | `document` | the document |
@@ -75,15 +75,15 @@ const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
 /// THE TABLE. Every kind.
 pub const TABLE: [CardKind; 18] = [
     row(Kind::Person, App::People, "person"),
-    row(Kind::Event, App::Agenda, "event"),
-    row(Kind::Task, App::Agenda, "task"),
+    row(Kind::Event, App::Calendar, "event"),
+    row(Kind::Task, App::Reminders, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
     row(Kind::Album, App::Photos, "album"),
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
-    row(Kind::List, App::Agenda, "project"),
+    row(Kind::List, App::Reminders, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
     row(Kind::LockerItem, App::Locker, "locker_item"),
     row(Kind::Workout, App::Health, "workout"),
@@ -414,7 +414,7 @@ mod tests {
         let cards = step_cards(&[step]);
         assert_eq!(cards.len(), 1);
         let card = &cards[0];
-        assert_eq!((card.app, card.entity), (App::Agenda, PROPOSAL_STEP));
+        assert_eq!((card.app, card.entity), (App::Reminders, PROPOSAL_STEP));
         assert_eq!(
             (
                 card.qualifier.as_str(),

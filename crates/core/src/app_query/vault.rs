@@ -369,7 +369,7 @@ mod tests {
             .collect();
         assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
         assert!(
-            hits.contains(&("agenda", "task", task.as_str())),
+            hits.contains(&("reminders", "task", task.as_str())),
             "{hits:?}"
         );
         assert!(
@@ -410,7 +410,7 @@ mod tests {
         let slipped = scratch.search("cabni");
         let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
         assert!(
-            apps.contains(&"notes") && apps.contains(&"agenda"),
+            apps.contains(&"notes") && apps.contains(&"reminders"),
             "{apps:?}"
         );
         assert_eq!(slipped.corrected, "cabin");
@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(hits.len(), 4, "{hits:?}");
         assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "album")], (album.as_str(), ""));
-        assert_eq!(hits[&("agenda", "project")], (project.as_str(), ""));
+        assert_eq!(hits[&("reminders", "project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "folder")], (folder.as_str(), ""));
         // Titles are the names; a container's subtitle is its kind.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();

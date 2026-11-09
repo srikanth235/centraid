@@ -66,7 +66,8 @@ pub(super) struct Step {
 /// does not know is no app's, and the card keeps the shell's colour rather than guess one.
 pub(super) fn app_of_kind(kind: &str) -> &'static str {
     match kind {
-        "task" | "reminder" | "event" | "project" | "list" | "section" => "agenda",
+        "event" => "calendar",
+        "task" | "reminder" | "project" | "list" | "section" => "reminders",
         "person" | "contact" | "people" | "touch" => "people",
         "note" | "notebook" => "notes",
         "doc" | "document" | "file" | "folder" => "docs",
@@ -797,8 +798,10 @@ mod proposal_app_tests {
 
     #[test]
     fn a_proposal_wears_the_colour_of_the_one_app_its_rows_belong_to() {
-        assert_eq!(proposal(&["task"]).app(), "agenda");
-        assert_eq!(proposal(&["task", "event"]).app(), "agenda");
+        assert_eq!(proposal(&["task"]).app(), "reminders");
+        assert_eq!(proposal(&["event"]).app(), "calendar");
+        // Rows of two apps wear the shell's colour rather than guess one.
+        assert_eq!(proposal(&["task", "event"]).app(), "");
         assert_eq!(proposal(&["person"]).app(), "people");
     }
 

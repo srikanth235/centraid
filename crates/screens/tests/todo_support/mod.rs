@@ -18,6 +18,19 @@ pub fn driver() -> Driver {
     driver
 }
 
+/// A driver whose one tab is rooted at Reminders' home (round 10: the lists are Reminders').
+pub fn reminders_driver() -> Driver {
+    let mut driver = Driver::with_runtime(centraid_screens::Runtime::new(
+        agenda::registry(),
+        vec![(
+            agenda::TAB.to_owned(),
+            agenda::routes::home(wire::AgendaDestination::Todo, ""),
+        )],
+    ));
+    driver.start();
+    driver
+}
+
 /// Write as another surface, and insist it committed.
 pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
     let response = d.act(
@@ -43,14 +56,14 @@ pub fn id_of(response: &wire::ActResponse) -> String {
         .to_owned()
 }
 
-pub fn add(d: &Driver, task: act::agenda::AddTask) -> String {
+pub fn add(d: &Driver, task: act::reminders::AddTask) -> String {
     id_of(&arrange(d, task))
 }
 
 pub fn task(d: &Driver, title: &str) -> String {
     add(
         d,
-        act::agenda::AddTask {
+        act::reminders::AddTask {
             title: title.to_owned(),
             ..Default::default()
         },
@@ -59,10 +72,10 @@ pub fn task(d: &Driver, title: &str) -> String {
 
 pub fn load_board(
     d: &Driver,
-    view: load::agenda::BoardView,
+    view: load::reminders::BoardView,
     project: Option<&str>,
 ) -> wire::AgendaTaskBoard {
-    let request = load::agenda::Board {
+    let request = load::reminders::Board {
         limit: 500,
         project_id: project.map(str::to_owned),
         view: Some(view),
@@ -91,7 +104,7 @@ pub fn answer(d: &Driver, request: impl Into<wire::LoadRequest>) -> Answer {
 pub fn task_of(d: &Driver, id: &str) -> wire::AgendaTask {
     match answer(
         d,
-        load::agenda::Task {
+        load::reminders::Task {
             task_id: id.to_owned(),
         },
     ) {
@@ -102,7 +115,7 @@ pub fn task_of(d: &Driver, id: &str) -> wire::AgendaTask {
 
 /// The core's today, from the board it answers.
 pub fn today(d: &Driver) -> String {
-    load_board(d, load::agenda::BoardView::Anytime, None).today
+    load_board(d, load::reminders::BoardView::Anytime, None).today
 }
 
 pub fn day(d: &Driver, offset: i64) -> String {
@@ -112,22 +125,22 @@ pub fn day(d: &Driver, offset: i64) -> String {
 /// Delete every task, so a test's own tasks are the only ones.
 pub fn clear_tasks(d: &Driver) {
     for view in [
-        load::agenda::BoardView::All,
-        load::agenda::BoardView::Logbook,
+        load::reminders::BoardView::All,
+        load::reminders::BoardView::Logbook,
     ] {
         let board = load_board(d, view, None);
         for group in &board.groups {
             for task in &group.tasks {
                 arrange(
                     d,
-                    act::agenda::DeleteTask {
+                    act::reminders::DeleteTask {
                         task_id: task.task_id.clone(),
                     },
                 );
             }
         }
     }
-    let left = load_board(d, load::agenda::BoardView::All, None);
+    let left = load_board(d, load::reminders::BoardView::All, None);
     assert!(
         left.groups.iter().all(|g| g.tasks.is_empty()),
         "the vault still has tasks"
@@ -137,7 +150,7 @@ pub fn clear_tasks(d: &Driver) {
 pub fn complete(d: &Driver, id: &str) {
     arrange(
         d,
-        act::agenda::CompleteTask {
+        act::reminders::CompleteTask {
             task_id: id.to_owned(),
         },
     );
@@ -146,7 +159,7 @@ pub fn complete(d: &Driver, id: &str) {
 pub fn cancel(d: &Driver, id: &str) {
     arrange(
         d,
-        act::agenda::CancelTask {
+        act::reminders::CancelTask {
             task_id: id.to_owned(),
         },
     );
@@ -155,7 +168,7 @@ pub fn cancel(d: &Driver, id: &str) {
 pub fn project(d: &Driver, title: &str) -> String {
     id_of(&arrange(
         d,
-        act::agenda::CreateProject {
+        act::reminders::CreateProject {
             title: title.to_owned(),
             ..Default::default()
         },
@@ -165,7 +178,7 @@ pub fn project(d: &Driver, title: &str) -> String {
 pub fn section(d: &Driver, project: &str, title: &str) -> String {
     id_of(&arrange(
         d,
-        act::agenda::CreateSection {
+        act::reminders::CreateSection {
             parent: project.to_owned(),
             title: title.to_owned(),
             ..Default::default()

@@ -1,6 +1,6 @@
 // AGENDA'S FIVE QUERIES, AS THE CORE ANSWERS THEM (#1046, #1029).
 //
-// `crates/apps/agenda` runs `upcoming`, `day-context`, `parties` and `search`
+// `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs `upcoming`, `day-context`, `parties` and `search`
 // over the vault — six-plus tables joined and every repeating series expanded by
 // the one recurrence engine (D-1020-S1) — and these are its answers, typed. A
 // shell reaches them through `app_query.proto`'s `AppQueryRequest`, and draws
@@ -22,7 +22,7 @@
 // groups by the member's local day, draws a now line and prints "08:15". So a
 // request states `tz`, and the answer carries the local readings — every
 // occurrence's `local_start`, `local_end` and `local_days`, and the answer's
-// `today` and `now_local` — computed by `crates/apps/agenda`'s `local` module
+// `today` and `now_local` — computed by `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks)'s `local` module
 // against the bundled zone database. A shell reads those strings and does no
 // zone arithmetic; the only civil arithmetic left to it is a weekday from a
 // `YYYY-MM-DD`, which is pure.
@@ -378,7 +378,33 @@ message AgendaFollowedGuest {
   string state = 3;
 }
 
-// `agenda.attachments`: one page of what an event or a task has attached (#1173).
+// `calendar.dated-reminders`: the open, one-off reminders that fall due on the local days of a window,
+// read-only (round 10 of #1173: Calendar shows a reminder on its day and opens it in Reminders).
+message CalendarDatedRemindersRequest {
+  // The first and the last local day of the window, `YYYY-MM-DD`.
+  string from = 1;
+  string to = 2;
+  // The zone the days are read in (the file header's rule).
+  string tz = 3;
+}
+
+message CalendarDatedReminders {
+  // The day the vault clock names in `tz`, `YYYY-MM-DD`.
+  string today = 1;
+  repeated CalendarDatedReminder reminders = 2;
+}
+
+// A reminder on its day: its title, due day, due time and nothing else.
+message CalendarDatedReminder {
+  string task_id = 1;
+  string title = 2;
+  // `YYYY-MM-DD`.
+  string due_day = 3;
+  // `HH:MM`, or empty for a date-only due.
+  string due_time = 4;
+}
+
+// `calendar.attachments` and `reminders.attachments`: one page of what an event or a task has attached (#1173).
 message AgendaAttachments {
   repeated AgendaAttachmentRow attachments = 1;
   // The cursor of the next page, as the request's `after` spells it; absent
@@ -422,7 +448,7 @@ message AgendaSearch {
 // ===========================================================================
 // THE TASKS ARE AGENDA'S (#1128): the board (a bounded window of open work plus
 // the logbook, families nested and the promotion rule applied), one task, the
-// projects, search, catch-up and the trash. `crates/apps/agenda` runs them
+// projects, search, catch-up and the trash. `crates/apps/calendar` (events) and `crates/apps/reminders` (tasks) runs them
 // (`task/queries.rs`) and these are its answers, typed; a shell nests no family,
 // collapses no missed period and groups no place, because each of those in
 // Kotlin or Swift is a second copy of a rule v0 already drifted on.

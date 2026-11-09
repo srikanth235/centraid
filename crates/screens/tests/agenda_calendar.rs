@@ -618,7 +618,7 @@ const ZONE_PARIS: &str = "Europe/Paris";
 #[test]
 fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_is_told() {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     // Appearing asks the device whether it follows; a first launch has not imported.
     answer(
         &mut world,
@@ -678,7 +678,7 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
 #[test]
 fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_an_account() {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     answer(
         &mut world,
         is_keychain,
@@ -735,7 +735,7 @@ fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_a
 fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete_read_goes_but_not_from_a_partial_one()
  {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     answer(
         &mut world,
         is_keychain,
@@ -778,7 +778,7 @@ fn a_calendar_with_nothing_in_it_is_still_told_and_an_event_that_left_a_complete
 #[test]
 fn a_repeating_series_imports_as_one_event_that_skips_what_the_phone_does_not_show() {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     answer(
         &mut world,
         is_keychain,
@@ -840,7 +840,7 @@ fn a_repeating_series_imports_as_one_event_that_skips_what_the_phone_does_not_sh
 
 fn following_world() -> (World, u64) {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     answer(
         &mut world,
         is_keychain,
@@ -855,7 +855,7 @@ fn following_world() -> (World, u64) {
 #[test]
 fn a_device_that_never_imported_is_not_followed_and_the_phone_is_not_even_read() {
     let mut world = world();
-    let host = world.driver.push("agenda", host_route());
+    let host = world.driver.push("calendar", host_route());
     answer(
         &mut world,
         is_keychain,

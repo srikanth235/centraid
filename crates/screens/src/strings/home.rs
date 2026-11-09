@@ -73,7 +73,7 @@ catalog! {
     plain vaults_unnamed = ("Unnamed vault", "Unnamed vault");
 
     // ---- the apps' names ----
-    plain app_agenda = ("Agenda", "Agenda");
+    plain app_calendar = ("Calendar", "Calendar");
     plain app_docs = ("Docs", "Docs");
     plain app_health = ("Health", "Health");
     plain app_locker = ("Locker", "Locker");
@@ -85,7 +85,7 @@ catalog! {
 
     // ---- the tiles ----
     plain tile_agenda_count = ("on your plate", "on your plate");
-    plain tile_agenda_foot_more = ("Agenda · {n} more", "Agenda · {n} more");
+    plain tile_agenda_foot_more = ("Calendar · {n} more", "Calendar · {n} more");
     plain tile_agenda_none_today = ("No events today", "No events today");
     plain tile_docs_count_one = ("document", "document");
     plain tile_docs_count_many = ("documents", "documents");
@@ -100,7 +100,7 @@ catalog! {
     plain tile_people_reconnect = ("reconnect", "reconnect");
     plain tile_people_count_one = ("person", "person");
     plain tile_people_count_many = ("people", "people");
-    plain tile_empty_agenda = ("Put something on the calendar", "Put something on the calendar");
+    plain tile_empty_calendar = ("Put something on the calendar", "Put something on the calendar");
     plain tile_empty_docs = ("Add your first document", "Add your first document");
     plain tile_empty_health = ("Connect your health app", "Connect your health app");
     plain tile_empty_health_small = ("Connect", "Connect");
@@ -108,5 +108,6 @@ catalog! {
     plain tile_empty_money = ("Import your first statement", "Import your first statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
     plain tile_empty_people = ("Add someone you know", "Add someone you know");
+    plain tile_empty_reminders = ("Add your first reminder", "Add your first reminder");
     plain tile_empty_photos = ("Import your first photo", "Import your first photo");
 }

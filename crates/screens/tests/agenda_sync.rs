@@ -41,7 +41,7 @@ impl Screen for Host {
             Some(E::Appeared(_)) => {
                 // The home's own read: the tables of events are the ones whose change it hears.
                 let _ = ctx.load(
-                    load::agenda::Upcoming {
+                    load::calendar::Upcoming {
                         from: Some("2099-01-01T00:00:00Z".to_owned()),
                         to: Some("2099-12-31T00:00:00Z".to_owned()),
                     }
@@ -82,7 +82,7 @@ fn phone(imported: bool) -> Phone {
         }))
     }));
     let host = world.driver.push(
-        "agenda",
+        "calendar",
         wire::Route {
             sheet: false,
             screen: "test.sync".to_owned(),
@@ -246,10 +246,10 @@ impl Phone {
     }
 
     fn edit_title(&mut self, id: &str, title: &str) {
-        self.act(act::agenda::EditEvent {
+        self.act(act::calendar::EditEvent {
             event_id: id.to_owned(),
             title: Some(title.to_owned()),
-            ..act::agenda::EditEvent::default()
+            ..act::calendar::EditEvent::default()
         });
     }
 }
@@ -385,10 +385,10 @@ fn an_events_link_is_stated_only_when_it_changed_and_reads_back_without_a_write(
 
     // The member changes the notes: the notes are stated, the link is not.
     let id = event.event_id;
-    phone.act(act::agenda::EditEvent {
+    phone.act(act::calendar::EditEvent {
         event_id: id.clone(),
         description: Field::Is("Bring slides and badge".into()),
-        ..act::agenda::EditEvent::default()
+        ..act::calendar::EditEvent::default()
     });
     let writes = phone.writes();
     let fields = only(&writes[0]).fields.clone().expect("fields");
@@ -409,10 +409,10 @@ fn an_events_link_is_stated_only_when_it_changed_and_reads_back_without_a_write(
     assert_eq!(event.description.as_deref(), Some("Bring slides and badge"));
 
     // The member changes the link: the link is stated with the value, the notes are not.
-    phone.act(act::agenda::EditEvent {
+    phone.act(act::calendar::EditEvent {
         event_id: id,
         url: Field::Is("https://example.com/moved".into()),
-        ..act::agenda::EditEvent::default()
+        ..act::calendar::EditEvent::default()
     });
     let writes = phone.writes();
     let fields = only(&writes[0]).fields.clone().expect("fields");
@@ -482,7 +482,7 @@ fn c5_a_phone_delete_of_an_event_the_member_edited_keeps_it_and_does_not_recreat
 fn c6_a_trashed_event_the_phone_still_holds_is_deleted_there_once() {
     let mut phone = with_offsite();
     let id = phone.id("Offsite");
-    phone.act(act::agenda::TrashEvent {
+    phone.act(act::calendar::TrashEvent {
         event_id: id.clone(),
     });
     let writes = phone.writes();
@@ -509,7 +509,7 @@ fn c12_a_restored_event_is_created_again_on_the_phone_and_linked_to_its_new_id()
     let mut phone = with_offsite();
     let id = phone.id("Offsite");
     // C6: trashed, and deleted on the phone.
-    phone.act(act::agenda::TrashEvent {
+    phone.act(act::calendar::TrashEvent {
         event_id: id.clone(),
     });
     assert_eq!(only(&phone.writes()[0]).op, Op::Delete as i32);
@@ -517,7 +517,7 @@ fn c12_a_restored_event_is_created_again_on_the_phone_and_linked_to_its_new_id()
     assert!(phone.writes().is_empty());
 
     // The member restores it from the trash.
-    phone.act(act::agenda::RestoreEvent {
+    phone.act(act::calendar::RestoreEvent {
         event_id: id.clone(),
     });
     let writes = phone.writes();
@@ -568,10 +568,10 @@ fn c12_never_recreates_an_event_the_phone_deleted_after_the_member_edited_it() {
     }]);
     phone.pass(writable_work(vec![]));
     assert!(phone.event("Mine").is_some());
-    phone.act(act::agenda::TrashEvent {
+    phone.act(act::calendar::TrashEvent {
         event_id: id.clone(),
     });
-    phone.act(act::agenda::RestoreEvent { event_id: id });
+    phone.act(act::calendar::RestoreEvent { event_id: id });
     assert!(phone.writes().is_empty(), "the phone's delete is final");
 }
 
@@ -581,7 +581,7 @@ fn c12_never_recreates_an_event_the_phone_deleted_after_the_member_edited_it() {
 fn c7_a_trashed_event_the_phone_changed_stays_on_the_phone_and_says_so() {
     let mut phone = with_offsite();
     let id = phone.id("Offsite");
-    phone.act(act::agenda::TrashEvent {
+    phone.act(act::calendar::TrashEvent {
         event_id: id.clone(),
     });
     assert_eq!(only(&phone.writes()[0]).op, Op::Delete as i32);
@@ -679,12 +679,12 @@ fn c10_a_series_edit_is_one_series_write_and_a_cancelled_day_is_that_day_only() 
     phone.written_ok();
 
     // One day cancelled: that occurrence only.
-    phone.act(act::agenda::EditOccurrence {
-        action: act::agenda::EditOccurrenceAction::Skip,
+    phone.act(act::calendar::EditOccurrence {
+        action: act::calendar::EditOccurrenceAction::Skip,
         event_id: id.clone(),
         original_start: "2099-03-09T09:00:00".to_owned(),
-        scope: act::agenda::EditOccurrenceScope::Occurrence,
-        ..act::agenda::EditOccurrence::default()
+        scope: act::calendar::EditOccurrenceScope::Occurrence,
+        ..act::calendar::EditOccurrence::default()
     });
     let writes = phone.writes();
     let item = only(&writes[0]);
@@ -722,14 +722,14 @@ fn c10_a_moved_day_is_written_as_that_day_with_the_series_length() {
             .collect(),
     ));
     let id = phone.id("Standup");
-    phone.act(act::agenda::EditOccurrence {
-        action: act::agenda::EditOccurrenceAction::Override,
+    phone.act(act::calendar::EditOccurrence {
+        action: act::calendar::EditOccurrenceAction::Override,
         event_id: id,
         original_start: "2099-03-09T09:00:00".to_owned(),
-        scope: act::agenda::EditOccurrenceScope::Occurrence,
+        scope: act::calendar::EditOccurrenceScope::Occurrence,
         starts: Some("2099-03-09T10:00:00".to_owned()),
         zone: Field::Is("Europe/Paris".to_owned()),
-        ..act::agenda::EditOccurrence::default()
+        ..act::calendar::EditOccurrence::default()
     });
     let writes = phone.writes();
     let item = only(&writes[0]);

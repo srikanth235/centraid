@@ -101,13 +101,13 @@ impl Candidates {
     }
 }
 
-/// Where a question is drawn from: an app, or the one app that holds two kinds of thing. Agenda's
-/// events and its tasks are asked about in turn (#1128), and each reads its own rows.
+/// Where a question is drawn from: an app. Calendar reads its events and Reminders its tasks
+/// (they were one app until round 10 of #1173), and each reads its own rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
-    /// Agenda's tasks.
+    /// Reminders' tasks.
     Tasks,
-    /// Agenda's events.
+    /// Calendar's events.
     Events,
     /// Any other app.
     Other(App),
@@ -117,15 +117,17 @@ impl Source {
     /// The app a question from here is asked in.
     const fn app(self) -> App {
         match self {
-            Self::Tasks | Self::Events => App::Agenda,
+            Self::Tasks => App::Reminders,
+            Self::Events => App::Calendar,
             Self::Other(app) => app,
         }
     }
 
-    /// Every source a chat scoped to `app` reads: Agenda reads its events, then its tasks.
+    /// Every source a chat scoped to `app` reads: Calendar its events, Reminders its tasks.
     fn of(app: App) -> Vec<Self> {
         match app {
-            App::Agenda => vec![Self::Events, Self::Tasks],
+            App::Calendar => vec![Self::Events],
+            App::Reminders => vec![Self::Tasks],
             other => vec![Self::Other(other)],
         }
     }
@@ -133,6 +135,12 @@ impl Source {
 
 /// Every candidate from one source, backed and dataless apart.
 fn candidates(source: Source, world: &World, today: Date) -> Candidates {
+    // Calendar and Reminders are read as their kinds, however the source was spelled.
+    let source = match source {
+        Source::Other(App::Calendar) => Source::Events,
+        Source::Other(App::Reminders) => Source::Tasks,
+        other => other,
+    };
     let app = source.app();
     let mut backed = Vec::new();
     let mut dataless = Vec::new();
@@ -160,7 +168,7 @@ fn candidates(source: Source, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What is coming up?"));
             dataless.push(say(app, "What is overdue?"));
         }
-        Source::Events | Source::Other(App::Agenda) => {
+        Source::Events => {
             let week_end = today.saturating_add(jiff::Span::new().days(6));
             let coming = || {
                 live(world, Kind::Event).filter(move |row| {
@@ -251,6 +259,8 @@ fn candidates(source: Source, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What folders do I have?"));
             dataless.push(say(app, "Which documents are starred?"));
         }
+        // Folded into Events and Tasks above.
+        Source::Other(App::Calendar | App::Reminders) => {}
     }
     Candidates { backed, dataless }
 }
@@ -400,9 +410,9 @@ mod tests {
             open_task("t2", "Rotate the tires", "2026-10-01"),
             row(Kind::List, "l1", "Tahoe trip"),
         ]);
-        // Tasks are Agenda's (#1128); this vault holds no event, so
-        // every backed question is about its tasks.
-        let got = suggest_in(&w, TODAY, Some(App::Agenda));
+        // Tasks are Reminders'; this vault holds no event, so every backed question is about its
+        // tasks.
+        let got = suggest_in(&w, TODAY, Some(App::Reminders));
         assert_eq!(
             texts(&got),
             [
@@ -411,11 +421,11 @@ mod tests {
                 "What is left in Tahoe trip?"
             ]
         );
-        assert!(got.iter().all(|s| s.app == App::Agenda));
+        assert!(got.iter().all(|s| s.app == App::Reminders));
     }
 
     #[test]
-    fn the_agenda_scope_asks_about_events_and_tasks_both() {
+    fn calendar_asks_about_events_and_reminders_about_tasks() {
         let w = world([
             open_task("t1", "Pick up the dry cleaning", "2026-10-08"),
             open_task("t2", "Rotate the tires", "2026-10-01"),
@@ -424,18 +434,26 @@ mod tests {
                 "2026-10-10T19:00:00",
             ),
         ]);
-        let got = suggest_in(&w, TODAY, Some(App::Agenda));
-        // The backed question of each domain in turn, events first (registry order).
+        let got = suggest_in(&w, TODAY, Some(App::Calendar));
         assert_eq!(
             texts(&got),
             [
                 "What is on my calendar this week?",
-                "What is due today?",
-                "When is Dinner with Maya?"
+                "When is Dinner with Maya?",
+                "What is on tomorrow?"
             ]
         );
-        let apps: Vec<App> = got.iter().map(|s| s.app).collect();
-        assert_eq!(apps, [App::Agenda, App::Agenda, App::Agenda]);
+        assert!(got.iter().all(|s| s.app == App::Calendar));
+        let got = suggest_in(&w, TODAY, Some(App::Reminders));
+        assert_eq!(
+            texts(&got),
+            [
+                "What is due today?",
+                "What is overdue?",
+                "What is coming up?"
+            ]
+        );
+        assert!(got.iter().all(|s| s.app == App::Reminders));
     }
 
     #[test]
@@ -447,15 +465,14 @@ mod tests {
         );
         let mut trashed = open_task("t2", "Trashed", "2026-10-01");
         trashed.trashed = true;
-        // Nothing backs "today" or "overdue", so the order is the dataless one: Agenda's
-        // events and tasks in turn.
-        let got = suggest_in(&world([done, trashed]), TODAY, Some(App::Agenda));
+        // Nothing backs "today" or "overdue", so the order is the dataless one.
+        let got = suggest_in(&world([done, trashed]), TODAY, Some(App::Reminders));
         assert_eq!(
             texts(&got),
             [
-                "What is on my calendar this week?",
                 "What is due today?",
-                "What is on tomorrow?"
+                "What is coming up?",
+                "What is overdue?"
             ]
         );
     }
@@ -490,7 +507,7 @@ mod tests {
             ]
         );
         let apps: Vec<App> = got.iter().map(|s| s.app).collect();
-        assert_eq!(apps, [App::Agenda, App::Agenda, App::People]);
+        assert_eq!(apps, [App::Reminders, App::Calendar, App::People]);
     }
 
     #[test]
@@ -551,8 +568,8 @@ mod tests {
             );
         }
         // "alpha" sorts before "Zeta" whatever the case, and neither list holds a task.
-        let agenda = suggest_in(&forward, TODAY, Some(App::Agenda));
-        assert!(texts(&agenda).contains(&"What is left in alpha?"));
+        let reminders = suggest_in(&forward, TODAY, Some(App::Reminders));
+        assert!(texts(&reminders).contains(&"What is left in alpha?"));
     }
 
     #[test]
@@ -571,21 +588,20 @@ mod tests {
             "status",
             "cancelled",
         );
-        let got = suggest_in(&world([far, cancelled]), TODAY, Some(App::Agenda));
+        let got = suggest_in(&world([far, cancelled]), TODAY, Some(App::Calendar));
         assert!(!texts(&got).iter().any(|text| text.starts_with("When is")));
         let near = on(
             row(Kind::Event, "e3", "Dentist, 2nd floor"),
             "2026-10-09T09:00:00",
         );
-        let got = suggest_in(&world([near]), TODAY, Some(App::Agenda));
-        // The two backed event questions, then the first dataless one, which is the tasks'
-        // (the events' own first is already said).
+        let got = suggest_in(&world([near]), TODAY, Some(App::Calendar));
+        // The two backed event questions, then the first dataless one the events do not already say.
         assert_eq!(
             texts(&got),
             [
                 "What is on my calendar this week?",
                 "When is Dentist 2nd floor?",
-                "What is due today?"
+                "What is on tomorrow?"
             ]
         );
     }

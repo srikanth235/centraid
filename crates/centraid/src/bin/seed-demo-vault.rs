@@ -13,12 +13,12 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,agenda` draws People, Notes
+//! springboard — a vault seeded `--only docs,calendar` draws People, Notes
 //! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across eight apps** — agenda, docs, locker, money, notes,
-//! people, photos and agenda: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! **One scenario across nine apps** — calendar, reminders, docs, locker, money, notes,
+//! people, photos and money: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
@@ -383,7 +383,7 @@ fn main() {
 /// self id is the predicate's one bind). Locker
 /// counts live, unarchived items, as its tile does; the trashed demo item is
 /// not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 9] = [
     ("photos", "photo", "id", None),
     // HEALTH COUNTS ITS WORKOUTS: the day totals are keyed by (person, day, metric)
     // and have no `id` for a page to sort by; the library's tests count those.
@@ -395,12 +395,18 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
         "id",
         Some("kind = 'note' AND deleted_at IS NULL"),
     ),
-    // THE TASKS ARE AGENDA'S (#1128): its events and its tasks are one app's rows.
+    // EVENTS ARE CALENDAR'S AND TASKS ARE REMINDERS' (round 10 of #1173): two apps, two counts.
     (
-        "agenda",
+        "calendar",
         "entity",
         "id",
-        Some("kind IN ('event', 'task') AND deleted_at IS NULL"),
+        Some("kind = 'event' AND deleted_at IS NULL"),
+    ),
+    (
+        "reminders",
+        "entity",
+        "id",
+        Some("kind = 'task' AND deleted_at IS NULL"),
     ),
     (
         "people",

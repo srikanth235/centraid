@@ -196,7 +196,7 @@ fn a_ready_document_has_the_schema_and_the_pinned_clock() {
     assert_eq!(first["starts_local"], "2026-11-07T15:00");
     assert_eq!(first["ends_local"], "2026-11-07T16:00");
     assert_eq!(first["all_day"], false);
-    assert_eq!(first["tint"], "agenda");
+    assert_eq!(first["tint"], "calendar");
     assert_eq!(first["open"], "e:e1:2026-11-07T15:00");
     assert_eq!(doc["siri"]["next_sentence"], "Next is Dentist at 15:00.");
     // The example a reader of this schema is written against.
@@ -423,7 +423,7 @@ fn an_overdue_task_is_tinted_red_and_the_rest_agenda() {
     let overdue = task("o", "Late", "2026-11-01", "09:00");
     let due = task("t", "On time", TODAY, "09:00");
     assert_eq!(snapshot::tint_of(&overdue), "red");
-    assert_eq!(snapshot::tint_of(&due), "agenda");
+    assert_eq!(snapshot::tint_of(&due), "calendar");
 }
 
 #[test]

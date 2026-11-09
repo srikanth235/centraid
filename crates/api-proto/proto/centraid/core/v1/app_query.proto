@@ -95,6 +95,7 @@ message AppQueryRequest {
     AgendaTaskSmartCountsRequest agenda_task_smart_counts = 26;
     // The earliest-due open tasks of a window, at any vault size (#1173).
     AgendaTaskDueRowsRequest agenda_task_due_rows = 25;
+    CalendarDatedRemindersRequest calendar_dated_reminders = 29;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -195,6 +196,7 @@ message AppQueryResponse {
     AgendaTaskBoard agenda_task_reminders = 19;
     AgendaTaskSmartCounts agenda_task_smart_counts = 26;
     AgendaTaskDueRows agenda_task_due_rows = 25;
+    CalendarDatedReminders calendar_dated_reminders = 29;
     // What an event or a task has attached (`agenda.attachments`, #1173).
     AgendaAttachments agenda_attachments = 27;
     DocsDrive docs_drive = 30;

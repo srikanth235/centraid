@@ -42,7 +42,8 @@ sha1.workspace = true
 # so it runs HERE, over the page door, and a shell draws its typed answer —
 # rather than a second engine in each shell (D-1020-S1). `app_query` is the one
 # module that reaches it.
-centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-apps-calendar = { path = "../apps/calendar" }
+centraid-apps-reminders = { path = "../apps/reminders" }
 # Tasks' board, one task, projects, search and catch-up (#1046): the families,
 # the recurrence collapse and every civil reading run here, over the page door.
 # Docs' drive, search, document and activity (#1046), the same way.

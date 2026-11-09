@@ -741,11 +741,11 @@ fn in_your_vault_lists_a_task_about_the_person_in_agendas_own_page_and_colour() 
             row.kind_label.as_str(),
             row.title.as_str()
         ),
-        ("agenda", "Task", "Send Ada the book")
+        ("reminders", "Task", "Send Ada the book")
     );
     let task: serde_json::Value = serde_json::from_slice(&task.output).unwrap();
     assert_eq!(row.id, task["task_id"].as_str().unwrap());
-    assert_eq!(row.route.as_ref().unwrap().screen, "agenda.task");
+    assert_eq!(row.route.as_ref().unwrap().screen, "reminders.task");
     assert!(data.vault_more.is_empty());
     // The follow-up is also the person's own, and a person with nothing else has none.
     let other = person(&d, "Bea Okafor");

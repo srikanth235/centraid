@@ -345,7 +345,7 @@ fn local_day_of(zone: &centraid_vault::time::zone::FireZone, text: &str) -> Opti
     if is_date {
         return Some(text.to_owned());
     }
-    centraid_apps_agenda::local::today(zone, text)
+    centraid_apps_kit::civil::today(zone, text)
 }
 
 /// The column whose code `PageQuery.with_minor_units` states the exponent of.
@@ -660,7 +660,7 @@ mod tests {
             };
             assert_eq!(
                 row.values[2].kind,
-                centraid_apps_agenda::local::today(&zone, created).map(wire::value::Kind::Text),
+                centraid_apps_kit::civil::today(&zone, created).map(wire::value::Kind::Text),
                 "the day {created} falls on at UTC+14"
             );
         }
@@ -1091,7 +1091,7 @@ mod tests {
                 })
                 .collect()
         };
-        for name in ["test", "home.people", "agenda.task.trash", "assist.native"] {
+        for name in ["test", "home.people", "reminders.trash", "assist.native"] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(
                 !titles(&answer).contains(&"Bank login".to_owned()),

@@ -663,8 +663,9 @@ mod tests {
                 },
             })
             .collect();
-        let restored = Session::restore(Some(App::Agenda), history, Some("question 6".to_owned()));
-        assert_eq!(restored.scope(), Some(App::Agenda));
+        let restored =
+            Session::restore(Some(App::Reminders), history, Some("question 6".to_owned()));
+        assert_eq!(restored.scope(), Some(App::Reminders));
         let model = ScriptedModel::new(["ok."]);
         let (said, _) = chat(&model, restored.history(), &Cancel::new());
         said.unwrap();

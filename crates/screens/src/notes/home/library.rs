@@ -678,7 +678,7 @@ mod tests {
             chips,
             [
                 ("About · Maya".to_owned(), "people.person".to_owned()),
-                ("About · Dinner".to_owned(), "agenda.event".to_owned()),
+                ("About · Dinner".to_owned(), "calendar.event".to_owned()),
             ]
         );
         assert_eq!(titles(&library).len(), 3);

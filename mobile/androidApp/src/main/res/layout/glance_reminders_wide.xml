@@ -9,7 +9,7 @@
     android:orientation="vertical"
     android:padding="14dp">
     <LinearLayout android:layout_width="match_parent" android:layout_height="36dp" android:gravity="center_vertical" android:orientation="horizontal">
-        <TextView android:id="@+id/glance_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_app_agenda_text" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/glance_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="@dimen/centraid_text_group" android:textStyle="bold" android:textColor="@color/centraid_app_reminders_text" android:maxLines="1" android:ellipsize="end" />
         <TextView android:id="@+id/glance_today" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:textSize="@dimen/centraid_text_group" android:textColor="@color/centraid_text_meta" android:maxLines="1" android:ellipsize="end" />
         <TextView android:id="@+id/glance_add" android:layout_width="wrap_content" android:layout_height="36dp" android:background="@drawable/glance_pill" android:drawableStart="@drawable/glance_plus" android:drawablePadding="6dp" android:gravity="center_vertical" android:paddingStart="10dp" android:paddingEnd="14dp" android:textSize="@dimen/centraid_text_meta" android:textStyle="bold" android:textColor="@color/centraid_surface_card" android:maxLines="1" />
     </LinearLayout>

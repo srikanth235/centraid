@@ -11,7 +11,7 @@ enum WidgetPalette {
     static let page = Color(CentraidAsset.surfaceCard)
     static let ink = Color(CentraidAsset.textInk)
     static let meta = Color(CentraidAsset.textMeta)
-    static let agenda = Color(CentraidAsset.appAgenda)
+    static let agenda = Color(CentraidAsset.appCalendar)
     static let red = Color(CentraidAsset.stateRed)
 
     /// A snapshot's `tint` key as a colour. An unknown key is Agenda's own.

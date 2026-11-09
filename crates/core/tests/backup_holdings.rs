@@ -61,7 +61,15 @@ fn every_app_says_what_it_holds_and_the_rows_add_up() {
     assert_eq!(
         ids,
         [
-            "agenda", "docs", "health", "locker", "money", "notes", "people", "photos"
+            "calendar",
+            "docs",
+            "health",
+            "locker",
+            "money",
+            "notes",
+            "people",
+            "photos",
+            "reminders"
         ]
     );
     let photos = app(&backed, "photos");

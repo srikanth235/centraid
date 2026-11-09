@@ -106,7 +106,7 @@ fn a_new_task_asks_for_one_new_snapshot() {
     let today = todo_support::today(&d);
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::AddTask {
+        centraid_screens::catalog::act::reminders::AddTask {
             title: title.to_owned(),
             due: Field::Is(today),
             ..Default::default()
@@ -141,7 +141,7 @@ fn the_counts_say_every_open_task_when_the_rows_are_only_a_window() {
     for n in 0..overdue {
         arrange(
             &d,
-            centraid_screens::catalog::act::agenda::AddTask {
+            centraid_screens::catalog::act::reminders::AddTask {
                 title: format!("Zq long overdue {n}"),
                 due: Field::Is("2000-01-01".to_owned()),
                 ..Default::default()
@@ -176,7 +176,7 @@ fn the_rows_are_the_earliest_due_in_a_vault_bigger_than_the_boards_window() {
     let add = |title: String, due: &str| {
         arrange(
             &d,
-            centraid_screens::catalog::act::agenda::AddTask {
+            centraid_screens::catalog::act::reminders::AddTask {
                 title,
                 due: Field::Is(due.to_owned()),
                 ..Default::default()
@@ -208,7 +208,7 @@ fn a_change_of_hour_cycle_rebuilds_the_snapshot_in_the_phones_words() {
     let today = todo_support::today(&d);
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::AddTask {
+        centraid_screens::catalog::act::reminders::AddTask {
             title: "Zq timed".to_owned(),
             due: Field::Is(format!("{today}T23:30")),
             ..Default::default()
@@ -242,7 +242,7 @@ fn the_runtime_relays_a_commit_to_the_service_once() {
     let today = todo_support::today(&d);
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::AddTask {
+        centraid_screens::catalog::act::reminders::AddTask {
             title: "Zq relayed".to_owned(),
             due: Field::Is(today),
             ..Default::default()
@@ -306,7 +306,7 @@ fn add_a_reminder_opens_reminders_with_the_title_in_the_quick_add_bar() {
     assert!(
         todo_support::load_board(
             &d,
-            centraid_screens::catalog::load::agenda::BoardView::All,
+            centraid_screens::catalog::load::reminders::BoardView::All,
             None
         )
         .groups
@@ -365,19 +365,19 @@ fn busy_day() -> (Driver, String) {
     let today = todo_support::today(&d);
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::Propose {
+        centraid_screens::catalog::act::calendar::Propose {
             id: Some("zq-event".to_owned()),
             title: "Zq all-day".to_owned(),
             starts: today.clone(),
             ends: Field::Is(today.clone()),
-            timing: Some(centraid_screens::catalog::act::agenda::ProposeTiming::AllDay),
+            timing: Some(centraid_screens::catalog::act::calendar::ProposeTiming::AllDay),
             busy: Some(false),
             ..Default::default()
         },
     );
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::AddTask {
+        centraid_screens::catalog::act::reminders::AddTask {
             title: "Zq due today".to_owned(),
             due: Field::Is(today.clone()),
             ..Default::default()
@@ -472,7 +472,7 @@ fn a_key_from_an_older_snapshot_opens_agenda_home() {
     answer_glance(&mut d, done());
     arrange(
         &d,
-        centraid_screens::catalog::act::agenda::CompleteTask { task_id: id },
+        centraid_screens::catalog::act::reminders::CompleteTask { task_id: id },
     );
     d.send(SERVICE, changed());
     let newer = documents(&d).pop().expect("a newer snapshot");

@@ -855,8 +855,8 @@ fn catalog_swift(tokens: &Tokens) -> Result<String> {
 
 /// One named colour with its two appearances.
 struct ColorAsset {
-    /// `app_agenda`; the iOS name is `CentraidAppAgenda`, the Android one
-    /// `centraid_app_agenda`.
+    /// `app_calendar`; the iOS name is `CentraidAppCalendar`, the Android one
+    /// `centraid_app_calendar`.
     snake: String,
     light: String,
     dark: String,
@@ -1475,19 +1475,19 @@ mod tests {
     #[test]
     fn asset_names_are_prefixed_and_cased_for_each_platform() {
         let asset = ColorAsset {
-            snake: "app_agenda_text".into(),
+            snake: "app_calendar_text".into(),
             light: "#266FC4".into(),
             dark: "#569EF7".into(),
         };
-        assert_eq!(asset.ios_name(), "CentraidAppAgendaText");
-        assert_eq!(asset.android_name(), "centraid_app_agenda_text");
-        assert_eq!(camel(&asset.snake), "appAgendaText");
+        assert_eq!(asset.ios_name(), "CentraidAppCalendarText");
+        assert_eq!(asset.android_name(), "centraid_app_calendar_text");
+        assert_eq!(camel(&asset.snake), "appCalendarText");
     }
 
     #[test]
     fn a_colour_set_carries_light_then_dark_in_xcodes_spelling() {
         let asset = ColorAsset {
-            snake: "app_agenda".into(),
+            snake: "app_calendar".into(),
             light: "#266FC4".into(),
             dark: "#3077CD".into(),
         };

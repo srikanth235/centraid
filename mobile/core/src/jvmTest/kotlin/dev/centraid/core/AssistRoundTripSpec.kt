@@ -87,7 +87,7 @@ class AssistRoundTripSpec : StringSpec({
 
             // --- a session, scoped to an app the assistant reads --------------
             val started = core.assist(
-                AssistRequest(start = AssistStartRequest(app = "agenda")),
+                AssistRequest(start = AssistStartRequest(app = "reminders")),
             ).answer().started!!
             (started.session_id > 0L) shouldBe true
 

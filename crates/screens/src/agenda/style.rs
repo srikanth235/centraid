@@ -195,8 +195,8 @@ impl Draft {
             return match self.subject {
                 Subject::List => ops.created(
                     ctx,
-                    act::agenda::CreateProject {
-                        kind: act::agenda::CreateProjectKind::Project,
+                    act::reminders::CreateProject {
+                        kind: act::reminders::CreateProjectKind::Project,
                         title: name.clone(),
                         color: Field::Is(self.color.clone()),
                         icon: self.icon.clone().map_or(Field::Keep, Field::Is),
@@ -207,7 +207,7 @@ impl Draft {
                 ),
                 Subject::Calendar => ops.created(
                     ctx,
-                    act::agenda::CreateCalendar {
+                    act::calendar::CreateCalendar {
                         title: name.clone(),
                         color: Field::Is(create_color(&self.color)),
                         icon: self.icon.clone().map_or(Field::Keep, Field::Is),
@@ -225,7 +225,7 @@ impl Draft {
         if self.name_changed()
             && !ops.created(
                 ctx,
-                act::agenda::RenameList {
+                act::reminders::RenameList {
                     list_id: initial.id.clone(),
                     title: name.clone(),
                 },
@@ -238,7 +238,7 @@ impl Draft {
         if self.color_changed() || self.icon_changed() {
             return ops.created(
                 ctx,
-                act::agenda::StyleContainer {
+                act::reminders::StyleContainer {
                     list_id: initial.id.clone(),
                     color: if self.color_changed() {
                         Field::Is(style_color(&self.color))
@@ -270,8 +270,8 @@ pub(super) fn icon_of(stored: Option<&str>) -> String {
         .unwrap_or_default()
 }
 
-fn create_color(key: &str) -> act::agenda::CreateCalendarColor {
-    use act::agenda::CreateCalendarColor as C;
+fn create_color(key: &str) -> act::calendar::CreateCalendarColor {
+    use act::calendar::CreateCalendarColor as C;
     match key {
         "mustard" => C::Mustard,
         "violet" => C::Violet,
@@ -284,8 +284,8 @@ fn create_color(key: &str) -> act::agenda::CreateCalendarColor {
     }
 }
 
-fn style_color(key: &str) -> act::agenda::StyleContainerColor {
-    use act::agenda::StyleContainerColor as C;
+fn style_color(key: &str) -> act::reminders::StyleContainerColor {
+    use act::reminders::StyleContainerColor as C;
     match key {
         "mustard" => C::Mustard,
         "violet" => C::Violet,

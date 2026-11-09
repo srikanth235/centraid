@@ -51,6 +51,8 @@ pub struct Context<'a> {
     pub show_project: bool,
     /// How the phone words a time of day; 24-hour until the shell says.
     pub cycle: HourCycle,
+    /// Calendar's reminders on a day (round 10): the row's box does not check it, a tap opens it.
+    pub read_only: bool,
 }
 
 impl<'a> Context<'a> {
@@ -74,6 +76,7 @@ impl<'a> Context<'a> {
             day_in_head: false,
             show_project: true,
             cycle: HourCycle::default(),
+            read_only: false,
         }
     }
 }
@@ -151,6 +154,7 @@ pub fn row(locale: Locale, task: &wire::AgendaTask, ctx: &Context, subtask: bool
         can_file: open && !subtask,
         route: Some(routes::task(&task.task_id)),
         flagged: task.flagged,
+        read_only: ctx.read_only,
         list_color_key: task
             .project_id
             .as_deref()
@@ -503,7 +507,7 @@ pub fn flatten(group: &wire::AgendaTaskGroup) -> Vec<&wire::AgendaTask> {
 #[must_use]
 pub fn chrome(locale: Locale) -> wire::TodoChrome {
     wire::TodoChrome {
-        title: words::app_title(locale),
+        title: reminders::reminders_title(locale),
         retry: words::retry(locale),
         loading: words::loading(locale),
         search_placeholder: words::search_placeholder(locale),
@@ -534,7 +538,7 @@ pub fn chrome(locale: Locale) -> wire::TodoChrome {
         cancel: words::cancel(locale),
         home: words::band_home(locale),
         show_more: words::show_more(locale),
-        back: words::app_title(locale),
+        back: reminders::reminders_title(locale),
         add_subtask_verb: words::add(locale),
         add_tag_verb: words::add(locale),
         file_verb: words::file(locale),

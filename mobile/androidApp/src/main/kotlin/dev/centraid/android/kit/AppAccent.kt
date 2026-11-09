@@ -41,7 +41,7 @@ private fun Context.inScheme(dark: Boolean): Context {
 
 /**
  * AN APP'S COLOUR, as the three values the design gives it. The one hook for every screen that
- * wears an app: `appAccent("agenda")`. The shell's places (`home`, `chat`, `backup`) and any id
+ * wears an app: `appAccent("calendar")`. The shell's places (`home`, `chat`, `backup`) and any id
  * this table does not know wear the shell's teal.
  *
  * - [fill] is the colour under white glyphs: the filled `+`, a button, a selected state. In dark
@@ -84,7 +84,7 @@ public fun appAccent(): AppAccent = appAccent(LocalAppAccentId.current)
 
 /** The fill, text and tile resources for an app id (fill, text, tile). */
 private fun accentResources(appId: String): IntArray = when (appId) {
-    "agenda" -> intArrayOf(R.color.centraid_app_agenda, R.color.centraid_app_agenda_text, R.color.centraid_app_agenda_tile, R.color.centraid_app_agenda_tint)
+    "calendar" -> intArrayOf(R.color.centraid_app_calendar, R.color.centraid_app_calendar_text, R.color.centraid_app_calendar_tile, R.color.centraid_app_calendar_tint)
     "docs" -> intArrayOf(R.color.centraid_app_docs, R.color.centraid_app_docs_text, R.color.centraid_app_docs_tile, R.color.centraid_app_docs_tint)
     "health" -> intArrayOf(R.color.centraid_app_health, R.color.centraid_app_health_text, R.color.centraid_app_health_tile, R.color.centraid_app_health_tint)
     "locker" -> intArrayOf(R.color.centraid_app_locker, R.color.centraid_app_locker_text, R.color.centraid_app_locker_tile, R.color.centraid_app_locker_tint)
@@ -92,6 +92,7 @@ private fun accentResources(appId: String): IntArray = when (appId) {
     "notes" -> intArrayOf(R.color.centraid_app_notes, R.color.centraid_app_notes_text, R.color.centraid_app_notes_tile, R.color.centraid_app_notes_tint)
     "people" -> intArrayOf(R.color.centraid_app_people, R.color.centraid_app_people_text, R.color.centraid_app_people_tile, R.color.centraid_app_people_tint)
     "photos" -> intArrayOf(R.color.centraid_app_photos, R.color.centraid_app_photos_text, R.color.centraid_app_photos_tile, R.color.centraid_app_photos_tint)
+    "reminders" -> intArrayOf(R.color.centraid_app_reminders, R.color.centraid_app_reminders_text, R.color.centraid_app_reminders_tile, R.color.centraid_app_reminders_tint)
     else -> intArrayOf(R.color.centraid_shell, R.color.centraid_shell_text, R.color.centraid_shell)
 }
 

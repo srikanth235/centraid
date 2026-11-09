@@ -71,7 +71,7 @@ pub(super) fn export(
     let json = asked.format() == wire::LockerExportFormat::Json;
     let day = crate::app_query::zone_of(vault, &asked.tz)
         .ok()
-        .and_then(|zone| centraid_apps_agenda::local::today(&zone, &vault.clock().now_text()))
+        .and_then(|zone| centraid_apps_kit::civil::today(&zone, &vault.clock().now_text()))
         .unwrap_or_default();
     let door = VaultDoor::new(vault);
     let mut sources = loaded(loaders::load_export(&door))?;

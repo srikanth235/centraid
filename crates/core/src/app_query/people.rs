@@ -16,7 +16,7 @@
 //! those are `person.*` and the shared verbs.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_people as people;
 use centraid_apps_people::dates::CivilDate;
 use centraid_apps_people::phone::{self, RosterFilter, RosterSort};

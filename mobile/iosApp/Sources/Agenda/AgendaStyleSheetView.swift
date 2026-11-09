@@ -11,6 +11,8 @@ import SwiftUI
 /// and drawn greyed, never hidden, while it is not.
 struct AgendaStyleSheetView: View {
     let style: Centraid_Core_V1_AgendaStyleSheet
+    /// The app the sheet wears (`calendar` or `reminders`).
+    let appKey: String
     let onName: (String) -> Void
     let onColor: (String) -> Void
     /// An empty key clears the icon.
@@ -111,7 +113,7 @@ struct AgendaStyleSheetView: View {
         // scroll.
         .presentationDetents([.large])
         // Create and Save wear Agenda's blue, whichever screen presents the sheet.
-        .environment(\.appAccent, AppAccent("agenda"))
+        .environment(\.appAccent, AppAccent(appKey))
     }
 
     /// The chosen colour, or the quiet ink while none is.

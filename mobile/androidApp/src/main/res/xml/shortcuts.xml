@@ -2,7 +2,7 @@
 <!--
   "Add a reminder" (#1173): the launcher's long-press shortcut, the counterpart of the iOS
   App Shortcut. It starts the app on `dev.centraid.action.ADD_REMINDER`; `MainActivity`
-  reports that to the core, which opens Agenda's Reminders with the quick-add bar ready.
+  reports that to the core, which opens Reminders with the quick-add bar ready.
   Nothing is written until the member taps Add. The package is the applicationId
   (`build.gradle.kts`); a static shortcut cannot take a manifest placeholder.
 -->
@@ -10,7 +10,7 @@
     <shortcut
         android:enabled="true"
         android:icon="@drawable/glance_shortcut_add"
-        android:shortcutId="agenda_add_reminder"
+        android:shortcutId="reminders_add"
         android:shortcutLongLabel="@string/glance_shortcut_add_long"
         android:shortcutShortLabel="@string/glance_shortcut_add_short">
         <intent

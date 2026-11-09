@@ -17,7 +17,7 @@
 //! the command plane, with the plan's `publish_input`.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_agenda::local;
+use centraid_apps_kit::civil as local;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::money::{Money, minor_units};
 use centraid_apps_kit::page::{PageCursor, PageRequest};

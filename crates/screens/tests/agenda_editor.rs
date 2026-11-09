@@ -156,29 +156,12 @@ fn keychain_ops(world: &World) -> Vec<(i32, String, Vec<u8>)> {
         .collect()
 }
 
-fn answer_kind(world: &mut World, remembered: Option<&str>) {
-    world
-        .driver
-        .answer_effect(wire::effect_result::Outcome::Keychain(
-            wire::KeychainValue {
-                found: remembered.is_some(),
-                value: remembered.unwrap_or_default().as_bytes().to_vec(),
-            },
-        ));
-}
-
 #[test]
 fn a_new_event_reads_today_and_the_people_and_starts_at_the_next_half_hour_for_an_hour() {
     let mut world = World::new();
     let page = world.open_new("", Kind::Unspecified);
-    // A create that names no kind asks the device what it last added.
-    let ops = keychain_ops(&world);
-    assert_eq!(ops.len(), 1, "{ops:?}");
-    assert_eq!(
-        (ops[0].0, ops[0].1.as_str()),
-        (wire::keychain_op::Op::Get as i32, "agenda_add_kind")
-    );
-    answer_kind(&mut world, None);
+    // Calendar adds events only: nothing asks the device what it last added.
+    assert!(keychain_ops(&world).is_empty());
 
     let (today, now) = world.today();
     let data = world.editor_data(page);
@@ -814,7 +797,7 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
     assert_eq!(data.draft.as_ref().expect("draft").repeat_key, "custom");
     assert!(!data.show_skip, "the series row has no occurrence to skip");
     world.title(page, "Mine");
-    world.act(act::agenda::EditEvent {
+    world.act(act::calendar::EditEvent {
         event_id: series.clone(),
         title: Some("Theirs".to_owned()),
         ..Default::default()
@@ -834,28 +817,18 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
 }
 
 #[test]
-fn the_add_sheet_has_an_event_task_switch_and_an_edit_has_none() {
+fn the_add_sheet_is_for_events_with_no_switch_and_an_edit_has_none() {
     let mut world = World::new();
     let page = world.open_new("2099-06-17", Kind::Event);
     let state = world.editor_state(page);
     assert_eq!(state.kind, Kind::Event as i32);
     let data = world.editor_data(page);
-    let kinds: Vec<(i32, &str, bool)> = data
-        .kinds
-        .iter()
-        .map(|k| (k.kind, k.label.as_str(), k.selected))
-        .collect();
-    assert_eq!(
-        kinds,
-        [
-            (Kind::Event as i32, "Event", true),
-            (Kind::Task as i32, "Task", false)
-        ]
-    );
+    // Calendar adds events only: no Event | Task switch is offered (round 10).
+    assert!(data.kinds.is_empty());
     assert!(data.show_event_fields);
     assert!(
         world.driver.effects.is_empty(),
-        "a route that names its kind asks no one"
+        "a route asks no one what kind it is"
     );
 
     // AN EDIT IS AN EVENT and says nothing of kinds; a stray pick changes nothing.
@@ -870,208 +843,11 @@ fn the_add_sheet_has_an_event_task_switch_and_an_edit_has_none() {
     assert_eq!(world.editor_state(edit).kind, Kind::Event as i32);
     // ... even when the route names a task.
     let named = world.driver.push(
-        "agenda",
+        "calendar",
         centraid_screens::agenda::routes::editor(&id, &id, None, "2099-06-15", Kind::Task),
     );
     assert_eq!(world.editor_state(named).kind, Kind::Event as i32);
     assert_eq!(world.editor_data(named).heading, "Edit event");
-}
-
-#[test]
-fn a_sheet_opened_on_task_is_a_title_and_a_due_day_all_day_until_a_time_is_wanted() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Task);
-    let state = world.editor_state(page);
-    assert_eq!(state.kind, Kind::Task as i32);
-    let data = world.editor_data(page);
-    assert_eq!(
-        data.kinds.iter().find(|k| k.selected).expect("one").label,
-        "Task"
-    );
-    assert_eq!(data.heading, "New task");
-    assert!(!data.show_event_fields);
-    assert_eq!(data.start_field_label, "Due");
-    assert_eq!(data.foot_note, "");
-    // THE DUE DEFAULTS TO THE DAY THE SHEET OPENED ON, a bare date.
-    let draft = data.draft.clone().expect("draft");
-    assert_eq!(draft.start_day, "2099-06-17");
-    assert!(draft.all_day);
-    assert_eq!(data.start_day_label, "Wed 17 Jun");
-    assert_eq!(data.start_time_label, "");
-    assert!(!data.can_save);
-    // Nothing typed: leaving is done, not a question.
-    let fresh = world.open_new("2099-06-17", Kind::Task);
-    world.send_editor(fresh, leave());
-    assert!(world.editor_state(fresh).dismissed);
-    // A task needs a title, and nothing else (no calendar, no range).
-    world.save(page);
-    assert_eq!(
-        world.editor_data(page).blocked_reason,
-        "Add a title to save."
-    );
-    world.title(page, "Call Mum");
-    assert!(world.editor_data(page).can_save);
-
-    // THE EVENT FIELDS ARE NOT A TASK'S: their events change nothing. (Notes and
-    // Repeat are a task's too since #1173, and tests/agenda_tasks.rs covers them.)
-    let before = world.driver.view(page).clone();
-    let maya = world.person("Maya Alvarez");
-    let calendar_id = world.calendar_names()[0].0.clone();
-    for stray in [
-        guest(&maya),
-        reminder("30"),
-        calendar(&calendar_id),
-        end("2099-06-18", "10:00"),
-        link("https://x.example"),
-        sheet(Sheet::Calendar),
-        skip(),
-    ] {
-        world.send_editor(page, stray);
-    }
-    assert_eq!(world.driver.view(page), &before);
-}
-
-#[test]
-fn switching_kinds_keeps_the_title_and_the_day_and_is_never_a_change_to_discard() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Event);
-    world.send_editor(page, kind(Kind::Task));
-    let state = world.editor_state(page);
-    assert_eq!(state.kind, Kind::Task as i32);
-    let data = world.editor_data(page);
-    assert_eq!(
-        data.kinds.iter().find(|k| k.selected).expect("one").label,
-        "Task"
-    );
-    assert_eq!(data.heading, "New task");
-    assert!(data.draft.as_ref().expect("draft").all_day);
-    assert_eq!(data.draft.as_ref().expect("draft").start_day, "2099-06-17");
-    assert!(!data.dirty);
-    // THE SWITCH ALONE LEAVES FREELY.
-    let to_task = world.open_new("2099-06-17", Kind::Event);
-    world.send_editor(to_task, kind(Kind::Task));
-    world.send_editor(to_task, leave());
-    assert!(world.editor_state(to_task).dismissed);
-
-    // Typed on one kind, kept on the other; the picked day goes with it.
-    world.title(page, "Plan the trip");
-    world.send_editor(page, start("2099-06-19", "09:00"));
-    world.send_editor(page, kind(Kind::Event));
-    let data = world.editor_data(page);
-    assert_eq!(data.heading, "New event");
-    assert!(data.show_event_fields);
-    assert_eq!(data.foot_note, "A new event starts tentative.");
-    let draft = data.draft.clone().expect("draft");
-    assert_eq!(draft.title, "Plan the trip");
-    assert_eq!(draft.start_day, "2099-06-19");
-    assert!(!draft.all_day);
-    assert_eq!(draft.end_time, "10:00");
-    // ... and a typed title asks first, in the kind's words.
-    world.send_editor(page, leave());
-    assert_eq!(
-        world.editor_state(page).confirm.as_ref().expect("q").title,
-        "Discard this event?"
-    );
-    world.send_editor(
-        page,
-        K::ConfirmDismissed(wire::agenda_editor_event::ConfirmDismissed {}),
-    );
-    world.send_editor(page, kind(Kind::Task));
-    world.send_editor(page, leave());
-    assert_eq!(
-        world.editor_state(page).confirm.as_ref().expect("q").title,
-        "Discard this task?"
-    );
-}
-
-#[test]
-fn a_task_saves_as_a_task_with_a_bare_day_or_a_floating_time_and_a_commit_ends_the_sitting() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Task);
-    world.title(page, "  Renew passport ");
-    assert!(world.editor_data(page).can_save);
-    let update = world.save(page);
-    assert!(world.editor_state(page).dismissed);
-    let found = world.tasks_titled("Renew passport");
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].due_day, "2099-06-17");
-    assert_eq!(found[0].due_time, "");
-    // A task add remembers the kind on this device.
-    assert_eq!(update.effects.len(), 1);
-    let ops = keychain_ops(&world);
-    assert_eq!(
-        (ops[0].0, ops[0].1.as_str(), ops[0].2.as_slice()),
-        (
-            wire::keychain_op::Op::Set as i32,
-            "agenda_add_kind",
-            b"task".as_slice()
-        )
-    );
-    // A Save before the shell has gone files nothing more, and the kind cannot be switched.
-    world.save(page);
-    world.send_editor(page, kind(Kind::Event));
-    assert_eq!(world.tasks_titled("Renew passport").len(), 1);
-    assert_eq!(world.editor_state(page).kind, Kind::Task as i32);
-
-    // A TIME turns All day off: the due is the floating wall clock the command reads.
-    let timed = world.open_new("2099-06-17", Kind::Task);
-    world.title(timed, "Call the bank");
-    world.send_editor(timed, all_day(false));
-    world.send_editor(timed, start("2099-06-17", "14:30"));
-    assert_eq!(world.editor_data(timed).start_time_label, "14:30");
-    world.save(timed);
-    let found = world.tasks_titled("Call the bank");
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].due_day, "2099-06-17");
-    assert_eq!(found[0].due_time, "14:30");
-}
-
-#[test]
-fn the_device_remembers_the_kind_of_the_last_add_an_event_is_absence_and_an_unknown_word_is_an_event()
- {
-    let mut world = World::new();
-    // A task was the last thing added: the next sheet opens on it.
-    let page = world.open_new("2099-06-17", Kind::Unspecified);
-    answer_kind(&mut world, Some("task"));
-    assert_eq!(world.editor_state(page).kind, Kind::Task as i32);
-    let data = world.editor_data(page);
-    assert_eq!(data.heading, "New task");
-    assert!(
-        !data.dirty,
-        "the remembered kind is the starting point, not a change"
-    );
-    assert!(data.draft.as_ref().expect("draft").all_day);
-
-    // An unknown word opens on an event; so does a store that failed.
-    let page = world.open_new("2099-06-17", Kind::Unspecified);
-    answer_kind(&mut world, Some("habit"));
-    assert_eq!(world.editor_state(page).kind, Kind::Event as i32);
-    let page = world.open_new("2099-06-17", Kind::Unspecified);
-    world
-        .driver
-        .answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
-            reason: "locked".to_owned(),
-            denied: false,
-            ..Default::default()
-        }));
-    assert_eq!(world.editor_state(page).kind, Kind::Event as i32);
-
-    // A kind the member picks before the memory answers wins over it.
-    let page = world.open_new("2099-06-17", Kind::Unspecified);
-    world.send_editor(page, kind(Kind::Task));
-    world.send_editor(page, kind(Kind::Event));
-    answer_kind(&mut world, Some("task"));
-    assert_eq!(world.editor_state(page).kind, Kind::Event as i32);
-    // An edit never asks the memory.
-    let id = world.propose(
-        "Review",
-        "2099-06-15T14:00:00",
-        "2099-06-15T15:00:00",
-        |_| {},
-    );
-    world.driver.effects.clear();
-    world.open_edit(&id, &id, None, "2099-06-15");
-    assert!(keychain_ops(&world).is_empty());
 }
 
 #[test]
@@ -1190,15 +966,6 @@ fn place_search(text: &str) -> K {
     ev(
         K::PlaceSearch,
         wire::agenda_editor_event::PlaceSearched {
-            text: text.to_owned(),
-        },
-    )
-}
-
-fn url(text: &str) -> K {
-    ev(
-        K::Url,
-        wire::agenda_editor_event::UrlChanged {
             text: text.to_owned(),
         },
     )
@@ -1473,7 +1240,7 @@ fn an_event_in_another_zone_opens_in_its_own_wall_clock_and_a_zone_change_edits_
 fn a_floating_event_has_no_zone_and_keeps_none_unless_one_is_picked() {
     let mut world = World::new();
     let id = world.propose("Lunch", "2099-06-17T12:00:00", "2099-06-17T13:00:00", |p| {
-        p.timing = Some(act::agenda::ProposeTiming::Floating);
+        p.timing = Some(act::calendar::ProposeTiming::Floating);
         p.zone = Field::Keep;
     });
     let page = world.open_edit(&id, "", None, "2099-06-17");
@@ -1805,66 +1572,6 @@ fn typed_words_that_became_a_place_meanwhile_are_that_place() {
     assert_eq!(coffee.location_place_id, lunch.location_place_id);
 }
 
-#[test]
-fn only_an_event_has_these_fields_a_task_has_an_address_instead() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Task);
-    world.title(page, "Book flights");
-    let data = world.editor_data(page);
-    assert!(data.show_url && !data.show_zone && !data.show_second_reminder);
-    assert!(data.location_label.is_empty() && data.travel_label.is_empty());
-    // An event's controls are ignored on a task.
-    world.send_editor(page, travel("30"));
-    world.send_editor(page, availability("free"));
-    world.send_editor(page, sheet(Sheet::Zone));
-    world.send_editor(page, sheet(Sheet::Location));
-    let draft = world.draft(page);
-    assert_eq!((draft.travel_min, draft.free), (0, false));
-    assert_eq!(world.editor_state(page).sheet, Sheet::None as i32);
-    // And an event ignores the task's address.
-    let event = world.open_new("2099-06-17", Kind::Event);
-    world.send_editor(event, url("example.com"));
-    assert_eq!(world.draft(event).url, "");
-    assert!(!world.editor_data(event).show_url);
-}
-
-#[test]
-fn a_task_address_is_made_a_web_address_or_refused_and_may_be_cleared() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Task);
-    world.title(page, "Read the article");
-    // A bare domain gets https, and the row says what will be saved.
-    world.send_editor(page, url("  example.com/read?q=1 "));
-    let data = world.editor_data(page);
-    assert_eq!(data.url_saved_as, "https://example.com/read?q=1");
-    assert!(data.can_save && data.blocked_reason.is_empty());
-    // A full address stays as it is.
-    world.send_editor(page, url("http://Example.org/A"));
-    assert_eq!(world.editor_data(page).url_saved_as, "http://Example.org/A");
-    // Anything else is refused with a sentence, and Save is not armed.
-    for refused in [
-        "not a url",
-        "mailto:me@example.com",
-        "javascript:alert(1)",
-        "ftp://example.com",
-        "nodots",
-        "https://",
-    ] {
-        world.send_editor(page, url(refused));
-        let data = world.editor_data(page);
-        assert!(!data.can_save, "{refused}");
-        assert_eq!(
-            data.blocked_reason, "That is not a web address.",
-            "{refused}"
-        );
-        assert!(data.url_saved_as.is_empty());
-    }
-    // Cleared, it is no address and the task saves.
-    world.send_editor(page, url("   "));
-    assert!(world.editor_data(page).can_save);
-    assert!(world.editor_data(page).blocked_reason.is_empty());
-}
-
 // ---- THE WRITES CARRY THE FIELDS: the act payloads the editor builds. ----
 
 use centraid_screens::agenda::editor::write;
@@ -2049,32 +1756,6 @@ fn a_new_task_write_carries_its_address_and_rule() {
     })
     .request();
     assert!(!none.input.contains_key("url"));
-}
-
-#[test]
-fn travel_time_and_a_task_address_commit_through_the_vault() {
-    let mut world = World::new();
-    let page = world.open_new("2099-06-17", Kind::Event);
-    world.title(page, "Dentist");
-    world.send_editor(page, travel("30"));
-    world.save(page);
-    assert!(
-        world.editor_state(page).dismissed,
-        "{:?}",
-        world.editor_state(page).status
-    );
-    made(&world, "Dentist", "2099-06-17");
-
-    let task = world.open_new("2099-06-17", Kind::Task);
-    world.title(task, "Read the article");
-    world.send_editor(task, url("example.com/read"));
-    world.save(task);
-    assert!(
-        world.editor_state(task).dismissed,
-        "{:?}",
-        world.editor_state(task).status
-    );
-    assert_eq!(world.tasks_titled("Read the article").len(), 1);
 }
 
 /// AN EXISTING EVENT OPENS AS IT WAS SAVED (#1173): free, and its travel time, from the read, so a

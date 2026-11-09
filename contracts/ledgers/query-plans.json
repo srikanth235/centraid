@@ -10,7 +10,7 @@
     "allowed": 7,
     "entries": [
       {
-        "home": "agenda.upcoming.calendars",
+        "home": "calendar.upcoming.calendars",
         "reason": "kind = 'calendar': one row per calendar the member keeps (a handful), sorted for the page"
       },
       {

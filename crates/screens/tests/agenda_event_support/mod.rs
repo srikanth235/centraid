@@ -45,7 +45,7 @@ impl World {
         }));
         let parties = driver
             .handle
-            .load(&load::agenda::Parties::default().into())
+            .load(&load::calendar::Parties::default().into())
             .expect("parties load");
         let Some(wire::app_query_response::Answer::AgendaParties(parties)) =
             parties.answer.and_then(|a| a.answer)
@@ -82,7 +82,7 @@ impl World {
         seeded.sort();
         seeded.dedup();
         for event_id in seeded {
-            self.act(act::agenda::TrashEvent { event_id });
+            self.act(act::calendar::TrashEvent { event_id });
         }
     }
 
@@ -124,14 +124,14 @@ impl World {
         title: &str,
         starts: &str,
         ends: &str,
-        more: impl FnOnce(&mut act::agenda::Propose),
+        more: impl FnOnce(&mut act::calendar::Propose),
     ) -> String {
-        let mut propose = act::agenda::Propose {
+        let mut propose = act::calendar::Propose {
             title: title.to_owned(),
             starts: starts.to_owned(),
             ends: Field::Is(ends.to_owned()),
             zone: Field::Is(ZONE.to_owned()),
-            ..act::agenda::Propose::default()
+            ..act::calendar::Propose::default()
         };
         more(&mut propose);
         let done = self.act(propose);
@@ -171,9 +171,9 @@ impl World {
     /// What the vault holds of one event now.
     pub fn event_row(&self, id: &str) -> Option<wire::AgendaEvent> {
         let wire::app_query_response::Answer::AgendaEvent(detail) =
-            self.load(load::agenda::Event {
+            self.load(load::calendar::Event {
                 event_id: id.to_owned(),
-                ..load::agenda::Event::default()
+                ..load::calendar::Event::default()
             })
         else {
             panic!("event answered something else");
@@ -183,7 +183,7 @@ impl World {
 
     pub fn calendar_names(&self) -> Vec<(String, String)> {
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.load(load::agenda::Upcoming {
+            self.load(load::calendar::Upcoming {
                 from: Some("1970-01-01T00:00:00Z".to_owned()),
                 to: Some("1970-01-01T00:00:01Z".to_owned()),
             })
@@ -200,7 +200,7 @@ impl World {
     /// The events of a window, in the phone's zone.
     pub fn window(&self, from: &str, to: &str) -> Vec<wire::AgendaEvent> {
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.load(load::agenda::Upcoming {
+            self.load(load::calendar::Upcoming {
                 from: Some(from.to_owned()),
                 to: Some(to.to_owned()),
             })
@@ -213,7 +213,7 @@ impl World {
     /// The core's today and now on the phone's wall clock.
     pub fn today(&self) -> (String, String) {
         let wire::app_query_response::Answer::AgendaUpcoming(upcoming) =
-            self.load(load::agenda::Upcoming {
+            self.load(load::calendar::Upcoming {
                 from: Some("1970-01-01T00:00:00Z".to_owned()),
                 to: Some("1970-01-01T00:00:01Z".to_owned()),
             })
@@ -226,10 +226,10 @@ impl World {
     /// Every task on the board with this title.
     pub fn tasks_titled(&self, title: &str) -> Vec<wire::AgendaTask> {
         let wire::app_query_response::Answer::AgendaTaskBoard(board) =
-            self.load(load::agenda::Board {
+            self.load(load::reminders::Board {
                 limit: 200,
-                view: Some(load::agenda::BoardView::All),
-                ..load::agenda::Board::default()
+                view: Some(load::reminders::BoardView::All),
+                ..load::reminders::Board::default()
             })
         else {
             panic!("board answered something else");

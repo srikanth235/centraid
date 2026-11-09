@@ -833,7 +833,7 @@ fn a_tasks_denial_is_answered_as_the_denied_arm() {
         .handle
         .with_vault(|vault| {
             let door = VaultDoor::new(vault);
-            let denial = centraid_apps_agenda::Denial {
+            let denial = centraid_apps_reminders::Denial {
                 code: Some("revoked".to_owned()),
                 message: Some("Tasks may not read".to_owned()),
                 revoked_at: None,
@@ -886,7 +886,7 @@ fn a_project_is_found_by_name_beside_the_tasks() {
     let hit = &found.containers[0];
     assert_eq!(
         (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()),
-        ("project", project.as_str(), "agenda")
+        ("project", project.as_str(), "reminders")
     );
     assert_eq!(hit.title, "Kitchen refit");
 

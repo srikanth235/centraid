@@ -306,7 +306,7 @@ fn read(
                 tz,
             },
         )?,
-        ("agenda", "upcoming") => app_query::agenda_upcoming(
+        ("calendar", "upcoming") => app_query::agenda_upcoming(
             vault,
             door,
             now,
@@ -316,7 +316,7 @@ fn read(
                 tz,
             },
         )?,
-        ("agenda", "day-context") => app_query::agenda_day_context(
+        ("calendar", "day-context") => app_query::agenda_day_context(
             vault,
             door,
             now,
@@ -326,8 +326,8 @@ fn read(
                 tz,
             },
         )?,
-        ("agenda", "parties") => app_query::agenda_parties(door)?,
-        ("agenda", "search") => app_query::agenda_search(
+        ("calendar", "parties") => app_query::agenda_parties(door)?,
+        ("calendar", "search") => app_query::agenda_search(
             vault,
             door,
             now,
@@ -338,7 +338,7 @@ fn read(
             },
         )?,
 
-        ("agenda", "event") => app_query::agenda_event(
+        ("calendar", "event") => app_query::agenda_event(
             vault,
             door,
             now,
@@ -349,13 +349,31 @@ fn read(
                 tz,
             },
         )?,
-        ("agenda", "attachments") => app_query::agenda_attachments::attachments(
+        ("calendar", "dated-reminders") => app_query::agenda_dated::dated(
+            vault,
             door,
+            now,
+            &wire::CalendarDatedRemindersRequest {
+                from: p.text("from")?,
+                to: p.text("to")?,
+                tz,
+            },
+        )?,
+        ("calendar", "attachments") => app_query::agenda_attachments::attachments(
+            door,
+            app_query::agenda_attachments::Of::Event,
             &p.text("item_id")?,
             p.after()?,
             p.limit(ATTACHMENTS_ROWS),
         )?,
-        ("agenda", "board") => app_query::agenda_task::board(
+        ("reminders", "attachments") => app_query::agenda_attachments::attachments(
+            door,
+            app_query::agenda_attachments::Of::Task,
+            &p.text("item_id")?,
+            p.after()?,
+            p.limit(ATTACHMENTS_ROWS),
+        )?,
+        ("reminders", "board") => app_query::agenda_task::board(
             vault,
             door,
             now,
@@ -366,7 +384,7 @@ fn read(
                 project_id: p.text("project_id")?,
             },
         )?,
-        ("agenda", "task") => app_query::agenda_task::task(
+        ("reminders", "task") => app_query::agenda_task::task(
             vault,
             door,
             now,
@@ -375,19 +393,19 @@ fn read(
                 tz,
             },
         )?,
-        ("agenda", "projects") => app_query::agenda_task::projects(
+        ("reminders", "projects") => app_query::agenda_task::projects(
             vault,
             door,
             now,
             &wire::AgendaTaskProjectsRequest { tz },
         )?,
-        ("agenda", "catch-up") => app_query::agenda_task::catch_up(
+        ("reminders", "catch-up") => app_query::agenda_task::catch_up(
             vault,
             door,
             now,
             &wire::AgendaTaskCatchUpRequest { tz },
         )?,
-        ("agenda", "reminders") => app_query::agenda_task::reminders(
+        ("reminders", "reminders") => app_query::agenda_task::reminders(
             vault,
             door,
             now,
@@ -396,13 +414,13 @@ fn read(
                 limit: p.limit(0),
             },
         )?,
-        ("agenda", "smart-counts") => app_query::agenda_task::smart_counts(
+        ("reminders", "smart-counts") => app_query::agenda_task::smart_counts(
             vault,
             door,
             now,
             &wire::AgendaTaskSmartCountsRequest { tz },
         )?,
-        ("agenda", "due-rows") => app_query::agenda_task::due_rows(
+        ("reminders", "due-rows") => app_query::agenda_task::due_rows(
             vault,
             door,
             now,
@@ -417,7 +435,17 @@ fn read(
                 ),
             },
         )?,
-        ("agenda", "trash") => {
+        ("reminders", "search") => app_query::agenda_task::search(
+            vault,
+            door,
+            now,
+            &wire::AgendaTaskSearchRequest {
+                term: p.text("term")?,
+                limit: p.limit(SEARCH_ROWS),
+                tz,
+            },
+        )?,
+        ("reminders", "trash") => {
             app_query::agenda_task::trash(vault, door, &wire::AgendaTaskTrashRequest { tz })?
         }
 
@@ -916,7 +944,7 @@ mod tests {
             }
         }
         // The names no manifest declares answer nothing.
-        let mut params_request = ask("agenda", "no-such");
+        let mut params_request = ask("calendar", "no-such");
         assert!(!asked_of(&vault, &params_request).3);
         params_request.query = "typo".to_owned();
         assert!(!asked_of(&vault, &params_request).3);
@@ -991,7 +1019,7 @@ mod tests {
     #[test]
     fn arguments_are_read_by_name_and_a_stranger_is_refused() {
         let (dir, vault) = founded();
-        let mut request = ask("agenda", "board");
+        let mut request = ask("reminders", "board");
         request.limit = 50;
         request.params.insert(
             "view".to_owned(),
@@ -1013,7 +1041,7 @@ mod tests {
         ));
 
         // A limit on a query that takes none, and a wrong type.
-        let mut request = ask("agenda", "parties");
+        let mut request = ask("calendar", "parties");
         request.limit = 5;
         assert!(load(&vault, &request).is_err());
         let mut request = ask("people", "person");

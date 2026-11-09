@@ -150,7 +150,7 @@ impl Rig {
 
     fn event(&mut self, id: &str, title: &str, starts: &str, ends: Option<&str>) {
         let zone = self.zone.clone();
-        self.write(act::agenda::Propose {
+        self.write(act::calendar::Propose {
             id: Some(id.to_owned()),
             title: title.to_owned(),
             starts: starts.to_owned(),
@@ -163,7 +163,7 @@ impl Rig {
 
     /// The occurrence the vault holds for `id` on `day`, as the core answers it.
     fn occurrence(&self, id: &str, day: &str) -> wire::AgendaEvent {
-        let mut request: wire::LoadRequest = load::agenda::Upcoming {
+        let mut request: wire::LoadRequest = load::calendar::Upcoming {
             from: Some(format!("{}T00:00:00Z", plus(day, -1))),
             to: Some(format!("{}T00:00:00Z", plus(day, 2))),
         }
@@ -272,8 +272,8 @@ fn the_view_menu_is_day_week_month_list_year_and_lights_the_calendar_tab() {
             .collect();
         assert_eq!(current, [key]);
     }
-    // Reminders is not a Calendar view: no menu, the tab dark.
-    r.band("reminders");
+    // Invites is not a Calendar view: no menu, the tab dark.
+    r.band("invites");
     assert!(!r.state().band[0].current);
     assert!(r.state().calendar_views.is_empty());
     // The Calendar tab returns to the view last used: Year.
@@ -712,7 +712,7 @@ fn a_resize_sets_the_end_and_is_never_under_fifteen_minutes() {
 #[test]
 fn an_occurrence_of_a_series_moves_alone() {
     let mut r = rig(Dest::Day);
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-series".to_owned()),
         title: "Zq Series".to_owned(),
         starts: "2027-06-02T09:00".to_owned(),
@@ -781,7 +781,7 @@ fn an_event_with_other_guests_cannot_be_dragged_and_a_move_writes_nothing() {
     let wire::app_query_response::Answer::AgendaParties(parties) = r
         .driver
         .handle
-        .load(&load::agenda::Parties::default().into())
+        .load(&load::calendar::Parties::default().into())
         .expect("parties load")
         .answer
         .and_then(|answer| answer.answer)
@@ -798,7 +798,7 @@ fn an_event_with_other_guests_cannot_be_dragged_and_a_move_writes_nothing() {
         .party_id
         .clone();
     let zone = r.zone.clone();
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-guests".to_owned()),
         title: "Zq Guests".to_owned(),
         starts: "2027-06-09T10:00".to_owned(),
@@ -808,7 +808,7 @@ fn an_event_with_other_guests_cannot_be_dragged_and_a_move_writes_nothing() {
         attendees: Some(serde_json::to_string(&[&me, &other]).expect("json")),
         ..Default::default()
     });
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-solo".to_owned()),
         title: "Zq Solo".to_owned(),
         starts: "2027-06-09T13:00".to_owned(),
@@ -864,69 +864,6 @@ fn a_run_over_midnight_and_an_all_day_event_cannot_be_dragged() {
 }
 
 #[test]
-fn a_dated_task_is_a_chip_or_a_block_and_the_swipe_deletes_it_with_undo() {
-    let mut r = rig(Dest::Week);
-    r.write(act::agenda::AddTask {
-        id: Some("zq-t-untimed".to_owned()),
-        title: "Zq Untimed".to_owned(),
-        due: Field::Is(WED.to_owned()),
-        zone: Field::Is("UTC".to_owned()),
-        ..Default::default()
-    });
-    r.write(act::agenda::AddTask {
-        id: Some("zq-t-timed".to_owned()),
-        title: "Zq Timed".to_owned(),
-        due: Field::Is(format!("{WED}T15:00")),
-        zone: Field::Is("UTC".to_owned()),
-        ..Default::default()
-    });
-    r.pick(WED, Dest::Week);
-    let column = r
-        .grid()
-        .days
-        .iter()
-        .find(|d| d.day == WED)
-        .expect("column")
-        .clone();
-    let chip = column
-        .all_day
-        .iter()
-        .find(|c| c.title == "Zq Untimed")
-        .expect("a chip");
-    assert!(chip.is_task && !chip.task_id.is_empty());
-    let block = column
-        .blocks
-        .iter()
-        .find(|b| b.title == "Zq Timed")
-        .expect("a block");
-    assert!(block.is_task && !block.movable);
-    assert_eq!((block.start_minute, block.end_minute), (900, 930));
-    let id = block.task_id.clone();
-    r.send(H::TaskDeleted(wire::agenda_home_event::TaskDeleted {
-        task_id: id,
-    }));
-    assert!(
-        r.grid()
-            .days
-            .iter()
-            .flat_map(|d| &d.blocks)
-            .all(|b| b.title != "Zq Timed")
-    );
-    assert_eq!(
-        r.state().status.as_ref().expect("a line").action_label,
-        "Undo"
-    );
-    r.send(H::StatusActed(wire::agenda_home_event::StatusActed {}));
-    assert!(
-        r.grid()
-            .days
-            .iter()
-            .flat_map(|d| &d.blocks)
-            .any(|b| b.title == "Zq Timed")
-    );
-}
-
-#[test]
 fn a_search_term_draws_no_grid() {
     let mut r = rig(Dest::Week);
     r.event(
@@ -978,10 +915,10 @@ fn day_and_week_carry_the_header_and_nothing_else_keeps_it() {
         assert!(r.header().all_day.is_empty());
     }
     // Reminders wears the same header with its own title, no chip and no layout key.
-    r.destination(Dest::Todo);
-    assert!(r.header().shown);
-    assert_eq!(r.header().title, "Reminders");
-    assert!(r.header().month_label.is_empty() && r.header().layouts.is_empty());
+    let t = rig(Dest::Todo);
+    assert!(t.header().shown);
+    assert_eq!(t.header().title, "Reminders");
+    assert!(t.header().month_label.is_empty() && t.header().layouts.is_empty());
     r.destination(Dest::Month);
     assert!(
         !r.state().calendar_views.is_empty(),
@@ -1010,11 +947,11 @@ fn the_today_key_shows_off_today_and_the_tap_brings_the_day_back() {
 #[test]
 fn the_all_day_lane_holds_days_chips_once_and_week_keeps_its_columns() {
     let mut r = rig(Dest::Day);
-    r.write(act::agenda::Propose {
+    r.write(act::calendar::Propose {
         id: Some("zq-all".to_owned()),
         title: "Zq Retreat".to_owned(),
         starts: WED.to_owned(),
-        timing: Some(act::agenda::ProposeTiming::AllDay),
+        timing: Some(act::calendar::ProposeTiming::AllDay),
         ..Default::default()
     });
     r.event(

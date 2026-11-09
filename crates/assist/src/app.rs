@@ -1,6 +1,6 @@
-//! THE APPS THE ASSISTANT READS: eight, every one a chat scope. (Tally left with the app and Money
-//! joined, #1099; Locker joined by the owner's ruling of 2026-10-22, #1135; Tasks were folded into
-//! Agenda, #1128.)
+//! THE APPS THE ASSISTANT READS: nine, every one a chat scope. (Tally left with the app and Money
+//! joined, #1099; Locker joined by the owner's ruling of 2026-10-22, #1135; Agenda, which had
+//! swallowed Tasks (#1128), became Calendar and Reminders in round 10 of #1173.)
 //!
 //! The roster is the vault's one constant (`centraid_vault::roster::APPS`, R-1135-7-1): [`App`]
 //! is its typed face, and its id is *indexed out of that constant* by the variant's position, so a
@@ -13,8 +13,8 @@
 //! (R-1088-3).
 //!
 //! ONE APP IS ONE WORD. A card, a search hit, a write and a chat scope all name the app the member
-//! opens: the tasks a member keeps are Agenda's, so a task card says `agenda`, and nothing maps
-//! one app onto another.
+//! opens: the events a member keeps are Calendar's and the tasks are Reminders', so a task card
+//! says `reminders`, and nothing maps one app onto another.
 
 use centraid_vault::roster;
 
@@ -22,7 +22,7 @@ use centraid_vault::roster;
 /// indexes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum App {
-    Agenda,
+    Calendar,
     Docs,
     Health,
     Locker,
@@ -30,12 +30,13 @@ pub enum App {
     Notes,
     People,
     Photos,
+    Reminders,
 }
 
 impl App {
     /// Every app, in registry order. A chat can be scoped to any of them.
-    pub const ALL: [Self; 8] = [
-        Self::Agenda,
+    pub const ALL: [Self; 9] = [
+        Self::Calendar,
         Self::Docs,
         Self::Health,
         Self::Locker,
@@ -43,6 +44,7 @@ impl App {
         Self::Notes,
         Self::People,
         Self::Photos,
+        Self::Reminders,
     ];
 
     /// The id a shell routes by — the same word `AppRegistry` uses.
@@ -55,7 +57,7 @@ impl App {
     #[must_use]
     pub const fn display(self) -> &'static str {
         match self {
-            Self::Agenda => "Agenda",
+            Self::Calendar => "Calendar",
             Self::Docs => "Docs",
             Self::Health => "Health",
             Self::Locker => "Locker",
@@ -63,6 +65,7 @@ impl App {
             Self::Notes => "Notes",
             Self::People => "People",
             Self::Photos => "Photos",
+            Self::Reminders => "Reminders",
         }
     }
 
