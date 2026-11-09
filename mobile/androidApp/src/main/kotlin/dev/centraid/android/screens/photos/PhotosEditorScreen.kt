@@ -280,9 +280,16 @@ private fun Stage(
     val thirds = centraidColor("stageLine")
     val flipX = if (plan.flip == PhotosEditPlan.Flip.FLIP_HORIZONTAL) -1f else 1f
     val flipY = if (plan.flip == PhotosEditPlan.Flip.FLIP_VERTICAL) -1f else 1f
+    // A STRAIGHTEN LEAVES WEDGES OF NOTHING AT THE CORNERS, so the stage is rescaled until the frame the
+    // photograph still fills takes the whole space, as the board draws it (layout only; the crop is Rust's).
+    val fill = straightenFillZoom(sourceRatio, plan.quarters, plan.straighten, frameW, frameH, maxWidthDp, maxHeightDp)
     Box(
         modifier = Modifier
             .size(frameW.dp, frameH.dp)
+            .graphicsLayer {
+                scaleX = fill
+                scaleY = fill
+            }
             .semantics {
                 contentDescription = words.crop_area
                 stateDescription = words.crop_hint
@@ -612,6 +619,32 @@ private fun StraightenCard(
 
 /** Whole degrees of turn: quarter turns plus the straighten (Rust's `total_rotation`). */
 private fun totalRotation(plan: PhotosEditPlan): Int = (plan.quarters % 4) * 90 + plan.straighten
+
+/**
+ * How far the stage is scaled up so the largest centred rectangle of the photograph's shape that stays
+ * inside the turned photograph (Rust's `inscribed_crop`) fills the space; 1 when it is not straightened.
+ */
+private fun straightenFillZoom(
+    sourceRatio: Double,
+    quarters: Int,
+    straighten: Int,
+    frameW: Float,
+    frameH: Float,
+    spaceW: Float,
+    spaceH: Float,
+): Float {
+    if (straighten == 0 || sourceRatio <= 0.0 || frameW <= 0f || frameH <= 0f || spaceW <= 0f || spaceH <= 0f) return 1f
+    val ratio = if (quarters % 2 == 0) sourceRatio else 1.0 / sourceRatio
+    val radians = straighten * PI / 180.0
+    val c = abs(cos(radians))
+    val s = abs(sin(radians))
+    val k = minOf(ratio / (ratio * c + s), 1.0 / (ratio * s + c))
+    val box = rotatedBox(ratio, 1.0, straighten)
+    if (box.first <= 0.0 || box.second <= 0.0) return 1f
+    val cropW = (k * ratio / box.first).toFloat() * frameW
+    val cropH = (k / box.second).toFloat() * frameH
+    return maxOf(1f, minOf(spaceW / cropW, spaceH / cropH))
+}
 
 /** The grown box of a straightened frame (layout only: Rust owns the plan). */
 private fun rotatedBox(width: Double, height: Double, degrees: Int): Pair<Double, Double> {

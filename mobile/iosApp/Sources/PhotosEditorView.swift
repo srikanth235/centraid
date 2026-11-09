@@ -165,7 +165,7 @@ struct PhotosEditorView: View {
                 space: space
             )
             cropAccessibility(
-                cropStage(preview, geometry: geometry)
+                cropStage(preview, geometry: geometry, space: space)
             )
             .accessibilityIdentifier("photos.editor.stage")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,13 +193,23 @@ struct PhotosEditorView: View {
             .accessibilityHidden(true)
     }
 
-    private func cropStage(_ preview: UIImage, geometry: PhotoEditGeometry) -> some View {
-        Color.clear
+    private func cropStage(_ preview: UIImage, geometry: PhotoEditGeometry, space: CGSize) -> some View {
+        // A STRAIGHTEN TURNS THE PHOTOGRAPH AND LEAVES WEDGES OF NOTHING AT THE CORNERS, so the stage
+        // is rescaled until the frame the photograph still fills takes the whole space, as the board
+        // draws it. Layout only: the crop itself is Rust's.
+        let zoom = geometry.fillZoom(
+            sourceRatio: preview.size.width / preview.size.height,
+            quarters: Int(plan.quarters),
+            straighten: Int(plan.straighten),
+            space: space
+        )
+        return Color.clear
             .frame(width: geometry.frame.width, height: geometry.frame.height)
             .overlay { stageImage(preview, geometry: geometry) }
             .overlay { cropOverlay }
             .contentShape(Rectangle())
             .gesture(cropGesture(frame: geometry.frame), including: isEditing ? .all : .none)
+            .scaleEffect(zoom)
     }
     #endif
 
@@ -505,6 +515,22 @@ struct PhotoEditGeometry {
         let boxWidth = Self.rotatedBox(width: Double(sourceRatio), height: 1, degrees: rotation).0
         let scale = boxWidth > 0 ? frame.width / CGFloat(boxWidth) : 0
         image = CGSize(width: sourceRatio * scale, height: scale)
+    }
+
+    /// HOW FAR THE STAGE IS SCALED UP so the photograph's own frame (the largest centred rectangle of
+    /// its shape that stays inside the turned photograph, `inscribed_crop` in Rust) fills the space.
+    /// 1 when the photograph is not straightened.
+    func fillZoom(sourceRatio: CGFloat, quarters: Int, straighten: Int, space: CGSize) -> CGFloat {
+        guard straighten != 0, sourceRatio > 0, space.width > 0, space.height > 0 else { return 1 }
+        let ratio = Double(quarters % 2 == 0 ? sourceRatio : 1 / sourceRatio)
+        let radians = Double(straighten) * .pi / 180
+        let c = abs(cos(radians)), s = abs(sin(radians))
+        let k = min(ratio / (ratio * c + s), 1 / (ratio * s + c))
+        let box = Self.rotatedBox(width: ratio, height: 1, degrees: straighten)
+        guard box.0 > 0, box.1 > 0, frame.width > 0, frame.height > 0 else { return 1 }
+        let cropWidth = CGFloat(k * ratio / box.0) * frame.width
+        let cropHeight = CGFloat(k / box.1) * frame.height
+        return max(1, min(space.width / cropWidth, space.height / cropHeight))
     }
 
     static func rotatedBox(width: Double, height: Double, degrees: Int) -> (Double, Double) {
