@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Route
 import centraid.core.v1.SearchAsk
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -54,7 +55,7 @@ public fun SearchAskRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(30.dp).clip(CircleShape).background(accent.tile), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(30.dp).clip(CircleShape).background(accent.tint ?: accent.wash(centraidDark())), contentAlignment = Alignment.Center) {
             CentraidIcon(iconKey = "Sparkle", tint = accent.text, size = 16.dp)
         }
         Text(ask.label, style = centraidType("smallStrong"), color = accent.text, modifier = Modifier.weight(1f))

@@ -263,6 +263,7 @@ struct SearchAskRow: View {
 
     @Environment(\.askChat) private var askChat
     @Environment(\.appAccent) private var accent
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if let press = handoff ?? (ask.hasRoute ? askChat.map({ door in { door(ask.route) } }) : nil) {
@@ -275,7 +276,7 @@ struct SearchAskRow: View {
                 HStack(spacing: 12) {
                     CentraidIconView(iconKey: "Sparkle", tint: accent.text, size: 16)
                         .frame(width: 30, height: 30)
-                        .background(Circle().fill(accent.tile))
+                        .background(Circle().fill(accent.tint ?? accent.wash(dark: scheme == .dark)))
                         .accessibilityHidden(true)
                     Text(ask.label)
                         .kitType(.row)
