@@ -860,8 +860,8 @@ fn known_people(ctx: &CommandCtx<'_, '_>) -> Result<Known> {
     };
     let mut people = c.prepare_cached(
         "SELECT e.id, e.title, p.nickname, p.role, p.birthday
-           FROM person p JOIN entity e ON e.id = p.id
-          WHERE e.deleted_at IS NULL ORDER BY e.n",
+           FROM entity e JOIN person p ON p.id = e.id
+          WHERE e.kind = 'person' AND e.deleted_at IS NULL ORDER BY e.created_at, e.id",
     )?;
     let rows = people
         .query_map([], |row| {
@@ -1106,10 +1106,10 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
     let mut people = ctx.connection().prepare_cached(
         "SELECT e.id, e.title, p.nickname, p.role, p.birthday
-           FROM person p JOIN entity e ON e.id = p.id
-          WHERE e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
+           FROM entity e JOIN person p ON p.id = e.id
+          WHERE e.kind = 'person' AND e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
             AND (?1 IS NULL OR e.id IN (SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'))
-          ORDER BY e.title COLLATE NOCASE, e.n",
+          ORDER BY e.title COLLATE NOCASE, e.created_at, e.id",
     )?;
     let rows = people
         .query_map([list], |row| {
