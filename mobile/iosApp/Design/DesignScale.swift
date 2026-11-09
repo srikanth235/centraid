@@ -2,7 +2,7 @@
 //
 // The redesign's type scale and radii (#1173), in points, and the names of its
 // colour sets in `Resources/Assets.xcassets`. Light and dark are built into
-// each set, so `Color(CentraidAsset.appAgenda)` follows the appearance.
+// each set, so `Color(CentraidAsset.appCalendar)` follows the appearance.
 
 import CoreGraphics
 
