@@ -198,7 +198,7 @@ public fun EmptyStateView(
     // THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
     // colour, the one sentence, the reason, and at most one action as the app's pill.
     val accent = appAccent()
-    val glyph = CentraidCatalog.byId[accent.appId]?.iconKey
+    val glyph = empty.icon_key.ifEmpty { CentraidCatalog.byId[accent.appId]?.iconKey }
     Column(
         modifier
             .fillMaxWidth()

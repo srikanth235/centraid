@@ -246,6 +246,10 @@ message ScreenEvent {
     // what the member typed (an autosave's pending edit); a shell never sends
     // it, and only its `act`s survive: the view is no longer drawn.
     Left left = 6;
+    // RUNTIME-ORIGINATED: the screen's tab went out of view (another tab was
+    // selected) while the screen stays on its stack. A screen with an OS prompt
+    // out withdraws it; a shell never sends it.
+    TabHidden tab_hidden = 12;
     // RUNTIME-ORIGINATED: the assistant's running turn said something (a token,
     // the cards, the answer). Only a screen that opts in (`hears_assist`, the
     // chat) hears it; a shell never sends it.
@@ -359,6 +363,8 @@ message Announced {
 }
 
 message Left {}
+
+message TabHidden {}
 
 message DataChanged {
   repeated string tables = 1;
@@ -806,12 +812,17 @@ message FreeUpFacts {
 // `setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`,
 // `setTitle(title)` and `setSubtitle(subtitle)` and no negative button. With
 // `ask` false it only reads what this phone can do (`OwnerChecked.available`,
-// `biometry`) and raises nothing.
+// `biometry`) and raises nothing. With `cancel` true it withdraws the prompt
+// that is up (iOS `LAContext.invalidate()`, Android
+// `BiometricPrompt.cancelAuthentication()`), raises nothing, and answers `Done`:
+// Rust sends it when the member leaves Locker before answering, so no prompt
+// outlives the screen that asked for it.
 message OwnerCheck {
   bool ask = 1;
   string reason = 2;
   string title = 3;
   string subtitle = 4;
+  bool cancel = 5;
 }
 
 // What this phone can do, as its shell reads it.

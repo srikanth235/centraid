@@ -1695,7 +1695,13 @@ impl Screen for Item {
                 self.field = None;
                 self.passkey_name = None;
                 self.confirming = None;
-                Vec::new()
+                // A pending unlock is dropped, and its prompt taken down.
+                let step = self.wall.left();
+                self.walled(ctx, step)
+            }
+            Some(E::TabHidden(_)) => {
+                let step = self.wall.hidden();
+                self.walled(ctx, step)
             }
             _ => Vec::new(),
         }

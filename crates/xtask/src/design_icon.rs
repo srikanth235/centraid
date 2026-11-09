@@ -168,6 +168,12 @@ pub fn palette(tokens: &Tokens, variant: Variant) -> Result<Palette> {
     })
 }
 
+/// How much the iOS icon's mark is grown: its disc (a circle of radius [`RADIUS`]) to
+/// `ios_mark_share` of the tile.
+fn ios_scale(tokens: &Tokens) -> f64 {
+    tokens.icon.ios_mark_share * GRID / (2.0 * RADIUS)
+}
+
 fn rgb(hex: &str) -> Result<[u8; 3]> {
     let digits = hex.strip_prefix('#').unwrap_or(hex);
     anyhow::ensure!(digits.len() == 6, "{hex} is not #RRGGBB");
@@ -219,8 +225,8 @@ fn svg_open(view_box: &str, size: Option<u32>) -> String {
 }
 
 /// One master SVG: the tile (rounded, 27 radius), the hairline when given, and
-/// the four see-through quarters.
-fn tile_svg(palette: &Palette, edge: Option<&str>) -> String {
+/// the four see-through quarters, grown about the centre by `scale`.
+fn tile_svg(palette: &Palette, edge: Option<&str>, scale: f64) -> String {
     let mut out = svg_open("0 0 120 120", Some(1024));
     let _ = writeln!(
         out,
@@ -239,7 +245,7 @@ fn tile_svg(palette: &Palette, edge: Option<&str>) -> String {
         let _ = writeln!(
             out,
             "  <path d=\"{}\" fill=\"{colour}\"/>",
-            path_data(*turns, 0.0, 1.0)
+            path_data(*turns, CENTRE * (1.0 - scale), scale)
         );
     }
     out.push_str("</svg>\n");
@@ -343,16 +349,16 @@ fn legacy_xml(palette: &Palette, round: bool) -> String {
 // --- The PNGs --------------------------------------------------------------
 
 /// The colour of one sample at a grid point, tile when the point is on no quarter.
-fn sample(palette: &[[u8; 3]; 5], x: f64, y: f64) -> [u8; 3] {
-    match quarter_at(x - CENTRE, y - CENTRE) {
+fn sample(palette: &[[u8; 3]; 5], scale: f64, x: f64, y: f64) -> [u8; 3] {
+    match quarter_at((x - CENTRE) / scale, (y - CENTRE) / scale) {
         Some(at) => palette[at + 1],
         None => palette[0],
     }
 }
 
 /// An opaque, full-bleed square of `size` pixels in `palette`: the tile fills the
-/// canvas (iOS masks it) and the mark sits on the 120 grid scaled to fit.
-pub fn render(palette: &Palette, size: u32) -> Result<Vec<u8>> {
+/// canvas (iOS masks it) and the mark sits on the 120 grid grown about the centre by `scale`.
+pub fn render(palette: &Palette, scale: f64, size: u32) -> Result<Vec<u8>> {
     let mut colours = [[0u8; 3]; 5];
     colours[0] = rgb(&palette.tile)?;
     for (slot, hex) in colours[1..].iter_mut().zip(&palette.quarters) {
@@ -366,10 +372,10 @@ pub fn render(palette: &Palette, size: u32) -> Result<Vec<u8>> {
             // agree is flat: skip the supersampling there (most of the canvas).
             let (left, top) = (f64::from(column) * step, f64::from(row) * step);
             let corners = [
-                sample(&colours, left, top),
-                sample(&colours, left + step, top),
-                sample(&colours, left, top + step),
-                sample(&colours, left + step, top + step),
+                sample(&colours, scale, left, top),
+                sample(&colours, scale, left + step, top),
+                sample(&colours, scale, left, top + step),
+                sample(&colours, scale, left + step, top + step),
             ];
             if corners.iter().all(|corner| *corner == corners[0]) {
                 pixels.extend_from_slice(&corners[0]);
@@ -380,7 +386,7 @@ pub fn render(palette: &Palette, size: u32) -> Result<Vec<u8>> {
                 for sx in 0..SAMPLES {
                     let x = (f64::from(column) + (f64::from(sx) + 0.5) / f64::from(SAMPLES)) * step;
                     let y = (f64::from(row) + (f64::from(sy) + 0.5) / f64::from(SAMPLES)) * step;
-                    let colour = sample(&colours, x, y);
+                    let colour = sample(&colours, scale, x, y);
                     for (total, part) in sum.iter_mut().zip(colour) {
                         *total += u32::from(part);
                     }
@@ -431,27 +437,28 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
         quarters: std::array::from_fn(|_| tokens.icon.themed_glyph.clone()),
     };
 
+    let grown = ios_scale(tokens);
     text(
         format!("{SVG_DIR}/centraid-light.svg"),
-        tile_svg(&light, Some(&tokens.icon.light_edge)),
+        tile_svg(&light, Some(&tokens.icon.light_edge), grown),
     );
     text(
         format!("{SVG_DIR}/centraid-dark.svg"),
-        tile_svg(&dark, None),
+        tile_svg(&dark, None, grown),
     );
     text(
         format!("{SVG_DIR}/centraid-tinted.svg"),
-        tile_svg(&tinted, None),
+        tile_svg(&tinted, None, grown),
     );
     text(
         format!("{SVG_DIR}/centraid-themed.svg"),
-        tile_svg(&themed, None),
+        tile_svg(&themed, None, 1.0),
     );
     text(format!("{SVG_DIR}/centraid-mark.svg"), mark_svg(&light));
 
     text(format!("{APPICON_SET}/Contents.json"), appiconset_json());
     let mut png = |name: &str, palette: &Palette| -> Result<()> {
-        let bytes = encode_png(&render(palette, ICON_PX)?, ICON_PX)?;
+        let bytes = encode_png(&render(palette, grown, ICON_PX)?, ICON_PX)?;
         files.insert(format!("{APPICON_SET}/{name}"), bytes);
         Ok(())
     };
@@ -628,6 +635,7 @@ mod tests {
 
         // The PNGs hold those colours at the quarters' middles and the tile in the
         // heart, the cuts and the corners.
+        let grown = ios_scale(&tokens);
         for (name, tile) in [
             ("AppIcon-Light.png", &tokens.icon.light_tile),
             ("AppIcon-Dark.png", &tokens.icon.dark_tile),
@@ -641,18 +649,47 @@ mod tests {
                 ("teal", (0.0, -20.0)),
             ] {
                 assert_eq!(
-                    pixel(&pixels, size, CENTRE + u, CENTRE + v),
+                    pixel(&pixels, size, CENTRE + u * grown, CENTRE + v * grown),
                     tokens.brand[key],
                     "{name} {key}"
                 );
             }
-            for (u, v) in [(0.0, 0.0), (20.0, 20.0), (-50.0, -50.0), (0.0, 45.0)] {
+            for (u, v) in [(0.0, 0.0), (20.0, 20.0), (-50.0, -50.0), (0.0, 40.0)] {
                 assert_eq!(
-                    pixel(&pixels, size, CENTRE + u, CENTRE + v),
+                    pixel(&pixels, size, CENTRE + u * grown, CENTRE + v * grown),
                     *tile,
                     "{name} tile at ({u}, {v})"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn the_ios_mark_spans_its_share_of_the_tile() {
+        // The disc runs from the tile's left edge by (1 - share) / 2 to the same on the right:
+        // measure the widest row of non-tile pixels in each appearance.
+        let tokens = tokens();
+        for (name, tile) in [
+            ("AppIcon-Light.png", &tokens.icon.light_tile),
+            ("AppIcon-Dark.png", &tokens.icon.dark_tile),
+            ("AppIcon-Tinted.png", &tokens.icon.tinted_tile),
+        ] {
+            let (size, pixels) = decode(&emitted()[&format!("{APPICON_SET}/{name}")]);
+            let tile = rgb(tile).unwrap_or_default();
+            let middle = size as usize / 2;
+            let row = &pixels[middle * size as usize * 3..(middle + 1) * size as usize * 3];
+            let marked: Vec<usize> = row
+                .chunks(3)
+                .enumerate()
+                .filter(|(_, rgb)| [rgb[0], rgb[1], rgb[2]] != tile)
+                .map(|(column, _)| column)
+                .collect();
+            let span = (marked[marked.len() - 1] - marked[0] + 1) as f64 / f64::from(size);
+            assert!(
+                (span - tokens.icon.ios_mark_share).abs() < 0.01,
+                "{name}: the mark spans {span} of the tile, not {}",
+                tokens.icon.ios_mark_share
+            );
         }
     }
 

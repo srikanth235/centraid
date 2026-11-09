@@ -125,6 +125,7 @@ struct PeoplePersonView: View {
 }
 
 private struct PeoplePersonBody: View {
+    @Environment(\.isLargestText) private var largestText
     let person: Centraid_Core_V1_PeoplePersonData
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
@@ -265,11 +266,13 @@ private struct PeoplePersonBody: View {
             PeopleAvatarView(avatar: person.avatar, size: 96)
                 .padding(.bottom, 6)
             Text(person.name)
-                .kitType(.title)
+                .kitType(.hero)
                 .foregroundStyle(Surface.ink)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
+                // THE HERO REFLOWS AT THE LARGEST SIZES: the name wraps rather than shrinks or clips.
+                .lineLimit(largestText ? nil : 2)
+                .minimumScaleFactor(largestText ? 1 : 0.7)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if !person.role.isEmpty {
                 Text(person.role)

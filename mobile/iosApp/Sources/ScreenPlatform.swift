@@ -12,8 +12,20 @@ import UniformTypeIdentifiers
 
 /// `OwnerCheck`: `LAContext().evaluatePolicy(.deviceOwnerAuthentication, …)`.
 /// With `ask` false it only reads what this phone can do and raises nothing.
+@MainActor
 enum OwnerCheckPerformer {
+    /// The evaluation that is up, so a `cancel` can take its sheet down.
+    private static var pending: LAContext?
+
     static func run(_ check: Centraid_Core_V1_OwnerCheck) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        // THE MEMBER LEFT LOCKER BEFORE ANSWERING: invalidating the context ends
+        // the evaluation (its callback answers `appCancel`, a cancel Rust ignores
+        // as late) and takes Face ID's sheet down from over whatever is under it.
+        if check.cancel {
+            pending?.invalidate()
+            pending = nil
+            return .done(Centraid_Core_V1_EffectDone())
+        }
         let context = LAContext()
         var error: NSError?
         let available = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
@@ -33,6 +45,9 @@ enum OwnerCheckPerformer {
             checked.outcome = .unavailable
             return .ownerChecked(checked)
         }
+        pending?.invalidate()
+        pending = context
+        defer { if pending === context { pending = nil } }
         let outcome: Centraid_Core_V1_OwnerChecked.Outcome = await withCheckedContinuation { continuation in
             context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: check.reason) { ok, error in
                 continuation.resume(returning: ok ? .succeeded : Self.outcome(error))
@@ -43,7 +58,7 @@ enum OwnerCheckPerformer {
     }
 
     /// THE OUTCOME MAP: a dismissal is not a failure.
-    static func outcome(_ error: Swift.Error?) -> Centraid_Core_V1_OwnerChecked.Outcome {
+    nonisolated static func outcome(_ error: Swift.Error?) -> Centraid_Core_V1_OwnerChecked.Outcome {
         guard let error = error as? LAError else { return .failed }
         switch error.code {
         case .userCancel, .systemCancel, .appCancel: return .cancelled

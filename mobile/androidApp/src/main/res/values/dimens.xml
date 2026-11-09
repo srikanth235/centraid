@@ -7,6 +7,7 @@
 <resources>
     <dimen name="centraid_text_badge">11sp</dimen>
     <dimen name="centraid_text_group">12sp</dimen>
+    <dimen name="centraid_text_hero">24sp</dimen>
     <dimen name="centraid_text_meta">13sp</dimen>
     <dimen name="centraid_text_row">16sp</dimen>
     <dimen name="centraid_text_section">20sp</dimen>
@@ -14,6 +15,7 @@
     <dimen name="centraid_radius_card">16dp</dimen>
     <integer name="centraid_weight_badge">700</integer>
     <integer name="centraid_weight_group">600</integer>
+    <integer name="centraid_weight_hero">700</integer>
     <integer name="centraid_weight_meta">400</integer>
     <integer name="centraid_weight_row">400</integer>
     <integer name="centraid_weight_section">700</integer>

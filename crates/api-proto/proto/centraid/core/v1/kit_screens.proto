@@ -56,6 +56,10 @@ message EmptyState {
   // of use, never as an up-front permission wall — and a shell that cannot
   // draws `action_label` as before. The app's own add stays in its header.
   ImportSource import_source = 5;
+  // The catalogue glyph on the card's wash. Empty means the app's own glyph
+  // (day one); a trash's empty state says "Trash", so Locker's empty trash does
+  // not wear a lock.
+  string icon_key = 6;
 }
 
 // A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import

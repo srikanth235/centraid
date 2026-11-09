@@ -464,6 +464,7 @@ impl Chat {
                 reason: words::unlock_reason(locale),
                 title: words::unlock_title(locale),
                 subtitle: words::unlock_subtitle(locale),
+                cancel: false,
             }))];
         }
         if let Some(held) = self.proposal_mut(id, Stage::Working) {

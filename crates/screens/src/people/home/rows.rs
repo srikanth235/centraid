@@ -19,6 +19,7 @@ pub fn day_one(locale: Locale) -> wire::EmptyState {
         body: words::empty_roster_body(locale),
         action_label: words::add_person(locale),
         import_source: wire::ImportSource::Contacts as i32,
+        icon_key: String::new(),
     }
 }
 
