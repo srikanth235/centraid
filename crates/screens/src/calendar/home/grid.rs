@@ -601,7 +601,7 @@ fn chips_of(input: &Input, day: &str) -> Vec<wire::AgendaGridChip> {
                 ..wire::AgendaGridChip::default()
             }),
     );
-    // OVERDUE REMINDERS lead Day's lane on today, in the attention tone (never red), each with its
+    // OVERDUE REMINDERS lead Day's lane on today, in the attention hue (amber, never red), each with its
     // box and how long ago in its spoken label.
     if input.destination == Dest::Day && day == input.today {
         out.splice(
@@ -611,7 +611,7 @@ fn chips_of(input: &Input, day: &str) -> Vec<wire::AgendaGridChip> {
                 let how_long = rows::due_label(input.locale, task, input.tasks);
                 wire::AgendaGridChip {
                     key: format!("task:overdue:{}", task.task_id),
-                    hue_key: "stateAmber".to_owned(),
+                    hue_key: rows::hue_role("amber"),
                     is_task: true,
                     task_id: task.task_id.clone(),
                     route: Some(crate::kit::schedule::routes::task(&task.task_id)),

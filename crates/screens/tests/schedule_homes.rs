@@ -1930,7 +1930,7 @@ fn today_draws_the_overdue_reminders_above_the_day_and_no_other_day_does() {
             .iter()
             .all(|chip| chip.is_task && !chip.read_only && !chip.done)
     );
-    assert_eq!(chips[0].hue_key, "stateAmber");
+    assert_eq!(chips[0].hue_key, "cAmber");
     // A tick clears one from the group.
     r.check("zq-older");
     r.settle();
