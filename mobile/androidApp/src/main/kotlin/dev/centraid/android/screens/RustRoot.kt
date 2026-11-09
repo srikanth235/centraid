@@ -39,6 +39,7 @@ import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.TrashScreen
+import dev.centraid.android.kit.TransferScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
 import dev.centraid.android.screens.agenda.AgendaEventScreen
 import dev.centraid.android.screens.agenda.TodoCatchUpScreen
@@ -450,6 +451,7 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val transfer = view.transfer
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
         val lockerEditor = view.locker_editor
@@ -795,6 +797,12 @@ internal class RustRoot(
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
+                onBack = back,
+            )
+            // IMPORT AND EXPORT (#1173): Notes' Markdown and People's vCards.
+            transfer != null -> TransferScreen(
+                view = transfer,
+                onEvent = { send(ScreenEvent(transfer = it)) },
                 onBack = back,
             )
             // THE VAULT PLUMBING (#1135, lane H2): the backup, the 24 words and pairing a gateway.

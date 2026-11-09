@@ -91,6 +91,7 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("people", "person") => Some(people::routes::person(id, title, false)),
         ("money", "transaction") => Some(money::routes::transaction(id, parent)),
         ("health", "workout") => Some(health::routes::workout(id, parent)),
+        ("health", "metric") => Some(health::routes::metric(id, parent)),
         ("locker", "locker_item") => Some(locker_item(row, parent)),
         // A conversation opens as a chat page (the chat's `chat.thread`).
         ("chat", "thread") => Some(crate::chat::routes::thread(id, title)),

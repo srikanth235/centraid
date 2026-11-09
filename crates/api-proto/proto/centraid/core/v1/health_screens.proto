@@ -200,6 +200,11 @@ message HealthHomeChrome {
   string stop_cancel = 7;
   // Workouts' Show more.
   string show_more = 8;
+  // THE BAND'S SEARCH KEY (#1173, item 11): "Search Health", and the page it pushes (metrics
+  // by name; workouts by kind, date, place or note). EMPTY while nothing is connected or the
+  // read is denied.
+  string search_placeholder = 9;
+  optional Route search_route = 10;
 }
 
 message HealthHomeData {

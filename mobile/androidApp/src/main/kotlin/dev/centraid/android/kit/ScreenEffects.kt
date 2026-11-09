@@ -62,6 +62,11 @@ internal fun HostScreenEffects(
     // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
     val picking = remember { Ask<android.net.Uri?>() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picking.answer(it) }
+    // SEVERAL FILES AT ONCE and a whole folder (`PickBytes.multiple`, `PickBytes.folder`).
+    val pickingMany = remember { Ask<List<android.net.Uri>>() }
+    val manyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pickingMany.answer(it) }
+    val pickingFolder = remember { Ask<android.net.Uri?>() }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pickingFolder.answer(it) }
     val saving = remember { Ask<android.net.Uri?>() }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { saving.answer(it) }
     // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
@@ -111,6 +116,10 @@ internal fun HostScreenEffects(
                     effect.export_originals != null ->
                         effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed("the originals could not be handed off") }
+                    effect.pick_bytes != null && effect.pick_bytes!!.folder ->
+                        pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept)
+                    effect.pick_bytes != null && effect.pick_bytes!!.multiple ->
+                        pickMany(context, pickingMany.ask { manyPicker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
                     effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
                     effect.save_file != null -> {
                         val file = effect.save_file!!

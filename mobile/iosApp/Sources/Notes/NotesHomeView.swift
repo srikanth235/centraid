@@ -491,6 +491,8 @@ struct NotesRowView: View {
                         .foregroundStyle(Surface.meta)
                         .lineLimit(1)
                 }
+                AboutChips(chips: row.about)
+                    .padding(.top, 2)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

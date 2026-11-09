@@ -192,6 +192,8 @@ struct NotesEditorView: View {
     /// The line over the title, the pin first when the note is pinned: "Travel · Edited Wed 4 November".
     @ViewBuilder
     private func metaLine(_ draft: Centraid_Core_V1_NotesEditorDraft) -> some View {
+        // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
+        AboutChips(chips: state.about, onOpen: open)
         if !state.meta.isEmpty {
             HStack(spacing: 6) {
                 if draft.pinned { NotesPinMark() }

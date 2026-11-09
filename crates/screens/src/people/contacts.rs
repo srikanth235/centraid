@@ -52,6 +52,8 @@ pub const DEFAULT_ORIGIN: &str = "local:this-phone";
 /// The keychain key that says this device imported its contacts.
 pub const IMPORTED_KEY: &str = "people_contacts_imported";
 const IMPORTED_VALUE: &[u8] = b"1";
+/// The same key, when the member paused the follow: the device imported and follows no more.
+const PAUSED_VALUE: &[u8] = b"paused";
 
 /// Triggers within this long of the first are one pass.
 pub const SETTLE: Duration = Duration::from_secs(2);
@@ -325,6 +327,8 @@ pub struct Outcome {
     pub updated: u32,
     pub trashed: u32,
     pub add_account: bool,
+    /// How many contacts the read held: what the Phone contacts row says it follows.
+    pub read: u32,
 }
 
 /// The one sentence an import ends on.
@@ -395,6 +399,12 @@ pub struct ContactsFollow {
     import_queued: bool,
     status: Option<wire::StatusLine>,
     outcome: Option<Outcome>,
+    /// The member paused the follow (their word, kept in the keychain).
+    paused: bool,
+    /// The phone refused the address book, the last time a read was tried.
+    denied: bool,
+    /// What the last read held, and when it was.
+    last_read: Option<(u32, std::time::Instant)>,
 }
 
 impl Default for ContactsFollow {
@@ -414,6 +424,9 @@ impl ContactsFollow {
             import_queued: false,
             status: None,
             outcome: None,
+            paused: false,
+            denied: false,
+            last_read: None,
         }
     }
 
@@ -469,6 +482,98 @@ impl ContactsFollow {
         self.outcome.as_ref()
     }
 
+    /// THE PHONE CONTACTS ROW'S ACTION: pause a follow that is on, resume one that is paused,
+    /// turn on one that never was (the import: the OS asks its permission then). The row is
+    /// drawn from the same facts ([`Self::row`]).
+    pub fn toggle(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.followed {
+            self.followed = false;
+            self.paused = true;
+            self.watching = false;
+            ctx.cancel_timer(SETTLE_TIMER);
+            self.gate = Gate::Idle;
+            return vec![
+                keychain(wire::keychain_op::Op::Set, PAUSED_VALUE.to_vec()),
+                watch(false),
+            ];
+        }
+        if self.paused {
+            self.paused = false;
+            self.followed = true;
+            let mut effects = vec![keychain(
+                wire::keychain_op::Op::Set,
+                IMPORTED_VALUE.to_vec(),
+            )];
+            effects.extend(self.begin_following(ctx));
+            return effects;
+        }
+        self.import(ctx)
+    }
+
+    /// Whether the row's action is Settings: the phone said no.
+    #[must_use]
+    pub fn needs_settings(&self) -> bool {
+        self.denied
+    }
+
+    /// THE ROW: whether People follows, how many, when it last looked, and the one action.
+    #[must_use]
+    pub fn row(&self, locale: Locale) -> wire::PeopleContactsRow {
+        use wire::people_contacts_row::State;
+        let (state, label, action) = if self.denied {
+            (
+                State::Denied,
+                words::contacts_state_denied(locale),
+                words::contacts_settings(locale),
+            )
+        } else if self.followed {
+            (
+                State::Following,
+                words::contacts_state_on(locale),
+                words::contacts_pause(locale),
+            )
+        } else if self.paused {
+            (
+                State::Paused,
+                words::contacts_state_paused(locale),
+                words::contacts_resume(locale),
+            )
+        } else {
+            (
+                State::Off,
+                words::contacts_state_off(locale),
+                words::contacts_turn_on(locale),
+            )
+        };
+        let detail = match (state, self.last_read) {
+            (State::Following | State::Paused, Some((count, at))) => {
+                let minutes = at.elapsed().as_secs() / 60;
+                let when = match minutes {
+                    0 => words::contacts_updated_now(locale),
+                    1..=59 => words::contacts_updated_minutes(locale, minutes),
+                    _ => words::contacts_updated_hours(locale, minutes / 60),
+                };
+                format!(
+                    "{} · {when}",
+                    words::contacts_followed(locale, u64::from(count))
+                )
+            }
+            _ => String::new(),
+        };
+        wire::PeopleContactsRow {
+            title: words::contacts_title(locale),
+            state: state as i32,
+            accessibility_label: if detail.is_empty() {
+                format!("{}, {label}", words::contacts_title(locale))
+            } else {
+                format!("{}, {label}, {detail}", words::contacts_title(locale))
+            },
+            state_label: label,
+            detail,
+            action_label: action,
+        }
+    }
+
     /// Whether this device follows the address book.
     #[must_use]
     pub fn followed(&self) -> bool {
@@ -498,6 +603,7 @@ impl ContactsFollow {
             (Waiting::Flag, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
                 self.followed = value.found && value.value == IMPORTED_VALUE;
+                self.paused = value.found && value.value == PAUSED_VALUE;
                 Some(self.begin_following(ctx))
             }
             (Waiting::Flag, Some(O::Failed(_))) => {
@@ -564,6 +670,7 @@ impl ContactsFollow {
         let Waiting::Read(purpose) = self.waiting else {
             return Vec::new();
         };
+        self.denied = denied;
         if purpose == Purpose::Import {
             let locale = ctx.locale();
             self.status = Some(plain(if denied {
@@ -588,6 +695,8 @@ impl ContactsFollow {
             return self.read_failed(ctx, false);
         };
         let (outcome, told) = self.run(ctx, snapshot);
+        self.denied = false;
+        self.last_read = Some((outcome.read, std::time::Instant::now()));
         let mut effects = Vec::new();
         if purpose == Purpose::Import {
             self.status = Some(plain(sentence(ctx.locale(), &outcome)));
@@ -613,6 +722,7 @@ impl ContactsFollow {
         let batch = batch(ctx.locale(), snapshot);
         let mut outcome = Outcome {
             add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
+            read: u32::try_from(batch.records.len()).unwrap_or(u32::MAX),
             ..Outcome::default()
         };
         let mut told = false;

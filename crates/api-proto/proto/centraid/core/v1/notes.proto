@@ -2,7 +2,7 @@
 //
 // `crates/apps/notes` folds the library (a bounded recent window plus EVERY
 // pinned note, decorated by `IN`-bounded reads of the edges that carry its
-// tags, links and attachments), the memo set that four surfaces exclude (a
+// tags, links and attachments), the journal set that four surfaces exclude (a
 // note with an `about` edge: a People-journal entry among them), a note's
 // revisions and the powerbox over every searchable kind (D-1020-N1). These are
 // its answers, typed. A shell reaches them through `app_query.proto`'s
@@ -14,10 +14,12 @@
 // conversion. Instants are the vault's text form,
 // `YYYY-MM-DDTHH:MM:SS.mmmZ`; days are `YYYY-MM-DD`.
 //
-// THE JOURNAL ASYMMETRY IS THE CONTRACT (D-1020-N3): a memo (a People-journal
-// entry is one) is absent from `library`, `trash`, the tag chips, `search` and
-// `link_targets`, is the whole of `journal`, and is still answered by `note`,
-// because the People screen opens one by id.
+// THE JOURNAL ASYMMETRY IS THE CONTRACT (D-1020-N3): a journal entry (a note
+// ABOUT THE OWNER, which People's journal writes) is absent from `library`,
+// `trash`, the tag chips, `search` and `link_targets`, is the whole of
+// `journal`, and is still answered by `note`, because the People screen opens
+// one by id. A note about anything else (#1173) is on the shelf, and its row
+// carries what it is about.
 //
 // CIVIL DAYS. `library`, `trash` and `history` take a `tz` and answer each
 // instant's `*_local_day` beside it, so "edited today" and "purges on" are
@@ -251,6 +253,8 @@ message NotesNote {
   // The tags it carries and what is attached to it.
   repeated NotesTag tags = 18;
   repeated NotesAttachment attachments = 19;
+  // What the note is about, as in `NotesRow.about`.
+  repeated NotesCard about = 20;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +286,9 @@ message NotesRow {
   string updated_local_day = 19;
   string deleted_local_day = 20;
   string purge_local_day = 21;
+  // What the note is about (a person, an event, a task, a document), live subjects only.
+  // The owner is never here: a note about the owner is a journal entry (#1173).
+  repeated NotesCard about = 22;
 }
 
 message NotesSearchHit {

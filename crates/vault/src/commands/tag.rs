@@ -56,7 +56,7 @@ pub const LABEL_COLORS: [&str; 8] = [
 /// The palette colour the fewest labels wear, the first such in palette order:
 /// a new label lands on the hue least in use, so a drive's labels spread over
 /// the palette before any colour repeats.
-fn next_color(ctx: &CommandCtx<'_, '_>) -> Result<&'static str> {
+pub(crate) fn next_color(ctx: &CommandCtx<'_, '_>) -> Result<&'static str> {
     let mut least = (i64::MAX, LABEL_COLORS[0]);
     for color in LABEL_COLORS {
         let used: i64 = ctx.connection().query_row(

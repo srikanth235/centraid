@@ -10,4 +10,5 @@ pub mod money;
 pub mod read;
 pub mod search;
 pub mod secret;
+pub mod transfer;
 pub mod trash;

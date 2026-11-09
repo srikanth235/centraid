@@ -1686,6 +1686,65 @@ pub fn live_photo_count(connection: &Connection) -> KitResult<i64> {
         .map_err(door)
 }
 
+/// A Locker key row, the way a founded vault with Locker set up holds one: a key id and nothing
+/// else (`K` is never a file). A test that adds a Locker item needs it.
+///
+/// # Errors
+///
+/// Whatever the vault refuses the row for.
+pub fn locker_key(connection: &Connection, key_id: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO locker_key (key_id, created_at) VALUES (?1, '2026-01-01T00:00:00.000Z')",
+            [key_id],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
+/// `count` tasks, each `about` the same `subject`: the `about` edges of other kinds that a
+/// notes read must not spend its bound on.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for.
+pub fn tasks_about(connection: &Connection, subject: &str, count: usize) -> KitResult<()> {
+    for n in 0..count {
+        let task = format!("task-{n:05}");
+        connection
+            .execute(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES (?1, 'task', 't', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+                [&task],
+            )
+            .map_err(door)?;
+        connection
+            .execute("INSERT INTO task (id, status) VALUES (?1, 'open')", [&task])
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES (?1, 'about', ?2, '2026-01-01T00:00:00.000Z')",
+                [&task, subject],
+            )
+            .map_err(door)?;
+    }
+    Ok(())
+}
+
+/// The entity a followed record is, by the id the source named it by.
+///
+/// # Errors
+///
+/// Whatever the vault refuses the read for.
+pub fn followed_entity(connection: &Connection, external_id: &str) -> KitResult<String> {
+    connection
+        .query_row(
+            "SELECT entity_id FROM source WHERE external_id = ?1",
+            [external_id],
+            |row| row.get(0),
+        )
+        .map_err(door)
+}
+
 #[cfg(test)]
 mod tests {
     use super::instant;

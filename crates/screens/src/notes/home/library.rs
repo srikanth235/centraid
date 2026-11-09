@@ -3,7 +3,7 @@
 //! into a notebook and trashes.
 //!
 //! THE ROOM'S GRAMMAR (R-CHROME-1…4): New note is the header's one action next to
-//! the filter button, search the bar under it, and More holds Trash alone — never
+//! the filter button, search the bar under it, and More holds Import, Export and Trash — never
 //! search, sort or a filter. The button opens ONE menu ([`Library::filter_menu`]:
 //! Pinned and the tags to show, the order to sort by), and the notebook the
 //! library was opened on is the title's second line ([`Library::subtitle`]), whose
@@ -35,6 +35,9 @@ const MAX_WINDOW: u32 = 2000;
 pub(super) const FILTER: &str = "show";
 pub(super) const FILTER_PINNED: &str = "pinned";
 pub(super) const FILTER_TAG: &str = "tag-";
+/// The About options: the notes about a person, the notes about an event (#1173).
+pub(super) const FILTER_ABOUT_PEOPLE: &str = "about-people";
+pub(super) const FILTER_ABOUT_EVENTS: &str = "about-events";
 
 /// The sort section's options (`notes-filter-sort-updated`).
 const SORT_UPDATED: &str = "updated";
@@ -62,6 +65,9 @@ pub(super) struct Library {
     pub sort: wire::NotesLibrarySort,
     pub pinned_only: bool,
     pub tag_ids: Vec<String>,
+    /// Only the notes about a person, and/or about an event (either, when both are on).
+    pub about_people: bool,
+    pub about_events: bool,
     pub notebook_id: String,
     pub notebook_name: String,
     pub unfiled_only: bool,
@@ -76,6 +82,8 @@ impl Library {
             sort: wire::NotesLibrarySort::Updated,
             pinned_only: false,
             tag_ids: Vec::new(),
+            about_people: false,
+            about_events: false,
             notebook_id: notebook_id.to_owned(),
             notebook_name: notebook_name.to_owned(),
             unfiled_only: unfiled_only && notebook_id.is_empty(),
@@ -162,6 +170,24 @@ impl Library {
         self.reload(ctx);
     }
 
+    pub fn toggle_about(&mut self, ctx: &Ctx, events: bool) {
+        if events {
+            self.about_events = !self.about_events;
+        } else {
+            self.about_people = !self.about_people;
+        }
+        self.reload(ctx);
+    }
+
+    /// Whether a row passes the About options: with neither on, every row does.
+    fn shows(&self, row: &wire::NotesRow) -> bool {
+        (!self.about_people && !self.about_events)
+            || row.about.iter().any(|card| {
+                (self.about_people && card.entity == "person")
+                    || (self.about_events && card.entity == "event")
+            })
+    }
+
     pub fn toggle_pinned(&mut self, ctx: &Ctx) {
         self.pinned_only = !self.pinned_only;
         self.reload(ctx);
@@ -178,10 +204,13 @@ impl Library {
     /// "Clear filters": Pinned and the tags go; the notebook it was opened on and
     /// the order stay (the notebook has its own close key, a sort is no filter).
     pub fn clear_filters(&mut self, ctx: &Ctx) {
-        if !self.pinned_only && self.tag_ids.is_empty() {
+        if !self.pinned_only && self.tag_ids.is_empty() && !self.about_people && !self.about_events
+        {
             return;
         }
         self.pinned_only = false;
+        self.about_people = false;
+        self.about_events = false;
         self.tag_ids.clear();
         self.reload(ctx);
     }
@@ -263,6 +292,8 @@ impl Library {
             || self.unfiled_only
             || !self.notebook_id.is_empty()
             || !self.tag_ids.is_empty()
+            || self.about_people
+            || self.about_events
     }
 
     /// THE HEADER'S FILTER BUTTON: Pinned and the tags the window saw (any number
@@ -287,6 +318,16 @@ impl Library {
                 )
             }));
         }
+        shown.push(menu::option(
+            FILTER_ABOUT_PEOPLE,
+            words::filter_about_people(locale),
+            self.about_people,
+        ));
+        shown.push(menu::option(
+            FILTER_ABOUT_EVENTS,
+            words::filter_about_events(locale),
+            self.about_events,
+        ));
         let order = sorts(locale)
             .into_iter()
             .map(|(sort, label)| menu::option(sort_key(sort), label, sort == self.sort))
@@ -297,7 +338,7 @@ impl Library {
                 menu::multi(FILTER, words::filter_title(locale), shown),
                 menu::single(menu::SORT, words::sort_title(locale), order),
             ],
-            self.pinned_only || !self.tag_ids.is_empty(),
+            self.pinned_only || !self.tag_ids.is_empty() || self.about_people || self.about_events,
         ))
     }
 
@@ -309,6 +350,8 @@ impl Library {
         }
         match (pick.section, pick.option) {
             (FILTER, FILTER_PINNED) => self.toggle_pinned(ctx),
+            (FILTER, FILTER_ABOUT_PEOPLE) => self.toggle_about(ctx, false),
+            (FILTER, FILTER_ABOUT_EVENTS) => self.toggle_about(ctx, true),
             (FILTER, tag) => {
                 if let Some(concept_id) = tag.strip_prefix(FILTER_TAG) {
                     self.toggle_tag(ctx, concept_id);
@@ -345,6 +388,7 @@ impl Library {
         let rows: Vec<wire::NotesNoteRow> = library
             .notes
             .iter()
+            .filter(|row| self.shows(row))
             .map(|row| fold::row(locale, row))
             .collect();
         let count = rows.len();
@@ -578,5 +622,79 @@ mod tests {
         library.tag_ids.clear();
         library.pinned_only = true;
         assert!(library.filter_menu(locale).unwrap().filtering);
+    }
+
+    fn row_about(id: &str, subjects: &[(&str, &str, &str)]) -> wire::NotesRow {
+        wire::NotesRow {
+            note_id: id.to_owned(),
+            title: Some(id.to_owned()),
+            about: subjects
+                .iter()
+                .map(|(kind, subject, title)| wire::NotesCard {
+                    entity: (*kind).to_owned(),
+                    id: (*subject).to_owned(),
+                    status: "live".to_owned(),
+                    title: Some((*title).to_owned()),
+                    ..wire::NotesCard::default()
+                })
+                .collect(),
+            ..wire::NotesRow::default()
+        }
+    }
+
+    #[test]
+    fn a_note_about_something_wears_its_subject_and_the_about_options_narrow_the_shelf() {
+        let locale = Locale::En;
+        let mut library = ready("", false);
+        library.phase = Phase::Ready(wire::NotesLibrary {
+            notes: vec![
+                row_about("plain", &[]),
+                row_about("maya", &[("person", "p1", "Maya")]),
+                row_about("dinner", &[("event", "e1", "Dinner")]),
+            ],
+            ..wire::NotesLibrary::default()
+        });
+        let titles = |library: &Library| -> Vec<String> {
+            let Content::Data(data) = library.content(locale) else {
+                panic!("data");
+            };
+            data.sections
+                .iter()
+                .flat_map(|section| section.rows.iter())
+                .map(|row| row.title.clone())
+                .collect()
+        };
+        let Content::Data(all) = library.content(locale) else {
+            panic!("data");
+        };
+        let chips: Vec<(String, String)> = all
+            .sections
+            .iter()
+            .flat_map(|section| section.rows.iter())
+            .flat_map(|row| row.about.iter())
+            .map(|chip| (chip.label.clone(), chip.route.clone().unwrap().screen))
+            .collect();
+        assert_eq!(
+            chips,
+            [
+                ("About · Maya".to_owned(), "people.person".to_owned()),
+                ("About · Dinner".to_owned(), "agenda.event".to_owned()),
+            ]
+        );
+        assert_eq!(titles(&library).len(), 3);
+        library.about_people = true;
+        assert_eq!(titles(&library), ["maya"]);
+        library.about_events = true;
+        assert_eq!(titles(&library).len(), 2, "either, when both are on");
+        assert!(library.filter_menu(locale).unwrap().filtering);
+        let labels: Vec<String> = library
+            .filter_menu(locale)
+            .unwrap()
+            .sections
+            .iter()
+            .flat_map(|section| section.options.iter().map(|o| o.label.clone()))
+            .collect();
+        assert!(labels.contains(&"About people".to_owned()));
+        assert!(labels.contains(&"About events".to_owned()));
     }
 }

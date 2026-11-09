@@ -824,6 +824,349 @@ const MERGE: &str = r#"{
 /// A merge ends a person for good, so it is presented the way a purge is: medium
 /// risk, and parked for the owner's confirmation on every non-owner-device
 /// invocation (the level `entity.purge` carries).
+// ---------------------------------------------------------------------------
+// vCards in and out (#1173, item 20)
+// ---------------------------------------------------------------------------
+use crate::commands::contact_point::reach_key;
+use crate::commands::person_portable::{self as vcard, Card};
+use std::collections::{BTreeMap, BTreeSet};
+
+/// The most cards one import takes.
+const VCARD_MAX: usize = 20_000;
+
+/// A person's nickname, role and birthday: the fields a card may fill.
+type Fields = (Option<String>, Option<String>, Option<String>);
+
+/// What the vault already holds of the people a file may name: their names and the points they
+/// are reached at, folded to the keys two spellings share.
+struct Known {
+    by_name: BTreeMap<String, String>,
+    /// A person's own name, for saying whom a card would merge into.
+    titles: BTreeMap<String, String>,
+    by_point: BTreeMap<(String, String), String>,
+    /// A person's own fields and points, for what a card would add.
+    fields: BTreeMap<String, Fields>,
+    points: BTreeSet<(String, String, String)>,
+}
+
+fn known_people(ctx: &CommandCtx<'_, '_>) -> Result<Known> {
+    let c = ctx.connection();
+    let mut known = Known {
+        by_name: BTreeMap::new(),
+        titles: BTreeMap::new(),
+        by_point: BTreeMap::new(),
+        fields: BTreeMap::new(),
+        points: BTreeSet::new(),
+    };
+    let mut people = c.prepare_cached(
+        "SELECT e.id, e.title, p.nickname, p.role, p.birthday
+           FROM person p JOIN entity e ON e.id = p.id
+          WHERE e.deleted_at IS NULL ORDER BY e.n",
+    )?;
+    let rows = people
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (id, title, nickname, role, birthday) in rows {
+        known
+            .by_name
+            .entry(crate::model::fold_label(&title))
+            .or_insert_with(|| id.clone());
+        known.titles.insert(id.clone(), title);
+        known.fields.insert(id, (nickname, role, birthday));
+    }
+    let mut points = c.prepare_cached(
+        "SELECT cp.person_id, cp.kind, cp.normalized FROM contact_point cp
+           JOIN entity e ON e.id = cp.person_id AND e.deleted_at IS NULL",
+    )?;
+    let rows = points
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (person, kind, key) in rows {
+        if matches!(kind.as_str(), "phone" | "email") {
+            known
+                .by_point
+                .entry((kind.clone(), key.clone()))
+                .or_insert_with(|| person.clone());
+        }
+        known.points.insert((person, kind, key));
+    }
+    Ok(known)
+}
+
+/// The person a card is: one with its name, else one reached at a number or an address of it.
+fn match_of(known: &Known, card: &Card) -> Option<String> {
+    known
+        .by_name
+        .get(&crate::model::fold_label(&card.name))
+        .cloned()
+        .or_else(|| {
+            card.points
+                .iter()
+                .filter(|point| matches!(point.kind, "phone" | "email"))
+                .find_map(|point| {
+                    known
+                        .by_point
+                        .get(&(point.kind.to_owned(), reach_key(point.kind, &point.value)))
+                        .cloned()
+                })
+        })
+}
+
+/// What a card would add to the person it matches: the fields they leave blank and the points
+/// they lack. Nothing already there is ever replaced.
+struct Adds {
+    nickname: Option<String>,
+    role: Option<String>,
+    birthday: Option<String>,
+    points: Vec<usize>,
+}
+
+impl Adds {
+    fn count(&self) -> usize {
+        usize::from(self.nickname.is_some())
+            + usize::from(self.role.is_some())
+            + usize::from(self.birthday.is_some())
+            + self.points.len()
+    }
+}
+
+fn adds_of(known: &Known, person: &str, card: &Card) -> Adds {
+    let (nickname, role, birthday) = known.fields.get(person).cloned().unwrap_or_default();
+    let blank = |value: &Option<String>| value.as_deref().is_none_or(|v| v.trim().is_empty());
+    Adds {
+        nickname: card.nickname.clone().filter(|_| blank(&nickname)),
+        role: card.role.clone().filter(|_| blank(&role)),
+        birthday: card.birthday.clone().filter(|_| blank(&birthday)),
+        points: card
+            .points
+            .iter()
+            .enumerate()
+            .filter(|(_, point)| {
+                !reach_key(point.kind, &point.value).is_empty()
+                    && !known.points.contains(&(
+                        person.to_owned(),
+                        point.kind.to_owned(),
+                        reach_key(point.kind, &point.value),
+                    ))
+            })
+            .map(|(index, _)| index)
+            .collect(),
+    }
+}
+
+fn vcards(ctx: &CommandCtx<'_, '_>) -> Vec<Card> {
+    ctx.optional_str("cards")
+        .map(vcard::parse)
+        .unwrap_or_default()
+        .into_iter()
+        .take(VCARD_MAX)
+        .collect()
+}
+
+fn write_points(
+    ctx: &CommandCtx<'_, '_>,
+    person: &str,
+    card: &Card,
+    which: &[usize],
+) -> Result<()> {
+    for &index in which {
+        let point = &card.points[index];
+        let key = reach_key(point.kind, &point.value);
+        ctx.connection().execute(
+            "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, preferred, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0,
+                     (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
+            rusqlite::params![ctx.next_id(), person, point.kind, point.value.trim(), key, point.label],
+        )?;
+    }
+    Ok(())
+}
+
+/// `person.import_vcf`: read vCards as people. A card that names someone the vault already has
+/// (by name, or by a number or an address) is a **proposal to merge**: it fills what that person
+/// leaves blank and adds the points they lack, and replaces nothing. With `dry_run` it writes
+/// nothing and answers what importing would do, which is the preview the member confirms; with
+/// `merge: false` the matches are left alone and only new people are added. Importing a file
+/// twice adds nothing: the second time every card is the person the first made.
+fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let dry_run = ctx
+        .input
+        .get("dry_run")
+        .and_then(Json::as_bool)
+        .unwrap_or(false);
+    let merge = ctx
+        .input
+        .get("merge")
+        .and_then(Json::as_bool)
+        .unwrap_or(true);
+    let cards = vcards(ctx);
+    // MATCHED AGAINST THE VAULT AS IT WAS, never against what this file has written, so the
+    // preview and the write agree card for card.
+    let known = known_people(ctx)?;
+    let (mut added, mut merged, mut unchanged, mut declined, mut repeated) = (0, 0, 0, 0, 0);
+    let mut proposals: Vec<String> = Vec::new();
+    let mut seen_new: BTreeSet<String> = BTreeSet::new();
+    for card in &cards {
+        let name_key = crate::model::fold_label(&card.name);
+        match match_of(&known, card) {
+            Some(person) => {
+                let adds = adds_of(&known, &person, card);
+                if adds.count() == 0 {
+                    unchanged += 1;
+                } else if !merge {
+                    declined += 1;
+                } else {
+                    merged += 1;
+                    if proposals.len() < 5 {
+                        // Whom it merges into, when that is not the name the card carries: a
+                        // number or an address can name a different person.
+                        let into = known.titles.get(&person).cloned().unwrap_or_default();
+                        proposals.push(
+                            if crate::model::fold_label(&into) == name_key || into.is_empty() {
+                                card.name.clone()
+                            } else {
+                                format!("{} → {into}", card.name)
+                            },
+                        );
+                    }
+                    if !dry_run {
+                        let c = ctx.connection();
+                        c.execute(
+                            "UPDATE person SET nickname = COALESCE(nickname, ?2), role = COALESCE(role, ?3),
+                                    birthday = COALESCE(birthday, ?4) WHERE id = ?1",
+                            rusqlite::params![person, adds.nickname, adds.role, adds.birthday],
+                        )?;
+                        write_points(ctx, &person, card, &adds.points)?;
+                        ctx.touch(&person)?;
+                    }
+                }
+            }
+            None if seen_new.contains(&name_key) => repeated += 1,
+            None => {
+                seen_new.insert(name_key);
+                added += 1;
+                if !dry_run {
+                    let id = found(
+                        ctx,
+                        &NewPerson {
+                            id: None,
+                            title: &card.name,
+                            form: None,
+                            nickname: card.nickname.as_deref(),
+                            role: card.role.as_deref(),
+                            met: None,
+                            birthday: card.birthday.as_deref(),
+                            cadence_days: None,
+                        },
+                    )?;
+                    write_points(ctx, &id, card, &(0..card.points.len()).collect::<Vec<_>>())?;
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "cards": cards.len(),
+        "added": added,
+        "merged": merged,
+        "unchanged": unchanged,
+        "declined": declined,
+        "repeated": repeated,
+        "proposals": proposals,
+        "dry_run": dry_run,
+    }))
+}
+
+/// `person.export_vcf`: everyone (or one list's people) as vCards in one file. Writes nothing.
+/// The owner's own card is not in it: it is the member's, not someone to add to another book.
+fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let list = ctx.optional_str("list_id");
+    let mut file_name = "People".to_owned();
+    if let Some(list) = list {
+        let title: Option<String> = ctx
+            .connection()
+            .query_row("SELECT title FROM entity WHERE id = ?1", [list], |row| {
+                row.get(0)
+            })
+            .ok();
+        file_name = title.map_or_else(|| "People".to_owned(), |t| note::portable_stem(&t));
+    }
+    let mut people = ctx.connection().prepare_cached(
+        "SELECT e.id, e.title, p.nickname, p.role, p.birthday
+           FROM person p JOIN entity e ON e.id = p.id
+          WHERE e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
+            AND (?1 IS NULL OR e.id IN (SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'))
+          ORDER BY e.title COLLATE NOCASE, e.n",
+    )?;
+    let rows = people
+        .query_map([list], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut points = ctx.connection().prepare_cached(
+        "SELECT kind, value, label FROM contact_point WHERE person_id = ?1 ORDER BY position",
+    )?;
+    let mut text = String::new();
+    for (id, title, nickname, role, birthday) in &rows {
+        let reached = points
+            .query_map([id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        text.push_str(&vcard::write(&Card {
+            name: title.clone(),
+            nickname: nickname.clone().filter(|n| !n.trim().is_empty()),
+            role: role.clone().filter(|r| !r.trim().is_empty()),
+            birthday: birthday.clone(),
+            points: reached
+                .into_iter()
+                .filter_map(|(kind, value, label)| {
+                    Some(vcard::Point {
+                        kind: match kind.as_str() {
+                            "phone" => "phone",
+                            "email" => "email",
+                            "address" => "address",
+                            "url" => "url",
+                            _ => return None,
+                        },
+                        value,
+                        label,
+                    })
+                })
+                .collect(),
+        }));
+    }
+    Ok(serde_json::json!({
+        "name": format!("{file_name}.vcf"),
+        "media_type": "text/vcard",
+        "count": rows.len(),
+        "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, text),
+    }))
+}
+
 fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
     definition.risk = Risk::Medium;
     definition.confirm = true;
@@ -833,6 +1176,37 @@ fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
+        CommandDefinition::plain(
+            "person.import_vcf",
+            "person",
+            r#"{
+              "type": "object",
+              "required": ["cards"],
+              "additionalProperties": false,
+              "properties": {
+                "cards": { "type": "string" },
+                "dry_run": { "type": "boolean" },
+                "merge": { "type": "boolean" }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[],
+            import_vcf,
+        ),
+        CommandDefinition::plain(
+            "person.export_vcf",
+            "person",
+            r#"{
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "list_id": { "type": ["string", "null"] }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[],
+            export_vcf,
+        ),
         CommandDefinition::plain(
             "person.add",
             "person",

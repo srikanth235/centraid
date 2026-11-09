@@ -194,6 +194,10 @@ public fun PeopleHomeScreen(
     // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
     if (state.sheet == PeopleHomeState.Sheet.SHEET_MORE && chrome != null) {
         SheetRoom(title = chrome.more_title, onDismiss = dismiss, expanded = true) {
+            // WHAT PEOPLE MAY READ of the address book (#1173): Rust decides every word.
+            state.contacts?.let { row ->
+                PeopleContactsRowView(row) { onEvent(PeopleHomeEvent(contacts_action = PeopleHomeEvent.ContactsActionTapped())) }
+            }
             state.more_rows.forEach { row ->
                 SheetRow(
                     label = row.label,

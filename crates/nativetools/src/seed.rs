@@ -462,15 +462,18 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
                 json!({"from": album, "rel": "contains", "to": id}),
             )?;
         }
-        // a photograph is in an album and nowhere else the model can say: nothing is `about` it
-        if row
+        // who is in a photograph is tagged by hand: a `depicts` edge to the person
+        for person in row
             .get("people")
             .and_then(Value::as_array)
-            .is_some_and(|p| !p.is_empty())
+            .into_iter()
+            .flatten()
         {
-            seeder
-                .dropped
-                .push(format!("{key}.people (a photograph is not about a person)"));
+            let person = seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?;
+            seeder.run(
+                "edge.add",
+                json!({"from": id, "rel": "depicts", "to": person}),
+            )?;
         }
     }
     for row in rows(world, "locker") {
@@ -694,17 +697,21 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .get(to)
             .cloned()
             .ok_or_else(|| format!("no key \"{to}\""))?;
-        // like a photograph's people: a document is not `about` anything in the model, so
-        // the link is reported and left out rather than refused
-        if matches!(from_kind, Kind::Document) {
+        // a document is about a person and nothing else in the model: any other link is
+        // reported and left out rather than refused
+        let to_kind = seeder.keys.get(to).map(|(kind, _)| *kind);
+        if matches!(from_kind, Kind::Document) && to_kind != Some(Kind::Person) {
             seeder
                 .dropped
-                .push(format!("{from}.links (a document is not about anything)"));
+                .push(format!("{from}.links (a document is only about a person)"));
             continue;
         }
-        if !matches!(from_kind, Kind::Note | Kind::Task | Kind::Event) {
+        if !matches!(
+            from_kind,
+            Kind::Note | Kind::Task | Kind::Event | Kind::Document
+        ) {
             return Err(format!(
-                "a {} is not about anything: only a note, a task or an event is ({link})",
+                "a {} is not about anything: only a note, a task, an event or a document is ({link})",
                 from_kind.name()
             ));
         }

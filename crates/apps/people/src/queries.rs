@@ -25,6 +25,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
+use centraid_apps_kit::graph;
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
@@ -785,6 +786,10 @@ pub enum VaultKind {
     /// A document attached to them, or to an event or task that is about them (the menu on
     /// "Dinner with Maya").
     Document,
+    /// A transaction that is with them: a payment to or from them (Money).
+    Txn,
+    /// A photograph they are in, tagged by hand (Photos).
+    Photo,
 }
 
 impl VaultKind {
@@ -795,6 +800,8 @@ impl VaultKind {
             Self::Task => "task",
             Self::Note => "note",
             Self::Document => "document",
+            Self::Txn => "txn",
+            Self::Photo => "photo",
         }
     }
 }
@@ -824,36 +831,29 @@ pub struct VaultLinks {
     pub more: usize,
 }
 
-/// The things in the vault about one person, read from the edges that END at them
-/// (`edge_to`, one `to_id`): an event's `attendee` or `about` edge, a task's `about`, a note's
-/// `links`. A yearly all-day event is one of their dates, a cancelled event is not on the
-/// calendar, and a row in the trash is no row. A note's `about` edge is People's own note.
+/// The things in the vault about one person, read through the graph
+/// ([`centraid_apps_kit::graph`]) from the joins that END at them (`edge_to`, one `to_id`): an
+/// event's `attendee` or `about` edge, a task's `about`, a note's `links`, a document's `about`,
+/// a transaction's `with`, a photograph's `depicts`. A yearly all-day event is one of their
+/// dates, a cancelled event is not on the calendar, a void line is not a payment, and a row in
+/// the trash is no row. A note's `about` edge is People's own note.
 ///
-/// DOCUMENTS are the `attached` edges that START at the person or at one of their events or
-/// tasks. A document is a link to an item only when the item is one this list shows: the edge
-/// that ties it to the person is the item's. Money has no such link: a transaction joins no
-/// person in the model (`edge_shape`), and a merchant is not a person.
+/// DOCUMENTS are also the `attached` edges that START at the person or at one of their events
+/// or tasks. A document is a link to an item only when the item is one this list shows: the
+/// edge that ties it to the person is the item's. **Locker is never here**: its links end at
+/// the person like any other edge, and the door does not serve them to this read, so the only
+/// place a Locker item shows its person is the item's own "Linked to".
 pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks> {
-    let ids = [id.to_owned()];
-    let incoming = Read {
-        name: "people.vault.in",
-        table: "edge",
-        select: "from_id, to_id, rel",
-        order: ("to_id", "from_id"),
-        column: "to_id",
-    }
-    .within(
-        WIDE,
+    let incoming = graph::incoming(
         door,
-        &ids,
-        Some((
-            "rel IN (?, ?, ?)",
-            vec![text("about"), text("attendee"), text("links")],
-        )),
+        WIDE,
+        id,
+        "person",
+        &["about", "attendee", "links", "with", "depicts"],
     )?;
     let mut sources: Vec<(String, String)> = incoming
         .iter()
-        .filter_map(|row| Some((text_of(row, "from_id")?, text_of(row, "rel")?)))
+        .map(|joined| (joined.from.clone(), joined.relation.clone()))
         .collect();
     sources.sort();
     sources.dedup();
@@ -870,8 +870,15 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
         door,
         &from,
         Some((
-            "kind IN (?, ?, ?) AND deleted_at IS NULL",
-            vec![text("event"), text("task"), text("note")],
+            "kind IN (?, ?, ?, ?, ?, ?) AND deleted_at IS NULL",
+            vec![
+                text("event"),
+                text("task"),
+                text("note"),
+                text("document"),
+                text("txn"),
+                text("photo"),
+            ],
         )),
     )?;
     let event_ids: Vec<String> = entities
@@ -889,6 +896,28 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
     .within(WIDE, door, &event_ids, None)?
     .into_iter()
     .filter_map(|row| Some((text_of(&row, "id")?, row)))
+    .collect();
+    // A void line is no payment: it stays on the ledger and is not a link to a person.
+    let line_ids: Vec<String> = entities
+        .iter()
+        .filter(|row| text_of(row, "kind").as_deref() == Some("txn"))
+        .filter_map(|row| text_of(row, "id"))
+        .collect();
+    let void: BTreeSet<String> = Read {
+        name: "people.vault.txn",
+        table: "txn",
+        select: "id",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .within(
+        WIDE,
+        door,
+        &line_ids,
+        Some(("status = ?", vec![text("void")])),
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "id"))
     .collect();
     let mut items: Vec<VaultItem> = Vec::new();
     for row in &entities {
@@ -932,6 +961,11 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
             }
             "task" if rels(&["about"]) => (VaultKind::Task, None, None, None),
             "note" if rels(&["links"]) => (VaultKind::Note, None, None, None),
+            "document" if rels(&["about"]) => (VaultKind::Document, None, None, None),
+            "txn" if rels(&["with"]) && !void.contains(&item_id) => {
+                (VaultKind::Txn, None, None, None)
+            }
+            "photo" if rels(&["depicts"]) => (VaultKind::Photo, None, None, None),
             _ => continue,
         };
         items.push(VaultItem {
@@ -945,7 +979,12 @@ pub(crate) fn vault_links(door: &dyn PageDoor, id: &str) -> KitResult<VaultLinks
             via: None,
         });
     }
-    items.extend(attached_documents(door, id, &items)?);
+    let direct: BTreeSet<String> = items.iter().map(|item| item.id.clone()).collect();
+    items.extend(
+        attached_documents(door, id, &items)?
+            .into_iter()
+            .filter(|item| !direct.contains(&item.id)),
+    );
     items.sort_by(|left, right| {
         left.kind
             .cmp(&right.kind)

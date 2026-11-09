@@ -56,12 +56,27 @@
       },
       {
         "schema": "vault",
+        "table": "txn",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "vault",
         "verbs": "read"
       },
       {
         "schema": "person",
         "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "import_vcf",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "export_vcf",
         "verbs": "act"
       },
       {
@@ -1487,6 +1502,75 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "import-vcf",
+      "verb": "log",
+      "bulk": true,
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "person.import_vcf",
+      "phrasings": [
+        "import my contacts file",
+        "bring in this vcf",
+        "import vCards"
+      ],
+      "description": "Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "string",
+            "description": "The text of one or more .vcf files."
+          },
+          "dry_run": { "type": "boolean" },
+          "merge": { "type": "boolean" }
+        },
+        "required": ["cards"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "export-vcf",
+      "verb": "log",
+      "bulk": true,
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "command": "person.export_vcf",
+      "phrasings": [
+        "export my people as vcf",
+        "save a list as vCards",
+        "back up my contacts to a file"
+      ],
+      "description": "Answer everyone, or one list's people, as vCards in one file through person.export_vcf. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] }
+        },
+
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

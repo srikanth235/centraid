@@ -29,7 +29,7 @@ use centraid_apps_kit::row::text_of;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::Denial;
-use crate::journal::read_memo_ids;
+use crate::journal::read_journal_ids;
 use crate::queries::{
     LibraryData, LibraryRow, WINDOW_DEFAULT, WINDOW_MIN, load_library, note_rows, notebooks,
     pinned_ids, recent_statement, texts,
@@ -168,7 +168,7 @@ pub fn load_notebooks(door: &dyn PageDoor) -> KitResult<(NotebooksData, Option<D
 
 fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
     let books = notebooks(door)?;
-    let memos: BTreeSet<String> = read_memo_ids(door)?.into_iter().collect();
+    let memos: BTreeSet<String> = read_journal_ids(door)?.into_iter().collect();
     // Which notes name a notebook, then which of those are live shelf notes. The walk is the
     // notebook index in its own order, so it streams: an `IN` over the notebooks would sort.
     let filed = read_pages(

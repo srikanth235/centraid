@@ -907,6 +907,12 @@ impl Screen for Home {
                         close_label: words::close(locale),
                         stop_cancel: words::stop_cancel(locale),
                         show_more: words::show_more(locale),
+                        search_placeholder: if drawing && connected {
+                            crate::strings::home::health_search_placeholder(locale)
+                        } else {
+                            String::new()
+                        },
+                        search_route: (drawing && connected).then(super::routes::search),
                     }),
                     filter_menu: if drawing
                         && connected

@@ -13,6 +13,7 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::statement::PageBindValue;
 
 use crate::Denial;
+use crate::cards::RefCard;
 use crate::queries::{PINNED, TagChip, read_note, tags_of};
 use centraid_apps_kit::attached::Attachment;
 use centraid_apps_kit::reads::Read;
@@ -36,6 +37,8 @@ pub struct EditorNote {
     pub tags: Vec<TagChip>,
     /// The documents and photos attached to it.
     pub attachments: Vec<Attachment>,
+    /// What it is about, as cards (the owner never): the line over the note.
+    pub about: Vec<RefCard>,
 }
 
 /// One note, whole, by id — live or trashed, memo or not.
@@ -98,6 +101,9 @@ fn editor_body(door: &dyn PageDoor, note_id: &str) -> KitResult<Option<EditorNot
     let attachments = centraid_apps_kit::attached::of(door, ids)?
         .remove(&note.id)
         .unwrap_or_default();
+    let about = crate::queries::about_of(door, ids)?
+        .remove(&note.id)
+        .unwrap_or_default();
     Ok(Some(EditorNote {
         found: true,
         note_id: note.id,
@@ -112,5 +118,6 @@ fn editor_body(door: &dyn PageDoor, note_id: &str) -> KitResult<Option<EditorNot
         notebook_id: note.notebook_id,
         tags,
         attachments,
+        about,
     }))
 }

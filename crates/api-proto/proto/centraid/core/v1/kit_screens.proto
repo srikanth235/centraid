@@ -319,6 +319,51 @@ message TrashData {
   string count_label = 4;
 }
 
+// THE TRANSFER SCREEN (#1173): bring something in from a file, or write something out to one,
+// in the app's own words. Rust decides every line; the shell draws the rows and the buttons and
+// sends back the key of whichever was tapped. `<app>.import` reads a file or folder, shows what
+// it holds as rows, and waits for the member's tap on the primary action; `<app>.export` lists
+// what can go out as tappable rows.
+message TransferView {
+  string app_id = 1;
+  // "Import notes", and the back control's words.
+  string title = 2;
+  string back_label = 3;
+  // What is happening, in a line ("Ready to import", "Imported 12 notes").
+  string headline = 4;
+  // One sentence of what the page does.
+  string lede = 5;
+  // What the file holds (label and count), or what can be exported (tappable).
+  repeated TransferRow rows = 6;
+  repeated TransferAction actions = 7;
+  // A read or a write is under way: the rows and buttons are drawn but do nothing.
+  bool busy = 8;
+  StatusLine status = 9;
+}
+
+message TransferRow {
+  string key = 1;
+  string label = 2;
+  // A count or a short fact; empty for a tappable scope row.
+  string value = 3;
+  bool tappable = 4;
+  string icon_key = 5;
+  string accessibility_label = 6;
+}
+
+message TransferAction {
+  string key = 1;
+  string label = 2;
+  // The one filled button of the page.
+  bool primary = 3;
+  bool enabled = 4;
+}
+
+// A tap on an action or a row: its key.
+message TransferEvent {
+  string key = 1;
+}
+
 // What a trash screen shows. The screen name (`<app>.trash`) says which app.
 message TrashView {
   string app_id = 1;

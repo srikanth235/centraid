@@ -24,6 +24,7 @@ centraid-apps-docs = { path = "../apps/docs" }
 centraid-assist = { path = "../assist" }
 prost.workspace = true
 serde_json.workspace = true
+base64.workspace = true
 # THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.
 centraid-design = { path = "../design" }
 # Locker's one-time-code seed rule is the app crate's (`totp::seed_of`): the

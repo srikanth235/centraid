@@ -47,10 +47,22 @@
 //! # A VAULT THAT STAYED, ASKED FOR AGAIN (R-1047-R6)
 //!
 //! `RestoreRequest.indices` names the indices an earlier restore answered as
-//! `unclaimed`, and the scan then visits exactly those. Whatever the scan, **a
-//! vault this phone already holds is never touched**: its directory already
-//! has a `vault.db`, so it is not asked about, not laid down again under the
-//! core that has it open, and not answered.
+//! `unclaimed`, and the scan then visits exactly those.
+//!
+//! # THE SAME PHONE (#1173, item 22)
+//!
+//! **A vault this phone already holds is replaced, not skipped.** Its directory
+//! has a `vault.db` that is an older copy of the head the gateway holds; the
+//! restore lays the head down beside it, checks it and claims it like any other,
+//! and then the held file, its WAL and its ledger give way to the restored
+//! ones. There is no other phone to hand the vault to, so nothing is frozen and
+//! no "moved to your other phone" is recorded: that marker is only for a real
+//! move, where a claim from another directory supersedes a phone that is not
+//! this one. A held vault the gateway holds no head for is left as it is, and so is one whose copy is
+//! the **newer**: a copy that ran writes its backup lacks is answered as unclaimed, never
+//! replaced. While the restored file is adopted the held one is set aside out of the name
+//! `vault.db` (and put back if the adoption fails), so a crash never leaves an older file under
+//! the name beside a ledger that already names the restored head.
 //!
 //! # A VAULT IS NAMED `vault.db` ONLY ONCE IT IS CLAIMED AND KEPT
 //!
@@ -196,6 +208,7 @@ fn run_controlled(
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
     let scan = Scan {
+        open: vault_file,
         payload: &payload,
         cert_der: &cert_der,
         runtime,
@@ -206,6 +219,8 @@ fn run_controlled(
     // epoch moves (#1047 M1). One that will not check refuses the restore,
     // and every vault already laid down goes with it.
     let mut staged: Vec<Staged> = Vec::new();
+    // A held copy that ran writes its backup lacks is left as it is, and answered as such.
+    let mut newer: Vec<wire::UnclaimedVault> = Vec::new();
     let mut visit = |index: u32| -> Result<bool> {
         let keyring = centraid_identity::derive::restore_vault_keys(&seed, index)
             .map(Keyring::of)
@@ -214,13 +229,27 @@ fn run_controlled(
             });
         let found = keyring.and_then(|keyring| {
             scan.checkpoint()?;
-            // A VAULT THIS PHONE ALREADY HOLDS IS NEVER TOUCHED (R-1047-R6),
-            // and for the gap it is a hit.
-            if vault_dir(&root, &keyring).join(HELD).exists() {
-                return Ok(true);
-            }
+            // A VAULT THIS PHONE ALREADY HOLDS IS A HIT FOR THE GAP, and when
+            // the gateway holds a head for it too, the restore replaces the
+            // copy (the module header, "the same phone").
+            let held = vault_dir(&root, &keyring).join(HELD).exists();
+            let vault_id = keyring.vault_hex();
             scan.check(keyring, &root, index)
-                .map(|checked| checked.map(|one| staged.push(one)).is_some())
+                .map(|checked| match checked {
+                    Checked::Miss => held,
+                    Checked::Staged(one) => {
+                        staged.push(*one);
+                        true
+                    }
+                    Checked::HeldIsNewer => {
+                        newer.push(wire::UnclaimedVault {
+                            index,
+                            vault_id,
+                            reason: "this phone's copy is newer than its backup".to_owned(),
+                        });
+                        true
+                    }
+                })
         });
         found
             .map_err(|error| scan.checkpoint().err().unwrap_or(error))
@@ -251,7 +280,8 @@ fn run_controlled(
     // cannot take that one back, so the claimed vaults are answered and the
     // rest named.
     let mut vaults = Vec::new();
-    let mut unclaimed = Vec::new();
+    let left_alone = newer.len();
+    let mut unclaimed = std::mem::take(&mut newer);
     let mut first_refusal = None;
     for mut one in staged {
         match scan.claim(&mut one, before_claim, after_claim) {
@@ -269,6 +299,7 @@ fn run_controlled(
         }
     }
     if vaults.is_empty()
+        && left_alone == 0
         && let Some(error) = first_refusal
     {
         return Err(error);
@@ -321,10 +352,83 @@ fn discard(file: &Path) {
 
 /// What every index of one restore shares.
 struct Scan<'a> {
+    /// The file the core running this restore has open, if it has one: never replaced.
+    open: &'a Path,
     payload: &'a PairPayload,
     cert_der: &'a [u8],
     runtime: &'a tokio::runtime::Handle,
     cancellation: Option<crate::handle::Cancellation>,
+}
+
+/// What looking at one index came to.
+enum Checked {
+    /// The gateway holds nothing for it (or no head yet).
+    Miss,
+    /// Laid down and checked; the claim is next.
+    Staged(Box<Staged>),
+    /// This phone's held copy has writes the backup lacks, so it is not replaced.
+    HeldIsNewer,
+}
+
+/// Whether the copy at `held` has run writes that the restored file at `restored` has not.
+/// A file that will not open is not newer: it is the damaged one.
+fn held_is_newer(held: &Path, restored: &Path) -> bool {
+    let writes = |file: &Path| -> Option<u64> {
+        let vault = Vault::open(file).ok()?;
+        let history = centraid_vault::backup::snapshot::history(&vault).ok();
+        let _ = vault.close();
+        history.map(|history| history.writes)
+    };
+    matches!((writes(held), writes(restored)), (Some(held), Some(head)) if held > head)
+}
+
+/// The held copy of a vault, moved out of the name `vault.db` for the whole of an adoption, so
+/// that nothing reads as a held vault while the ledger already names the restored head (the
+/// module header: the name is last). A failed adoption puts it back.
+struct Aside {
+    moved: Vec<(PathBuf, PathBuf)>,
+}
+
+impl Aside {
+    const SUFFIXES: [&'static str; 3] = ["", "-wal", "-shm"];
+
+    fn named(file: &Path, suffix: &str, tag: &str) -> PathBuf {
+        let mut name = file.as_os_str().to_owned();
+        name.push(tag);
+        name.push(suffix);
+        PathBuf::from(name)
+    }
+
+    fn take(kept: &Path) -> Result<Self> {
+        let mut moved = Vec::new();
+        for suffix in Self::SUFFIXES {
+            // An earlier adoption's leftovers go first.
+            let aside = Self::named(kept, suffix, ".replaced");
+            let _ = std::fs::remove_file(&aside);
+            let from = Self::named(kept, suffix, "");
+            if from.exists() {
+                std::fs::rename(&from, &aside).map_err(|error| CoreError::Invariant {
+                    context: format!("setting {} aside: {error}", from.display()),
+                })?;
+                moved.push((from, aside));
+            }
+        }
+        Ok(Self { moved })
+    }
+
+    /// The restored file is kept: the older copy goes.
+    fn discard(self) {
+        for (_, aside) in self.moved {
+            let _ = std::fs::remove_file(aside);
+        }
+    }
+
+    /// The adoption failed: the older copy is the vault again.
+    fn put_back(self) {
+        for (from, aside) in self.moved {
+            let _ = std::fs::rename(aside, from);
+        }
+    }
 }
 
 /// One vault fetched, laid down and checked, and not yet claimed.
@@ -394,11 +498,11 @@ impl Scan<'_> {
     /// the gateway holds it. **No writer epoch moves here.** `Ok(None)` is a
     /// miss: a vault the gateway does not hold, or holds with no head yet —
     /// paired, never backed up, which is nothing to lay down.
-    fn check(&self, keyring: Keyring, root: &Path, index: u32) -> Result<Option<Staged>> {
+    fn check(&self, keyring: Keyring, root: &Path, index: u32) -> Result<Checked> {
         let client = self.client();
         let Some(grant) = pair::read_grant(&client, &keyring, &self.payload.gw, self.runtime)?
         else {
-            return Ok(None);
+            return Ok(Checked::Miss);
         };
         client.set_token(grant.token);
         let state = self
@@ -406,7 +510,7 @@ impl Scan<'_> {
             .block_on(client.head_state(&keyring.vault_id()))
             .map_err(pair::pairing_error)?;
         let Some(head) = state.head else {
-            return Ok(None);
+            return Ok(Checked::Miss);
         };
         let dir = vault_dir(root, &keyring);
         let made = (!dir.exists()).then(|| dir.clone());
@@ -422,17 +526,26 @@ impl Scan<'_> {
         );
         store.set_cancellation(self.cancellation.clone());
         match lay_down(&store, &keyring, &head.name, &file, index) {
-            Ok(restored) => Ok(Some(Staged {
-                keyring,
-                index,
-                head: head.name,
-                head_set_ms: head.set_at_ms,
-                epoch: state.epoch,
-                file,
-                made,
-                store,
-                restored,
-            })),
+            Ok(restored) => {
+                // THE SAME PHONE: a copy this phone holds is replaced only when it is the older
+                // one. One that ran writes the head lacks is the newer, and it is left alone.
+                let held = dir.join(HELD);
+                if held != self.open && held.exists() && held_is_newer(&held, &file) {
+                    discard(&file);
+                    return Ok(Checked::HeldIsNewer);
+                }
+                Ok(Checked::Staged(Box::new(Staged {
+                    keyring,
+                    index,
+                    head: head.name,
+                    head_set_ms: head.set_at_ms,
+                    epoch: state.epoch,
+                    file,
+                    made,
+                    store,
+                    restored,
+                })))
+            }
             Err(error) => {
                 if let Some(dir) = &made {
                     let _ = std::fs::remove_dir_all(dir);
@@ -517,11 +630,35 @@ impl Scan<'_> {
         staged: &Staged,
         paired: &centraid_gateway::rules::wire::Paired,
     ) -> Result<wire::RestoredVault> {
-        let gateway_id = paired.gateway_id.hex();
         let kept = staged.file.with_file_name(HELD);
-        let plane = Plane::of(&kept);
+        // A copy this phone held gives way first, out of the name `vault.db`.
+        let aside = Aside::take(&kept)?;
+        match self.adopt_over(staged, paired, &kept) {
+            Ok(restored) => {
+                aside.discard();
+                Ok(restored)
+            }
+            Err(error) => {
+                aside.put_back();
+                Err(error)
+            }
+        }
+    }
+
+    fn adopt_over(
+        &self,
+        staged: &Staged,
+        paired: &centraid_gateway::rules::wire::Paired,
+        kept: &Path,
+    ) -> Result<wire::RestoredVault> {
+        let gateway_id = paired.gateway_id.hex();
+        let plane = Plane::of(kept);
         let ledger = plane.ledger()?;
         ledger.reset().map_err(plane_error)?;
+        // THE SAME PHONE: a copy this one held is an older copy of this vault,
+        // and its marker of a move, if it ever had one, is not the truth of the
+        // vault restored over it.
+        ledger.clear_moved(&gateway_id).map_err(plane_error)?;
         let now = now_ms();
         ledger
             .put_destination(&Destination {
@@ -586,7 +723,7 @@ impl Scan<'_> {
             Err(error) => tracing::warn!(%error, "a restore's derivatives did not all come back"),
         }
 
-        std::fs::rename(&staged.file, &kept).map_err(|error| CoreError::Invariant {
+        std::fs::rename(&staged.file, kept).map_err(|error| CoreError::Invariant {
             context: format!("keeping the restored vault as {}: {error}", kept.display()),
         })?;
         Ok(wire::RestoredVault {
@@ -760,5 +897,50 @@ mod cancellation_tests {
             front.close();
         }
         runtime.block_on(gateway.shutdown());
+    }
+}
+
+#[cfg(test)]
+mod aside_tests {
+    use super::*;
+
+    fn files(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .expect("a directory")
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn a_held_copy_leaves_the_name_for_the_whole_adoption_and_comes_back_if_it_fails() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let kept = dir.path().join(HELD);
+        for suffix in ["", "-wal", "-shm"] {
+            std::fs::write(Aside::named(&kept, suffix, ""), b"older").expect("written");
+        }
+        // A leftover of an adoption that was killed.
+        std::fs::write(dir.path().join("vault.db.replaced"), b"stale").expect("written");
+
+        let aside = Aside::take(&kept).expect("set aside");
+        assert!(!kept.exists(), "nothing reads as a held vault meanwhile");
+        assert_eq!(
+            std::fs::read(dir.path().join("vault.db.replaced")).expect("kept"),
+            b"older"
+        );
+        aside.put_back();
+        assert_eq!(
+            files(dir.path()),
+            ["vault.db", "vault.db-shm", "vault.db-wal"]
+        );
+        assert_eq!(std::fs::read(&kept).expect("back"), b"older");
+
+        let aside = Aside::take(&kept).expect("set aside");
+        aside.discard();
+        assert!(
+            files(dir.path()).is_empty(),
+            "the older copy is gone once the restored one is kept"
+        );
     }
 }

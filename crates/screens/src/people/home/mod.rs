@@ -12,7 +12,7 @@
 //!   closing search reads nothing and clears the term.
 //! - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
 //!   action beside the filter button, search the bar under it, and More holds
-//!   Trash alone.
+//!   Import, Export and Trash.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
 //! - **Contacts** import and follow here ([`ContactsFollow`]): the day-one empty
@@ -308,6 +308,20 @@ impl Home {
                 self.status = None;
                 return self.contacts.import(ctx);
             }
+            H::ContactsAction(_) => {
+                self.status = None;
+                if self.contacts.needs_settings() {
+                    // THE PHONE SAID NO: only its own Settings can say yes.
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::VaultCommand(wire::VaultCommand {
+                            kind: Some(wire::vault_command::Kind::Open(
+                                wire::home_status::Destination::Phone as i32,
+                            )),
+                        })),
+                    }];
+                }
+                return self.contacts.toggle(ctx);
+            }
         }
         Vec::new()
     }
@@ -484,15 +498,31 @@ impl Screen for Home {
             more_rows: if denied_now {
                 Vec::new()
             } else {
-                vec![wire::PeopleMoreRow {
-                    key: "trash".to_owned(),
-                    label: words::trash_label(locale),
-                    icon_key: "Trash".to_owned(),
-                    route: Some(routes::trash()),
-                }]
+                let back = words::app_title(locale);
+                vec![
+                    wire::PeopleMoreRow {
+                        key: "import".to_owned(),
+                        label: words::more_import(locale),
+                        icon_key: "Download".to_owned(),
+                        route: Some(routes::transfer(false, &back)),
+                    },
+                    wire::PeopleMoreRow {
+                        key: "export".to_owned(),
+                        label: words::more_export(locale),
+                        icon_key: "Upload".to_owned(),
+                        route: Some(routes::transfer(true, &back)),
+                    },
+                    wire::PeopleMoreRow {
+                        key: "trash".to_owned(),
+                        label: words::trash_label(locale),
+                        icon_key: "Trash".to_owned(),
+                        route: Some(routes::trash()),
+                    },
+                ]
             },
             sheet: self.sheet as i32,
             status: self.status(),
+            contacts: (!denied_now).then(|| self.contacts.row(locale)),
             add_person: Some(routes::new_person()),
             filter_menu: self.filter_menu(locale),
         };

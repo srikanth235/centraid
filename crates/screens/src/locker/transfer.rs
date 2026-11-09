@@ -566,6 +566,7 @@ impl Import {
                             "application/json".to_owned(),
                             "text/plain".to_owned(),
                         ],
+                        ..wire::PickBytes::default()
                     })),
                 }]
             }

@@ -773,7 +773,7 @@ fn tag_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
     Ok(ok(json!({"changed": true})))
 }
 
-/// An edge the model reads: a photograph in an album (`contains`), what a note, task or event is
+/// An edge the model reads: a photograph in an album (`contains`) or of a person (`depicts`), a line with a person (`with`), what a note, task, event or document is
 /// `about`, and who attends an event.
 fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, String> {
     let (from, to) = (
@@ -783,6 +783,8 @@ fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, Strin
     let via = match text(input, "rel") {
         Some("contains") => Via::Entry,
         Some("about") => Via::About,
+        Some("with") => Via::With,
+        Some("depicts") => Via::Depicts,
         Some("attendee") => Via::Attendee,
         other => return Err(format!("error: park has no patch for an edge of {other:?}")),
     };

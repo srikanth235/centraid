@@ -90,6 +90,48 @@ catalog! {
         "They were moved to the trash or merged into someone else."
     );
     plain gone_title = ("This person is not in People.", "This person is not in People.");
+    plain contacts_pause = ("Pause", "Pause");
+    plain contacts_resume = ("Resume", "Resume");
+    plain contacts_settings = ("Settings", "Settings");
+    plain contacts_state_denied = ("No access", "No access");
+    plain contacts_state_off = ("Off", "Off");
+    plain contacts_state_on = ("On", "On");
+    plain contacts_state_paused = ("Paused", "Paused");
+    plain contacts_title = ("Phone contacts", "Phone contacts");
+    plain contacts_turn_on = ("Turn on", "Turn on");
+    plain contacts_updated_now = ("Updated just now", "Updated just now");
+    counted contacts_followed = ("{n} followed", "{n} followed");
+    counted contacts_updated_hours = ("Updated {n} hour ago", "Updated {n} hours ago");
+    counted contacts_updated_minutes = ("Updated {n} min ago", "Updated {n} min ago");
+    plain more_export = ("Export", "Export");
+    plain more_import = ("Import", "Import");
+    plain transfer_choose_again_action = ("Choose again", "Choose again");
+    plain transfer_choose_file_action = ("Choose files", "Choose files");
+    plain transfer_export_all = ("Everyone", "Everyone");
+    plain transfer_export_done = ("Exported {n} people", "Exported {n} people");
+    plain transfer_export_failed = ("Could not export", "Could not export");
+    plain transfer_export_headline = ("Choose who to export", "Choose who to export");
+    plain transfer_export_lede = (
+        "vCards in one .vcf file, for any address book.",
+        "vCards in one .vcf file, for any address book."
+    );
+    plain transfer_export_title = ("Export people", "Export people");
+    plain transfer_import_add_only_action = ("Add new only", "Add new only");
+    plain transfer_import_action = ("Import {n} people", "Import {n} people");
+    plain transfer_import_done = ("Imported {n} people", "Imported {n} people");
+    plain transfer_import_failed = ("Could not import", "Could not import");
+    plain transfer_import_headline = ("Choose what to import", "Choose what to import");
+    plain transfer_import_lede = (
+        "vCard files. People you already have are merged, not repeated.",
+        "vCard files. People you already have are merged, not repeated."
+    );
+    plain transfer_import_nothing = ("Nobody new in that choice", "Nobody new in that choice");
+    plain transfer_import_ready = ("Ready to import", "Ready to import");
+    plain transfer_import_title = ("Import people", "Import people");
+    plain transfer_row_added = ("New people", "New people");
+    plain transfer_row_merged = ("Merge into someone you have", "Merge into someone you have");
+    plain transfer_row_same = ("Already here", "Already here");
+    plain transfer_row_proposal = ("Merges {name}", "Merges {name}");
     plain import_contacts = ("Import contacts", "Import contacts");
     plain import_contacts_add_account = (
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
@@ -235,6 +277,8 @@ catalog! {
     plain vault_kind_document = ("Doc", "Doc");
     plain vault_kind_event = ("Event", "Event");
     plain vault_kind_note = ("Note", "Note");
+    plain vault_kind_payment = ("Payment", "Payment");
+    plain vault_kind_photo = ("Photo", "Photo");
     plain vault_on = ("On {item}", "On {item}");
     plain vault_kind_task = ("Task", "Task");
     plain vault_more = ("and {n} more", "and {n} more");

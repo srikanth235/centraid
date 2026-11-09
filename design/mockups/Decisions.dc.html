@@ -14,7 +14,7 @@ body{margin:0}
 button{font:inherit}
 </style>
 </helmet>
-<div style="width: 1200px; height: 1780px; box-sizing: border-box; background: #F4F2EE; font-family: Geist, system-ui, sans-serif; color: #1C1B19; padding: 48px 56px;">
+<div style="width: 1200px; height: 2060px; box-sizing: border-box; background: #F4F2EE; font-family: Geist, system-ui, sans-serif; color: #1C1B19; padding: 48px 56px;">
   <h1 style="margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Decisions, words and behaviour</h1>
   <p style="margin: 6px 0 24px; font-size: 16px; color: #6F6B64;">What the boards can't show on their own. Open items wait for the owner.</p>
   <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
@@ -53,10 +53,15 @@ button{font:inherit}
       <p style="margin: 0 0 12px; font-size: 13px; color: #6F6B64; line-height: 1.4;">One source for light and dark.</p>
       <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #4A4741; line-height: 1.55;"><li>Light boards are the source. <b>make_dark.py</b> makes every dark board and lays out both pages: change a light board, then rerun it.</li><li>Never edit a dark board by hand.</li><li>Until Phase 1 commits the canvas to <span style="font-family: 'Geist Mono', monospace; font-size: 12px;">design/mockups/</span>, the script runs from the canvas folder and the result is republished.</li></ul>
     </div>
+    <div style="background: #FFFFFF; border-radius: 16px; padding: 20px;">
+      <h2 style="margin: 0 0 4px; font-size: 17px; font-weight: 700;">One graph, one owner</h2>
+      <p style="margin: 0 0 12px; font-size: 13px; color: #6F6B64; line-height: 1.4;">Decided 9 Nov. How things are joined.</p>
+      <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #4A4741; line-height: 1.55;"><li><b>Links</b>: a payment is <i>with</i> a person, a document is <i>about</i> one, a photograph <i>depicts</i> one (tagged by hand: no face detection, no faces album), a Locker item is <i>about</i> an account, a place or a person and <i>with</i> a person.</li><li><b>Only a note, an event or a touch</b> goes to the trash with the person it is about. Nothing else joined to them does, and a photograph never.</li><li><b>Notes shows <i>about</i></b>: a note about a person, event, task or document is on the shelf with its subject. Only a note about <i>you</i> is a journal entry.</li><li><b>Locker links stay inside Locker</b>: hidden from every other door, no sealed value in a label or anchor.</li><li><b>One read</b> of the graph (edges and columns together) feeds People, Notes and the assistant.</li><li><b>Restore onto the same phone</b> replaces the older copy and never says "Moved".</li></ul>
+    </div>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1780}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":2060}}'>
 class Component extends DCLogic {
 renderVals() { return {}; }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import dev.centraid.android.kit.AboutChips
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitRowAction
 import dev.centraid.android.kit.KitSwipeRow
@@ -381,6 +382,7 @@ private fun NoteBody(row: NotesNoteRow) {
         }
         Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
+        AboutChips(row.about, Modifier.padding(top = 2.dp))
     }
 }
 

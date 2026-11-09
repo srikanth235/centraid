@@ -355,6 +355,7 @@ impl Import {
                             ".ofx".to_owned(),
                             ".qfx".to_owned(),
                         ],
+                        ..wire::PickBytes::default()
                     })),
                 }];
             }

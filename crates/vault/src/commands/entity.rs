@@ -139,10 +139,15 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
         Kind::Account => "SELECT id FROM txn WHERE account_id = ?1",
         // What was written or logged about one person and no one else: their
         // notes and journal words, the touches that were with them alone, and
-        // their yearly dates. A task about them is the member's own and stays.
+        // their yearly dates. A task about them is the member's own and stays,
+        // and so is a document, a line, a photograph or a Locker item joined to
+        // them: **an allow-list**, so a kind the model learns to join to a
+        // person is kept until someone decides otherwise. `depicts` never
+        // cascades.
         Kind::Person => {
             "SELECT e.from_id FROM edge e JOIN entity f ON f.id = e.from_id
-              WHERE e.to_id = ?1 AND e.rel IN ('about', 'with') AND f.kind <> 'task'
+              WHERE e.to_id = ?1 AND e.rel IN ('about', 'with')
+                AND f.kind IN ('note', 'event', 'activity')
                 AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
                                    AND o.rel IN ('about', 'with') AND o.to_id <> ?1)"
         }

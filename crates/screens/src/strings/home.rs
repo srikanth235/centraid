@@ -44,7 +44,11 @@ catalog! {
     plain search_kind_locker_item = ("Locker item", "Locker item");
     plain search_kind_note = ("Note", "Note");
     plain search_kind_person = ("Person", "Person");
+    plain search_kind_metric = ("Metric", "Metric");
     plain search_kind_photo = ("Photo", "Photo");
+    plain search_kind_transaction = ("Payment", "Payment");
+    plain search_kind_workout = ("Workout", "Workout");
+    plain health_search_placeholder = ("Search Health", "Search Health");
     plain search_kind_task = ("Task", "Task");
     plain vault_denied_title = ("No vault access yet.", "No vault access yet.");
     plain vault_switch_spoken = ("Switch vault", "Switch vault");
