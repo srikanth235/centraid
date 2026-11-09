@@ -198,22 +198,32 @@ pink = "#F83F6E"
 # SVG only (iOS and Android mask their own edge). `tinted_*` is iOS's tinted
 # appearance, which the system recolours: ONE neutral grey for the mark (the system
 # maps luminance to its tint, so a second step would only be recoloured oddly); the
-# cuts between the quarters keep them apart. `themed_*` is Android's themed icon: one
+# cuts between the quarters keep them apart. `light_tile`/`light_tile_bottom` and
+# `dark_ground_top`/`dark_ground_bottom` are the two grounds of the layered iOS 26 icon
+# (`AppIcon.icon`): the system adds the glass, rim and shadows, the artwork is only
+# flat colour. The flat PNGs use `light_tile` and `dark_tile`. `themed_*` is Android's themed icon: one
 # flat glyph colour, which the system repaints from the wallpaper; the board's
 # colours stand in for the preview.
 [icon]
 light_tile = "#FFFFFF"
 light_edge = "#E4E0D8"
+light_tile_bottom = "#ECF0F8"
 dark_tile = "#1C1B19"
+dark_ground_top = "#2E3A63"
+dark_ground_bottom = "#04060D"
 tinted_tile = "#1B1B1B"
 tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
-# The mark's disc as a share of the iOS tile's width (582 of 1024 px was 57%, which
-# left the icon small beside Fitness and Files; Apple's grid puts the outer circle
-# near 78%). The masters and the three AppIcon PNGs follow it; Android's adaptive icon
-# keeps its own rule, the 66dp safe zone.
-ios_mark_share = 0.78
+# The mark's disc as a share of the iOS tile's width: 0.76 is an outer radius of 45.6
+# on the 120 grid, today's proportions (inner edge and cuts included) scaled uniformly.
+# It matches Apple's Watch icon, measured on the iOS 26 home screen: its artwork spans
+# 76% of the tile tall (70% wide with the side button), a margin of about 12%. 91% and
+# 82% left too little white gap once iOS masked the tile and added its glass rim. The
+# masters and the three flat AppIcon PNGs (the pre-iOS-26 fallback) follow it, and so
+# does the layered iOS 26 icon `AppIcon.icon`; Android's adaptive icon keeps its own
+# rule, the 66dp safe zone.
+ios_mark_share = 0.76
 
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]

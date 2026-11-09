@@ -50,8 +50,11 @@ targets:
     platform: iOS
     settings:
       base:
-        # The app icon is `Resources/Assets.xcassets/AppIcon.appiconset`, written
-        # by `cargo xtask design` (light, dark and tinted, #1173).
+        # THE APP ICON IS TWO THINGS, BOTH WRITTEN BY `cargo xtask design` (#1173).
+        # `Resources/AppIcon.icon` is the layered Icon Composer icon iOS 26 draws
+        # with Liquid Glass; `Resources/Assets.xcassets/AppIcon.appiconset` is the
+        # flat light, dark and tinted fallback for the OS versions before it (the
+        # deployment target is 17.5). Both are named AppIcon.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
         #
@@ -136,6 +139,10 @@ targets:
       # Re-run `xcodegen generate` after the first generation: the catalogue is
       # a new source the project does not list until then.
       - path: Resources/Assets.xcassets
+        buildPhase: resources
+      # The layered iOS 26 app icon: a source file here, compiled by actool
+      # next to the catalogue (`ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`).
+      - path: Resources/AppIcon.icon
         buildPhase: resources
     # THE SWIFT PROTOBUF TYPES ARE BUILT, NOT CARRIED (#1020).
     #
