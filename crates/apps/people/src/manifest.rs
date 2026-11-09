@@ -98,16 +98,16 @@ mod tests {
         }
     }
 
-    /// THIRTY-FIVE SCOPES: ten reads of the vault's own tables and one `act`
+    /// THIRTY-SIX SCOPES: eleven reads of the vault's own tables and one `act`
     /// per command the actions invoke. The `act` half is compared against the
     /// action table rather than transcribed: an action with no scope is an
     /// action the grant does not cover, and a scope with no action is reach
     /// nothing uses.
     #[test]
-    fn it_declares_ten_reads_and_one_act_scope_per_command() {
+    fn it_declares_eleven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 35);
+        assert_eq!(vault.scopes.len(), 36);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -133,7 +133,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 10);
+        assert_eq!(reads.len(), 11);
         // NOTHING WIDER and nothing revealed: no whole-schema grant, and
         // `reveal` is Locker's alone.
         assert!(

@@ -140,6 +140,21 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
                 parent: String::new(),
             }),
         ),
+        "txn" => (
+            "money.transaction",
+            wire::route::Args::MoneyTransaction(wire::MoneyTransactionRoute {
+                txn_id: item.id.clone(),
+                parent: String::new(),
+            }),
+        ),
+        "photo" => (
+            "photos.lightbox",
+            wire::route::Args::PhotosLightbox(wire::PhotosLightboxRoute {
+                photo_id: item.id.clone(),
+                neighbour_ids: Vec::new(),
+                album_id: String::new(),
+            }),
+        ),
         _ => return None,
     };
     Some(wire::Route {
@@ -150,7 +165,7 @@ fn vault_route(item: &wire::PeopleVaultItem, today: &str) -> Option<wire::Route>
 }
 
 /// IN YOUR VAULT (#1173): the rows, each in its own app's colour (the shell looks `app_key`
-/// up), in the core's order: events, tasks, notes, documents. An item of a kind this build does not know
+/// up), in the core's order: events, tasks, notes, documents, payments, photos. An item of a kind this build does not know
 /// is not shown.
 #[must_use]
 pub fn vault(
@@ -168,6 +183,8 @@ pub fn vault(
                 "event" => ("agenda", words::vault_kind_event(locale)),
                 "task" => ("agenda", words::vault_kind_task(locale)),
                 "document" => ("docs", words::vault_kind_document(locale)),
+                "txn" => ("money", words::vault_kind_payment(locale)),
+                "photo" => ("photos", words::vault_kind_photo(locale)),
                 _ => ("notes", words::vault_kind_note(locale)),
             };
             let when = if item.kind == "event" {
@@ -675,6 +692,28 @@ mod tests {
             "Event: Lunch with Ada, Sat 7 November, 12:30"
         );
         assert_eq!(data.vault[2].accessibility_label, "Event: Standing call");
+    }
+
+    #[test]
+    fn a_payment_and_a_photograph_wear_their_apps_and_open_their_own_pages() {
+        let mut sheet = sheet(Vec::new());
+        sheet.vault = vec![item("txn", "tx", "Rent"), item("photo", "ph", "")];
+        let data = person(EN, HourCycle::default(), &sheet, "2026-11-07");
+        assert_eq!(
+            data.vault
+                .iter()
+                .map(|row| (row.app_key.as_str(), row.kind_label.as_str()))
+                .collect::<Vec<_>>(),
+            [("money", "Payment"), ("photos", "Photo")]
+        );
+        assert_eq!(
+            data.vault[0].route.as_ref().unwrap().screen,
+            "money.transaction"
+        );
+        assert_eq!(
+            data.vault[1].route.as_ref().unwrap().screen,
+            "photos.lightbox"
+        );
     }
 
     #[test]

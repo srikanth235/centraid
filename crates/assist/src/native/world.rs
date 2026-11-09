@@ -1331,11 +1331,17 @@ impl World {
             .keys()
             .map(|(kind, id)| (id.clone(), *kind))
             .collect();
-        for (from, to) in pairs(door, "about")? {
-            let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
-                continue;
-            };
-            self.edge((*from_kind, from), (*to_kind, to), Via::About);
+        for (rel, via) in [
+            ("about", Via::About),
+            ("with", Via::With),
+            ("depicts", Via::Depicts),
+        ] {
+            for (from, to) in pairs(door, rel)? {
+                let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
+                    continue;
+                };
+                self.edge((*from_kind, from), (*to_kind, to), via);
+            }
         }
         Ok(())
     }

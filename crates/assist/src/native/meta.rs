@@ -226,6 +226,10 @@ pub enum Via {
     Entry,
     /// `document.folder_id`.
     FolderColumn,
+    /// A `with` edge: a transaction (or a touch) with a person.
+    With,
+    /// A `depicts` edge: a photograph of a person, tagged by hand.
+    Depicts,
 }
 
 /// One verb's row.

@@ -42,6 +42,7 @@ pub mod denial;
 pub mod error;
 pub mod fixtures;
 pub mod grammar;
+pub mod graph;
 pub mod manifest;
 pub mod money;
 pub mod page;

@@ -88,6 +88,8 @@ fn via(name: &str) -> &'static str {
         "list_column" => "Via::ListColumn",
         "entry" => "Via::Entry",
         "folder_column" => "Via::FolderColumn",
+        "with" => "Via::With",
+        "depicts" => "Via::Depicts",
         other => panic!("catalog: unknown link via {other}"),
     }
 }

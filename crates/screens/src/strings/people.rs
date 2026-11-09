@@ -235,6 +235,8 @@ catalog! {
     plain vault_kind_document = ("Doc", "Doc");
     plain vault_kind_event = ("Event", "Event");
     plain vault_kind_note = ("Note", "Note");
+    plain vault_kind_payment = ("Payment", "Payment");
+    plain vault_kind_photo = ("Photo", "Photo");
     plain vault_on = ("On {item}", "On {item}");
     plain vault_kind_task = ("Task", "Task");
     plain vault_more = ("and {n} more", "and {n} more");

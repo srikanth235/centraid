@@ -542,6 +542,7 @@ name = "centraid-apps-people"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-blobs",
  "centraid-ontology",
  "centraid-vault",
  "rusqlite",

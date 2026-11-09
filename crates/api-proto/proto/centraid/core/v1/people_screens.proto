@@ -545,10 +545,10 @@ message PeopleHeroAction {
 
 message PeopleVaultRow {
   string id = 1;
-  // The app the item belongs to (`agenda`, `notes`): the shell draws the kind word in that
+  // The app the item belongs to (`agenda`, `notes`, `docs`, `money`, `photos`): the shell draws the kind word in that
   // app's colour.
   string app_key = 2;
-  // "Event", "Task", "Note".
+  // "Event", "Task", "Note", "Doc", "Payment", "Photo".
   string kind_label = 3;
   string title = 4;
   // "Sat 7 Nov, 12:30", "3 days ago", or empty.
