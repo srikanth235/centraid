@@ -572,3 +572,41 @@ fn the_late_snapshot_of_an_abandoned_pass_does_not_end_the_next_pass() {
     rig.serve();
     assert_eq!(rig.reads.contacts + rig.reads.calendar, before + 2);
 }
+
+#[test]
+fn a_read_that_never_answers_is_abandoned_and_the_store_and_the_next_one_run() {
+    let mut rig = two_stores_out();
+    assert_eq!(rig.d.effects.len(), 1, "one store at a time");
+    rig.answer_next();
+    let stale = rig.take_asked();
+    assert_eq!(stale.len(), 1);
+    let first = named(&stale[0]);
+    assert!(first.ends_with("-read"), "{first}");
+
+    // The read never comes back: the backstop releases the store, and the other one runs.
+    rig.read_timed_out(&stale[0]);
+    let next = rig.take_asked();
+    assert_eq!(next.len(), 1, "the next store's pass started: {next:?}");
+    assert!(
+        named(&next[0]).starts_with("habit:"),
+        "{:?}",
+        named(&next[0])
+    );
+    rig.d.effects = next;
+    rig.serve();
+    assert_eq!(
+        rig.reads.contacts + rig.reads.calendar,
+        1,
+        "only the next store's own read: the first never answered"
+    );
+
+    // And the abandoned store is free: a new change runs a pass, not a queue behind a read that
+    // is gone.
+    rig.changed(if first == "contacts-read" {
+        wire::ImportSource::Contacts
+    } else {
+        wire::ImportSource::Calendar
+    });
+    rig.settle();
+    assert_eq!(rig.d.effects.len(), 1, "a pass for the released store");
+}

@@ -1359,3 +1359,96 @@ fn the_grace_after_leaving_the_screen_follows_nothing() {
         "the grace is the upload's alone"
     );
 }
+
+/// A granted window whose backup ended and whose first store's read never answers: the coordinator
+/// holds the OS's answer. The instance of the coordinator, to hand it its backstop.
+fn window_held_by_a_read_that_never_answers(rig: &mut Rig) -> u64 {
+    rig.first_pass(empty());
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.fact(wire::shell_fact::Fact::Window(wire::WindowGranted {
+        window: windows::NIGHT.to_owned(),
+        deadline_ms: 25_000,
+    }));
+    let _ = rig.drain();
+    rig.answer_drain(empty());
+    let at = rig
+        .driver
+        .effects
+        .iter()
+        .position(|request| {
+            matches!(
+                request
+                    .effect
+                    .as_ref()
+                    .and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::Keychain(_))
+            )
+        })
+        .expect("the coordinator asked for the habit");
+    let habit = rig.driver.effects.remove(at);
+    rig.driver.send(
+        habit.instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: habit.effect_id,
+            outcome: Some(wire::effect_result::Outcome::Keychain(
+                wire::KeychainValue {
+                    found: true,
+                    value: b"1".to_vec(),
+                },
+            )),
+        }),
+    );
+    assert!(
+        rig.has(|effect| matches!(effect.kind, Some(wire::effect::Kind::ContactsRead(_)))),
+        "the read is out and nobody answers it"
+    );
+    assert!(window_dones(rig).is_empty(), "the OS is held while it is");
+    habit.instance
+}
+
+fn window_backstop(rig: &mut Rig, coordinator: u64) {
+    rig.driver.send(
+        coordinator,
+        E::TimerFired(wire::TimerFired {
+            timer: centraid_screens::follow::coordinator::WINDOW_TIMER.to_owned(),
+        }),
+    );
+}
+
+#[test]
+fn a_window_held_for_follows_is_released_once_when_the_backstop_fires() {
+    let mut rig = Rig::following();
+    let coordinator = window_held_by_a_read_that_never_answers(&mut rig);
+    window_backstop(&mut rig, coordinator);
+    assert_eq!(
+        window_dones(&rig),
+        [(windows::NIGHT.to_owned(), true)],
+        "the OS is told, once"
+    );
+    // The stores go on following afterwards (the read answers late); the window is not told again.
+    follow_stores(&mut rig, true);
+    assert_eq!(window_dones(&rig).len(), 1, "and not a second time");
+}
+
+#[test]
+fn a_window_the_os_took_back_while_held_is_never_told_it_is_done() {
+    let mut rig = Rig::following();
+    let coordinator = window_held_by_a_read_that_never_answers(&mut rig);
+    rig.fact(wire::shell_fact::Fact::Expired(wire::WindowExpired {
+        window: windows::NIGHT.to_owned(),
+    }));
+    window_backstop(&mut rig, coordinator);
+    follow_stores(&mut rig, true);
+    assert!(
+        window_dones(&rig).is_empty(),
+        "an expired window has no one waiting for the answer"
+    );
+}

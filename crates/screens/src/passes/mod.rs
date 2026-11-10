@@ -27,6 +27,8 @@
 //! `PassWindowDone` until it says they ran, so the backup and the camera roll keep their
 //! priority and the window's rules (its budget, its expiry) are the only clock. The grace after
 //! leaving the screen ([`conductor::BACKGROUND_WINDOW`]) is the upload's alone.
+//! A window the OS takes back while it is held (`ShellFact.expired`) is forgotten: nothing is
+//! left to tell.
 
 pub mod conditions;
 pub mod conductor;

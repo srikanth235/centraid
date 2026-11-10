@@ -37,7 +37,11 @@
 //! the OS's answer until this service says every store ran once ([`Follows::release`]): the
 //! work is bounded by the number of stores, and the OS's own expiry is the only clock. A read
 //! that never answers is abandoned after [`READ_TIMEOUT`] so one stuck read cannot hold the
-//! others for good, and a window is given up on after the same bound.
+//! others for good, and a window is given up on after the same bound. Neither shell is hurt by a
+//! bound longer than its window: iOS's expiration handler and Android's cancellation end the task
+//! themselves, once, and report `Expired`, which makes the pass service forget the window, so the
+//! release that comes after finds nobody waiting and sends no `PassWindowDone`; and a late one
+//! would be a no-op in both shells (no waiter is left under the name).
 
 use std::collections::{BTreeSet, VecDeque};
 use std::time::{Duration, Instant};
