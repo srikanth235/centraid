@@ -319,8 +319,6 @@ struct PhotosLightboxView: View {
         .padding(.vertical, 8)
     }
 
-    /// THE ONE STATUS LINE, drawn only when it has something to say.
-    @ViewBuilder
     /// The status line's action ("Undo" after Move to trash, #1185); empty label, no button.
     @ViewBuilder
     private func statusAction(_ ink: Color, _ identifier: String) -> some View {
@@ -338,6 +336,8 @@ struct PhotosLightboxView: View {
         }
     }
 
+    /// THE ONE STATUS LINE, drawn only when it has something to say.
+    @ViewBuilder
     private func statusLine(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
         let line = state.slideshow
             ? state.slideshowLine
