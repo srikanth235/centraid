@@ -62,7 +62,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `room-subtitle`, `room-subtitle-clear` | Notes (the notebook the library is scoped to, with its ✕ `room-subtitle-clear`), Money (the month, tappable: opens the month sheet) | the title's second line, which replaced the notebook and month chips |
 | `photos-grain-<years\|months\|all>` | Photos | one segment of the zoom control in the band (Years · Months · All), between the folded place key and the search key; `photos-band-places` is that folded key, which brings the plate of places back |
 | `agenda-search` | Agenda | Agenda's search field once open, at the foot in the band's place; it finds events, tasks and projects: the projects whose name matched as `search-container-schedule.project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |
-| `calendar-band-<key>` / `reminders-band-<key>` | Calendar / Reminders | one band place, keyed on the machine's key: `calendar`, `invites`, `more` (the Calendars sheet) in Calendar; `reminders`, `more` in Reminders; `<app>-band-home` is the home capsule. The selectors below that begin `agenda-` are the shared home view's and stay (the two apps draw one view) |
+| `calendar-band-<key>` / `reminders-band-<key>` | Calendar / Reminders | one band place, keyed on the machine's key: `calendar`, `invites`, `more` (the Calendars sheet), `menu` ("More": the sheet of Calendar's own places, Trash today) in Calendar; `reminders`, `more` in Reminders; `<app>-band-home` is the home capsule. The selectors below that begin `agenda-` are the shared home view's and stay (the two apps draw one view) |
 | `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
 | `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
 | `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |
@@ -80,7 +80,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-style-name` / `agenda-style-submit` / `agenda-style-cancel` | Agenda's style sheet (a new list from "Add List", a list's "Edit List", a new or edited calendar) | the name field, Create or Save, and Cancel; the new list sheet's field is `agenda-style-name` too (it was `tasks-new-project-field`) |
 | `agenda-style-color-<key>` / `agenda-style-icon-<key>` / `agenda-style-icon-none` | the same | one of the eight `[list]` swatches (`blue`, `mustard`, `violet`, `petrol`, `indigo`, `graphite`, `raspberry`, `orchid`), one icon of the grid (a `design/icons.toml` key such as `Gym`), and the row that clears the icon; the selected one carries `selected=true` |
 | `tasks-project-edit` | a project page | the header verb "Edit List": opens the style sheet on the list |
-| `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
+| `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write; on the event page, after Move to trash) |
+| `trash-status-action` | every app's Trash | the status line's Undo after a restore (`TrashEvent.status_acted`); the same id on both shells |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
 | `agenda-month-chip` | Agenda (Day, Week) | the header's back-to-month chip, "‹ November" (`calendar_header.month_label`); a tap opens the Month on the same day |
 | `agenda-layout-key` | Agenda (Day, Week) | the header's layout key; its rows are `agenda-view-<key>` (`day`, `week`, `month`, `list`, `year`) and a pick keeps the day |

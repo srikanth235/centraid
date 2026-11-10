@@ -32,8 +32,15 @@ struct AgendaEventView: View {
             EmptyView()
         } content: {
             if case let .gone(gone)? = state.content {
-                EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onBack)
-                    .accessibilityIdentifier("agenda-event-gone")
+                // THE PAGE STAYS ON THE GONE CARD AFTER MOVE TO TRASH, and the status line under it
+                // carries "{title} moved to trash" with Undo (#1185).
+                VStack(spacing: 0) {
+                    EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onBack)
+                        .accessibilityIdentifier("agenda-event-gone")
+                    StatusLineView(status: state.status, identifier: "agenda-status-action") {
+                        send(event { $0.statusActed = .init() })
+                    }
+                }
             } else {
                 ReadStateView(
                     content: readContent(state),

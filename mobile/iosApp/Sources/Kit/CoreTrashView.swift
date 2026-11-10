@@ -85,7 +85,9 @@ struct CoreTrashView: View {
                         .refreshable { event { $0.kind = .refreshed(.init()) } }
                     }
                 }
-                StatusLineView(status: state.status, identifier: "trash-status-action") {}
+                StatusLineView(status: state.status, identifier: "trash-status-action") {
+                    event { $0.kind = .statusActed(.init()) }
+                }
             }
         }
         .sheet(isPresented: Binding(

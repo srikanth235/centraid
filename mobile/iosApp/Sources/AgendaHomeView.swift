@@ -984,6 +984,7 @@ private struct AgendaMoreSheet: View {
                         SheetRow(
                             iconKey: sheetIcon(of: row),
                             label: row.label,
+                            detail: row.toggle ? "" : row.meta,
                             selected: row.toggle && row.on,
                             identifier: "agenda-more-\(row.key)"
                         ) {
