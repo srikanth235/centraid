@@ -412,6 +412,7 @@ impl Earlier {
             ctx,
             act::shell::UndoChange {
                 earlier_version_id: self.entity_id.clone(),
+                seq: None,
             }
             .into(),
             "undo",

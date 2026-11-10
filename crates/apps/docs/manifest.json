@@ -724,7 +724,7 @@
       "name": "recolor-label",
       "verb": "edit",
       "kind": "document",
-      "inverse": null,
+      "inverse": "recolor-label",
       "sealed": [],
       "command": "tag.color",
       "phrasings": [

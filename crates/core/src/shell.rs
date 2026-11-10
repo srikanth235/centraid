@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 }
 
 /// Which vault command each shell action runs.
-pub const ACTIONS: [ActionRow; 8] = [
+pub const ACTIONS: [ActionRow; 9] = [
     // ---- chat (lane I) ----
     act("rename-chat", "entity.retitle"),
     // a chat has no trash (R-CHAT-8): its delete is the shared permanent one
@@ -46,6 +46,8 @@ pub const ACTIONS: [ActionRow; 8] = [
     // ---- history (#1185): the earlier-versions screen ----
     act("restore-version", "history.restore_version"),
     act("undo-change", "history.undo"),
+    // The Undo of any act that made something: it goes to the trash, restorable (#1185).
+    act("undo-create", "entity.trash"),
 ];
 
 #[cfg(test)]

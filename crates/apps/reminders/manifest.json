@@ -796,7 +796,7 @@
       "name": "create-section",
       "verb": "create",
       "kind": "section",
-      "inverse": null,
+      "inverse": "delete-task",
       "sealed": [],
       "command": "container.create",
       "phrasings": [

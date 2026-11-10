@@ -26,6 +26,11 @@
 //!    has no reader and can only drift, so the parser refuses the key — `[]`
 //!    included — rather than carry a second copy of a fact the vault already
 //!    reports.
+//!    **One fact that looks like it is allowed: `"writes_nothing": true`**, on an action whose
+//!    command changes nothing in the vault (an export). It is not a list of tables: it is a claim
+//!    the core's tests prove for every action that makes it, by running the action and reading
+//!    the commit's census (`crates/core/tests/undo_plane.rs`), so it cannot be made falsely. It
+//!    is what classifies such an action for Undo (#1185): there is nothing to take back.
 //! 5. **Every action and query is classified for the conversation surface**
 //!    ([#1135](https://github.com/srikanth235/centraid/issues/1135)). An action
 //!    names the chat `verb` it is (`edit`, or `edit:cadence` when it edits one
@@ -67,6 +72,13 @@ pub const RESERVED_HANDLER_PREFIX: &str = "_";
 pub const CANONICAL_DESIGNED_STATES: [&str; 7] = [
     "dayone", "pending", "offline", "stale", "conflict", "parked", "denied",
 ];
+
+/// The two Undos every app shares, actions of the shell's catalogue and not of an app's manifest
+/// (#1185): `undo-change` puts a record back to the earlier version an act made, `undo-create`
+/// moves what an act created to the trash. A manifest may name one as an action's `inverse`;
+/// chat cannot run it, so such an action is a card for the member to finish, as one with no
+/// inverse is.
+pub const SHELL_UNDOS: [&str; 2] = ["undo-change", "undo-create"];
 
 pub fn is_reserved_handler_name(name: &str) -> bool {
     name.starts_with(RESERVED_HANDLER_PREFIX)
@@ -151,6 +163,9 @@ pub struct ActionEntry {
     /// The id properties of its input the core mints when the caller leaves
     /// them out: those the schema marks `"x-minted": true`.
     pub minted: Vec<String>,
+    /// `"writes_nothing": true`: the command changes nothing in the vault, so there is nothing
+    /// to undo. Proven by the core's tests, never trusted (module note, 4).
+    pub writes_nothing: bool,
 }
 
 impl ActionEntry {
@@ -244,7 +259,11 @@ impl ActionEntry {
             .and_then(Value::as_array)
             .map(|names| names.iter().filter_map(Value::as_str).collect())
             .unwrap_or_default();
-        let irreversible = self.inverse.is_none() && self.verb != "log";
+        let irreversible = self
+            .inverse
+            .as_deref()
+            .is_none_or(|inverse| SHELL_UNDOS.contains(&inverse))
+            && self.verb != "log";
         let sealed_required = required
             .iter()
             .any(|name| self.sealed.iter().any(|s| s == name));
@@ -664,6 +683,19 @@ fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
         // REFUSED, not ignored: a `writes` list nobody reads is a comment with a
         // schema, and a quiet one is how the second copy comes back (module note,
         // 4). The commit's own census says what an action wrote.
+        let writes_nothing = match entry.get("writes_nothing") {
+            None => false,
+            Some(Value::Bool(true)) => true,
+            Some(_) => {
+                return Err(KitError::manifest(
+                    "invalid_handler_entry",
+                    format!(
+                        "action \"{name}\" declares `writes_nothing` as something but `true`: leave it out"
+                    ),
+                    Some(&path),
+                ));
+            }
+        };
         if entry.get("writes").is_some() {
             return Err(KitError::manifest(
                 "removed_field",
@@ -691,6 +723,7 @@ fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
             command: class.command,
             phrasings: class.phrasings,
             minted,
+            writes_nothing,
         });
     }
     Ok(actions)
@@ -1010,13 +1043,14 @@ fn parse_kinds(raw: &Value) -> KitResult<Vec<KindDecl>> {
 }
 
 /// The cross-checks a per-entry parse cannot make: an `inverse` names an action
-/// of this manifest (an edit may name itself), a direct action acts on a kind
+/// of this manifest (an edit may name itself) or one of the shell's [`SHELL_UNDOS`], a direct action acts on a kind
 /// this manifest declares, and no two direct actions are the same (verb, kind,
 /// qualifier) to the chat surface — the assistant looks up one action per triple.
 fn check_classification(actions: &[ActionEntry], kinds: &[KindDecl]) -> KitResult<()> {
     let refuse = |message: String| KitError::manifest("invalid_handler_entry", message, None);
     for action in actions {
         if let Some(inverse) = &action.inverse
+            && !SHELL_UNDOS.contains(&inverse.as_str())
             && !actions.iter().any(|other| &other.name == inverse)
         {
             return Err(refuse(format!(
@@ -1227,6 +1261,21 @@ mod tests {
 
     fn action(name: &str, extra: &str) -> String {
         format!(r#"{{"name": "{name}", "confirmation": "none", "input": {{}}, {CLASS}{extra}}}"#)
+    }
+
+    /// `writes_nothing` is `true` or absent, never a list and never `false` spelled out.
+    #[test]
+    fn writes_nothing_is_true_or_left_out() {
+        let with = |extra: &str| {
+            let entry = action("export", extra);
+            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#)))
+        };
+        assert!(!with("").unwrap().actions[0].writes_nothing);
+        assert!(with(r#", "writes_nothing": true"#).unwrap().actions[0].writes_nothing);
+        assert!(with(r#", "writes_nothing": false"#).is_err());
+        assert!(with(r#", "writes_nothing": ["task"]"#).is_err());
+        // the old `writes` list stays refused
+        assert!(with(r#", "writes": []"#).is_err());
     }
 
     fn query(name: &str) -> String {
@@ -1460,6 +1509,17 @@ mod tests {
             parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap()
         };
         assert_eq!(undoable("").actions[0].surface(), ChatSurface::Direct);
+        // an inverse chat cannot run (the shell's Undo) leaves it a card, as no inverse does
+        let shell_undo = |name: &str| {
+            let entry =
+                action("add", "").replace("\"inverse\": null", &format!("\"inverse\": \"{name}\""));
+            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap()
+        };
+        for name in SHELL_UNDOS {
+            let parsed = shell_undo(name);
+            assert_eq!(parsed.actions[0].inverse.as_deref(), Some(name));
+            assert_eq!(parsed.actions[0].surface(), ChatSurface::Card);
+        }
         // bulk: a card
         assert_eq!(
             undoable(r#", "bulk": true"#).actions[0].surface(),

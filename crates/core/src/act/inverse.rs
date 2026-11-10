@@ -9,6 +9,33 @@
 //! The table is data held to the manifests by the tests below: every action it
 //! names exists, and the inverse input it builds satisfies the inverse
 //! action's required properties.
+//!
+//! # EVERY ACTION IS TAKEN BACK, OR ASKS FIRST (#1185)
+//!
+//! An action of a manifest is in exactly one of three places, and a test over every manifest
+//! holds it (the promise register's Undo row reads the same two files):
+//!
+//! 1. a row here: another action reverses it (`Same`, `Id`, `Created`), or the vault's history
+//!    puts the record back as it was (`Earlier`);
+//! 2. `"confirmation": "required"` in its manifest: it cannot be taken back, so the member is
+//!    asked first (a purge, an empty trash, a merge);
+//! 3. `"writes_nothing": true` in its manifest: it changes nothing in the vault, so there is
+//!    nothing to take back (an export). The core's tests run each such action and read the
+//!    commit's census, so the claim cannot be made falsely.
+//!
+//! The manifest's `inverse` and this table are one list: the table says HOW (where the input
+//! comes from), the manifest says WHICH action, and a test fails when they differ.
+//!
+//! # `Earlier`: THE RECORD GOES BACK TO WHAT IT WAS BEFORE THIS ACT
+//!
+//! The vault keeps every record's earlier state ([`centraid_vault::history`]). An edit of one
+//! record is taken back by `undo-change {id, seq}`, which names the version THIS act made, and
+//! the vault refuses it when a newer version exists (the record changed again since): the later
+//! change is never lost to an old Undo. Whether an act made a version is not a list of names: the
+//! core asks the vault how many versions the record held before and after the command and offers
+//! the Undo only when exactly one more exists. An act the history does not capture (a tag, a
+//! star, a link, a bank-stated column) makes no version and so offers nothing; it is never given
+//! this inverse by a row.
 
 use serde_json::{Map, Value};
 
@@ -23,7 +50,19 @@ pub(crate) enum Input {
     /// The id of what the action created: the input's own `id` (or Locker's
     /// `item_id`) when one was stated, else the one in the command's output.
     Created,
+    /// The record's own earlier version: `undo-change {id, seq}` with the `seq` of the version
+    /// this act made (see the module note). The row's inverse is `undo-change`, or the action
+    /// itself where chat takes it back by running it again with the values it replaced.
+    Earlier,
+    /// The same action again, with the values it replaced: the command answers them under
+    /// `replaced` (`{"replaced": {"color": "blue"}}`) and each one overwrites the input's value of
+    /// the same name. For a change the history does not keep (a label's colour is not a record).
+    /// Offered only when the command named every value it replaced.
+    Replaced,
 }
+
+/// The shell action that puts a record back to a named earlier version. Any app's act can run it.
+pub(crate) const UNDO_CHANGE: &str = "undo-change";
 
 type Row = (&'static str, &'static str, Input);
 
@@ -51,6 +90,10 @@ const REMINDERS: &[Row] = &[
     ("create-section", "delete-task", Input::Created),
     ("add-task-tag", "remove-task-tag", Input::Same),
     ("remove-task-tag", "add-task-tag", Input::Same),
+    ("edit-task", "edit-task", Input::Earlier),
+    ("organize-task", "organize-task", Input::Earlier),
+    ("rename-list", "rename-list", Input::Earlier),
+    ("style-container", "style-container", Input::Earlier),
 ];
 const DOCS: &[Row] = &[
     ("upload", "trash", Input::Created),
@@ -65,6 +108,7 @@ const DOCS: &[Row] = &[
     ("untag", "tag", Input::Same),
     ("add-about", "remove-about", Input::Same),
     ("remove-about", "add-about", Input::Same),
+    ("recolor-label", "recolor-label", Input::Replaced),
 ];
 const LOCKER: &[Row] = &[
     ("add-item", "trash-item", Input::Created),
@@ -165,6 +209,18 @@ pub(crate) fn of(
     let (_, inverse, from) = rows(app).iter().find(|row| row.0 == action)?;
     let built = match from {
         Input::Same => input.clone(),
+        Input::Earlier => return None,
+        Input::Replaced => {
+            let replaced = output.get("replaced")?.as_object()?;
+            let mut again = input.clone();
+            for (name, value) in replaced {
+                if value.is_null() || !again.contains_key(name) {
+                    return None;
+                }
+                again.insert(name.clone(), value.clone());
+            }
+            (!replaced.is_empty()).then_some(again)?
+        }
         Input::Id => id_only(input.get("id")?)?,
         Input::Created => id_only(
             input
@@ -176,6 +232,21 @@ pub(crate) fn of(
         )?,
     };
     Some((inverse, built))
+}
+
+/// Whether the action is taken back by the record's earlier version (an `Earlier` row).
+pub(crate) fn is_earlier(app: &str, action: &str) -> bool {
+    rows(app)
+        .iter()
+        .any(|row| row.0 == action && row.2 == Input::Earlier)
+}
+
+/// The Undo of an act that made version `seq` of record `id`.
+pub(crate) fn earlier(id: &str, seq: u32) -> (&'static str, Map<String, Value>) {
+    let mut input = Map::new();
+    input.insert("id".to_owned(), Value::String(id.to_owned()));
+    input.insert("seq".to_owned(), Value::from(seq));
+    (UNDO_CHANGE, input)
 }
 
 fn id_only(id: &Value) -> Option<Map<String, Value>> {
@@ -199,6 +270,13 @@ mod tests {
                 let forward = manifest
                     .action(action)
                     .unwrap_or_else(|| panic!("{}.{action} is not in its manifest", app.id));
+                if centraid_apps_kit::manifest::SHELL_UNDOS.contains(inverse) {
+                    assert!(
+                        crate::shell::manifest().action(inverse).is_some(),
+                        "the shell does not carry {inverse}"
+                    );
+                    continue;
+                }
                 let back = manifest
                     .action(inverse)
                     .unwrap_or_else(|| panic!("{}.{inverse} is not in its manifest", app.id));
@@ -207,6 +285,16 @@ mod tests {
                     .map(|names| names.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
                 match from {
+                    Input::Earlier => assert!(
+                        action == inverse || *inverse == UNDO_CHANGE,
+                        "{}.{action}: an earlier-version undo is the action run again or `undo-change`",
+                        app.id
+                    ),
+                    Input::Replaced => assert_eq!(
+                        action, inverse,
+                        "{}.{action}: a replaced-values undo is the action run again",
+                        app.id
+                    ),
                     Input::Id | Input::Created => assert_eq!(
                         required,
                         ["id"],
@@ -255,12 +343,56 @@ mod tests {
             for entry in &manifest.actions {
                 if let Some(inverse) = &entry.inverse {
                     assert!(
-                        manifest.action(inverse).is_some(),
+                        centraid_apps_kit::manifest::SHELL_UNDOS.contains(&inverse.as_str())
+                            || manifest.action(inverse).is_some(),
                         "{}.{}",
                         app.id,
                         entry.name
                     );
                 }
+            }
+        }
+    }
+
+    /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
+    /// two checks below hold for every other app, and an app leaves this list in the change that
+    /// takes its row to Kept.
+    const OWED: &[&str] = &[
+        "calendar", "docs", "health", "locker", "money", "notes", "people", "photos",
+    ];
+
+    /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.
+    ///
+    /// The register's part A and B (`crates/xtask/src/promises.rs`), held here too so `cargo test`
+    /// fails where the register does: an action has a row, or `confirmation: "required"`, or
+    /// `writes_nothing`; and the inverse its manifest names is exactly the row's.
+    #[test]
+    fn every_action_has_a_row_asks_first_or_writes_nothing_and_the_manifest_agrees() {
+        use centraid_apps_kit::manifest::Confirmation;
+        for app in APPS.iter().filter(|app| !OWED.contains(&app.id)) {
+            for entry in &app.manifest().actions {
+                let row = rows(app.id).iter().find(|row| row.0 == entry.name);
+                assert!(
+                    row.is_some()
+                        || entry.confirmation == Confirmation::Required
+                        || entry.writes_nothing,
+                    "{}.{} is not taken back, does not ask first and does not say it writes nothing",
+                    app.id,
+                    entry.name
+                );
+                assert_eq!(
+                    row.map(|row| row.1),
+                    entry.inverse.as_deref(),
+                    "{}.{}: the table and the manifest name different inverses",
+                    app.id,
+                    entry.name
+                );
+                assert!(
+                    !(entry.writes_nothing && row.is_some()),
+                    "{}.{} writes nothing and so has nothing to take back",
+                    app.id,
+                    entry.name
+                );
             }
         }
     }

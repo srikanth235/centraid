@@ -878,6 +878,28 @@ fn a_page_of_versions_is_keyset_paged_and_a_restore_refuses_what_is_not_there() 
 }
 
 #[test]
+fn an_undo_that_names_its_version_is_refused_once_the_record_changed_again() {
+    let w = World::new();
+    let id = w.id("person.add", json!({ "title": "Ada" }));
+    w.ok("entity.retitle", json!({ "id": id, "title": "Ada L." }));
+    let named = w.versions(&id)[0].seq;
+    // Nothing changed since: the named undo is the plain undo.
+    let again = w.id("person.add", json!({ "title": "Grace" }));
+    w.ok(
+        "entity.retitle",
+        json!({ "id": again, "title": "Grace H." }),
+    );
+    let grace = w.versions(&again)[0].seq;
+    w.ok("history.undo", json!({ "id": again, "seq": grace }));
+    assert_eq!(w.state(&again)["entity"]["title"], "Grace");
+    // Changed again after the named change: refused, and the later change stays.
+    w.ok("entity.retitle", json!({ "id": id, "title": "Countess" }));
+    let refused = w.refused("history.undo", json!({ "id": id, "seq": named }));
+    assert!(refused.contains("can no longer be undone"), "{refused}");
+    assert_eq!(w.state(&id)["entity"]["title"], "Countess");
+}
+
+#[test]
 fn what_an_edit_costs_in_storage() {
     let w = World::new();
     let id = w.id(

@@ -157,7 +157,7 @@ pub const REGISTER: &[Row] = &[
     owed("notes", Promise::Undo, UNDO_OWED),
     owed("people", Promise::Undo, UNDO_OWED),
     owed("photos", Promise::Undo, UNDO_OWED),
-    owed("reminders", Promise::Undo, UNDO_OWED),
+    kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
     // others' work list.
     kept(
@@ -600,6 +600,9 @@ struct UndoAction {
     inverse: Option<String>,
     /// `"confirmation": "required"`: the member is asked first.
     confirmed: bool,
+    /// `"writes_nothing": true`: there is nothing to take back. The core's tests prove the claim
+    /// by running the action (`crates/core/tests/undo_plane.rs`), so the register trusts it.
+    writes_nothing: bool,
 }
 
 /// Every action of the app's manifest. Every one is a write: the manifest has no read-only action
@@ -628,6 +631,10 @@ fn undo_actions(root: &Path, app: &str) -> Vec<UndoAction> {
                             .map(str::to_owned),
                         confirmed: action.get("confirmation").and_then(|c| c.as_str())
                             == Some("required"),
+                        writes_nothing: action
+                            .get("writes_nothing")
+                            .and_then(serde_json::Value::as_bool)
+                            == Some(true),
                     })
                 })
                 .collect()
@@ -660,8 +667,9 @@ fn core_inverses(root: &Path, app: &str) -> Option<BTreeMap<String, String>> {
 /// Undo is kept when, for `app`, both hold (each gap is `<action>: (A|B) what is missing`):
 ///
 /// A. every manifest action is classified: it has a row in the core's inverse table
-///    ([`INVERSE_TABLE`]), or it is `confirmed` in the manifest (irreversible, asked first). An
-///    action that is both is fine; one that is neither is a gap.
+///    ([`INVERSE_TABLE`]), or it is `confirmed` in the manifest (irreversible, asked first), or it
+///    declares `"writes_nothing": true` (nothing to take back; the core's tests prove it by running
+///    the action). An action that is several is fine; one that is none is a gap.
 /// B. the manifest and the table are one list: every inverse the manifest declares is the row the
 ///    table holds for that action, and every row of the table is the inverse its manifest names.
 ///
@@ -685,9 +693,9 @@ fn undo_missing(root: &Path, app: &str) -> Vec<String> {
     for action in &actions {
         let name = &action.name;
         let row = table.get(name);
-        if row.is_none() && !action.confirmed {
+        if row.is_none() && !action.confirmed && !action.writes_nothing {
             unclassified.push(format!(
-                "{name}: (A) has no inverse in {INVERSE_TABLE} and is not `confirmed` in the manifest"
+                "{name}: (A) has no inverse in {INVERSE_TABLE}, is not `confirmed` and does not declare `writes_nothing` in the manifest"
             ));
         }
         match (row, &action.inverse) {

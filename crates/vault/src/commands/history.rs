@@ -8,6 +8,8 @@
 //!   and row by row.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
+//!   Given `seq` it undoes THAT change and nothing else: the version must still be the newest, so
+//!   a record changed again since is refused ([`CHANGED_SINCE`]) rather than losing the later change.
 //!
 //! The versions are read with [`crate::history::earlier_versions`] through [`crate::Vault::read`].
 
@@ -40,13 +42,24 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((held == 0).then(|| "That version is not in this record's history.".to_owned()))
 }
 
+/// What an undo that names its version says when the record has changed again since.
+pub const CHANGED_SINCE: &str = "This can no longer be undone: it has changed since.";
+
 fn pre_undo(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = alive(ctx)? {
         return Ok(Some(sentence));
     }
-    Ok(newest(ctx)?
-        .is_none()
-        .then(|| "There is no earlier version to go back to.".to_owned()))
+    let Some(newest) = newest(ctx)? else {
+        return Ok(Some(
+            "There is no earlier version to go back to.".to_owned(),
+        ));
+    };
+    Ok(ctx
+        .input
+        .get("seq")
+        .and_then(serde_json::Value::as_i64)
+        .filter(|seq| *seq != newest)
+        .map(|_| CHANGED_SINCE.to_owned()))
 }
 
 fn answer(id: &str, seq: i64, restored: Option<history::Restored>) -> serde_json::Value {
@@ -119,7 +132,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "required": ["id"],
               "additionalProperties": false,
               "properties": {
-                "id": { "type": "string", "minLength": 1 }
+                "id": { "type": "string", "minLength": 1 },
+                "seq": { "type": "integer", "minimum": 1 }
               }
             }"#,
             Idempotency::Once,

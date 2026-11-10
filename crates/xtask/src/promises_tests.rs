@@ -437,6 +437,27 @@ fn an_action_that_is_neither_undoable_nor_confirmed_is_named() {
 }
 
 #[test]
+fn an_action_that_writes_nothing_is_classified_and_a_plain_no_is_not() {
+    let root = fixture_dir("undo-writes-nothing");
+    write(&root, "crates/core/src/act/inverse.rs", TABLE);
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[
+          {"name":"flag-note","inverse":"unflag-note","confirmation":"none","command":"x.y"},
+          {"name":"unflag-note","inverse":"flag-note","confirmation":"none","command":"x.y"},
+          {"name":"delete-note","inverse":"restore-note","confirmation":"none","command":"x.y"},
+          {"name":"export-notes","inverse":null,"confirmation":"none","writes_nothing":true,"command":"x.y"},
+          {"name":"rename-note","inverse":null,"confirmation":"none","writes_nothing":false,"command":"x.y"}
+        ]}"#,
+    );
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(gaps.contains("1 of 5 actions unclassified"), "{gaps}");
+    assert!(gaps.contains("rename-note: (A)"));
+    assert!(!gaps.contains("export-notes"));
+}
+
+#[test]
 fn a_confirmed_action_with_an_inverse_is_fine() {
     let root = undo_tree(
         "undo-both",

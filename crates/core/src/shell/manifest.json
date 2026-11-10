@@ -388,7 +388,37 @@
         "undo that restore",
         "go back one change"
       ],
-      "description": "(history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore. A detail screen's tap, never the assistant's.",
+      "description": "(history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore, and the Undo of any edit of one record (the core offers it as the act's inverse, naming the version the act made in `seq`; with `seq` it is refused when the record changed again since). Any app's screen runs it. A detail screen's tap, never the assistant's.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "undo-create",
+      "verb": "delete",
+      "kind": "earlier_version",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.trash",
+      "phrasings": [
+        "undo that",
+        "take back what I just added",
+        "remove what I just made"
+      ],
+      "description": "(history, #1185) Move a record an act just created to the trash, through entity.trash: the Undo of an add, a log or a create whose app has no trash action of its own. It is restorable from the trash. Any app's screen runs it. A status line's tap, never the assistant's.",
       "confirmation": "none",
       "input": {
         "type": "object",

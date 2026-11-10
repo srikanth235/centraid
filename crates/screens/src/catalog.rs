@@ -5871,10 +5871,11 @@ pub mod act {
             }
         }
 
-        /// (history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore. A detail screen's tap, never the assistant's.
+        /// (history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore, and the Undo of any edit of one record (the core offers it as the act's inverse, naming the version the act made in `seq`; with `seq` it is refused when the record changed again since). Any app's screen runs it. A detail screen's tap, never the assistant's.
         #[derive(Clone, Debug, Default)]
         pub struct UndoChange {
             pub earlier_version_id: String,
+            pub seq: Option<i64>,
         }
         impl UndoChange {
             pub const NAME: &str = "undo-change";
@@ -5882,11 +5883,32 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.earlier_version_id));
+                if let Some(it) = self.seq { map.insert("seq".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
         impl From<UndoChange> for wire::ActRequest {
             fn from(value: UndoChange) -> Self {
+                value.request()
+            }
+        }
+
+        /// (history, #1185) Move a record an act just created to the trash, through entity.trash: the Undo of an add, a log or a create whose app has no trash action of its own. It is restorable from the trash. Any app's screen runs it. A status line's tap, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct UndoCreate {
+            pub earlier_version_id: String,
+        }
+        impl UndoCreate {
+            pub const NAME: &str = "undo-create";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.earlier_version_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UndoCreate> for wire::ActRequest {
+            fn from(value: UndoCreate) -> Self {
                 value.request()
             }
         }

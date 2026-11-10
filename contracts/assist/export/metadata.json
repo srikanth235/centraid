@@ -1709,7 +1709,7 @@
         "bulk": false,
         "chat": "card",
         "command": "tag.color",
-        "inverse": null,
+        "inverse": "recolor-label",
         "kind": "document",
         "phrasings": [
           "make the taxes label blue",
@@ -4595,7 +4595,7 @@
         "bulk": false,
         "chat": "card",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "delete-task",
         "kind": "section",
         "phrasings": [
           "add a section called Kitchen to Home renovation",
