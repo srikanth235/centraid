@@ -491,6 +491,12 @@ pub fn person(
         } else {
             String::new()
         },
+        // The phone's words are the screen's second read, laid on by `Person::view`.
+        name_phone_says: None,
+        role_phone_says: None,
+        nickname_phone_says: None,
+        birthday_phone_says: None,
+        channels_phone_says: Vec::new(),
     }
 }
 

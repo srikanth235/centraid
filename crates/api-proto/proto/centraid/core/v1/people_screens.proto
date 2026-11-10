@@ -560,6 +560,18 @@ message PeoplePersonData {
   bool is_me = 28;
   // "My card", on the owner's own card.
   string my_card_label = 29;
+  // WHAT THE PHONE SAYS (#1183), only where the member's value differs from the phone's, each
+  // under the field or list it belongs to. The name, under the name.
+  optional PhoneSays name_phone_says = 30;
+  // Under the role line.
+  optional PhoneSays role_phone_says = 31;
+  // Under the facts, where the nickname is.
+  optional PhoneSays nickname_phone_says = 32;
+  // Under the dates, where the birthday is.
+  optional PhoneSays birthday_phone_says = 33;
+  // Under the channels: a number or address the member changed ("Phone says ...") and one they
+  // removed ("Phone still has ..."), in a stable order. One the member added has no line.
+  repeated PhoneSays channels_phone_says = 34;
 }
 
 message PeopleHeroAction {

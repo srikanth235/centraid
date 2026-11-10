@@ -282,4 +282,14 @@ catalog! {
     plain vault_on = ("On {item}", "On {item}");
     plain vault_kind_task = ("Task", "Task");
     plain vault_more = ("and {n} more", "and {n} more");
+    // What a "phone says" line calls the thing, to a screen reader (#1183).
+    plain says_labelled = ("{value} ({label})", "{value} ({label})");
+    plain says_noun_address = ("address", "address");
+    plain says_noun_birthday = ("birthday", "birthday");
+    plain says_noun_email = ("email", "email");
+    plain says_noun_handle = ("handle", "handle");
+    plain says_noun_name = ("name", "name");
+    plain says_noun_nickname = ("nickname", "nickname");
+    plain says_noun_number = ("number", "number");
+    plain says_noun_role = ("role", "role");
 }

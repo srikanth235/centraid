@@ -33,11 +33,13 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::follow;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words};
 
 mod data;
+mod phone;
 mod sheets;
 
 pub(crate) use data::gone;
@@ -63,6 +65,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         asking: Asking::Nothing,
         status: None,
         done: false,
+        differences: Vec::new(),
     }))
 }
 
@@ -85,6 +88,8 @@ struct Person {
     asking: Asking,
     status: Option<wire::StatusLine>,
     done: bool,
+    /// Where the phone's words differ from the person's, read with the page (#1183).
+    differences: Vec<follow::Difference>,
 }
 
 impl Person {
@@ -106,6 +111,10 @@ impl Person {
             read::Reading::Denied(denial) => read::Reading::Denied(denial),
             read::Reading::Failed => read::Reading::Failed,
         });
+        self.differences = match &self.phase {
+            Phase::Ready(Some(_)) => follow::read(ctx, &self.party_id),
+            _ => Vec::new(),
+        };
         match &self.phase {
             // GONE: nothing to write to, and no sheet over nothing.
             Phase::Ready(None) => {
@@ -521,6 +530,19 @@ impl Person {
             .unwrap_or_default()
     }
 
+    /// The action under a "phone says" line: take the phone's value, then read again so the line
+    /// goes. A refusal is the status line, over the page as it still is.
+    fn take_phone(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.loaded().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.party_id, taken) else {
+            return;
+        };
+        self.status = (!settled.committed).then(|| refused(settled.refusal));
+        self.reload(ctx);
+    }
+
     fn event(&mut self, event: wire::PeoplePersonEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(kind) = event.kind else {
             return Vec::new();
@@ -680,6 +702,7 @@ impl Screen for Person {
                 }
             }
             Some(E::PeoplePerson(person)) => return self.event(person, ctx),
+            Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
             _ => {}
         }
         Vec::new()
@@ -693,12 +716,16 @@ impl Screen for Person {
             Phase::Failed => C::Failure(read::failure(locale)),
             Phase::Denied(denial) => C::Denied(denied(locale, denial)),
             Phase::Ready(None) => C::Gone(data::gone(locale)),
-            Phase::Ready(Some((sheet, today))) => C::Data(Box::new(data::person(
-                locale,
-                ctx.hour_cycle(),
-                sheet,
-                today,
-            ))),
+            Phase::Ready(Some((sheet, today))) => {
+                let mut page = data::person(locale, ctx.hour_cycle(), sheet, today);
+                let lines = phone::lines(locale, &self.differences);
+                page.name_phone_says = lines.name;
+                page.role_phone_says = lines.role;
+                page.nickname_phone_says = lines.nickname;
+                page.birthday_phone_says = lines.birthday;
+                page.channels_phone_says = lines.channels;
+                C::Data(Box::new(page))
+            }
         };
         let state = wire::PeoplePersonState {
             party_id: self.party_id.clone(),
