@@ -254,6 +254,7 @@ pub fn action(key: &str, label: String, icon: &str) -> wire::DocsAction {
         enabled: true,
         detail: String::new(),
         route: None,
+        meta: String::new(),
     }
 }
 

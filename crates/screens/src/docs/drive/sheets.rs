@@ -10,7 +10,7 @@ use super::{
 };
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
-use crate::strings::{Locale, docs as words, fill};
+use crate::strings::{Locale, docs as words, fill, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Sheet {
@@ -84,6 +84,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     String::new()
                 },
                 route: Some(routes::trash()),
+                meta: shared::trash_entry_meta(locale),
                 ..fold::action(KEY_TRASH_SHELF, words::more_trash(locale), TRASH_ICON)
             });
             sheet(

@@ -382,6 +382,8 @@ fn more_holds_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
     let labels: Vec<&str> = more.more_rows.iter().map(|r| r.label.as_str()).collect();
     assert_eq!(labels, ["Import", "Export", "Trash"]);
     assert_eq!(more.more_rows[2].route, Some(routes::trash()));
+    assert_eq!(more.more_rows[2].meta, "30 days, then erased");
+    assert!(more.more_rows[..2].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,

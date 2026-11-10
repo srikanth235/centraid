@@ -33,7 +33,7 @@ use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::search;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, people as words};
+use crate::strings::{Locale, fill, people as words, shared};
 
 mod rows;
 
@@ -510,18 +510,21 @@ impl Screen for Home {
                         label: words::more_import(locale),
                         icon_key: "Download".to_owned(),
                         route: Some(routes::transfer(false, &back)),
+                        meta: String::new(),
                     },
                     wire::PeopleMoreRow {
                         key: "export".to_owned(),
                         label: words::more_export(locale),
                         icon_key: "Upload".to_owned(),
                         route: Some(routes::transfer(true, &back)),
+                        meta: String::new(),
                     },
                     wire::PeopleMoreRow {
                         key: "trash".to_owned(),
                         label: words::trash_label(locale),
                         icon_key: "Trash".to_owned(),
                         route: Some(routes::trash()),
+                        meta: shared::trash_entry_meta(locale),
                     },
                 ]
             },

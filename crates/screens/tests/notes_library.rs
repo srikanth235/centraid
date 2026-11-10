@@ -791,6 +791,8 @@ fn more_is_a_sheet_of_import_export_and_trash_and_the_same_tab_is_nothing() {
         ]
     );
     assert_eq!(state.more_rows[2].route, Some(routes::trash()));
+    assert_eq!(state.more_rows[2].meta, "30 days, then erased");
+    assert!(state.more_rows[..2].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,

@@ -815,6 +815,7 @@ fn the_trash_row_of_more_is_a_route_with_the_count_beside_it() {
         .unwrap();
     assert_eq!(trash.label, "Trash");
     assert_eq!(trash.detail, "1 document");
+    assert_eq!(trash.meta, "30 days, then erased");
     assert_eq!(trash.route.as_ref().unwrap().screen, docs::TRASH);
 }
 

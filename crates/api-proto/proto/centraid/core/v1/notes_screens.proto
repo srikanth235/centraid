@@ -134,6 +134,8 @@ message NotesMoreRow {
   string icon_key = 3;
   // Where a tap goes.
   Route route = 4;
+  // The row's second line (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 5;
 }
 
 message NotesChoice {

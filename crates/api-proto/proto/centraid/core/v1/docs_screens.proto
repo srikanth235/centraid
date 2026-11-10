@@ -303,6 +303,8 @@ message DocsAction {
   // WHERE THE ACTION GOES when it opens a page (Edit, Trash, Versions): the
   // shell sends the pick and pushes this.
   optional Route route = 7;
+  // The rule under the label (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 8;
 }
 
 // A FOLDER DOCS FOLLOWS ON THIS PHONE (#1127): its origin (`folder:<uuid>`), the
