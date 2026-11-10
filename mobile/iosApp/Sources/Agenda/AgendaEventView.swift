@@ -14,6 +14,7 @@ struct AgendaEventView: View {
     let send: (Centraid_Core_V1_AgendaEventEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
@@ -109,7 +110,11 @@ struct AgendaEventView: View {
     private func detailView(_ detail: Centraid_Core_V1_AgendaEventData, state: Centraid_Core_V1_AgendaEventState) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if detail.hasTitlePhoneSays {
+                    PhoneSaysLines(lines: [detail.titlePhoneSays], onTake: onPhoneSays)
+                }
                 header(detail)
+                PhoneSaysLines(lines: detail.whenPhoneSays, onTake: onPhoneSays)
                 // THE FACTS IN ONE ROUNDED CARD (#1173), label left and value right, as on the board.
                 if !detail.facts.isEmpty {
                     AgendaGroupCard {
@@ -119,6 +124,7 @@ struct AgendaEventView: View {
                     }
                     .accessibilityIdentifier("agenda-event-facts")
                 }
+                PhoneSaysLines(lines: detail.factsPhoneSays, onTake: onPhoneSays)
                 // THE JOINING LINK, OPENED BY THE OS under Rust's verb
                 // ("Join call"); empty with no link.
                 if !detail.callLabel.isEmpty, let url = URL(string: detail.callUri) {
@@ -137,6 +143,9 @@ struct AgendaEventView: View {
                         .padding(CentraidGeometry.pageMargin)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if detail.hasNotesPhoneSays {
+                    PhoneSaysLines(lines: [detail.notesPhoneSays], onTake: onPhoneSays)
+                }
                 if detail.hasRsvp {
                     rsvpView(detail.rsvp)
                 }
@@ -149,6 +158,7 @@ struct AgendaEventView: View {
                     }
                     .padding(.top, 0)
                 }
+                PhoneSaysLines(lines: detail.guestsPhoneSays, onTake: onPhoneSays)
                 // GUESTS THE PHONE'S CALENDAR HOLDS, read only: a name (else the address), the address
                 // under a name, and the guest's answer.
                 if !detail.followedGuests.isEmpty {

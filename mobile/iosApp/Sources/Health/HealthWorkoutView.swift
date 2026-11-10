@@ -10,6 +10,7 @@ struct HealthWorkoutView: View {
     let state: Centraid_Core_V1_HealthWorkoutState
     let send: (Centraid_Core_V1_HealthWorkoutEvent) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     private let accent = AppAccent("health")
 
@@ -31,6 +32,10 @@ struct HealthWorkoutView: View {
             ) { workout in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        // THE PAGE'S STATUS LINE (a refused write says so here), as Trash's does.
+                        if state.hasStatus {
+                            StatusLineView(status: state.status, identifier: "health-workout-status") {}
+                        }
                         if workout.hasGone {
                             EmptyStateView(workout.gone)
                         } else {
@@ -96,6 +101,7 @@ struct HealthWorkoutView: View {
             .kitCard()
             .accessibilityElement(children: .combine)
         }
+        PhoneSaysLines(lines: workout.figuresPhoneSays, padded: false, onTake: onPhoneSays)
         HealthNote(text: workout.foot)
     }
 }

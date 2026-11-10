@@ -14,6 +14,7 @@ struct PeoplePersonView: View {
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -60,7 +61,7 @@ struct PeoplePersonView: View {
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
                 ) { person in
-                    PeoplePersonBody(person: person, state: state, send: send, open: open)
+                    PeoplePersonBody(person: person, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
                 }
             }
         }
@@ -130,6 +131,7 @@ private struct PeoplePersonBody: View {
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
@@ -162,6 +164,8 @@ private struct PeoplePersonBody: View {
                     }
                     .peopleCard()
                 }
+                // WHAT THE PHONE SAYS about the channels, together after the rows (#1183).
+                PhoneSaysLines(lines: person.channelsPhoneSays, onTake: onPhoneSays)
 
                 SectionHeader(
                     title: person.datesHead.title,
@@ -180,6 +184,12 @@ private struct PeoplePersonBody: View {
                         }
                     }
                     .peopleCard()
+                }
+                if person.hasBirthdayPhoneSays {
+                    PhoneSaysLines(lines: [person.birthdayPhoneSays], onTake: onPhoneSays)
+                }
+                if person.hasNicknamePhoneSays {
+                    PhoneSaysLines(lines: [person.nicknamePhoneSays], onTake: onPhoneSays)
                 }
 
                 if !person.relations.isEmpty {
@@ -274,10 +284,16 @@ private struct PeoplePersonBody: View {
                 .minimumScaleFactor(largestText ? 1 : 0.7)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
+            if person.hasNamePhoneSays {
+                PhoneSaysLines(lines: [person.namePhoneSays], centered: true, padded: false, onTake: onPhoneSays)
+            }
             if !person.role.isEmpty {
                 Text(person.role)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
+            }
+            if person.hasRolePhoneSays {
+                PhoneSaysLines(lines: [person.rolePhoneSays], centered: true, padded: false, onTake: onPhoneSays)
             }
             if person.isMe {
                 Text(person.myCardLabel)

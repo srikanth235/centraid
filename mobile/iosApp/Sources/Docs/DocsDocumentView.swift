@@ -14,6 +14,7 @@ struct DocsDocumentView: View {
     let send: (Centraid_Core_V1_DocsDocumentEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
+    let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -89,6 +90,10 @@ struct DocsDocumentView: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.top, 2)
                                         .accessibilityIdentifier("docs-document-subtitle")
+                                }
+                                // WHAT THE FOLDER SAYS, under the name (#1183).
+                                if document.hasTitlePhoneSays {
+                                    PhoneSaysLines(lines: [document.titlePhoneSays], onTake: onPhoneSays)
                                 }
                                 surface(document)
                                 infoCard(document)

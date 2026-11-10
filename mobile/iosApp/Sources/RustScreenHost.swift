@@ -182,7 +182,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .agendaEvent($0)) },
                 open: open,
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .environment(\.appAccent, AppAccent("calendar"))
         case .agendaEditor(let state)?:
@@ -382,7 +383,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .docsDocument($0)) },
                 open: open,
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
         case .docsVersions(let state)?:
             DocsVersionsView(
@@ -413,7 +415,8 @@ struct RustScreenView: View {
             HealthWorkoutView(
                 state: state,
                 send: { store.send(instance, .healthWorkout($0)) },
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
         case .healthConnect(let state)?:
             HealthConnectView(
@@ -453,7 +456,8 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .peoplePerson($0)) },
                 open: open,
-                onBack: pop
+                onBack: pop,
+                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
             .appAccent("people")
         case .peopleEditor(let state)?:
