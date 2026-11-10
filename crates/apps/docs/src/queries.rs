@@ -889,21 +889,42 @@ pub fn load_history(
                 replaced_at.get(&(seq - 1)).cloned()
             }
         };
-        let newest = revisions
-            .iter()
-            .filter_map(|row| row.get("seq").and_then(|cell| cell.integer()))
-            .max()
-            .unwrap_or(0);
+        // A revision is also kept when only the title or the folder moved (the
+        // one history at the commit door, #1185); this list is of BYTES, so a
+        // revision whose bytes match the version newer than it adds nothing.
+        // The newest of a run of equal bytes stays, and a run is dated by its
+        // oldest member: `became_current` reads the revision before it.
         let current_blob = text_of(head, "blob").unwrap_or_default();
+        let mut newer = current_blob.clone();
+        let kept: Vec<&Row> = revisions
+            .iter()
+            .filter(|row| {
+                let blob = text_of(row, "blob").unwrap_or_default();
+                let changed = blob != newer;
+                newer = blob;
+                changed
+            })
+            .collect();
+        // The head is numbered after the newest version of other bytes.
+        let newest = kept
+            .first()
+            .and_then(|row| row.get("seq").and_then(|cell| cell.integer()))
+            .unwrap_or(0);
+        // The head's bytes became current when the newest kept version was
+        // replaced.
+        let head_since = kept
+            .first()
+            .and_then(|row| text_of(row, "at"))
+            .unwrap_or_else(|| created_at.clone());
         let mut versions = vec![VersionRow {
             number: usize::try_from(newest + 1).unwrap_or(1),
             byte_size: sizes.get(&current_blob).copied(),
             content_id: current_blob,
             media_type: text_of(head, "media_type"),
             current: true,
-            asserted_at: became_current(newest + 1),
+            asserted_at: Some(head_since),
         }];
-        for row in &revisions {
+        for row in kept {
             let Some(seq) = row.get("seq").and_then(|cell| cell.integer()) else {
                 continue;
             };
@@ -914,11 +935,28 @@ pub fn load_history(
                 content_id: blob,
                 media_type: text_of(row, "media_type"),
                 current: false,
-                asserted_at: became_current(seq),
+                asserted_at: oldest_of_run(&revisions, seq).and_then(&became_current),
             });
         }
         Ok(HistoryData { versions })
     })
+}
+
+/// The seq of the oldest revision in the run of equal bytes that `seq` starts
+/// (revisions are newest first).
+fn oldest_of_run(revisions: &[Row], seq: i64) -> Option<i64> {
+    let bytes = |row: &Row| text_of(row, "blob");
+    let at = revisions
+        .iter()
+        .position(|row| row.get("seq").and_then(|cell| cell.integer()) == Some(seq))?;
+    let mut oldest = at;
+    while let Some(older) = revisions.get(oldest + 1) {
+        if bytes(older) != bytes(&revisions[at]) {
+            break;
+        }
+        oldest += 1;
+    }
+    revisions[oldest].get("seq").and_then(|cell| cell.integer())
 }
 
 /// The statements this module owns, named so a plan snapshot can be compared

@@ -964,24 +964,57 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
         .iter()
         .map(|row| text_of(row, "at").unwrap_or_default())
         .collect();
+    // A revision is also kept when only the title, the notebook or the pin
+    // moved (the one history at the commit door, #1185); this screen lists the
+    // WORDS, so a revision whose words match the version newer than it adds
+    // nothing. The newest of a run of equal words stays, dated by the run's
+    // oldest member (the stamp says when those words became the note's).
+    let mut newer = note.body.clone();
+    let words_changed: Vec<bool> = page
+        .rows
+        .iter()
+        .map(|row| {
+            let body = text_of(row, "body").unwrap_or_default();
+            let changed = body != newer;
+            newer = body;
+            changed
+        })
+        .collect();
+    let became_current = |index: usize| {
+        let mut oldest = index;
+        while words_changed.get(oldest + 1) == Some(&false) {
+            oldest += 1;
+        }
+        stamps
+            .get(oldest + 1)
+            .cloned()
+            .unwrap_or_else(|| note.created_at.clone())
+    };
+    // The current words became the note's when the newest kept version was
+    // replaced.
+    let current_since = page
+        .rows
+        .iter()
+        .zip(&words_changed)
+        .take(HISTORY_ROWS)
+        .zip(&stamps)
+        .find_map(|((_, changed), stamp)| changed.then(|| stamp.clone()))
+        .unwrap_or_else(|| note.created_at.clone());
     let mut versions = vec![Version {
         seq: 0,
-        body: note.body,
+        body: note.body.clone(),
         current: true,
-        asserted_at: stamps
-            .first()
-            .cloned()
-            .unwrap_or_else(|| note.created_at.clone()),
+        asserted_at: current_since,
     }];
     for (index, row) in page.rows.iter().take(HISTORY_ROWS).enumerate() {
+        if !words_changed[index] {
+            continue;
+        }
         versions.push(Version {
             seq: integer_or_zero(row, "seq"),
             body: text_of(row, "body").unwrap_or_default(),
             current: false,
-            asserted_at: stamps
-                .get(index + 1)
-                .cloned()
-                .unwrap_or_else(|| note.created_at.clone()),
+            asserted_at: became_current(index),
         });
     }
     Ok(HistoryData {

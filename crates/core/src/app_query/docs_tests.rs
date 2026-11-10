@@ -507,6 +507,11 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
             serde_json::json!({ "id": lease, "body_text": body }),
         );
     }
+    // A rename keeps a revision of its own (#1185) but adds no version of bytes.
+    scratch.run(
+        "document.edit",
+        serde_json::json!({ "id": lease, "title": "Lease (signed)" }),
+    );
     let opened = scratch.document(&lease);
     let row = opened.document.expect("the document exists");
     assert_eq!(row.surface, wire::DocsSurface::Reading as i32);
