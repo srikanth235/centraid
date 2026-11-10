@@ -40,7 +40,10 @@
 //!
 //! The phone's calendars stay the source and are followed one way, into the vault (#1183):
 //! nothing is ever written back to them. An event the member edits here stays edited here, and
-//! the vault's `follow.take_stated` offers the phone's word back.
+//! the vault's `follow.take_stated` offers the phone's word back. Which calendars the phone
+//! hands over is its shell's call (every visible one, a read-only or subscribed one too, never
+//! Birthdays, whose dates arrive through Contacts); a snapshot carries no access level, so a
+//! calendar the member can only view is followed and its events are edited here like any other.
 //!
 //! "This device imported" is a per-device habit kept in the keychain
 //! ([`IMPORTED_KEY`]), not a fact read back from the vault: the OS permission a
