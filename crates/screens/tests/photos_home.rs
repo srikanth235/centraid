@@ -349,6 +349,9 @@ fn no_menu_off_the_library_on_searchs_page_or_while_selecting() {
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     assert!(r.state().filter_menu.is_none());
     r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
+    assert_eq!(r.state().destination, Dest::Collections as i32);
+    assert!(r.state().filter_menu.is_none());
+    r.send(H::Band("library".to_owned()));
     assert!(r.state().filter_menu.is_some());
     r.send(selecting_on());
     assert!(r.state().filter_menu.is_none());
