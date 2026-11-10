@@ -397,7 +397,10 @@ pub const REGISTER: &[Entry] = &[
     ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.store_system", rust_only(EARLIER_VERSIONS)),
-    ("EarlierVersion.since_store_system", rust_only(EARLIER_VERSIONS)),
+    (
+        "EarlierVersion.since_store_system",
+        rust_only(EARLIER_VERSIONS),
+    ),
     ("EarlierChange.before_json", rust_only(EARLIER_VERSIONS)),
     ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
