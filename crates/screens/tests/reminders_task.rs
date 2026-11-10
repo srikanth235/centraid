@@ -74,16 +74,26 @@ fn phase(v: &wire::ViewState) -> Phase {
 }
 
 fn rent(d: &Driver) -> String {
+    rent_on(d, &day(d, 4))
+}
+
+/// The reminder "Rent", due at nine on `day`.
+fn rent_on(d: &Driver, day: &str) -> String {
     add(
         d,
         act::reminders::AddTask {
             title: "Rent".into(),
             description: Field::Is("Standing order".into()),
-            due: due(&format!("{}T09:00", day(d, 4))),
+            due: due(&format!("{day}T09:00")),
             ..Default::default()
         },
     )
 }
+
+/// A Wednesday far enough ahead to be a future day whenever the suite runs: a test about the
+/// weekdays of a repeat names its day rather than reading it off the machine's clock, where four
+/// days from today is a Saturday one day in seven.
+const A_WEDNESDAY: &str = "2099-06-03";
 
 // -----------------------------------------------------------------------------
 // Reading
@@ -641,7 +651,7 @@ fn custom_event(d: &mut Driver, i: u64, kind: wire::agenda_editor_event::Kind) {
 fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
     use wire::agenda_editor_event as ee;
     let mut d = driver();
-    let id = rent(&d);
+    let id = rent_on(&d, A_WEDNESDAY);
     let i = open(&mut d, &id);
     // Custom is a choice beside the presets, and no sheet is up until it is chosen.
     let repeats = field(d.view(i), "repeats");
