@@ -44,7 +44,7 @@ internal fun readCalendarSnapshot(context: Context, daysBack: Int, daysOn: Int, 
 
 private const val DAY_MS: Long = 24L * 60 * 60 * 1000
 
-/** What the phone's calendars held at one read: the events, and every calendar the member writes to that is present. */
+/** What the phone's calendars held at one read: the events, and every calendar the member can edit that is present. */
 private class CalendarsRead(
     val events: List<PhoneCalendarEvent>,
     val calendars: List<PhoneCalendar>,
@@ -52,7 +52,7 @@ private class CalendarsRead(
     val complete: Boolean,
 )
 
-/** One calendar the member writes to: its origin and the name they know it by. */
+/** One calendar the member can edit: its origin and the name they know it by. */
 private class CalendarRow(val key: String, val calendar: PhoneCalendar)
 
 /** What an event row says about where it lives and what it is called on every device. */
@@ -69,7 +69,7 @@ private class EventMeta(val calendarId: Long, val uid: String?)
  * how the importer knows to skip it.
  *
  * **EACH EVENT IS KEYED BY ITS iCal UID** (R-1127-10) where the provider fills it, else its row
- * id, and **belongs to its calendar**: every visible calendar the member writes to is an origin,
+ * id, and **belongs to its calendar**: every visible calendar the member can edit is an origin,
  * an empty one included. A calendar the member hides has no instances, so it reads as one that
  * left the phone, and the member is asked, with Keep the default.
  */
@@ -93,9 +93,11 @@ private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: 
         CalendarContract.Instances.ORIGINAL_INSTANCE_TIME,
         CalendarContract.Instances.EVENT_LOCATION,
     )
-    // ONLY CALENDARS THE MEMBER WRITES TO, never a cancelled instance: a
-    // subscribed holiday calendar is nobody's own events, and a contacts'
-    // birthdays calendar would copy what Contacts → People brought in.
+    // ONLY CALENDARS THE MEMBER CAN EDIT (contributor access or more), never a cancelled instance.
+    // Nothing is written back to the phone now (#1183); the rule stays as the way to tell the
+    // member's own calendars from the ones the phone fills for them: a subscribed holiday calendar
+    // is nobody's own events, and a contacts' birthdays calendar would copy what Contacts → People
+    // brought in. The privacy page says "your editable calendars".
     val selection = "(${CalendarContract.Instances.STATUS} IS NULL OR " +
         "${CalendarContract.Instances.STATUS} != ${CalendarContract.Events.STATUS_CANCELED}) AND " +
         "${CalendarContract.Instances.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR}"

@@ -48,9 +48,11 @@ enum PhoneCalendar {
     /// **Complete only with full access** (R-1127-10), which is the only access this reads under.
     private static func snapshot(_ store: EKEventStore, _ read: Centraid_Core_V1_CalendarRead) -> Centraid_Core_V1_CalendarSnapshot {
         let now = Date()
-        // ONLY CALENDARS THE MEMBER WRITES TO: a subscribed holiday calendar
-        // is nobody's own events, and the Birthdays calendar would copy what
-        // Contacts -> People already brought in. Each is listed, empty or not.
+        // ONLY CALENDARS THE MEMBER CAN EDIT (`allowsContentModifications`). Nothing is written back
+        // to the phone now (#1183); the rule stays as the way to tell the member's own calendars from
+        // the ones the phone fills for them: a subscribed holiday calendar is nobody's own events, and
+        // the Birthdays calendar would copy what Contacts -> People already brought in. The privacy
+        // page says "your editable calendars". Each is listed, empty or not.
         let own = store.calendars(for: .event)
             .filter(\.allowsContentModifications)
             .sorted { $0.calendarIdentifier < $1.calendarIdentifier }
