@@ -141,6 +141,7 @@ pub mod chat;
 pub mod chat_confirm;
 pub mod custody;
 pub mod docs;
+pub mod follow;
 pub mod health;
 pub mod home;
 pub mod imports;

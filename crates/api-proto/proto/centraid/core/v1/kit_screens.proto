@@ -498,3 +498,35 @@ message LinkEvent {
 
   message PickerClosed {}
 }
+
+// WHAT THE PHONE SAYS (#1183): the line a followed row's detail screen draws under a field, or
+// under a list, where the member's value differs from what the phone's store last stated. Only
+// the detail screen has it; a list, a tile, Home and search show the member's value and no mark.
+// Rust words everything, in the store's name (Phone, Folder, Apple Health), and works the line
+// out on each read: nothing is stored, and the line goes once the two agree. One shape, drawn
+// the same on the person, event, document and workout pages.
+message PhoneSays {
+  // The sentence, with the value in it: "Phone says Ada Lovelase", "Phone still has +44 7700
+  // 900123".
+  string lead = 1;
+  // The one tap: "Use phone’s", "Add back".
+  string action_label = 2;
+  // What the action does, spoken: "Use the name your phone has, Ada Lovelase".
+  string accessibility_label = 3;
+  // What to send back when the action is tapped.
+  PhoneSaysTake take = 4;
+}
+
+// Which field, and which item of it, the action takes the phone's value for. Opaque to a shell:
+// it is sent back as it came.
+message PhoneSaysTake {
+  string field = 1;
+  // The item of a field made of items; absent for the whole field.
+  optional string item_key = 2;
+}
+
+// The action is tapped: the screen takes the phone's value and reads again, so the line goes.
+// The same event on every page that draws a `PhoneSays`.
+message PhoneSaysTaken {
+  PhoneSaysTake take = 1;
+}

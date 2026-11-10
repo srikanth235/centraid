@@ -56,6 +56,9 @@ const PASS_TELLS_ROLL: &str = "the pass service tells the camera roll by name (p
 const FILES_FOLLOWED: &str = "`shell.files-followed` is read by Rust only: core/app_query/imports.rs builds the answer, imports/files.rs and docs/drive/mod.rs read it";
 
 /// One reason, several rows.
+const PHONE_DIFFERENCES: &str = "`shell.phone-differences` is read by Rust only: core/app_query/follow.rs builds the answer and kit/follow.rs reads it; the detail screens word it and send a shell only the finished `PhoneSays` line";
+
+/// One reason, several rows.
 const ROLL_TELLS_PHOTOS: &str = "the camera roll tells Photos' home by name (imports/camera_roll.rs to photos/home/chrome.rs); no shell sends it";
 
 /// One reason, several rows.
@@ -377,6 +380,16 @@ pub const REGISTER: &[Entry] = &[
         rust_only(
             "the Docs drive tells the folder follower by name (docs/drive/mod.rs to imports/files.rs); no shell sends it",
         ),
+    ),
+    ("FollowDifference.held_json", rust_only(PHONE_DIFFERENCES)),
+    ("FollowDifference.stated_json", rust_only(PHONE_DIFFERENCES)),
+    (
+        "FollowItemDifference.held_json",
+        rust_only(PHONE_DIFFERENCES),
+    ),
+    (
+        "FollowItemDifference.stated_json",
+        rust_only(PHONE_DIFFERENCES),
     ),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.documents", rust_only(FILES_FOLLOWED)),

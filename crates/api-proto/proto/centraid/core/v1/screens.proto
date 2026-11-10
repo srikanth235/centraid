@@ -316,6 +316,8 @@ message ScreenEvent {
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
     TransferEvent transfer = 901;
+    // The action under a "phone says" line, from any page that draws one (#1183).
+    PhoneSaysTaken phone_says_taken = 902;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
