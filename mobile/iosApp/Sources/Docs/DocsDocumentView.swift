@@ -4,11 +4,11 @@ import SwiftUI
 
 /// ONE DOCUMENT'S PAGE (#1046, #1135): its surface — the reader (text), the
 /// stage (image, video, PDF), facts only, or gone — then its path, facts, a row
-/// to its version history and the verbs Rust offers.
+/// to its Earlier versions and the verbs Rust offers.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which verbs exist and whether each is
 /// enabled are `DocsDocumentData.actions`; the editor, a crumb's folder and the
-/// version history are routes the data carries, which a tap pushes.
+/// Earlier versions are routes the data carries, which a tap pushes.
 struct DocsDocumentView: View {
     let state: Centraid_Core_V1_DocsDocumentState
     let send: (Centraid_Core_V1_DocsDocumentEvent) -> Void
@@ -110,6 +110,8 @@ struct DocsDocumentView: View {
                                         FieldRow(key: fact.label, value: fact.detail)
                                     }
                                 }
+                                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                                EarlierEntryRow(entry: document.hasEarlier ? document.earlier : nil, open: open)
                             }
                             .padding(.bottom, 16)
                         }
@@ -200,8 +202,8 @@ struct DocsDocumentView: View {
         }
     }
 
-    /// THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to
-    /// its versions. A white card on the page, 16 points round.
+    /// THE INFO CARD: what it is and when it changed, its labels in their colours.
+    /// A white card on the page, 16 points round.
     private func infoCard(_ document: Centraid_Core_V1_DocsDocumentData) -> some View {
         VStack(spacing: 0) {
             HStack {
@@ -233,10 +235,6 @@ struct DocsDocumentView: View {
                 .frame(minHeight: 44)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("docs-document-labels")
-            }
-            if document.hasVersions {
-                KitHairline()
-                versionsRow(document.versions)
             }
         }
         .background(RoundedRectangle(cornerRadius: CentraidScale.cardRadius).fill(Color(CentraidAsset.surfaceCard)))
@@ -281,32 +279,6 @@ struct DocsDocumentView: View {
         if action.destructive { return Theme.color("net", scheme) }
         if action.key == "unstar" || action.key == "share" { return AppAccent("docs").text }
         return Theme.color("text", scheme)
-    }
-
-    /// THE VERSION HISTORY'S ROW: its words, how many, and the page it opens.
-    private func versionsRow(_ versions: Centraid_Core_V1_DocsVersionsLink) -> some View {
-        Button {
-            open(versions.route)
-        } label: {
-            HStack(spacing: 12) {
-                Text(versions.label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 8)
-                Text(versions.countLabel)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KitRowPress())
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("docs-versions")
     }
 
     // MARK: Events
@@ -448,83 +420,6 @@ struct DocsPDFStage: UIViewRepresentable {
 
     func updateUIView(_ view: PDFView, context: Context) {
         if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
-    }
-}
-
-// MARK: - Version history
-
-/// A DOCUMENT'S VERSIONS (`docs.versions`): newest first, the current one
-/// marked, an earlier one of a live document restorable. Every word, and
-/// whether a row offers Restore at all, is Rust's.
-struct DocsVersionsView: View {
-    let state: Centraid_Core_V1_DocsVersionsState
-    let send: (Centraid_Core_V1_DocsVersionsEvent) -> Void
-    let onBack: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.appAccent) private var accent
-
-    static func event(_ build: (inout Centraid_Core_V1_DocsVersionsEvent) -> Void) -> Centraid_Core_V1_DocsVersionsEvent {
-        var event = Centraid_Core_V1_DocsVersionsEvent()
-        build(&event)
-        return event
-    }
-
-    private func content(_ state: Centraid_Core_V1_DocsVersionsState) -> ScreenContent<Centraid_Core_V1_DocsVersionsData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
-    var body: some View {
-        // THE BOARD (DocVersions): the title large in the page, the versions in one white card.
-        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
-            EmptyView()
-        } content: {
-            VStack(spacing: 0) {
-                DocsWriteLine(status: state.status)
-                ReadStateView(
-                    content: content(state),
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(Self.event { $0.refreshed = .init() }) }
-                ) { data in
-                    if data.hasEmpty {
-                        EmptyStateView(data.empty)
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(data.versions.enumerated()), id: \.element.key) { index, version in
-                                    if index > 0 { KitHairline().padding(.leading, 16) }
-                                    HStack(spacing: 8) {
-                                        // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
-                                        CentraidRow(title: version.label, meta: version.meta)
-                                        if !version.restoreLabel.isEmpty {
-                                            KitLink(
-                                                label: version.restoreLabel,
-                                                dense: true,
-                                                tint: accent.text,
-                                                identifier: "docs-version-restore-\(version.key)"
-                                            ) {
-                                                send(Self.event { $0.restored = .with { $0.key = version.key } })
-                                            }
-                                        }
-                                    }
-                                    .padding(.trailing, 8)
-                                }
-                            }
-                            .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.bottom, 16)
-                        }
-                        .refreshable { send(Self.event { $0.refreshed = .init() }) }
-                    }
-                }
-            }
-        }
     }
 }
 

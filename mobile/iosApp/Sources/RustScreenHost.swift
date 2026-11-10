@@ -117,9 +117,9 @@ struct RustScreenView: View {
         case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
         case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
              .moneyCategories?, .moneyImport?, .moneySearch?: "money"
-        case .docsDrive?, .docsDocument?, .docsVersions?, .docsEditor?: "docs"
+        case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
         case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
-        case .notesHome?, .notesEditor?, .notesHistory?: "notes"
+        case .notesHome?, .notesEditor?: "notes"
         case .peopleHome?, .peoplePerson?, .peopleEditor?: "people"
         default: ""
         }
@@ -386,12 +386,6 @@ struct RustScreenView: View {
                 onBack: pop,
                 onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )
-        case .docsVersions(let state)?:
-            DocsVersionsView(
-                state: state,
-                send: { store.send(instance, .docsVersions($0)) },
-                onBack: pop
-            )
         case .docsEditor(let state)?:
             DocsEditorView(
                 state: state,
@@ -438,12 +432,6 @@ struct RustScreenView: View {
                 send: { store.send(instance, .notesEditor($0)) },
                 open: open,
                 onClose: pop
-            )
-        case .notesHistory(let state)?:
-            NotesHistoryView(
-                state: state,
-                send: { store.send(instance, .notesHistory($0)) },
-                onBack: pop
             )
         case .peopleHome(let state)?:
             PeopleHomeView(
