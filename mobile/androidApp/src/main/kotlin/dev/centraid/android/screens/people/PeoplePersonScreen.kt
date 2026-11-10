@@ -55,6 +55,7 @@ import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -254,6 +255,9 @@ private fun PersonBody(
                 testTag = "people-touch-${touch.interaction_id}",
             )
         }
+
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
+        state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
 
         if (chrome != null && !person.is_me) {
             item(key = "foot") {

@@ -38,6 +38,7 @@ import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.EarlierScreen
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.kit.TransferScreen
 import dev.centraid.android.screens.agenda.AgendaEditorScreen
@@ -451,6 +452,7 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val earlier = view.earlier
         val transfer = view.transfer
         val lockerHome = view.locker_home
         val lockerItem = view.locker_item
@@ -801,6 +803,12 @@ internal class RustRoot(
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
+                onBack = back,
+            )
+            // EVERY RECORD'S EARLIER VERSIONS (#1185).
+            earlier != null -> EarlierScreen(
+                view = earlier,
+                onEvent = { send(ScreenEvent(earlier = it)) },
                 onBack = back,
             )
             // IMPORT AND EXPORT (#1173): Notes' Markdown and People's vCards.

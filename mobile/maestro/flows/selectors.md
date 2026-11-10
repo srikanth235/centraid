@@ -83,6 +83,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `tasks-project-edit` | a project page | the header verb "Edit List": opens the style sheet on the list |
 | `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write; on the event page, after Move to trash) |
 | `trash-status-action` | every app's Trash | the status line's Undo after a restore (`TrashEvent.status_acted`); the same id on both shells |
+| `earlier-entry` | the foot of a detail page (People's person today) | the one-row card "Earlier versions 2 ›" (`EarlierEntry`, #1185): label, count and a chevron; a tap pushes the entry's `route`. Absent when the record holds nothing earlier, and then nothing is drawn. One `EarlierEntryRow` / `EarlierEntryCard` per shell (`Kit/EarlierEntry.swift`, `kit/EarlierEntry.kt`) |
+| `earlier-row-<seq>`, `earlier-restore-<seq>`, `earlier-more`, `earlier-status-action` | every app's Earlier versions page (`<app>.earlier`) | a version's row (`seq` 0 is the current row, tagged "Current", with no Restore), its plain-text Restore (sends `EarlierEvent.restore`; asks nothing), the "Show more" control (`EarlierEvent.more`), and the status line's Undo after a restore (`EarlierEvent.status_acted`); the same ids on both shells (`Kit/CoreEarlierView.swift`, `kit/EarlierScreen.kt`) |
 | `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
 | `agenda-month-chip` | Agenda (Day, Week) | the header's back-to-month chip, "‹ November" (`calendar_header.month_label`); a tap opens the Month on the same day |
 | `agenda-layout-key` | Agenda (Day, Week) | the header's layout key; its rows are `agenda-view-<key>` (`day`, `week`, `month`, `list`, `year`) and a pick keeps the day |
