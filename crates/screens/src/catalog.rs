@@ -5453,6 +5453,30 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// (following, #1183) Make a field of a followed row, or one item of it, equal to what the phone's store last stated, through follow.take_stated. A detail screen's tap, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct TakeStated {
+            pub entity: String,
+            pub field: String,
+            pub item_key: Option<String>,
+        }
+        impl TakeStated {
+            pub const NAME: &str = "take-stated";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity".to_owned(), text(self.entity));
+                map.insert("field".to_owned(), text(self.field));
+                if let Some(it) = self.item_key { map.insert("item_key".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<TakeStated> for wire::ActRequest {
+            fn from(value: TakeStated) -> Self {
+                value.request()
+            }
+        }
     }
 }
 
@@ -7067,6 +7091,26 @@ pub mod load {
         }
         impl From<ChatCard> for wire::LoadRequest {
             fn from(value: ChatCard) -> Self {
+                value.request()
+            }
+        }
+
+        /// (following, #1183) For one followed row, each field the member's edit holds apart from what the phone's store last stated, per item for a contact's numbers, an event's guests and a workout's figures. Worked out on each read, never stored; empty for a row nothing follows or a trashed one. A detail screen words it.
+        #[derive(Clone, Debug, Default)]
+        pub struct PhoneDifferences {
+            pub entity_id: String,
+        }
+        impl PhoneDifferences {
+            pub const NAME: &str = "phone-differences";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<PhoneDifferences> for wire::LoadRequest {
+            fn from(value: PhoneDifferences) -> Self {
                 value.request()
             }
         }

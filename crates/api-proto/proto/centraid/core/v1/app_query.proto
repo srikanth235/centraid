@@ -261,6 +261,8 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
+    // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
+    FollowDifferences follow_differences = 1702;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

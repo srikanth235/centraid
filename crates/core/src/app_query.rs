@@ -70,6 +70,8 @@ use crate::error::{CoreError, Result};
 pub(crate) mod chat;
 // The shell's import reads (lane I): the folders a vault follows.
 pub(crate) mod imports;
+// What the phone says that differs from a followed row (#1183).
+pub(crate) mod follow;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
 // projects, Docs folders and chat threads, for Home and the
 // owning apps.

@@ -149,6 +149,35 @@ message ImportsHeldFile {
   string stat = 2;
 }
 
+// WHAT THE PHONE SAYS THAT DIFFERS (#1183): the shell query `phone-differences`. For one followed
+// row, each field the member's edit holds apart from what the phone's store last stated, with
+// both values as JSON text in the form the vault keeps them. A field made of items (a contact's
+// numbers, an event's guests, a workout's figures) lists only the items that differ. Empty for a
+// row nothing follows, a trashed one and one that agrees. Nothing is stored; it is worked out on
+// each read, and each detail screen words it.
+message FollowDifferences {
+  repeated FollowDifference fields = 1;
+}
+
+message FollowDifference {
+  // The field's stable name: `title`, `birthday`, `starts`, `points`, `attendees`, `workout`.
+  string field = 1;
+  // What the store last stated and what the vault holds, as JSON text.
+  string stated_json = 2;
+  string held_json = 3;
+  repeated FollowItemDifference items = 4;
+}
+
+message FollowItemDifference {
+  // The key that names the item across statements (`kind:reach-key`, a guest's email, a
+  // measure's column).
+  string key = 1;
+  // Absent: the store never stated it (the member added it).
+  optional string stated_json = 2;
+  // Absent: the vault no longer holds it (the member removed it).
+  optional string held_json = 3;
+}
+
 // ---------------------------------------------------------------------------
 // A made vault's imports
 // ---------------------------------------------------------------------------

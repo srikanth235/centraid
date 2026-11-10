@@ -603,6 +603,10 @@ fn read(
         // ---- the shell's own catalogue (`shell/manifest.json`) ----
         // imports (lane I): the folders the vault follows, with each file's last stat
         ("shell", "files-followed") => app_query::imports::files_followed(door)?,
+        // following (#1183): what the phone says that differs from one followed row
+        ("shell", "phone-differences") => {
+            app_query::follow::differences(vault, &p.text("entity_id")?)?
+        }
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,
