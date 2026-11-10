@@ -162,7 +162,8 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
                 SheetRow(
                     label = action.label,
                     iconKey = action.icon_key.ifEmpty { null },
-                    detail = action.detail,
+                    // Trash's rule (meta) is the second line; the count (detail) stays under it.
+                    detail = listOf(action.meta, action.detail).filter { it.isNotEmpty() }.joinToString("\n"),
                     destructive = action.destructive,
                     testTag = "docs-action-${action.key}",
                     onTap = { if (action.enabled) actions.onAction(action) },

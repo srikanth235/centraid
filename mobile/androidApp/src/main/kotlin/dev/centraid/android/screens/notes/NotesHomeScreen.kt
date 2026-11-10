@@ -472,7 +472,7 @@ private fun HomeSheets(state: NotesHomeState, onEvent: (NotesHomeEvent) -> Unit,
             // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
             NotesSheet.NOTES_SHEET_MORE -> SheetRoom(title = chrome?.more_title.orEmpty(), onDismiss = close, expanded = true) {
                 state.more_rows.forEach { row ->
-                    SheetRow(row.label, iconKey = row.icon_key, testTag = "notes-more-${row.key}", onTap = {
+                    SheetRow(row.label, iconKey = row.icon_key, detail = row.meta, testTag = "notes-more-${row.key}", onTap = {
                         close()
                         row.route?.let(onOpen)
                     })

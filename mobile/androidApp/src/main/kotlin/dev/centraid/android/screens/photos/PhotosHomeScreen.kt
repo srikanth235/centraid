@@ -146,7 +146,12 @@ internal fun PhotosHomeScreen(
             },
             filter = filter,
             contentUnderBand = true,
-            status = state.status?.sentence.orEmpty(),
+            statusLine = {
+                // "{title} moved to trash" with Undo (#1185); a refusal's sentence shows alone.
+                dev.centraid.android.kit.StatusLine(state.status, actTag = "photos-status-action") {
+                    onEvent(PhotosHomeEvent(selection = PhotosSelectionEvent(status_acted = PhotosSelectionEvent.StatusActed())))
+                }
+            },
             band = {
                 if (selecting) {
                     // A SELECTION TAKES THE BAND'S PLACE (Apple Photos; v0's room),

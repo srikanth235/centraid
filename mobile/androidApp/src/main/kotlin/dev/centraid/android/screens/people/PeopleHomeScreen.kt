@@ -202,6 +202,7 @@ public fun PeopleHomeScreen(
                 SheetRow(
                     label = row.label,
                     iconKey = row.icon_key,
+                    detail = row.meta,
                     testTag = "people-more-${row.key}",
                     onTap = {
                         dismiss()

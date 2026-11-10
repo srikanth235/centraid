@@ -300,7 +300,20 @@ private fun LightViewer(
                     .padding(bottom = 8.dp),
             ) {
                 state.status?.takeIf { it.sentence.isNotEmpty() && !it.refused }?.let {
-                    KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.fillMaxWidth().padding(bottom = 4.dp).testTag("photos.lightbox.status"))
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.weight(1f).testTag("photos.lightbox.status"))
+                        if (it.action_label.isNotEmpty()) {
+                            KitText(
+                                it.action_label,
+                                KitType.Meta,
+                                Surface.ink,
+                                Modifier
+                                    .clickable { onEvent(PhotosLightboxEvent(status_acted = PhotosLightboxEvent.StatusActed())) }
+                                    .padding(start = 8.dp)
+                                    .testTag("photos-lightbox-status-action"),
+                            )
+                        }
+                    }
                 }
                 Box(Modifier.clip(CircleShape).background(Surface.card)) {
                     Toolbar(state, words, photo.trashed, onEvent, onOpen, Surface.meta, light = true)
@@ -442,16 +455,31 @@ private fun Chrome(
         state.status?.takeIf { it.sentence.isNotEmpty() }?.let { status ->
             // ON ITS OWN PLATE, clear of the photograph's pixels beneath it.
             Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    text = status.sentence,
-                    color = ink,
-                    textAlign = TextAlign.Center,
-                    style = centraidType("small"),
+                Row(
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(centraidColor("stageSunken"))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = status.sentence,
+                        color = ink,
+                        textAlign = TextAlign.Center,
+                        style = centraidType("small"),
+                    )
+                    if (status.action_label.isNotEmpty()) {
+                        Text(
+                            text = status.action_label,
+                            color = ink,
+                            style = centraidType("small"),
+                            modifier = Modifier
+                                .clickable { onEvent(PhotosLightboxEvent(status_acted = PhotosLightboxEvent.StatusActed())) }
+                                .padding(start = 12.dp)
+                                .testTag("photos-lightbox-status-action"),
+                        )
+                    }
+                }
             }
         }
 
