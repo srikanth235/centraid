@@ -634,8 +634,9 @@ message DocsDocumentData {
   repeated DocsFact facts = 6;
   // The folder path, top level first, for the breadcrumb.
   repeated DocsCrumb path = 7;
-  // No longer sent (#1185): the foot's row is `earlier`.
-  optional DocsVersionsLink versions = 8;
+  // 8 was `versions`: the foot's row is `earlier` (#1185).
+  reserved 8;
+  reserved "versions";
   // 9 and 10 were the Activity rows and their empty line: the rail read the command journal,
   // which is gone (#1146).
   reserved 9, 10;
@@ -668,14 +669,6 @@ message DocsDocumentData {
   // The foot's "Earlier versions   2 ›" row (#1185): the kit's entry, absent until the document
   // holds an earlier version. Its route is the kit's one screen, `docs.earlier`.
   optional EarlierEntry earlier = 22;
-}
-
-// NO LONGER SENT (#1185): the row that opened the version history.
-message DocsVersionsLink {
-  string label = 1;
-  // How many versions: "3 versions".
-  string count_label = 2;
-  Route route = 3;
 }
 
 message DocsReader {
@@ -798,65 +791,6 @@ message DocsDocumentEvent {
   message Confirmed {}
 
   message Dismissed {}
-}
-
-// ---------------------------------------------------------------------------
-// Version history (`docs.versions`): NO LONGER SENT (#1185). A document's earlier versions are the
-// kit's one screen (`docs.earlier`, `EarlierView`); these messages stay until the shells delete
-// the views that read them, and are then `reserved`.
-// ---------------------------------------------------------------------------
-
-message DocsVersionsState {
-  string document_id = 1;
-  string title = 2;
-  oneof content {
-    Loading loading = 3;
-    Failure failure = 4;
-    Denied denied = 5;
-    DocsVersionsData data = 6;
-  }
-  StatusLine status = 7;
-  DocsVersionsChrome chrome = 8;
-}
-
-message DocsVersionsChrome {
-  // The page this one was pushed from: the document's title.
-  string back = 1;
-  string heading = 2;
-  string retry = 3;
-  string loading = 4;
-}
-
-message DocsVersionsData {
-  repeated DocsVersionRow versions = 1;
-  // Set when the document is gone or has nothing to list.
-  optional EmptyState empty = 2;
-}
-
-message DocsVersionRow {
-  // The version's own key is its number: two versions can hold the same bytes.
-  string key = 1;
-  // "Version 3".
-  string label = 2;
-  // "Current · 2.4 MB · 3 March 09:12".
-  string meta = 3;
-  bool current = 4;
-  // "Restore" on an earlier version of a live document; EMPTY otherwise.
-  string restore_label = 5;
-}
-
-message DocsVersionsEvent {
-  oneof kind {
-    Refreshed refreshed = 1;
-    Restored restored = 2;
-  }
-
-  message Refreshed {}
-
-  // A `DocsVersionRow.key` whose Restore was tapped.
-  message Restored {
-    string key = 1;
-  }
 }
 
 // ---------------------------------------------------------------------------

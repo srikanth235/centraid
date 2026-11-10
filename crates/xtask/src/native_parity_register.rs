@@ -394,6 +394,7 @@ pub const REGISTER: &[Entry] = &[
         "FollowItemDifference.stated_json",
         rust_only(PHONE_DIFFERENCES),
     ),
+    ("EarlierVersions.versions", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.store_system", rust_only(EARLIER_VERSIONS)),

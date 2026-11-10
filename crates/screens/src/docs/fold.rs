@@ -416,8 +416,6 @@ pub fn document(
         surface: Some(surface),
         facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
-        // `versions` is no longer sent (#1185): the foot's row is `earlier`, set by the page.
-        versions: None,
         earlier: None,
         actions: head_actions(locale, found),
         bar: bar_actions(locale, found),

@@ -1328,8 +1328,6 @@ impl Screen for Editor {
                 },
                 checklist_label: words::checklist(locale),
                 keyboard_label: words::keyboard_hide(locale),
-                // `history_label` and `history_enabled` are no longer sent (#1185).
-                ..wire::NotesEditorChrome::default()
             }),
             autosave: Some(autosave),
             link: self
@@ -1361,7 +1359,6 @@ impl Screen for Editor {
                 caret,
                 seq: self.selection_seq,
             }),
-            // `history` is no longer sent (#1185): the menu's row is `earlier`.
             ..wire::NotesEditorState::default()
         };
         if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {

@@ -454,8 +454,9 @@ message NotesEditorState {
   Autosave autosave = 7;
   // The powerbox, while open.
   optional NotesLinkSheet link = 8;
-  // No longer sent (#1185): the menu's earlier-versions row is `earlier`.
-  optional Route history = 9;
+  // 9 was `history`: the menu's earlier-versions row is `earlier` (#1185).
+  reserved 9;
+  reserved "history";
   // Where Send to Agenda goes (To-do's quick add holds the words); absent
   // while there are none.
   optional Route send_to_agenda = 10;
@@ -587,8 +588,9 @@ message NotesEditorChrome {
   string title_placeholder = 2;
   string body_placeholder = 3;
   string pin_label = 4;
-  // No longer sent (#1185): the entry carries its own label.
-  string history_label = 5;
+  // 5 was `history_label`: the entry carries its own label (#1185).
+  reserved 5;
+  reserved "history_label";
   string send_to_agenda_label = 6;
   string link_label = 7;
   // "Saving…", "Saved", the refusal's sentence, or empty.
@@ -596,8 +598,9 @@ message NotesEditorChrome {
   // "New note" or "Note".
   string title = 9;
   string menu_label = 10;
-  // No longer sent (#1185): the entry is absent until there is something earlier.
-  bool history_enabled = 11;
+  // 11 was `history_enabled`: the entry is absent until there is something earlier (#1185).
+  reserved 11;
+  reserved "history_enabled";
   string retry = 12;
   // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
   string tag_placeholder = 13;
@@ -722,54 +725,3 @@ message NotesEditorEvent {
   message Saved {}
 }
 
-// ---------------------------------------------------------------------------
-// notes.history: NO LONGER SENT (#1185). A note's earlier versions are the kit's one screen
-// (`notes.earlier`, `EarlierView`); these messages stay until the shells delete the views that
-// read them, and are then `reserved`.
-// ---------------------------------------------------------------------------
-
-message NotesHistoryState {
-  string note_id = 1;
-  // The title and chrome.
-  string title = 2;
-  // The note this history is of, by name: the back control's words.
-  string back = 3;
-  string close = 4;
-  string retry = 5;
-  string loading_label = 6;
-  oneof content {
-    Loading loading = 7;
-    Failure failure = 8;
-    Denied denied = 9;
-    NotesHistoryData data = 10;
-  }
-  StatusLine status = 11;
-}
-
-message NotesHistoryData {
-  repeated NotesVersionRow rows = 1;
-  EmptyState empty = 2;
-}
-
-message NotesVersionRow {
-  // The revision's `seq` as text; "0" is the current words.
-  string content_id = 1;
-  string label = 2;
-  string preview = 3;
-  bool current = 4;
-  string restore_label = 5;
-  string accessibility_label = 6;
-}
-
-message NotesHistoryEvent {
-  oneof kind {
-    Refreshed refreshed = 1;
-    RestoreTapped restore = 2;
-  }
-
-  message Refreshed {}
-
-  message RestoreTapped {
-    string content_id = 1;
-  }
-}

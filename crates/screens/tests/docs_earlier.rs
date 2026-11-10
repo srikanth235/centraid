@@ -95,10 +95,6 @@ fn the_page_offers_the_entry_with_the_count_only_once_there_is_something_earlier
         document_data(d.view(i)).earlier.is_none(),
         "a document never changed has nothing earlier"
     );
-    assert!(
-        document_data(d.view(i)).versions.is_none(),
-        "the old row is not sent"
-    );
 
     edit(&d, &id, "second");
     edit(&d, &id, "third");

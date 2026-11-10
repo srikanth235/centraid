@@ -31,6 +31,10 @@ message Route {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof args {
     CounterRoute counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -73,7 +77,6 @@ message Route {
     DocsDriveRoute docs_drive = 200;
     DocsDocumentRoute docs_document = 201;
     DocsEditorRoute docs_editor = 202;
-    DocsVersionsRoute docs_versions = 203;
     // ---- health (300-399) ----
     HealthHomeRoute health_home = 300;
     HealthMetricRoute health_metric = 301;
@@ -82,7 +85,6 @@ message Route {
     // ---- notes (600-699) ----
     NotesHomeRoute notes_home = 600;
     NotesEditorRoute notes_editor = 601;
-    NotesHistoryRoute notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeRoute people_home = 700;
     PeoplePersonRoute people_person = 701;
@@ -365,13 +367,6 @@ message DocsEditorRoute {
   string title = 2;
 }
 
-// `docs.versions`: NO LONGER SENT (#1185); the kit's `docs.earlier` replaced it. Stays until the
-// shells delete the view.
-message DocsVersionsRoute {
-  string document_id = 1;
-  string title = 2;
-}
-
 // ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
@@ -445,13 +440,6 @@ message NotesHomeRoute {
 message NotesEditorRoute {
   string note_id = 1;
   bool is_new = 2;
-}
-
-// `notes.history`: NO LONGER SENT (#1185); the kit's `notes.earlier` replaced it. Stays until the
-// shells delete the view.
-message NotesHistoryRoute {
-  string note_id = 1;
-  string note_title = 2;
 }
 
 // ---------------------------------------------------------------------------

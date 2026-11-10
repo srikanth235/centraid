@@ -224,6 +224,10 @@ message ScreenEvent {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof kind {
     // The screen came into view. The first one loads.
     Appeared appeared = 1;
@@ -298,7 +302,6 @@ message ScreenEvent {
     DocsDriveEvent docs_drive = 200;
     DocsDocumentEvent docs_document = 201;
     DocsEditorEvent docs_editor = 202;
-    DocsVersionsEvent docs_versions = 203;
     // ---- notes (600-699) ----
     HealthHomeEvent health_home = 300;
     HealthMetricEvent health_metric = 301;
@@ -306,7 +309,6 @@ message ScreenEvent {
     HealthConnectEvent health_connect = 303;
     NotesHomeEvent notes_home = 600;
     NotesEditorEvent notes_editor = 601;
-    NotesHistoryEvent notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeEvent people_home = 700;
     PeoplePersonEvent people_person = 701;
@@ -388,6 +390,10 @@ message ViewState {
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
+  // 203 and 602 were `docs.versions` and `notes.history`, replaced by the kit's earlier-versions
+  // screen (#1185).
+  reserved 203, 602;
+  reserved "docs_versions", "notes_history";
   oneof kind {
     CounterView counter = 10;
     // ---- words (1300-1399, lane H2) ----
@@ -430,7 +436,6 @@ message ViewState {
     DocsDriveState docs_drive = 200;
     DocsDocumentState docs_document = 201;
     DocsEditorState docs_editor = 202;
-    DocsVersionsState docs_versions = 203;
     // ---- notes (600-699) ----
     HealthHomeState health_home = 300;
     HealthMetricState health_metric = 301;
@@ -438,7 +443,6 @@ message ViewState {
     HealthConnectState health_connect = 303;
     NotesHomeState notes_home = 600;
     NotesEditorState notes_editor = 601;
-    NotesHistoryState notes_history = 602;
     // ---- people (700-799) ----
     PeopleHomeState people_home = 700;
     PeoplePersonState people_person = 701;
