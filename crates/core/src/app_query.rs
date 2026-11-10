@@ -96,6 +96,7 @@ pub(crate) mod reminders;
 pub(crate) mod attachments;
 // The reminders a Calendar day shows (rounds 10 and 12).
 pub(crate) mod calendar_dated;
+pub(crate) mod calendar_trash;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 pub(crate) mod vault;
 
@@ -157,6 +158,7 @@ pub(crate) fn answer_recording(
         Q::AgendaTaskSmartCounts(asked) => reminders::smart_counts(vault, &door, &now, asked)?,
         Q::AgendaTaskDueRows(asked) => reminders::due_rows(vault, &door, &now, asked)?,
         Q::CalendarDatedReminders(asked) => calendar_dated::dated(vault, &door, &now, asked)?,
+        Q::CalendarTrash(asked) => calendar_trash::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,

@@ -376,6 +376,61 @@ pub mod act {
             }
         }
 
+        /// Delete one ALREADY-TRASHED event forever through entity.purge. Irreversible: the event, every occurrence of a repeating one, its guests and its reminders go now.
+        #[derive(Clone, Debug, Default)]
+        pub struct PurgeEvent {
+            pub event_id: String,
+        }
+        impl PurgeEvent {
+            pub const NAME: &str = "purge-event";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.event_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<PurgeEvent> for wire::ActRequest {
+            fn from(value: PurgeEvent) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Event,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Event => "event",
+                }
+            }
+        }
+
+        /// Empty the event trash through entity.empty_trash with kind event. Irreversible and takes no id: every event in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
         /// Attach or detach any file to an event through the shared edge verbs.
         #[derive(Clone, Debug, Default)]
         pub struct Attach {
@@ -5795,6 +5850,24 @@ pub mod load {
         }
         impl From<DatedReminders> for wire::LoadRequest {
             fn from(value: DatedReminders) -> Self {
+                value.request()
+            }
+        }
+
+        /// Events in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased. A repeating event is one entry, whole.
+        #[derive(Clone, Debug, Default)]
+        pub struct Trash {
+        }
+        impl Trash {
+            pub const NAME: &str = "trash";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Trash> for wire::LoadRequest {
+            fn from(value: Trash) -> Self {
                 value.request()
             }
         }

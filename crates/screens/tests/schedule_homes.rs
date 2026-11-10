@@ -413,7 +413,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.key.as_str())
             .collect::<Vec<_>>(),
-        ["calendar", "more", "invites"]
+        ["calendar", "more", "invites", "menu"]
     );
     assert_eq!(
         state
@@ -421,7 +421,7 @@ fn opening_lands_on_day_at_the_today_the_core_names() {
             .iter()
             .map(|tab| tab.icon_key.as_str())
             .collect::<Vec<_>>(),
-        ["Calendar", "List", "Inbox"]
+        ["Calendar", "List", "Inbox", "MoreHoriz"]
     );
     assert_eq!(
         state
@@ -1516,7 +1516,7 @@ fn a_failed_read_is_a_failure_and_never_an_empty_agenda_and_refreshed_is_its_ret
     assert_eq!(failure.remedy, "Try again");
     assert_eq!(r.state().chrome.as_ref().unwrap().retry, "Try again");
     // The band stands and the data is not an empty list.
-    assert_eq!(r.state().band.len(), 3);
+    assert_eq!(r.state().band.len(), 4);
     r.in_zone("Europe/London");
     assert!(matches!(r.state().content, Some(Content::Data(_))));
     r.in_zone("Not/AZone");

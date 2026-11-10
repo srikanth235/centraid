@@ -99,10 +99,10 @@ const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
 
 /// THE TABLE. One row per app per promise; it only shrinks truthfully.
 pub const REGISTER: &[Row] = &[
-    owed(
+    kept(
         "calendar",
         Promise::Trash,
-        "#1185: the event page offers Cancel only; no trash screen",
+        "crates/screens/src/calendar/trash.rs",
     ),
     kept("docs", Promise::Trash, "crates/screens/src/docs/trash.rs"),
     owed(

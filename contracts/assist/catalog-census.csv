@@ -4,8 +4,10 @@ calendar,rsvp,respond,event,card,yes: crates/screens/src/calendar/event.rs,no
 calendar,edit-event,edit,event,direct,yes: crates/screens/src/calendar/editor.rs,yes
 calendar,edit-occurrence,reschedule,event,card,yes: crates/screens/src/calendar/editor.rs,no
 calendar,cancel-event,cancel,event,direct,yes: crates/screens/src/calendar/event.rs,yes
-calendar,trash-event,delete,event,direct,no,no
-calendar,restore-event,restore,event,direct,no,no
+calendar,trash-event,delete,event,direct,yes: crates/screens/src/calendar/event.rs; crates/screens/src/calendar/trash.rs,no
+calendar,restore-event,restore,event,direct,yes: crates/screens/src/calendar/event.rs; crates/screens/src/calendar/trash.rs,no
+calendar,purge-event,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
+calendar,empty-trash,purge,event,card,yes: crates/screens/src/calendar/trash.rs,no
 calendar,attach,attach,event,card,no,no
 calendar,detach,detach,event,card,no,no
 calendar,follow-calendar,import,event,card,yes: crates/screens/src/calendar/follow.rs,no

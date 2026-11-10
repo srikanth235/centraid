@@ -1322,8 +1322,8 @@ message AgendaEventEvent {
     // Read again (the failure's retry).
     Refreshed refreshed = 2;
     RsvpPicked rsvp = 6;
-    // `AgendaAction.key`. Only `cancel` is an event: it opens the confirm or
-    // the scope sheet. `edit` carries a route and is the shell's push.
+    // `AgendaAction.key`. `cancel` opens the confirm or the scope sheet and `trash` moves the whole
+    // event to the trash at once (#1185). `edit` carries a route and is the shell's push.
     ActionPicked action = 7;
     ScopePicked scope = 8;
     SheetClosed sheet_closed = 9;
@@ -1332,9 +1332,13 @@ message AgendaEventEvent {
     ConfirmDismissed confirm_dismissed = 11;
     // The attachments section's controls (#1173).
     AgendaAttachmentEvent attachment = 20;
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 21;
   }
 
   message Refreshed {}
+
+  message StatusActed {}
 
   message RsvpPicked {
     string partstat = 1;

@@ -360,6 +360,9 @@ fn read(
                 overdue_before: p.text("overdue_before")?,
             },
         )?,
+        ("calendar", "trash") => {
+            app_query::calendar_trash::trash(vault, door, &wire::CalendarTrashRequest { tz })?
+        }
         ("calendar", "attachments") => app_query::attachments::attachments(
             door,
             app_query::attachments::Of::Event,

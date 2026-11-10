@@ -49,6 +49,11 @@ impl World {
         Self::build(Registry::default(), Some(now_ms))
     }
 
+    /// [`Self::with`] over a vault seeded as of `now_ms`.
+    pub fn seeded_with(registry: Registry, now_ms: i64) -> Self {
+        Self::build(registry, Some(now_ms))
+    }
+
     fn build(registry: Registry, seeded_at_ms: Option<i64>) -> Self {
         Self::build_with(registry, seeded_at_ms, false)
     }

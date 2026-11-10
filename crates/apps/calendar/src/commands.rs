@@ -111,10 +111,10 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-use centraid_apps_kit::actions::act;
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
-/// The fourteen, in the manifest's own order.
+/// The sixteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -124,6 +124,9 @@ pub const ACTIONS: &[ActionRow] = &[
     // An event goes to the trash and comes back through the shared verbs.
     act("trash-event", "entity.trash"),
     act("restore-event", "entity.restore"),
+    // THE TWO DESTROYS (#1185), as in every app: one trashed event, and the whole trash.
+    confirmed("purge-event", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     // An attachment is an `attached` edge from the event: the shared verbs.
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
@@ -167,7 +170,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 14);
+        assert_eq!(ACTIONS.len(), 16);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"
@@ -196,7 +199,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-calendar"]);
-        assert_eq!(act_scope_tables().len(), 14);
+        assert_eq!(act_scope_tables().len(), 16);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

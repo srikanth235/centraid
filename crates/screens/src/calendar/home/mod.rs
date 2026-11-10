@@ -58,6 +58,8 @@ pub(super) struct Home {
     /// The Calendar view last used: where the band's Calendar tab returns to.
     last_calendar: Dest,
     sheet: Sheet,
+    /// Whether the More sheet is the band's menu (Trash) and not the Calendars sheet.
+    menu: bool,
     /// The style sheet's draft: the new calendar or the calendar being edited.
     style: Option<Draft>,
     /// The status line of a write here (a calendar made, an event moved) and its Undo.
@@ -102,6 +104,7 @@ impl Home {
                 Dest::Day
             },
             sheet: Sheet::None,
+            menu: false,
             style: None,
             ops: Ops::default(),
             held: Held::default(),
@@ -173,7 +176,14 @@ impl Home {
                 // The Calendar tab lands on the view the member last used.
                 chrome::BAND_CALENDAR => self.move_to(self.last_calendar, ctx),
                 chrome::BAND_INVITES => self.move_to(Dest::Waiting, ctx),
-                chrome::BAND_MORE => self.sheet = Sheet::More,
+                chrome::BAND_MORE => {
+                    self.sheet = Sheet::More;
+                    self.menu = false;
+                }
+                chrome::BAND_MENU => {
+                    self.sheet = Sheet::More;
+                    self.menu = true;
+                }
                 _ => {}
             },
             H::DayStepped(step) => {
@@ -227,6 +237,7 @@ impl Home {
                     Sheet::None
                 };
                 self.style = None;
+                self.menu = false;
             }
             // THE TICK ON A REMINDER'S DAY (round 12): Reminders' own `complete-task` or
             // `reopen-task`, sent by the kit's check. A later occurrence of a repeating reminder
@@ -323,6 +334,12 @@ impl Home {
     /// A Calendars sheet row, by its key. A key the sheet does not hold now (a calendar
     /// gone since it was drawn) does nothing.
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
+        // THE MENU'S ROW is a route the shell pushes: the sheet is done.
+        if self.menu && key == chrome::MORE_TRASH {
+            self.sheet = Sheet::None;
+            self.menu = false;
+            return;
+        }
         let rows = self.more_rows(ctx);
         let Some(row) = rows.iter().find(|row| row.key == key) else {
             return;
@@ -340,6 +357,7 @@ impl Home {
     /// A sheet up, with the draft it names: a new calendar starts blank. A calendar edit has its
     /// own entry ([`Self::edit_calendar`]).
     fn open_sheet(&mut self, sheet: Sheet) {
+        self.menu = false;
         match sheet {
             Sheet::NewCalendar => {
                 self.style = Some(Draft::making(Subject::Calendar));
@@ -417,6 +435,9 @@ impl Home {
     fn more_rows(&self, ctx: &Ctx) -> Vec<wire::AgendaMoreRow> {
         if self.denied() {
             return Vec::new();
+        }
+        if self.menu {
+            return chrome::menu_rows(ctx.locale());
         }
         let calendars = self
             .data(ctx)
@@ -524,7 +545,8 @@ impl Screen for Home {
         } else {
             String::new()
         };
-        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads);
+        let menu_up = self.menu && self.sheet == Sheet::More;
+        let sheet_up = matches!(self.sheet, Sheet::More | Sheet::Reads) && !menu_up;
         let today = data
             .as_ref()
             .map(|data| data.today.clone())
@@ -542,7 +564,7 @@ impl Screen for Home {
                     band: if denied {
                         Vec::new()
                     } else {
-                        chrome::band(locale, self.destination, sheet_up)
+                        chrome::band(locale, self.destination, sheet_up, menu_up)
                     },
                     calendar_header: Some(calendar_header),
                     filter_menu: None,
@@ -559,10 +581,20 @@ impl Screen for Home {
                         &today,
                         !denied && term.is_none(),
                     )),
-                    chrome: Some(chrome::words_of(locale)),
+                    chrome: Some(wire::AgendaChrome {
+                        // The menu sheet is titled for the app, the Calendars sheet for its list.
+                        more_title: if menu_up {
+                            words::app_title(locale)
+                        } else {
+                            chrome::words_of(locale).more_title
+                        },
+                        ..chrome::words_of(locale)
+                    }),
                     app_key: "calendar".to_owned(),
                     more_rows: if denied {
                         Vec::new()
+                    } else if menu_up {
+                        chrome::menu_rows(locale)
                     } else {
                         chrome::more_rows(
                             locale,

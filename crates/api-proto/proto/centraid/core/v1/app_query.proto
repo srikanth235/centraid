@@ -96,6 +96,8 @@ message AppQueryRequest {
     // The earliest-due open tasks of a window, at any vault size (#1173).
     AgendaTaskDueRowsRequest agenda_task_due_rows = 25;
     CalendarDatedRemindersRequest calendar_dated_reminders = 29;
+    // The events in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    CalendarTrashRequest calendar_trash = 34;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -201,6 +203,7 @@ message AppQueryResponse {
     AgendaTaskSmartCounts agenda_task_smart_counts = 26;
     AgendaTaskDueRows agenda_task_due_rows = 25;
     CalendarDatedReminders calendar_dated_reminders = 29;
+    CalendarTrash calendar_trash = 34;
     // What an event or a task has attached (`agenda.attachments`, #1173).
     AgendaAttachments agenda_attachments = 27;
     DocsDrive docs_drive = 30;

@@ -46,8 +46,8 @@ mod tests {
     #[test]
     fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 14);
+        assert_eq!(manifest.queries.len(), 8);
+        assert_eq!(manifest.actions.len(), 16);
         for name in [
             "upcoming",
             "search",
@@ -136,9 +136,8 @@ mod tests {
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
     ///
-    /// The one exception is `purge-task` (#1015 D1), which is not v0's and is the one
-    /// irreversible act: it confirms, as every other app's destroy does. `delete-task` trashes a
-    /// task AND every subtask under it, which is as destructive as `delete-note`.
+    /// The exceptions are `purge-event` and `empty-trash` (#1185), the irreversible acts: they
+    /// confirm, as every other app's destroys do.
     #[test]
     fn calendar_confirms_nothing_and_the_command_gate_is_the_other_one() {
         for row in ACTIONS {
@@ -146,7 +145,11 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = (Confirmation::None, Confirm::None);
+            let expected = if matches!(row.action, "purge-event" | "empty-trash") {
+                (Confirmation::Required, Confirm::Required)
+            } else {
+                (Confirmation::None, Confirm::None)
+            };
             assert_eq!((declared, row.confirm), expected, "{}", row.action);
         }
     }

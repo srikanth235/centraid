@@ -68,6 +68,7 @@ fn covers(query: &Q) -> &'static str {
         Q::AgendaTaskSmartCounts(_) => "reminders.smart-counts",
         Q::AgendaTaskDueRows(_) => "reminders.due-rows",
         Q::CalendarDatedReminders(_) => "calendar.dated-reminders",
+        Q::CalendarTrash(_) => "calendar.trash",
         Q::DocsDrive(_) => "docs.drive",
         Q::DocsSearch(_) => "docs.search",
         Q::DocsDocument(_) => "docs.document",
@@ -162,6 +163,7 @@ fn requests(word: &str) -> Vec<Q> {
             tz: tz(),
             overdue_before: "2025-06-07".to_owned(),
         }),
+        Q::CalendarTrash(wire::CalendarTrashRequest { tz: tz() }),
         Q::AgendaTaskProjects(wire::AgendaTaskProjectsRequest { tz: tz() }),
         Q::AgendaTaskSearch(wire::AgendaTaskSearchRequest {
             term: word.clone(),
@@ -863,11 +865,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 62 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 63 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 63, "{asked:?}");
+    assert_eq!(asked.len(), 64, "{asked:?}");
 }

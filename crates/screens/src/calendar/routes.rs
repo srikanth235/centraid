@@ -1,7 +1,7 @@
 //! THE ROUTES CALENDAR'S SCREENS HAND A SHELL inside a view state: a row that opens a page carries the
 //! [`wire::Route`] to push, so a shell never names a screen.
 
-use super::{EDITOR, EVENT, HOME};
+use super::{EDITOR, EVENT, HOME, TRASH};
 use centraid_api_proto::core_v1 as wire;
 
 fn route(screen: &str, args: wire::route::Args) -> wire::Route {
@@ -78,4 +78,10 @@ pub fn editor_at(day: &str, start_time: &str) -> wire::Route {
             ..wire::AgendaEditorRoute::default()
         }),
     )
+}
+
+/// The trash: the kit's one trash screen over Calendar's spec (#1185).
+#[must_use]
+pub fn trash() -> wire::Route {
+    route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
 }

@@ -11,6 +11,7 @@ use std::time::Duration;
 use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::calendar::follow::{self as calendar, CalendarFollow};
+use centraid_screens::catalog::act;
 use centraid_screens::kit::civil;
 use centraid_screens::strings::Locale;
 use centraid_screens::{Registry, Screen};
@@ -693,6 +694,71 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
     assert_eq!(in_window(&world, "Dentist").len(), 1);
+}
+
+/// THE MEMBER'S OWN TRASH STANDS (#1185): a followed event the member moved to trash is not
+/// brought back by the next pass over the same phone record, and a restore is the member's.
+#[test]
+fn a_followed_event_the_member_trashed_is_not_resurrected_by_the_next_pass() {
+    let mut world = world();
+    let host = world.driver.push("calendar", host_route());
+    answer(
+        &mut world,
+        is_keychain,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+            found: false,
+            value: vec![],
+        }),
+    );
+    let events = vec![future("Offsite", "2099-03-10", "uid:offsite@google")];
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events.clone())),
+    );
+    let offsite = in_window(&world, "Offsite");
+    assert_eq!(offsite.len(), 1);
+    let id = offsite[0].event_id.clone();
+
+    world.act(act::calendar::TrashEvent {
+        event_id: id.clone(),
+    });
+    assert!(in_window(&world, "Offsite").is_empty());
+
+    // The phone still holds the record; the pass runs again.
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events.clone())),
+    );
+    assert!(
+        in_window(&world, "Offsite").is_empty(),
+        "the pass did not bring a trashed event back"
+    );
+    let wire::app_query_response::Answer::CalendarTrash(trash) =
+        world.load(centraid_screens::catalog::load::calendar::Trash::default())
+    else {
+        panic!("calendar.trash answered something else");
+    };
+    assert!(
+        trash.events.iter().any(|row| row.event_id == id),
+        "it is still in the trash, restorable"
+    );
+
+    // The member's restore is the member's: it is back, and a later pass keeps it so.
+    world.act(act::calendar::RestoreEvent {
+        event_id: id.clone(),
+    });
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(events)),
+    );
+    assert_eq!(in_window(&world, "Offsite").len(), 1);
 }
 
 #[test]

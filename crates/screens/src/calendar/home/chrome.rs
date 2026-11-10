@@ -6,31 +6,41 @@ use centraid_api_proto::core_v1 as wire;
 use wire::AgendaDestination as Dest;
 
 use super::grid;
+use crate::calendar::routes;
 use crate::kit::civil;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words::long_day;
 use crate::strings::{
     Locale, agenda as words, agenda_grid as sayings, agenda_home as sentences,
-    agenda_lists as lists, agenda_reminders as reminders, fill,
+    agenda_lists as lists, agenda_reminders as reminders, fill, shared,
 };
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
 pub const BAND_CALENDAR: &str = "calendar";
 pub const BAND_INVITES: &str = "invites";
 pub const BAND_MORE: &str = "more";
+/// The band's last place (`Calendar.dc.html`): the sheet of Calendar's own places, Trash today.
+pub const BAND_MENU: &str = "menu";
 
 /// `AgendaMoreRow.key`s: what `MoreRowPicked` carries.
 pub const MORE_READS: &str = "reads";
 pub const MORE_CALENDAR: &str = "calendar-";
 /// The row that opens the new-calendar sheet (#1173).
 pub const MORE_NEW_CALENDAR: &str = "new-calendar";
+/// The menu sheet's row to the trash (#1185).
+pub const MORE_TRASH: &str = "trash";
 
 /// The band (places only, R-CHROME-5): Calendar, Calendars (the sheet of calendars to show or hide,
 /// Apple's middle key) and Invites (Apple's Inbox; the old Waiting). Calendar holds Day, Week, Month,
 /// List and Year behind its view menu ([`calendar_views`]). SEARCH IS A MODE OVER THE PLACE, not a
 /// place: the destination's tab stays lit while the field is open.
 #[must_use]
-pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::AgendaBandTab> {
+pub fn band(
+    locale: Locale,
+    destination: Dest,
+    calendars_up: bool,
+    menu_up: bool,
+) -> Vec<wire::AgendaBandTab> {
     let tab = |key: &str, label: String, icon: &str, current: bool| wire::AgendaBandTab {
         key: key.to_owned(),
         label,
@@ -42,13 +52,13 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
             BAND_CALENDAR,
             reminders::band_calendar(locale),
             "Calendar",
-            grid::is_calendar_view(destination) && !sheet_up,
+            grid::is_calendar_view(destination) && !calendars_up && !menu_up,
         ),
         tab(
             BAND_MORE,
             reminders::band_calendars(locale),
             "List",
-            sheet_up,
+            calendars_up,
         ),
         tab(
             BAND_INVITES,
@@ -56,6 +66,7 @@ pub fn band(locale: Locale, destination: Dest, sheet_up: bool) -> Vec<wire::Agen
             "Inbox",
             destination == Dest::Waiting,
         ),
+        tab(BAND_MENU, words::band_more(locale), "MoreHoriz", menu_up),
     ]
 }
 
@@ -248,6 +259,23 @@ pub fn more_rows(
         ..wire::AgendaMoreRow::default()
     });
     out
+}
+
+/// CALENDAR'S MENU SHEET (`MoreCalendar.dc.html`): the places that are not a view of the calendar.
+/// Trash, with the rule that every trash states: 30 days, then erased.
+#[must_use]
+pub fn menu_rows(locale: Locale) -> Vec<wire::AgendaMoreRow> {
+    let label = shared::trash_entry(locale);
+    let meta = shared::trash_entry_meta(locale);
+    vec![wire::AgendaMoreRow {
+        key: MORE_TRASH.to_owned(),
+        spoken: format!("{label}, {meta}"),
+        label,
+        meta,
+        icon_key: "Trash".to_owned(),
+        route: Some(routes::trash()),
+        ..wire::AgendaMoreRow::default()
+    }]
 }
 
 /// The screen's fixed words, so a view carries no copy of its own.

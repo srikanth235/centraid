@@ -52,13 +52,17 @@ use crate::kit::follow;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::rows::hue_role;
+use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda as words, agenda_editor as editor_words, agenda_event as event_words, fill,
+    shared,
 };
 
 pub const ACTION_EDIT: &str = "edit";
 pub const ACTION_CANCEL: &str = "cancel";
+/// Move the whole event to the trash (#1185): it asks nothing, because Undo and the trash restore it.
+pub const ACTION_TRASH: &str = "trash";
 /// Open the event's location in the phone's maps app (an `OpenMap` effect).
 pub const ACTION_OPEN_MAP: &str = "open_map";
 
@@ -88,6 +92,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         confirm: false,
         scope: None,
         status: None,
+        undo: None,
         dismissed: false,
         attachments,
         differences: follow::Phone::default(),
@@ -101,6 +106,14 @@ enum Content {
     Data(Box<wire::AgendaEventDetail>),
 }
 
+/// The event the status line's Undo reverses, and which way.
+struct Undo {
+    event_id: String,
+    title: String,
+    /// The event is in the trash now, so Undo restores it.
+    restore: bool,
+}
+
 struct EventPage {
     route: wire::AgendaEventRoute,
     content: Content,
@@ -111,6 +124,8 @@ struct EventPage {
     /// The scope the sheet has picked.
     scope: Option<wire::AgendaScope>,
     status: Option<wire::StatusLine>,
+    /// What the status line's Undo does: put the event back in the trash, or back on the calendar.
+    undo: Option<Undo>,
     dismissed: bool,
     /// The photos and files on the event (#1173).
     attachments: Attachments,
@@ -283,6 +298,74 @@ impl EventPage {
         }
     }
 
+    /// MOVE TO TRASH (#1185): the WHOLE event, a series with every occurrence. It asks nothing: the
+    /// status line says what happened with Undo, and the trash restores it for 30 days. The page
+    /// stays, reads the event as gone, and keeps the line.
+    fn trash_event(&mut self, ctx: &Ctx) {
+        let Some(event) = self.event() else { return };
+        let (event_id, title) = (
+            event.event_id.clone(),
+            event.summary.clone().unwrap_or_default(),
+        );
+        self.trash_or_restore(ctx, event_id, title, false);
+    }
+
+    /// The status line's Undo: reverse the last move.
+    fn undone(&mut self, ctx: &Ctx) {
+        let has_undo = self
+            .status
+            .as_ref()
+            .is_some_and(|status| !status.action_label.is_empty());
+        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
+            return;
+        };
+        self.trash_or_restore(ctx, undo.event_id, undo.title, undo.restore);
+    }
+
+    fn trash_or_restore(&mut self, ctx: &Ctx, event_id: String, title: String, restore: bool) {
+        let locale = ctx.locale();
+        self.status = None;
+        self.undo = None;
+        let settled = if restore {
+            let key = kit_act::key(&["restore-event", &event_id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::calendar::RestoreEvent {
+                    event_id: event_id.clone(),
+                },
+                &key,
+            )
+        } else {
+            let key = kit_act::key(&["trash-event", &event_id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::calendar::TrashEvent {
+                    event_id: event_id.clone(),
+                },
+                &key,
+            )
+        };
+        if settled.committed {
+            self.status = Some(wire::StatusLine {
+                sentence: if restore {
+                    trash::restored(locale, &title)
+                } else {
+                    trash::moved_to_trash(locale, &title)
+                },
+                action_label: shared::trash_undo(locale),
+                refused: false,
+            });
+            self.undo = Some(Undo {
+                event_id,
+                title,
+                restore: !restore,
+            });
+        } else {
+            self.refused(&settled);
+        }
+        self.reload(ctx);
+    }
+
     fn cancel_event(&mut self, ctx: &Ctx, event_id: &str) {
         let request = act::calendar::CancelEvent {
             event_id: event_id.to_owned(),
@@ -337,6 +420,8 @@ impl Screen for EventPage {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
                 Some(K::Action(picked)) if picked.key == ACTION_CANCEL => self.ask_cancel(),
+                Some(K::Action(picked)) if picked.key == ACTION_TRASH => self.trash_event(ctx),
+                Some(K::StatusActed(_)) => self.undone(ctx),
                 Some(K::Action(picked)) if picked.key == ACTION_OPEN_MAP => {
                     return self.open_map();
                 }
@@ -661,6 +746,14 @@ impl EventPage {
                         enabled: true,
                         destructive: true,
                         accessibility_label: words::a11y_cancel(locale),
+                        route: None,
+                    },
+                    wire::AgendaAction {
+                        key: ACTION_TRASH.to_owned(),
+                        label: shared::trash_move(locale),
+                        enabled: true,
+                        destructive: true,
+                        accessibility_label: shared::trash_move(locale),
                         route: None,
                     },
                 ])

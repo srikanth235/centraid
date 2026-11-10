@@ -147,7 +147,14 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
         .iter()
         .map(|a| (a.key.as_str(), a.label.as_str()))
         .collect();
-    assert_eq!(actions, [("edit", "Edit"), ("cancel", "Cancel…")]);
+    assert_eq!(
+        actions,
+        [
+            ("edit", "Edit"),
+            ("cancel", "Cancel…"),
+            ("trash", "Move to trash")
+        ]
+    );
     assert!(!data.is_past, "2099 is ahead");
     assert_eq!(
         data.accessibility_label,
@@ -207,7 +214,8 @@ fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_sa
     let data = world.event_data(page);
     assert_eq!(data.facts[0].label, "Repeats");
     assert!(!data.facts[0].detail.is_empty());
-    assert_eq!(data.actions.last().expect("cancel").label, "Cancel…");
+    assert_eq!(data.actions[data.actions.len() - 2].label, "Cancel…");
+    assert_eq!(data.actions.last().expect("trash").label, "Move to trash");
     assert_eq!(
         data.rsvp.as_ref().expect("a guest").note,
         "Your answer is for every occurrence."
@@ -831,7 +839,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["open_map", "edit", "cancel"]);
+    assert_eq!(keys, ["open_map", "edit", "cancel", "trash"]);
     let map = world.event_data(page).actions[0].clone();
     assert_eq!(map.label, "Open in Maps");
     assert!(map.route.is_none() && map.enabled && !map.destructive);
@@ -855,7 +863,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["edit", "cancel"]);
+    assert_eq!(keys, ["edit", "cancel", "trash"]);
     // Asked anyway, a page with no location opens nothing.
     let update = world.driver.send(
         page,
