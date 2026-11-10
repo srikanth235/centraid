@@ -443,6 +443,43 @@ fn emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked() {
     assert!(!w.exists("gone"));
 }
 
+#[test]
+fn emptying_a_having_trash_takes_only_what_the_trash_lists_and_a_touch_stays_with_its_person() {
+    let w = World::new();
+    w.person("pat", "Pat");
+    let touch = w.ok(
+        "person.log_interaction",
+        json!({"id": "pat", "kind": "call"}),
+    )["interaction_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let workout = w.ok(
+        "workout.log",
+        json!({"type": "run", "starts": "2026-03-04", "moving_s": 1_800}),
+    )["workout_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.ok("entity.trash", json!({"id": "pat"}));
+    w.ok("entity.trash", json!({"id": workout}));
+    assert!(w.trashed(&touch), "the touch went to the trash with Pat");
+    // the schema's enum refuses any other selector
+    w.refused(
+        "entity.empty_trash",
+        json!({"kind": "activity", "having": "tag"}),
+    );
+    let out = w.ok(
+        "entity.empty_trash",
+        json!({"kind": "activity", "having": "workout"}),
+    );
+    assert_eq!(out["purged"], 1);
+    assert!(!w.exists(&workout));
+    assert!(w.exists(&touch) && w.trashed(&touch), "the touch stays");
+    w.ok("entity.restore", json!({"id": "pat"}));
+    assert!(!w.trashed(&touch), "and comes back with its person");
+}
+
 // ---------------------------------------------------------------------------
 // tag.*, flag.*, edge.*
 // ---------------------------------------------------------------------------

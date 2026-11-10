@@ -592,8 +592,9 @@ const DOOMED_CHUNK: i64 = 64;
 /// Purge what is in the trash: one kind's, or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
-/// something else is due. What cannot be purged as it stands (a calendar with
-/// events, the self person) stays in the trash, and does not stop the rest. With
+/// something else is due. With `having: "workout"` only the activities that have a workout row
+/// (what Health's trash lists; a touch trashed with its person has none and stays). What cannot
+/// be purged as it stands (a calendar with events, the self person) stays in the trash, and does not stop the rest. With
 /// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
 /// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -613,6 +614,7 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
     let kind = ctx.optional_str("kind");
+    let having = ctx.optional_str("having");
     let mut purged = Vec::new();
     let mut roots = 0usize;
     let mut more = false;
@@ -629,6 +631,8 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                     AND (?1 IS NULL OR kind = ?1)
                     AND (?2 = 0 OR purge_at <= ?3)
                     AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
+                    AND (?7 IS NULL OR (?7 = 'workout'
+                         AND EXISTS (SELECT 1 FROM workout WHERE workout.id = entity.id)))
                   ORDER BY deleted_at, n LIMIT ?6",
             )?
             .query_map(
@@ -638,7 +642,8 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                     ctx.now,
                     after.as_ref().map(|(at, _)| at),
                     after.as_ref().map_or(0, |(_, n)| *n),
-                    DOOMED_CHUNK
+                    DOOMED_CHUNK,
+                    having
                 ],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?
@@ -736,6 +741,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
+                "having": { "type": "string", "enum": ["workout"] },
                 "due_only": { "type": "boolean" },
                 "limit": { "type": "integer", "minimum": 1 },
                 "defer_collect": { "type": "boolean" }

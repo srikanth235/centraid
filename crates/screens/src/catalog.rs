@@ -1459,6 +1459,19 @@ pub mod act {
         }
 
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashHaving {
+            #[default]
+            Workout,
+        }
+        impl EmptyTrashHaving {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Workout => "workout",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum EmptyTrashKind {
             #[default]
             Activity,
@@ -1471,10 +1484,11 @@ pub mod act {
             }
         }
 
-        /// Empty the workout trash through entity.empty_trash with kind activity. Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.
+        /// Empty the workout trash through entity.empty_trash with kind activity and having workout (a touch trashed with its person is not a workout and stays). Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.
         #[derive(Clone, Debug, Default)]
         pub struct EmptyTrash {
             pub due_only: Option<bool>,
+            pub having: Option<EmptyTrashHaving>,
             pub kind: Option<EmptyTrashKind>,
         }
         impl EmptyTrash {
@@ -1483,6 +1497,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.having { map.insert("having".to_owned(), text(it.wire())); }
                 if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }

@@ -619,7 +619,7 @@
         "clear out the trashed workouts for good",
         "permanently delete everything in the Health trash"
       ],
-      "description": "Empty the workout trash through entity.empty_trash with kind activity. Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.",
+      "description": "Empty the workout trash through entity.empty_trash with kind activity and having workout (a touch trashed with its person is not a workout and stays). Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -627,6 +627,10 @@
           "kind": {
             "type": "string",
             "enum": ["activity"]
+          },
+          "having": {
+            "type": "string",
+            "enum": ["workout"]
           },
           "due_only": {
             "type": "boolean"

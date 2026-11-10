@@ -2,7 +2,7 @@
 //!
 //! `delete-workout` (`entity.trash`) moves a workout here for 30 days from its page,
 //! `restore-workout` brings it back, `purge-workout` (`entity.purge`) deletes one forever and
-//! `empty-trash` (`entity.empty_trash`, kind activity) every trashed workout, each behind the kit's
+//! `empty-trash` (`entity.empty_trash`, kind activity having a workout row: exactly what the list shows, never a touch trashed with its person) every trashed workout, each behind the kit's
 //! destructive confirm. A workout a health store states is the member's to trash like any other: the
 //! store's next read leaves it in the trash (the follower never restores what the member trashed).
 //! The list is the core's `health.trash`; a row is named as the Workouts list names it ("Morning run").
@@ -48,6 +48,7 @@ pub static SPEC: TrashSpec = TrashSpec {
     empty: || {
         act::health::EmptyTrash {
             kind: Some(act::health::EmptyTrashKind::Activity),
+            having: Some(act::health::EmptyTrashHaving::Workout),
             ..Default::default()
         }
         .into()
