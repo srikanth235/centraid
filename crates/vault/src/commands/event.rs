@@ -443,6 +443,20 @@ pub(crate) fn attendees_canon(statement: &Json) -> Json {
     Json::Array(guests)
 }
 
+/// The live person an email is, by an exact match with one of their email points.
+fn person_of_email(connection: &Connection, email: &str) -> Result<Option<String>> {
+    let key = crate::commands::contact_point::reach_key("email", email);
+    Ok(connection
+        .query_row(
+            "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
+              WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
+              ORDER BY p.person_id LIMIT 1",
+            [&key],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// The people the guests of a statement are, by an exact email match with a live person's email,
 /// with the answer each gave.
 fn matched_guests(
@@ -458,27 +472,107 @@ fn matched_guests(
         ) else {
             continue;
         };
-        let key = crate::commands::contact_point::reach_key("email", email);
-        let person: Option<String> = connection
-            .query_row(
-                "SELECT p.person_id FROM contact_point p JOIN entity e ON e.id = p.person_id
-                  WHERE p.kind = 'email' AND p.normalized = ?1 AND e.deleted_at IS NULL
-                  ORDER BY p.person_id LIMIT 1",
-                [&key],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(person) = person {
+        if let Some(person) = person_of_email(connection, email)? {
             people.insert(person, state.to_owned());
         }
     }
     Ok(people)
 }
 
-/// The follower's `attendees` merge: a guest the phone states whose email is a person's becomes
-/// that person's `attendee` edge, with the answer the phone states; one the phone no longer
-/// states is taken off. A guest nobody's email matches mints no person and stays in the
-/// statement ([`attendees_read`]). Guests are never pushed back.
+/// The answer each person the event has an `attendee` edge to holds now (a blank answer is
+/// `needs-action`, as a statement spells it).
+fn held_guests(
+    connection: &Connection,
+    id: &str,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    connection
+        .prepare_cached(
+            "SELECT to_id, state FROM edge WHERE from_id = ?1 AND rel = 'attendee' ORDER BY to_id",
+        )?
+        .query_map([id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?
+        .map(|row| {
+            row.map(|(person, state)| {
+                (
+                    person,
+                    state
+                        .filter(|state| ANSWERS.contains(&state.as_str()))
+                        .unwrap_or_else(|| "needs-action".to_owned()),
+                )
+            })
+        })
+        .collect::<rusqlite::Result<_>>()
+        .map_err(Into::into)
+}
+
+/// The guests the event holds, in the form a phone states them: the guests the source last stated
+/// stand as stated unless they are a person's, and a person's carry the answer the vault holds (a
+/// guest whose edge the member took away is not there); a person the member added as a guest
+/// follows, by name and first email.
+pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> {
+    let stated: Option<String> = connection
+        .query_row(
+            "SELECT stated FROM source WHERE entity_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let stated = stated
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .and_then(|stated| stated.get("attendees").cloned());
+    let mut held = held_guests(connection, id)?;
+    let mut covered = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for guest in stated
+        .as_ref()
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let mut guest = guest_canon(guest);
+        let person = match guest.get("email").and_then(Json::as_str) {
+            Some(email) => person_of_email(connection, email)?,
+            None => None,
+        };
+        let Some(person) = person else {
+            out.push(guest);
+            continue;
+        };
+        // A person's guest carries the answer held, and is not there when the edge is gone. The
+        // people the member added are the edges left once the stated guests are accounted for.
+        if let Some(state) = held.get(&person) {
+            guest["state"] = Json::String(state.clone());
+            out.push(guest);
+        }
+        covered.insert(person);
+    }
+    held.retain(|person, _| !covered.contains(person));
+    for (person, state) in held {
+        let (name, email): (String, Option<String>) = connection.query_row(
+            "SELECT e.title, (SELECT value FROM contact_point
+                               WHERE person_id = e.id AND kind = 'email'
+                               ORDER BY position, id LIMIT 1)
+               FROM entity e WHERE e.id = ?1",
+            [&person],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let mut guest = json!({ "name": name, "state": state });
+        if let Some(email) = email {
+            guest["email"] = Json::String(email.to_lowercase());
+        }
+        out.push(guest_canon(&guest));
+    }
+    Ok(attendees_canon(&Json::Array(out)))
+}
+
+/// The follower's `attendees` merge, **per guest**: a guest the phone states whose email is a
+/// person's becomes that person's `attendee` edge, with the answer the phone states; one the
+/// phone no longer states is taken off. A guest the member has not changed (the edge holds the
+/// answer the phone last stated, or there is no edge and the phone had no answer) takes the
+/// phone's word; one the member changed (answered differently, took off, or added) stands. A
+/// guest nobody's email matches mints no person and stays in the statement
+/// ([`attendees_read`]). Guests are never pushed back.
 pub(crate) fn attendees_merge(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
@@ -488,34 +582,36 @@ pub(crate) fn attendees_merge(
     let connection = ctx.connection();
     let wanted = matched_guests(connection, Some(now))?;
     let had = matched_guests(connection, before)?;
+    let held = held_guests(connection, id)?;
+    let people: std::collections::BTreeSet<&String> = wanted.keys().chain(had.keys()).collect();
     let mut changed = false;
-    for person in had.keys().filter(|person| !wanted.contains_key(*person)) {
-        changed |= connection.execute(
-            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-            [id, person],
-        )? > 0;
-    }
-    for (person, state) in &wanted {
-        let held: Option<Option<String>> = connection
-            .query_row(
-                "SELECT state FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-                [id, person],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if held.as_ref().and_then(Option::as_deref) != Some(state.as_str()) {
-            edge::put(
-                ctx,
-                id,
-                Rel::Attendee,
-                person,
-                None,
-                &Extras {
-                    state: Some(state),
-                    ..Extras::default()
-                },
-            )?;
-            changed = true;
+    for person in people {
+        let (mine, said, wants) = (held.get(person), had.get(person), wanted.get(person));
+        // The member changed this guest, or there is nothing to change: it stands.
+        if mine != said || mine == wants {
+            continue;
+        }
+        match wants {
+            None => {
+                changed |= connection.execute(
+                    "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+                    [id, person],
+                )? > 0;
+            }
+            Some(state) => {
+                edge::put(
+                    ctx,
+                    id,
+                    Rel::Attendee,
+                    person,
+                    None,
+                    &Extras {
+                        state: Some(state),
+                        ..Extras::default()
+                    },
+                )?;
+                changed = true;
+            }
         }
     }
     Ok(changed)

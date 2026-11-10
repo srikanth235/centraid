@@ -12,7 +12,13 @@
 //!   never changed it and the new value is written;
 //! - if it differs, the member's value stands;
 //!
-//! and then `source.stated` becomes the new statement. A record that is new is
+//! and then `source.stated` becomes the new statement. A field made of items (a
+//! contact's points, an event's guests, a series' days) follows the same rule **per
+//! item**: an item the member has not changed takes the source's word, including its
+//! removal; one they changed, added or removed stands
+//! ([#1183](https://github.com/srikanth235/centraid/issues/1183)). A field is "edited" only
+//! while the vault's value differs from the statement, so it follows again by itself once
+//! they are equal. A record that is new is
 //! **matched** first, by the system's match key (a name; a title and a start; a
 //! file name; a workout kind and its start) against rows nothing follows yet,
 //! and only then added. What a record gone from a *complete* read does is the
@@ -425,7 +431,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             // `attendee` edge; the rest stay in the statement and are read from it.
             Child {
                 name: "attendees",
-                read: |connection, id| stated_read(connection, id, "attendees"),
+                read: event::attendees_read,
                 canon: event::attendees_canon,
                 merge: event::attendees_merge,
             },
