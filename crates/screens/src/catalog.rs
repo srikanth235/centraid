@@ -4815,6 +4815,41 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Photo,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Photo => "photo",
+                }
+            }
+        }
+
+        /// Empty the photo trash through entity.empty_trash with kind photo. Irreversible and takes no id: every photograph in the trash is destroyed now, as purge destroys one, and its bytes go once nothing else holds them. A trashed album is not touched.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
         /// Start a new album through container.create with kind album.
         #[derive(Clone, Debug, Default)]
         pub struct CreateAlbum {

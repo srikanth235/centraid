@@ -18,8 +18,17 @@
 //! ## Empty Trash is exactly what the trash shows
 //!
 //! The trash walks every page (it is the one shelf that must be whole to be
-//! emptied), and "Empty trash" purges, one `purge-photo` each, the ids the shelf
-//! is showing and no others.
+//! emptied). "Empty trash" is the shared verb (`empty-trash`, `entity.empty_trash`, kind photo,
+//! one commit) when the trash is still exactly what the shelf showed; if something was trashed
+//! since the member looked, it purges, one `purge-photo` each, the ids the shelf was showing and
+//! no others, and the shelf then shows what is left.
+//!
+//! ## The trash is a grid, and the register knows it
+//!
+//! This shelf is Photos' Trash (#1185): thumbnails the member recognises, picked many at a time,
+//! not the kit's list of rows. `cargo xtask rules` holds it to the same promise as every app's
+//! trash (`crates/xtask/src/promises.rs`, `GRID_TRASH`): move to trash, restore, delete forever
+//! and empty are manifest actions the screens call, in the kit's words.
 //!
 //! ## Dropped with the Kotlin architecture
 //!
@@ -360,21 +369,40 @@ impl Shelf {
         }
     }
 
-    /// Purge exactly what the trash is showing, one `purge-photo` each: the ids
-    /// the shelf holds, never a fresh list of the whole trash.
+    /// EMPTY TRASH is exactly what the member saw. The trash is read once more: if it is still
+    /// the ids the shelf showed, the shared `empty-trash` verb empties it in one commit; if
+    /// something was trashed since, only the ids the shelf showed are purged, one `purge-photo`
+    /// each, never a fresh list of the whole trash.
     fn empty_trash(&mut self, ctx: &Ctx) {
-        let ids: Vec<String> = self
+        let seen: Vec<String> = self
             .cells
             .iter()
             .map(|cell| cell.photo_id.clone())
             .collect();
-        let written = each(ctx, &ids, "purge-photo", |id| {
-            act::photos::PurgePhoto {
-                photo_id: id.to_owned(),
-            }
-            .into()
-        });
-        self.selection.refuse(written.refusal);
+        self.reload(ctx);
+        let unchanged = self.cells.len() == seen.len()
+            && self.cells.iter().all(|cell| seen.contains(&cell.photo_id));
+        if unchanged {
+            let key = kit_act::key(&["empty-trash", "photo"], kit_act::fresh());
+            let settled = kit_act::act(
+                ctx,
+                act::photos::EmptyTrash {
+                    kind: Some(act::photos::EmptyTrashKind::Photo),
+                    ..Default::default()
+                },
+                &key,
+            );
+            self.selection
+                .refuse((!settled.committed).then_some(settled.refusal));
+        } else {
+            let written = each(ctx, &seen, "purge-photo", |id| {
+                act::photos::PurgePhoto {
+                    photo_id: id.to_owned(),
+                }
+                .into()
+            });
+            self.selection.refuse(written.refusal);
+        }
         self.reload(ctx);
     }
 

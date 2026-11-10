@@ -14,6 +14,10 @@
 //! - an `Owed` row that is still owed passes, and `cargo xtask rules` prints,
 //!   under the rule, exactly what is missing and in which file.
 //!
+//! TRASH HAS TWO SHAPES, and only two: the kit's `TrashSpec` screen (every app but one), and a
+//! GRID trash an app declares by name in [`GRID_TRASH`] (Photos: thumbnails picked many at a time).
+//! The grid shape proves the same four verbs and the kit's words; it is not a way out of them.
+//!
 //! `Owed` is honest debt listed in one place. It is not an exemption from any
 //! other rule: every other gate runs over the same tree whatever this table says.
 //!
@@ -89,6 +93,10 @@ const fn kept(app: &'static str, promise: Promise, proof: &'static str) -> Row {
     }
 }
 
+#[expect(
+    dead_code,
+    reason = "no promise is owed now (#1185 closed Trash everywhere); the ratchet stays for the next one, and this expectation fails the build the day a row is Owed again, so it is removed with it"
+)]
 const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
     Row {
         app,
@@ -122,10 +130,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Trash,
         "crates/screens/src/people/trash.rs",
     ),
-    owed(
+    // A grid trash (`GRID_TRASH`): thumbnails picked many at a time, held to the same four verbs.
+    kept(
         "photos",
         Promise::Trash,
-        "#1185: Photos' Trash is its own shelf (photos/shelf.rs): it has Restore, Delete forever and Empty trash in the shared words, but empties by purging photo by photo (no `entity.empty_trash` action) and is not a kit TrashSpec",
+        "crates/screens/src/photos/shelf.rs",
     ),
     kept(
         "reminders",
@@ -232,6 +241,143 @@ const TRASH_COMMANDS: [(&str, &str); 4] = [
     ("entity.empty_trash", "empty trash"),
 ];
 
+/// A TRASH THAT IS A GRID, not the kit's list of rows (#1185).
+///
+/// An app whose records are looked at rather than read (a photograph is recognised by its
+/// thumbnail, and picked many at a time) may keep Trash as a shelf of its own instead of the kit's
+/// [`TrashSpec`] screen. It is declared HERE, by name, so the register cannot grow a second shape
+/// by accident, and it must still prove the same promise: every verb (move to trash, restore,
+/// delete forever, empty) is an action of the manifest that a screen of the app calls, the shelf is
+/// registered and reached from another screen, and the words a confirm says are the kit's
+/// ([`GRID_WORDS`]). Every other app is held to the kit's shape, whatever it has in its folder.
+pub struct GridTrash {
+    pub app: &'static str,
+    /// The shelf's file under `crates/screens/src/<app>/`.
+    pub shelf: &'static str,
+    /// What another screen spells to open the trash shelf (its route).
+    pub route: &'static str,
+}
+
+/// The grid trashes. Only Photos: a trash of thumbnails with multi-select.
+pub const GRID_TRASH: &[GridTrash] = &[GridTrash {
+    app: "photos",
+    shelf: "shelf.rs",
+    route: "PhotosShelfKind::Trash",
+}];
+
+/// The kit's words a grid trash must say, as the shared catalog names them
+/// (`crates/screens/src/strings/shared.rs`): Restore, Delete forever, and the Empty trash confirm.
+const GRID_WORDS: [&str; 5] = [
+    "trash_restore",
+    "trash_purge",
+    "trash_empty_title",
+    "trash_empty_body",
+    "trash_empty_action",
+];
+
+fn trash_missing(root: &Path, app: &str) -> Vec<String> {
+    trash_missing_in(root, app, GRID_TRASH)
+}
+
+/// [`trash_missing`] over a stated list of grid trashes (a fixture states its own).
+fn trash_missing_in(root: &Path, app: &str, grids: &[GridTrash]) -> Vec<String> {
+    match grids.iter().find(|grid| grid.app == app) {
+        Some(grid) => grid_trash_missing(root, app, grid),
+        None => kit_trash_missing(root, app),
+    }
+}
+
+/// A grid trash is kept when, for `app`:
+///
+/// 1. `crates/apps/<app>/manifest.json` declares actions for `entity.trash`, `entity.restore`,
+///    `entity.purge` and `entity.empty_trash`;
+/// 2. the shelf file exists, the app's `mod.rs` registers it (`<shelf>::build`) and a screen other
+///    than the shelf opens it ([`GridTrash::route`]);
+/// 3. screens of the app call actions that reach all four commands (the shelf's own selection
+///    bar and the page's Move to trash included), so no verb is a promise nothing sends;
+/// 4. the app's screens say each of [`GRID_WORDS`].
+fn grid_trash_missing(root: &Path, app: &str, grid: &GridTrash) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let dir = root.join("crates/screens/src").join(app);
+    let shelf_path = dir.join(grid.shelf);
+    let shelf_rel = format!("crates/screens/src/{app}/{}", grid.shelf);
+    let manifest_rel = format!("crates/apps/{app}/manifest.json");
+    let actions = manifest_actions(root, app);
+
+    // 1. the manifest
+    if actions.is_empty() {
+        gaps.push(format!("{manifest_rel} could not be read"));
+    } else {
+        for (command, word) in TRASH_COMMANDS {
+            if !actions.iter().any(|(_, c)| c == command) {
+                gaps.push(format!(
+                    "{manifest_rel} declares no `{command}` action ({word})"
+                ));
+            }
+        }
+    }
+
+    // 2. the shelf, registered and routed to; 3. the verbs called; 4. the words
+    if live_source(&shelf_path).is_none() {
+        gaps.push(format!("{shelf_rel} is missing: no grid trash shelf"));
+    }
+    let stem = grid.shelf.trim_end_matches(".rs");
+    let mut registered = false;
+    let mut routed = false;
+    let mut called: BTreeSet<String> = BTreeSet::new();
+    let mut said = String::new();
+    for file in source_files(&dir, "rs") {
+        let rel = relative(root, &file);
+        let Some(text) = live_source(&file) else {
+            continue;
+        };
+        if rel.ends_with("/mod.rs")
+            && rel.matches('/').count() == 4
+            && text.contains(&format!("{stem}::build"))
+        {
+            registered = true;
+        }
+        if file != shelf_path && text.contains(grid.route) {
+            routed = true;
+        }
+        called.extend(act_idents(&text, app));
+        said.push_str(&text);
+    }
+    if !registered {
+        gaps.push(format!(
+            "crates/screens/src/{app}/mod.rs does not register the shelf (`{stem}::build`)"
+        ));
+    }
+    if !routed {
+        gaps.push(format!(
+            "crates/screens/src/{app}/: no screen other than {shelf_rel} opens the trash shelf (`{}`)",
+            grid.route
+        ));
+    }
+    if !actions.is_empty() {
+        let reached: BTreeSet<&str> = actions
+            .iter()
+            .filter(|(name, _)| called.contains(&pascal(name)))
+            .map(|(_, command)| command.as_str())
+            .collect();
+        for (command, word) in TRASH_COMMANDS {
+            if !reached.contains(command) {
+                gaps.push(format!(
+                    "crates/screens/src/{app}/: no screen calls an `{command}` action ({word})"
+                ));
+            }
+        }
+    }
+    for word in GRID_WORDS {
+        if !said.contains(word) {
+            gaps.push(format!(
+                "crates/screens/src/{app}/ never says `{word}`, the kit's word (strings/shared.rs)"
+            ));
+        }
+    }
+    gaps
+}
+
 /// Trash is kept when, for `app`:
 ///
 /// 1. `crates/screens/src/<app>/trash.rs` defines a `TrashSpec` built on
@@ -245,7 +391,7 @@ const TRASH_COMMANDS: [(&str, &str); 4] = [
 ///    together they reach restore, purge and empty;
 /// 6. a screen other than the trash calls one of the manifest's
 ///    `entity.trash` actions (the "Move to trash" verb is reachable).
-fn trash_missing(root: &Path, app: &str) -> Vec<String> {
+fn kit_trash_missing(root: &Path, app: &str) -> Vec<String> {
     let mut gaps = Vec::new();
     let dir = root.join("crates/screens/src").join(app);
     let spec_path = dir.join("trash.rs");

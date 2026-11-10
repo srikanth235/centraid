@@ -213,3 +213,155 @@ fn pascal_spells_the_catalog() {
     assert_eq!(pascal("trash"), "Trash");
     assert_eq!(pascal("empty-trash"), "EmptyTrash");
 }
+
+// ---------------------------------------------------------------------------
+// A grid trash (#1185): a second, declared shape that proves the same promise.
+// ---------------------------------------------------------------------------
+
+const GRID: &[GridTrash] = &[GridTrash {
+    app: "notes",
+    shelf: "shelf.rs",
+    route: "ShelfKind::Trash",
+}];
+
+const GRID_MANIFEST: &str = r#"{"actions":[
+ {"name":"delete-photo","command":"entity.trash"},
+ {"name":"restore-photo","command":"entity.restore"},
+ {"name":"purge-photo","command":"entity.purge"},
+ {"name":"empty-trash","command":"entity.empty_trash"}]}"#;
+
+const GRID_SHELF: &str = r"fn empty() {
+    act::notes::EmptyTrash {};
+    kit_words::trash_empty_title(); kit_words::trash_empty_body(); kit_words::trash_empty_action();
+}
+fn bar() {
+    act::notes::PurgePhoto {}; act::notes::RestorePhoto {};
+    kit_words::trash_restore(); kit_words::trash_purge();
+}
+";
+
+/// A `notes` app whose trash is a shelf of its own, declared in [`GRID`], keeping the promise.
+fn grid_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/screens/src/notes/shelf.rs", GRID_SHELF);
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "registry().with(SHELF, shelf::build)",
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn tile() { shelf(ShelfKind::Trash); act::notes::DeletePhoto {}; }",
+    );
+    write(&root, "crates/apps/notes/manifest.json", GRID_MANIFEST);
+    root
+}
+
+fn grid_lacking(root: &Path) -> String {
+    trash_missing_in(root, "notes", GRID).join("\n")
+}
+
+#[test]
+fn a_declared_grid_trash_that_keeps_every_verb_is_clean() {
+    let root = grid_tree("promises-grid-clean");
+    assert_eq!(grid_lacking(&root), "");
+}
+
+#[test]
+fn a_grid_trash_with_no_empty_trash_action_is_named() {
+    let root = grid_tree("promises-grid-no-empty");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[
+ {"name":"delete-photo","command":"entity.trash"},
+ {"name":"restore-photo","command":"entity.restore"},
+ {"name":"purge-photo","command":"entity.purge"}]}"#,
+    );
+    let gaps = grid_lacking(&root);
+    assert!(gaps.contains("declares no `entity.empty_trash` action"));
+    assert!(gaps.contains("no screen calls an `entity.empty_trash` action"));
+}
+
+#[test]
+fn a_grid_trash_that_empties_photo_by_photo_is_named() {
+    // The shelf purges one at a time and never calls the shared empty verb.
+    let root = grid_tree("promises-grid-by-photo");
+    write(
+        &root,
+        "crates/screens/src/notes/shelf.rs",
+        &GRID_SHELF.replace("act::notes::EmptyTrash {};", ""),
+    );
+    assert!(grid_lacking(&root).contains("no screen calls an `entity.empty_trash` action"));
+}
+
+#[test]
+fn a_grid_trash_that_does_not_say_the_kits_words_is_named() {
+    let root = grid_tree("promises-grid-words");
+    write(
+        &root,
+        "crates/screens/src/notes/shelf.rs",
+        &GRID_SHELF
+            .replace("kit_words::trash_empty_title();", "")
+            .replace("kit_words::trash_purge();", ""),
+    );
+    let gaps = grid_lacking(&root);
+    assert!(gaps.contains("never says `trash_empty_title`"));
+    assert!(gaps.contains("never says `trash_purge`"));
+    assert!(!gaps.contains("never says `trash_restore`"));
+}
+
+#[test]
+fn a_grid_trash_nothing_opens_or_registers_is_named() {
+    let root = grid_tree("promises-grid-unreachable");
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn tile() { act::notes::DeletePhoto {}; }",
+    );
+    write(&root, "crates/screens/src/notes/mod.rs", "registry()");
+    let gaps = grid_lacking(&root);
+    assert!(gaps.contains("does not register the shelf (`shelf::build`)"));
+    assert!(gaps.contains("opens the trash shelf (`ShelfKind::Trash`)"));
+}
+
+#[test]
+fn a_grid_trash_with_no_move_to_trash_caller_is_named() {
+    let root = grid_tree("promises-grid-no-move");
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn tile() { shelf(ShelfKind::Trash); }",
+    );
+    assert!(grid_lacking(&root).contains("no screen calls an `entity.trash` action"));
+}
+
+#[test]
+fn a_test_module_does_not_make_a_grid_trash_say_a_word_or_call_a_verb() {
+    let root = grid_tree("promises-grid-test-only");
+    write(
+        &root,
+        "crates/screens/src/notes/shelf.rs",
+        &format!("#[cfg(test)]\nmod t {{ {GRID_SHELF} }}"),
+    );
+    let gaps = grid_lacking(&root);
+    assert!(gaps.contains("no screen calls an `entity.empty_trash` action"));
+    assert!(gaps.contains("never says `trash_empty_action`"));
+}
+
+/// THE SECOND SHAPE IS NOT A LOOPHOLE: an app that is not declared in the grid list is held to the
+/// kit's spec however good its own shelf looks.
+#[test]
+fn an_undeclared_app_with_a_shelf_of_its_own_still_owes_the_kit_spec() {
+    let root = grid_tree("promises-grid-undeclared");
+    let gaps = trash_missing_in(&root, "notes", &[]).join("\n");
+    assert!(gaps.contains("crates/screens/src/notes/trash.rs is missing"));
+    assert!(gaps.contains("does not register the screen (`trash::build`)"));
+}
+
+#[test]
+fn only_photos_is_declared_a_grid_and_its_shelf_is_a_real_file() {
+    let apps: Vec<&str> = GRID_TRASH.iter().map(|grid| grid.app).collect();
+    assert_eq!(apps, ["photos"]);
+}

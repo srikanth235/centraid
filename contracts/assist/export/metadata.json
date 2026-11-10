@@ -4117,6 +4117,24 @@
         "verb": "purge"
       },
       {
+        "action": "empty-trash",
+        "also": [],
+        "app": "photos",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "empty the photo trash",
+          "clear out the trashed photos for good",
+          "permanently delete everything in the Photos trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "create-album",
         "also": [],
         "app": "photos",

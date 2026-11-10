@@ -160,6 +160,7 @@ photos,unarchive-photo,unarchive,photo,direct,yes: crates/screens/src/photos/lig
 photos,delete-photo,delete,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,restore-photo,restore,photo,direct,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs,yes
 photos,purge-photo,purge,photo,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/selection.rs; crates/screens/src/photos/shelf.rs,no
+photos,empty-trash,purge,photo,card,yes: crates/screens/src/photos/shelf.rs,no
 photos,create-album,create,album,direct,yes: crates/screens/src/photos/album_choice.rs; crates/screens/src/photos/home/collections.rs,yes
 photos,rename-album,edit,album,direct,yes: crates/screens/src/photos/shelf.rs,yes
 photos,set-album-cover,edit,album,card,yes: crates/screens/src/photos/lightbox.rs; crates/screens/src/photos/shelf.rs,no

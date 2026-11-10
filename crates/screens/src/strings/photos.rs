@@ -77,7 +77,6 @@ catalog! {
     plain photos_delete_album = ("Delete album", "Delete album");
     plain photos_delete_album_body = ("Photos stay in the library.", "Photos stay in the library.");
     plain photos_delete_album_title = ("Delete this album?", "Delete this album?");
-    plain photos_delete_forever = ("Delete forever", "Delete forever");
     plain photos_delete_forever_body = ("Captions, tags and album entries go too. This cannot be undone.", "Captions, tags and album entries go too. This cannot be undone.");
     plain photos_delete_forever_many = ("Delete {count} photos forever?", "Delete {count} photos forever?");
     plain photos_delete_forever_one = ("Delete this photo forever?", "Delete this photo forever?");
@@ -227,7 +226,6 @@ catalog! {
     plain photos_remove_from_album = ("Remove from album", "Remove from album");
     plain photos_remove_item = ("Remove {label}", "Remove {label}");
     plain photos_rename_album = ("Rename album", "Rename album");
-    plain photos_restore = ("Restore", "Restore");
     plain photos_review_checked = ("Albums are checked. Favorites are not.", "Albums are checked. Favorites are not.");
     plain photos_review_choose_first = ("Choose the copy to keep first.", "Choose the copy to keep first.");
     plain photos_review_in_album = ("In an album", "In an album");

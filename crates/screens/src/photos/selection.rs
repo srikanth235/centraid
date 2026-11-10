@@ -30,7 +30,7 @@ use wire::photos_selection_event::Kind as E;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::screen::Ctx;
-use crate::strings::{Locale, fill, photos as words};
+use crate::strings::{Locale, fill, photos as words, shared};
 
 /// A bar verb.
 pub use wire::photos_batch_action::Kind as Verb;
@@ -566,8 +566,8 @@ pub fn label(locale: Locale, verb: Verb) -> String {
         Verb::Archive => words::photos_archive(locale),
         Verb::Unarchive => words::photos_unarchive(locale),
         Verb::Trash => words::photos_trash(locale),
-        Verb::Restore => words::photos_restore(locale),
-        Verb::DeleteForever => words::photos_delete_forever(locale),
+        Verb::Restore => shared::trash_restore(locale),
+        Verb::DeleteForever => shared::trash_purge(locale),
         Verb::AddToAlbum => words::photos_add_to_album(locale),
         Verb::RemoveFromAlbum => words::photos_remove_from_album(locale),
         Verb::Unspecified => String::new(),
@@ -582,7 +582,7 @@ fn confirm(locale: Locale, verb: Verb, count: u32) -> wire::Confirm {
         Verb::DeleteForever => wire::Confirm {
             title: words::delete_forever_question(locale, n),
             body: words::photos_delete_forever_body(locale),
-            confirm_label: words::photos_delete_forever(locale),
+            confirm_label: shared::trash_purge(locale),
             destructive: true,
         },
         _ => wire::Confirm {

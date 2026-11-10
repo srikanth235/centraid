@@ -106,8 +106,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-three actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 23] = [
+/// THE TABLE. Twenty-four actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 24] = [
     act("upload", "photo.add"),
     act("edit-photo", "photo.edit"),
     act("retitle-photo", "entity.retitle"),
@@ -117,9 +117,10 @@ pub const ACTIONS: [ActionRow; 23] = [
     act("unarchive-photo", "flag.clear"),
     act("delete-photo", "entity.trash"),
     act("restore-photo", "entity.restore"),
-    // THE TWO CONFIRM-GATED ACTIONS: one trashed photograph forever, and an
-    // album (its photographs stay in the library).
+    // THE CONFIRM-GATED ACTIONS: one trashed photograph forever, the whole photo trash (#1185,
+    // the shared verb), and an album (its photographs stay in the library).
     confirmed("purge-photo", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("create-album", "container.create"),
     act("rename-album", "entity.retitle"),
     act("set-album-cover", "album.set_cover"),
@@ -177,7 +178,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
-        assert_eq!(ACTIONS.len(), 23);
+        assert_eq!(ACTIONS.len(), 24);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -245,20 +246,20 @@ mod tests {
     }
 
     #[test]
-    fn the_two_destroys_are_the_only_confirmed_actions() {
+    fn the_destroys_are_the_only_confirmed_actions() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-photo", "delete-album"]);
+        assert_eq!(required, ["purge-photo", "empty-trash", "delete-album"]);
     }
 
     /// ONE ACT SCOPE PER DISTINCT COMMAND — never one `read+act` over a whole
     /// family. Widening it would hand Photos every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 15);
+        assert_eq!(act_scope_tables().len(), 16);
         assert!(act_scope_tables().contains(&("photo", "add")));
         assert!(
             !act_scope_tables()

@@ -65,6 +65,7 @@ A screen's load is a skeleton (`ReadStateView`). A spinner (`KitSpinner`, `Stage
 - **Entry.** "Trash", secondary "30 days, then erased", in the app's More sheet. The page header is "Trash · {n}".
 - **Row.** "Deleted {day date} · Erased {day date}", actions "Restore" and "Delete forever".
 - **Confirms** (outlined, destructive). One row: "Delete this {noun} forever?" / "It leaves this vault for good. This cannot be undone." / "Delete forever". The whole trash: "Empty trash?" / "Everything in trash leaves this vault for good. This cannot be undone." / "Empty trash". An app may replace the first sentence with what goes with the record; the last is always "This cannot be undone."
+- **Photos' trash is a grid.** A photograph is recognised by its thumbnail and picked many at a time, so Photos keeps its Trash as a shelf of thumbnails instead of the kit's list of rows. It is declared in the register (`GRID_TRASH` in `crates/xtask/src/promises.rs`) and held to the same four verbs and the kit's words; "Empty trash" is the shared verb, and purges exactly what the member saw if something was trashed since.
 - **A trashed record is gone from every surface**: the grid, the agenda, search, notifications. A repeating event or a holder is trashed whole. A followed record the member trashed stays trashed when the source sends it again.
 
 ## Search and Ask about

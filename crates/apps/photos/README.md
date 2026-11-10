@@ -49,7 +49,7 @@ Every one is an answer to a way this crate could be wrong.
 
 ## Two gates, never one
 
-The manifest's `confirmation: "required"` is what the **dispatching surface** asks before sending, and Photos declares it on `purge-photo` and `delete-album`. A command definition's `confirm: true` parks a **non-owner** invocation regardless of risk, and no command Photos names carries it. Collapsing the two would add a dialog in front of a member's own purge and drop the park in front of an agent's.
+The manifest's `confirmation: "required"` is what the **dispatching surface** asks before sending, and Photos declares it on `purge-photo`, `empty-trash` and `delete-album`. A command definition's `confirm: true` parks a **non-owner** invocation regardless of risk, and no command Photos names carries it. Collapsing the two would add a dialog in front of a member's own purge and drop the park in front of an agent's.
 
 ## Fixtures
 

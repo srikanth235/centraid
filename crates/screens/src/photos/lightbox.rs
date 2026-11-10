@@ -1048,7 +1048,7 @@ fn verbs(
     if detail.trashed {
         let mut forever = verb(
             V::DeleteForever,
-            words::photos_delete_forever(locale),
+            shared::trash_purge(locale),
             "trash",
             refusal,
             false,
@@ -1058,7 +1058,7 @@ fn verbs(
             vec![
                 verb(
                     V::Restore,
-                    words::photos_restore(locale),
+                    shared::trash_restore(locale),
                     "restore",
                     refusal,
                     false,
@@ -1434,7 +1434,7 @@ impl Screen for Lightbox {
             confirm: self.confirm.then(|| wire::Confirm {
                 title: words::photos_delete_forever_one(locale),
                 body: words::photos_delete_forever_body(locale),
-                confirm_label: words::photos_delete_forever(locale),
+                confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),
             dismissed: self.dismissed,

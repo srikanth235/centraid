@@ -734,3 +734,69 @@ fn send_a_copy_asks_how_much_place_travels_then_hands_the_pick_to_the_platform()
     ));
     assert_eq!(state(&d, shelf).notice, "Photos not exported. Try again.");
 }
+
+// -- The trash keeps the uniform promise in the kit's words (#1185) ----------------
+
+/// The trash is a grid of thumbnails, not the kit's list, and says everything the kit's trash says,
+/// word for word: Restore, "Delete this photo forever?" with the confirm "Delete forever", and the
+/// whole-trash confirm. "Empty trash" is the shared verb: when the trash is still what the shelf
+/// showed, it empties it.
+#[test]
+fn the_trash_says_the_kits_words_and_empties_through_the_shared_verb() {
+    use centraid_screens::kit::trash;
+    use centraid_screens::strings::{Locale, shared};
+    let mut d = driver();
+    let (a, b) = (photo(&d, "a"), photo(&d, "b"));
+    trash(&d, &a);
+    trash(&d, &b);
+    let shelf = open(&mut d, wire::PhotosShelfKind::Trash, "");
+    pick(&mut d, shelf, &a);
+    let labels: Vec<(Verb, String)> = state(&d, shelf)
+        .selection
+        .as_ref()
+        .unwrap()
+        .actions
+        .iter()
+        .map(|action| (action.kind(), action.label.clone()))
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            (Verb::Restore, shared::trash_restore(Locale::En)),
+            (Verb::DeleteForever, shared::trash_purge(Locale::En)),
+        ],
+        "the trash offers Restore and Delete forever, nothing else"
+    );
+    tap(&mut d, shelf, Verb::DeleteForever);
+    let confirm = state(&d, shelf)
+        .selection
+        .as_ref()
+        .unwrap()
+        .confirm
+        .clone()
+        .expect("a confirm");
+    assert_eq!(
+        confirm.title,
+        trash::purge_title(Locale::En, shared::trash_noun_photo)
+    );
+    assert_eq!(confirm.confirm_label, shared::trash_purge(Locale::En));
+    assert!(confirm.destructive);
+
+    // Empty trash, in the kit's sentences, through `empty-trash`: both photographs go.
+    send(
+        &mut d,
+        shelf,
+        ev::Kind::PromptDismissed(ev::PromptDismissed {}),
+    );
+    prompt(&mut d, shelf, Prompt::EmptyTrash);
+    let confirm = state(&d, shelf).confirm.clone().expect("a confirm");
+    assert_eq!(confirm.title, shared::trash_empty_title(Locale::En));
+    assert_eq!(confirm.body, shared::trash_empty_body(Locale::En));
+    assert_eq!(
+        confirm.confirm_label,
+        shared::trash_empty_action(Locale::En)
+    );
+    confirm_prompt(&mut d, shelf);
+    assert!(shown(&d, shelf).is_empty(), "the trash is empty");
+    assert!(state(&d, shelf).status.is_none());
+}

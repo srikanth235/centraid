@@ -85,6 +85,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -609,6 +614,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "photo",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the photo trash",
+        "clear out the trashed photos for good",
+        "permanently delete everything in the Photos trash"
+      ],
+      "description": "Empty the photo trash through entity.empty_trash with kind photo. Irreversible and takes no id: every photograph in the trash is destroyed now, as purge destroys one, and its bytes go once nothing else holds them. A trashed album is not touched.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["photo"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {
