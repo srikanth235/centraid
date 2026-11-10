@@ -37,4 +37,16 @@ catalog! {
         "Use the {noun} {store} has, {value}",
         "Use the {noun} {store} has, {value}"
     );
+    plain unchecked_folder_status = (
+        "Couldn’t check what the folder says.",
+        "Couldn’t check what the folder says."
+    );
+    plain unchecked_phone_status = (
+        "Couldn’t check what your phone says.",
+        "Couldn’t check what your phone says."
+    );
+    plain unchecked_store_status = (
+        "Couldn’t check what {store} says.",
+        "Couldn’t check what {store} says."
+    );
 }

@@ -65,7 +65,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         asking: Asking::Nothing,
         status: None,
         done: false,
-        differences: Vec::new(),
+        differences: follow::Phone::default(),
     }))
 }
 
@@ -89,7 +89,7 @@ struct Person {
     status: Option<wire::StatusLine>,
     done: bool,
     /// Where the phone's words differ from the person's, read with the page (#1183).
-    differences: Vec<follow::Difference>,
+    differences: follow::Phone,
 }
 
 impl Person {
@@ -113,7 +113,7 @@ impl Person {
         });
         self.differences = match &self.phase {
             Phase::Ready(Some(_)) => follow::read(ctx, &self.party_id),
-            _ => Vec::new(),
+            _ => follow::Phone::default(),
         };
         match &self.phase {
             // GONE: nothing to write to, and no sheet over nothing.
@@ -734,7 +734,10 @@ impl Screen for Person {
             content: Some(content),
             sheet: self.sheet.as_ref().map(|sheet| sheet.view(locale)),
             confirm: self.confirm(locale),
-            status: self.status.clone(),
+            status: self
+                .status
+                .clone()
+                .or_else(|| self.differences.status(locale, follow::Source::Phone)),
             done: self.done,
             edit: self.loaded().map(|_| routes::editor(&self.party_id)),
         };

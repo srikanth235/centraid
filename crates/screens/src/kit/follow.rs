@@ -15,8 +15,11 @@
 //! - **The tap** is one [`wire::PhoneSaysTaken`] on every page. The screen runs [`take`], reads
 //!   again, and a refusal is its own status sentence, never silence.
 //!
-//! A read that does not land draws no line: the line decorates a page that has its data, as the
-//! secondary reads of a page do, and the member's own values are all on screen.
+//! A read that does not land draws no line, and says so: the member's own values are all on
+//! screen, but no line is not "the phone agrees" when the check was not made. The page's status line
+//! carries one sentence ([`Phone::status`]) over the page as it otherwise is. A read that was
+//! refused says the same: nothing on this path answers "refused" for a row that follows nothing (that
+//! is an empty answer), so a refusal is a check that was not made.
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::Value;
@@ -52,11 +55,47 @@ fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap_or(Value::Null)
 }
 
-/// What differs on `entity_id`; nothing when it differs on nothing, when nothing follows it, and
-/// when the read does not land.
-pub fn read(ctx: &Ctx, entity_id: &str) -> Vec<Difference> {
+/// What the phone's store says that differs on a row, and whether the check was made. It reads as
+/// the slice of differences; an unchecked one has none, and [`Phone::status`] says why.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Phone {
+    found: Vec<Difference>,
+    unchecked: bool,
+}
+
+impl std::ops::Deref for Phone {
+    type Target = [Difference];
+
+    fn deref(&self) -> &[Difference] {
+        &self.found
+    }
+}
+
+impl Phone {
+    /// The one sentence for a check that was not made, in the store's name; `None` when it was.
+    #[must_use]
+    pub fn status(&self, locale: Locale, source: Source<'_>) -> Option<wire::StatusLine> {
+        if !self.unchecked {
+            return None;
+        }
+        let sentence = match source {
+            Source::Phone => words::unchecked_phone_status(locale),
+            Source::Folder => words::unchecked_folder_status(locale),
+            Source::Store(name) => fill(&words::unchecked_store_status(locale), &[("store", name)]),
+        };
+        Some(wire::StatusLine {
+            sentence,
+            action_label: String::new(),
+            refused: false,
+        })
+    }
+}
+
+/// What differs on `entity_id`: nothing when it differs on nothing or when nothing follows it, and
+/// nothing but an unchecked mark when the read does not land.
+pub fn read(ctx: &Ctx, entity_id: &str) -> Phone {
     if entity_id.is_empty() {
-        return Vec::new();
+        return Phone::default();
     }
     let reading = read::read(
         ctx,
@@ -69,9 +108,12 @@ pub fn read(ctx: &Ctx, entity_id: &str) -> Vec<Difference> {
         },
     );
     let Reading::Data(found) = reading else {
-        return Vec::new();
+        return Phone {
+            found: Vec::new(),
+            unchecked: true,
+        };
     };
-    found
+    let found = found
         .fields
         .into_iter()
         .map(|difference| Difference {
@@ -88,7 +130,11 @@ pub fn read(ctx: &Ctx, entity_id: &str) -> Vec<Difference> {
                 })
                 .collect(),
         })
-        .collect()
+        .collect();
+    Phone {
+        found,
+        unchecked: false,
+    }
 }
 
 /// The difference of `field`, when there is one.

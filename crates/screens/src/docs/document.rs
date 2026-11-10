@@ -73,7 +73,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         rename: None,
         dismissed: false,
         links: Links::new(&[Kind::Person]),
-        differences: Vec::new(),
+        differences: follow::Phone::default(),
     }))
 }
 
@@ -94,7 +94,7 @@ struct Document {
     links: Links,
     /// Where the followed folder's name for the document differs from the member's (#1183), read
     /// with the page.
-    differences: Vec<follow::Difference>,
+    differences: follow::Phone,
 }
 
 impl Document {
@@ -126,7 +126,7 @@ impl Document {
         let about = links::read_people(ctx, &self.document_id);
         self.differences = match &document {
             Reading::Data(_) => follow::read(ctx, &self.document_id),
-            _ => Vec::new(),
+            _ => follow::Phone::default(),
         };
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
@@ -594,7 +594,10 @@ impl Screen for Document {
                     document_id: self.document_id.clone(),
                     title_hint: self.title_hint.clone(),
                     content: Some(content),
-                    status: self.status.clone(),
+                    status: self
+                        .status
+                        .clone()
+                        .or_else(|| self.differences.status(locale, Source::Folder)),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
                     sheet,

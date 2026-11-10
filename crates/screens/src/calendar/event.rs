@@ -90,7 +90,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         dismissed: false,
         attachments,
-        differences: Vec::new(),
+        differences: follow::Phone::default(),
     }))
 }
 
@@ -115,7 +115,7 @@ struct EventPage {
     /// The photos and files on the event (#1173).
     attachments: Attachments,
     /// Where the phone's calendar says otherwise than the event does (#1183), read with the page.
-    differences: Vec<follow::Difference>,
+    differences: follow::Phone,
 }
 
 impl EventPage {
@@ -137,7 +137,7 @@ impl EventPage {
         });
         self.differences = match &reading {
             Reading::Data(_) => follow::read(ctx, &self.route.event_id),
-            _ => Vec::new(),
+            _ => follow::Phone::default(),
         };
         match reading {
             Reading::Data(detail) => self.content = Content::Data(detail),
@@ -402,7 +402,10 @@ impl Screen for EventPage {
             chrome: Some(Self::chrome(locale)),
             dismissed: self.dismissed,
             cancel_armed: series_sheet && self.scope.is_some(),
-            status: self.status.clone(),
+            status: self
+                .status
+                .clone()
+                .or_else(|| self.differences.status(locale, follow::Source::Phone)),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),

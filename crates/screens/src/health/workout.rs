@@ -32,7 +32,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         activity_id: args.activity_id.clone(),
         parent: args.parent.clone(),
         phase: Phase::Loading,
-        differences: Vec::new(),
+        differences: follow::Phone::default(),
         status: None,
     }))
 }
@@ -42,7 +42,7 @@ struct WorkoutPage {
     parent: String,
     phase: Phase<wire::HealthWorkout>,
     /// Where the store's figures differ from the member's (#1183), read with the page.
-    differences: Vec<follow::Difference>,
+    differences: follow::Phone,
     status: Option<wire::StatusLine>,
 }
 
@@ -149,7 +149,7 @@ impl WorkoutPage {
             Phase::Ready(answer) if answer.workout.is_some() => {
                 follow::read(ctx, &self.activity_id)
             }
-            _ => Vec::new(),
+            _ => follow::Phone::default(),
         };
     }
 
@@ -304,7 +304,10 @@ impl Screen for WorkoutPage {
                         },
                         retry: words::retry(locale),
                     }),
-                    status: self.status.clone(),
+                    status: self.status.clone().or_else(|| {
+                        self.differences
+                            .status(locale, Source::Store(&Store::of(ctx).name(locale)))
+                    }),
                 },
             )),
             ..wire::ViewState::default()
