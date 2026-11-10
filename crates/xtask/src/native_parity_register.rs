@@ -56,6 +56,9 @@ const PASS_TELLS_ROLL: &str = "the pass service tells the camera roll by name (p
 const FILES_FOLLOWED: &str = "`shell.files-followed` is read by Rust only: core/app_query/imports.rs builds the answer, imports/files.rs and docs/drive/mod.rs read it";
 
 /// One reason, several rows.
+const EARLIER_VERSIONS: &str = "`shell.earlier-versions` is read by Rust only: core/app_query/history.rs builds the answer and kit/earlier.rs reads it; the app's spec words each version and a shell is sent only the finished `EarlierRow`";
+
+/// One reason, several rows.
 const PHONE_DIFFERENCES: &str = "`shell.phone-differences` is read by Rust only: core/app_query/follow.rs builds the answer and kit/follow.rs reads it; the detail screens word it and send a shell only the finished `PhoneSays` line";
 
 /// One reason, several rows.
@@ -391,6 +394,12 @@ pub const REGISTER: &[Entry] = &[
         "FollowItemDifference.stated_json",
         rust_only(PHONE_DIFFERENCES),
     ),
+    ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
+    ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
+    ("EarlierVersion.store_system", rust_only(EARLIER_VERSIONS)),
+    ("EarlierVersion.since_store_system", rust_only(EARLIER_VERSIONS)),
+    ("EarlierChange.before_json", rust_only(EARLIER_VERSIONS)),
+    ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.documents", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.origin_id", rust_only(FILES_FOLLOWED)),
