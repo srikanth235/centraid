@@ -136,6 +136,21 @@ pub(crate) fn canon(points: &Json) -> Json {
     )
 }
 
+/// The points of a canonical list by the key that names each across statements: its kind and
+/// reach key.
+pub(crate) fn items(points: &Json) -> BTreeMap<String, Json> {
+    points
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|point| {
+            let kind = point.get("kind")?.as_str()?;
+            let value = point.get("value")?.as_str()?;
+            Some((format!("{kind}:{}", reach_key(kind, value)), point.clone()))
+        })
+        .collect()
+}
+
 /// A three-way merge of a person's points, **per item** (the follower's rule, one point at a
 /// time): a point is `(kind, key)` and its parts are its spelling and its label. A point the
 /// member has not changed (the vault holds what the source last stated of it, or holds nothing

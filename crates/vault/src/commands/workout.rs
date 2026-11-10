@@ -13,6 +13,8 @@
 //! is refused by `workout.edit` with a sentence naming the store, because the
 //! next read would state it again. The follower's merge keeps a figure the member set (one they logged on a row the store is only now matching, or changed since the store last stated it).
 
+use std::collections::BTreeMap;
+
 use rusqlite::OptionalExtension;
 use rusqlite::types::Value as Sql;
 use serde_json::{Map, Value as Json};
@@ -42,7 +44,18 @@ pub const MEASURES: Child = Child {
     read,
     canon,
     merge,
+    items: Some(items),
 };
+
+/// The measures by column.
+fn items(value: &Json) -> BTreeMap<String, Json> {
+    value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(column, figure)| (column.clone(), figure.clone()))
+        .collect()
+}
 
 /// The measures a record states in the one form the engine compares: only what
 /// is stated, numbers as reals, words squashed.

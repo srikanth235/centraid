@@ -55,6 +55,8 @@
 //! rows that hang off them (a contact's points, an event's attendees, a
 //! workout's measures) are added by the lane that owns the kind.
 
+use std::collections::BTreeMap;
+
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
@@ -107,7 +109,15 @@ pub struct Child {
     /// Apply what the source says now, given what it said last (`None`: it has
     /// not spoken for this row before). Returns whether anything changed.
     pub merge: fn(&CommandCtx<'_, '_>, &str, Option<&Json>, &Json) -> Result<bool>,
+    /// The items a canonical value is made of, each under the key that names it across
+    /// statements (a point's kind and reach key, a guest's email, a measure's column), for a
+    /// child whose items the member changes one at a time. `None` for a child that is judged
+    /// whole ([`differences`] then reports the field as one).
+    pub items: Option<Items>,
 }
+
+/// See [`Child::items`].
+pub type Items = fn(&Json) -> BTreeMap<String, Json>;
 
 /// What a record gone from a complete read does to its row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -361,6 +371,7 @@ const STAT: Child = Child {
     read: |connection, id| stated_read(connection, id, "stat"),
     canon: stated_canon,
     merge: stated_merge,
+    items: None,
 };
 
 /// What a statement said of a line beyond what the model keeps: its memo, its
@@ -370,6 +381,7 @@ const LINE: Child = Child {
     read: |connection, id| stated_read(connection, id, "line"),
     canon: stated_canon,
     merge: stated_merge,
+    items: None,
 };
 
 /// The five systems the vault follows.
@@ -388,6 +400,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             read: contact_point::read,
             canon: contact_point::canon,
             merge: contact_point::merge,
+            items: Some(contact_point::items),
         }],
         match_on: &[Match::Title],
         gone: Gone::Trash,
@@ -426,6 +439,8 @@ pub const SYSTEMS: &[SystemMap] = &[
                 read: event::overrides_read,
                 canon: event::overrides_canon,
                 merge: event::overrides_merge,
+                // Judged whole: a day is not an item the screens name one at a time.
+                items: None,
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
@@ -434,6 +449,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 read: event::attendees_read,
                 canon: event::attendees_canon,
                 merge: event::attendees_merge,
+                items: Some(event::attendees_items),
             },
         ],
         match_on: &[Match::Title, Match::Column("starts")],
@@ -1124,6 +1140,129 @@ fn edited(connection: &Connection, map: &SystemMap, id: &str, stated: &Json) -> 
         .into_iter()
         .flatten()
         .any(|(name, said)| !map.agree(name, now.get(name.as_str()), Some(said))))
+}
+
+// ---------------------------------------------------------------------------
+// What the phone says that differs
+// ---------------------------------------------------------------------------
+
+/// One item of a multi-valued field where the vault and the source disagree.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemDifference {
+    /// The key that names the item across statements: `kind:reach-key` for a contact point,
+    /// the email (else `name:<name>`) for a guest, the column for a workout measure.
+    pub key: String,
+    /// The item as the source states it; `None` when the source never stated it (the member
+    /// added it).
+    pub stated: Option<Json>,
+    /// The item as the vault holds it; `None` when the vault no longer holds it.
+    pub held: Option<Json>,
+}
+
+/// A field whose held value differs from what the linked source last stated.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Difference {
+    /// The field's stable name: `title`, a column of the kind's own row (`birthday`,
+    /// `starts`, ...), or a child (`points`, `attendees`, `overrides`, `workout`).
+    pub field: String,
+    /// The value the source last stated (a child in its canonical form).
+    pub stated: Json,
+    /// The value the vault holds.
+    pub held: Json,
+    /// For a field made of items, those that differ, in key order; empty for a field judged
+    /// whole.
+    pub items: Vec<ItemDifference>,
+}
+
+/// The system and statement of the live source link of an entity: the entity is live (not in the
+/// trash), its source has not been unlinked or forgotten, and it names a system the vault follows.
+pub(crate) fn live_link(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<(&'static SystemMap, Json)>> {
+    let row: Option<(String, String)> = connection
+        .query_row(
+            "SELECT s.system, s.stated FROM source s JOIN entity e ON e.id = s.entity_id
+              WHERE s.entity_id = ?1 AND s.gone_at IS NULL AND e.deleted_at IS NULL
+              LIMIT 1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(row.and_then(|(system, stated)| {
+        let map = SYSTEMS.iter().find(|map| map.system == system)?;
+        Some((map, serde_json::from_str(&stated).ok()?))
+    }))
+}
+
+/// The fields a followed entity holds differently from what its source last stated, derived on
+/// each call from `source.stated` and the held rows (nothing is stored): the field is "edited"
+/// exactly while the two differ, and follows again by itself once they are equal.
+///
+/// Only a field the source stated is reported (one it never stated has nothing to compare), and
+/// only for an entity that is live with a live source link: a tombstone, a trashed row, a row
+/// the phone unlinked and one nothing follows have no differences. A field that a system writes
+/// once and never after (`fixed`) is not reported, for the source will not change it either.
+/// A series' `overrides` are reported whole, not day by day: a day's change is not a thing the
+/// screens name one at a time.
+///
+/// # Errors
+///
+/// A database error.
+pub fn differences(connection: &Connection, id: &str) -> Result<Vec<Difference>> {
+    let Some((map, stated)) = live_link(connection, id)? else {
+        return Ok(Vec::new());
+    };
+    let now = current(connection, map, id)?;
+    let names = std::iter::once("title")
+        .chain(map.fields.iter().copied())
+        .chain(map.children.iter().map(|child| child.name))
+        .filter(|name| !map.fixed.contains(name));
+    let mut out = Vec::new();
+    for name in names {
+        let Some(said) = stated.get(name) else {
+            continue;
+        };
+        let held = now.get(name);
+        if map.agree(name, held, Some(said)) {
+            continue;
+        }
+        let Some(child) = map.child(name) else {
+            out.push(Difference {
+                field: name.to_owned(),
+                stated: said.clone(),
+                held: held.cloned().unwrap_or(Json::Null),
+                items: Vec::new(),
+            });
+            continue;
+        };
+        let (said, held) = (
+            (child.canon)(said),
+            (child.canon)(held.unwrap_or(&Json::Null)),
+        );
+        let items = child.items.map_or_else(Vec::new, |items| {
+            let (stated_items, held_items) = (items(&said), items(&held));
+            stated_items
+                .keys()
+                .chain(held_items.keys())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .filter(|key| stated_items.get(*key) != held_items.get(*key))
+                .map(|key| ItemDifference {
+                    key: key.clone(),
+                    stated: stated_items.get(key).cloned(),
+                    held: held_items.get(key).cloned(),
+                })
+                .collect()
+        });
+        out.push(Difference {
+            field: name.to_owned(),
+            stated: said,
+            held,
+            items,
+        });
+    }
+    Ok(out)
 }
 
 fn merge_record(

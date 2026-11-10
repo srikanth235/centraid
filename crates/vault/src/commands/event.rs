@@ -443,6 +443,28 @@ pub(crate) fn attendees_canon(statement: &Json) -> Json {
     Json::Array(guests)
 }
 
+/// The guests of a canonical list by the key that names each across statements: their email, or
+/// their name when they have none.
+pub(crate) fn attendees_items(guests: &Json) -> std::collections::BTreeMap<String, Json> {
+    let mut out = std::collections::BTreeMap::new();
+    for guest in guests.as_array().into_iter().flatten() {
+        let key = guest
+            .get("email")
+            .and_then(Json::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                guest
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .map(|name| format!("name:{}", name.to_lowercase()))
+            });
+        if let Some(key) = key {
+            out.entry(key).or_insert_with(|| guest.clone());
+        }
+    }
+    out
+}
+
 /// The live person an email is, by an exact match with one of their email points.
 fn person_of_email(connection: &Connection, email: &str) -> Result<Option<String>> {
     let key = crate::commands::contact_point::reach_key("email", email);
