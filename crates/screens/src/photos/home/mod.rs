@@ -911,7 +911,10 @@ impl Screen for Home {
         let locale = ctx.locale();
         let library = chrome::is_library(self.destination);
         let more_up = matches!(self.sheet, Sheet::More | Sheet::TileSize);
-        let status = self.status.clone().or_else(|| self.selection.status());
+        let status = self
+            .status
+            .clone()
+            .or_else(|| self.selection.status(locale));
         let mut state = wire::PhotosHomeState {
             destination: self.destination as i32,
             band: chrome::band(locale, self.destination, more_up),

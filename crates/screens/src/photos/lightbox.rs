@@ -56,6 +56,7 @@ use crate::kit::act as kit_act;
 use crate::kit::civil::HourCycle;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
+use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, photos as words, photos_lightbox as own, shared};
 
@@ -521,10 +522,14 @@ impl Lightbox {
                     });
                 }
             }
-            // THE PHOTOGRAPH STAYS ON SCREEN, so the move is said, and the bar's
-            // labelled Restore is the way back: undo-able and never a blocking ask.
+            // THE PHOTOGRAPH STAYS ON SCREEN, so the move is said with Undo, which restores it,
+            // and it never asks (#1185).
             V::Trash => {
                 self.sheet = Sheet::None;
+                let title = self
+                    .detail()
+                    .map(|detail| detail.cell.title.clone())
+                    .unwrap_or_default();
                 if self.write(
                     ctx,
                     "delete-photo",
@@ -533,7 +538,11 @@ impl Lightbox {
                         photo_id: id.clone(),
                     },
                 ) {
-                    self.receipt(words::photos_receipt_trashed(ctx.locale()));
+                    self.status = Some(wire::StatusLine {
+                        sentence: trash::moved_to_trash(ctx.locale(), &title),
+                        action_label: shared::trash_undo(ctx.locale()),
+                        refused: false,
+                    });
                 }
             }
             V::Restore => {
@@ -1114,7 +1123,7 @@ fn verbs(
         ),
         verb(
             V::Trash,
-            words::photos_trash(locale),
+            shared::trash_move(locale),
             "trash",
             refusal,
             false,
@@ -1220,6 +1229,24 @@ impl Screen for Lightbox {
                         let usable = self.verb_enabled(locale, kind);
                         if usable {
                             return self.tap(kind, ctx);
+                        }
+                    }
+                    K::StatusActed(_) => {
+                        let id = self.photo_id.clone();
+                        if self
+                            .status
+                            .as_ref()
+                            .is_some_and(|line| !line.action_label.is_empty())
+                            && self.write(
+                                ctx,
+                                "restore-photo",
+                                &[&id],
+                                act::photos::RestorePhoto {
+                                    photo_id: id.clone(),
+                                },
+                            )
+                        {
+                            self.receipt(words::photos_receipt_restored(locale));
                         }
                     }
                     K::AlbumChoice(album) => self.album_event(&album, ctx),

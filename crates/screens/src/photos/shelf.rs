@@ -744,7 +744,7 @@ impl Screen for Shelf {
             kind: self.kind as i32,
             content: Some(content),
             selection: Some(self.selection.view(locale)),
-            status: self.selection.status(),
+            status: self.selection.status(locale),
             notice: self.notice.clone(),
             purge_window: if self.is_trash() {
                 fill(

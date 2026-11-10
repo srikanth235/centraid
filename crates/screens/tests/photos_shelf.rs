@@ -437,7 +437,7 @@ fn the_archives_restore_is_an_unarchive_and_the_photograph_leaves_it() {
 }
 
 #[test]
-fn trash_and_delete_forever_ask_first_and_act_only_when_confirmed() {
+fn move_to_trash_asks_nothing_and_delete_forever_asks_first() {
     let mut d = driver();
     let (a, b) = (photo(&d, "a"), photo(&d, "b"));
     star(&d, &a);
@@ -445,17 +445,18 @@ fn trash_and_delete_forever_ask_first_and_act_only_when_confirmed() {
     let shelf = open(&mut d, wire::PhotosShelfKind::Favorites, "");
     pick(&mut d, shelf, &a);
     tap(&mut d, shelf, Verb::Trash);
-    let confirm = state(&d, shelf)
-        .selection
-        .as_ref()
-        .unwrap()
-        .confirm
-        .clone()
-        .expect("a confirm");
-    assert_eq!(confirm.title, "Move 1 photo to the trash?");
-    assert!(shown(&d, shelf).contains(&a), "nothing happened yet");
-    confirm_selection(&mut d, shelf);
+    assert!(
+        state(&d, shelf)
+            .selection
+            .as_ref()
+            .unwrap()
+            .confirm
+            .is_none()
+    );
     assert!(!shown(&d, shelf).contains(&a) && shown(&d, shelf).contains(&b));
+    let status = state(&d, shelf).status.clone().expect("a status line");
+    assert_eq!(status.sentence, "1 photo moved to trash");
+    assert_eq!(status.action_label, "Undo");
 
     let trash_shelf = open(&mut d, wire::PhotosShelfKind::Trash, "");
     assert_eq!(shown(&d, trash_shelf), vec![a.clone()]);

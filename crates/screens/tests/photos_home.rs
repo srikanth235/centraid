@@ -1226,25 +1226,21 @@ fn trash_asks_first_ends_the_mode_and_takes_the_photographs_out_of_the_grid() {
     let mut r = rig();
     let a = r.photo("trash a", Some("2026-06-03T10:00:00Z"), None);
     r.send(H::Refreshed(wire::PhotosRefreshed {}));
-    // A trash confirm over nothing is not asked.
+    // Nothing picked writes nothing.
     r.send(verb(V::Trash));
-    assert!(r.state().selection.as_ref().unwrap().confirm.is_none());
+    assert!(r.tile_ids().contains(&a));
     r.send(toggle(&a));
     r.send(verb(V::Trash));
-    let confirm = r
-        .state()
-        .selection
-        .as_ref()
-        .unwrap()
-        .confirm
-        .clone()
-        .expect("a confirm");
-    assert_eq!(confirm.title, "Move 1 photo to the trash?");
-    assert!(r.tile_ids().contains(&a));
-    r.send(selection(wire::photos_selection_event::Kind::Confirmed(
-        wire::photos_selection_event::Confirmed {},
-    )));
+    let bar = r.state().selection.as_ref().unwrap();
+    assert!(bar.confirm.is_none(), "Move to trash asks nothing");
     assert!(!r.tile_ids().contains(&a));
+    let status = r.state().status.clone().expect("a status line");
+    assert_eq!(status.sentence, "1 photo moved to trash");
+    assert_eq!(status.action_label, "Undo");
+    r.send(selection(wire::photos_selection_event::Kind::StatusActed(
+        wire::photos_selection_event::StatusActed {},
+    )));
+    assert!(r.tile_ids().contains(&a), "Undo restores it");
     let bar = r.state().selection.as_ref().unwrap();
     assert!(!bar.selecting && bar.count == 0);
 }

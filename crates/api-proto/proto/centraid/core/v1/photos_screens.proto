@@ -184,6 +184,8 @@ message PhotosSelectionEvent {
     ActionTapped action = 6;
     Confirmed confirmed = 7;
     ConfirmDismissed dismissed = 8;
+    // The status line's Undo after Move to trash: restores exactly those photographs.
+    StatusActed status_acted = 9;
   }
 
   message ModeSet {
@@ -213,6 +215,8 @@ message PhotosSelectionEvent {
   message Confirmed {}
 
   message ConfirmDismissed {}
+
+  message StatusActed {}
 }
 
 // ---------------------------------------------------------------------------

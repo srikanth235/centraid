@@ -35,7 +35,6 @@ catalog! {
     plain photos_bytes_many = ("{count} bytes", "{count} bytes");
     plain photos_byte_one = ("1 byte", "1 byte");
     plain photos_cancel = ("Cancel", "Cancel");
-    plain photos_receipt_trashed = ("Photo moved to trash", "Photo moved to trash");
     plain photos_receipt_restored = ("Restored.", "Restored.");
     plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
     plain photos_receipt_unfavorited = ("Removed from Favorites.", "Removed from Favorites.");
@@ -141,7 +140,6 @@ catalog! {
     plain photos_grid_select = ("Select photos", "Select photos");
     plain photos_grid_selected_many = ("{count} photos selected", "{count} photos selected");
     plain photos_grid_selected_one = ("1 photo selected", "1 photo selected");
-    plain photos_grid_trash_confirm = ("Move to trash", "Move to trash");
     plain photos_import_looking = ("Looking through your camera roll", "Looking through your camera roll");
     plain photos_import_now = ("Import now", "Import now");
     plain photos_import_paused_disk = ("Paused: this phone is out of space", "Paused: this phone is out of space");
@@ -285,9 +283,6 @@ catalog! {
     plain photos_title = ("Photos", "Photos");
     plain photos_to_reclaim = ("{size} to reclaim.", "{size} to reclaim.");
     plain photos_trash = ("Trash", "Trash");
-    plain photos_trash_body = ("Restore them from the trash later. Your camera roll is not touched.", "Restore them from the trash later. Your camera roll is not touched.");
-    plain photos_trash_many = ("Move {count} photos to the trash?", "Move {count} photos to the trash?");
-    plain photos_trash_one = ("Move 1 photo to the trash?", "Move 1 photo to the trash?");
     plain photos_unarchive = ("Unarchive", "Unarchive");
     plain photos_undated = ("Undated", "Undated");
     plain photos_unfavorite = ("Unfavorite", "Unfavorite");
@@ -314,12 +309,12 @@ catalog! {
     // Counted forms of the pairs above: `{n}` is the count.
     counted receipt_favorited_n = ("1 photo added to Favorites.", "{n} photos added to Favorites.");
     counted receipt_unfavorited_n = ("1 photo removed from Favorites.", "{n} photos removed from Favorites.");
+    counted receipt_trashed_n = ("1 photo moved to trash", "{n} photos moved to trash");
     counted receipt_archived_n = ("1 photo moved to the archive.", "{n} photos moved to the archive.");
     counted receipt_unarchived_n = ("1 photo moved out of the archive.", "{n} photos moved out of the archive.");
     counted receipt_album_n = ("1 photo added to {album}.", "{n} photos added to {album}.");
     counted selected_title = ("1 photo selected", "{n} photos selected");
     counted chosen_title = ("{n} chosen", "{n} chosen");
-    counted trash_question = ("Move 1 photo to the trash?", "Move {n} photos to the trash?");
     counted delete_forever_question = ("Delete this photo forever?", "Delete {n} photos forever?");
     counted places_unpinned = ("1 place has no location, so it is not on the map.", "{n} places have no location, so they are not on the map.");
     counted review_trash_others = ("Trash the other {n} copies", "Trash the other {n} copies");

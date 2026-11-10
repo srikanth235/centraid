@@ -881,9 +881,15 @@ fn favorite_archive_and_trash_each_say_what_they_did() {
     let state = view(&d, at);
     let receipt = state.status.expect("receipt");
     assert!(!receipt.refused);
-    assert_eq!(receipt.sentence, "Photo moved to trash");
+    assert!(receipt.sentence.ends_with(" moved to trash"), "{receipt:?}");
+    assert_eq!(receipt.action_label, "Undo");
     let kinds: Vec<i32> = state.toolbar.iter().map(|v| v.kind).collect();
     assert_eq!(kinds, [V::Restore as i32, V::DeleteForever as i32]);
+    // Undo restores it.
+    send(&mut d, at, ev::Kind::StatusActed(ev::StatusActed {}));
+    let state = view(&d, at);
+    assert_eq!(state.status.expect("receipt").sentence, "Restored.");
+    assert!(state.toolbar.iter().any(|v| v.kind == V::Trash as i32));
 }
 
 #[test]

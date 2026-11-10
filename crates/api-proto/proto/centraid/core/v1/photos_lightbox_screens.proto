@@ -282,6 +282,8 @@ message PhotosLightboxEvent {
     ConfirmDismissed confirm_dismissed = 16;
     // The people section's and picker's events (#1173).
     LinkEvent people = 17;
+    // The status line's Undo after Move to trash: restores the photograph.
+    StatusActed status_acted = 18;
   }
 
   message Refreshed {}
@@ -332,6 +334,8 @@ message PhotosLightboxEvent {
   message Confirmed {}
 
   message ConfirmDismissed {}
+
+  message StatusActed {}
 }
 
 // ---------------------------------------------------------------------------

@@ -185,6 +185,8 @@ pub struct Selection {
     refusal: Option<String>,
     /// What the last batch did, in a sentence, until the next attempt.
     receipt: Option<String>,
+    /// The photographs the last Move to trash took, which the status line's Undo restores.
+    undo: Vec<String>,
 }
 
 impl Selection {
@@ -198,6 +200,7 @@ impl Selection {
             picked: Vec::new(),
             confirming: None,
             refusal: None,
+            undo: Vec::new(),
             receipt: None,
         }
     }
@@ -298,9 +301,14 @@ impl Selection {
         self.refusal.as_deref()
     }
 
+    fn clear_receipt(&mut self) {
+        self.receipt = None;
+        self.undo.clear();
+    }
+
     /// The refusal as the kit's status line, or else what the last batch did.
     #[must_use]
-    pub fn status(&self) -> Option<wire::StatusLine> {
+    pub fn status(&self, locale: Locale) -> Option<wire::StatusLine> {
         self.refusal
             .as_ref()
             .map(|sentence| wire::StatusLine {
@@ -311,7 +319,11 @@ impl Selection {
             .or_else(|| {
                 self.receipt.as_ref().map(|sentence| wire::StatusLine {
                     sentence: sentence.clone(),
-                    action_label: String::new(),
+                    action_label: if self.undo.is_empty() {
+                        String::new()
+                    } else {
+                        shared::trash_undo(locale)
+                    },
                     refused: false,
                 })
             })
@@ -365,8 +377,11 @@ impl Selection {
         ordered: &[String],
         ctx: &Ctx,
     ) -> Outcome {
-        if !matches!(event.kind, Some(E::Action(_) | E::Confirmed(_))) {
-            self.receipt = None;
+        if !matches!(
+            event.kind,
+            Some(E::Action(_) | E::Confirmed(_) | E::StatusActed(_))
+        ) {
+            self.clear_receipt();
         }
         match &event.kind {
             Some(E::Mode(mode)) => self.set_mode(mode.selecting),
@@ -388,6 +403,21 @@ impl Selection {
                 }
             }
             Some(E::Dismissed(_)) => self.confirming = None,
+            // THE STATUS LINE'S UNDO: exactly the photographs the last Move to trash took.
+            Some(E::StatusActed(_)) => {
+                let ids = std::mem::take(&mut self.undo);
+                if !ids.is_empty() {
+                    let written = each(ctx, &ids, "restore-photo", |id| {
+                        act::photos::RestorePhoto {
+                            photo_id: id.to_owned(),
+                        }
+                        .into()
+                    });
+                    self.receipt = None;
+                    self.refusal = written.refusal.clone();
+                    return Outcome::Wrote(written);
+                }
+            }
             None => {}
         }
         Outcome::Moved
@@ -404,10 +434,11 @@ impl Selection {
             return Outcome::Moved;
         }
         self.refusal = None;
-        self.receipt = None;
+        self.clear_receipt();
         match verb {
-            // Destroying and trashing ask first, in full sentences.
-            Verb::Trash | Verb::DeleteForever => {
+            // Destroying asks first, in full sentences; Move to trash asks nothing and says
+            // what it did with Undo, as everywhere else (#1185).
+            Verb::DeleteForever => {
                 self.confirming = Some(verb);
                 Outcome::Moved
             }
@@ -479,6 +510,9 @@ impl Selection {
         };
         self.settle(&written, verb);
         self.acknowledge(ctx.locale(), verb, &written, None);
+        if verb == Verb::Trash && self.receipt.is_some() {
+            self.undo.clone_from(&written.committed);
+        }
         Outcome::Wrote(written)
     }
 
@@ -511,7 +545,7 @@ impl Selection {
             title,
             actions,
             cancel_label: words::photos_cancel(locale),
-            confirm: self.confirming.map(|verb| confirm(locale, verb, count)),
+            confirm: self.confirming.map(|_| confirm(locale, count)),
         }
     }
 }
@@ -540,6 +574,7 @@ pub fn receipt(locale: Locale, verb: Verb, count: usize, album: Option<&str>) ->
     Some(match verb {
         Verb::Favorite => words::receipt_favorited_n(locale, n),
         Verb::Unfavorite => words::receipt_unfavorited_n(locale, n),
+        Verb::Trash => words::receipt_trashed_n(locale, n),
         Verb::Archive => words::receipt_archived_n(locale, n),
         Verb::Unarchive => words::receipt_unarchived_n(locale, n),
         Verb::AddToAlbum => fill(
@@ -565,7 +600,7 @@ pub fn label(locale: Locale, verb: Verb) -> String {
         Verb::Unfavorite => words::photos_unfavorite(locale),
         Verb::Archive => words::photos_archive(locale),
         Verb::Unarchive => words::photos_unarchive(locale),
-        Verb::Trash => words::photos_trash(locale),
+        Verb::Trash => shared::trash_move(locale),
         Verb::Restore => shared::trash_restore(locale),
         Verb::DeleteForever => shared::trash_purge(locale),
         Verb::AddToAlbum => words::photos_add_to_album(locale),
@@ -574,22 +609,13 @@ pub fn label(locale: Locale, verb: Verb) -> String {
     }
 }
 
-/// The confirm over a destructive verb, with the whole cost stated: not only the
+/// The confirm over Delete forever, with the whole cost stated: not only the
 /// photograph but its captions, tags and album entries.
-fn confirm(locale: Locale, verb: Verb, count: u32) -> wire::Confirm {
-    let n = u64::from(count);
-    match verb {
-        Verb::DeleteForever => wire::Confirm {
-            title: words::delete_forever_question(locale, n),
-            body: words::photos_delete_forever_body(locale),
-            confirm_label: shared::trash_purge(locale),
-            destructive: true,
-        },
-        _ => wire::Confirm {
-            title: words::trash_question(locale, n),
-            body: words::photos_trash_body(locale),
-            confirm_label: words::photos_grid_trash_confirm(locale),
-            destructive: true,
-        },
+fn confirm(locale: Locale, count: u32) -> wire::Confirm {
+    wire::Confirm {
+        title: words::delete_forever_question(locale, u64::from(count)),
+        body: words::photos_delete_forever_body(locale),
+        confirm_label: shared::trash_purge(locale),
+        destructive: true,
     }
 }
