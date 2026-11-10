@@ -156,7 +156,7 @@ pub const REGISTER: &[Row] = &[
     owed("money", Promise::Undo, UNDO_OWED),
     owed("notes", Promise::Undo, UNDO_OWED),
     owed("people", Promise::Undo, UNDO_OWED),
-    owed("photos", Promise::Undo, UNDO_OWED),
+    kept("photos", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
     // others' work list.

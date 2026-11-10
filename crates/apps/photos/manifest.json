@@ -244,7 +244,7 @@
       "name": "edit-photo",
       "verb": "edit",
       "kind": "photo",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "photo.edit",
       "phrasings": [
@@ -774,7 +774,7 @@
       "name": "set-album-cover",
       "verb": "edit",
       "kind": "album",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "album.set_cover",
       "phrasings": [
@@ -1001,7 +1001,7 @@
       "name": "set-place",
       "verb": "edit",
       "kind": "place",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "photo.set_place",
       "phrasings": [
@@ -1045,7 +1045,7 @@
       "name": "name-place",
       "verb": "edit",
       "kind": "place",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "entity.retitle",
       "phrasings": [

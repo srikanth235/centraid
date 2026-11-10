@@ -180,6 +180,12 @@ const PHOTOS: &[Row] = &[
     ("untag-photo", "tag-photo", Input::Same),
     ("add-person", "remove-person", Input::Same),
     ("remove-person", "add-person", Input::Same),
+    ("edit-photo", "undo-change", Input::Earlier),
+    ("retitle-photo", "retitle-photo", Input::Earlier),
+    ("rename-album", "rename-album", Input::Earlier),
+    ("set-album-cover", "undo-change", Input::Earlier),
+    ("set-place", "undo-change", Input::Earlier),
+    ("name-place", "undo-change", Input::Earlier),
 ];
 
 fn rows(app: &str) -> &'static [Row] {
@@ -358,7 +364,7 @@ mod tests {
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
     const OWED: &[&str] = &[
-        "calendar", "docs", "health", "locker", "money", "notes", "people", "photos",
+        "calendar", "docs", "health", "locker", "money", "notes", "people",
     ];
 
     /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.

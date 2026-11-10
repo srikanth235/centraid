@@ -427,6 +427,66 @@ fn a_claim_of_writing_nothing_is_proven_by_running_the_action() {
     }
 }
 
+fn photos(w: &World) {
+    let photo = w.first("photo");
+    let album = w.make(
+        "photos",
+        "create-album",
+        &json!({ "kind": "album", "title": "Undo album" }),
+    );
+    // A place the photograph is not at yet, so that pointing it there is a change.
+    let place = w
+        .sample
+        .handle
+        .command("place.add", &json!({ "title": "Undo cove" }), "undo-cove")
+        .expect("a place")
+        .output["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.round_trip(
+        "photos",
+        "edit-photo",
+        &photo,
+        &json!({ "id": photo, "taken_at": "2026-01-02T03:04:05Z" }),
+    );
+    w.round_trip(
+        "photos",
+        "retitle-photo",
+        &photo,
+        &json!({ "id": photo, "title": "A new caption" }),
+    );
+    w.round_trip(
+        "photos",
+        "rename-album",
+        &album,
+        &json!({ "id": album, "title": "Renamed album" }),
+    );
+    w.round_trip(
+        "photos",
+        "set-place",
+        &photo,
+        &json!({ "id": photo, "place_id": place }),
+    );
+    w.round_trip(
+        "photos",
+        "name-place",
+        &place,
+        &json!({ "id": place, "title": "Somewhere new" }),
+    );
+    w.ok(
+        "photos",
+        "add-to-album",
+        &json!({ "from": album, "to": photo, "rel": "contains" }),
+    );
+    w.round_trip(
+        "photos",
+        "set-album-cover",
+        &album,
+        &json!({ "id": album, "photo_id": photo }),
+    );
+}
+
 /// EVERY ROW THAT TAKES AN ACTION BACK BY ITS EARLIER VERSION IS PROVEN BY A ROUND TRIP, and the
 /// rows are read from the table itself: the classification of "the history captures this" is
 /// the vault answering that the act made a version (the round trip asserts the state changed and
@@ -435,6 +495,7 @@ fn a_claim_of_writing_nothing_is_proven_by_running_the_action() {
 fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     let w = World::new();
     reminders(&w);
+    photos(&w);
     let proven = w.proven.borrow().clone();
 
     let table = include_str!("../src/act/inverse.rs");
