@@ -1,9 +1,6 @@
 package dev.centraid.android.screens.docs
 
 import dev.centraid.android.kit.SearchAskRow
-import dev.centraid.android.kit.Surface
-import dev.centraid.design.CentraidScale
-import dev.centraid.android.kit.appAccent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -69,8 +66,6 @@ import centraid.core.v1.DocsRename
 import centraid.core.v1.DocsRowView
 import centraid.core.v1.DocsSheet
 import centraid.core.v1.DocsStage
-import centraid.core.v1.DocsVersionsEvent
-import centraid.core.v1.DocsVersionsState
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
 import centraid.core.v1.PhoneSaysTaken
@@ -594,7 +589,7 @@ private fun Tile(
 }
 
 // ---------------------------------------------------------------------------
-// docs.document — reader, stage or facts; path, versions, actions
+// docs.document — reader, stage or facts; path, facts, earlier versions, actions
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -682,6 +677,8 @@ internal fun DocsDocumentScreen(
                     item(key = "facts-head") { Heading(chrome?.facts_heading.orEmpty()) }
                     items(document.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                item(key = "earlier") { dev.centraid.android.kit.EarlierEntryCard(document.earlier, onOpen) }
             }
             // THE QUICK LOOK BAR under the page.
             if (document.bar.isNotEmpty()) {
@@ -722,8 +719,8 @@ internal fun DocsDocumentScreen(
 }
 
 /**
- * THE INFO CARD: what it is and when it changed, its labels in their colours, and the way to its
- * versions (a page of its own). A white card, 16 points round.
+ * THE INFO CARD: what it is and when it changed, its labels in their colours.
+ * A white card, 16 points round.
  */
 @Composable
 private fun DocsInfoCard(document: DocsDocumentData, onOpen: (Route) -> Unit) {
@@ -755,92 +752,11 @@ private fun DocsInfoCard(document: DocsDocumentData, onOpen: (Route) -> Unit) {
                 }
             }
         }
-        document.versions?.let { versions ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .clickable { versions.route?.let(onOpen) }
-                    .padding(horizontal = 14.dp)
-                    .testTag("docs-versions"),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(versions.label, style = centraidType("small"), color = centraidColor("text"), modifier = Modifier.weight(1f))
-                Text(versions.count_label, style = centraidType("small"), color = centraidColor("textSoft"))
-            }
-        }
     }
 }
 
 /** The head's `edit` action key. */
 private const val EDIT: String = "edit"
-
-// ---------------------------------------------------------------------------
-// docs.versions — a document's history; an earlier version of a live one is restorable
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun DocsVersionsScreen(state: DocsVersionsState, onEvent: (DocsVersionsEvent) -> Unit, onBack: () -> Unit) {
-    val chrome = state.chrome
-    PushedPage(
-        title = chrome?.heading.orEmpty(),
-        parentTitle = chrome?.back.orEmpty(),
-        onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
-    ) {
-        ReadStateView(
-            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
-            onRetry = { onEvent(DocsVersionsEvent(refreshed = DocsVersionsEvent.Refreshed())) },
-            retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { data ->
-            val empty = data.empty
-            if (empty != null) {
-                EmptyStateView(empty, onAction = null)
-                return@ReadStateView
-            }
-            // THE BOARD (DocVersions): the versions in one white card, Restore in the app's colour.
-            LazyColumn(Modifier.fillMaxSize()) {
-                item {
-                    Column(
-                        Modifier
-                            .padding(horizontal = KitGeometry.GUTTER)
-                            .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
-                            .background(Surface.card),
-                    ) {
-                        data.versions.forEach { version ->
-                            CentraidRow(
-                                title = version.label,
-                                meta = version.meta,
-                                // NOTHING IS DIMMED: the current version carries the word "Current" in its meta.
-                                testTag = "docs-version-${version.key}",
-                                accessory = if (version.restore_label.isNotEmpty()) {
-                                    {
-                                        Text(
-                                            version.restore_label,
-                                            style = centraidType("annotLabelOn"),
-                                            color = appAccent().text,
-                                            modifier = Modifier
-                                                .heightIn(min = KitGeometry.ROW_MIN)
-                                                .clickable {
-                                                    onEvent(DocsVersionsEvent(restored = DocsVersionsEvent.Restored(key = version.key)))
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 12.dp)
-                                                .testTag("docs-version-restore-${version.key}")
-                                                .semantics { role = Role.Button },
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun Heading(title: String) {

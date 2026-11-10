@@ -57,7 +57,6 @@ import dev.centraid.android.screens.docs.DocsDocumentScreen
 import dev.centraid.android.screens.docs.DocsDriveScreen
 import dev.centraid.android.screens.docs.DocsEditorScreen
 import dev.centraid.android.screens.docs.DocsFiles
-import dev.centraid.android.screens.docs.DocsVersionsScreen
 import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.android.screens.health.HealthConnectScreen
 import dev.centraid.android.screens.health.HealthHomeScreen
@@ -80,7 +79,6 @@ import dev.centraid.android.screens.money.MoneySearchScreen
 import dev.centraid.android.screens.money.MoneyTargetScreen
 import dev.centraid.android.screens.money.MoneyTransactionScreen
 import dev.centraid.android.screens.notes.NotesEditorScreen
-import dev.centraid.android.screens.notes.NotesHistoryScreen
 import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
@@ -471,11 +469,9 @@ internal class RustRoot(
         val moneySearch = view.money_search
         val drive = view.docs_drive
         val doc = view.docs_document
-        val versions = view.docs_versions
         val docEditor = view.docs_editor
         val notesHome = view.notes_home
         val notesEditor = view.notes_editor
-        val notesHistory = view.notes_history
         val peopleHome = view.people_home
         val peoplePerson = view.people_person
         val peopleEditor = view.people_editor
@@ -688,11 +684,6 @@ internal class RustRoot(
                 onBack = back,
                 onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
-            versions != null -> DocsVersionsScreen(
-                state = versions,
-                onEvent = { send(ScreenEvent(docs_versions = it)) },
-                onBack = back,
-            )
             docEditor != null -> DocsEditorScreen(
                 state = docEditor,
                 onEvent = { send(ScreenEvent(docs_editor = it)) },
@@ -710,11 +701,6 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(notes_editor = it)) },
                 onOpen = open,
                 onClose = back,
-            )
-            notesHistory != null -> NotesHistoryScreen(
-                state = notesHistory,
-                onEvent = { send(ScreenEvent(notes_history = it)) },
-                onBack = back,
             )
             peopleHome != null -> PeopleHomeScreen(
                 state = peopleHome,
