@@ -496,6 +496,16 @@ fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) 
     };
     let sealed = write.kind == "sealed";
     let supplied = write.value.filter(|value| !value.is_empty());
+    // A one-time-code seed is a secret, and `value_text` is a plain column that history and the
+    // backup's readers can see. `otp` is the one non-`sealed` kind that names a secret, so it
+    // never carries a value: a seed belongs in the login's sealed `otp_seed` or a `sealed` field.
+    if write.kind == "otp" && supplied.is_some() {
+        return Err(invalid(
+            "value",
+            "a one-time-code seed is a secret and cannot be kept in a plain field; \
+             keep it in the login's one-time code or in a sealed field",
+        ));
+    }
     let unchanged = supplied == Some(SEALED_PLACEHOLDER);
     let value_sealed: Option<String> = if sealed {
         if unchanged {

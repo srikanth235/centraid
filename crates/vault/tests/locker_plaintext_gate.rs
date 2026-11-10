@@ -658,6 +658,103 @@ fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
     }
 }
 
+/// A custom field of kind `otp` is a one-time-code seed, a secret, and `value_text` is a plain
+/// column: the vault refuses to write one (the login's own `otp_seed` and a `sealed` field are the
+/// sealed homes), and a row that an older vault already holds in the clear never enters history.
+#[test]
+fn an_otp_custom_field_is_never_stored_plain_nor_copied_into_history() {
+    const SEED: &str = "PLANTED-OTPFIELD-bn8qc3-not-in-any-payload";
+    let vault = Sealed::founded();
+    for (command, input) in [
+        (
+            "locker.set_field",
+            serde_json::json!({
+                "item_id": "item-1", "field_id": "field-otp", "label": "Backup code",
+                "kind": "otp", "value": SEED
+            }),
+        ),
+        (
+            "locker.duplicate_item",
+            serde_json::json!({
+                "item_id": "item-1", "new_item_id": "item-9",
+                "fields": [{ "field_id": "field-otp-2", "label": "Backup code",
+                             "kind": "otp", "value": SEED }]
+            }),
+        ),
+    ] {
+        let outcome = vault
+            .scratch
+            .vault
+            .execute(
+                &vault.registry,
+                &Principal::owner("phone"),
+                &Command::new(command, input),
+            )
+            .expect("the command plane answers");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Failed,
+            "{command} stored an otp field's value in a plain column"
+        );
+    }
+    let stored: i64 = vault
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT count(*) FROM locker_item_field WHERE kind = 'otp' AND value_text IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .expect("the count reads");
+    assert_eq!(stored, 0);
+
+    // A row an older vault wrote in the clear: history must not copy it.
+    vault
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO locker_item_field
+                   (field_id, item_id, section, label, kind, value_text, created_at, updated_at)
+                 VALUES ('field-legacy', 'item-1', '', 'Old code', 'otp', ?1,
+                         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+                [SEED],
+            )?;
+            Ok(())
+        })
+        .expect("the legacy row lands");
+    let edited = vault.run(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "username": "someone-else" }),
+    );
+    assert!(
+        edited.contains("Applied") || edited.contains("Ok"),
+        "{edited}"
+    );
+    let revisions: Vec<String> = vault
+        .scratch
+        .vault
+        .read(|connection| {
+            let mut statement = connection.prepare("SELECT CAST(state AS TEXT) FROM revision")?;
+            Ok(statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .expect("the revisions read");
+    assert!(
+        revisions
+            .iter()
+            .any(|state| state.contains("someone-else") || state.contains("plainuser-xylophone9")),
+        "the edit made a revision (the scan is not vacuous)"
+    );
+    for state in &revisions {
+        assert!(!state.contains(SEED), "history copied an otp field's value");
+    }
+}
+
 /// THE FALSIFICATION.
 ///
 /// The gate above is a **search for plaintext**, and a search that finds
