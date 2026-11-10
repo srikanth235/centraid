@@ -140,6 +140,16 @@ impl Driver {
         Self::opened(runtime, false)
     }
 
+    /// A seeded vault whose example dates are independent of the machine's day.
+    /// The core's device clock is unchanged; only the scenario's anchor is fixed.
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made; this is test support.
+    #[must_use]
+    pub fn with_runtime_seeded_at(runtime: Runtime, seed_at: i64) -> Self {
+        Self::opened_seeded_at(runtime, false, Some(seed_at))
+    }
+
     /// [`Self::with_runtime`] over a core that holds the vault's keys, so a
     /// Locker session can open (the all-`abandon` words' seed).
     ///
@@ -174,6 +184,10 @@ impl Driver {
     }
 
     fn opened(runtime: Runtime, keyed: bool) -> Self {
+        Self::opened_seeded_at(runtime, keyed, None)
+    }
+
+    fn opened_seeded_at(runtime: Runtime, keyed: bool, seed_at: Option<i64>) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the scratch directory is made");
         let config = CoreConfig::new(dir.join("vault.db"));
@@ -207,7 +221,7 @@ impl Driver {
                     handle.registry(),
                     &handle.owner(),
                     &|_| true,
-                    centraid_core::example::now_ms(),
+                    seed_at.unwrap_or_else(centraid_core::example::now_ms),
                 )
             })
             .expect("the scenario seeds");
