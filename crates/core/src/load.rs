@@ -132,6 +132,12 @@ impl<'a> Params<'a> {
         }
     }
 
+    /// The request's `after` as it was sent, for a query whose cursor is one number.
+    pub(crate) fn after_raw(&mut self) -> String {
+        self.after_taken = true;
+        self.request.after.clone()
+    }
+
     /// The request's `after`, split into its two keys.
     pub(crate) fn after(&mut self) -> Result<Option<(String, String)>> {
         self.after_taken = true;
@@ -610,6 +616,13 @@ fn read(
         ("shell", "phone-differences") => {
             app_query::follow::differences(vault, &p.text("entity_id")?)?
         }
+        // history (#1185): a page of one record's earlier versions, and how many it holds
+        ("shell", "earlier-versions") => {
+            let after = p.after_raw();
+            let limit = p.limit(app_query::history::PAGE as u32);
+            app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
+        }
+        ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,

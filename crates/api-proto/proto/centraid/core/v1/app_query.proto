@@ -47,6 +47,7 @@ import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
 import "centraid/core/v1/imports_screens.proto";
+import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/vault_search.proto";
 
@@ -272,6 +273,10 @@ message AppQueryResponse {
     ImportsFilesHeld imports_files_held = 1700;
     // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
     FollowDifferences follow_differences = 1702;
+    // A record's earlier values, a page (#1185): `shell.earlier-versions`, and how many it
+    // holds, `shell.earlier-count`.
+    EarlierVersions earlier_versions = 1703;
+    EarlierCount earlier_count = 1704;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

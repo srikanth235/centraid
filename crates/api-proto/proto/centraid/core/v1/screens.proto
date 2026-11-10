@@ -318,6 +318,8 @@ message ScreenEvent {
     TransferEvent transfer = 901;
     // The action under a "phone says" line, from any page that draws one (#1183).
     PhoneSaysTaken phone_says_taken = 902;
+    // The earlier-versions screen (#1185).
+    EarlierEvent earlier = 903;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeEvent backup_home = 1450;
     // ---- passes (1500-1599): passes_screens.proto ----
@@ -446,6 +448,7 @@ message ViewState {
     // ---- the kit (900-999) ----
     TrashView trash = 900;
     TransferView transfer = 901;
+    EarlierView earlier = 903;
     // ---- backup (1450-1499, lane H2) ----
     BackupHomeState backup_home = 1450;
     // ---- the shell (1000-1999): chat (1600-1699) ----

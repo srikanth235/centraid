@@ -72,6 +72,8 @@ pub(crate) mod chat;
 pub(crate) mod imports;
 // What the phone says that differs from a followed row (#1183).
 pub(crate) mod follow;
+// A record's earlier values (#1185).
+pub(crate) mod history;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
 // projects, Docs folders and chat threads, for Home and the
 // owning apps.

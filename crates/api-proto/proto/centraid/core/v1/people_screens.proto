@@ -443,6 +443,8 @@ message PeoplePersonState {
   bool done = 12;
   // The editor on this person.
   Route edit = 13;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 14;
 }
 
 message PeoplePersonChrome {

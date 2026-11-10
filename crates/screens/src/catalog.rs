@@ -5849,6 +5849,48 @@ pub mod act {
             }
         }
 
+        /// (history, #1185) Put a record back to what version `seq` held, field by field, through history.restore_version. It is a commit like any other and makes a version of its own. A detail screen's tap, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct RestoreVersion {
+            pub earlier_version_id: String,
+            pub seq: i64,
+        }
+        impl RestoreVersion {
+            pub const NAME: &str = "restore-version";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.earlier_version_id));
+                map.insert("seq".to_owned(), whole(self.seq));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RestoreVersion> for wire::ActRequest {
+            fn from(value: RestoreVersion) -> Self {
+                value.request()
+            }
+        }
+
+        /// (history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore. A detail screen's tap, never the assistant's.
+        #[derive(Clone, Debug, Default)]
+        pub struct UndoChange {
+            pub earlier_version_id: String,
+        }
+        impl UndoChange {
+            pub const NAME: &str = "undo-change";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.earlier_version_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UndoChange> for wire::ActRequest {
+            fn from(value: UndoChange) -> Self {
+                value.request()
+            }
+        }
+
         /// (following, #1183) Make a field of a followed row, or one item of it, equal to what the phone's store last stated, through follow.take_stated. A detail screen's tap, never the assistant's.
         #[derive(Clone, Debug, Default)]
         pub struct TakeStated {
@@ -7560,6 +7602,46 @@ pub mod load {
         }
         impl From<PhoneDifferences> for wire::LoadRequest {
             fn from(value: PhoneDifferences) -> Self {
+                value.request()
+            }
+        }
+
+        /// (history, #1185) A page of one record's earlier versions, newest first: when each was replaced and when it began, who replaced it (the member, or a phone store's pass), and what the replacing change moved field by field, both values as JSON text. Keyset paged: `after` is the `next` of the page before, `limit` at most 100. Never reachable by the assistant; a detail screen's Earlier versions page.
+        #[derive(Clone, Debug, Default)]
+        pub struct EarlierVersions {
+            pub entity_id: String,
+        }
+        impl EarlierVersions {
+            pub const NAME: &str = "earlier-versions";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<EarlierVersions> for wire::LoadRequest {
+            fn from(value: EarlierVersions) -> Self {
+                value.request()
+            }
+        }
+
+        /// (history, #1185) How many earlier versions one record holds, not counting the current one: the number on a detail screen's Earlier versions entry.
+        #[derive(Clone, Debug, Default)]
+        pub struct EarlierCount {
+            pub entity_id: String,
+        }
+        impl EarlierCount {
+            pub const NAME: &str = "earlier-count";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<EarlierCount> for wire::LoadRequest {
+            fn from(value: EarlierCount) -> Self {
                 value.request()
             }
         }

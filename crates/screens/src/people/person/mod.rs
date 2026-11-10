@@ -33,6 +33,7 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
@@ -66,6 +67,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         done: false,
         differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -90,6 +92,8 @@ struct Person {
     done: bool,
     /// Where the phone's words differ from the person's, read with the page (#1183).
     differences: follow::Phone,
+    /// The entry to the person's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
 }
 
 impl Person {
@@ -114,6 +118,12 @@ impl Person {
         self.differences = match &self.phase {
             Phase::Ready(Some(_)) => follow::read(ctx, &self.party_id),
             _ => follow::Phone::default(),
+        };
+        self.earlier = match &self.phase {
+            Phase::Ready(Some(_)) => {
+                earlier::foot(ctx, super::EARLIER, &self.party_id, &self.name())
+            }
+            _ => earlier::Foot::default(),
         };
         match &self.phase {
             // GONE: nothing to write to, and no sheet over nothing.
@@ -740,9 +750,11 @@ impl Screen for Person {
             status: self
                 .status
                 .clone()
-                .or_else(|| self.differences.status(locale, follow::Source::Phone)),
+                .or_else(|| self.differences.status(locale, follow::Source::Phone))
+                .or_else(|| self.earlier.status(locale)),
             done: self.done,
             edit: self.loaded().map(|_| routes::editor(&self.party_id)),
+            earlier: self.earlier.entry.clone(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeoplePerson(Box::new(state))),

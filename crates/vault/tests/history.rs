@@ -734,6 +734,10 @@ fn a_follow_pass_that_changes_a_field_is_attributed_to_the_store() {
     let versions = w.versions(&id);
     assert_eq!(versions[0].by, Who::Member);
     assert_eq!(versions[1].by, Who::Store("contacts".to_owned()));
+    // What a version became current by is who replaced the one below it: the first version was
+    // never replaced by anyone but the creating pass, which no commit names.
+    assert_eq!(versions[0].since_by, Who::Store("contacts".to_owned()));
+    assert_eq!(versions[1].since_by, Who::Member);
 }
 
 #[test]
@@ -826,6 +830,37 @@ fn a_page_of_versions_is_keyset_paged_and_a_restore_refuses_what_is_not_there() 
     );
     let wire = first.to_json();
     assert_eq!(wire["versions"][0]["by"]["kind"], "member");
+    // A version became current when the one below it was replaced, the first when the record was
+    // made, also across a page's edge; and the count is the rows the record holds.
+    assert_eq!(first.versions[0].since, first.versions[1].at);
+    assert_eq!(first.versions[0].since_by, Who::Member);
+    assert_eq!(first.versions[2].since, second.versions[0].at);
+    let last = second.versions.last().expect("the last");
+    let born: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(
+                c.query_row("SELECT created_at FROM entity WHERE id = ?1", [&id], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .expect("born");
+    let all = w
+        .scratch
+        .vault
+        .read(|c| history::earlier_versions(c, &id, None, 100))
+        .expect("all");
+    assert_eq!(all.versions.last().expect("oldest").since, born);
+    assert_eq!(last.seq, 2);
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| history::count(c, &id))
+            .expect("count"),
+        7
+    );
     assert!(
         w.refused("history.restore_version", json!({ "id": id, "seq": 99 }))
             .contains("not in this record's history")

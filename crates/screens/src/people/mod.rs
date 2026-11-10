@@ -9,6 +9,7 @@
 //! | One person | [`PERSON`] | [`person`] |
 //! | The profile, autosaving | [`EDITOR`] | [`editor`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | Earlier versions of a person | [`EARLIER`] | [`earlier`] |
 //!
 //! People and Touch are ONE screen with the destination a value, so a tap on the
 //! band swaps what is drawn and never a stack entry: back never walks through
@@ -38,6 +39,7 @@ use crate::Registry;
 use crate::kit::read::Reading;
 
 pub mod contacts;
+pub mod earlier;
 pub mod editor;
 pub mod fold;
 pub mod home;
@@ -50,6 +52,7 @@ pub const HOME: &str = "people.home";
 pub const PERSON: &str = "people.person";
 pub const EDITOR: &str = "people.editor";
 pub const TRASH: &str = "people.trash";
+pub const EARLIER: &str = "people.earlier";
 pub const IMPORT: &str = "people.import";
 pub const EXPORT: &str = "people.export";
 
@@ -64,6 +67,7 @@ pub fn registry() -> Registry {
         .with(PERSON, person::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(EARLIER, earlier::build)
         .with(IMPORT, transfer::build_import)
         .with(EXPORT, transfer::build_export)
 }

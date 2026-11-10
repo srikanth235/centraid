@@ -61,7 +61,9 @@ mod read;
 mod restore;
 mod shape;
 
-pub use read::{Change, Earlier, Version, Who, current_state, earlier_versions, version_state};
+pub use read::{
+    Change, Earlier, Version, Who, count, current_state, earlier_versions, version_state,
+};
 pub use restore::{Restored, Scope, restore_version};
 pub use shape::{CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, shape};
 

@@ -319,6 +319,122 @@ message TrashData {
   string count_label = 4;
 }
 
+// ---------------------------------------------------------------------------
+// Earlier versions (#1185): every record keeps its earlier values, and one screen lists them
+// ---------------------------------------------------------------------------
+
+// The entry a detail page embeds at its foot: "Earlier versions   2 ›". Absent when the record
+// holds no earlier version, or when the count could not be read (a count that did not land is
+// not a zero).
+message EarlierEntry {
+  string label = 1;
+  // The number of earlier versions, not counting the current one: "2".
+  string count_label = 2;
+  // `<app>.earlier` for this record.
+  Route route = 3;
+  // "Earlier versions, 2".
+  string accessibility_label = 4;
+}
+
+// `shell.earlier-count`: how many earlier versions one record holds.
+message EarlierCount {
+  uint32 count = 1;
+}
+
+// `shell.earlier-versions`: one page of a record's earlier versions, newest first. Every value is
+// JSON text in the form the vault keeps it; the app's screen words it.
+message EarlierVersions {
+  repeated EarlierVersion versions = 1;
+  // The page after this one starts below this seq; absent on the last page.
+  optional int64 next = 2;
+}
+
+message EarlierVersion {
+  // The version's number: what Restore names.
+  int64 seq = 1;
+  // When it was replaced, and when it became the record's state, as civil minutes in the
+  // request's zone (`YYYY-MM-DDTHH:MM`); empty when the vault names no zone.
+  string replaced_local = 2;
+  string since_local = 3;
+  // The phone store whose pass replaced it, and the one whose pass made it the record's state
+  // (`contacts`, `calendar`, `files`, `health`, `statement`); empty when the member did.
+  string store_system = 4;
+  string since_store_system = 6;
+  // What the replacing change moved, field by field: `entity.title`, `<kind table>.<column>`,
+  // `contact_point[<key>].<column>`, `attendee[<person>]`.
+  repeated EarlierChange changes = 5;
+}
+
+message EarlierChange {
+  string field = 1;
+  string before_json = 2;
+  string after_json = 3;
+}
+
+// One row of the earlier-versions list. The first is the record as it is now, tagged "Current",
+// and carries no Restore.
+message EarlierRow {
+  // The version's number; 0 for the current row.
+  int64 seq = 1;
+  // "Wed 4 November · 09:12", with "· From your phone" after it when a phone store made the change
+  // that replaced the version.
+  string label = 2;
+  // One line: the values the version held.
+  string value = 3;
+  bool current = 4;
+  // "Current" on the current row, else empty.
+  string current_label = 5;
+  // "Restore"; empty on the current row.
+  string restore_label = 6;
+  string accessibility_label = 7;
+}
+
+message EarlierData {
+  repeated EarlierRow rows = 1;
+  // Drawn when the record holds no earlier version.
+  EmptyState empty = 2;
+  // "Show more" when a page below this one exists; empty otherwise.
+  string more_label = 3;
+}
+
+// What the earlier-versions screen shows. The screen name (`<app>.earlier`) says which app.
+message EarlierView {
+  string app_id = 1;
+  // "Earlier versions", and the back control's words: the page it was pushed from.
+  string title = 3;
+  string back_label = 4;
+  oneof content {
+    Loading loading = 5;
+    Failure failure = 6;
+    Denied denied = 7;
+    EarlierData data = 8;
+  }
+  // "Earlier version restored" with "Undo", or a refusal's sentence; the list stays.
+  StatusLine status = 9;
+}
+
+message EarlierEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    // Restore asks nothing: it undoes.
+    RestoreTapped restore = 2;
+    MoreTapped more = 3;
+    // "Undo" on the status line after a restore.
+    StatusActed status_acted = 4;
+  }
+
+  message Refreshed {}
+
+  message RestoreTapped {
+    int64 seq = 1;
+  }
+
+  message MoreTapped {}
+
+  message StatusActed {}
+}
+
 // THE TRANSFER SCREEN (#1173): bring something in from a file, or write something out to one,
 // in the app's own words. Rust decides every line; the shell draws the rows and the buttons and
 // sends back the key of whichever was tapped. `<app>.import` reads a file or folder, shows what

@@ -96,6 +96,40 @@
       }
     },
     {
+      "name": "earlier-versions",
+      "kind": "earlier_version",
+      "figures": ["versions"],
+      "description": "(history, #1185) A page of one record's earlier versions, newest first: when each was replaced and when it began, who replaced it (the member, or a phone store's pass), and what the replacing change moved field by field, both values as JSON text. Keyset paged: `after` is the `next` of the page before, `limit` at most 100. Never reachable by the assistant; a detail screen's Earlier versions page.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "earlier-count",
+      "kind": "earlier_version",
+      "figures": ["count"],
+      "description": "(history, #1185) How many earlier versions one record holds, not counting the current one: the number on a detail screen's Earlier versions entry.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "files-followed",
       "kind": "followed_folder",
       "figures": ["folders"],
@@ -309,6 +343,62 @@
           }
         },
         "required": ["system", "ref"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "restore-version",
+      "verb": "edit",
+      "kind": "earlier_version",
+      "inverse": null,
+      "sealed": [],
+      "command": "history.restore_version",
+      "phrasings": [
+        "go back to an earlier version",
+        "restore an earlier version",
+        "put it back how it was"
+      ],
+      "description": "(history, #1185) Put a record back to what version `seq` held, field by field, through history.restore_version. It is a commit like any other and makes a version of its own. A detail screen's tap, never the assistant's.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["id", "seq"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "undo-change",
+      "verb": "edit",
+      "kind": "earlier_version",
+      "inverse": null,
+      "sealed": [],
+      "command": "history.undo",
+      "phrasings": [
+        "undo the last change",
+        "undo that restore",
+        "go back one change"
+      ],
+      "description": "(history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore. A detail screen's tap, never the assistant's.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
         "additionalProperties": false
       }
     },

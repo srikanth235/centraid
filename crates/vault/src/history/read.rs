@@ -62,6 +62,12 @@ pub struct Version {
     pub seq: i64,
     /// When it was replaced.
     pub at: String,
+    /// When it became the record's state: when the version before it was replaced, or, for the
+    /// first, when the record was made.
+    pub since: String,
+    /// Who made it the record's state: who replaced the version before it. The member for the
+    /// first, whose making no commit names.
+    pub since_by: Who,
     /// Who replaced it.
     pub by: Who,
     /// The command that replaced it, as the commit named it.
@@ -87,6 +93,8 @@ impl Earlier {
             "versions": self.versions.iter().map(|version| serde_json::json!({
                 "seq": version.seq,
                 "at": version.at,
+                "since": version.since,
+                "since_by": version.since_by.to_json(),
                 "by": version.by.to_json(),
                 "cause": version.cause,
                 "changes": version.changes.iter().map(|change| serde_json::json!({
@@ -184,6 +192,20 @@ pub fn version_state(connection: &Connection, id: &str, seq: i64) -> Result<Opti
     row.as_ref().map(assemble).transpose()
 }
 
+/// How many earlier versions an entity holds: what a detail screen's "Earlier versions" entry
+/// counts. It reads the entity's own rows (the key prefix), never the vault's.
+///
+/// # Errors
+/// A database error.
+pub fn count(connection: &Connection, id: &str) -> Result<u32> {
+    let held: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM revision WHERE entity_id = ?1",
+        [id],
+        |row| row.get(0),
+    )?;
+    Ok(u32::try_from(held).unwrap_or(u32::MAX))
+}
+
 /// The earlier versions of one entity, newest first, a page at a time (`before` is the `next` of
 /// the page before; `limit` is at most [`MAX_PAGE`]). Each carries what changed when it was
 /// replaced.
@@ -227,8 +249,21 @@ pub fn earlier_versions(
         Some(state) => Some(state),
         None => current_state(connection, id)?,
     };
+    // The version below the last one shown dates it: the extra row read, else the record's birth.
+    let birth: (String, Who) = match rows.get(shown.len()) {
+        Some(below) => (below.at.clone(), Who::of(&below.cause)),
+        None => (
+            connection
+                .query_row("SELECT created_at FROM entity WHERE id = ?1", [id], |row| {
+                    row.get(0)
+                })
+                .optional()?
+                .unwrap_or_default(),
+            Who::Member,
+        ),
+    };
     let mut versions = Vec::with_capacity(shown.len());
-    for row in shown {
+    for (index, row) in shown.iter().enumerate() {
         let state = assemble(row)?;
         let changes = replacement
             .as_ref()
@@ -236,6 +271,12 @@ pub fn earlier_versions(
         versions.push(Version {
             seq: row.seq,
             at: row.at.clone(),
+            since: shown
+                .get(index + 1)
+                .map_or_else(|| birth.0.clone(), |below| below.at.clone()),
+            since_by: shown
+                .get(index + 1)
+                .map_or_else(|| birth.1.clone(), |below| Who::of(&below.cause)),
             by: Who::of(&row.cause),
             cause: row.cause.clone(),
             changes,
