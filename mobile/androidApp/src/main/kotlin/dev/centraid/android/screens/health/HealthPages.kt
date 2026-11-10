@@ -41,6 +41,7 @@ import centraid.core.v1.HealthWorkoutEvent
 import centraid.core.v1.HealthWorkoutState
 import centraid.core.v1.PhoneSaysTaken
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitCardGrid
@@ -49,11 +50,13 @@ import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitBorderedCard
@@ -154,7 +157,12 @@ internal fun HealthWorkoutScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            status = state.status?.sentence.orEmpty(),
+            statusLine = {
+                // "{title} moved to trash" with Undo; the gone card shows under it (#1185).
+                StatusLine(state.status, actTag = "health-status-action") {
+                    onEvent(HealthWorkoutEvent(status_acted = HealthWorkoutEvent.StatusActed()))
+                }
+            },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -207,6 +215,19 @@ internal fun HealthWorkoutScreen(
                             }
                         }
                         item(key = "foot") { HealthNote(data.foot) }
+                        // MOVE TO TRASH, outlined and destructive under the figures (#1185): it asks
+                        // nothing, the status line carries Undo. Empty while the workout is gone.
+                        if (data.trash_label.isNotEmpty()) {
+                            item(key = "trash") {
+                                ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp)) {
+                                    OutlineButton(
+                                        data.trash_label,
+                                        testTag = "health-action-trash",
+                                        ink = "net",
+                                    ) { onEvent(HealthWorkoutEvent(trash = HealthWorkoutEvent.TrashTapped())) }
+                                }
+                            }
+                        }
                     }
                 }
             }

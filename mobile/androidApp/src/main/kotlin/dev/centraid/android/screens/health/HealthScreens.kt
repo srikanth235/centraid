@@ -122,7 +122,7 @@ internal fun HealthHomeScreen(
         HealthHomeState.Sheet.SHEET_MORE -> OptionSheet(
             title = chrome?.more_title.orEmpty(),
             options = state.more_rows.map {
-                SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, destructive = it.tone == StatusChip.Tone.TONE_NET)
+                SheetOption(key = it.key, label = it.label, iconKey = it.icon_key, detail = it.meta, destructive = it.tone == StatusChip.Tone.TONE_NET)
             },
             // The sheet goes either way; a row with a route also opens its page.
             onPick = { key ->

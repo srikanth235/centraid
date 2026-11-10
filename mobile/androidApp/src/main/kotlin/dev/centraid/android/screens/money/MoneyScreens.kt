@@ -385,13 +385,23 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
 internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (MoneyTransactionEvent) -> Unit, onBack: () -> Unit) {
     val chrome = state.chrome
     val data = state.data_
-    val status = state.status
     PushedPage(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = status?.sentence.orEmpty(),
+        statusLine = {
+            // "{title} moved to trash" with Undo on the gone card (#1185), and a refusal's sentence.
+            StatusLine(state.status, actTag = "money-status-action") {
+                onEvent(MoneyTransactionEvent(status_acted = MoneyTransactionEvent.StatusActed()))
+            }
+        },
     ) {
+        val gone = state.gone
+        if (gone != null) {
+            // THE PAGE STAYS OPEN ON THE GONE CARD after Move to trash; the line above carries Undo.
+            EmptyStateView(gone, onAction = null)
+            return@PushedPage
+        }
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(MoneyTransactionEvent(refreshed = MoneyTransactionEvent.Refreshed())) },
@@ -473,13 +483,6 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
             )
         }
         else -> Unit
-    }
-    state.confirm?.let { confirm ->
-        ConfirmSheet(
-            confirm = confirm,
-            onConfirm = { onEvent(MoneyTransactionEvent(confirm_accepted = MoneyTransactionEvent.ConfirmAccepted())) },
-            onDismiss = { onEvent(MoneyTransactionEvent(confirm_dismissed = MoneyTransactionEvent.ConfirmDismissed())) },
-        )
     }
 }
 
