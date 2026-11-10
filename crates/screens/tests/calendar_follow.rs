@@ -114,7 +114,6 @@ fn work() -> wire::PhoneCalendar {
         source_title: "Google".to_owned(),
         title: "Work".to_owned(),
         color: "#007AFF".to_owned(),
-        ..wire::PhoneCalendar::default()
     }
 }
 
@@ -382,7 +381,6 @@ fn a_calendar_is_painted_with_the_wheel_hue_nearest_its_phone_colour_and_a_grey_
                 source_title: String::new(),
                 title: "Home".to_owned(),
                 color: color.to_owned(),
-                ..wire::PhoneCalendar::default()
             },
         )
         .color
@@ -406,7 +404,6 @@ fn a_calendar_names_itself_by_its_source_and_title() {
                 source_title: source.to_owned(),
                 title: title.to_owned(),
                 color: String::new(),
-                ..wire::PhoneCalendar::default()
             },
         )
         .label
@@ -983,4 +980,146 @@ fn an_import_tapped_during_a_pass_waits_for_it() {
         ask[0].ask_permission,
         "then the member's import, which may ask"
     );
+}
+
+#[test]
+fn alerts_and_guests_ride_the_record_alerts_once_each_and_guests_only_when_there_are_any() {
+    let mut party = event(
+        "Party",
+        "2099-03-10T12:00:00",
+        "2099-03-10T13:00:00",
+        "uid:party",
+    );
+    party.alerts = vec![10, 60, 10];
+    party.attendees = vec![
+        wire::PhoneAttendee {
+            name: " Ada ".into(),
+            email: "ada@example.com".into(),
+            status: "accepted".into(),
+        },
+        wire::PhoneAttendee::default(),
+    ];
+    let bare = event(
+        "Bare",
+        "2099-03-10T12:00:00",
+        "2099-03-10T13:00:00",
+        "uid:bare",
+    );
+    let batch = calendar::batch(Locale::En, &snapshot(vec![party, bare]));
+    let party = &batch.records[0].fields;
+    assert_eq!(party["reminders"], serde_json::json!([10, 60]));
+    assert_eq!(
+        party["attendees"],
+        serde_json::json!([{ "name": "Ada", "email": "ada@example.com", "state": "accepted" }])
+    );
+    let bare = &batch.records[1].fields;
+    assert!(bare["reminders"].is_null());
+    assert!(bare.get("attendees").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// A stored rule this build cannot read (#1173, owner decision)
+// ---------------------------------------------------------------------------
+
+/// An imported series whose rule the engine does not expand (a sub-daily rule, `BYHOUR`) is
+/// stored as the phone said it. It must still load: the event shows once, at its anchor; its
+/// detail renders; the editor opens it read-only as Custom and offers Replace; and Replace with a
+/// rule the engine reads writes it.
+#[test]
+fn a_followed_series_whose_rule_this_build_cannot_read_still_loads_everywhere() {
+    use wire::agenda_editor_event as events;
+    use wire::agenda_editor_event::Kind as K;
+
+    const UNREADABLE: &str = "FREQ=DAILY;BYHOUR=9";
+    let mut world = world();
+    let host = world.driver.push("calendar", host_route());
+    answer(
+        &mut world,
+        is_keychain,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+            found: false,
+            value: vec![],
+        }),
+    );
+    let day = |day: &str| wire::PhoneCalendarEvent {
+        title: "Standup".to_owned(),
+        start: format!("{day}T09:00:00"),
+        end: format!("{day}T09:30:00"),
+        tz: "Europe/Paris".to_owned(),
+        series: Some(wire::PhoneCalendarSeries {
+            id: "uid:standup".to_owned(),
+            rrule: format!("RRULE:{UNREADABLE}"),
+            start: "2099-03-02T09:00:00".to_owned(),
+            end: "2099-03-02T09:30:00".to_owned(),
+        }),
+        phone_id: format!("local:ek-{day}"),
+        calendar_key: "work".to_owned(),
+        ..wire::PhoneCalendarEvent::default()
+    };
+    tap_import(&mut world, host);
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![day("2099-03-02")])),
+    );
+
+    // It shows, once, at its anchor, carrying the stored rule for the editor.
+    let shown: Vec<wire::AgendaEvent> = world
+        .window("2099-01-01T00:00:00Z", "2099-12-31T00:00:00Z")
+        .into_iter()
+        .filter(|event| event.summary.as_deref() == Some("Standup"))
+        .collect();
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    let id = shown[0].event_id.clone();
+    assert_eq!(shown[0].rrule.as_deref(), Some(UNREADABLE));
+
+    // Its detail renders, and says "Custom" for a rule nobody can read, never the rule.
+    let page = world.open_event(&id, &id, None, "2099-03-02");
+    let data = world.event_data(page);
+    let repeats = data
+        .facts
+        .iter()
+        .find(|fact| fact.label == "Repeats")
+        .expect("a repeat fact");
+    assert_eq!(repeats.detail, "Custom");
+    assert!(!data.facts.iter().any(|fact| fact.detail.contains("BYHOUR")));
+
+    // The editor opens it read-only as Custom, with Replace.
+    let editor = world.open_edit(&id, "", None, "2099-03-02");
+    assert_eq!(world.draft(editor).repeat_key, "custom");
+    world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    let sheet = world
+        .editor_data(editor)
+        .custom_repeat
+        .clone()
+        .expect("the sheet");
+    assert!(sheet.read_only);
+    assert_eq!(sheet.replace_label, "Replace this rule");
+    assert!(!sheet.summary.is_empty() && !sheet.summary.contains("BYHOUR"));
+    // Done leaves the stored rule alone: nothing to save.
+    world.send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(!world.editor_data(editor).dirty);
+    // Replace starts a fresh rule the engine reads, and saving writes it.
+    world.send_editor(
+        editor,
+        K::Repeat(events::RepeatPicked {
+            key: "custom".into(),
+        }),
+    );
+    world.send_editor(editor, K::CustomReplace(events::CustomReplaceTapped {}));
+    assert!(
+        !world
+            .editor_data(editor)
+            .custom_repeat
+            .clone()
+            .expect("sheet")
+            .read_only
+    );
+    world.send_editor(editor, K::CustomApplied(events::CustomApplied {}));
+    assert!(world.editor_data(editor).dirty);
 }

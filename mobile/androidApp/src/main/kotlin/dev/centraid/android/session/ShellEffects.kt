@@ -39,7 +39,6 @@ import dev.centraid.android.glance.GlanceWidgets
 import dev.centraid.android.kit.SecretStores
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
-import dev.centraid.android.screens.agenda.performCalendarWrite
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.docs.FolderReader
 import dev.centraid.android.screens.people.readContactsSnapshot
@@ -208,17 +207,11 @@ internal class ShellEffects(
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
                     EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
                 } else {
-                    // THE WRITE GRANT SHARES READ'S GROUP: asked at the same tap, the system grants it without a second prompt.
-                    if (read.ask_permission) allowed(Manifest.permission.WRITE_CALENDAR, true)
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
                     }.fold({ EffectResult(calendar = it) }, { failed("the calendar could not be read") })
                 }
             }
-            // TWO-WAY CALENDAR SYNC: the core's writes to the phone's calendars; never a permission prompt.
-            effect.calendar_write != null -> effectAttempt {
-                withContext(Dispatchers.IO) { performCalendarWrite(context, effect.calendar_write!!) }
-            }.fold({ EffectResult(calendar_written = it) }, { failed("the calendar could not be written") })
             effect.contacts_read != null -> {
                 val read = effect.contacts_read!!
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {

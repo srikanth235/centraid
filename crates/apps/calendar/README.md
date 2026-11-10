@@ -1,6 +1,6 @@
 # `crates/apps/calendar` — events, invites and the one recurrence engine
 
-Calendar is **7 manifest queries (the events' and one read-only read of reminders' dates), 15 actions and the scopes in `manifest.json`**. It was half of Agenda until round 10 of #1173: Reminders (`crates/apps/reminders`) owns tasks and lists, and Calendar only READS a task's title, due day, due time and state (`src/dated.rs`, scope `vault.task` read) to show it on its day; it acts on no `task.*` command, and `manifest.rs` tests that.
+Calendar is **7 manifest queries (the events' and one read-only read of reminders' dates), 14 actions and the scopes in `manifest.json`**. It was half of Agenda until round 10 of #1173: Reminders (`crates/apps/reminders`) owns tasks and lists, and Calendar only READS a task's title, due day, due time and state (`src/dated.rs`, scope `vault.task` read) to show it on its day; it acts on no `task.*` command, and `manifest.rs` tests that.
 
 ## What is here
 
@@ -14,7 +14,7 @@ Calendar is **7 manifest queries (the events' and one read-only read of reminder
 | `src/local.rs` | where an occurrence falls in a stated zone: its local wall clock, the civil days it occupies (a timed end exclusive, an all-day end inclusive), today and now — what the core answers a shell with no calendar |
 | `src/window.rs` | `occurrences`: the occurrences that occupy a range of local days (`YYYY-MM-DD` in a stated zone), series expanded, cancelled and trashed left out, each with its `Placement` — `upcoming` and `local::place` composed for a reader that only needs what is on when. The assistant runtime's read model reaches it through `Door::events` (the harness over a vault file, the core over the phone's vault), so it cannot disagree with this tab ([#1088](https://github.com/srikanth235/centraid/issues/1088), R-1088-8) |
 | `src/dated.rs` | `load_dated_reminders`: the open one-off reminders due on a window of local days, title and due only, read-only |
-| `src/commands.rs` | the fifteen actions, as a table of command invocations |
+| `src/commands.rs` | the fourteen actions, as a table of command invocations |
 
 ## The five things this app is about
 

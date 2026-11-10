@@ -181,6 +181,10 @@ message AppQueryResponse {
   reserved "locker_access";
   reserved 33;
   reserved "docs_activity";
+  // 1701 was `imports_calendar_owed`: Calendar follows the phone one way and nothing is written
+  // back to it (#1183), so nothing is owed.
+  reserved 1701;
+  reserved "imports_calendar_owed";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -257,8 +261,6 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
-    // What the phone's calendars are owed (`shell.calendar-owed`, two-way sync).
-    ImportsCalendarOwed imports_calendar_owed = 1701;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

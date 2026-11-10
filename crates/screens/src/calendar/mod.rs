@@ -14,7 +14,6 @@ pub mod event;
 pub mod follow;
 pub mod home;
 pub mod hues;
-pub mod push;
 pub mod routes;
 
 /// Calendar's home.

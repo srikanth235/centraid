@@ -44,7 +44,7 @@ internal fun readCalendarSnapshot(context: Context, daysBack: Int, daysOn: Int, 
 
 private const val DAY_MS: Long = 24L * 60 * 60 * 1000
 
-/** What the phone's calendars held at one read: the events, and every writable calendar present. */
+/** What the phone's calendars held at one read: the events, and every calendar the member writes to that is present. */
 private class CalendarsRead(
     val events: List<PhoneCalendarEvent>,
     val calendars: List<PhoneCalendar>,
@@ -194,7 +194,6 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
         SYNC_ID,
         CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
         CalendarContract.Calendars.CALENDAR_COLOR,
-        CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
     )
     val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR} AND " +
         "${CalendarContract.Calendars.VISIBLE} = 1"
@@ -211,9 +210,6 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
                     source_title = cursor.getString(2).orEmpty(),
                     title = cursor.getString(4).orEmpty(),
                     color = if (cursor.isNull(5)) "" else "#%06X".format(cursor.getInt(5) and 0xFFFFFF),
-                    // TWO-WAY SYNC: a contributor can add; only an editor or better can change or delete.
-                    writable = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR,
-                    allows_modifications = cursor.getInt(6) >= CalendarContract.Calendars.CAL_ACCESS_EDITOR,
                 ),
             )
         }

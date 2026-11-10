@@ -65,11 +65,6 @@ enum PhoneCalendar {
             entry.sourceTitle = calendar.source?.title ?? ""
             entry.title = calendar.title
             entry.color = hex(calendar.cgColor)
-            // THE SHELL'S FINAL WORD on whether the app may write here: a calendar that
-            // takes content and is the member's own kind (never a subscription or Birthdays).
-            let writable = calendar.allowsContentModifications && [.local, .calDAV, .exchange].contains(calendar.type)
-            entry.writable = writable
-            entry.allowsModifications = writable
             return entry
         }
         out.events = events(store, own, now, read)

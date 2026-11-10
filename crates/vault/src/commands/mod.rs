@@ -44,7 +44,6 @@
 //! its own content, or by an id the phone minted before the first attempt.
 
 pub mod blob;
-pub mod calendar_push;
 pub mod contact_point;
 pub mod container;
 pub mod document;

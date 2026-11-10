@@ -431,16 +431,7 @@ impl Screen for Home {
                 // choice is read after it has landed, never beside it.
                 return self.calendar.attach();
             }
-            Some(E::EnvironmentChanged(_)) => self.refresh(ctx),
-            // The vault moved: the view reloads, and an event of a writable phone calendar may
-            // now be owed to the phone (two-way sync).
-            Some(E::DataChanged(changed)) => {
-                self.refresh(ctx);
-                return self
-                    .calendar
-                    .on_event(&E::DataChanged(changed), ctx)
-                    .unwrap_or_default();
-            }
+            Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => self.refresh(ctx),
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
                 // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add

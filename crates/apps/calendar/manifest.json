@@ -135,11 +135,6 @@
         "verbs": "act"
       },
       {
-        "schema": "follow",
-        "table": "pushed",
-        "verbs": "act"
-      },
-      {
         "schema": "place",
         "table": "add",
         "verbs": "act"
@@ -1013,77 +1008,6 @@
           }
         },
         "required": ["title"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    {
-      "name": "record-calendar-push",
-      "verb": "import:items",
-      "kind": "event",
-      "inverse": null,
-      "sealed": [],
-      "bulk": true,
-      "command": "follow.pushed",
-      "phrasings": [
-        "record what was written back to my phone's calendar",
-        "mark these events as pushed to the phone",
-        "note which events the phone's calendar now holds"
-      ],
-      "description": "Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "maxItems": 200,
-            "items": {
-              "type": "object",
-              "properties": {
-                "event_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "op": {
-                  "type": "string",
-                  "enum": ["create", "update", "delete"]
-                },
-                "ok": {
-                  "type": "boolean"
-                },
-                "external_id": {
-                  "type": ["string", "null"]
-                },
-                "device_id": {
-                  "type": ["string", "null"]
-                },
-                "fields": {
-                  "type": ["object", "null"]
-                },
-                "phone_kept": {
-                  "type": "boolean"
-                }
-              },
-              "required": ["event_id", "op", "ok"],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": ["items"],
         "additionalProperties": false
       },
       "output": {

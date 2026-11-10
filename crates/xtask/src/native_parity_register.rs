@@ -38,9 +38,6 @@ const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has
 const OS_UPLOADS: &str = "the OS-owned background uploads are iOS's `URLSession`; Android's mover runs inside its WorkManager pass";
 
 /// One reason, several rows.
-const CALENDAR_OWED: &str = "`shell.calendar-owed` is read by Rust only: core/app_query/imports.rs builds the answer and agenda/calendar_push.rs reads it, then hands the shells `CalendarWriteFields`";
-
-/// One reason, several rows.
 const AGENDA_DRAFT: &str = "the editor holds its draft as this wire message and reads it back (agenda/editor.rs); the shells draw the choices' `selected` flags instead";
 
 /// One reason, several rows.
@@ -279,9 +276,6 @@ pub const REGISTER: &[Entry] = &[
     ("AgendaDraft.repeat_rule", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.second_reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.travel_min", rust_only(AGENDA_DRAFT)),
-    ("ImportsOwedPush.fields_json", rust_only(CALENDAR_OWED)),
-    ("ImportsOwedPush.origin_ref", rust_only(CALENDAR_OWED)),
-    ("ImportsOwedPush.stated_json", rust_only(CALENDAR_OWED)),
     (
         "Autosave.remote_changed",
         rust_only(

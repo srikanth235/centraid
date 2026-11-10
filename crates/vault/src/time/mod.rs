@@ -25,8 +25,8 @@
 //!
 //! 1. A **nonexistent** wall time moves FORWARD by the gap, as RFC 5545 section
 //!    3.3.5 reads it (02:30 New York on the spring-forward day is 03:30 EDT),
-//!    and it COUNTS toward `COUNT` (owner decision on #1173: a two-way sync
-//!    with EventKit and CalendarContract has to expand exactly the phone's
+//!    and it COUNTS toward `COUNT` (owner decision on #1173: a calendar followed
+//!    from EventKit and CalendarContract has to expand exactly the phone's
 //!    occurrences, and both do this). One reading everywhere:
 //!    [`zone::FireZone::resolve_wall_time_forward`], which
 //!    `civil::parse_civil_ms` shares. Its exception key stays the series' own

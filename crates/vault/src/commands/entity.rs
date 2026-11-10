@@ -544,9 +544,7 @@ pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<Stri
     Ok(restored)
 }
 
-/// `entity.restore`. It writes nothing about the phone: a restored event in a followed phone
-/// calendar whose source a pushed delete tombstoned has no source, and the create it is then owed
-/// is DERIVED at the next read ([`crate::commands::calendar_push`], rule C12).
+/// `entity.restore`.
 fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let restored = restore_one(ctx, ctx.required_str("id")?)?;
     Ok(serde_json::json!({ "restored": restored }))

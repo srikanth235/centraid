@@ -600,26 +600,6 @@ pub mod act {
                 value.request()
             }
         }
-
-        /// Record the shell's answers to a write-back to the phone's calendars through follow.pushed: a created event is linked to the id the phone gave it, an updated one is stated as pushed, a deleted one is tombstoned (or unlinked when the phone's copy had changed), and a failed item changes nothing, so it is owed again.
-        #[derive(Clone, Debug, Default)]
-        pub struct RecordCalendarPush {
-            pub items: String,
-        }
-        impl RecordCalendarPush {
-            pub const NAME: &str = "record-calendar-push";
-            pub fn request(self) -> wire::ActRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("items".to_owned(), text(self.items));
-                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
-            }
-        }
-        impl From<RecordCalendarPush> for wire::ActRequest {
-            fn from(value: RecordCalendarPush) -> Self {
-                value.request()
-            }
-        }
     }
 
     pub mod docs {
@@ -7105,29 +7085,6 @@ pub mod load {
         }
         impl From<FilesFollowed> for wire::LoadRequest {
             fn from(value: FilesFollowed) -> Self {
-                value.request()
-            }
-        }
-
-        /// (imports, two-way calendar sync) What the phone's writable calendars are owed, derived at read time from the rows the follower keeps: events made or edited here and not yet written to the phone, and trashed ones the phone still holds. One page, in event-id order; `origins` is a JSON array of the origin refs (`calendar:<key>`) the shell reported writable.
-        #[derive(Clone, Debug, Default)]
-        pub struct CalendarOwed {
-            pub after_event: Option<String>,
-            pub limit: u32,
-            pub origins: Option<String>,
-        }
-        impl CalendarOwed {
-            pub const NAME: &str = "calendar-owed";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.after_event { map.insert("after_event".to_owned(), text(it)); }
-                if let Some(it) = self.origins { map.insert("origins".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
-            }
-        }
-        impl From<CalendarOwed> for wire::LoadRequest {
-            fn from(value: CalendarOwed) -> Self {
                 value.request()
             }
         }

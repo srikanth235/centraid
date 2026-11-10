@@ -603,14 +603,6 @@ fn read(
         // ---- the shell's own catalogue (`shell/manifest.json`) ----
         // imports (lane I): the folders the vault follows, with each file's last stat
         ("shell", "files-followed") => app_query::imports::files_followed(door)?,
-        // imports (two-way calendar sync): what the writable phone calendars are owed
-        ("shell", "calendar-owed") => app_query::imports::calendar_owed(
-            vault,
-            door,
-            &p.list("origins")?,
-            &p.text("after_event")?,
-            p.limit(0),
-        )?,
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,

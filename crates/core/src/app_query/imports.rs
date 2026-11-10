@@ -15,8 +15,6 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::{KitError, KitResult};
-use centraid_vault::Vault;
-use centraid_vault::commands::calendar_push;
 
 use super::{Answer, VaultDoor, settle};
 use crate::error::Result;
@@ -106,46 +104,4 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
         Ok((wire::ImportsFilesHeld { folders }, None))
     })();
     settle(door, loaded, Answer::ImportsFilesHeld)
-}
-
-/// `shell.calendar-owed`: the pushes the shell's writable phone calendars are owed, one page.
-///
-/// The vault derives them at read time ([`calendar_push::owed_pushes`]), so a push that failed or
-/// was never answered is simply owed again; nothing is stored. `limit` 0 is the vault's own page.
-pub(crate) fn calendar_owed(
-    vault: &Vault,
-    door: &VaultDoor<'_>,
-    origins: &[String],
-    after_event: &str,
-    limit: u32,
-) -> Result<Answer> {
-    let limit = usize::try_from(limit).unwrap_or(usize::MAX).max(1);
-    let after = (!after_event.is_empty()).then_some(after_event);
-    // The shell knows its calendars by origin ref (`calendar:<key>`); the vault's origin ids are
-    // minted, so the refs are looked up inside the one read.
-    let page = vault.read(|connection| {
-        let ids = calendar_push::origin_ids(connection, origins)?;
-        calendar_push::owed_pushes(connection, &ids, after, limit)
-    })?;
-    let loaded: KitResult<(wire::ImportsCalendarOwed, Option<centraid_apps_kit::Denial>)> = Ok((
-        wire::ImportsCalendarOwed {
-            items: page
-                .items
-                .into_iter()
-                .map(|owed| wire::ImportsOwedPush {
-                    op: owed.op.as_str().to_owned(),
-                    event_id: owed.event_id,
-                    origin_ref: owed.origin_ref,
-                    external_id: owed.external_id.unwrap_or_default(),
-                    device_id: owed.device_id.unwrap_or_default(),
-                    changed: owed.changed,
-                    stated_json: owed.stated.to_string(),
-                    fields_json: owed.fields.to_string(),
-                })
-                .collect(),
-            next: page.next.unwrap_or_default(),
-        },
-        None,
-    ));
-    settle(door, loaded, Answer::ImportsCalendarOwed)
 }

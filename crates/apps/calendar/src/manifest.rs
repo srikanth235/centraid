@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_seven_queries_and_fifteen_actions() {
+    fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 15);
+        assert_eq!(manifest.actions.len(), 14);
         for name in [
             "upcoming",
             "search",
@@ -66,7 +66,7 @@ mod tests {
     /// `reopen-task`, sent by the screen under Reminders' name. So Calendar READS `task` (a title, a
     /// due day and time, the state) and holds no general task write and no complete or uncomplete
     /// permission either: no scope on `task` but the read, no `task.*` command, no action of that
-    /// kind among its fifteen.
+    /// kind among its fourteen.
     #[test]
     fn calendar_reads_reminders_and_holds_no_task_write_the_tick_is_reminders() {
         let vault = manifest().vault.as_ref().expect("reach");

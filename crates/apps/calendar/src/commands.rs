@@ -114,7 +114,7 @@ pub struct CommandsUnavailable {
 use centraid_apps_kit::actions::act;
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 
-/// The fifteen, in the manifest's own order.
+/// The fourteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -136,8 +136,6 @@ pub const ACTIONS: &[ActionRow] = &[
     act("style-calendar", "container.style"),
     // A PLACE THE MEMBER TYPED (#1173): an event's location that is not one the vault holds.
     act("add-place", "place.add"),
-    // TWO-WAY SYNC (#1173): the shell's answers to a write-back to the phone's calendars.
-    act("record-calendar-push", "follow.pushed"),
 ];
 
 /// The row for an action, by name.
@@ -169,7 +167,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 15);
+        assert_eq!(ACTIONS.len(), 14);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"
@@ -198,7 +196,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-calendar"]);
-        assert_eq!(act_scope_tables().len(), 15);
+        assert_eq!(act_scope_tables().len(), 14);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

@@ -149,28 +149,6 @@ message ImportsHeldFile {
   string stat = 2;
 }
 
-// What the phone's writable calendars are owed: the shell query `calendar-owed`, derived in the
-// vault at read time (`centraid_vault::commands::calendar_push::owed_pushes`), one page.
-message ImportsCalendarOwed {
-  repeated ImportsOwedPush items = 1;
-  // Pass as `after_event` to read the next page; empty when nothing is left.
-  string next = 2;
-}
-
-message ImportsOwedPush {
-  // `create`, `update` or `delete`.
-  string op = 1;
-  string event_id = 2;
-  string origin_ref = 3;
-  string external_id = 4;
-  string device_id = 5;
-  repeated string changed = 6;
-  // JSON: what the phone last stated (`null` for a create), and the followed fields as the
-  // vault holds them (`null` for a delete).
-  string stated_json = 7;
-  string fields_json = 8;
-}
-
 // ---------------------------------------------------------------------------
 // A made vault's imports
 // ---------------------------------------------------------------------------

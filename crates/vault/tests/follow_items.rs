@@ -5,7 +5,6 @@
 mod common;
 
 use centraid_vault::commands::Registry;
-use centraid_vault::commands::calendar_push::owed_pushes;
 use centraid_vault::{Command, CommandStatus, Principal};
 use serde_json::{Value, json};
 
@@ -126,16 +125,6 @@ impl World {
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .expect("guests")
-    }
-
-    fn owed_here(&self) -> usize {
-        let origin: String = self.one("SELECT id FROM origin WHERE ref = 'calendar:work'", &[]);
-        self.scratch
-            .vault
-            .read(|c| owed_pushes(c, &[origin], None, 50))
-            .expect("owed")
-            .items
-            .len()
     }
 }
 
@@ -289,7 +278,6 @@ fn a_guest_the_member_answered_keeps_the_answer_and_an_untouched_guest_follows()
         Some("tentative"),
         "the untouched guest follows"
     );
-    assert_eq!(w.owed_here(), 0, "a guest answer is never pushed back");
 }
 
 #[test]
@@ -318,5 +306,4 @@ fn a_guest_the_member_took_off_or_added_is_left_alone_and_an_untouched_one_goes_
         "Ann stays off, Cy stays on, Ben went with the source"
     );
     assert!(!held.contains(&ann) && !held.contains(&ben));
-    assert_eq!(w.owed_here(), 0);
 }

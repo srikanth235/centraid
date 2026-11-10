@@ -594,7 +594,7 @@ pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> 
 /// answer the phone last stated, or there is no edge and the phone had no answer) takes the
 /// phone's word; one the member changed (answered differently, took off, or added) stands. A
 /// guest nobody's email matches mints no person and stays in the statement
-/// ([`attendees_read`]). Guests are never pushed back.
+/// ([`attendees_read`]). Guests are read from the phone and never written to it.
 pub(crate) fn attendees_merge(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
@@ -1556,19 +1556,6 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
         said
     } else {
         json!({ "held": inside(&rows).iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
-    })
-}
-
-/// What the vault holds of a series' changed and skipped days, in the form [`overrides_read`] gives
-/// an edited series: `{ "held": [[day, cancelled, starts, title, timing, url, place], ...] }`, or
-/// `null` for a series whose days are all as its rule has them. It is what a series the vault
-/// founded pushes for its days, there being no statement to compare with.
-pub(crate) fn overrides_held(connection: &Connection, id: &str) -> Result<Json> {
-    let rows = held(connection, id)?;
-    Ok(if rows.is_empty() {
-        Json::Null
-    } else {
-        json!({ "held": rows.iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
     })
 }
 

@@ -919,7 +919,7 @@ mod tests {
     #[test]
     fn an_occurrence_in_the_spring_gap_moves_forward_by_the_gap_and_counts() {
         // FLIPPED to RFC 5545 section 3.3.5 by the owner's decision on #1173
-        // (a two-way sync with EventKit and CalendarContract has to expand the
+        // (a calendar followed from EventKit and CalendarContract has to expand the
         // phone's occurrences, and both move a gap time forward). It used to
         // be skipped and not counted.
         let new_york = zone("America/New_York");

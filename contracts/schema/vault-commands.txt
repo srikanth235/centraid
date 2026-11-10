@@ -40,7 +40,6 @@ follow.calendar
 follow.contacts
 follow.files
 follow.health
-follow.pushed
 follow.statement
 follow.stop
 follow.take_stated

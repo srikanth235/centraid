@@ -104,7 +104,6 @@ fn calendar(titles: &[&str]) -> O {
             source_title: "Google".to_owned(),
             title: "Work".to_owned(),
             color: "#34C759".to_owned(),
-            ..wire::PhoneCalendar::default()
         }],
         events: titles
             .iter()

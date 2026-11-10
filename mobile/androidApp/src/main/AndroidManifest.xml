@@ -60,12 +60,9 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Calendar, for Agenda's calendar follow: asked for when the member taps
          "Import calendar" on Agenda's day one, never at launch
-         (`screens/agenda/CalendarImporter.kt`). Read access brings the phone's
-         events in; write access (the same permission group, so one prompt) lets
-         the core send the member's own changes back to the calendars they
-         follow (`screens/agenda/CalendarWriter.kt`). -->
+         (`screens/agenda/CalendarImporter.kt`). Read only: the phone's events are
+         copied into the member's vault and nothing is written back. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
          and workouts, asked for when the member taps Connect on Health's
          Connect page and for exactly the types chosen there, never at launch
