@@ -251,6 +251,9 @@ struct LockerItemView: View {
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
         }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; it is inside the item's
+        // data, so it is absent while Locker is locked.
+        EarlierEntryRow(entry: item.hasEarlier ? item.earlier : nil, open: open)
     }
 }
 

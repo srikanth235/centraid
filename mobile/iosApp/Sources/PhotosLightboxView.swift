@@ -748,6 +748,8 @@ private struct PhotosLightboxInfo: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.top, 14)
+            // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the foot of the details.
+            EarlierEntryRow(entry: photo.hasEarlier ? photo.earlier : nil, open: open)
         }
         // THE CARDS' NAME is what a screen reader says on entering them.
         .accessibilityElement(children: .contain)
