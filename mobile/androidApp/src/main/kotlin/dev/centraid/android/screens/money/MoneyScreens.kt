@@ -59,6 +59,7 @@ import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.BandSearchField
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ChoiceStack
+import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -382,7 +383,12 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (MoneyTransactionEvent) -> Unit, onBack: () -> Unit) {
+internal fun MoneyTransactionScreen(
+    state: MoneyTransactionState,
+    onEvent: (MoneyTransactionEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onBack: () -> Unit,
+) {
     val chrome = state.chrome
     val data = state.data_
     PushedPage(
@@ -439,6 +445,8 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
                 tx.with_offer?.let { offer ->
                     item(key = "offer-with") { OfferCard(offer, "with", onEvent) }
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
                 items(tx.actions, key = { "act-${it.key}" }) { action ->
                     CentraidRow(
                         title = action.label,

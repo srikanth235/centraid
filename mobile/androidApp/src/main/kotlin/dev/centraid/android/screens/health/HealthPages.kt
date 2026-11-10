@@ -39,6 +39,8 @@ import centraid.core.v1.HealthMetricEvent
 import centraid.core.v1.HealthMetricState
 import centraid.core.v1.HealthWorkoutEvent
 import centraid.core.v1.HealthWorkoutState
+import centraid.core.v1.Route
+import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.PhoneSaysTaken
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ChoiceStack
@@ -148,6 +150,7 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
 internal fun HealthWorkoutScreen(
     state: HealthWorkoutState,
     onEvent: (HealthWorkoutEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onBack: () -> Unit,
     onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
@@ -215,6 +218,8 @@ internal fun HealthWorkoutScreen(
                             }
                         }
                         item(key = "foot") { HealthNote(data.foot) }
+                        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above Move to trash.
+                        state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
                         // MOVE TO TRASH, outlined and destructive under the figures (#1185): it asks
                         // nothing, the status line carries Undo. Empty while the workout is gone.
                         if (data.trash_label.isNotEmpty()) {

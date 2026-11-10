@@ -39,6 +39,8 @@ import centraid.core.v1.AgendaEventEvent
 import centraid.core.v1.AgendaEventState
 import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
+import centraid.core.v1.EarlierEntry
+import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
 import centraid.core.v1.EmptyState
@@ -103,7 +105,7 @@ internal fun AgendaEventScreen(
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 skeleton = { RowSkeleton(rows = 5, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> EventBody(data, onEvent, onOpen, onCall, onPhoneSays) }
+            ) { data -> EventBody(data, state.earlier, onEvent, onOpen, onCall, onPhoneSays) }
         }
     }
     if (state.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && chrome != null) {
@@ -133,6 +135,7 @@ internal fun AgendaEventScreen(
 @Composable
 private fun EventBody(
     data: AgendaEventData,
+    earlier: EarlierEntry?,
     onEvent: (AgendaEventEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onCall: (String) -> Unit,
@@ -263,6 +266,8 @@ private fun EventBody(
                 onOpen = onOpen,
             )
         }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+        EarlierEntryCard(earlier, onOpen)
         // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share the
         // width, Cancel in the red outline.
         ChoiceRow(Modifier.padding(KitGeometry.GUTTER)) {

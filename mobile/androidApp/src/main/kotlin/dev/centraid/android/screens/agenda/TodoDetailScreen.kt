@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Autosave
 import centraid.core.v1.Route
+import dev.centraid.android.kit.EarlierEntryCard
 import centraid.core.v1.TodoDetailData
 import centraid.core.v1.TodoDetailEvent
 import centraid.core.v1.TodoDetailState
@@ -239,6 +240,8 @@ private fun TodoDetailBody(
             }
         }
         if (data.subtask_note.isNotEmpty()) FieldNote(data.subtask_note)
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
+        EarlierEntryCard(state.earlier, onOpen)
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             if (data.can_release && data.release_label.isNotEmpty()) {
                 OutlineButton(data.release_label, testTag = "tasks-release", modifier = Modifier.padding(end = 8.dp)) {

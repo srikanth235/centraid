@@ -630,6 +630,7 @@ internal class RustRoot(
             moneyTransaction != null -> MoneyTransactionScreen(
                 state = moneyTransaction,
                 onEvent = { send(ScreenEvent(money_transaction = it)) },
+                onOpen = open,
                 onBack = back,
             )
             moneyTarget != null -> MoneyTargetScreen(
@@ -748,6 +749,7 @@ internal class RustRoot(
             healthWorkout != null -> HealthWorkoutScreen(
                 state = healthWorkout,
                 onEvent = { send(ScreenEvent(health_workout = it)) },
+                onOpen = open,
                 onBack = back,
                 onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
