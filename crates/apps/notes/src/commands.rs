@@ -107,7 +107,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Seventeen actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 19] = [
+pub const ACTIONS: [ActionRow; 21] = [
     act("create-note", "note.create"),
     act("edit-note", "note.edit"),
     act("move-note", "note.move"),
@@ -117,6 +117,8 @@ pub const ACTIONS: [ActionRow; 19] = [
     confirmed("delete-notebook", "entity.trash"),
     confirmed("delete-note", "entity.trash"),
     act("restore-note", "entity.restore"),
+    confirmed("purge-note", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("restore-note-version", "note.restore_version"),
     act("flag-note", "flag.set"),
     act("unflag-note", "flag.clear"),
@@ -179,7 +181,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_note_verbs_are_the_notes_own() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 21);
         let note_own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -224,7 +226,7 @@ mod tests {
             .collect();
         assert_eq!(edges, ["link", "attach"]);
         // One scope per distinct command.
-        assert_eq!(act_scope_tables().len(), 17);
+        assert_eq!(act_scope_tables().len(), 19);
     }
 
     #[test]
@@ -234,7 +236,15 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["delete-notebook", "delete-note"]);
+        assert_eq!(
+            required,
+            [
+                "delete-notebook",
+                "delete-note",
+                "purge-note",
+                "empty-trash"
+            ]
+        );
     }
 
     /// Every command an action names is one the vault registers: `send-to-tasks`'

@@ -716,7 +716,7 @@ fn delete_forever_asks_with_the_whole_cost_and_destroys_only_when_confirmed() {
         confirm.body,
         "Captions, tags and album entries go too. This cannot be undone."
     );
-    assert_eq!(confirm.confirm_label, "Delete 2 forever");
+    assert_eq!(confirm.confirm_label, "Delete forever");
     assert!(confirm.destructive);
     assert!(ids_of(&shelf(&d, load::photos::ShelfView::Trash, None)).contains(&one));
 

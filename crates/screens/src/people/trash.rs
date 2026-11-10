@@ -4,8 +4,8 @@
 //! person forever, with everything written about them alone that went to the
 //! trash with them (a task about them stays the member's). The vault refuses it
 //! while the owner is the person, and that refusal is the core's sentence on the
-//! status line. There is no People action that empties the whole trash, so no
-//! "Empty trash": the purge sweep erases the rest on each row's day.
+//! status line. `empty-trash` (`entity.empty_trash`, kind person) deletes every
+//! trashed person forever the same way (#1185).
 //!
 //! The list is the core's `people.trash` (the name lives on the party), not a
 //! page of `entity` rows.
@@ -16,35 +16,44 @@ use wire::app_query_response::Answer;
 use super::denied;
 use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
-use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::people as words;
+use crate::strings::{people as words, shared};
 
 /// People's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::people::APP,
     icon_key: "User",
-    copy: TrashCopy {
-        purge_body: Some(words::trash_purge_body),
-        purges_on: Some(words::trash_erases),
-        ..TrashCopy::KIT
-    },
+    noun: shared::trash_noun_person,
+    purge_lead: Some(words::trash_purge_lead),
     back_label: words::app_title,
     denied,
     load: trashed,
+    trash: |id| {
+        act::people::TrashPerson {
+            person_id: id.to_owned(),
+        }
+        .into()
+    },
     restore: |id| {
         act::people::RestorePerson {
             person_id: id.to_owned(),
         }
         .into()
     },
-    purge: Some(|id| {
+    purge: |id| {
         act::people::PurgePerson {
             person_id: id.to_owned(),
         }
         .into()
-    }),
-    empty: None,
+    },
+    empty: || {
+        act::people::EmptyTrash {
+            kind: Some(act::people::EmptyTrashKind::Person),
+            ..Default::default()
+        }
+        .into()
+    },
 };
 
 #[must_use]

@@ -1,8 +1,9 @@
 //! NOTES' TRASH: the kit's one trash screen with Notes' spec (#1015 D1).
 //!
-//! RESTORE ONLY. Notes offers neither "Delete forever" nor "Empty trash" (the
-//! shared `entity.purge` and `entity.empty_trash` exist, and this screen does
-//! not ask for them), and the purge sweep erases at 30 days.
+//! `delete-note` moves a note here for 30 days, `restore-note` brings it back,
+//! `purge-note` (`entity.purge`) deletes one forever and `empty-trash`
+//! (`entity.empty_trash`, kind note) every trashed note, each behind the kit's
+//! destructive confirm (#1185: every trash can be emptied).
 //!
 //! The list is the core's `notes.trash`, not a page of `entity` rows: a memo (a
 //! People-journal entry) must never reach this trash, and only that arm knows
@@ -14,26 +15,44 @@ use wire::app_query_response::Answer;
 use super::{denied, fold};
 use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
-use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::notes as words;
+use crate::strings::{notes as words, shared};
 
 /// Notes' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::notes::APP,
     icon_key: "FileText",
-    copy: TrashCopy::KIT,
+    noun: shared::trash_noun_note,
+    purge_lead: None,
     back_label: words::title,
     denied,
     load: trashed,
+    trash: |id| {
+        act::notes::DeleteNote {
+            note_id: id.to_owned(),
+        }
+        .into()
+    },
     restore: |id| {
         act::notes::RestoreNote {
             note_id: id.to_owned(),
         }
         .into()
     },
-    purge: None,
-    empty: None,
+    purge: |id| {
+        act::notes::PurgeNote {
+            note_id: id.to_owned(),
+        }
+        .into()
+    },
+    empty: || {
+        act::notes::EmptyTrash {
+            kind: Some(act::notes::EmptyTrashKind::Note),
+            ..Default::default()
+        }
+        .into()
+    },
 };
 
 #[must_use]

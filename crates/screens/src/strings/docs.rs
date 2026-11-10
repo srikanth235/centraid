@@ -139,7 +139,6 @@ catalog! {
     plain trash_confirm = ("Move to trash", "Move to trash");
     plain trash_confirm_body = ("It can be restored from trash for 30 days.", "It can be restored from trash for 30 days.");
     plain trash_confirm_title = ("Move to trash?", "Move to trash?");
-    plain trash_empty_state_body = ("Trashed documents can be restored for 30 days.", "Trashed documents can be restored for 30 days.");
     plain truncated = ("Older documents aren't listed; search finds them.", "Older documents aren't listed; search finds them.");
     plain type_any = ("Any type", "Any type");
     plain type_audio = ("Audio", "Audio");

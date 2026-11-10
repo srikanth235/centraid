@@ -35,7 +35,7 @@ catalog! {
     plain photos_bytes_many = ("{count} bytes", "{count} bytes");
     plain photos_byte_one = ("1 byte", "1 byte");
     plain photos_cancel = ("Cancel", "Cancel");
-    plain photos_receipt_trashed = ("Moved to Trash. Restore brings it back.", "Moved to Trash. Restore brings it back.");
+    plain photos_receipt_trashed = ("Photo moved to trash", "Photo moved to trash");
     plain photos_receipt_restored = ("Restored.", "Restored.");
     plain photos_receipt_favorited = ("Added to Favorites.", "Added to Favorites.");
     plain photos_receipt_unfavorited = ("Removed from Favorites.", "Removed from Favorites.");
@@ -79,9 +79,8 @@ catalog! {
     plain photos_delete_album_title = ("Delete this album?", "Delete this album?");
     plain photos_delete_forever = ("Delete forever", "Delete forever");
     plain photos_delete_forever_body = ("Captions, tags and album entries go too. This cannot be undone.", "Captions, tags and album entries go too. This cannot be undone.");
-    plain photos_delete_forever_confirm = ("Delete {count} forever", "Delete {count} forever");
     plain photos_delete_forever_many = ("Delete {count} photos forever?", "Delete {count} photos forever?");
-    plain photos_delete_forever_one = ("Delete 1 photo forever?", "Delete 1 photo forever?");
+    plain photos_delete_forever_one = ("Delete this photo forever?", "Delete this photo forever?");
     plain photos_deselect = ("Deselect", "Deselect");
     plain photos_deselect_day = ("Deselect {title}", "Deselect {title}");
     plain photos_done = ("Done", "Done");
@@ -109,9 +108,6 @@ catalog! {
     plain photos_edit_saving = ("Saving new photo", "Saving new photo");
     plain photos_edit_still_loading = ("The original is still loading.", "The original is still loading.");
     plain photos_empty_favorites = ("No favorites yet — tap the heart on any photo.", "No favorites yet — tap the heart on any photo.");
-    plain photos_empty_trash = ("Empty trash", "Empty trash");
-    plain photos_empty_trash_body = ("Every photo in the trash is deleted, with its captions and tags. This cannot be undone.", "Every photo in the trash is deleted, with its captions and tags. This cannot be undone.");
-    plain photos_empty_trash_title = ("Delete everything in the trash forever?", "Delete everything in the trash forever?");
     plain photos_error_edit_not_saved = ("Photo not saved.", "Photo not saved.");
     plain photos_error_export_failed = ("Photo not exported.", "Photo not exported.");
     plain photos_error_export_failed_retry = ("Photo not exported. Try again.", "Photo not exported. Try again.");
@@ -326,8 +322,7 @@ catalog! {
     counted selected_title = ("1 photo selected", "{n} photos selected");
     counted chosen_title = ("{n} chosen", "{n} chosen");
     counted trash_question = ("Move 1 photo to the trash?", "Move {n} photos to the trash?");
-    counted delete_forever_question = ("Delete 1 photo forever?", "Delete {n} photos forever?");
-    counted delete_forever_label = ("Delete {n} forever", "Delete {n} forever");
+    counted delete_forever_question = ("Delete this photo forever?", "Delete {n} photos forever?");
     counted places_unpinned = ("1 place has no location, so it is not on the map.", "{n} places have no location, so they are not on the map.");
     counted review_trash_others = ("Trash the other {n} copies", "Trash the other {n} copies");
 }

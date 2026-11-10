@@ -200,15 +200,24 @@ fn the_trash_lists_trashed_notes_with_their_day_restore_only() {
         data.rows.iter().find(|r| r.id == unnamed).unwrap().title,
         "first line here"
     );
-    // RESTORE ONLY: no purge, no empty.
-    assert!(data.rows.iter().all(|r| r.purge_label.is_empty()));
-    assert_eq!(data.empty_label, "");
+    // EVERY TRASH CAN DELETE FOREVER AND EMPTY (#1185), each behind a confirm.
+    assert!(data.rows.iter().all(|r| r.purge_label == "Delete forever"));
+    assert_eq!(data.empty_label, "Empty trash");
     send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: named.clone() }));
+    let confirm = trash_state(d.view(i)).confirm.clone().expect("a confirm");
+    assert_eq!(confirm.title, "Delete this note forever?");
+    assert!(confirm.destructive);
+    send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
     send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
-    assert!(
-        trash_state(d.view(i)).confirm.is_none(),
-        "nothing to confirm"
+    assert_eq!(
+        trash_state(d.view(i))
+            .confirm
+            .as_ref()
+            .expect("a confirm")
+            .title,
+        "Empty trash?"
     );
+    send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
     // Restore asks nothing and brings the note back.
     send_trash(
         &mut d,

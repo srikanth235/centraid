@@ -239,7 +239,7 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     pick_doc(&mut d, i, "purge");
     let state = document_state(d.view(i));
     let confirm = state.confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Delete this forever?");
+    assert_eq!(confirm.title, "Delete this document forever?");
     assert_eq!(
         confirm.body,
         "It leaves this vault for good. This cannot be undone."
@@ -537,15 +537,16 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     let row = data.rows.iter().find(|row| row.id == a).unwrap();
     assert!(row.meta.starts_with("Deleted "), "{}", row.meta);
     assert!(
-        !row.meta.contains("Erased"),
-        "no row says when it will be erased"
+        row.meta.contains(" · Erased "),
+        "every row says when it will be erased: {}",
+        row.meta
     );
     assert_eq!(row.purge_label, "Delete forever");
     assert_eq!(data.empty_label, "Empty trash");
     // Delete forever: the kit's confirm, then the bytes go.
     trash_send(&mut d, i, T::Purge(te::PurgeTapped { id: a.clone() }));
     let confirm = trash_view(d.view(i)).confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Delete this forever?");
+    assert_eq!(confirm.title, "Delete this document forever?");
     assert!(confirm.destructive);
     trash_send(&mut d, i, T::Confirmed(te::Confirmed {}));
     assert_eq!(trash_ids(d.view(i)), std::slice::from_ref(&b));
@@ -562,7 +563,7 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     };
     assert_eq!(
         data.empty.as_ref().unwrap().body,
-        "Trashed documents can be restored for 30 days."
+        "Deleted items wait here for 30 days, then they are erased."
     );
 }
 

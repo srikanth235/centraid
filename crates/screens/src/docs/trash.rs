@@ -12,40 +12,44 @@ use wire::app_query_response::Answer;
 
 use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
-use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, docs as words};
+use crate::strings::{Locale, docs as words, shared};
 
 /// Docs' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::docs::APP,
     icon_key: "FileText",
-    copy: TrashCopy {
-        empty_state_body: Some(words::trash_empty_state_body),
-        ..TrashCopy::KIT
-    },
+    noun: shared::trash_noun_document,
+    purge_lead: None,
     back_label: words::app_title,
     denied,
     load: trashed,
+    trash: |id| {
+        act::docs::Trash {
+            document_id: id.to_owned(),
+        }
+        .into()
+    },
     restore: |id| {
         act::docs::Restore {
             document_id: id.to_owned(),
         }
         .into()
     },
-    purge: Some(|id| {
+    purge: |id| {
         act::docs::Purge {
             document_id: id.to_owned(),
         }
         .into()
-    }),
-    empty: Some(|| {
+    },
+    empty: || {
         act::docs::EmptyTrash {
             kind: Some(act::docs::EmptyTrashKind::Document),
             ..Default::default()
         }
         .into()
-    }),
+    },
 };
 
 #[must_use]
@@ -80,7 +84,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                     id: row.document_id,
                     title: row.title,
                     deleted_day: row.trashed_local,
-                    purge_day: String::new(),
+                    purge_day: row.purge_local_day,
                 })
                 .collect(),
         ),

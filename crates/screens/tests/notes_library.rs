@@ -435,7 +435,7 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
         state.menu.as_ref().unwrap().file_label,
         "File into notebook"
     );
-    assert_eq!(state.menu.as_ref().unwrap().trash_label, "Trash");
+    assert_eq!(state.menu.as_ref().unwrap().trash_label, "Move to trash");
 
     // PIN: the sheet closes, the vault has the flag, the row is pinned.
     send_home(
@@ -526,7 +526,7 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
         confirm.body,
         "It stays restorable for 30 days, with its links, tags and files."
     );
-    assert_eq!(confirm.confirm_label, "Trash");
+    assert_eq!(confirm.confirm_label, "Move to trash");
     assert!(confirm.destructive);
     assert_eq!(titles(d.view(i)), ["A"], "nothing moved yet");
     send_home(&mut d, i, H::Dismissed(ev::Dismissed {}));

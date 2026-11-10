@@ -36,12 +36,13 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// seventeenth of v0's (#1047): the memo command existed and no action exposed
 /// it (the handoff's README §8 paper cut). The seven lifecycle actions and the
 /// two tag actions are the vault's shared verbs (#1135).
-pub const ACTIONS: [ActionRow; 22] = [
+pub const ACTIONS: [ActionRow; 23] = [
     act("add-item", "locker.add_item"),
     act("edit-item", "locker.edit_item"),
     act("trash-item", "entity.trash"),
     act("restore-item", "entity.restore"),
     confirmed("purge-item", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("star-item", "flag.set"),
     act("unstar-item", "flag.clear"),
     act("archive-item", "flag.set"),
@@ -77,7 +78,7 @@ mod tests {
     /// share.
     #[test]
     fn the_table_is_one_command_per_action_and_locker_wraps_no_shared_verb() {
-        assert_eq!(ACTIONS.len(), 22);
+        assert_eq!(ACTIONS.len(), 23);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)

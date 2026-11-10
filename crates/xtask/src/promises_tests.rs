@@ -17,8 +17,8 @@ const SPEC: &str = r"use crate::kit::trash::{self, TrashSpec};
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::notes::APP,
     restore: |id| act::notes::RestoreNote { note_id: id.to_owned() }.into(),
-    purge: Some(|id| act::notes::PurgeNote { note_id: id.to_owned() }.into()),
-    empty: Some(|| act::notes::EmptyTrash {}.into()),
+    purge: |id| act::notes::PurgeNote { note_id: id.to_owned() }.into(),
+    empty: || act::notes::EmptyTrash {}.into(),
 };
 ";
 
@@ -64,17 +64,17 @@ fn a_spec_with_no_purge_and_no_empty_is_named() {
         "crates/screens/src/notes/trash.rs",
         &SPEC
             .replace(
-                "purge: Some(|id| act::notes::PurgeNote { note_id: id.to_owned() }.into()),",
+                "purge: |id| act::notes::PurgeNote { note_id: id.to_owned() }.into(),",
                 "purge: None,",
             )
             .replace(
-                "empty: Some(|| act::notes::EmptyTrash {}.into()),",
+                "empty: || act::notes::EmptyTrash {}.into(),",
                 "empty: None,",
             ),
     );
     let gaps = lacking(&root);
-    assert!(gaps.contains("crates/screens/src/notes/trash.rs: the spec has `purge: None`"));
-    assert!(gaps.contains("the spec has `empty: None`"));
+    assert!(gaps.contains("crates/screens/src/notes/trash.rs: the spec has no `purge`"));
+    assert!(gaps.contains("the spec has no `empty`"));
     assert!(gaps.contains("reaches no `entity.purge` action"));
 }
 

@@ -423,8 +423,8 @@ impl Document {
             }),
             // The trash shelf's own sentences (the kit's), for one document.
             Asking::Purge => Some(wire::Confirm {
-                title: shared::trash_purge_title(locale),
-                body: shared::trash_purge_body(locale),
+                title: crate::kit::trash::purge_title(locale, shared::trash_noun_document),
+                body: crate::kit::trash::purge_body(locale, None),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
             }),

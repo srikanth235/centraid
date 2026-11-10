@@ -26,7 +26,7 @@
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). People's manifest-confirmed actions are `trash-person`,
-//! `purge-person`, `delete-contact-channel` and `merge-people`; no command this
+//! `purge-person`, `empty-trash`, `delete-contact-channel` and `merge-people`; no command this
 //! build carries sets the command-level gate. Collapsing them would put a
 //! dialog in front of nothing and drop the non-owner park in exchange.
 
@@ -112,13 +112,14 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Twenty-nine actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 29] = [
+pub const ACTIONS: [ActionRow; 30] = [
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
     confirmed("trash-person", "entity.trash"),
     act("restore-person", "entity.restore"),
     confirmed("purge-person", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     act("log-interaction", "person.log_interaction"),
     act("star-person", "flag.set"),
     act("unstar-person", "flag.clear"),
@@ -202,7 +203,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 29);
+        assert_eq!(ACTIONS.len(), 30);
         assert_eq!(
             commands("person."),
             [
@@ -253,6 +254,7 @@ mod tests {
             [
                 "trash-person",
                 "purge-person",
+                "empty-trash",
                 "delete-contact-channel",
                 "merge-people"
             ]

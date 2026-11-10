@@ -110,35 +110,31 @@ pub const REGISTER: &[Row] = &[
         Promise::Trash,
         "#1185: a workout moves to trash and restores, but there is no trash screen",
     ),
-    owed(
+    kept(
         "locker",
         Promise::Trash,
-        "#1185: the trash cannot be emptied",
+        "crates/screens/src/locker/trash.rs",
     ),
     owed(
         "money",
         Promise::Trash,
         "#1185: a transaction cannot be moved to trash",
     ),
-    owed(
-        "notes",
-        Promise::Trash,
-        "#1185: a trashed note cannot be deleted forever, nor the trash emptied",
-    ),
-    owed(
+    kept("notes", Promise::Trash, "crates/screens/src/notes/trash.rs"),
+    kept(
         "people",
         Promise::Trash,
-        "#1185: the trash cannot be emptied",
+        "crates/screens/src/people/trash.rs",
     ),
     owed(
         "photos",
         Promise::Trash,
-        "#1185: Photos' Trash is its own shelf (photos/shelf.rs), not the kit's trash screen",
+        "#1185: Photos' Trash is its own shelf (photos/shelf.rs): it has Restore, Delete forever and Empty trash in the shared words, but empties by purging photo by photo (no `entity.empty_trash` action) and is not a kit TrashSpec",
     ),
-    owed(
+    kept(
         "reminders",
         Promise::Trash,
-        "#1185: the trash cannot be emptied",
+        "crates/screens/src/reminders/trash.rs",
     ),
 ];
 
@@ -243,7 +239,7 @@ const TRASH_COMMANDS: [(&str, &str); 4] = [
 /// Trash is kept when, for `app`:
 ///
 /// 1. `crates/screens/src/<app>/trash.rs` defines a `TrashSpec` built on
-///    `kit::trash`, with `restore`, `purge: Some(..)` and `empty: Some(..)`;
+///    `kit::trash`, with `restore`, `purge` and `empty`;
 /// 2. the app's `mod.rs` registers the screen (`trash::build`);
 /// 3. a screen other than the trash routes to it (`routes::trash()`, the More
 ///    menu's entry);
@@ -278,14 +274,14 @@ fn trash_missing(root: &Path, app: &str) -> Vec<String> {
             if !spec_field(text, "restore:") {
                 gaps.push(format!("{spec_rel}: the spec has no `restore`"));
             }
-            if !text.contains("purge: Some(") {
+            if !spec_field(text, "purge:") {
                 gaps.push(format!(
-                    "{spec_rel}: the spec has `purge: None` (no Delete forever)"
+                    "{spec_rel}: the spec has no `purge` (no Delete forever)"
                 ));
             }
-            if !text.contains("empty: Some(") {
+            if !spec_field(text, "empty:") {
                 gaps.push(format!(
-                    "{spec_rel}: the spec has `empty: None` (no Empty trash)"
+                    "{spec_rel}: the spec has no `empty` (no Empty trash)"
                 ));
             }
             spec_actions = act_idents(text, app);

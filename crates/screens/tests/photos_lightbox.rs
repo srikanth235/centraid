@@ -455,7 +455,7 @@ fn trash_is_reversible_in_place_and_delete_forever_asks_first_and_then_the_scree
     tap(&mut d, at, V::DeleteForever);
     let asked = view(&d, at);
     let confirm = asked.confirm.expect("asked first");
-    assert_eq!(confirm.title, "Delete 1 photo forever?");
+    assert_eq!(confirm.title, "Delete this photo forever?");
     assert!(confirm.destructive);
     assert!(cell_of(&d, &id).1, "nothing was purged by asking");
     // Dismissing takes the question back.
@@ -881,7 +881,7 @@ fn favorite_archive_and_trash_each_say_what_they_did() {
     let state = view(&d, at);
     let receipt = state.status.expect("receipt");
     assert!(!receipt.refused);
-    assert_eq!(receipt.sentence, "Moved to Trash. Restore brings it back.");
+    assert_eq!(receipt.sentence, "Photo moved to trash");
     let kinds: Vec<i32> = state.toolbar.iter().map(|v| v.kind).collect();
     assert_eq!(kinds, [V::Restore as i32, V::DeleteForever as i32]);
 }

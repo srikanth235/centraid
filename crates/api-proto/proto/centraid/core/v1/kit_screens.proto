@@ -298,9 +298,9 @@ message StatusLine {
 // The kit's trash screen (`<app>.trash`, arm 900 of Route/ScreenEvent/ViewState)
 // ---------------------------------------------------------------------------
 
-// One trashed row, finished: `meta` is "Deleted Wed 11 March" (and the app's
-// "Erased ..." clause where it states one). The verbs are the app's own words;
-// `purge_label` is empty where the app has no destroy path.
+// One trashed row, finished: `meta` is "Deleted Wed 11 March · Erased Mon 12
+// October" (the erase clause is left off where the core stated no day). The
+// verbs are the kit's words, identical in every app.
 message TrashRow {
   string id = 1;
   string title = 2;
@@ -397,6 +397,8 @@ message TrashEvent {
     EmptyTapped empty = 4;
     Confirmed confirmed = 5;
     Dismissed dismissed = 6;
+    // "Undo" on the status line after a restore: the row goes back in the trash.
+    StatusActed status_acted = 7;
   }
 
   message Refreshed {}
@@ -414,6 +416,8 @@ message TrashEvent {
   message Confirmed {}
 
   message Dismissed {}
+
+  message StatusActed {}
 }
 
 // LINKS, SET BY HAND (#1173, O3): a transaction is With someone, a document is About someone, a

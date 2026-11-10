@@ -3,44 +3,53 @@
 //!
 //! `delete-task` puts a task and its subtasks in the trash for 30 days,
 //! `restore-task` brings back what that gesture trashed, and `purge-task`
-//! destroys a trashed task and the subtasks trashed with it now (#1015 D1:
-//! "Delete forever" wherever an app can destroy). There is no Reminders action
-//! that empties the whole trash, so no "Empty trash": the purge sweep erases the
-//! rest at 30 days, and the screen says nothing it cannot do.
+//! destroys a trashed task and the subtasks trashed with it now (#1015 D1).
+//! `empty-trash` (`entity.empty_trash`, kind task) does that to every trashed
+//! task (#1185): every trash can be emptied.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
 use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
-use crate::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda_reminders::reminders_title, task as words};
+use crate::strings::{Locale, agenda_reminders::reminders_title, shared, task as words};
 
 /// Reminders' trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
     app: act::reminders::APP,
     icon_key: "Todo",
-    copy: TrashCopy {
-        purge_body: Some(words::trash_purge_body),
-        ..TrashCopy::KIT
-    },
+    noun: shared::trash_noun_task,
+    purge_lead: Some(words::trash_purge_lead),
     back_label: reminders_title,
     denied,
     load: trashed,
+    trash: |id| {
+        act::reminders::DeleteTask {
+            task_id: id.to_owned(),
+        }
+        .into()
+    },
     restore: |id| {
         act::reminders::RestoreTask {
             task_id: id.to_owned(),
         }
         .into()
     },
-    purge: Some(|id| {
+    purge: |id| {
         act::reminders::PurgeTask {
             task_id: id.to_owned(),
         }
         .into()
-    }),
-    empty: None,
+    },
+    empty: || {
+        act::reminders::EmptyTrash {
+            kind: Some(act::reminders::EmptyTrashKind::Task),
+            ..Default::default()
+        }
+        .into()
+    },
 };
 
 #[must_use]

@@ -568,7 +568,8 @@ impl Detail {
                     self.finished = true;
                     // The words are gone with the task: leaving saves nothing.
                     self.autosave = Autosave::new();
-                    self.ops.status = Some(say(words::task_deleted(locale)));
+                    self.ops.status =
+                        Some(say(crate::kit::trash::moved_to_trash(locale, &task.title)));
                 }
             }
             Asking::Release => {

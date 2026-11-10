@@ -30,9 +30,9 @@ catalog! {
     plain days_ago = ("days ago", "days ago");
     plain days_away = ("days away", "days away");
     plain day_one = ("Add the first thing you must not forget.", "Add the first thing you must not forget.");
-    plain delete = ("Delete", "Delete");
-    plain delete_body = ("It goes to Trash with its subtasks, and Restore brings it back for 30 days.", "It goes to Trash with its subtasks, and Restore brings it back for 30 days.");
-    plain delete_title = ("Delete this task?", "Delete this task?");
+    plain delete = ("Move to trash", "Move to trash");
+    plain delete_body = ("It goes to trash with its subtasks, and Restore brings it back for 30 days.", "It goes to trash with its subtasks, and Restore brings it back for 30 days.");
+    plain delete_title = ("Move this task to trash?", "Move this task to trash?");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Reminders cannot read your tasks", "Reminders cannot read your tasks");
     plain done = ("Done", "Done");
@@ -78,7 +78,6 @@ catalog! {
     plain more_logbook_meta = ("done and won't do", "done and won't do");
     plain more_reminders_meta = ("open work with a reminder", "open work with a reminder");
     plain more_title = ("More in Reminders", "More in Reminders");
-    plain more_trash_meta = ("deleted tasks", "deleted tasks");
     plain new_project_title = ("New project", "New project");
     plain next_is = ("next is", "next is");
     plain next_one_is = ("the next one is", "the next one is");
@@ -136,7 +135,6 @@ catalog! {
     plain tags_add = ("Add a tag", "Add a tag");
     plain tags_note_b = ("Removing a tag affects only this task.", "Removing a tag affects only this task.");
     plain tasks_done = ("tasks done", "tasks done");
-    plain task_deleted = ("Task deleted", "Task deleted");
     plain task_done = ("Task done", "Task done");
     plain task_gone = ("This task is gone.", "This task is gone.");
     plain task_many = ("tasks", "tasks");
@@ -146,8 +144,7 @@ catalog! {
     plain time_none = ("No time", "No time");
     plain title_placeholder = ("Task name", "Task name");
     plain title_required = ("A task needs a name.", "A task needs a name.");
-    plain trash = ("Trash", "Trash");
-    plain trash_purge_body = ("It and the subtasks trashed with it leave this vault for good. This cannot be undone.", "It and the subtasks trashed with it leave this vault for good. This cannot be undone.");
+    plain trash_purge_lead = ("It and the subtasks trashed with it leave this vault for good.", "It and the subtasks trashed with it leave this vault for good.");
     plain undo = ("Undo", "Undo");
     plain untitled = ("Untitled task", "Untitled task");
     plain view_all = ("All", "All");

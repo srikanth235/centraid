@@ -239,11 +239,10 @@ catalog! {
     plain tile_starred = ("Starred", "Starred");
     plain tile_upcoming = ("Upcoming", "Upcoming");
     plain touch_a11y = ("{kind}, {when}", "{kind}, {when}");
-    plain trash_erases = ("Erased {day}", "Erased {day}");
     plain trash_label = ("Trash", "Trash");
-    plain trash_purge_body = (
-        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours. This cannot be undone.",
-        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours. This cannot be undone."
+    plain trash_purge_lead = (
+        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours.",
+        "Their profile, dates, notes and touches leave this vault for good. A task about them stays yours."
     );
     plain unstar = ("Remove star from {name}", "Remove star from {name}");
     plain unstar_verb = ("Remove star", "Remove star");

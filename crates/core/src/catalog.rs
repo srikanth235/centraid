@@ -131,8 +131,8 @@ mod tests {
             }
         }
         assert_eq!(
-            actions, 182,
-            "the nine manifests declare 182 actions: the 178 of the eight, plus the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style)"
+            actions, 187,
+            "the nine manifests declare 187 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the five that give every trash a way to be emptied and Notes a way to delete forever (#1185)"
         );
     }
 

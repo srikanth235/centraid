@@ -582,7 +582,7 @@ fn confirm(locale: Locale, verb: Verb, count: u32) -> wire::Confirm {
         Verb::DeleteForever => wire::Confirm {
             title: words::delete_forever_question(locale, n),
             body: words::photos_delete_forever_body(locale),
-            confirm_label: words::delete_forever_label(locale, n),
+            confirm_label: words::photos_delete_forever(locale),
             destructive: true,
         },
         _ => wire::Confirm {

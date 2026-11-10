@@ -45,6 +45,7 @@ use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, fill, photos as words, photos_home as home_words, photos_shelf as shelf_words,
+    shared as kit_words,
 };
 
 /// One page of a shelf (the core clamps to 200).
@@ -587,7 +588,7 @@ impl Shelf {
             can_show_more: capped,
             show_more_label: words::photos_show_all(locale),
             empty_trash_label: (self.is_trash() && !tiles.is_empty())
-                .then(|| words::photos_empty_trash(locale)),
+                .then(|| kit_words::trash_empty_action(locale)),
             empty,
             cells: tiles,
         }
@@ -621,9 +622,9 @@ impl Shelf {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.prompt {
             Prompt::EmptyTrash => Some(wire::Confirm {
-                title: words::photos_empty_trash_title(locale),
-                body: words::photos_empty_trash_body(locale),
-                confirm_label: words::photos_empty_trash(locale),
+                title: kit_words::trash_empty_title(locale),
+                body: kit_words::trash_empty_body(locale),
+                confirm_label: kit_words::trash_empty_action(locale),
                 destructive: true,
             }),
             Prompt::DeleteAlbum => Some(wire::Confirm {

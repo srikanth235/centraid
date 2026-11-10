@@ -95,7 +95,7 @@ fn the_swipes_delete_trashes_the_task_and_undo_restores_it() {
     );
     assert_eq!(
         list(d.view(i)).status.as_ref().unwrap().sentence,
-        "Task deleted"
+        "Clear out the garage moved to trash"
     );
     assert!(rows(&list_data(d.view(i)).groups).is_empty());
     send_list(&mut d, i, le::Kind::StatusActed(le::StatusActed {}));

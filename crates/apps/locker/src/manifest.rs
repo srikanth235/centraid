@@ -100,7 +100,7 @@ mod tests {
         // weak/reused scoring (Q-1047-16), and the access history, deleted with
         // the receipt table (#1146).
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 22);
+        assert_eq!(manifest.actions.len(), 23);
         for name in ["items", "item", "search", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -156,7 +156,7 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-item", "export"]);
+        assert_eq!(required, ["purge-item", "empty-trash", "export"]);
     }
 
     /// THE ONLY THREE `reveal` SCOPES IN THE PRODUCT, and they survive the
@@ -174,7 +174,7 @@ mod tests {
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 30);
+        assert_eq!(vault.scopes.len(), 31);
 
         let reveals: Vec<String> = vault
             .scopes

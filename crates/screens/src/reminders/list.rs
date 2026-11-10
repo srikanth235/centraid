@@ -325,13 +325,12 @@ impl List {
                 }
             }
             Some(L::RowDeleted(deleted)) => {
-                if self
+                if let Some(task) = self
                     .phase
                     .data()
                     .and_then(|board| find(board, &deleted.task_id))
-                    .is_some()
                 {
-                    self.ops.delete(ctx, &deleted.task_id);
+                    self.ops.delete(ctx, &deleted.task_id, &task.title);
                     self.reload(ctx);
                 }
             }

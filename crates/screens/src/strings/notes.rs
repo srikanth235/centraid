@@ -19,7 +19,7 @@ catalog! {
         "It stays restorable for 30 days, with its links, tags and files."
     );
     plain delete_note_title = ("Move this note to trash?", "Move this note to trash?");
-    plain delete_note_verb = ("Trash", "Trash");
+    plain delete_note_verb = ("Move to trash", "Move to trash");
     plain delete_notebook_body = (
         "Its notes go to the trash with it, restorable for 30 days.",
         "Its notes go to the trash with it, restorable for 30 days."

@@ -1018,7 +1018,7 @@ fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
     let state = detail(d.view(i));
     let confirm = state.confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm.title, "Delete this task?");
+    assert_eq!(confirm.title, "Move this task to trash?");
     assert!(confirm.destructive);
     // Dismissed, nothing is written.
     send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
@@ -1028,7 +1028,10 @@ fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
     send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let state = detail(d.view(i));
     assert!(state.finished);
-    assert_eq!(state.status.as_ref().unwrap().sentence, "Task deleted");
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Rent moved to trash"
+    );
     assert!(state.confirm.is_none());
     // It is in the trash.
     let trash_page = d.push(agenda::TAB, routes::trash());

@@ -253,8 +253,8 @@ impl Home {
             }
             // THE SWIPE'S DELETE: to the trash, with Undo.
             H::TaskDeleted(deleted) => {
-                if self.held.find(&deleted.task_id).is_some() {
-                    self.ops.delete(ctx, &deleted.task_id);
+                if let Some(task) = self.held.find(&deleted.task_id) {
+                    self.ops.delete(ctx, &deleted.task_id, &task.title);
                     self.refresh(ctx);
                 }
             }

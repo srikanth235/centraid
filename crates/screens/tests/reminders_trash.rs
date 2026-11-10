@@ -13,7 +13,7 @@ use centraid_screens::agenda;
 use centraid_screens::catalog::act;
 use centraid_screens::kit::civil;
 use centraid_screens::kit::read::Reading;
-use centraid_screens::kit::trash::{self, TrashCopy, TrashItem, TrashSpec};
+use centraid_screens::kit::trash::{self, TrashItem, TrashSpec};
 use centraid_screens::strings::Locale;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime};
@@ -75,15 +75,18 @@ fn the_trash_lists_deleted_tasks_with_the_day_they_were_deleted() {
     let today = today(&d);
     let row = data.rows.iter().find(|r| r.id == first).unwrap();
     assert_eq!(row.title, "Rent");
-    assert_eq!(
-        row.meta,
-        format!("Deleted {}", civil::day_month(Locale::En, &today))
+    assert!(
+        row.meta.starts_with(&format!(
+            "Deleted {} · Erased ",
+            civil::day_month(Locale::En, &today)
+        )),
+        "{}",
+        row.meta
     );
     assert_eq!(row.restore_label, "Restore");
     assert_eq!(row.purge_label, "Delete forever");
     assert_eq!(row.icon_key, "Todo");
-    // Nothing empties it: no Empty trash.
-    assert_eq!(data.empty_label, "");
+    assert_eq!(data.empty_label, "Empty trash");
 }
 
 #[test]
@@ -98,8 +101,17 @@ fn restore_asks_nothing_and_brings_the_task_back() {
         ids(d.view(i)).is_empty(),
         "the list is read again after the write"
     );
-    assert!(trash(d.view(i)).status.is_none());
+    let status = trash(d.view(i)).status.clone().expect("a status line");
+    assert_eq!(status.sentence, "Rent restored");
+    assert_eq!(status.action_label, "Undo");
+    assert!(!status.refused);
     assert_eq!(task_of(&d, &id).title, "Rent");
+    // Undo puts it back in the trash, and says so.
+    send_trash(&mut d, i, T::StatusActed(te::StatusActed {}));
+    assert_eq!(ids(d.view(i)), [id]);
+    let status = trash(d.view(i)).status.clone().expect("a status line");
+    assert_eq!(status.sentence, "Rent moved to trash");
+    assert_eq!(status.action_label, "");
 }
 
 #[test]
@@ -110,7 +122,7 @@ fn delete_forever_asks_in_full_sentences_and_destroys_only_when_confirmed() {
     let i = d.push(agenda::TAB, routes::trash());
     send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: id.clone() }));
     let confirm = confirm_of(d.view(i)).expect("a confirm");
-    assert_eq!(confirm.title, "Delete this forever?");
+    assert_eq!(confirm.title, "Delete this task forever?");
     assert_eq!(
         confirm.body,
         "It and the subtasks trashed with it leave this vault for good. This cannot be undone."
@@ -134,7 +146,7 @@ fn delete_forever_asks_in_full_sentences_and_destroys_only_when_confirmed() {
     );
     assert_eq!(
         trash_gone.empty.as_ref().unwrap().body,
-        "Deleted items wait here until emptied."
+        "Deleted items wait here for 30 days, then they are erased."
     );
     // It is gone for good: a restore of it is refused by there being nothing to restore.
     send_trash(&mut d, i, T::Restore(te::RestoreTapped { id }));
@@ -142,14 +154,27 @@ fn delete_forever_asks_in_full_sentences_and_destroys_only_when_confirmed() {
 }
 
 #[test]
-fn the_trash_has_no_empty_trash_and_asks_nothing_when_told_to_empty() {
+fn empty_trash_asks_first_and_destroys_every_task_when_confirmed() {
     let mut d = driver();
     empty_agendas_trash(&mut d);
     trashed(&d, "Rent");
+    trashed(&d, "Pay the deposit");
     let i = d.push(agenda::TAB, routes::trash());
     send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
-    assert!(confirm_of(d.view(i)).is_none());
-    assert_eq!(trash_data(d.view(i)).rows.len(), 1);
+    let confirm = confirm_of(d.view(i)).expect("a confirm");
+    assert_eq!(confirm.title, "Empty trash?");
+    assert_eq!(
+        confirm.body,
+        "Everything in trash leaves this vault for good. This cannot be undone."
+    );
+    assert_eq!(confirm.confirm_label, "Empty trash");
+    assert!(confirm.destructive);
+    send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
+    assert_eq!(trash_data(d.view(i)).rows.len(), 2);
+    send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
+    send_trash(&mut d, i, T::Confirmed(te::Confirmed {}));
+    assert!(ids(d.view(i)).is_empty());
+    assert_eq!(trash_data(d.view(i)).empty_label, "");
 }
 
 #[test]
@@ -280,46 +305,38 @@ mod kit {
         "Notes".to_owned()
     }
 
-    fn app_empty_body(_: Locale) -> String {
-        "Nothing is removed.".to_owned()
+    fn app_lead(_: Locale) -> String {
+        "Its pages go too.".to_owned()
     }
 
-    fn app_empty_state(_: Locale) -> String {
-        "Kept 30 days.".to_owned()
+    fn noun(_: Locale) -> String {
+        "page".to_owned()
     }
 
-    fn erased(_: Locale) -> String {
-        "Erased {day}".to_owned()
+    fn trash_marker(_: &str) -> wire::ActRequest {
+        act::reminders::CreateProject {
+            title: "Trashed marker".into(),
+            ..Default::default()
+        }
+        .into()
     }
 
     static FULL: TrashSpec = TrashSpec {
         app: "fake",
         icon_key: "Note",
-        copy: TrashCopy {
-            purges_on: Some(erased),
-            ..TrashCopy::KIT
-        },
+        noun,
+        purge_lead: None,
         back_label: app_name,
         denied,
         load: two_rows,
+        trash: trash_marker,
         restore,
-        purge: Some(purge),
-        empty: Some(empty),
+        purge,
+        empty,
     };
 
-    static RESTORE_ONLY: TrashSpec = TrashSpec {
-        purge: None,
-        empty: None,
-        copy: TrashCopy::KIT,
-        ..clone_of_full()
-    };
-
-    static OWN_WORDS: TrashSpec = TrashSpec {
-        copy: TrashCopy {
-            empty_body: Some(app_empty_body),
-            empty_state_body: Some(app_empty_state),
-            ..TrashCopy::KIT
-        },
+    static OWN_LEAD: TrashSpec = TrashSpec {
+        purge_lead: Some(app_lead),
         ..clone_of_full()
     };
 
@@ -336,13 +353,15 @@ mod kit {
         TrashSpec {
             app: "fake",
             icon_key: "Note",
-            copy: TrashCopy::KIT,
+            noun,
+            purge_lead: None,
             back_label: app_name,
             denied,
             load: two_rows,
+            trash: trash_marker,
             restore,
-            purge: Some(purge),
-            empty: Some(empty),
+            purge,
+            empty,
         }
     }
 
@@ -350,12 +369,8 @@ mod kit {
         trash::build(&FULL)
     }
 
-    fn restore_only(_: &wire::Route) -> Option<Box<dyn centraid_screens::Screen>> {
-        trash::build(&RESTORE_ONLY)
-    }
-
-    fn own_words(_: &wire::Route) -> Option<Box<dyn centraid_screens::Screen>> {
-        trash::build(&OWN_WORDS)
+    fn own_lead(_: &wire::Route) -> Option<Box<dyn centraid_screens::Screen>> {
+        trash::build(&OWN_LEAD)
     }
 
     fn nothing(_: &wire::Route) -> Option<Box<dyn centraid_screens::Screen>> {
@@ -386,7 +401,7 @@ mod kit {
         send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: "t1".into() }));
         let confirm = confirm_of(d.view(i)).unwrap();
         assert!(confirm.destructive);
-        assert_eq!(confirm.title, "Delete this forever?");
+        assert_eq!(confirm.title, "Delete this page forever?");
         send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
         assert!(confirm_of(d.view(i)).is_none());
         assert!(!markers(&d).contains(&"Purged marker".to_owned()));
@@ -422,19 +437,6 @@ mod kit {
     }
 
     #[test]
-    fn an_app_with_no_destroy_path_offers_restore_only() {
-        let (mut d, i) = driver_of(restore_only);
-        let data = trash_data(d.view(i));
-        assert_eq!(data.rows[0].purge_label, "");
-        assert_eq!(data.empty_label, "");
-        assert_eq!(data.rows[0].restore_label, "Restore");
-        let before = d.view(i).clone();
-        send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: "t1".into() }));
-        send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
-        assert_eq!(d.view(i), &before, "nothing it cannot do");
-    }
-
-    #[test]
     fn a_refused_restore_keeps_the_list_and_says_the_cores_sentence() {
         let (mut d, i) = driver_of(full);
         send_trash(&mut d, i, T::Restore(te::RestoreTapped { id: "t1".into() }));
@@ -448,41 +450,25 @@ mod kit {
     }
 
     #[test]
-    fn an_apps_words_replace_the_kits_and_only_where_it_says_so() {
-        let (mut d, i) = driver_of(own_words);
-        send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
-        let confirm = confirm_of(d.view(i)).unwrap();
-        assert_eq!(confirm.body, "Nothing is removed.");
-        assert_eq!(confirm.title, "Empty trash?", "the kit's title stands");
-        send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
+    fn an_app_may_replace_the_first_sentence_of_the_purge_confirm_and_nothing_else() {
+        let (mut d, i) = driver_of(own_lead);
         send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: "t1".into() }));
+        let confirm = confirm_of(d.view(i)).unwrap();
+        assert_eq!(confirm.body, "Its pages go too. This cannot be undone.");
+        assert_eq!(confirm.title, "Delete this page forever?");
+        send_trash(&mut d, i, T::Dismissed(te::Dismissed {}));
+        send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
         assert_eq!(
             confirm_of(d.view(i)).unwrap().body,
-            "It leaves this vault for good. This cannot be undone."
+            "Everything in trash leaves this vault for good. This cannot be undone."
         );
         let (d2, j) = driver_of(nothing);
+        let data = trash_data(d2.view(j));
+        assert_eq!(data.empty.as_ref().unwrap().headline, "Trash is empty.");
         assert_eq!(
-            trash_data(d2.view(j)).empty.as_ref().unwrap().headline,
-            "Trash is empty."
+            data.empty.as_ref().unwrap().body,
+            "Deleted items wait here for 30 days, then they are erased."
         );
-    }
-
-    #[test]
-    fn an_apps_empty_state_body_replaces_the_kits() {
-        static EMPTY_OWN: TrashSpec = TrashSpec {
-            load: none,
-            copy: TrashCopy {
-                empty_state_body: Some(app_empty_state),
-                ..TrashCopy::KIT
-            },
-            ..clone_of_full()
-        };
-        fn build(_: &wire::Route) -> Option<Box<dyn centraid_screens::Screen>> {
-            trash::build(&EMPTY_OWN)
-        }
-        let (d, i) = driver_of(build);
-        let data = trash_data(d.view(i));
-        assert_eq!(data.empty.as_ref().unwrap().body, "Kept 30 days.");
         assert_eq!(data.empty_label, "", "nothing to empty");
     }
 
@@ -497,9 +483,8 @@ mod kit {
         // A row with no day from the core says none; an untitled one the kit's word.
         assert_eq!(data.rows[1].meta, "");
         assert_eq!(data.rows[1].title, "Untitled");
-        // An app that names no erase day says nothing about one.
-        let (d, i) = driver_of(restore_only);
-        assert_eq!(trash_data(d.view(i)).rows[0].meta, "Deleted Thu 12 March");
+        // A row the core gave no erase day says nothing about one.
+        assert_eq!(data.rows[1].meta, "");
     }
 
     fn refused(_: &centraid_screens::Ctx) -> Reading<Vec<TrashItem>> {

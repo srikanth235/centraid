@@ -49,6 +49,7 @@ locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.r
 locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
 locker,restore-item,restore,locker_item,direct,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,yes
 locker,purge-item,purge,locker_item,card,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,no
+locker,empty-trash,purge,locker_item,card,yes: crates/screens/src/locker/trash.rs,no
 locker,star-item,star,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
 locker,unstar-item,unstar,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
 locker,archive-item,archive,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
@@ -99,6 +100,8 @@ notes,rename-notebook,edit,notebook,direct,yes: crates/screens/src/notes/home/mo
 notes,delete-notebook,delete,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
 notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
 notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
+notes,purge-note,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
+notes,empty-trash,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
 notes,restore-note-version,restore,note,card,yes: crates/screens/src/notes/history.rs,no
 notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
 notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
@@ -116,6 +119,7 @@ people,set-cadence,edit:cadence,person,direct,yes: crates/screens/src/people/edi
 people,trash-person,delete,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
 people,restore-person,restore,person,direct,yes: crates/screens/src/people/trash.rs,yes
 people,purge-person,purge,person,card,yes: crates/screens/src/people/trash.rs,no
+people,empty-trash,purge,person,card,yes: crates/screens/src/people/trash.rs,no
 people,log-interaction,log,person,direct,yes: crates/screens/src/people/person/mod.rs,yes
 people,star-person,star,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
 people,unstar-person,unstar,person,direct,yes: crates/screens/src/people/home/mod.rs; crates/screens/src/people/person/mod.rs,yes
@@ -170,6 +174,7 @@ reminders,cancel-task,cancel,task,direct,yes: crates/screens/src/reminders/ops.r
 reminders,organize-task,add_to,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
 reminders,delete-task,delete,task,direct,yes: crates/screens/src/reminders/detail.rs,yes
 reminders,purge-task,purge,task,card,yes: crates/screens/src/reminders/trash.rs,no
+reminders,empty-trash,purge,task,card,yes: crates/screens/src/reminders/trash.rs,no
 reminders,restore-task,restore,task,direct,yes: crates/screens/src/reminders/trash.rs,yes
 reminders,create-project,create,list,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes
 reminders,rename-list,edit,list,direct,no,no

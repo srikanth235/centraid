@@ -227,3 +227,69 @@ fn change_password_opens_the_items_own_site_and_only_for_a_login_with_one() {
     let wifi = push_item(&mut d, "w");
     assert!(item_data(&d, wifi).change_password.is_none());
 }
+
+/// EVERY TRASH CAN BE EMPTIED (#1185): Locker's too, behind the kit's confirm,
+/// with Locker's own first sentence on a single purge.
+#[test]
+fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
+    use centraid_screens::locker::{self, routes};
+    use wire::trash_event::{self as te, Kind as T};
+
+    fn trash_state(d: &centraid_screens::testing::Driver, i: u64) -> wire::TrashView {
+        match &d.view(i).kind {
+            Some(wire::view_state::Kind::Trash(trash)) => trash.clone(),
+            other => panic!("not the trash: {other:?}"),
+        }
+    }
+    fn send(d: &mut centraid_screens::testing::Driver, i: u64, kind: T) {
+        d.send(
+            i,
+            wire::screen_event::Kind::Trash(wire::TrashEvent { kind: Some(kind) }),
+        );
+    }
+
+    let mut d = driver();
+    for (id, title) in [("a", "Old login"), ("b", "Old card")] {
+        add(&d, id, title, |i| i.password = Some("pw".to_owned()));
+        arrange(
+            &d,
+            act::locker::TrashItem {
+                locker_item_id: id.to_owned(),
+            },
+        );
+    }
+    open_home(&mut d);
+    let i = d.push(locker::TAB, routes::trash());
+    let view = trash_state(&d, i);
+    let Some(wire::trash_view::Content::Data(data)) = &view.content else {
+        panic!("no data: {view:?}");
+    };
+    assert_eq!(data.count_label, "Trash · 2");
+    assert_eq!(data.empty_label, "Empty trash");
+    assert!(
+        data.rows[0].meta.contains(" · Erased "),
+        "{}",
+        data.rows[0].meta
+    );
+
+    send(&mut d, i, T::Purge(te::PurgeTapped { id: "a".to_owned() }));
+    let confirm = trash_state(&d, i).confirm.expect("a confirm");
+    assert_eq!(confirm.title, "Delete this item forever?");
+    assert_eq!(
+        confirm.body,
+        "It's erased with its secrets and history. This cannot be undone."
+    );
+    send(&mut d, i, T::Dismissed(te::Dismissed {}));
+
+    send(&mut d, i, T::Empty(te::EmptyTapped {}));
+    let confirm = trash_state(&d, i).confirm.expect("a confirm");
+    assert_eq!(confirm.title, "Empty trash?");
+    assert_eq!(confirm.confirm_label, "Empty trash");
+    send(&mut d, i, T::Confirmed(te::Confirmed {}));
+    let view = trash_state(&d, i);
+    let Some(wire::trash_view::Content::Data(data)) = &view.content else {
+        panic!("no data: {view:?}");
+    };
+    assert!(data.rows.is_empty(), "the trash is empty");
+    assert_eq!(data.empty_label, "");
+}

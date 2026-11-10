@@ -40,7 +40,7 @@ use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::secret::Secrets;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, links as link_words, locker as words};
+use crate::strings::{Locale, fill, links as link_words, locker as words, shared as kit_words};
 
 /// The product's reveal window, in seconds (`REVEAL_WINDOW_MS`).
 const REVEAL_SECONDS: u32 = 30;
@@ -489,7 +489,7 @@ impl Item {
                 );
                 if settled.committed {
                     self.status = Some(wire::StatusLine {
-                        sentence: words::trashed(locale),
+                        sentence: crate::kit::trash::moved_to_trash(locale, &item.title),
                         action_label: words::undo(locale),
                         refused: false,
                     });
@@ -1017,7 +1017,7 @@ impl Item {
         let actions = if item.trashed {
             vec![
                 action("restore", words::restore(locale), false),
-                action("purge", words::purge_action(locale), true),
+                action("purge", kit_words::trash_purge(locale), true),
             ]
         } else {
             let mut actions = vec![
@@ -1311,9 +1311,9 @@ impl Item {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         Some(match self.confirming? {
             Confirming::Purge => wire::Confirm {
-                title: words::purge_title(locale),
-                body: words::purge_body(locale),
-                confirm_label: words::purge_action(locale),
+                title: crate::kit::trash::purge_title(locale, kit_words::trash_noun_item),
+                body: crate::kit::trash::purge_body(locale, Some(words::purge_lead)),
+                confirm_label: kit_words::trash_purge(locale),
                 destructive: true,
             },
             Confirming::Field => wire::Confirm {

@@ -114,6 +114,7 @@ pub const ACTIONS: &[ActionRow] = &[
     act("delete-task", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
     confirmed("purge-task", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
     // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
     act("restore-task", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
@@ -162,7 +163,7 @@ mod tests {
 
     #[test]
     fn the_tasks_own_are_the_verbs_the_rest_are_shared_and_no_event_is_touched() {
-        assert_eq!(ACTIONS.len(), 19);
+        assert_eq!(ACTIONS.len(), 20);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("event.")),
             "Reminders never writes an event"
@@ -193,7 +194,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 18);
+        assert_eq!(act_scope_tables().len(), 19);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

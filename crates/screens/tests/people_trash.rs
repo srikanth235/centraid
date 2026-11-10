@@ -66,11 +66,11 @@ fn a_trashed_person_is_a_row_with_the_days_the_members_zone_reads() {
     // The days are the core's civil days: "Deleted <day> · Erased <day>".
     assert!(row.meta.starts_with("Deleted "), "{}", row.meta);
     assert!(row.meta.contains(" · Erased "), "{}", row.meta);
-    // DELETE FOREVER is `entity.purge`; there is no emptying.
+    // DELETE FOREVER is `entity.purge`, and the trash can be emptied.
     assert!(!row.purge_label.is_empty());
     assert!(!row.restore_label.is_empty());
     match &trash_of(d.view(i)).content {
-        Some(wire::trash_view::Content::Data(data)) => assert_eq!(data.empty_label, ""),
+        Some(wire::trash_view::Content::Data(data)) => assert_eq!(data.empty_label, "Empty trash"),
         other => panic!("{other:?}"),
     }
 }
@@ -123,6 +123,40 @@ fn delete_forever_is_asked_first_in_full_sentences_then_the_person_is_gone() {
     send(&mut d, i, T::Confirmed(wire::trash_event::Confirmed {}));
     assert!(!is_listed(&d, i, &id));
     assert!(trash_of(d.view(i)).status.is_none());
+}
+
+#[test]
+fn empty_trash_asks_first_and_deletes_every_trashed_person_forever() {
+    let mut d = clean();
+    let id = trashed_dana(&d);
+    let i = d.push(people::TAB, routes::trash());
+    send(&mut d, i, T::Empty(wire::trash_event::EmptyTapped {}));
+    let confirm = trash_of(d.view(i)).confirm.clone().expect("asked first");
+    assert_eq!(confirm.title, "Empty trash?");
+    assert_eq!(
+        confirm.body,
+        "Everything in trash leaves this vault for good. This cannot be undone."
+    );
+    assert_eq!(confirm.confirm_label, "Empty trash");
+    assert!(confirm.destructive);
+    send(&mut d, i, T::Dismissed(wire::trash_event::Dismissed {}));
+    assert!(is_listed(&d, i, &id), "dismissing wrote nothing");
+    send(&mut d, i, T::Empty(wire::trash_event::EmptyTapped {}));
+    send(&mut d, i, T::Confirmed(wire::trash_event::Confirmed {}));
+    assert!(rows(d.view(i)).is_empty());
+    assert!(trash_of(d.view(i)).status.is_none());
+    // Delete forever names the noun.
+    let again = trashed_dana(&d);
+    send(&mut d, i, T::Refreshed(wire::trash_event::Refreshed {}));
+    send(
+        &mut d,
+        i,
+        T::Purge(wire::trash_event::PurgeTapped { id: again }),
+    );
+    assert_eq!(
+        trash_of(d.view(i)).confirm.as_ref().expect("asked").title,
+        "Delete this person forever?"
+    );
 }
 
 #[test]

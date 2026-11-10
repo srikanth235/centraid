@@ -21,7 +21,7 @@ use crate::kit::menu;
 use crate::kit::read;
 use crate::kit::secret::Secrets;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, locker as words};
+use crate::strings::{Locale, fill, locker as words, shared as kit_words};
 
 /// The filter section's key (`locker-filter-show-starred` on a screen); its
 /// options are keyed `all`, `starred`, `archived` and each type's key.
@@ -821,8 +821,8 @@ impl Home {
                 ),
                 more(
                     "trash",
-                    words::more_trash(locale),
-                    words::more_trash_meta(locale),
+                    kit_words::trash_entry(locale),
+                    kit_words::trash_entry_meta(locale),
                     "Trash",
                     Some(routes::trash()),
                 ),

@@ -1758,6 +1758,41 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            LockerItem,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::LockerItem => "locker_item",
+                }
+            }
+        }
+
+        /// Empty the item trash through entity.empty_trash with kind locker_item. Irreversible and takes no id: every item in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
         /// Star an item through flag.set — the vault's one canonical star, the same every other surface reads. Idempotent; refuses trashed items.
         #[derive(Clone, Debug, Default)]
         pub struct StarItem {
@@ -3255,6 +3290,61 @@ pub mod act {
             }
         }
 
+        /// Delete one ALREADY-TRASHED note forever through entity.purge. Irreversible: the note, its versions and its links go now, and its attachments' bytes go once nothing else holds them.
+        #[derive(Clone, Debug, Default)]
+        pub struct PurgeNote {
+            pub note_id: String,
+        }
+        impl PurgeNote {
+            pub const NAME: &str = "purge-note";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.note_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<PurgeNote> for wire::ActRequest {
+            fn from(value: PurgeNote) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Note,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Note => "note",
+                }
+            }
+        }
+
+        /// Empty the note trash through entity.empty_trash with kind note. Irreversible and takes no id: every note in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
         /// Restore one prior body from this note's history through note.restore_version; the words it replaces are kept as the newest version.
         #[derive(Clone, Debug, Default)]
         pub struct RestoreNoteVersion {
@@ -3685,6 +3775,41 @@ pub mod act {
         }
         impl From<PurgePerson> for wire::ActRequest {
             fn from(value: PurgePerson) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Person,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Person => "person",
+                }
+            }
+        }
+
+        /// Empty the person trash through entity.empty_trash with kind person. Irreversible and takes no id: every person in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
                 value.request()
             }
         }
@@ -5041,6 +5166,41 @@ pub mod act {
         }
         impl From<PurgeTask> for wire::ActRequest {
             fn from(value: PurgeTask) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Task,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Task => "task",
+                }
+            }
+        }
+
+        /// Empty the task trash through entity.empty_trash with kind task. Irreversible and takes no id: every task in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
                 value.request()
             }
         }

@@ -256,7 +256,7 @@ impl Ops {
 
     /// THE SWIPE'S DELETE: the task goes to the trash with its subtasks and
     /// Undo restores it.
-    pub fn delete(&mut self, ctx: &Ctx, task_id: &str) -> bool {
+    pub fn delete(&mut self, ctx: &Ctx, task_id: &str, title: &str) -> bool {
         let locale = ctx.locale();
         let key = kit_act::key(&["delete-task", task_id], self.next_seq());
         let settled = kit_act::act(
@@ -271,7 +271,7 @@ impl Ops {
             return false;
         }
         self.status = Some(wire::StatusLine {
-            sentence: words::task_deleted(locale),
+            sentence: crate::kit::trash::moved_to_trash(locale, title),
             action_label: words::undo(locale),
             refused: false,
         });

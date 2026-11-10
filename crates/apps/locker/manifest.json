@@ -120,6 +120,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "flag",
         "table": "set",
         "verbs": "act"
@@ -504,6 +509,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "locker_item",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the Locker trash",
+        "clear out the trashed items for good",
+        "permanently delete everything in the Locker trash"
+      ],
+      "description": "Empty the item trash through entity.empty_trash with kind locker_item. Irreversible and takes no id: every item in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["locker_item"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {

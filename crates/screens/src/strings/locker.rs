@@ -242,8 +242,6 @@ catalog! {
     plain more_import_meta = ("From a password manager", "From a password manager");
     plain more_lock_meta = ("Cover every item now", "Cover every item now");
     plain more_title = ("Locker", "Locker");
-    plain more_trash = ("Trash", "Trash");
-    plain more_trash_meta = ("Thirty days, then erased", "Thirty days, then erased");
     plain no_answer = ("The lock didn't respond. Try again.", "The lock didn't respond. Try again.");
     plain no_vault = ("No vault is open on this phone.", "No vault is open on this phone.");
     plain open = ("Open", "Open");
@@ -276,9 +274,7 @@ catalog! {
     plain prompt_subtitle = ("Your items stay covered until you do.", "Your items stay covered until you do.");
     plain prompt_title = ("Unlock Locker", "Unlock Locker");
     plain purged = ("Item erased", "Item erased");
-    plain purge_action = ("Delete forever", "Delete forever");
-    plain purge_body = ("It's erased with its secrets and history. This cannot be undone.", "It's erased with its secrets and history. This cannot be undone.");
-    plain purge_title = ("Delete this item forever?", "Delete this item forever?");
+    plain purge_lead = ("It's erased with its secrets and history.", "It's erased with its secrets and history.");
     plain read_incomplete = ("Locker could not read this item.", "Locker could not read this item.");
     plain regenerate = ("Generate another", "Generate another");
     plain restore = ("Restore", "Restore");
@@ -337,10 +333,7 @@ catalog! {
     plain tile_open_line = ("Locks when you leave Centraid", "Locks when you leave Centraid");
     plain title_needed = ("A title is needed.", "A title is needed.");
     plain trash = ("Move to trash", "Move to trash");
-    plain trashed = ("Moved to trash", "Moved to trash");
     plain trashed_note = ("In the trash · erased on {day}", "In the trash · erased on {day}");
-    plain trash_empty_body = ("Trashed items stay for thirty days.", "Trashed items stay for thirty days.");
-    plain trash_purges_on = ("Erased {day}", "Erased {day}");
     plain item_type = ("Type", "Type");
     plain types_card = ("Cards", "Cards");
     plain types_identity = ("Identities", "Identities");

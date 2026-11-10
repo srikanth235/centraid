@@ -48,7 +48,7 @@ mod tests {
     fn it_declares_nine_queries_and_nineteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 9);
-        assert_eq!(manifest.actions.len(), 19);
+        assert_eq!(manifest.actions.len(), 21);
         for name in [
             "link-targets",
             "library",
@@ -117,7 +117,15 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["delete-notebook", "delete-note"]);
+        assert_eq!(
+            required,
+            [
+                "delete-notebook",
+                "delete-note",
+                "purge-note",
+                "empty-trash"
+            ]
+        );
     }
 
     /// THE TWO MANIFEST CONFIRMATIONS, RE-JUDGED RATHER THAN CITED.
@@ -203,7 +211,7 @@ mod tests {
     fn it_declares_twenty_eight_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Notes declares its reach");
-        assert_eq!(vault.scopes.len(), 30);
+        assert_eq!(vault.scopes.len(), 32);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -242,7 +250,7 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, act_scope_tables());
-        assert_eq!(declared.len(), 17);
+        assert_eq!(declared.len(), 19);
 
         let reads = vault
             .scopes

@@ -6,7 +6,9 @@ use wire::AgendaDestination as Dest;
 
 use super::super::routes;
 use crate::kit::schedule::rows;
-use crate::strings::{Locale, agenda as words, agenda_reminders as reminders, imports, task};
+use crate::strings::{
+    Locale, agenda as words, agenda_reminders as reminders, imports, shared, task,
+};
 
 /// `AgendaBandTab.key`s: what `BandPicked` carries.
 pub const BAND_REMINDERS: &str = "reminders";
@@ -98,8 +100,8 @@ pub fn more_rows(locale: Locale, can_import_reminders: bool) -> Vec<wire::Agenda
         ),
         place(
             MORE_TRASH,
-            task::trash(locale),
-            task::more_trash_meta(locale),
+            shared::trash_entry(locale),
+            shared::trash_entry_meta(locale),
             "Trash",
             routes::trash(),
         ),

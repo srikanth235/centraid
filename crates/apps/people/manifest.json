@@ -100,6 +100,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "person",
         "table": "log_interaction",
         "verbs": "act"
@@ -485,6 +490,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the people trash",
+        "clear out the trashed people for good",
+        "permanently delete everyone in the trash"
+      ],
+      "description": "Empty the person trash through entity.empty_trash with kind person. Irreversible and takes no id: every person in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["person"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {

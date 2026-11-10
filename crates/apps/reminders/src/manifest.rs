@@ -47,7 +47,7 @@ mod tests {
     fn it_declares_ten_queries_and_nineteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 10);
-        assert_eq!(manifest.actions.len(), 19);
+        assert_eq!(manifest.actions.len(), 20);
         for name in [
             "board",
             "task",
@@ -113,8 +113,8 @@ mod tests {
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
     ///
-    /// The one exception is `purge-task` (#1015 D1), which is not v0's and is the one
-    /// irreversible act: it confirms, as every other app's destroy does. `delete-task` trashes a
+    /// The exceptions are `purge-task` (#1015 D1) and `empty-trash` (#1185), which are not v0's
+    /// and are the irreversible acts: they confirm, as every other app's destroys do. `delete-task` trashes a
     /// task AND every subtask under it, which is as destructive as `delete-note`.
     #[test]
     fn reminders_confirms_only_the_purge_and_the_command_gate_is_the_other_one() {
@@ -123,7 +123,7 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = if row.action == "purge-task" {
+            let expected = if matches!(row.action, "purge-task" | "empty-trash") {
                 (Confirmation::Required, Confirm::Required)
             } else {
                 (Confirmation::None, Confirm::None)

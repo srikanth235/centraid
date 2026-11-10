@@ -86,6 +86,11 @@
       },
       {
         "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
         "table": "restore",
         "verbs": "act"
       },
@@ -577,6 +582,50 @@
           }
         },
         "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the task trash",
+        "clear out the trashed tasks for good",
+        "permanently delete everything in the reminders trash"
+      ],
+      "description": "Empty the task trash through entity.empty_trash with kind task. Irreversible and takes no id: every task in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["task"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {
