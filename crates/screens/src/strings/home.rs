@@ -84,7 +84,8 @@ catalog! {
     plain app_reminders = ("Reminders", "Reminders");
 
     // ---- the tiles ----
-    plain tile_agenda_count = ("on your plate", "on your plate");
+    plain tile_agenda_count = ("upcoming events", "upcoming events");
+    plain tile_agenda_finished_today = ("No more events today", "No more events today");
     plain tile_agenda_foot_more = ("Calendar · {n} more", "Calendar · {n} more");
     plain tile_agenda_none_today = ("No events today", "No events today");
     plain tile_docs_count_one = ("document", "document");

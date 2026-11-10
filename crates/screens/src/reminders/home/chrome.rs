@@ -149,12 +149,12 @@ pub fn words_of(locale: Locale) -> wire::AgendaChrome {
         today: words::today(locale),
         previous_day: words::previous_day(locale),
         next_day: words::next_day(locale),
-        search_placeholder: words::search_placeholder(locale),
-        search_label: words::search_label(locale),
+        search_placeholder: reminders::search_placeholder(locale),
+        search_label: reminders::search_placeholder(locale),
         search_close: words::close(locale),
         retry: words::retry(locale),
         loading: words::loading(locale),
-        more_title: words::more_title(locale),
+        more_title: words::band_more(locale),
         reads_title: reminders::reads_reminders_title(locale),
         reads_facts: vec![
             wire::AgendaFact {

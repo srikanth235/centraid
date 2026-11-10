@@ -60,8 +60,6 @@ const RANGE_DAYS_30: &str = "days_30";
 const RANGE_DAYS_90: &str = "days_90";
 const RANGE_YEAR: &str = "year";
 
-const WEEK_BACK: i64 = 6;
-
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::HealthHome(args)) = &route.args else {
@@ -401,7 +399,8 @@ impl Home {
     ) -> wire::HealthWorkoutsData {
         let (locale, units) = (ctx.locale(), Units::of(ctx));
         let parent = self.title(locale);
-        let week = civil::plus_days(today, -WEEK_BACK).unwrap_or_else(|| today.to_owned());
+        let week = civil::week_first(today, civil::week_start_of(ctx.region()))
+            .unwrap_or_else(|| today.to_owned());
         let mut sections: Vec<wire::HealthWorkoutSection> = Vec::new();
         for row in &answer.workouts {
             let day = row.local_start.get(..10).unwrap_or_default();

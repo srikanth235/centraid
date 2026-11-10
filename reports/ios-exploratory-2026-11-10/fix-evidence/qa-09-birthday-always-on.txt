@@ -1,0 +1,87 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Back to People, ID: kit-pushed-back, Secondary Actions: Cancel
+					15 pop up button Description: More, ID: people-person-menu, Secondary Actions: Cancel
+					16 button Description: Edit, ID: people-person-edit, Secondary Actions: Cancel
+					17 heading Description: Jake Bennett, Secondary Actions: Cancel
+					18 text Description: Old roommate from Portland, Secondary Actions: Cancel
+					19 text Description: Every 45 days · last touch 31 days ago, Secondary Actions: Cancel
+					20 button Description: Message Jake Bennett, ID: people-person-hero-message, Secondary Actions: Cancel
+					21 button Description: Call Jake Bennett, ID: people-person-hero-call, Secondary Actions: Cancel
+					22 button Description: Email Jake Bennett, ID: people-person-hero-mail, Secondary Actions: Cancel
+					23 button Description: Log a touch with Jake Bennett, ID: people-person-hero-log, Secondary Actions: Cancel
+					24 heading Description: CHANNELS, Secondary Actions: Cancel
+					25 text Description: 2, Secondary Actions: Cancel
+					26 button Description: Add channel, Secondary Actions: Cancel
+					27 button Description: Phone, +1 503 555 0177, ID: people-channel-01a03ddf-e337-7e68-8550-f3956bc7a17d, Secondary Actions: Cancel
+					28 button Description: Call, ID: people-channel-action-01a03ddf-e337-7e68-8550-f3956bc7a17d, Secondary Actions: Cancel
+					29 button Description: Remove this phone, ID: people-channel-remove-01a03ddf-e337-7e68-8550-f3956bc7a17d, Secondary Actions: Cancel
+					30 button Description: Email, jake.bennett@example.com, ID: people-channel-01a03ddf-e338-7e68-8822-d938dc3b1d28, Secondary Actions: Cancel
+					31 button Description: Email, ID: people-channel-action-01a03ddf-e338-7e68-8822-d938dc3b1d28, Secondary Actions: Cancel
+					32 button Description: Remove this email, ID: people-channel-remove-01a03ddf-e338-7e68-8822-d938dc3b1d28, Secondary Actions: Cancel
+					33 heading Description: DATES, Secondary Actions: Cancel
+					34 text Description: 1, Secondary Actions: Cancel
+					35 button Description: Add date, Secondary Actions: Cancel
+					36 text Description: Birthday, 14 March, ID: people-date-birthday:01a03ddf-e337-7e68-9ad3-dc21530187ba, Secondary Actions: Cancel
+					37 heading Description: In your vault, ID: people-vault, Secondary Actions: Cancel
+					38 button Description: Event: 1:1 with Jake, Tue 10 November, 14:30, ID: people-vault, Secondary Actions: Cancel
+					39 button Description: Task: Ask Jake about the cabin split, Yesterday, ID: people-vault, Secondary Actions: Cancel
+					40 heading Description: NOTES, Secondary Actions: Cancel
+					41 text Description: 1, Secondary Actions: Cancel
+					42 button Description: Add note, Secondary Actions: Cancel
+					43 text Description: Jake's lease ends in March; he is deciding between Seattle and staying put., Yesterday, ID: people-note-01a1c01c-d74a-7e68-96a6-4b781ca9c1e9, Secondary Actions: Cancel
+					44 heading Description: TOUCHES, Secondary Actions: Cancel
+					45 text Description: 1, Secondary Actions: Cancel
+					46 button Description: Log a touch, Secondary Actions: Cancel
+					47 text Description: Call, Sat 10 October, ID: people-touch-01a1259e-0f42-7e68-95ca-d08268a3b65e, Secondary Actions: Cancel
+				48 button Description: Home, ID: app.grid.3x3
+				49 button Description: Screenshot, ID: camera.viewfinder
+				50 button Description: Record, ID: record.circle
+				51 button Rotate Right
+	52 toolbar
+		53 menu button Add, Help: Add Device, ID: plus
+		54 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		55 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		56 toggle button Description: Capture Keyboard, Value: off
+		57 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		58 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		59 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		60 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		61 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		62 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		63 menu button More, Help: More Actions, ID: ellipsis
+		64 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		65 radio button Description: text.document, Help: Reports, Value: 0
+		66 radio button Description: Info, Value: 0, ID: info
+	67 close button
+	68 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	69 minimize button
+	70 text c1173-review iOS 26.5
+71 menu bar
+	72 Device Hub
+	73 File
+	74 Edit
+	75 View
+	76 Device
+	77 Controls
+	78 Window
+	79 Help

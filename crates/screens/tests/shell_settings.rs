@@ -406,7 +406,7 @@ fn download_settings_opens_a_sheet_of_the_one_rule_and_a_pick_keeps_it() {
 }
 
 #[test]
-fn the_platform_answer_changes_the_key_sentence() {
+fn a_platform_sync_capability_does_not_claim_an_unknown_key_is_saved() {
     let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored(""));
     answer(
@@ -419,7 +419,8 @@ fn the_platform_answer_changes_the_key_sentence() {
         }),
     );
     let key = data(&d, i).sections[2].rows[0].meta.clone();
-    assert!(
-        key.starts_with("Saved in iCloud Keychain") || key.starts_with("Backed up with Google")
+    assert_eq!(
+        key,
+        "Can't tell whether your recovery key is saved elsewhere. Save a copy."
     );
 }

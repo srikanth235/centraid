@@ -64,6 +64,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Home {
     destination: Dest,
+    search_origin: Dest,
     sheet: Sheet,
     library: Library,
     filter: Filter,
@@ -100,6 +101,11 @@ impl Home {
         search.set_term(&query);
         Self {
             destination,
+            search_origin: if destination == Dest::Search {
+                Dest::Library
+            } else {
+                destination
+            },
             sheet: Sheet::None,
             library: Library::default(),
             filter: Filter::All,
@@ -158,8 +164,10 @@ impl Home {
             // must not outlive the grid it was made on, and the zoom comes back to
             // All. The photographs themselves stay read.
             self.leave_selection();
-            self.grain = Grain::All;
-            self.place_day.clear();
+            if destination != Dest::Search {
+                self.grain = Grain::All;
+                self.place_day.clear();
+            }
         }
         if destination != Dest::Search {
             self.search.close();
@@ -325,14 +333,19 @@ impl Home {
                 return effects;
             }
             H::OriginalRequested(photo_id) => self.request_original(&photo_id, ctx),
-            H::SearchOpened(_) => self.move_to(Dest::Search, ctx),
+            H::SearchOpened(_) => {
+                if self.destination != Dest::Search {
+                    self.search_origin = self.destination;
+                }
+                self.move_to(Dest::Search, ctx);
+            }
             H::SearchTerm(term) => {
                 self.sheet = Sheet::None;
                 self.destination = Dest::Search;
                 self.search.set_term(&term);
                 self.search.read(ctx);
             }
-            H::SearchClosed(_) => self.move_to(Dest::Library, ctx),
+            H::SearchClosed(_) => self.move_to(self.search_origin, ctx),
             H::Sheet(opened) => {
                 let sheet = Sheet::try_from(opened.sheet).unwrap_or(Sheet::Unspecified);
                 match sheet {

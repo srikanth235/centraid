@@ -162,6 +162,70 @@ fn send_regenerate(sample: &common::chat::Sample, session: u64, turn: u64) -> wi
 // ---------------------------------------------------------------------------
 
 #[test]
+fn an_exact_document_lookup_needs_no_model_writes_nothing_and_uses_the_members_zone() {
+    use centraid_assist::native::Door as _;
+    use centraid_assist::native::door::text;
+    let model = script(&[]);
+    let sample = native_sample(model.clone());
+    let door = sample.handle.assist_door();
+    let before = door
+        .table_where(
+            "entity",
+            "id, title, created_at, updated_at",
+            "id",
+            "id",
+            "kind = ?",
+            &["document".to_owned()],
+        )
+        .expect("documents read");
+    let document = before.first().expect("the demo holds a document");
+    let title = text(document, "title").expect("a document title");
+    let id = text(document, "id").expect("an id");
+    let session = sample.start("docs");
+    let response = sample
+        .assist(Ask::Send(wire::AssistSendRequest {
+            session_id: session,
+            text: format!("Find the {title}"),
+            tz: "Asia/Kolkata".to_owned(),
+            turn_id: 1,
+            ..Default::default()
+        }))
+        .expect("lookup answers");
+    let Some(wire::assist_response::Kind::Sent(sent)) = response.kind else {
+        panic!("a sent answer")
+    };
+    let answer = answered(&sent);
+    assert_eq!(answer.cards.len(), 1);
+    assert_eq!(answer.cards[0].id, id);
+    assert!(
+        model.prompts().is_empty(),
+        "an exact read never guesses a write"
+    );
+    let created = text(document, "created_at").expect("creation instant");
+    let instant = centraid_vault::time::recurrence::parse_instant_ms(&created).expect("an instant");
+    let local = centraid_vault::time::zone::FireZone::named("Asia/Kolkata")
+        .expect("a zone")
+        .zoned_parts(instant);
+    let clock = format!("{:02}:{:02}", local.hour, local.minute);
+    assert!(
+        answer.cards[0].subtitle.ends_with(&clock),
+        "{}",
+        answer.cards[0].subtitle
+    );
+    let after = door
+        .table_where(
+            "entity",
+            "id, title, created_at, updated_at",
+            "id",
+            "id",
+            "kind = ?",
+            &["document".to_owned()],
+        )
+        .expect("documents read again");
+    assert_eq!(before, after);
+}
+
+#[test]
 fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_its_line_composed()
 {
     let model = script(&read_tasks());

@@ -154,8 +154,8 @@ catalog! {
     plain scope_series_note = ("Guests, reminders, the link and the calendar belong to the whole series.", "Guests, reminders, the link and the calendar belong to the whole series.");
     plain scope_skip = ("Skip this occurrence", "Skip this occurrence");
     plain scope_title = ("This event repeats", "This event repeats");
-    plain search_label = ("Search agenda", "Search agenda");
-    plain search_placeholder = ("Search events and tasks", "Search events and tasks");
+    plain search_label = ("Search events", "Search events");
+    plain search_placeholder = ("Search events", "Search events");
     plain search_tasks = ("Tasks", "Tasks");
     plain spoken_to = ("to", "to");
     plain status_cancel_asked = ("cancellation asked", "cancellation asked");

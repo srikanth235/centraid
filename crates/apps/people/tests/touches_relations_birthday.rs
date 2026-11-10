@@ -204,7 +204,7 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_can_be_turned_off_and_back_on() {
+fn a_birthday_reminder_cannot_be_turned_off() {
     let w = World::new();
     let ada = w.person("Ada", json!({ "birthday": "01-20" }));
     let bob = w.person("Bob", json!({}));
@@ -234,15 +234,19 @@ fn a_birthday_reminder_can_be_turned_off_and_back_on() {
         (Some(true), true, 1),
         "a birthday has its reminder by default"
     );
-    w.ok(
-        "person.set_birthday_reminder",
-        json!({ "id": ada, "on": false }),
-    );
-    assert_eq!(
-        reminder(&w),
-        (Some(false), false, 0),
-        "off: the date stays, the reminder and the upcoming rail do not"
-    );
+    let refused = w
+        .vault
+        .execute(
+            &w.registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "person.set_birthday_reminder",
+                json!({ "id": ada, "on": false }),
+            ),
+        )
+        .expect("the refusal answers");
+    assert_eq!(refused.status, CommandStatus::Failed);
+    assert_eq!(reminder(&w), (Some(true), true, 1));
     w.ok(
         "person.set_birthday_reminder",
         json!({ "id": ada, "on": true }),

@@ -721,9 +721,6 @@ private struct PhotosLightboxInfo: View {
                 if !photo.trashLine.isEmpty {
                     Text(photo.trashLine).kitType(.meta).foregroundStyle(Surface.meta)
                 }
-                if state.hasStatus, !state.status.refused, !state.status.sentence.isEmpty {
-                    Text(state.status.sentence).kitType(.meta).foregroundStyle(Surface.meta)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, CentraidGeometry.pageMargin)

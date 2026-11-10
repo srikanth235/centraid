@@ -1,11 +1,5 @@
-//! `person.set_birthday_reminder`: a birthday's reminder is the person's own switch
-//! ([#1146](https://github.com/srikanth235/centraid/issues/1146) D9).
-//!
-//! The birthday is a column of the person, not an event, so it has no `reminders` of its own to
-//! edit (`event.edit` is how any other date's reminder is set). `person.birthday_reminder` is
-//! that column's switch: on by default, per person (a member keeps the reminders of the people
-//! they want to hear about, not all or none). The reads that list reminders and the upcoming
-//! rail respect it; the date itself stays on the sheet.
+//! `person.set_birthday_reminder` keeps the compatibility command for restoring a legacy
+//! off switch. Birthday reminders always stay on; an off request is refused before any write.
 
 use serde_json::{Value as Json, json};
 
@@ -14,6 +8,9 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::Result;
 
 fn pre_set(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if ctx.input.get("on").and_then(Json::as_bool) == Some(false) {
+        return Ok(Some("Birthday reminders stay on.".to_owned()));
+    }
     let id = ctx.required_str("id")?;
     if let Some(sentence) = refusal_unless_live_person(ctx.connection(), id)? {
         return Ok(Some(sentence));

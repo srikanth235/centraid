@@ -48,13 +48,23 @@ impl KeyCustody {
             synced: secrets.seed_synced(),
             saved: secrets.words_saved(),
             words_here: secrets.words().is_some(),
-            sentence: match (android, probe) {
-                // ANDROID SAYS THE UNCOMFORTABLE THING: Block Store hands the key
-                // back during the new-phone setup and at no other time.
-                (true, Some(_)) => words::key_saved_android(locale),
-                (false, Some(_)) if synchronizing => words::key_saved_ios(locale),
-                (false, Some(_)) => words::key_saved_ios_off(locale),
-                (_, None) => words::key_saved_unknown(locale),
+            sentence: if secrets.seed().is_none() {
+                words::key_saved_unknown(locale)
+            } else if !secrets.seed_synced() {
+                if secrets.words_saved() {
+                    crate::strings::backup::backup_key_phone_only_saved(locale)
+                } else {
+                    crate::strings::backup::backup_key_phone_only(locale)
+                }
+            } else {
+                match (android, probe) {
+                    // ANDROID SAYS THE UNCOMFORTABLE THING: Block Store hands the key
+                    // back during the new-phone setup and at no other time.
+                    (true, Some(_)) => words::key_saved_android(locale),
+                    (false, Some(_)) if synchronizing => words::key_saved_ios(locale),
+                    (false, Some(_)) => words::key_saved_ios_off(locale),
+                    (_, None) => words::key_saved_unknown(locale),
+                }
             },
             place: if !synchronizing {
                 String::new()
@@ -64,5 +74,35 @@ impl KeyCustody {
                 words::key_place_ios(locale)
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sync_capability_is_not_evidence_that_the_key_was_saved() {
+        let secrets = VaultSecrets::new();
+        let ops = VaultSecrets::remember_seed(&"a".repeat(128), false).first();
+        let answers = vec![
+            wire::SecretAnswer {
+                ok: true,
+                ..Default::default()
+            };
+            ops.len()
+        ];
+        secrets.absorb(&ops, &answers);
+        let probe = wire::SyncedSecretsStatus {
+            synchronizing: true,
+            ..Default::default()
+        };
+        let key = KeyCustody::read(Locale::En, &secrets, "ios", Some(&probe));
+        assert!(key.held && !key.synced);
+        assert_eq!(
+            key.sentence,
+            crate::strings::backup::backup_key_phone_only(Locale::En)
+        );
+        assert!(!key.place.is_empty(), "saving a copy remains available");
     }
 }

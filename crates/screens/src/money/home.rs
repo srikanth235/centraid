@@ -1252,6 +1252,7 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                 in_label: words::in_word(locale),
                 out_label: words::out_word(locale),
                 partial_label: words::partial_month(locale),
+                net_label: words::net(locale),
                 months: series
                     .months
                     .iter()
@@ -1279,6 +1280,17 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                         .join(" · "),
                         accessibility_label: [
                             fold::month_label(locale, &month.month),
+                            format!(
+                                "{} {}",
+                                words::in_word(locale),
+                                fold::text(month.incoming.as_ref())
+                            ),
+                            format!(
+                                "{} {}",
+                                words::out_word(locale),
+                                fold::text(month.outgoing.as_ref())
+                            ),
+                            format!("{} {}", words::net(locale), fold::text(month.net.as_ref())),
                             if month.partial {
                                 words::partial_month(locale)
                             } else {

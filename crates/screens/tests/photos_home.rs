@@ -1989,3 +1989,11 @@ fn closing_search_returns_to_the_library() {
     assert_eq!(r.state().destination, Dest::Library as i32);
     assert!(r.state().search.is_none());
 }
+
+#[test]
+fn closing_search_returns_to_collections_when_it_started_there() {
+    let mut r = rig_at(Dest::Collections, None);
+    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
+    r.send(H::SearchClosed(wire::PhotosSearchClosed {}));
+    assert_eq!(r.state().destination, Dest::Collections as i32);
+}

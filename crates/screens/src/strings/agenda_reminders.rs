@@ -40,6 +40,7 @@ catalog! {
     plain quick_chip_spoken_due = ("Due {when}. Saves as {title}.", "Due {when}. Saves as {title}.");
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain reminders_title = ("Reminders", "Reminders");
+    plain search_placeholder = ("Search reminders and lists", "Search reminders and lists");
     plain reads_reminders_reads = ("reminders, lists, people", "reminders, lists, people");
     plain reads_reminders_title = ("What Reminders may read", "What Reminders may read");
     plain reads_reminders_writes = ("reminders you make", "reminders you make");

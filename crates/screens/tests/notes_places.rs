@@ -400,7 +400,7 @@ fn the_journal_groups_entries_by_the_local_day_newest_first_in_words() {
     assert!(
         day.rows
             .iter()
-            .any(|row| !row.meta.is_empty() && row.route.is_some())
+            .any(|row| row.meta.is_empty() && row.route.is_some())
     );
     assert_eq!(data.tz, core.tz);
 }

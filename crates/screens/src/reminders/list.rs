@@ -284,7 +284,11 @@ impl List {
                 headline: self.empty(locale),
                 ..wire::EmptyState::default()
             }),
-            count_label: rows::count(locale, rows::root_count(&groups)),
+            count_label: if self.view == wire::TodoView::Today {
+                String::new()
+            } else {
+                rows::count(locale, rows::root_count(&groups))
+            },
             window_label: window_label(locale, board),
             can_show_more: board.truncated && self.limit < rows::MAX_WINDOW,
             groups,

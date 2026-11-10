@@ -286,13 +286,21 @@ struct MoneyHomeView: View {
                 MoneySection(title: series.heading)
                 MoneyCashflowChart(
                     months: series.months,
-                    summary: series.months.map { MoneyWords.spoken($0.accessibilityLabel, $0.net) }.joined(separator: ". ")
+                    summary: series.months.map(\.accessibilityLabel).joined(separator: ". ")
                 )
                 MoneyLegend(
                     incoming: series.inLabel,
                     outgoing: series.outLabel,
                     partial: series.partialLabel
                 )
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
+                        Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+                            .frame(width: 68, alignment: .trailing)
+                    }
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
                 // NEWEST FIRST under the chart, which runs oldest to newest.
                 ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
                     MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")

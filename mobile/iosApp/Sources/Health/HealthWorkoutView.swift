@@ -64,7 +64,7 @@ struct HealthWorkoutView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(Capsule().fill(accent.tile))
+            .background(Capsule().fill(accent.tint ?? accent.wash(dark: false)))
             .padding(.bottom, 6)
             Text(workout.title)
                 .kitType(.title)

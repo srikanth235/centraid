@@ -3,7 +3,7 @@
   "app": "chat",
   "strings": {
     "SAID_APPLIED": "Done.",
-    "SAID_CAP": "Out of steps. Ask a smaller question.",
+    "SAID_CAP": "I couldn't finish that. Try a more specific question.",
     "SAID_COUNT": "Counted {what}.",
     "SAID_DECLINE_FABRICATED_SECRET": "Chat does not invent secrets.",
     "SAID_DECLINE_NEVER_MIND": "Okay, cancelled.",
