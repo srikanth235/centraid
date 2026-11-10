@@ -557,7 +557,7 @@
     "DocVersions.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Document versions",
+      "title": "7 · Earlier versions of a document",
       "w": 390,
       "x": 2820,
       "y": 15080
@@ -565,7 +565,7 @@
     "DocVersionsDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "7 · Document versions · dark",
+      "title": "7 · Earlier versions of a document · dark",
       "w": 390,
       "x": 2820,
       "y": 15080
@@ -1165,7 +1165,7 @@
     "NoteHistory.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "6 · Note history",
+      "title": "6 · Earlier versions of a note",
       "w": 390,
       "x": 2350,
       "y": 15080
@@ -1173,7 +1173,7 @@
     "NoteHistoryDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "6 · Note history · dark",
+      "title": "6 · Earlier versions of a note · dark",
       "w": 390,
       "x": 2350,
       "y": 15080
@@ -1589,7 +1589,7 @@
     "Trash.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "4 · Trash",
+      "title": "4 · Locker trash",
       "w": 390,
       "x": 1410,
       "y": 17400
@@ -1597,7 +1597,7 @@
     "TrashDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · Trash · dark",
+      "title": "4 · Locker trash · dark",
       "w": 390,
       "x": 1410,
       "y": 17400
@@ -1713,6 +1713,406 @@
       "w": 2070,
       "x": 0,
       "y": 24960
+    },
+    "TrashNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Notes trash",
+      "w": 390,
+      "x": 0,
+      "y": 27200
+    },
+    "TrashNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Notes trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 27200
+    },
+    "TrashPeople.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · People trash, after a restore",
+      "w": 390,
+      "x": 470,
+      "y": 27200
+    },
+    "TrashPeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · People trash, after a restore · dark",
+      "w": 390,
+      "x": 470,
+      "y": 27200
+    },
+    "TrashReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Reminders trash",
+      "w": 390,
+      "x": 940,
+      "y": 27200
+    },
+    "TrashRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Reminders trash · dark",
+      "w": 390,
+      "x": 940,
+      "y": 27200
+    },
+    "TrashDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Docs trash",
+      "w": 390,
+      "x": 1410,
+      "y": 27200
+    },
+    "TrashDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Docs trash · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 27200
+    },
+    "TrashPhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Photos trash",
+      "w": 390,
+      "x": 1880,
+      "y": 27200
+    },
+    "TrashPhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Photos trash · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 27200
+    },
+    "TrashCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Calendar trash",
+      "w": 390,
+      "x": 2350,
+      "y": 27200
+    },
+    "TrashCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Calendar trash · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 27200
+    },
+    "TrashHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Health trash",
+      "w": 390,
+      "x": 2820,
+      "y": 27200
+    },
+    "TrashHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Health trash · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 27200
+    },
+    "TrashMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Money trash",
+      "w": 390,
+      "x": 3290,
+      "y": 27200
+    },
+    "TrashMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Money trash · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 27200
+    },
+    "TrashEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Empty trash, confirmed",
+      "w": 390,
+      "x": 3760,
+      "y": 27200
+    },
+    "TrashEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Empty trash, confirmed · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 27200
+    },
+    "MoreCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar More, with Trash",
+      "w": 390,
+      "x": 0,
+      "y": 28360
+    },
+    "MoreCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar More, with Trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 28360
+    },
+    "MoreHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Health More, with Trash",
+      "w": 390,
+      "x": 470,
+      "y": 28360
+    },
+    "MoreHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Health More, with Trash · dark",
+      "w": 390,
+      "x": 470,
+      "y": 28360
+    },
+    "MoreMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Money More, with Trash",
+      "w": 390,
+      "x": 940,
+      "y": 28360
+    },
+    "MoreMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Money More, with Trash · dark",
+      "w": 390,
+      "x": 940,
+      "y": 28360
+    },
+    "UndoNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Notes, after a delete",
+      "w": 390,
+      "x": 1410,
+      "y": 28360
+    },
+    "UndoNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Notes, after a delete · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 28360
+    },
+    "UndoPeople.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · People, after a delete",
+      "w": 390,
+      "x": 1880,
+      "y": 28360
+    },
+    "UndoPeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · People, after a delete · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 28360
+    },
+    "UndoHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health Workouts, after a delete",
+      "w": 390,
+      "x": 2350,
+      "y": 28360
+    },
+    "UndoHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health Workouts, after a delete · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 28360
+    },
+    "UndoMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Money, after a delete",
+      "w": 390,
+      "x": 2820,
+      "y": 28360
+    },
+    "UndoMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Money, after a delete · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 28360
+    },
+    "UndoPhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Photos, after a delete",
+      "w": 390,
+      "x": 3290,
+      "y": 28360
+    },
+    "UndoPhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Photos, after a delete · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 28360
+    },
+    "MoneyTransactionDetail.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · A transaction, with Move to trash",
+      "w": 390,
+      "x": 0,
+      "y": 29520
+    },
+    "MoneyTransactionDetailDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · A transaction, with Move to trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 29520
+    },
+    "VersionsPerson.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Earlier versions of a person",
+      "w": 390,
+      "x": 470,
+      "y": 29520
+    },
+    "VersionsPersonDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Earlier versions of a person · dark",
+      "w": 390,
+      "x": 470,
+      "y": 29520
+    },
+    "VersionsEvent.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Earlier versions of an event",
+      "w": 390,
+      "x": 940,
+      "y": 29520
+    },
+    "VersionsEventDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Earlier versions of an event · dark",
+      "w": 390,
+      "x": 940,
+      "y": 29520
+    },
+    "VersionsTask.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Earlier versions of a task",
+      "w": 390,
+      "x": 1410,
+      "y": 29520
+    },
+    "VersionsTaskDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Earlier versions of a task · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 29520
+    },
+    "VersionsTransaction.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Earlier versions of a transaction",
+      "w": 390,
+      "x": 1880,
+      "y": 29520
+    },
+    "VersionsTransactionDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Earlier versions of a transaction · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 29520
+    },
+    "VersionsPhoto.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Earlier versions of a photo",
+      "w": 390,
+      "x": 2350,
+      "y": 29520
+    },
+    "VersionsPhotoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Earlier versions of a photo · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 29520
+    },
+    "VersionsWorkout.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Earlier versions of a workout",
+      "w": 390,
+      "x": 2820,
+      "y": 29520
+    },
+    "VersionsWorkoutDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Earlier versions of a workout · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 29520
+    },
+    "VersionsLocker.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Earlier versions of a Locker item",
+      "w": 390,
+      "x": 3290,
+      "y": 29520
+    },
+    "VersionsLockerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Earlier versions of a Locker item · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 29520
     }
   },
   "createdOnFiles": {
@@ -1746,6 +2146,9 @@
     "light18",
     "light19",
     "light20",
+    "light21",
+    "light22",
+    "light23",
     "dark0",
     "dark1",
     "dark2",
@@ -1766,7 +2169,10 @@
     "dark17",
     "dark18",
     "dark19",
-    "dark20"
+    "dark20",
+    "dark21",
+    "dark22",
+    "dark23"
   ],
   "notes": {
     "dark0": {
@@ -2146,6 +2552,60 @@
       "w": 240,
       "x": 0,
       "y": 23000
+    },
+    "light21": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: Trash, Empty trash and More in every app",
+      "w": 240,
+      "x": 0,
+      "y": 27000
+    },
+    "dark21": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: Trash, Empty trash and More in every app",
+      "w": 240,
+      "x": 0,
+      "y": 27000
+    },
+    "light22": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: where Trash lives, and Undo after a delete",
+      "w": 240,
+      "x": 0,
+      "y": 28160
+    },
+    "dark22": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: where Trash lives, and Undo after a delete",
+      "w": 240,
+      "x": 0,
+      "y": 28160
+    },
+    "light23": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: earlier versions of every record",
+      "w": 240,
+      "x": 0,
+      "y": 29320
+    },
+    "dark23": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: earlier versions of every record",
+      "w": 240,
+      "x": 0,
+      "y": 29320
     }
   },
   "order": [
@@ -2362,7 +2822,32 @@
     "PeopleMoreContacts.dc.html",
     "PeopleImport.dc.html",
     "HealthSearch.dc.html",
-    "PersonLinks.dc.html"
+    "PersonLinks.dc.html",
+    "TrashNotes.dc.html",
+    "TrashPeople.dc.html",
+    "TrashReminders.dc.html",
+    "TrashDocs.dc.html",
+    "TrashPhotos.dc.html",
+    "TrashCalendar.dc.html",
+    "TrashHealth.dc.html",
+    "TrashMoney.dc.html",
+    "TrashEmpty.dc.html",
+    "MoreCalendar.dc.html",
+    "MoreHealth.dc.html",
+    "MoreMoney.dc.html",
+    "UndoNotes.dc.html",
+    "UndoPeople.dc.html",
+    "UndoHealth.dc.html",
+    "UndoMoney.dc.html",
+    "UndoPhotos.dc.html",
+    "MoneyTransactionDetail.dc.html",
+    "VersionsPerson.dc.html",
+    "VersionsEvent.dc.html",
+    "VersionsTask.dc.html",
+    "VersionsTransaction.dc.html",
+    "VersionsPhoto.dc.html",
+    "VersionsWorkout.dc.html",
+    "VersionsLocker.dc.html"
   ],
   "pages": [
     {
