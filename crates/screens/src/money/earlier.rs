@@ -23,6 +23,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     denied: |locale, _| fold::denied(locale),
     line,
     know: Some(know),
+    gate: None,
 };
 
 #[must_use]

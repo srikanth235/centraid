@@ -11,6 +11,7 @@
 //! | Every secret, in a file | [`EXPORT`] | [`transfer`] |
 //! | A password-manager file, reviewed and sealed in | [`IMPORT`] | [`transfer`] |
 //! | The trash | [`TRASH`] | [`trash`] |
+//! | Earlier versions of an item's plain fields | [`EARLIER`] | [`earlier`] |
 //! | The wall as a page (chat opens it) | [`LOCK`] | [`lock`] |
 //!
 //! **The list is metadata; the secret is not.** A sealed value reaches a view
@@ -26,6 +27,7 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
 
+pub mod earlier;
 pub mod editor;
 pub mod generator;
 mod handoff;
@@ -44,6 +46,8 @@ pub const EDITOR: &str = "locker.editor";
 pub const EXPORT: &str = "locker.export";
 pub const IMPORT: &str = "locker.import";
 pub const TRASH: &str = "locker.trash";
+/// The earlier versions of an item's plain fields (#1185).
+pub const EARLIER: &str = "locker.earlier";
 pub const LOCK: &str = "locker.lock";
 
 /// The tab Locker's home is the root of.
@@ -59,6 +63,7 @@ pub fn registry() -> Registry {
         .with(EXPORT, transfer::build_export)
         .with(IMPORT, transfer::build_import)
         .with(TRASH, trash::build)
+        .with(EARLIER, earlier::build)
         .with(LOCK, lock::build)
 }
 

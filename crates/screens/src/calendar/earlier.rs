@@ -30,6 +30,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     denied,
     line,
     know: Some(know),
+    gate: None,
 };
 
 #[must_use]

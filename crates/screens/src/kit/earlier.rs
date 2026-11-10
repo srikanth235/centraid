@@ -78,6 +78,10 @@ pub struct EarlierSpec {
     /// Reads the names a line needs for the ids a record's versions hold (a guest's, a category's)
     /// as the record's page names them; `None` where the fields carry their own words.
     pub know: Option<fn(&Ctx, &str) -> Names>,
+    /// A wall the app's records sit behind (Locker's lock): `Some(denial)` while it is shut. The
+    /// screen then reads nothing, draws the app's `denied` gate and restores nothing; `None` where
+    /// the app has no wall.
+    pub gate: Option<fn(&Ctx) -> Option<wire::AppQueryDenial>>,
 }
 
 /// The registry factory for `spec`'s screen.
@@ -279,7 +283,20 @@ impl Earlier {
         }
     }
 
+    /// The wall's refusal while the app's records are behind one that is shut.
+    fn walled(&self, ctx: &Ctx) -> Option<wire::AppQueryDenial> {
+        self.spec.gate.and_then(|gate| gate(ctx))
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
+        // A shut wall is a wipe: nothing read before it stays, and nothing is read behind it.
+        if let Some(denial) = self.walled(ctx) {
+            self.names = Names::new();
+            self.status = None;
+            self.undo = false;
+            self.phase = Phase::Denied(denial);
+            return;
+        }
         if let Some(know) = self.spec.know {
             self.names = know(ctx, &self.entity_id);
         }
@@ -299,6 +316,10 @@ impl Earlier {
             return;
         };
         let next = *next;
+        if self.walled(ctx).is_some() {
+            self.reload(ctx);
+            return;
+        }
         match self.page(ctx, Some(next)) {
             Reading::Data((more, after)) => {
                 if let Phase::Ready { versions, next } = &mut self.phase {
@@ -337,6 +358,10 @@ impl Earlier {
 
     /// A restore asks nothing, and says what it did with Undo.
     fn restore(&mut self, ctx: &Ctx, seq: i64) {
+        if self.walled(ctx).is_some() {
+            self.reload(ctx);
+            return;
+        }
         if !self.shown(seq) || seq <= 0 {
             return;
         }
@@ -376,6 +401,10 @@ impl Earlier {
 
     /// Undo of a restore: the record goes back to what the restore replaced.
     fn undone(&mut self, ctx: &Ctx) {
+        if self.walled(ctx).is_some() {
+            self.reload(ctx);
+            return;
+        }
         if !std::mem::take(&mut self.undo) {
             return;
         }

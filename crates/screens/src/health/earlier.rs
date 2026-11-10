@@ -22,6 +22,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     denied,
     line,
     know: None,
+    gate: None,
 };
 
 #[must_use]

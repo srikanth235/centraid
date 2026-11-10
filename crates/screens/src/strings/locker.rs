@@ -133,6 +133,8 @@ catalog! {
     plain field_title = ("Title", "Title");
     plain field_url = ("Address", "Address");
     plain field_username = ("Username", "Username");
+    plain earlier_field = ("{label}: {value}", "{label}: {value}");
+    plain earlier_cleared = ("{label}: none", "{label}: none");
     plain field_value = ("Value", "Value");
     plain filter_all = ("All", "All");
     plain filter_archived = ("Archived", "Archived");

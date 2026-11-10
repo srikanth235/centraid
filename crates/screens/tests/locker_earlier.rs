@@ -1,0 +1,276 @@
+//! EARLIER VERSIONS of a Locker item (#1185), for what the vault keeps: the plain fields. The
+//! vault keeps NO history of a sealed value (password, seed, card number, CVV, content, a sealed
+//! custom field, a passkey), so a change to one alone makes no version and no line, and nothing
+//! sealed is ever worded. The entry and the screen are behind the Locker's wall. Every test goes
+//! through `Driver`.
+
+mod locker_support;
+
+use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::{act, load};
+use centraid_screens::locker;
+use centraid_screens::testing::Driver;
+use locker_support::*;
+use wire::screen_event::Kind as E;
+
+fn opened() -> (Driver, u64) {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    d.start();
+    d.answer_effect(passed(wire::Biometry::Face));
+    let id = push_item(&mut d, "i1");
+    (d, id)
+}
+
+/// What an edit sends: the vault REPLACES a type's fields from the draft, so the draft is whole
+/// and a sealed value being kept goes as the placeholder.
+#[derive(Clone)]
+struct Draft {
+    title: String,
+    username: String,
+    url: String,
+    notes: String,
+    password: String,
+}
+
+impl Draft {
+    fn new() -> Self {
+        Self {
+            title: "Bank".to_owned(),
+            username: "maya@example.com".to_owned(),
+            url: "example.com".to_owned(),
+            notes: String::new(),
+            password: "«sealed»".to_owned(),
+        }
+    }
+
+    fn save(&self, d: &Driver) {
+        let text = |value: &str| (!value.is_empty()).then(|| value.to_owned());
+        arrange(
+            d,
+            act::locker::EditItem {
+                item_id: "i1".to_owned(),
+                title: Some(self.title.clone()),
+                username: text(&self.username),
+                url: text(&self.url),
+                notes: text(&self.notes),
+                password: Some(self.password.clone()),
+                ..act::locker::EditItem::default()
+            },
+        );
+    }
+}
+
+/// The username moved twice: two earlier versions.
+fn renamed(d: &Driver) -> Draft {
+    let mut draft = Draft::new();
+    draft.username = "maya@work.example".to_owned();
+    draft.save(d);
+    draft.username = "maya@home.example".to_owned();
+    draft.save(d);
+    draft
+}
+
+fn entry(d: &Driver, id: u64) -> Option<wire::EarlierEntry> {
+    item_data(d, id).earlier
+}
+
+fn earlier_view(v: &wire::ViewState) -> &wire::EarlierView {
+    match &v.kind {
+        Some(wire::view_state::Kind::Earlier(view)) => view,
+        other => panic!("not the earlier-versions screen: {other:?}"),
+    }
+}
+
+fn rows(v: &wire::ViewState) -> &[wire::EarlierRow] {
+    match &earlier_view(v).content {
+        Some(wire::earlier_view::Content::Data(data)) => &data.rows,
+        other => panic!("no data: {other:?}"),
+    }
+}
+
+fn open_earlier(d: &mut Driver, item: u64) -> u64 {
+    // The page reads the count with itself: a change since is read on its next load.
+    d.send(item, E::DataChanged(wire::DataChanged::default()));
+    let entry = entry(d, item).expect("the entry");
+    d.push(locker::TAB, entry.route.expect("a route"))
+}
+
+fn lines(d: &Driver, at: u64) -> Vec<String> {
+    rows(d.view(at)).iter().map(|r| r.value.clone()).collect()
+}
+
+fn send(d: &mut Driver, i: u64, kind: wire::earlier_event::Kind) {
+    d.send(i, E::Earlier(wire::EarlierEvent { kind: Some(kind) }));
+}
+
+fn username_now(d: &Driver) -> String {
+    d.with_ctx(|ctx| {
+        let answer = ctx
+            .load(
+                load::locker::Item {
+                    item_id: "i1".to_owned(),
+                }
+                .into(),
+            )
+            .expect("item");
+        match answer.answer.and_then(|a| a.answer) {
+            Some(wire::app_query_response::Answer::LockerItem(found)) => {
+                found.item.expect("an item").username
+            }
+            other => panic!("item answered {other:?}"),
+        }
+    })
+}
+
+#[test]
+fn plain_field_edits_make_versions_and_the_entry_counts_them() {
+    let (mut d, id) = opened();
+    assert!(entry(&d, id).is_none(), "never edited: no entry");
+    renamed(&d);
+    d.send(id, E::DataChanged(wire::DataChanged::default()));
+    let entry = entry(&d, id).expect("the entry");
+    assert_eq!(entry.label, "Earlier versions");
+    assert_eq!(entry.count_label, "2");
+    let route = entry.route.expect("a route");
+    assert_eq!(route.screen, locker::EARLIER);
+    let Some(wire::route::Args::Earlier(args)) = route.args else {
+        panic!("the shared route");
+    };
+    assert_eq!(args.entity_id, "i1");
+    assert_eq!(args.back_label, "Bank");
+
+    let at = open_earlier(&mut d, id);
+    assert_eq!(
+        lines(&d, at),
+        [
+            "Username: maya@home.example",
+            "Username: maya@work.example",
+            "Username: maya@example.com"
+        ]
+    );
+}
+
+#[test]
+fn the_name_the_address_and_the_notes_read_in_the_pages_own_words() {
+    let (mut d, id) = opened();
+    let mut draft = Draft::new();
+    draft.title = "Bank of Maya".to_owned();
+    draft.url = "bank.example".to_owned();
+    draft.save(&d);
+    draft.notes = "Ask for Priya.\nSecond line".to_owned();
+    draft.save(&d);
+    draft.title = "Bank (old)".to_owned();
+    draft.save(&d);
+    let at = open_earlier(&mut d, id);
+    let listed = lines(&d, at);
+    assert_eq!(listed[0], "Title: Bank (old)", "{listed:?}");
+    assert_eq!(listed[1], "Title: Bank of Maya", "{listed:?}");
+    assert_eq!(listed[2], "Notes: none", "{listed:?}");
+    assert_eq!(
+        listed[3], "Title: Bank · Address: example.com",
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn restore_works_for_a_plain_field_asks_nothing_and_undo_puts_it_back() {
+    let (mut d, id) = opened();
+    renamed(&d);
+    let at = open_earlier(&mut d, id);
+    let oldest = rows(d.view(at)).last().expect("a row").seq;
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::Restore(wire::earlier_event::RestoreTapped { seq: oldest }),
+    );
+    assert_eq!(username_now(&d), "maya@example.com");
+    let status = earlier_view(d.view(at)).status.clone().expect("a status");
+    assert_eq!(status.sentence, "Earlier version restored");
+    assert_eq!(status.action_label, "Undo");
+
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::StatusActed(wire::earlier_event::StatusActed {}),
+    );
+    assert_eq!(username_now(&d), "maya@home.example");
+}
+
+#[test]
+fn a_password_change_makes_no_version_and_no_line() {
+    let (mut d, id) = opened();
+    let mut draft = Draft::new();
+    draft.password = "battery staple".to_owned();
+    draft.save(&d);
+    draft.password = "tr0ub4dor three".to_owned();
+    draft.save(&d);
+    d.send(id, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        entry(&d, id).is_none(),
+        "the vault keeps no history of a sealed value: nothing to enter"
+    );
+
+    // A change to a plain field and the password together is a version of the plain field only,
+    // and no sealed value reaches any line, label or spoken name.
+    draft.username = "maya@work.example".to_owned();
+    draft.password = "a fourth secret".to_owned();
+    draft.save(&d);
+    let at = open_earlier(&mut d, id);
+    let everything = format!("{:?}", d.view(at));
+    for secret in [
+        "correct horse",
+        "battery staple",
+        "tr0ub4dor three",
+        "a fourth secret",
+    ] {
+        assert!(!everything.contains(secret), "{secret} reached the screen");
+    }
+    assert_eq!(
+        lines(&d, at),
+        ["Username: maya@work.example", "Username: maya@example.com"]
+    );
+}
+
+#[test]
+fn locked_there_is_no_entry_and_the_route_refuses_to_read_or_restore() {
+    let (mut d, id) = opened();
+    renamed(&d);
+    let at = open_earlier(&mut d, id);
+    let route = entry(&d, id).expect("the entry").route.expect("a route");
+    assert_eq!(rows(d.view(at)).len(), 3);
+
+    // The phone leaves the foreground: a relock is a wipe, on the item and on this screen.
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(
+        item(&d, id).content.is_none(),
+        "the item page is blank behind its wall"
+    );
+    match &earlier_view(d.view(at)).content {
+        Some(wire::earlier_view::Content::Denied(gate)) => {
+            assert_eq!(gate.title, "Locker is locked.");
+        }
+        other => panic!("a shut wall draws the gate: {other:?}"),
+    }
+    // A restore asked of the shut screen writes nothing.
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::Restore(wire::earlier_event::RestoreTapped { seq: 1 }),
+    );
+    // A fresh push of the route is the same gate.
+    let again = d.push(locker::TAB, route);
+    assert!(matches!(
+        earlier_view(d.view(again)).content,
+        Some(wire::earlier_view::Content::Denied(_))
+    ));
+    unlock_core(&d);
+    assert_eq!(
+        username_now(&d),
+        "maya@home.example",
+        "nothing was restored"
+    );
+}

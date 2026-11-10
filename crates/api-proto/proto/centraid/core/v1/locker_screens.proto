@@ -520,6 +520,9 @@ message LockerItemData {
   // "Linked to" (#1173): the account, place and people the item is linked to, behind the wall like
   // everything here. A link carries no sealed value.
   LinkSection links = 21;
+  // "Earlier versions   2 ›" at the foot of the item (#1185); absent when there are none. Only
+  // the plain fields keep earlier values: a sealed one never does.
+  optional EarlierEntry earlier = 22;
 }
 
 // ONE CUSTOM FIELD, ADDED OR EDITED. A SEALED field's value is typed into a

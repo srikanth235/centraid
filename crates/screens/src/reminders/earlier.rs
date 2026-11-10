@@ -28,6 +28,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     denied: list::denied,
     line,
     know: Some(know),
+    gate: None,
 };
 
 #[must_use]

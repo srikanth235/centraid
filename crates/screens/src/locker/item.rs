@@ -36,6 +36,7 @@ use super::wall::{CLIPBOARD_LIFE, Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil;
+use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::secret::Secrets;
@@ -117,6 +118,8 @@ struct Item {
     links: Links,
     /// The vault's owner, read once an item links to a person, so the row can say "You".
     owner_id: Option<String>,
+    /// The entry to the item's earlier versions (#1185), read only while the Locker is open.
+    earlier: earlier::Foot,
 }
 
 impl Item {
@@ -136,6 +139,7 @@ impl Item {
             passkey_name: None,
             links: Links::new(&[Kind::Account, Kind::Place, Kind::Person]),
             owner_id: None,
+            earlier: earlier::Foot::default(),
         }
     }
 
@@ -169,6 +173,12 @@ impl Item {
                 .find(|person| person.is_owner)
                 .map(|person| person.id.clone());
         }
+        self.earlier = match &item {
+            Reading::Data((Some(found), _)) => {
+                earlier::foot(ctx, super::EARLIER, &self.route.item_id, &found.title)
+            }
+            _ => earlier::Foot::default(),
+        };
         self.loaded = match item {
             Reading::Data((item, today)) => Phase::Ready(Loaded { item, today }),
             Reading::Denied(denial) => Phase::Denied(denial),
@@ -232,6 +242,7 @@ impl Item {
         self.passkey_name = None;
         self.links.close();
         self.owner_id = None;
+        self.earlier = earlier::Foot::default();
         ctx.cancel_timer(TICK);
         let mut effects = self.secrets.hide_all(ctx);
         effects.extend(self.secrets.clear_clip(ctx));
@@ -1053,6 +1064,7 @@ impl Item {
         };
         wire::LockerItemData {
             links: Some(self.link_section(locale, item)),
+            earlier: self.earlier.entry.clone(),
             title: item.title.clone(),
             type_chip: kind.chip(locale),
             hero_initial: types::initial(&item.title),
@@ -1832,14 +1844,18 @@ impl Screen for Item {
                 wire::locker_item_state::Content::Data(Box::new(self.data(locale, loaded)))
             }
         });
-        let status = self.status.clone().map(|mut status| {
-            if status.action_label.is_empty() || self.undo.is_some() {
-                status
-            } else {
-                status.action_label.clear();
-                status
-            }
-        });
+        let status = self
+            .status
+            .clone()
+            .map(|mut status| {
+                if status.action_label.is_empty() || self.undo.is_some() {
+                    status
+                } else {
+                    status.action_label.clear();
+                    status
+                }
+            })
+            .or_else(|| self.earlier.status(locale));
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerItem(Box::new(
                 wire::LockerItemState {

@@ -50,6 +50,39 @@ pub(super) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
+/// The code a closed Locker's refusal carries.
+pub(super) const LOCKED: &str = "locker-locked";
+
+/// The refusal a page behind the wall gets while the session is closed: `None` once it is open.
+/// A title or an earlier value is inside Locker, so nothing of it is read before the member opens
+/// it (the core's metadata list is plaintext by design; this wall is the screen's).
+pub(super) fn closed(ctx: &Ctx) -> Option<wire::AppQueryDenial> {
+    let open = ctx
+        .locker(&wire::LockerSessionRequest {
+            step: Some(wire::locker_session_request::Step::State(
+                wire::LockerStateAsk::default(),
+            )),
+        })
+        .is_ok_and(|answer| answer.state == wire::LockerSessionState::Unlocked as i32);
+    (!open).then(|| wire::AppQueryDenial {
+        code: Some(LOCKED.to_owned()),
+        message: Some(words::locked_sentence(ctx.locale())),
+        revoked_at: None,
+    })
+}
+
+/// The gate drawn when the Locker is closed or the vault will not let it read.
+pub(super) fn gate(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
+    if denial.code.as_deref() == Some(LOCKED) {
+        return wire::Denied {
+            title: words::locked_sentence(locale),
+            body: words::lock_body_lead(locale),
+            receipt: String::new(),
+        };
+    }
+    denied(locale, denial)
+}
+
 /// A one-line status.
 pub(super) fn status(sentence: String) -> Option<wire::StatusLine> {
     Some(wire::StatusLine {

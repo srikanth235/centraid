@@ -172,10 +172,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "crates/screens/src/health/earlier.rs",
     ),
-    owed(
+    kept(
         "locker",
         Promise::History,
-        "the item page has no Earlier versions entry (#1185)",
+        "crates/screens/src/locker/earlier.rs",
     ),
     kept(
         "money",
