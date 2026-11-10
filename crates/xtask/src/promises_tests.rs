@@ -365,3 +365,118 @@ fn only_photos_is_declared_a_grid_and_its_shelf_is_a_real_file() {
     let apps: Vec<&str> = GRID_TRASH.iter().map(|grid| grid.app).collect();
     assert_eq!(apps, ["photos"]);
 }
+
+// ---------------------------------------------------------------------------
+// Undo
+// ---------------------------------------------------------------------------
+
+const TABLE: &str = r#"const NOTES: &[Row] = &[
+    ("flag-note", "unflag-note", Input::Same),
+    ("unflag-note", "flag-note", Input::Same),
+    ("delete-note", "restore-note", Input::Id),
+];
+const PEOPLE: &[Row] = &[
+    ("star-person", "unstar-person", Input::Same),
+];
+"#;
+
+fn undo_manifest(actions: &[(&str, Option<&str>, bool)]) -> String {
+    let rows: Vec<String> = actions
+        .iter()
+        .map(|(name, inverse, confirmed)| {
+            let inverse = inverse.map_or("null".to_owned(), |i| format!("\"{i}\""));
+            let confirmation = if *confirmed { "required" } else { "none" };
+            format!(
+                r#"{{"name":"{name}","inverse":{inverse},"confirmation":"{confirmation}","command":"x.y"}}"#
+            )
+        })
+        .collect();
+    format!(r#"{{"actions":[{}]}}"#, rows.join(","))
+}
+
+fn undo_tree(name: &str, actions: &[(&str, Option<&str>, bool)]) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/core/src/act/inverse.rs", TABLE);
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        &undo_manifest(actions),
+    );
+    root
+}
+
+#[test]
+fn undo_with_every_action_classified_and_one_list_is_clean() {
+    let root = undo_tree(
+        "undo-clean",
+        &[
+            ("flag-note", Some("unflag-note"), false),
+            ("unflag-note", Some("flag-note"), false),
+            ("delete-note", Some("restore-note"), false),
+            ("purge-note", None, true),
+        ],
+    );
+    // `restore-note` is not an action of this fixture: the table names it as a row's inverse only.
+    assert_eq!(undo_missing(&root, "notes").join("\n"), "");
+}
+
+#[test]
+fn an_action_that_is_neither_undoable_nor_confirmed_is_named() {
+    let root = undo_tree(
+        "undo-unclassified",
+        &[
+            ("flag-note", Some("unflag-note"), false),
+            ("unflag-note", Some("flag-note"), false),
+            ("delete-note", Some("restore-note"), false),
+            ("rename-note", None, false),
+        ],
+    );
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(gaps.contains("1 of 4 actions unclassified (A), 0 list mismatches (B)"));
+    assert!(gaps.contains("rename-note: (A) has no inverse"));
+}
+
+#[test]
+fn a_confirmed_action_with_an_inverse_is_fine() {
+    let root = undo_tree(
+        "undo-both",
+        &[
+            ("flag-note", Some("unflag-note"), true),
+            ("unflag-note", Some("flag-note"), false),
+            ("delete-note", Some("restore-note"), false),
+        ],
+    );
+    assert_eq!(undo_missing(&root, "notes").join("\n"), "");
+}
+
+#[test]
+fn a_manifest_and_a_table_that_disagree_are_named_both_ways() {
+    let root = undo_tree(
+        "undo-disagree",
+        &[
+            // declared in the manifest, no table row
+            ("edit-note", Some("edit-note"), false),
+            // a row whose manifest says something else
+            ("flag-note", Some("delete-note"), false),
+            // a row whose manifest declares none
+            ("unflag-note", None, true),
+            ("delete-note", Some("restore-note"), false),
+        ],
+    );
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(gaps.contains(
+        "edit-note: (B) the manifest declares inverse `edit-note`, the table has no row"
+    ));
+    assert!(gaps.contains("flag-note: (B) the table reverses it with `unflag-note`, the manifest declares `delete-note`"));
+    assert!(gaps.contains(
+        "unflag-note: (B) the table reverses it with `flag-note`, the manifest declares no inverse"
+    ));
+    assert!(gaps.contains("edit-note: (A)"));
+}
+
+#[test]
+fn a_table_row_with_no_action_is_named() {
+    let root = undo_tree("undo-orphan", &[("flag-note", Some("unflag-note"), false)]);
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(gaps.contains("delete-note: (B) a row of the table, but no such action"));
+}

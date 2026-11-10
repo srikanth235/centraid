@@ -29,7 +29,7 @@
 //! Like [`crate::rules`] these are file walks and string scans, not parse trees,
 //! and every checker has a fixture that must be caught (`promises_tests`).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -54,15 +54,19 @@ pub enum Promise {
     /// Every item moves to trash, restores, and deletes forever; every trash
     /// empties.
     Trash,
+    /// Every action can be taken back from the status line, or is confirmed first because it
+    /// cannot be; the manifests and the core's inverse table say one thing.
+    Undo,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 1] = [Promise::Trash];
+    pub const ALL: [Promise; 2] = [Promise::Trash, Promise::Undo];
 
     fn name(self) -> &'static str {
         match self {
             Promise::Trash => "Trash",
+            Promise::Undo => "Undo",
         }
     }
 }
@@ -93,10 +97,6 @@ const fn kept(app: &'static str, promise: Promise, proof: &'static str) -> Row {
     }
 }
 
-#[expect(
-    dead_code,
-    reason = "no promise is owed now (#1185 closed Trash everywhere); the ratchet stays for the next one, and this expectation fails the build the day a row is Owed again, so it is removed with it"
-)]
 const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
     Row {
         app,
@@ -141,7 +141,19 @@ pub const REGISTER: &[Row] = &[
         Promise::Trash,
         "crates/screens/src/reminders/trash.rs",
     ),
+    // Undo (#1185, Phase 1): the checker's gaps are the adopters' work list.
+    owed("calendar", Promise::Undo, UNDO_OWED),
+    owed("docs", Promise::Undo, UNDO_OWED),
+    owed("health", Promise::Undo, UNDO_OWED),
+    owed("locker", Promise::Undo, UNDO_OWED),
+    owed("money", Promise::Undo, UNDO_OWED),
+    owed("notes", Promise::Undo, UNDO_OWED),
+    owed("people", Promise::Undo, UNDO_OWED),
+    owed("photos", Promise::Undo, UNDO_OWED),
+    owed("reminders", Promise::Undo, UNDO_OWED),
 ];
+
+const UNDO_OWED: &str = "actions neither in the core's inverse table nor confirmed, or the manifest and the table disagree (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -226,6 +238,7 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
 pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
     match promise {
         Promise::Trash => trash_missing(root, app),
+        Promise::Undo => undo_missing(root, app),
     }
 }
 
@@ -514,6 +527,144 @@ fn kit_trash_missing(root: &Path, app: &str) -> Vec<String> {
             }
         }
     }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Undo
+// ---------------------------------------------------------------------------
+
+/// The core's inverse table (`act/inverse.rs`), the one list a status-line Undo reads.
+const INVERSE_TABLE: &str = "crates/core/src/act/inverse.rs";
+
+/// One manifest action, as far as Undo is concerned.
+struct UndoAction {
+    name: String,
+    /// The inverse the manifest declares (`"inverse"`; chat's undo reads it).
+    inverse: Option<String>,
+    /// `"confirmation": "required"`: the member is asked first.
+    confirmed: bool,
+}
+
+/// Every action of the app's manifest. Every one is a write: the manifest has no read-only action
+/// (reads are `queries`), and `inverse` is a mandatory field of every action, so no action is
+/// exempt by name or by verb.
+fn undo_actions(root: &Path, app: &str) -> Vec<UndoAction> {
+    let path = root.join(format!("crates/apps/{app}/manifest.json"));
+    let Ok(text) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    value
+        .get("actions")
+        .and_then(|actions| actions.as_array())
+        .map(|actions| {
+            actions
+                .iter()
+                .filter_map(|action| {
+                    Some(UndoAction {
+                        name: action.get("name")?.as_str()?.to_owned(),
+                        inverse: action
+                            .get("inverse")
+                            .and_then(|inverse| inverse.as_str())
+                            .map(str::to_owned),
+                        confirmed: action.get("confirmation").and_then(|c| c.as_str())
+                            == Some("required"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `action -> inverse` for `app`, read from the `const <APP>: &[Row]` block of the core's table.
+/// `None` when the file or the block is missing (an app with no row has no inverse at all).
+fn core_inverses(root: &Path, app: &str) -> Option<BTreeMap<String, String>> {
+    let text = live_source(&root.join(INVERSE_TABLE))?;
+    let head = format!("const {}: &[Row]", app.to_uppercase());
+    let block = text.split(&head).nth(1)?.split("];").next()?;
+    let quoted = |part: &str| {
+        let part = part.trim().strip_prefix('"')?;
+        Some(part[..part.find('"')?].to_owned())
+    };
+    Some(
+        block
+            .lines()
+            .filter_map(|line| {
+                let row = line.trim().strip_prefix('(')?;
+                let mut parts = row.split(',');
+                Some((quoted(parts.next()?)?, quoted(parts.next()?)?))
+            })
+            .collect(),
+    )
+}
+
+/// Undo is kept when, for `app`, both hold (each gap is `<action>: (A|B) what is missing`):
+///
+/// A. every manifest action is classified: it has a row in the core's inverse table
+///    ([`INVERSE_TABLE`]), or it is `confirmed` in the manifest (irreversible, asked first). An
+///    action that is both is fine; one that is neither is a gap.
+/// B. the manifest and the table are one list: every inverse the manifest declares is the row the
+///    table holds for that action, and every row of the table is the inverse its manifest names.
+///
+/// Not checked, and why: which screens offer the status-line Undo after an inverse-able action.
+/// A screen sets the line far from the call (a kit helper, a `StatusActed` event, a closure in a
+/// `TrashSpec`, `settled.inverse` shared between Reminders and Calendar), so a static scan would
+/// guess; nothing is printed rather than a guess.
+fn undo_missing(root: &Path, app: &str) -> Vec<String> {
+    let actions = undo_actions(root, app);
+    if actions.is_empty() {
+        return vec![format!("crates/apps/{app}/manifest.json could not be read")];
+    }
+    let Some(table) = core_inverses(root, app) else {
+        return vec![format!(
+            "{INVERSE_TABLE} has no `{}` table",
+            app.to_uppercase()
+        )];
+    };
+    let mut unclassified = Vec::new();
+    let mut mismatched = Vec::new();
+    for action in &actions {
+        let name = &action.name;
+        let row = table.get(name);
+        if row.is_none() && !action.confirmed {
+            unclassified.push(format!(
+                "{name}: (A) has no inverse in {INVERSE_TABLE} and is not `confirmed` in the manifest"
+            ));
+        }
+        match (row, &action.inverse) {
+            (Some(row), Some(declared)) if row != declared => mismatched.push(format!(
+                "{name}: (B) the table reverses it with `{row}`, the manifest declares `{declared}`"
+            )),
+            (Some(row), None) => mismatched.push(format!(
+                "{name}: (B) the table reverses it with `{row}`, the manifest declares no inverse"
+            )),
+            (None, Some(declared)) => mismatched.push(format!(
+                "{name}: (B) the manifest declares inverse `{declared}`, the table has no row"
+            )),
+            _ => {}
+        }
+    }
+    for name in table.keys() {
+        if !actions.iter().any(|action| &action.name == name) {
+            mismatched.push(format!(
+                "{name}: (B) a row of the table, but no such action in the manifest"
+            ));
+        }
+    }
+    if unclassified.is_empty() && mismatched.is_empty() {
+        return Vec::new();
+    }
+    let mut gaps = vec![format!(
+        "summary: {} of {} actions unclassified (A), {} list mismatches (B)",
+        unclassified.len(),
+        actions.len(),
+        mismatched.len()
+    )];
+    gaps.extend(unclassified);
+    gaps.extend(mismatched);
     gaps
 }
 
