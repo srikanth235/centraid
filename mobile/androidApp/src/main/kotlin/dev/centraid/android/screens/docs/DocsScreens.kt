@@ -73,6 +73,7 @@ import centraid.core.v1.DocsVersionsEvent
 import centraid.core.v1.DocsVersionsState
 import centraid.core.v1.FilterMenuCleared
 import centraid.core.v1.FilterMenuPicked
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SectionHead
@@ -92,6 +93,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -600,6 +602,7 @@ internal fun DocsDocumentScreen(
     onEvent: (DocsDocumentEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -641,6 +644,7 @@ internal fun DocsDocumentScreen(
                         onEdit = { onEvent(DocsDocumentEvent(rename_edited = DocsDocumentEvent.RenameEdited(title = it))) },
                         onDone = { onEvent(DocsDocumentEvent(rename_closed = DocsDocumentEvent.RenameClosed())) },
                     )
+                    PhoneSaysLine(document.title_phone_says, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER))
                 }
                 item(key = "surface") {
                     val reading = document.reading

@@ -39,6 +39,7 @@ import centraid.core.v1.AgendaEventEvent
 import centraid.core.v1.AgendaEventState
 import centraid.core.v1.AgendaGone
 import centraid.core.v1.AgendaScopeChoice
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.Route
 import centraid.core.v1.EmptyState
 import dev.centraid.android.kit.SectionHead
@@ -48,6 +49,7 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
@@ -73,6 +75,7 @@ internal fun AgendaEventScreen(
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
     onCall: (String) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
     PushedPage(
@@ -94,7 +97,7 @@ internal fun AgendaEventScreen(
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 skeleton = { RowSkeleton(rows = 5, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> EventBody(data, onEvent, onOpen, onCall) }
+            ) { data -> EventBody(data, onEvent, onOpen, onCall, onPhoneSays) }
         }
     }
     if (state.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && chrome != null) {
@@ -127,11 +130,14 @@ private fun EventBody(
     onEvent: (AgendaEventEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onCall: (String) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-event")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
+            PhoneSaysLine(data.title_phone_says, onPhoneSays)
             if (data.date_label.isNotEmpty()) Text(data.date_label, style = centraidType("body"), color = centraidColor("text"))
             if (data.when_label.isNotEmpty()) Text(data.when_label, style = centraidType("small"), color = centraidColor("textSoft"))
+            data.when_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
             if (data.calendar_name.isNotEmpty()) {
                 Row(Modifier.padding(top = 4.dp).testTag("agenda-event-calendar"), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(gridHue(data.calendar_hue_key)))
@@ -152,6 +158,11 @@ private fun EventBody(
                 }
             }
         }
+        if (data.facts_phone_says.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                data.facts_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+            }
+        }
         if (data.call_uri.isNotEmpty() && data.call_label.isNotEmpty()) {
             OutlineButton(
                 label = data.call_label,
@@ -168,6 +179,7 @@ private fun EventBody(
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
             )
         }
+        PhoneSaysLine(data.notes_phone_says, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER))
         val rsvp = data.rsvp
         if (rsvp != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
@@ -215,6 +227,11 @@ private fun EventBody(
                         testTag = "agenda-guest-${guest.party_id}",
                     )
                 }
+            }
+        }
+        if (data.guests_phone_says.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                data.guests_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
             }
         }
         // THE GUESTS OF A FOLLOWED CALENDAR'S EVENT (#1173): names and replies the phone's calendar holds.

@@ -534,6 +534,7 @@ internal class RustRoot(
                     onOpen = open,
                     onBack = back,
                     onCall = { uri -> openCall(context, uri) },
+                    onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
                 )
             }
             editor != null -> CompositionLocalProvider(LocalAppAccentId provides "calendar") {
@@ -682,6 +683,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(docs_document = it)) },
                 onOpen = open,
                 onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             versions != null -> DocsVersionsScreen(
                 state = versions,
@@ -722,6 +724,7 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(people_person = it)) },
                 onOpen = open,
                 onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
             peopleEditor != null -> PeopleEditorScreen(
@@ -744,6 +747,7 @@ internal class RustRoot(
                 state = healthWorkout,
                 onEvent = { send(ScreenEvent(health_workout = it)) },
                 onBack = back,
+                onPhoneSays = { send(ScreenEvent(phone_says_taken = it)) },
             )
             healthConnect != null -> HealthConnectScreen(
                 state = healthConnect,

@@ -39,6 +39,7 @@ import centraid.core.v1.HealthMetricEvent
 import centraid.core.v1.HealthMetricState
 import centraid.core.v1.HealthWorkoutEvent
 import centraid.core.v1.HealthWorkoutState
+import centraid.core.v1.PhoneSaysTaken
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.InkButton
@@ -48,6 +49,7 @@ import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.LocalAppAccentId
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
@@ -140,10 +142,20 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWorkoutEvent) -> Unit, onBack: () -> Unit) {
+internal fun HealthWorkoutScreen(
+    state: HealthWorkoutState,
+    onEvent: (HealthWorkoutEvent) -> Unit,
+    onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
+) {
     val chrome = state.chrome
     CompositionLocalProvider(LocalAppAccentId provides "health") {
-        PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
+        PushedPage(
+            title = chrome?.title.orEmpty(),
+            parentTitle = chrome?.back_label.orEmpty(),
+            onBack = onBack,
+            status = state.status?.sentence.orEmpty(),
+        ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
                 onRetry = { onEvent(HealthWorkoutEvent(refreshed = HealthWorkoutEvent.Refreshed())) },
@@ -186,6 +198,13 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                                 gap = 8.dp,
                             ) { figure -> HealthFigureCard(figure) }
+                        }
+                        if (data.figures_phone_says.isNotEmpty()) {
+                            item(key = "figures-phone-says") {
+                                Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                                    data.figures_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+                                }
+                            }
                         }
                         item(key = "foot") { HealthNote(data.foot) }
                     }

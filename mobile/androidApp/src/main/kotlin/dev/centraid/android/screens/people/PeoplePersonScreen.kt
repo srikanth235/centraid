@@ -43,6 +43,7 @@ import centraid.core.v1.PeoplePersonData
 import centraid.core.v1.PeoplePersonEvent
 import centraid.core.v1.PeoplePersonSheet
 import centraid.core.v1.PeoplePersonState
+import centraid.core.v1.PhoneSaysTaken
 import centraid.core.v1.PeopleSheetFrame
 import centraid.core.v1.Route
 import centraid.core.v1.StatusChip
@@ -54,6 +55,7 @@ import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhoneSaysLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
@@ -83,6 +85,7 @@ public fun PeoplePersonScreen(
     onEvent: (PeoplePersonEvent) -> Unit,
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -105,7 +108,7 @@ public fun PeoplePersonScreen(
                 onRetry = { onEvent(PeoplePersonEvent(refreshed = PeoplePersonEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-            ) { person -> PersonBody(person, state, onEvent, onOpen, ::open) }
+            ) { person -> PersonBody(person, state, onEvent, onOpen, onPhoneSays, ::open) }
         }
     }
 
@@ -125,11 +128,12 @@ private fun PersonBody(
     state: PeoplePersonState,
     onEvent: (PeoplePersonEvent) -> Unit,
     onOpen: (Route) -> Unit,
+    onPhoneSays: (PhoneSaysTaken) -> Unit,
     open: (Which) -> Unit,
 ) {
     val chrome = state.chrome
     LazyColumn(Modifier.testTag("people-person")) {
-        item(key = "hero") { Hero(person) }
+        item(key = "hero") { Hero(person, onPhoneSays) }
         if (person.hero.isNotEmpty()) {
             item(key = "hero-actions") {
                 HeroActions(person.hero) { key ->
@@ -138,6 +142,9 @@ private fun PersonBody(
             }
         }
         items(person.facts, key = { "f-" + it.label }) { fact -> FieldRow(fact.label, fact.value_) }
+        person.nickname_phone_says?.let { line ->
+            item(key = "nickname-phone-says") { PhoneSaysLine(line, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER)) }
+        }
 
         person.channels_head?.let { head ->
             item(key = "channels-head") { SectionHeader(head.toKit()) { open(Which.WHICH_CHANNEL) } }
@@ -175,6 +182,14 @@ private fun PersonBody(
             }
         }
 
+        if (person.channels_phone_says.isNotEmpty()) {
+            item(key = "channels-phone-says") {
+                Column(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                    person.channels_phone_says.forEach { PhoneSaysLine(it, onPhoneSays) }
+                }
+            }
+        }
+
         person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head.toKit()) { open(Which.WHICH_DATE) } } }
         if (person.dates.isEmpty() && person.dates_empty.isNotEmpty()) {
             item(key = "dates-empty") { RailEmpty(person.dates_empty) }
@@ -195,6 +210,10 @@ private fun PersonBody(
                     ) { onEvent(PeoplePersonEvent(reminder = PeoplePersonEvent.ReminderToggled(date.date_id))) }
                 }
             }
+        }
+
+        person.birthday_phone_says?.let { line ->
+            item(key = "birthday-phone-says") { PhoneSaysLine(line, onPhoneSays, Modifier.padding(horizontal = KitGeometry.GUTTER)) }
         }
 
         if (person.relations.isNotEmpty()) {
@@ -262,7 +281,7 @@ private fun PersonBody(
 
 /** THE HERO: a centred avatar, the name, the role and the cadence line; the owner's own card says "My card". */
 @Composable
-private fun Hero(person: PeoplePersonData) {
+private fun Hero(person: PeoplePersonData, onPhoneSays: (PhoneSaysTaken) -> Unit) {
     val accent = appAccent("people")
     Column(
         Modifier
@@ -280,7 +299,9 @@ private fun Hero(person: PeoplePersonData) {
             Surface.ink,
             modifier = Modifier.padding(top = 10.dp).semantics { heading() },
         )
+        PhoneSaysLine(person.name_phone_says, onPhoneSays, centered = true)
         if (person.role.isNotEmpty()) KitText(person.role, KitType.Row, Surface.body)
+        PhoneSaysLine(person.role_phone_says, onPhoneSays, centered = true)
         val line = if (person.is_me) person.my_card_label else person.cadence_line
         if (line.isNotEmpty()) KitText(line, KitType.Meta, Surface.meta, modifier = Modifier.padding(top = 4.dp))
         person.due_chip?.let { chip ->
