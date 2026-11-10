@@ -430,6 +430,8 @@ message HealthWorkoutState {
     HealthWorkoutData data = 5;
   }
   HealthPageChrome chrome = 6;
+  // A refusal to take the store's value back (#1183), over the workout as it still is.
+  optional StatusLine status = 7;
 }
 
 message HealthWorkoutData {
@@ -449,6 +451,9 @@ message HealthWorkoutData {
   optional EmptyState gone = 6;
   // The kind's mark, for the chip over the title (#1173): the same one its row draws.
   string kind_icon_key = 7;
+  // WHAT THE STORE SAYS (#1183), under the figures, one per figure the member changed or cleared
+  // ("Apple Health says 5.0 km", "Apple Health still has 148 bpm"). Absent when they agree.
+  repeated PhoneSays figures_phone_says = 8;
 }
 
 message HealthWorkoutEvent {

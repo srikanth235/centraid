@@ -12,9 +12,10 @@ use super::figures;
 use super::{Metric, Phase, Store, Units, denied, kinds};
 use crate::catalog::load;
 use crate::kit::civil;
+use crate::kit::follow::{self, Source};
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{fill, health as words};
+use crate::strings::{Locale, fill, health as words};
 
 /// The kinds a pace means something for.
 const PACED: [&str; 3] = [kinds::RUN, kinds::WALK, kinds::HIKE];
@@ -31,6 +32,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         activity_id: args.activity_id.clone(),
         parent: args.parent.clone(),
         phase: Phase::Loading,
+        differences: Vec::new(),
+        status: None,
     }))
 }
 
@@ -38,9 +41,99 @@ struct WorkoutPage {
     activity_id: String,
     parent: String,
     phase: Phase<wire::HealthWorkout>,
+    /// Where the store's figures differ from the member's (#1183), read with the page.
+    differences: Vec<follow::Difference>,
+    status: Option<wire::StatusLine>,
+}
+
+/// The measure columns a line can name, in the order the page draws their figures.
+const FIGURES: [&str; 5] = [
+    "distance_m",
+    "moving_s",
+    "energy_kcal",
+    "heart_bpm",
+    "climb_m",
+];
+
+/// The lines under the figures: one per figure the member changed ("Apple Health says 5.0 km")
+/// or cleared ("Apple Health still has 148 bpm"), each worded as the page words that figure.
+/// `recorded_by` is the foot's sentence, not a figure, and the kind, title and times are not
+/// something the page offers to change, so they have no line.
+fn phone_says(
+    locale: Locale,
+    units: Units,
+    store: &str,
+    found: &[follow::Difference],
+) -> Vec<wire::PhoneSays> {
+    let Some(workout) = follow::of(found, "workout") else {
+        return Vec::new();
+    };
+    let mut lines = Vec::new();
+    for column in FIGURES {
+        let Some(item) = workout.items.iter().find(|item| item.key == column) else {
+            continue;
+        };
+        let Some(stated) = item.stated.as_ref().and_then(serde_json::Value::as_f64) else {
+            continue;
+        };
+        let join = |(n, u): (String, String)| {
+            if u.is_empty() { n } else { format!("{n} {u}") }
+        };
+        let (label, value) = match column {
+            "distance_m" => (
+                words::figure_distance(locale),
+                join(figures::distance(locale, stated, units)),
+            ),
+            "moving_s" => (
+                words::figure_time(locale),
+                figures::stopwatch(stated.round() as i64),
+            ),
+            "energy_kcal" => (
+                words::figure_energy(locale),
+                join(figures::figure(locale, Metric::Energy, stated, units)),
+            ),
+            "heart_bpm" => (
+                words::figure_heart(locale),
+                format!("{} {}", stated.round(), words::unit_bpm(locale)),
+            ),
+            _ => (
+                words::figure_elevation(locale),
+                join(figures::climb(locale, stated, units)),
+            ),
+        };
+        let (noun, source) = (label.to_lowercase(), Source::Store(store));
+        lines.push(if item.held.is_none() {
+            follow::still_has(locale, source, &value, &noun, "workout", Some(column))
+        } else {
+            follow::says(locale, source, &value, &noun, "workout", Some(column))
+        });
+    }
+    lines
 }
 
 impl WorkoutPage {
+    /// The action under a line: take the store's figure, then read again so the line goes. A
+    /// refusal is the status line, over the workout as it still is.
+    fn take_store(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self
+            .phase
+            .data()
+            .and_then(|answer| answer.workout.as_ref())
+            .is_none()
+        {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.activity_id, taken) else {
+            return;
+        };
+        self.status = (!settled.committed).then(|| wire::StatusLine {
+            sentence: settled.refusal,
+            action_label: String::new(),
+            refused: true,
+        });
+        self.reload(ctx);
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         self.phase = Phase::of(read::read(
             ctx,
@@ -52,6 +145,12 @@ impl WorkoutPage {
                 _ => None,
             },
         ));
+        self.differences = match &self.phase {
+            Phase::Ready(answer) if answer.workout.is_some() => {
+                follow::read(ctx, &self.activity_id)
+            }
+            _ => Vec::new(),
+        };
     }
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
@@ -147,6 +246,12 @@ impl WorkoutPage {
             figures: figures_,
             foot,
             gone: None,
+            figures_phone_says: phone_says(
+                locale,
+                units,
+                &Store::of(ctx).name(locale),
+                &self.differences,
+            ),
         }
     }
 }
@@ -157,6 +262,7 @@ impl Screen for WorkoutPage {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
             }
+            Some(E::PhoneSaysTaken(taken)) => self.take_store(ctx, &taken),
             Some(E::HealthWorkout(event)) => {
                 if let Some(W::Refreshed(_)) = event.kind {
                     self.reload(ctx);
@@ -198,9 +304,81 @@ impl Screen for WorkoutPage {
                         },
                         retry: words::retry(locale),
                     }),
+                    status: self.status.clone(),
                 },
             )),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The lines for a figure the member cleared: no command clears a followed workout's figure (the
+    //! store would state it again), so the differences are built here, as the vault reports them.
+
+    use serde_json::json;
+
+    use super::*;
+
+    fn item(key: &str, stated: Option<f64>, held: Option<f64>) -> follow::Item {
+        follow::Item {
+            key: key.to_owned(),
+            stated: stated.map(|n| json!(n)),
+            held: held.map(|n| json!(n)),
+        }
+    }
+
+    fn workout(items: Vec<follow::Item>) -> Vec<follow::Difference> {
+        vec![follow::Difference {
+            field: "workout".to_owned(),
+            stated: json!({}),
+            held: json!({}),
+            items,
+        }]
+    }
+
+    #[test]
+    fn a_cleared_figure_is_still_the_stores_a_changed_one_is_its_word_and_an_added_one_has_no_line()
+    {
+        let found = workout(vec![
+            item("climb_m", None, Some(40.0)),
+            item("distance_m", Some(5_000.0), Some(4_000.0)),
+            item("heart_bpm", Some(148.0), None),
+            item("moving_s", Some(1_864.0), None),
+            item("energy_kcal", Some(338.0), Some(300.0)),
+        ]);
+        let lines = phone_says(Locale::En, Units::Metric, "Apple Health", &found);
+        let shown: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|l| (l.lead.as_str(), l.action_label.as_str()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("Apple Health says 5.0 km", "Use Apple Health’s"),
+                ("Apple Health still has 31:04", "Add back"),
+                ("Apple Health says 338 kcal", "Use Apple Health’s"),
+                ("Apple Health still has 148 bpm", "Add back"),
+            ],
+            "in the page's order; the climb the member added has none"
+        );
+        assert_eq!(
+            lines[3].accessibility_label,
+            "Add back the average heart rate 148 bpm from Apple Health"
+        );
+        let take = lines[3].take.clone().expect("take");
+        assert_eq!(
+            (take.field.as_str(), take.item_key.as_deref()),
+            ("workout", Some("heart_bpm"))
+        );
+    }
+
+    #[test]
+    fn nothing_that_differs_is_no_line_and_distances_follow_the_members_units() {
+        assert!(phone_says(Locale::En, Units::Metric, "Apple Health", &[]).is_empty());
+        let found = workout(vec![item("distance_m", Some(5_000.0), Some(4_000.0))]);
+        let lines = phone_says(Locale::En, Units::Imperial, "Health Connect", &found);
+        assert_eq!(lines[0].lead, "Health Connect says 3.1 mi");
     }
 }
