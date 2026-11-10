@@ -76,6 +76,7 @@ import centraid.core.v1.PhotosLightboxWords
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
@@ -241,7 +242,13 @@ private fun LightViewer(
                 open = infoOpen,
                 onOpenChanged = { open -> onEvent(sheetEvent(if (open) PhotosLightboxState.Sheet.SHEET_INFO else PhotosLightboxState.Sheet.SHEET_NONE)) },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                details = { if (photo != null) InfoCards(state, photo, words, onEvent, onOpen) },
+                details = {
+                    if (photo != null) {
+                        InfoCards(state, photo, words, onEvent, onOpen)
+                        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the foot of the details.
+                        EarlierEntryCard(photo.earlier, onOpen)
+                    }
+                },
             ) {
                 // THE PHOTOGRAPH ON THE LIGHT PAGE, no black letterbox, with what plays or loads over its foot.
                 Box(Modifier.fillMaxSize()) {
