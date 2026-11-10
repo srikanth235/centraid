@@ -251,6 +251,9 @@ private struct PeoplePersonBody: View {
                         .peopleCard()
                     }
                 }
+
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the entry at the foot, when Rust has one.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
             }
             .padding(.bottom, CentraidGeometry.pageMargin)
         }

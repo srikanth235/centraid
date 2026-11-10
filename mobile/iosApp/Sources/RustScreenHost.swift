@@ -479,6 +479,12 @@ struct RustScreenView: View {
                 send: { store.send(instance, .trash($0)) },
                 onBack: pop
             )
+        case .earlier(let state)?:
+            CoreEarlierView(
+                state: state,
+                send: { store.send(instance, .earlier($0)) },
+                onBack: pop
+            )
         // PAIRING A GATEWAY (#1135).
         case .pairLaptop(let state)?:
             PairLaptopPageView(
