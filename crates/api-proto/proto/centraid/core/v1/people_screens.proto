@@ -565,7 +565,9 @@ message PeoplePersonData {
   optional PhoneSays name_phone_says = 30;
   // Under the role line.
   optional PhoneSays role_phone_says = 31;
-  // Under the facts, where the nickname is.
+  // Directly under the block that shows the nickname. Android draws the facts as a block of their
+  // own under the hero; iOS draws them as the last rows of the dates card, so the line comes under
+  // that card, after the birthday's.
   optional PhoneSays nickname_phone_says = 32;
   // Under the dates, where the birthday is.
   optional PhoneSays birthday_phone_says = 33;

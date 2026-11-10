@@ -188,6 +188,7 @@ private struct PeoplePersonBody: View {
                 if person.hasBirthdayPhoneSays {
                     PhoneSaysLines(lines: [person.birthdayPhoneSays], onTake: onPhoneSays)
                 }
+                // The nickname is a fact, and the facts are the last rows of the card above.
                 if person.hasNicknamePhoneSays {
                     PhoneSaysLines(lines: [person.nicknamePhoneSays], onTake: onPhoneSays)
                 }
