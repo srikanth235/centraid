@@ -13,6 +13,7 @@ use super::{Metric, Phase, Store, Units, denied, kinds};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::civil;
+use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::read;
 use crate::kit::trash;
@@ -35,6 +36,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         parent: args.parent.clone(),
         phase: Phase::Loading,
         differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
         status: None,
         undo: None,
     }))
@@ -46,6 +48,8 @@ struct WorkoutPage {
     phase: Phase<wire::HealthWorkout>,
     /// Where the store's figures differ from the member's (#1183), read with the page.
     differences: follow::Phone,
+    /// The entry to the workout's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
     status: Option<wire::StatusLine>,
     /// What the status line's Undo does: put the workout back in the trash, or back in the list.
     undo: Option<Undo>,
@@ -241,6 +245,19 @@ impl WorkoutPage {
             }
             _ => follow::Phone::default(),
         };
+        self.earlier = match &self.phase {
+            Phase::Ready(answer) if answer.workout.is_some() => {
+                let title = answer.workout.as_ref().map_or_else(String::new, |row| {
+                    figures::title(
+                        ctx.locale(),
+                        &row.kind_key,
+                        &civil::clock_for(ctx.locale(), &row.local_start, ctx.hour_cycle()),
+                    )
+                });
+                earlier::foot(ctx, super::EARLIER, &self.activity_id, &title)
+            }
+            _ => earlier::Foot::default(),
+        };
     }
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
@@ -396,10 +413,15 @@ impl Screen for WorkoutPage {
                         },
                         retry: words::retry(locale),
                     }),
-                    status: self.status.clone().or_else(|| {
-                        self.differences
-                            .status(locale, Source::Store(&Store::of(ctx).name(locale)))
-                    }),
+                    status: self
+                        .status
+                        .clone()
+                        .or_else(|| {
+                            self.differences
+                                .status(locale, Source::Store(&Store::of(ctx).name(locale)))
+                        })
+                        .or_else(|| self.earlier.status(locale)),
+                    earlier: self.earlier.entry.clone(),
                 },
             )),
             ..wire::ViewState::default()

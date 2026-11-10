@@ -434,6 +434,8 @@ message HealthWorkoutState {
   HealthPageChrome chrome = 6;
   // A refusal to take the store's value back (#1183), over the workout as it still is.
   optional StatusLine status = 7;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 8;
 }
 
 message HealthWorkoutData {

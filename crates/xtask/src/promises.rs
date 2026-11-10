@@ -167,10 +167,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "its own versions screen (versions.rs) has not moved onto the kit's, and the document page has no entry (#1185)",
     ),
-    owed(
+    kept(
         "health",
         Promise::History,
-        "the workout page has no Earlier versions entry (#1185)",
+        "crates/screens/src/health/earlier.rs",
     ),
     owed(
         "locker",

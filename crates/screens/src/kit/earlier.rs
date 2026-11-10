@@ -54,6 +54,8 @@ pub struct Look<'a> {
     pub cycle: HourCycle,
     /// The phone's own zone.
     pub zone: &'a str,
+    /// The phone's region (`US`, `GB`), which decides units.
+    pub region: &'a str,
     /// Names by id (a guest, a category), read with the list; empty when the spec has no hook.
     pub names: &'a Names,
 }
@@ -500,6 +502,7 @@ impl Screen for Earlier {
                         locale,
                         cycle: ctx.hour_cycle(),
                         zone: ctx.zone(),
+                        region: ctx.region(),
                         names: &self.names,
                     },
                     versions,

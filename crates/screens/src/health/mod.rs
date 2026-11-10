@@ -9,6 +9,7 @@
 //! | One metric over a week, a month, 6 months or a year | [`METRIC`] | [`metric`] |
 //! | One workout | [`WORKOUT`] | [`workout`] |
 //! | What Health may read, and Connect | [`CONNECT`] | [`connect`] |
+//! | Earlier versions of a workout | [`EARLIER`] | [`earlier`] |
 //!
 //! ## Reads and writes
 //!
@@ -36,6 +37,7 @@ use crate::screen::Ctx;
 use crate::strings::{Locale, health as words};
 
 pub mod connect;
+pub mod earlier;
 pub mod figures;
 pub mod follow;
 pub mod highlights;
@@ -52,6 +54,8 @@ pub const CONNECT: &str = "health.connect";
 pub const SEARCH: &str = "health.search";
 /// The workouts in the trash (#1185).
 pub const TRASH: &str = "health.trash";
+/// The earlier versions of a workout (#1185).
+pub const EARLIER: &str = "health.earlier";
 
 /// The tab Health's pages are pushed under.
 pub const TAB: &str = "health";
@@ -65,6 +69,7 @@ pub fn registry() -> Registry {
         .with(WORKOUT, workout::build)
         .with(CONNECT, connect::build)
         .with(TRASH, trash::build)
+        .with(EARLIER, earlier::build)
         .with(SEARCH, crate::shell::search::build_health)
 }
 
@@ -131,7 +136,13 @@ impl Units {
     /// The units of the device `ctx` describes.
     #[must_use]
     pub fn of(ctx: &Ctx) -> Self {
-        if matches!(ctx.region(), "US" | "LR" | "MM") {
+        Self::in_region(ctx.region())
+    }
+
+    /// The units a phone in `region` uses.
+    #[must_use]
+    pub fn in_region(region: &str) -> Self {
+        if matches!(region, "US" | "LR" | "MM") {
             Self::Imperial
         } else {
             Self::Metric
