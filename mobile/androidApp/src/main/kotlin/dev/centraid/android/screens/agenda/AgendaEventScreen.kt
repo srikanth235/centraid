@@ -55,6 +55,7 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.screenContentOf
@@ -83,7 +84,12 @@ internal fun AgendaEventScreen(
         title = state.data_?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+        statusLine = {
+            // "{title} moved to trash" with Undo on the gone card (#1185), and a refusal's sentence.
+            StatusLine(state.status, actTag = "agenda-status-action") {
+                onEvent(AgendaEventEvent(status_acted = AgendaEventEvent.StatusActed()))
+            }
+        },
     ) {
         val gone = state.gone
         if (gone != null) {

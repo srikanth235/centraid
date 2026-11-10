@@ -45,7 +45,11 @@ public fun TrashScreen(
         title = view.title,
         parentTitle = view.back_label,
         onBack = onBack,
-        status = view.status?.sentence.orEmpty(),
+        statusLine = {
+            StatusLine(view.status, actTag = "trash-status-action") {
+                onEvent(TrashEvent(status_acted = TrashEvent.StatusActed()))
+            }
+        },
         meta = data?.count_label.orEmpty(),
     ) {
         ReadStateView(

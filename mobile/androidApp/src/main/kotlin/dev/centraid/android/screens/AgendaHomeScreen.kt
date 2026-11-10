@@ -782,6 +782,7 @@ private fun AgendaMoreSheet(
                 } else {
                     SheetRow(
                         label = row.label,
+                        detail = row.meta,
                         testTag = "agenda-more-${row.key}",
                         onTap = pick,
                         iconKey = row.icon_key.ifEmpty { null },
