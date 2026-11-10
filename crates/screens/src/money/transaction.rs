@@ -20,6 +20,7 @@ use super::fold::{self, Phase};
 use super::rows;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash;
@@ -55,6 +56,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         undo: None,
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -87,6 +89,8 @@ struct Transaction {
     dismissed: Vec<String>,
     /// The "With" row's picker and the people it lists.
     links: Links,
+    /// The entry to the line's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
 }
 
 impl Transaction {
@@ -126,6 +130,12 @@ impl Transaction {
             }
             (Reading::Denied(_), _, _) => Phase::Denied,
             _ => Phase::Failed,
+        };
+        self.earlier = match &self.phase {
+            Phase::Ready(loaded) => {
+                earlier::foot(ctx, super::EARLIER, &self.txn_id, &loaded.txn.display_name)
+            }
+            _ => earlier::Foot::default(),
         };
     }
 
@@ -671,7 +681,8 @@ impl Screen for Transaction {
                         words::transaction_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone(),
+                    status: self.status.clone().or_else(|| self.earlier.status(locale)),
+                    earlier: self.earlier.entry.clone(),
                 },
             )),
             ..wire::ViewState::default()

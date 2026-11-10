@@ -177,10 +177,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "the item page has no Earlier versions entry (#1185)",
     ),
-    owed(
+    kept(
         "money",
         Promise::History,
-        "the transaction page has no Earlier versions entry (#1185)",
+        "crates/screens/src/money/earlier.rs",
     ),
     owed(
         "notes",

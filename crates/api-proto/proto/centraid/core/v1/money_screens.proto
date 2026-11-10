@@ -509,6 +509,8 @@ message MoneyTransactionState {
   MoneyPageChrome chrome = 11;
   // What the last act did: "Category saved", or the core's refusal.
   optional StatusLine status = 12;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 15;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
