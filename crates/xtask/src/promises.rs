@@ -157,10 +157,10 @@ pub const REGISTER: &[Row] = &[
     owed("reminders", Promise::Undo, UNDO_OWED),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
     // others' work list.
-    owed(
+    kept(
         "calendar",
         Promise::History,
-        "the event page has no Earlier versions entry (#1185)",
+        "crates/screens/src/calendar/earlier.rs",
     ),
     owed(
         "docs",

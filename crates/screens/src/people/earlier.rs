@@ -10,7 +10,7 @@
 use serde_json::Value;
 
 use super::{denied, fold};
-use crate::kit::earlier::{self, EarlierSpec, Field};
+use crate::kit::earlier::{self, EarlierSpec, Field, Look};
 use crate::screen::Screen;
 use crate::strings::{Locale, shared};
 use centraid_api_proto::core_v1 as wire;
@@ -21,6 +21,7 @@ pub static SPEC: EarlierSpec = EarlierSpec {
     noun: shared::trash_noun_person,
     denied,
     line,
+    know: None,
 };
 
 #[must_use]
@@ -56,7 +57,8 @@ fn birthday(locale: Locale, day: &str) -> String {
 }
 
 /// The one line a person's fields read as: `Ada Lovelace · Countess · 10 December · +44 20 7946 0000`.
-fn line(locale: Locale, fields: &[Field]) -> String {
+fn line(look: &Look, fields: &[Field]) -> String {
+    let locale = look.locale;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let own = |name: &str| named(name).and_then(|field| text(&field.value));
     let mut parts = vec![

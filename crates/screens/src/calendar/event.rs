@@ -48,6 +48,7 @@ use crate::calendar::routes;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::attachments::{Attachments, Of};
@@ -96,6 +97,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         dismissed: false,
         attachments,
         differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -131,6 +133,8 @@ struct EventPage {
     attachments: Attachments,
     /// Where the phone's calendar says otherwise than the event does (#1183), read with the page.
     differences: follow::Phone,
+    /// The entry to the event's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
 }
 
 impl EventPage {
@@ -153,6 +157,26 @@ impl EventPage {
         self.differences = match &reading {
             Reading::Data(_) => follow::read(ctx, &self.route.event_id),
             _ => follow::Phone::default(),
+        };
+        self.earlier = match &reading {
+            Reading::Data(detail) => match detail
+                .event
+                .as_ref()
+                .filter(|event| event.event_id == self.route.event_id)
+            {
+                Some(event) => earlier::foot(
+                    ctx,
+                    super::EARLIER,
+                    &self.route.event_id,
+                    &event
+                        .summary
+                        .as_deref()
+                        .filter(|summary| !summary.trim().is_empty())
+                        .map_or_else(|| words::untitled(ctx.locale()), str::to_owned),
+                ),
+                None => earlier::Foot::default(),
+            },
+            _ => earlier::Foot::default(),
         };
         match reading {
             Reading::Data(detail) => self.content = Content::Data(detail),
@@ -490,7 +514,9 @@ impl Screen for EventPage {
             status: self
                 .status
                 .clone()
-                .or_else(|| self.differences.status(locale, follow::Source::Phone)),
+                .or_else(|| self.differences.status(locale, follow::Source::Phone))
+                .or_else(|| self.earlier.status(locale)),
+            earlier: self.earlier.entry.clone(),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEvent(state)),
@@ -842,7 +868,7 @@ fn followed_row(locale: Locale, guest: &wire::AgendaFollowedGuest) -> wire::Agen
 }
 
 /// The gate a refused read draws.
-fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
+pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
     wire::Denied {
         title: words::denied_title(locale),
         body: words::denied_body(locale),

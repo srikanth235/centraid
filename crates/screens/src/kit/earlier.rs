@@ -21,6 +21,8 @@
 //!   first page; pages the member had opened are not kept.
 
 use centraid_api_proto::core_v1 as wire;
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 use wire::app_query_response::Answer;
 use wire::earlier_event::Kind as K;
@@ -45,6 +47,20 @@ pub struct Field {
     pub value: Value,
 }
 
+/// What a formatter needs of the phone it words for: the member's language, 12 or 24 hour clock
+/// and zone, and the names the app's `know` hook found for ids a version names.
+pub struct Look<'a> {
+    pub locale: Locale,
+    pub cycle: HourCycle,
+    /// The phone's own zone.
+    pub zone: &'a str,
+    /// Names by id (a guest, a category), read with the list; empty when the spec has no hook.
+    pub names: &'a Names,
+}
+
+/// Names by id, as an app's `know` hook reads them.
+pub type Names = BTreeMap<String, String>;
+
 /// ONE APP'S EARLIER VERSIONS, as the parameter the one screen takes.
 pub struct EarlierSpec {
     /// `people`: the app, and the prefix of the screen name `people.earlier`.
@@ -56,7 +72,10 @@ pub struct EarlierSpec {
     /// The ONE line a set of fields reads as, worded as the app's own detail screen words them: the
     /// fields a version held, or the ones the record holds now. Empty when none of them is
     /// something the screen shows.
-    pub line: fn(Locale, &[Field]) -> String,
+    pub line: fn(&Look, &[Field]) -> String,
+    /// Reads the names a line needs for the ids a record's versions hold (a guest's, a category's)
+    /// as the record's page names them; `None` where the fields carry their own words.
+    pub know: Option<fn(&Ctx, &str) -> Names>,
 }
 
 /// The registry factory for `spec`'s screen.
@@ -76,6 +95,7 @@ pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn 
         phase: Phase::Loading,
         status: None,
         undo: false,
+        names: Names::new(),
     }))
 }
 
@@ -204,6 +224,8 @@ struct Earlier {
     status: Option<wire::StatusLine>,
     /// Whether the status line's Undo is a restore's.
     undo: bool,
+    /// What the spec's `know` hook read with the list.
+    names: Names,
 }
 
 fn json(text: &str) -> Value {
@@ -256,6 +278,9 @@ impl Earlier {
     }
 
     fn reload(&mut self, ctx: &Ctx) {
+        if let Some(know) = self.spec.know {
+            self.names = know(ctx, &self.entity_id);
+        }
         self.phase = match self.page(ctx, None) {
             Reading::Data((versions, next)) => Phase::Ready { versions, next },
             Reading::Denied(denial) => Phase::Denied(denial),
@@ -380,13 +405,14 @@ impl Earlier {
 
     fn row(
         &self,
-        locale: Locale,
+        look: &Look,
         when: String,
         fields: &[Field],
         seq: i64,
         current: bool,
     ) -> wire::EarlierRow {
-        let line = (self.spec.line)(locale, fields);
+        let locale = look.locale;
+        let line = (self.spec.line)(look, fields);
         let value = if line.trim().is_empty() {
             words::other_details(locale)
         } else {
@@ -416,17 +442,13 @@ impl Earlier {
         }
     }
 
-    fn rows(
-        &self,
-        locale: Locale,
-        cycle: HourCycle,
-        versions: &[Version],
-    ) -> Vec<wire::EarlierRow> {
+    fn rows(&self, look: &Look, versions: &[Version]) -> Vec<wire::EarlierRow> {
+        let (locale, cycle) = (look.locale, look.cycle);
         let mut rows = Vec::with_capacity(versions.len() + 1);
         // The record as it is became so when the newest version was replaced, by whoever did.
         if let Some(newest) = versions.first() {
             rows.push(self.row(
-                locale,
+                look,
                 Self::when(locale, cycle, &newest.replaced_local, &newest.replaced_by),
                 &newest.after,
                 0,
@@ -435,7 +457,7 @@ impl Earlier {
         }
         for version in versions {
             rows.push(self.row(
-                locale,
+                look,
                 Self::when(locale, cycle, &version.since_local, &version.since_by),
                 &version.before,
                 version.seq,
@@ -473,7 +495,15 @@ impl Screen for Earlier {
             Phase::Failed => C::Failure(read::failure(locale)),
             Phase::Denied(denial) => C::Denied((self.spec.denied)(locale, denial)),
             Phase::Ready { versions, next } => C::Data(wire::EarlierData {
-                rows: self.rows(locale, ctx.hour_cycle(), versions),
+                rows: self.rows(
+                    &Look {
+                        locale,
+                        cycle: ctx.hour_cycle(),
+                        zone: ctx.zone(),
+                        names: &self.names,
+                    },
+                    versions,
+                ),
                 empty: Some(wire::EmptyState {
                     headline: words::empty_headline(locale),
                     body: fill(

@@ -44,7 +44,7 @@ pub struct Wording<'a> {
 
 /// A stated start or end as the page words a time: the day, then the time or "all day", then the
 /// zone where the event keeps one that is not the phone's. `None` for a value that is no time.
-fn moment(wording: Wording<'_>, zone: Option<&str>, value: &str) -> Option<String> {
+pub(crate) fn moment(wording: Wording<'_>, zone: Option<&str>, value: &str) -> Option<String> {
     let Wording {
         locale,
         cycle,
@@ -192,7 +192,7 @@ pub fn lines(wording: Wording<'_>, found: &[Difference]) -> Lines {
 
 /// The first line of a note, cut at 80 characters: the line quotes the notes, it does not
 /// reprint them.
-fn brief(notes: &str) -> String {
+pub(crate) fn brief(notes: &str) -> String {
     const MOST: usize = 80;
     let first = notes.lines().next().unwrap_or_default().trim();
     if first.chars().count() <= MOST && first.len() == notes.trim().len() {
