@@ -4,7 +4,7 @@ import SwiftUI
 /// proposes (a transfer, a rule) and the actions (#1099).
 ///
 /// Nothing is written until the member accepts an offer or picks an action; the
-/// category and name edits are sheets, and a void is the state's `Confirm`. Every
+/// category and name edits are sheets, and a transaction goes to the trash and asks nothing (#1185). Every
 /// word, the direction, the amount's tone and each action's enabled flag are the
 /// machine's.
 struct MoneyTransactionView: View {
@@ -26,38 +26,38 @@ struct MoneyTransactionView: View {
         let sheetBinding = moneySheetBinding(state.sheet == .category || state.sheet == .name) {
             send(event { $0.sheetClosed = .init() })
         }
-        let confirmBinding = moneySheetBinding(state.hasConfirm) {
-            send(event { $0.confirmDismissed = .init() })
-        }
         // THE PAGE HEADS ITSELF with the merchant's name, so the bar carries only the back chevron
         // (the board draws no small title over it).
         PushedPage(title: "", parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(
-                content: content,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) { transaction in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) { page(transaction) }
-                        .padding(.bottom, 16)
+            // THE PAGE STAYS ON THE GONE CARD AFTER MOVE TO TRASH, and the status line under it
+            // carries "{title} moved to trash" with Undo (#1185).
+            Group {
+                if case let .gone(gone)? = state.content {
+                    EmptyStateView(gone)
+                } else {
+                    ReadStateView(
+                        content: content,
+                        onRetry: { send(event { $0.refreshed = .init() }) }
+                    ) { transaction in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) { page(transaction) }
+                                .padding(.bottom, 16)
+                        }
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
                     status: MoneyWords.line(state.hasStatus ? state.status : nil),
-                    identifier: "money-transaction-status"
-                )
+                    identifier: "money-status-action"
+                ) {
+                    send(event { $0.statusActed = .init() })
+                }
             }
         }
         .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: content.loaded) }
-        .sheet(isPresented: confirmBinding) {
-            ConfirmSheet(
-                state.confirm,
-                onConfirm: { send(event { $0.confirmAccepted = .init() }) },
-                onDismiss: { send(event { $0.confirmDismissed = .init() }) }
-            )
-        }
         .linkPickerSheet(state.withPicker) { link in send(event { $0.withLink = link }) }
     }
 

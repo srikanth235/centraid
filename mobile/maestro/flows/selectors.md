@@ -195,9 +195,11 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `health-highlight-<key>` | Health | one Highlights card on the Summary (`<key>` the metric), the tap to its page |
 | `health-workout-<activityId>` | Health | one workout row (Today and Workouts) |
 | `health-range`, `health-metric-range` | Health, a metric | the segmented range (Trends: 30 days · 90 days · Year; a metric: Week · Month · 6 months · Year) |
-| `health-more-<key>`, `health-reads`, `health-reads-close` | Health | a More row (`reads`, `choose`, `stop`), the "What Health may read" sheet and its close |
+| `health-more-<key>`, `health-reads`, `health-reads-close` | Health | a More row (`reads`, `choose`, `stop`, `trash`; Trash's second line is the row's `meta`), the "What Health may read" sheet and its close |
 | `health-metric-page`, `health-workout-page` | a metric, a workout | the pushed page's scroll |
 | `health-metric-chart`, `health-metric-versus` | a metric | the bar chart (a finger on it scrubs) and the line against the typical |
+| `health-action-trash`, `health-status-action` | a workout | "Move to trash" under the figures (`HealthWorkoutData.trash_label`; no confirm), and the status line's Undo after it (`HealthWorkoutEvent.status_acted`); the page stays on the gone card (#1185) |
+| `money-action-trash`, `money-status-action` | a transaction | the action row "Move to trash" (`MoneyTransactionEvent.action`, key `trash`; no confirm; it replaced `void`), and the status line's Undo after it (`MoneyTransactionEvent.status_acted`); the page stays on the gone card (#1185) |
 | `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect Apple Health"), the status line |
 | `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |

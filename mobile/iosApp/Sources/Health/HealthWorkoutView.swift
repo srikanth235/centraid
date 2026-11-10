@@ -14,6 +14,8 @@ struct HealthWorkoutView: View {
 
     private let accent = AppAccent("health")
 
+    @Environment(\.colorScheme) private var scheme
+
     private func event(_ build: (inout Centraid_Core_V1_HealthWorkoutEvent) -> Void) -> Centraid_Core_V1_HealthWorkoutEvent {
         var event = Centraid_Core_V1_HealthWorkoutEvent()
         build(&event)
@@ -34,7 +36,10 @@ struct HealthWorkoutView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         // THE PAGE'S STATUS LINE (a refused write says so here), as Trash's does.
                         if state.hasStatus {
-                            StatusLineView(status: state.status, identifier: "health-workout-status") {}
+                            // "{title} moved to trash" with Undo (#1185); the gone card shows under it.
+                            StatusLineView(status: state.status, identifier: "health-status-action") {
+                                send(event { $0.statusActed = .init() })
+                            }
                         }
                         if workout.hasGone {
                             EmptyStateView(workout.gone)
@@ -48,6 +53,21 @@ struct HealthWorkoutView: View {
                 }
                 .refreshable { send(event { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("health-workout-page")
+                // MOVE TO TRASH, pinned at the foot as HealthWorkout.dc.html draws it: outlined and
+                // destructive, asking nothing (the status line carries Undo). Empty while gone.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !workout.trashLabel.isEmpty {
+                        KitChoiceStack {
+                            KitOutlineButton(label: workout.trashLabel, tone: "net") {
+                                send(event { $0.trash = .init() })
+                            }
+                            .accessibilityIdentifier("health-action-trash")
+                        }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 8)
+                        .background(Theme.color("bg", scheme))
+                    }
+                }
             }
         }
         .appAccent("health")

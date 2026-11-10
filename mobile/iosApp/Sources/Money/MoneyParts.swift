@@ -47,6 +47,7 @@ extension Centraid_Core_V1_MoneyHomeState {
 extension Centraid_Core_V1_MoneyTransactionState {
     var readContent: ScreenContent<Centraid_Core_V1_MoneyTransactionData> {
         switch content {
+        case .gone?: return .loading(true)
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failure(failure.sentence, failure.remedy)
         case let .denied(denied)?: return .denied(denied)
@@ -544,12 +545,14 @@ struct MoneyFormSheet<Content: View>: View {
 struct MoneyStatusFoot: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"
+    /// The line's action (Undo after Move to trash); the pages whose line has none leave it.
+    var onAct: () -> Void = {}
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if !status.sentence.isEmpty {
-            StatusLineView(status: status, identifier: identifier) {}
+            StatusLineView(status: status, identifier: identifier, onAct: onAct)
                 .padding(.vertical, 4)
                 .background(Theme.color("bg", scheme))
         }

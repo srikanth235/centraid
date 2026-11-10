@@ -295,6 +295,7 @@ struct HealthHomeView: View {
                     SheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
+                        detail: row.meta,
                         destructive: row.tone == .net,
                         identifier: "health-more-\(key)"
                     ) {
