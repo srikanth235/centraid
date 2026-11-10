@@ -3203,7 +3203,7 @@
         "bulk": false,
         "chat": "card",
         "command": "note.restore_version",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "note",
         "phrasings": [
           "go back to the earlier version of my trip note",
@@ -3257,7 +3257,7 @@
         "bulk": false,
         "chat": "card",
         "command": "edge.add",
-        "inverse": null,
+        "inverse": "detach",
         "kind": "note",
         "phrasings": [
           "link my trip note to Sam",
@@ -3275,7 +3275,7 @@
         "bulk": false,
         "chat": "card",
         "command": "task.add",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "task",
         "phrasings": [
           "turn this checklist line into a task",

@@ -640,7 +640,7 @@
       "name": "restore-note-version",
       "verb": "restore",
       "kind": "note",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "note.restore_version",
       "phrasings": [
@@ -772,7 +772,7 @@
       "name": "link",
       "verb": "link",
       "kind": "note",
-      "inverse": null,
+      "inverse": "detach",
       "sealed": [],
       "command": "edge.add",
       "phrasings": [
@@ -823,7 +823,7 @@
       "name": "send-to-tasks",
       "verb": "create",
       "kind": "task",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "task.add",
       "phrasings": [
@@ -1070,7 +1070,7 @@
         "import a folder of notes"
       ],
       "description": "Read Markdown and text files as notes through note.import: [[links]] become links, #tags become tags, a folder becomes a notebook. With dry_run it only says what would happen.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -1098,6 +1098,7 @@
       "bulk": true,
       "kind": "note",
       "inverse": null,
+      "writes_nothing": true,
       "sealed": [],
       "command": "note.export",
       "phrasings": [

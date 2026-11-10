@@ -492,6 +492,57 @@ fn docs(w: &World) {
     );
 }
 
+fn notes(w: &World) {
+    let book = w.make(
+        "notes",
+        "create-notebook",
+        &json!({ "kind": "notebook", "title": "Ideas" }),
+    );
+    let note = w.make(
+        "notes",
+        "create-note",
+        &json!({ "title": "Plan", "body": "one" }),
+    );
+    w.round_trip(
+        "notes",
+        "edit-note",
+        &note,
+        &json!({ "id": note, "body": "two" }),
+    );
+    w.round_trip(
+        "notes",
+        "move-note",
+        &note,
+        &json!({ "id": note, "notebook_id": book }),
+    );
+    w.round_trip(
+        "notes",
+        "rename-notebook",
+        &book,
+        &json!({ "id": book, "title": "Big ideas" }),
+    );
+    w.ok(
+        "notes",
+        "edit-note",
+        &json!({ "id": note, "body": "kept words" }),
+    );
+    w.round_trip(
+        "notes",
+        "restore-note-version",
+        &note,
+        &json!({ "id": note, "seq": 1 }),
+    );
+    // `undo-create` is the shell's, run under any app: what an act created goes to the trash.
+    let made = w.make(
+        "reminders",
+        "add-task",
+        &json!({ "title": "Made by mistake" }),
+    );
+    assert!(w.live(&made));
+    w.ok("notes", "undo-create", &json!({ "id": made }));
+    assert!(!w.live(&made), "the task is in the trash");
+}
+
 fn photos(w: &World) {
     let photo = w.first("photo");
     let album = w.make(
@@ -561,6 +612,7 @@ fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     let w = World::new();
     reminders(&w);
     docs(&w);
+    notes(&w);
     photos(&w);
     let proven = w.proven.borrow().clone();
 

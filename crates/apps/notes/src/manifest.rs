@@ -123,7 +123,8 @@ mod tests {
                 "delete-notebook",
                 "delete-note",
                 "purge-note",
-                "empty-trash"
+                "empty-trash",
+                "import-notes"
             ]
         );
     }

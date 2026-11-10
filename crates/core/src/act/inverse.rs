@@ -158,6 +158,11 @@ const NOTES: &[Row] = &[
     ("detach", "attach", Input::Same),
     ("add-tag", "remove-tag", Input::Same),
     ("remove-tag", "add-tag", Input::Same),
+    ("edit-note", "edit-note", Input::Earlier),
+    ("move-note", "move-note", Input::Earlier),
+    ("rename-notebook", "rename-notebook", Input::Earlier),
+    ("restore-note-version", "undo-change", Input::Earlier),
+    ("send-to-tasks", "undo-create", Input::Created),
 ];
 const PEOPLE: &[Row] = &[
     ("add-person", "trash-person", Input::Created),
@@ -369,7 +374,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["calendar", "health", "locker", "money", "notes", "people"];
+    const OWED: &[&str] = &["calendar", "health", "locker", "money", "people"];
 
     /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.
     ///
@@ -405,6 +410,20 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A task made from a note (a composite the assistant runs as two steps) is taken back by the
+    /// shell's `undo-create`, naming the id the command answered.
+    #[test]
+    fn a_task_made_from_a_note_is_taken_back_by_the_shells_trash() {
+        let input: Map<String, Value> =
+            serde_json::from_str(r#"{"title":"x","note_id":"n1"}"#).unwrap();
+        let output = serde_json::json!({"id":"made"});
+        let (action, built) = of("notes", "send-to-tasks", &input, &output).expect("undoable");
+        assert_eq!(
+            (action, Value::Object(built)),
+            ("undo-create", serde_json::json!({"id":"made"}))
+        );
     }
 
     #[test]

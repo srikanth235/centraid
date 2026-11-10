@@ -129,9 +129,10 @@ pub const ACTIONS: [ActionRow; 21] = [
     act("detach", "edge.remove"),
     act("add-tag", "tag.add"),
     act("remove-tag", "tag.remove"),
-    // Item 14 (#1173): the More page's Import and Export. Neither is reversible by an action
-    // (an import adds notes the member can trash; an export writes nothing).
-    act("import-notes", "note.import"),
+    // Item 14 (#1173): the More page's Import and Export. An import is not taken back by an action
+    // (it adds notes the member can trash), so it asks first: the Import screen is choose, preview,
+    // then the member's tap, and only the tap writes. An export writes nothing (`writes_nothing`).
+    confirmed("import-notes", "note.import"),
     act("export-notes", "note.export"),
 ];
 
@@ -242,7 +243,8 @@ mod tests {
                 "delete-notebook",
                 "delete-note",
                 "purge-note",
-                "empty-trash"
+                "empty-trash",
+                "import-notes"
             ]
         );
     }
