@@ -56,6 +56,8 @@ struct Tab {
 pub type BandFn = fn(Locale, &[String], &str) -> wire::ShellBand;
 
 struct State {
+    /// What the screens and the follow coordinator tell one another (`crate::follow`).
+    follows: crate::follow::Follows,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -113,6 +115,7 @@ impl Runtime {
             roots,
             services: Vec::new(),
             state: Mutex::new(State {
+                follows: crate::follow::Follows::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -316,10 +319,11 @@ impl Runtime {
         out: &mut wire::ScreenUpdate,
     ) {
         let env = state.env.clone();
+        let follows = state.follows.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
-        let ctx = Ctx::new(core, &env);
+        let ctx = Ctx::new(core, &env).with_follows(follows.clone());
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
         instance.tables.extend(done.tables);
@@ -331,7 +335,7 @@ impl Runtime {
         };
 
         if !instance.service {
-            let view_ctx = Ctx::new(core, &env);
+            let view_ctx = Ctx::new(core, &env).with_follows(follows);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;

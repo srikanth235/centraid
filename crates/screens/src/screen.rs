@@ -16,6 +16,7 @@ use centraid_core::screens::VaultRequest;
 use centraid_core::{Handle, Result};
 use prost::Message;
 
+use crate::follow::Follows;
 use crate::strings::Locale;
 
 /// One screen. `Send` because the runtime lives behind a mutex shared by the
@@ -88,6 +89,7 @@ pub struct Ctx<'a> {
     core: &'a dyn ScreenCtx,
     env: &'a Environment,
     done: RefCell<Done>,
+    follows: Follows,
 }
 
 impl<'a> Ctx<'a> {
@@ -96,7 +98,22 @@ impl<'a> Ctx<'a> {
             core,
             env,
             done: RefCell::new(Done::default()),
+            follows: Follows::default(),
         }
+    }
+
+    /// This context over the runtime's one follow board, so a screen's ask reaches the
+    /// coordinator that answers every screen.
+    #[must_use]
+    pub(crate) fn with_follows(mut self, follows: Follows) -> Self {
+        self.follows = follows;
+        self
+    }
+
+    /// The board the follow coordinator shares with the screens (`crate::follow`).
+    #[must_use]
+    pub fn follows(&self) -> &Follows {
+        &self.follows
     }
 
     /// The one read. The tables it read are remembered: when one changes, the

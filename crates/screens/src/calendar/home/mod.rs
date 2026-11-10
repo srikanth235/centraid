@@ -34,6 +34,7 @@ use wire::screen_event::Kind as E;
 use self::held::Held;
 use super::follow::CalendarFollow;
 use super::routes;
+use crate::follow::Store;
 use crate::kit::civil;
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::phase::Phase;
@@ -62,7 +63,7 @@ pub(super) struct Home {
     /// The status line of a write here (a calendar made, an event moved) and its Undo.
     ops: Ops,
     held: Held,
-    /// The phone's calendar, imported and followed for as long as Calendar is up.
+    /// The phone's calendar, imported here; the coordinator follows it (`crate::follow`).
     calendar: CalendarFollow,
 }
 
@@ -158,7 +159,10 @@ impl Home {
 
     fn on_event(&mut self, event: H, ctx: &Ctx) {
         match event {
-            H::Refreshed(_) => self.refresh(ctx),
+            H::Refreshed(_) => {
+                self.refresh(ctx);
+                ctx.follows().changed(ctx, Store::Calendar);
+            }
             // Taken before this match: it returns the shell's effects.
             H::ImportRequested(_) => {}
             H::Destination(moved) => {
@@ -427,6 +431,7 @@ impl Screen for Home {
         match event.kind {
             Some(E::Appeared(_)) => {
                 self.refresh(ctx);
+                ctx.follows().changed(ctx, Store::Calendar);
                 // THE CALENDAR'S FLAG IS A KEYCHAIN READ and an answer carries no key, so the
                 // choice is read after it has landed, never beside it.
                 return self.calendar.attach();

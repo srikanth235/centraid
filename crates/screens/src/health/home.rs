@@ -17,9 +17,10 @@
 //! Connect (R-ONBOARD-4). Every read asks `health.today` first, which says whether
 //! a store is connected and which types have any data.
 //!
-//! THIS SCREEN HOSTS THE FOLLOW ([`HealthFollow`]): it lives as long as Health
-//! does, so a pass runs when it appears and when the member pulls to refresh, on
-//! a phone that connected. A pass never asks the OS for permission.
+//! THE FOLLOW IS THE COORDINATOR'S ([`crate::follow`]): this screen asks it for a pass when it
+//! appears and when the member pulls to refresh, on a phone that connected, and draws what the
+//! pass said. It hosts the device's habit ([`HealthFollow`]) for Stop. A pass never asks the OS
+//! for permission.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -31,6 +32,7 @@ use super::figures;
 use super::follow::HealthFollow;
 use super::{Metric, PINNED, Phase, Store, Units, WIDE_CARDS, denied, highlights, routes};
 use crate::catalog::load;
+use crate::follow::Store as Followed;
 use crate::kit::civil;
 use crate::kit::menu;
 use crate::kit::read;
@@ -79,7 +81,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         workouts_shown: PAGE,
         sheet: Sheet::None,
         phase: Phase::Loading,
-        follow: HealthFollow::following(),
+        follow: HealthFollow::new(),
         status: None,
         known_connected: false,
         recheck: false,
@@ -603,9 +605,10 @@ impl Home {
             return facts;
         };
         let device = self.follow.device();
-        let refused: Vec<Metric> = self
-            .follow
-            .refused()
+        let refused: Vec<Metric> = ctx
+            .follows()
+            .report(Followed::Health)
+            .refused
             .iter()
             .filter_map(|key| Metric::of_key(key))
             .collect();
@@ -833,12 +836,13 @@ impl Screen for Home {
             Some(E::Appeared(_)) => {
                 self.reload(ctx);
                 effects.extend(self.follow.attach());
+                ctx.follows().changed(ctx, Followed::Health);
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::HealthHome(event)) => match event.kind {
                 Some(H::Refreshed(_)) => {
                     self.reload(ctx);
-                    effects.extend(self.follow.request(ctx));
+                    ctx.follows().changed(ctx, Followed::Health);
                 }
                 Some(H::Band(band)) => self.band(ctx, &band.key),
                 Some(H::Range(range)) => self.range(ctx, &range.key),

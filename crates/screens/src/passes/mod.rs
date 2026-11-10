@@ -19,6 +19,14 @@
 //! `PassWindowDone`, `LongRun`, `UploadsOp` and
 //! the off-thread door). It decides nothing; the camera roll's walk and the
 //! bytes the core asks for again are posted to `imports.camera_roll` in Rust.
+//!
+//! ## A granted window follows the phone's stores too (#1183)
+//!
+//! When a window the OS granted has finished its backup, the service asks the follow
+//! coordinator ([`crate::follow`]) for one pass per connected store and holds the OS's
+//! `PassWindowDone` until it says they ran, so the backup and the camera roll keep their
+//! priority and the window's rules (its budget, its expiry) are the only clock. The grace after
+//! leaving the screen ([`conductor::BACKGROUND_WINDOW`]) is the upload's alone.
 
 pub mod conditions;
 pub mod conductor;

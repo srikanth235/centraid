@@ -27,7 +27,7 @@ use prost::Message;
 use wire::screen_event::Kind as E;
 
 use super::conditions::Reason;
-use super::conductor::{Action, Conductor, Drained, Registration};
+use super::conductor::{Action, BACKGROUND_WINDOW, Conductor, Drained, Registration};
 use super::rule::Rules;
 use super::windows;
 use crate::custody::secrets::VaultSecrets;
@@ -100,6 +100,9 @@ struct Service {
     /// shell that re-reports the foreground (a screen re-reading its state) must
     /// not buy a camera-roll walk and a pass each time.
     foreground: Option<bool>,
+    /// Windows whose backup ended and whose follows are not done: the OS is told when the
+    /// follow coordinator says every store ran ([`crate::follow`]).
+    following: Vec<(String, bool)>,
 }
 
 impl Service {
@@ -113,7 +116,18 @@ impl Service {
             deferred: Vec::new(),
             started: false,
             foreground: None,
+            following: Vec::new(),
         }
+    }
+
+    /// Tell the shell a window's work is over.
+    fn window_done(window: String, drained: bool, out: &mut Vec<wire::Effect>) {
+        out.push(wire::Effect {
+            kind: Some(wire::effect::Kind::PassWindowDone(wire::PassWindowDone {
+                window,
+                drained,
+            })),
+        });
     }
 
     fn effect(&mut self, kind: Kind, effect: wire::Effect, out: &mut Vec<wire::Effect>) {
@@ -231,16 +245,19 @@ impl Service {
                     },
                     out,
                 ),
-                Action::WindowDone { window, drained } => self.effect(
-                    Kind::Noted,
-                    wire::Effect {
-                        kind: Some(wire::effect::Kind::PassWindowDone(wire::PassWindowDone {
-                            window,
-                            drained,
-                        })),
-                    },
-                    out,
-                ),
+                // A WINDOW THE OS GRANTED follows the phone's stores too, AFTER the backup and the
+                // camera roll: the OS is told once the coordinator says every store ran. The
+                // grace after leaving the screen is the upload's alone, so it is not held.
+                Action::WindowDone { window, drained }
+                    if window != BACKGROUND_WINDOW && ctx.follows().listening() =>
+                {
+                    ctx.follows().window(ctx, &window);
+                    self.following.push((window, drained));
+                }
+                Action::WindowDone { window, drained } => {
+                    self.outstanding.push_back(Kind::Noted);
+                    Self::window_done(window, drained, out);
+                }
                 Action::Timer { name, after } => ctx.start_timer(&name, after),
                 Action::CancelTimer { name } => ctx.cancel_timer(&name),
                 Action::Changed => Conductor::wake(ctx),
@@ -292,7 +309,17 @@ impl Service {
             }
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
-            E::Signalled(_) => self.asked(),
+            E::Signalled(_) => {
+                // The follow coordinator says a window's stores ran: tell the OS it is done.
+                for window in ctx.follows().take_released() {
+                    if let Some(at) = self.following.iter().position(|(held, _)| *held == window) {
+                        let (window, drained) = self.following.remove(at);
+                        self.outstanding.push_back(Kind::Noted);
+                        Self::window_done(window, drained, out);
+                    }
+                }
+                self.asked()
+            }
             E::RollReported(report) => match report.kind {
                 // THE WALK ENDED, OR FAILED, OR HAD NONE TO WALK: the pass runs either way.
                 Some(wire::roll_reported::Kind::Walked(_)) => self.conductor.walked(),

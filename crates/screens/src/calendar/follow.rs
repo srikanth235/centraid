@@ -27,16 +27,14 @@
 //! outside it is not in the phone's answer at all, so it reads as cancelled and
 //! becomes a skip. The phone's read cannot tell the two apart.
 //!
-//! ## Following ([`CalendarFollow`])
+//! ## Importing ([`CalendarFollow`]) and following
 //!
-//! A screen that lives as long as Calendar does (its home) hosts one
-//! [`CalendarFollow`]. The member's Import tap asks the OS for permission and
-//! imports; from then on this device FOLLOWS: a [`wire::PhoneWatch`] makes the
-//! shell report each change of the calendar store, bursts are coalesced (the
-//! first change arms a two-second timer, the ones before it fires join it, and
-//! changes during a pass queue exactly one more), and a pass reads the calendars
-//! only if the OS already allows it. **A pass never asks the OS for permission
-//! and never runs before this device imported.**
+//! The member's Import tap asks the OS for permission and imports ([`CalendarFollow`], hosted by
+//! Calendar's home and the made vault's importer); from then on this device FOLLOWS. Following
+//! is not a screen's: the follow coordinator ([`crate::follow`]) watches the calendar store,
+//! hears the app come to the front and the background windows, coalesces them, and runs the
+//! pass ([`run`]) when the habit below says this device imported. **A pass never asks the OS for
+//! permission and never runs before this device imported.**
 //!
 //! ## One way
 //!
@@ -49,13 +47,12 @@
 //! pass needs is per device too, and a vault restored onto a new phone must be
 //! imported from there once.
 
-use std::time::Duration;
-
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
 use wire::screen_event::Kind as E;
 
 use crate::catalog::act;
+use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::screen::Ctx;
@@ -74,14 +71,6 @@ pub const DEFAULT_ORIGIN: &str = "local:this-phone";
 /// The keychain key that says this device imported its calendar.
 pub const IMPORTED_KEY: &str = "agenda_calendar_imported";
 const IMPORTED_VALUE: &[u8] = b"1";
-
-/// Triggers within this long of the first are one pass.
-pub const SETTLE: Duration = Duration::from_secs(2);
-/// A read that has not answered in two minutes is abandoned, so one stuck read
-/// cannot hold the follow for good.
-pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
-const SETTLE_TIMER: &str = "calendar-settle";
-const READ_TIMER: &str = "calendar-read";
 
 pub type PhoneEvent = wire::PhoneCalendarEvent;
 
@@ -682,42 +671,25 @@ fn count(output: &Value, name: &str) -> u32 {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Purpose {
-    /// The member's tap: the OS may ask for permission, and a sentence says how it went.
-    Import,
-    /// A following pass: silent, and never asks.
-    Follow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Waiting {
     Nothing,
     /// The keychain's answer to "did this device import?".
     Flag,
-    Read(Purpose),
+    /// The member's Import read, which may ask the OS for permission.
+    Read,
 }
 
-/// When a following pass runs. Pure: the timers are the runtime's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Gate {
-    Idle,
-    /// A trigger armed the settle timer; later ones join it.
-    Armed,
-    /// A pass is out; `queued` is a trigger that arrived during it.
-    Running {
-        queued: bool,
-    },
-}
-
-/// THE IMPORT AND THE FOLLOW, as one component a long-lived screen hosts. The
-/// host sends it the events it does not know ([`Self::on_event`]), draws its
-/// [`Self::status`] on the status line, and returns the effects it hands back.
+/// THE IMPORT, as one component a screen hosts (Calendar's home, the made vault's importer). The
+/// host sends it the events it does not know ([`Self::on_event`]), draws its [`Self::status`]
+/// on the status line, and returns the effects it hands back.
+///
+/// It does not follow: a turned-on device is followed by the coordinator
+/// ([`crate::follow`]), which this tells ([`crate::follow::Follows::changed`]) whenever the
+/// habit it keeps changes.
 pub struct CalendarFollow {
     waiting: Waiting,
-    gate: Gate,
     /// This device imported its calendar: a pass may run.
     followed: bool,
-    watching: bool,
     /// An Import tapped while a read was out.
     import_queued: bool,
     status: Option<wire::StatusLine>,
@@ -730,61 +702,67 @@ impl Default for CalendarFollow {
     }
 }
 
+/// Whether the keychain's answer says this device follows its calendars.
+#[must_use]
+pub(crate) fn followed_in(value: &wire::KeychainValue) -> bool {
+    value.found && value.value == IMPORTED_VALUE
+}
+
+/// The read of the calendars a pass or an import performs.
+#[must_use]
+pub(crate) fn read_effect(ask_permission: bool) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::CalendarRead(wire::CalendarRead {
+            ask_permission,
+            days_back: DAYS_BACK,
+            days_on: DAYS_ON,
+        })),
+    }
+}
+
+/// Read the habit this device keeps for the calendar.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    keychain(wire::keychain_op::Op::Get, Vec::new())
+}
+
 impl CalendarFollow {
     #[must_use]
     pub fn new() -> Self {
         Self {
             waiting: Waiting::Nothing,
-            gate: Gate::Idle,
             followed: false,
-            watching: false,
             import_queued: false,
             status: None,
             outcome: None,
         }
     }
 
-    /// The host came up: learn whether this device follows. Asked once.
+    /// The host came up: learn whether this device follows.
     pub fn attach(&mut self) -> Vec<wire::Effect> {
         if self.followed || self.waiting != Waiting::Nothing {
             return Vec::new();
         }
         self.waiting = Waiting::Flag;
-        vec![keychain(wire::keychain_op::Op::Get, Vec::new())]
+        vec![habit_read()]
     }
 
     /// The member tapped Import. ONE IMPORT AT A TIME: a second tap while one
-    /// runs would write every event twice, so it is nothing. A tap during a
-    /// following pass (or before the device has said whether it follows) waits
-    /// for it.
+    /// runs would write every event twice, so it is nothing. A tap before the device has said
+    /// whether it follows waits for it.
     pub fn import(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.waiting == Waiting::Read(Purpose::Import) {
+        if self.waiting == Waiting::Read {
             return Vec::new();
         }
         if self.waiting != Waiting::Nothing {
             self.import_queued = true;
             return Vec::new();
         }
-        self.start_read(ctx, Purpose::Import)
-    }
-
-    /// The phone may have changed (or the app came forward): follow soon.
-    pub fn request(&mut self, ctx: &Ctx) {
-        if !self.followed {
-            return;
-        }
-        match self.gate {
-            Gate::Idle => {
-                self.gate = Gate::Armed;
-                ctx.start_timer(SETTLE_TIMER, SETTLE);
-            }
-            Gate::Armed => {}
-            Gate::Running { .. } => self.gate = Gate::Running { queued: true },
-        }
+        self.start_read(ctx)
     }
 
     /// The status line this flow wants drawn: the running sentence, then the
-    /// outcome's. A following pass says nothing.
+    /// outcome's.
     #[must_use]
     pub fn status(&self) -> Option<&wire::StatusLine> {
         self.status.as_ref()
@@ -803,12 +781,10 @@ impl CalendarFollow {
         self.followed
     }
 
-    /// Offer the host's event. `Some(effects)` when it was this flow's (a
-    /// timer it started, or the answer to an effect it asked); `None` otherwise.
+    /// Offer the host's event. `Some(effects)` when it was the answer to an effect this flow
+    /// asked; `None` otherwise.
     pub fn on_event(&mut self, event: &E, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         match event {
-            E::TimerFired(fired) if fired.timer == SETTLE_TIMER => Some(self.settled(ctx)),
-            E::TimerFired(fired) if fired.timer == READ_TIMER => Some(self.read_ended(ctx, None)),
             E::EffectResult(result) => self.on_result(result, ctx),
             _ => None,
         }
@@ -817,25 +793,17 @@ impl CalendarFollow {
     fn on_result(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         use wire::effect_result::Outcome as O;
         match (&self.waiting, &result.outcome) {
-            (_, Some(O::PhoneChanged(changed)))
-                if changed.source == wire::ImportSource::Calendar as i32 =>
-            {
-                self.request(ctx);
-                Some(Vec::new())
-            }
             (Waiting::Flag, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
-                self.followed = value.found && value.value == IMPORTED_VALUE;
-                Some(self.begin_following(ctx))
+                self.followed = followed_in(value);
+                Some(self.finish(ctx))
             }
             (Waiting::Flag, Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
-                Some(Vec::new())
+                Some(self.finish(ctx))
             }
-            (Waiting::Read(_), Some(O::Calendar(snapshot))) => {
-                Some(self.read_ended(ctx, Some(snapshot)))
-            }
-            (Waiting::Read(_), Some(O::Failed(failed))) => {
+            (Waiting::Read, Some(O::Calendar(snapshot))) => Some(self.read_ended(ctx, snapshot)),
+            (Waiting::Read, Some(O::Failed(failed))) => {
                 let denied = failed.denied;
                 Some(self.read_failed(ctx, denied))
             }
@@ -843,156 +811,90 @@ impl CalendarFollow {
         }
     }
 
-    /// Watch the store and follow once, now that this device follows.
-    fn begin_following(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if !self.followed || self.watching {
-            return Vec::new();
-        }
-        self.watching = true;
-        self.request(ctx);
-        vec![watch(true)]
-    }
-
-    /// The settle timer fired: start the pass.
-    fn settled(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.gate != Gate::Armed {
-            return Vec::new();
-        }
-        if !self.followed {
-            self.gate = Gate::Idle;
-            return Vec::new();
-        }
-        if self.waiting != Waiting::Nothing {
-            // An import is out: the pass waits the settle time again.
-            ctx.start_timer(SETTLE_TIMER, SETTLE);
-            return Vec::new();
-        }
-        self.gate = Gate::Running { queued: false };
-        self.start_read(ctx, Purpose::Follow)
-    }
-
-    fn start_read(&mut self, ctx: &Ctx, purpose: Purpose) -> Vec<wire::Effect> {
-        self.waiting = Waiting::Read(purpose);
-        match purpose {
-            Purpose::Import => {
-                self.outcome = None;
-                self.status = Some(plain(calendar_words::import_calendar_running(ctx.locale())));
-            }
-            // Only a read with no dialog can go unanswered.
-            Purpose::Follow => ctx.start_timer(READ_TIMER, READ_TIMEOUT),
-        }
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::CalendarRead(wire::CalendarRead {
-                ask_permission: purpose == Purpose::Import,
-                days_back: DAYS_BACK,
-                days_on: DAYS_ON,
-            })),
-        }]
+    fn start_read(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        self.waiting = Waiting::Read;
+        self.outcome = None;
+        self.status = Some(plain(calendar_words::import_calendar_running(ctx.locale())));
+        vec![read_effect(true)]
     }
 
     fn read_failed(&mut self, ctx: &Ctx, denied: bool) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        if purpose == Purpose::Import {
-            let locale = ctx.locale();
-            self.status = Some(plain(if denied {
-                calendar_words::import_calendar_denied(locale)
-            } else {
-                words::import_calendar_failed(locale)
-            }));
-        }
+        let locale = ctx.locale();
+        self.status = Some(plain(if denied {
+            calendar_words::import_calendar_denied(locale)
+        } else {
+            words::import_calendar_failed(locale)
+        }));
+        self.waiting = Waiting::Nothing;
         self.finish(ctx)
     }
 
-    /// A read came back (`Some`) or timed out (`None`).
-    fn read_ended(
-        &mut self,
-        ctx: &Ctx,
-        snapshot: Option<&wire::CalendarSnapshot>,
-    ) -> Vec<wire::Effect> {
-        let Waiting::Read(purpose) = self.waiting else {
-            return Vec::new();
-        };
-        let Some(snapshot) = snapshot else {
-            return self.read_failed(ctx, false);
-        };
-        let (outcome, told) = self.run(ctx, snapshot);
+    /// A read came back.
+    fn read_ended(&mut self, ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> Vec<wire::Effect> {
+        let (outcome, told) = run(ctx, snapshot);
+        self.status = Some(plain(sentence(ctx.locale(), &outcome)));
+        self.outcome = Some(outcome);
+        self.waiting = Waiting::Nothing;
         let mut effects = Vec::new();
-        if purpose == Purpose::Import {
-            self.status = Some(plain(sentence(ctx.locale(), &outcome)));
-            self.outcome = Some(outcome);
-            // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took a calendar.
-            if told && !self.followed {
-                self.followed = true;
-                effects.push(keychain(
-                    wire::keychain_op::Op::Set,
-                    IMPORTED_VALUE.to_vec(),
-                ));
-            }
+        // THIS DEVICE FOLLOWS FROM NOW ON, once the vault took a calendar.
+        if told && !self.followed {
+            self.followed = true;
+            effects.push(keychain(
+                wire::keychain_op::Op::Set,
+                IMPORTED_VALUE.to_vec(),
+            ));
+        }
+        if self.followed {
+            ctx.follows().changed(ctx, Store::Calendar);
         }
         effects.extend(self.finish(ctx));
-        if self.followed && !self.watching {
-            effects.extend(self.begin_following(ctx));
-        }
         effects
     }
 
-    /// One `follow-calendar` per calendar. `told` is whether the vault took any.
-    fn run(&mut self, ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, bool) {
-        let batch = batch(ctx.locale(), snapshot);
-        let mut outcome = Outcome {
-            add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
-            ..Outcome::default()
-        };
-        let mut told = false;
-        for origin in &batch.origins {
-            let records: Vec<&EventRecord> = batch
-                .records
-                .iter()
-                .filter(|record| record.origin == origin.id)
-                .collect();
-            let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
-            let key = kit_act::key(
-                &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
-                kit_act::fresh(),
-            );
-            let settled = kit_act::act(ctx, request, &key);
-            if !settled.committed {
-                outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
-                continue;
-            }
-            told = true;
-            let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
-            outcome.added += count(&output, "added") + count(&output, "matched");
-            outcome.refused += count(&output, "refused");
-            outcome.updated += count(&output, "updated");
-            outcome.trashed += count(&output, "trashed");
-        }
-        (outcome, told)
-    }
-
-    /// A read is over, however it ended: the next thing waiting goes.
+    /// A read is over, however it ended: an Import tapped meanwhile goes.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        ctx.cancel_timer(READ_TIMER);
-        self.waiting = Waiting::Nothing;
-        if self.import_queued {
+        if self.waiting == Waiting::Nothing && self.import_queued {
             self.import_queued = false;
-            return self.start_read(ctx, Purpose::Import);
+            return self.start_read(ctx);
         }
-        match self.gate {
-            // Triggers arrived during the pass: one more, at once.
-            Gate::Running { queued: true } => {
-                self.gate = Gate::Running { queued: false };
-                self.start_read(ctx, Purpose::Follow)
-            }
-            Gate::Running { queued: false } => {
-                self.gate = Gate::Idle;
-                Vec::new()
-            }
-            _ => Vec::new(),
-        }
+        Vec::new()
     }
+}
+
+/// One `follow-calendar` per calendar over a read of the phone's calendars. `told` is whether
+/// the vault took any. Both the member's import and the coordinator's pass go through it.
+#[must_use]
+pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, bool) {
+    let batch = batch(ctx.locale(), snapshot);
+    let mut outcome = Outcome {
+        add_account: batch.complete && batch.records.is_empty() && batch.origins.is_empty(),
+        ..Outcome::default()
+    };
+    let mut told = false;
+    for origin in &batch.origins {
+        let records: Vec<&EventRecord> = batch
+            .records
+            .iter()
+            .filter(|record| record.origin == origin.id)
+            .collect();
+        let request = follow_request(origin, &records, batch.complete, &snapshot.device_id);
+        let key = kit_act::key(
+            &["follow-calendar", &origin.id, &snapshot.now_ms.to_string()],
+            kit_act::fresh(),
+        );
+        let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            outcome.refused += u32::try_from(records.len()).unwrap_or(u32::MAX);
+            continue;
+        }
+        told = true;
+        let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
+        outcome.added += count(&output, "added") + count(&output, "matched");
+        outcome.refused += count(&output, "refused");
+        outcome.updated += count(&output, "updated");
+        outcome.trashed += count(&output, "trashed");
+    }
+    (outcome, told)
 }
 
 fn plain(sentence: String) -> wire::StatusLine {
@@ -1009,15 +911,6 @@ fn keychain(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
             op: op as i32,
             key: IMPORTED_KEY.to_owned(),
             value,
-        })),
-    }
-}
-
-fn watch(on: bool) -> wire::Effect {
-    wire::Effect {
-        kind: Some(wire::effect::Kind::PhoneWatch(wire::PhoneWatch {
-            source: wire::ImportSource::Calendar as i32,
-            on,
         })),
     }
 }

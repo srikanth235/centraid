@@ -45,7 +45,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         parent: args.parent.clone(),
         on: KEYS.iter().map(|_| true).collect(),
         seeded: false,
-        follow: HealthFollow::connecting(),
+        follow: HealthFollow::new(),
     }))
 }
 

@@ -6,7 +6,9 @@
 //! The store is read by the shell (HealthKit, Health Connect), which performs a
 //! [`wire::HealthRead`] effect and answers a [`wire::HealthSnapshot`]. Everything
 //! else is decided here: what is sent, how a workout is identified and kinded,
-//! when a read may judge a workout gone, and when a pass runs.
+//! and when a read may judge a workout gone. WHEN a pass runs is the follow coordinator's
+//! ([`crate::follow`]): the app coming forward, Health's home appearing, a pull to refresh and
+//! the background windows.
 //!
 //! ## A workout's identity
 //!
@@ -43,6 +45,7 @@ use wire::screen_event::Kind as E;
 
 use super::{Metric, Store, kinds};
 use crate::catalog::{act, load};
+use crate::follow::Store as Followed;
 use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::read::{self, Reading};
@@ -536,32 +539,24 @@ impl Device {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Purpose {
-    /// The member's Connect tap: the OS may ask for permission.
-    Connect(Vec<String>),
-    /// A following pass: silent, and never asks.
-    Pass,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 enum Waiting {
     Nothing,
     /// The keychain's answer to "did this device connect?".
     Device,
-    Read(Purpose),
+    /// The member's Connect tap, with the types chosen: the OS may ask for permission.
+    Connect(Vec<String>),
 }
 
-/// THE CONNECT AND THE FOLLOW, as one component a screen hosts. The host sends it
-/// the events it does not know ([`Self::on_event`]) and returns the effects it
-/// hands back.
+/// THE CONNECT, as one component a screen hosts. The host sends it the events it does not know
+/// ([`Self::on_event`]) and returns the effects it hands back.
+///
+/// It does not follow: a connected device is followed by the coordinator ([`crate::follow`]),
+/// which Health's home asks for a pass when it appears and when the member pulls to refresh
+/// ([`crate::follow::Follows::changed`]), and which says which chosen types the OS refused.
 pub struct HealthFollow {
     waiting: Waiting,
     device: Device,
     window: Option<Window>,
-    /// A pass runs as soon as the device says it connected.
-    auto: bool,
-    /// The chosen types the OS refused, as the last read said.
-    refused: Vec<String>,
     /// Which store the last read named, when it named one.
     store: Option<Store>,
     outcome: Option<Outcome>,
@@ -571,26 +566,19 @@ pub struct HealthFollow {
     connected_now: bool,
 }
 
+impl Default for HealthFollow {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthFollow {
-    /// A flow that follows on its own once the device has said it connected.
     #[must_use]
-    pub fn following() -> Self {
-        Self::new(true)
-    }
-
-    /// A flow that only connects, when asked.
-    #[must_use]
-    pub fn connecting() -> Self {
-        Self::new(false)
-    }
-
-    fn new(auto: bool) -> Self {
+    pub fn new() -> Self {
         Self {
             waiting: Waiting::Nothing,
             device: Device::default(),
             window: None,
-            auto,
-            refused: Vec::new(),
             store: None,
             outcome: None,
             failure: None,
@@ -622,13 +610,7 @@ impl HealthFollow {
         &self.device
     }
 
-    /// The chosen types the OS refused, as the last read said.
-    #[must_use]
-    pub fn refused(&self) -> &[String] {
-        &self.refused
-    }
-
-    /// How the last pass ended.
+    /// How the last read ended.
     #[must_use]
     pub fn outcome(&self) -> Option<&Outcome> {
         self.outcome.as_ref()
@@ -654,17 +636,7 @@ impl HealthFollow {
     /// Whether Connect's read is out (the OS is asking, or the first read runs).
     #[must_use]
     pub fn working(&self) -> bool {
-        matches!(self.waiting, Waiting::Read(Purpose::Connect(_)))
-    }
-
-    /// Follow now, when this device connected and nothing is out. A pass never
-    /// asks the OS for permission.
-    pub fn request(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        if self.waiting != Waiting::Nothing || !self.device.connected {
-            return Vec::new();
-        }
-        let chosen = self.device.chosen.clone();
-        self.start_read(ctx, Purpose::Pass, &chosen, false)
+        matches!(self.waiting, Waiting::Connect(_))
     }
 
     /// The member tapped Connect with `chosen` types on.
@@ -674,7 +646,7 @@ impl HealthFollow {
         }
         self.failure = None;
         let keys = chosen.clone();
-        let effects = self.start_read(ctx, Purpose::Connect(chosen), &keys, true);
+        let effects = self.start_read(ctx, chosen, &keys);
         if effects.is_empty() {
             self.failure = Some(self.connect_failed(ctx));
         }
@@ -689,35 +661,21 @@ impl HealthFollow {
             return None;
         }
         self.device.connected = false;
-        self.refused.clear();
+        ctx.follows().refused(Followed::Health, &[]);
         Some(vec![keychain(
             wire::keychain_op::Op::Set,
             Device::encode(false, &self.device.chosen),
         )])
     }
 
-    fn start_read(
-        &mut self,
-        ctx: &Ctx,
-        purpose: Purpose,
-        chosen: &[String],
-        ask: bool,
-    ) -> Vec<wire::Effect> {
+    fn start_read(&mut self, ctx: &Ctx, chosen: Vec<String>, keys: &[String]) -> Vec<wire::Effect> {
         let Some(window) = window(ctx) else {
             return Vec::new();
         };
-        let read = wire::HealthRead {
-            chosen: chosen.to_vec(),
-            ask_permission: ask,
-            totals_from: window.totals_from.clone(),
-            today: window.today.clone(),
-            workouts_since_ms: window.workouts_since_ms,
-        };
+        let effect = read_effect(&window, keys, true);
         self.window = Some(window);
-        self.waiting = Waiting::Read(purpose);
-        vec![wire::Effect {
-            kind: Some(wire::effect::Kind::HealthRead(read)),
-        }]
+        self.waiting = Waiting::Connect(chosen);
+        vec![effect]
     }
 
     /// Offer the host's event. `Some(effects)` when it was this flow's (the answer
@@ -730,33 +688,20 @@ impl HealthFollow {
         match (self.waiting.clone(), &result.outcome) {
             (Waiting::Device, Some(O::Keychain(value))) => {
                 self.waiting = Waiting::Nothing;
-                self.device = if value.found {
-                    Device::decode(&value.value)
-                } else {
-                    Device {
-                        loaded: true,
-                        ..Device::default()
-                    }
-                };
-                Some(if self.auto {
-                    self.request(ctx)
-                } else {
-                    Vec::new()
-                })
+                self.device = device_of(value);
+                Some(Vec::new())
             }
             (Waiting::Device, Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
                 self.device.loaded = true;
                 Some(Vec::new())
             }
-            (Waiting::Read(purpose), Some(O::Health(snapshot))) => {
-                Some(self.read_ended(ctx, &purpose, snapshot))
+            (Waiting::Connect(chosen), Some(O::Health(snapshot))) => {
+                Some(self.read_ended(ctx, &chosen, snapshot))
             }
-            (Waiting::Read(purpose), Some(O::Failed(_))) => {
+            (Waiting::Connect(_), Some(O::Failed(_))) => {
                 self.waiting = Waiting::Nothing;
-                if matches!(purpose, Purpose::Connect(_)) {
-                    self.failure = Some(self.connect_failed(ctx));
-                }
+                self.failure = Some(self.connect_failed(ctx));
                 Some(Vec::new())
             }
             _ => None,
@@ -774,7 +719,7 @@ impl HealthFollow {
     fn read_ended(
         &mut self,
         ctx: &Ctx,
-        purpose: &Purpose,
+        chosen: &[String],
         snapshot: &wire::HealthSnapshot,
     ) -> Vec<wire::Effect> {
         self.waiting = Waiting::Nothing;
@@ -783,45 +728,69 @@ impl HealthFollow {
             return Vec::new();
         };
         let locale = ctx.locale();
-        match purpose {
-            Purpose::Pass => {
-                self.refused.clone_from(&snapshot.refused);
-                let chosen = self.device.chosen.clone();
-                self.outcome = Some(run(ctx, snapshot, &window, &chosen, &snapshot.device_id));
-                Vec::new()
+        if !snapshot.store_present {
+            self.failure = Some(if snapshot.installable {
+                words::connect_install(locale)
+            } else {
+                words::connect_unavailable(locale)
+            });
+            return Vec::new();
+        }
+        match connect(ctx, snapshot, &window, chosen, &snapshot.device_id) {
+            Some(outcome) => {
+                ctx.follows().refused(Followed::Health, &snapshot.refused);
+                self.outcome = Some(outcome);
+                self.device = Device {
+                    loaded: true,
+                    connected: true,
+                    chosen: chosen.to_vec(),
+                };
+                self.connected_now = true;
+                vec![keychain(
+                    wire::keychain_op::Op::Set,
+                    Device::encode(true, chosen),
+                )]
             }
-            Purpose::Connect(chosen) => {
-                if !snapshot.store_present {
-                    self.failure = Some(if snapshot.installable {
-                        words::connect_install(locale)
-                    } else {
-                        words::connect_unavailable(locale)
-                    });
-                    return Vec::new();
-                }
-                match connect(ctx, snapshot, &window, chosen, &snapshot.device_id) {
-                    Some(outcome) => {
-                        self.refused.clone_from(&snapshot.refused);
-                        self.outcome = Some(outcome);
-                        self.device = Device {
-                            loaded: true,
-                            connected: true,
-                            chosen: chosen.clone(),
-                        };
-                        self.connected_now = true;
-                        vec![keychain(
-                            wire::keychain_op::Op::Set,
-                            Device::encode(true, chosen),
-                        )]
-                    }
-                    None => {
-                        self.failure = Some(self.connect_failed(ctx));
-                        Vec::new()
-                    }
-                }
+            None => {
+                self.failure = Some(self.connect_failed(ctx));
+                Vec::new()
             }
         }
     }
+}
+
+/// What this phone remembers, from the keychain's answer.
+#[must_use]
+pub(crate) fn device_of(value: &wire::KeychainValue) -> Device {
+    if value.found {
+        Device::decode(&value.value)
+    } else {
+        Device {
+            loaded: true,
+            ..Device::default()
+        }
+    }
+}
+
+/// The read of the health store for `window`: the member's Connect asks for permission, a
+/// pass does not.
+#[must_use]
+pub(crate) fn read_effect(window: &Window, chosen: &[String], ask: bool) -> wire::Effect {
+    wire::Effect {
+        kind: Some(wire::effect::Kind::HealthRead(wire::HealthRead {
+            chosen: chosen.to_vec(),
+            ask_permission: ask,
+            totals_from: window.totals_from.clone(),
+            today: window.today.clone(),
+            workouts_since_ms: window.workouts_since_ms,
+        })),
+    }
+}
+
+/// Read the habit this device keeps for Health.
+#[must_use]
+pub(crate) fn habit_read() -> wire::Effect {
+    keychain(wire::keychain_op::Op::Get, Vec::new())
 }
 
 fn keychain(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {

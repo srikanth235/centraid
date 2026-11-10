@@ -216,8 +216,8 @@ fn a_tap_asks_the_shell_to_read_the_store_with_exactly_the_chosen_types_then_fol
 }
 
 #[test]
-fn after_connect_the_home_follows_and_a_second_pass_over_the_same_store_changes_nothing() {
-    let mut d = driver();
+fn after_connect_a_following_pass_reads_without_asking_and_changes_nothing() {
+    let (mut d, follower) = driver_following_on("ios", "de-DE");
     let today = today(&d);
     let home = root(&d);
     // The home asks what this phone remembers: nothing yet.
@@ -231,15 +231,15 @@ fn after_connect_the_home_follows_and_a_second_pass_over_the_same_store_changes_
         other => panic!("{other:?}"),
     };
     assert_eq!(before.len(), 2);
-    // Connect wrote the origin, so the home's data changed under it: it learns
-    // the phone connected (Connect kept the habit) and follows, silently.
-    d.pump(std::time::Duration::from_millis(500));
-    answer_for(&mut d, home, keychain("1|steps,sleep_min,workouts"));
-    match pending_for(&d, home) {
+    // The home asked the coordinator for a pass when it appeared: it follows the connected
+    // store, silently, over the habit Connect kept.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(&mut d, follower, keychain("1|steps,sleep_min,workouts"));
+    match pending_for(&d, follower) {
         wire::effect::Kind::HealthRead(read) => assert!(!read.ask_permission),
         other => panic!("{other:?}"),
     }
-    answer_for(&mut d, home, Outcome::Health(snapshot(&today)));
+    answer_for(&mut d, follower, Outcome::Health(snapshot(&today)));
     let after = match answer(&d, load::health::FollowView {}) {
         Answer::HealthFollowView(view) => view.days,
         other => panic!("{other:?}"),

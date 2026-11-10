@@ -15,9 +15,9 @@
 //!   Import, Export and Trash.
 //! - **The star** is a write from the row: it commits at once, the load after it
 //!   shows the vault's star, and a refusal's sentence is the status line.
-//! - **Contacts** import and follow here ([`ContactsFollow`]): the day-one empty
-//!   state offers the phone's contacts, and a pass follows the address book for
-//!   as long as this screen lives.
+//! - **Contacts** import here ([`ContactsFollow`]): the day-one empty state offers the phone's
+//!   contacts. Following the address book is the coordinator's ([`crate::follow`]), whichever
+//!   screen is showing; this screen asks it for a pass when it appears and shows what it said.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -27,6 +27,7 @@ use wire::screen_event::Kind as E;
 use super::contacts::ContactsFollow;
 use super::{Phase, denied, routes};
 use crate::catalog::{act, load};
+use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::menu;
 use crate::kit::read;
@@ -267,7 +268,10 @@ impl Home {
             return Vec::new();
         };
         match kind {
-            H::Refreshed(_) => self.reload(ctx),
+            H::Refreshed(_) => {
+                self.reload(ctx);
+                ctx.follows().changed(ctx, Store::Contacts);
+            }
             // The same destination is nothing; More is a sheet; another is a swap.
             H::Band(picked) => match picked.key.as_str() {
                 "more" => self.sheet = wire::people_home_state::Sheet::More,
@@ -310,7 +314,7 @@ impl Home {
             }
             H::ContactsAction(_) => {
                 self.status = None;
-                if self.contacts.needs_settings() {
+                if self.contacts.needs_settings(ctx) {
                     // THE PHONE SAID NO: only its own Settings can say yes.
                     return vec![wire::Effect {
                         kind: Some(wire::effect::Kind::VaultCommand(wire::VaultCommand {
@@ -438,13 +442,14 @@ impl Screen for Home {
         let Some(kind) = event.kind else {
             return Vec::new();
         };
-        // The contacts flow's own events first: its timers and the answers to its effects.
+        // The contacts flow's own events first: the answers to the effects it asked.
         if let Some(effects) = self.contacts.on_event(&kind, ctx) {
             return effects;
         }
         match kind {
             E::Appeared(_) => {
                 self.reload(ctx);
+                ctx.follows().changed(ctx, Store::Contacts);
                 if !self.attached {
                     self.attached = true;
                     return self.contacts.attach();
@@ -522,7 +527,7 @@ impl Screen for Home {
             },
             sheet: self.sheet as i32,
             status: self.status(),
-            contacts: (!denied_now).then(|| self.contacts.row(locale)),
+            contacts: (!denied_now).then(|| self.contacts.row(ctx)),
             add_person: Some(routes::new_person()),
             filter_menu: self.filter_menu(locale),
         };

@@ -314,7 +314,10 @@ impl Drive {
 
     fn event(&mut self, event: wire::DocsDriveEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(D::Refreshed(_)) => self.reload(ctx),
+            Some(D::Refreshed(_)) => {
+                self.reload(ctx);
+                ctx.follows().changed(ctx, crate::follow::Store::Files);
+            }
             Some(D::Band(picked)) => self.band(ctx, &picked.key),
             Some(D::SearchOpened(_)) => self.search.open = true,
             Some(D::SearchTerm(typed)) => {

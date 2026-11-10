@@ -26,6 +26,43 @@ pub fn driver_on(platform: &str, locale: &str) -> Driver {
     driver
 }
 
+/// [`driver_on`] with the follow coordinator (`centraid_screens::follow`) running beside Health's
+/// screens, as the app runs it; and the instance of the coordinator, which asked for the watches
+/// at the start (those two effects are taken off the pending list, nobody here answers them).
+pub fn driver_following_on(platform: &str, locale: &str) -> (Driver, u64) {
+    let runtime = centraid_screens::Runtime::new(
+        health::registry().merge(centraid_screens::follow::registry()),
+        vec![(
+            health::TAB.to_owned(),
+            health::routes::home(wire::HealthDestination::Today),
+        )],
+    )
+    .with_services(centraid_screens::follow::services());
+    let mut driver = Driver::with_runtime(runtime);
+    driver.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: locale.to_owned(),
+        zone: "Europe/Berlin".to_owned(),
+        platform: platform.to_owned(),
+        ..Default::default()
+    }));
+    driver.start();
+    let coordinator = driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::PhoneWatch(_))
+            )
+        })
+        .map(|request| request.instance)
+        .expect("the coordinator watches the phone's stores");
+    driver
+        .effects
+        .retain(|request| request.instance != coordinator);
+    (driver, coordinator)
+}
+
 /// An iPhone in the metric world.
 pub fn driver() -> Driver {
     driver_on("ios", "de-DE")

@@ -281,15 +281,22 @@ fn a_phone_without_a_reminders_source_never_asks_for_them() {
 
 #[test]
 fn the_calendar_offered_when_the_vault_is_made_is_followed_from_then_on() {
-    let mut shell = shell_for_made();
+    // The follow coordinator runs beside the importers, as it does in the app.
+    let mut shell = imports_support::shell_over(centraid_screens::imports::runtime_following());
+    shell.d.effects.clear();
     made(&mut shell, false);
     photos_answered(&mut shell);
     answer_read(&mut shell, denied());
     answer_read(&mut shell, calendar(&["Standup"]));
-    // The import marked this device as following and asked the shell to watch the store.
+    // The import marked this device as following; the store is the coordinator's to watch.
     let pending = asked(&shell);
     assert!(pending.contains(&"keychain:2".to_owned()), "{pending:?}");
-    assert!(pending.contains(&"watch:true".to_owned()), "{pending:?}");
+    assert!(!pending.contains(&"watch:true".to_owned()), "{pending:?}");
+    // And the import told the coordinator: after the settle it reads the habit this device kept.
+    shell.d.effects.clear();
+    shell.d.pump(std::time::Duration::from_millis(2_600));
+    let pending = asked(&shell);
+    assert!(pending.contains(&"keychain:1".to_owned()), "{pending:?}");
 }
 
 #[test]

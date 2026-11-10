@@ -1,6 +1,8 @@
-//! WHEN A FOLLOWING PASS RUNS (#1127). Pure: no clock, no timer and no thread, only
-//! the instants a caller hands it (the Rust form of the KMP `FollowGate`; the runtime owns
-//! the timers). A phone store announces itself in bursts (iOS posts one change per saved
+//! WHEN A FOLLOWING PASS RUNS (#1127, #1183). Pure: no clock, no timer and no thread, only
+//! the instants a caller hands it (the runtime owns the timers). It is the ONE coalescing
+//! machine for every followed store: the coordinator ([`super::coordinator`]) keeps a
+//! `FollowGate<Store>`, so contacts, calendar, files and health settle, run and queue by the
+//! same rule. A phone store announces itself in bursts (iOS posts one change per saved
 //! contact, and the app coming to the front lands beside it), so:
 //!
 //! - **Triggers within [`SETTLE`] are one pass.** The first trigger arms a timer; the ones
@@ -74,6 +76,31 @@ impl<K: Ord + Clone> FollowGate<K> {
                 Step::Nothing
             }
         }
+    }
+
+    /// A trigger that does not wait for the settle: a background window has a budget and the
+    /// work is asked for once, so there is no burst to fold. [`Step::Start`] when nothing was
+    /// waiting or running for the key; a pass already waiting is started now (its timer then
+    /// finds nothing to start), and one already running queues exactly one more.
+    pub fn request_now(&mut self, key: &K) -> Step {
+        match self.states.get(key).copied() {
+            None | Some(State::Waiting { .. }) => {
+                self.states
+                    .insert(key.clone(), State::Running { queued: false });
+                Step::Start
+            }
+            Some(State::Running { .. }) => {
+                self.states
+                    .insert(key.clone(), State::Running { queued: true });
+                Step::Nothing
+            }
+        }
+    }
+
+    /// Whether nothing is waiting, running or queued for the key.
+    #[must_use]
+    pub fn idle(&self, key: &K) -> bool {
+        !self.states.contains_key(key)
     }
 
     /// The timer an [`Step::Arm`] asked for fired at `now`: [`Step::Start`] when the wait is over.
@@ -210,6 +237,27 @@ mod tests {
         assert_eq!(gate.fire(&CONTACTS, ms(2_000)), Step::Start);
         assert_eq!(gate.request(&CALENDAR, ms(2_100)), Step::Arm(ms(2_000)));
         assert_eq!(gate.fire(&CALENDAR, ms(4_100)), Step::Start);
+    }
+
+    #[test]
+    fn a_trigger_that_does_not_wait_starts_at_once_and_queues_one_more_while_running() {
+        let mut gate = gate();
+        assert_eq!(gate.request_now(&CONTACTS), Step::Start);
+        assert!(!gate.idle(&CONTACTS));
+        assert_eq!(gate.request_now(&CONTACTS), Step::Nothing);
+        assert_eq!(gate.request_now(&CONTACTS), Step::Nothing);
+        assert_eq!(gate.finish(&CONTACTS), Step::Start);
+        assert_eq!(gate.finish(&CONTACTS), Step::Nothing);
+        assert!(gate.idle(&CONTACTS));
+    }
+
+    #[test]
+    fn a_trigger_that_does_not_wait_takes_over_a_waiting_one_and_its_timer_starts_nothing() {
+        let mut gate = gate();
+        gate.request(&CONTACTS, ms(0));
+        assert_eq!(gate.request_now(&CONTACTS), Step::Start);
+        assert_eq!(gate.fire(&CONTACTS, ms(2_000)), Step::Nothing);
+        assert_eq!(gate.finish(&CONTACTS), Step::Nothing);
     }
 
     #[test]

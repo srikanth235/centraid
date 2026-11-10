@@ -111,13 +111,23 @@ impl Rig {
         );
     }
 
+    /// A rig with the follow coordinator and the folder follower beside the pass service: a
+    /// granted window follows the phone's stores before the OS is told it is done.
+    fn following() -> Self {
+        Self::build(FakeShell::default(), true)
+    }
+
     fn with_shell(shell: FakeShell) -> Self {
+        Self::build(shell, false)
+    }
+
+    fn build(shell: FakeShell, following: bool) -> Self {
         let secrets = VaultSecrets::new();
         let probe_secrets = secrets.clone();
         let quiet_secrets = secrets.clone();
         let roll = RollLog::default();
         let fake_roll = roll.clone();
-        let registry = passes::registry(&secrets)
+        let mut registry = passes::registry(&secrets)
             .with(centraid_screens::imports::CAMERA_ROLL, move |_| {
                 Some(Box::new(FakeRoll(fake_roll.clone())))
             })
@@ -138,6 +148,14 @@ impl Rig {
             screen: QUIET.to_owned(),
             args: None,
         };
+        if following {
+            registry = registry
+                .with(
+                    centraid_screens::imports::FILES,
+                    centraid_screens::imports::files::build,
+                )
+                .merge(centraid_screens::follow::registry());
+        }
         let runtime = Runtime::new(registry, vec![("t".to_owned(), root)]).with_services({
             let mut services = passes::services();
             services.push(wire::Route {
@@ -145,6 +163,10 @@ impl Rig {
                 screen: centraid_screens::imports::CAMERA_ROLL.to_owned(),
                 args: None,
             });
+            if following {
+                services.push(centraid_screens::imports::routes::files(""));
+                services.extend(centraid_screens::follow::services());
+            }
             services
         });
         Self {
@@ -1219,4 +1241,121 @@ fn a_vault_the_shelf_holds_a_core_for_is_passed_on_that_core_and_a_resting_one_i
         "a resting vault is not woken"
     );
     assert!(rig.secrets.conductor().facts().in_flight.is_empty());
+}
+
+/// The shell answers the coordinator's effects: a keychain habit, a read. Counts the contacts
+/// reads and whether any asked the OS for a permission.
+fn follow_stores(rig: &mut Rig, contacts_connected: bool) -> (u32, u32) {
+    let (mut reads, mut asked) = (0, 0);
+    loop {
+        let Some(at) = rig.driver.effects.iter().position(|request| {
+            matches!(
+                request
+                    .effect
+                    .as_ref()
+                    .and_then(|effect| effect.kind.as_ref()),
+                Some(
+                    wire::effect::Kind::Keychain(_)
+                        | wire::effect::Kind::ContactsRead(_)
+                        | wire::effect::Kind::CalendarRead(_)
+                        | wire::effect::Kind::HealthRead(_)
+                        | wire::effect::Kind::FoldersRead(_)
+                )
+            )
+        }) else {
+            return (reads, asked);
+        };
+        let request = rig.driver.effects.remove(at);
+        let outcome = match request.effect.and_then(|effect| effect.kind) {
+            Some(wire::effect::Kind::Keychain(op)) => {
+                let connected = contacts_connected
+                    && op.key == centraid_screens::people::contacts::IMPORTED_KEY;
+                wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+                    found: connected,
+                    value: if connected { b"1".to_vec() } else { Vec::new() },
+                })
+            }
+            Some(wire::effect::Kind::ContactsRead(read)) => {
+                reads += 1;
+                asked += u32::from(read.ask_permission);
+                wire::effect_result::Outcome::Contacts(wire::ContactsSnapshot {
+                    complete: true,
+                    device_id: "this-install".to_owned(),
+                    ..Default::default()
+                })
+            }
+            other => panic!("nothing else was connected: {other:?}"),
+        };
+        rig.driver.send(
+            request.instance,
+            E::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(outcome),
+            }),
+        );
+    }
+}
+
+fn window_dones(rig: &Rig) -> Vec<(String, bool)> {
+    rig.driver
+        .effects
+        .iter()
+        .filter_map(|request| request.effect.as_ref().and_then(window_done))
+        .collect()
+}
+
+#[test]
+fn a_granted_window_follows_each_connected_store_after_the_backup_and_before_the_os_is_told() {
+    let mut rig = Rig::following();
+    rig.first_pass(empty());
+    // The first launch's own follows (a foreground is a trigger) are not this window's.
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.fact(wire::shell_fact::Fact::Window(wire::WindowGranted {
+        window: windows::NIGHT.to_owned(),
+        deadline_ms: 540_000,
+    }));
+    let (drain, _) = rig.drain();
+    assert_eq!(drain.deadline_ms, 540_000);
+    // NOTHING FOLLOWS WHILE THE BACKUP RUNS: its priorities come first.
+    assert!(!rig.has(|effect| matches!(effect.kind, Some(wire::effect::Kind::Keychain(_)))));
+    rig.answer_drain(empty());
+    // The backup ended; the stores follow before the OS hears the window is done.
+    assert!(window_dones(&rig).is_empty(), "the OS is not told yet");
+    let (reads, asked) = follow_stores(&mut rig, true);
+    assert_eq!((reads, asked), (1, 0), "one read, and no permission");
+    assert_eq!(window_dones(&rig), [(windows::NIGHT.to_owned(), true)]);
+}
+
+#[test]
+fn the_grace_after_leaving_the_screen_follows_nothing() {
+    let mut rig = Rig::following();
+    rig.first_pass(empty());
+    rig.driver.effects.retain(|request| {
+        !matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    });
+    rig.driver
+        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: false,
+        }));
+    let (_, _) = rig.drain();
+    rig.answer_drain(empty());
+    assert_eq!(
+        window_dones(&rig),
+        [(BACKGROUND_WINDOW.to_owned(), true)],
+        "the grace is the upload's alone"
+    );
 }

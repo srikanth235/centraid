@@ -21,8 +21,10 @@
 //!
 //! ## When a pass runs
 //!
-//! [`FollowGate`]: triggers within two seconds are one pass, one pass runs at a time, a trigger
-//! during a pass queues exactly one more. **A pass never runs for a vault that follows no folder**
+//! The follow coordinator ([`crate::follow`]) decides: the app coming forward, a folder picked
+//! or pulled, and a background window are triggers it folds into one pass at a time with one
+//! queued behind it, then wakes this service to run it (`Signalled`) and hears when it ended.
+//! **A pass never runs for a vault that follows no folder**
 //! (the vault holds no `files` origin): a foreground pass never imports into a vault that never
 //! picked one. A read that has not answered in two minutes is abandoned, so one stuck read cannot
 //! hold the follow for good. A complete read that lost most of what the vault follows here is
@@ -35,10 +37,10 @@
 //!
 //! The Docs drive owns the picker effects (`FollowFolder`, `StopFollowing`) and posts what they
 //! came to here ([`wire::imports_files_event`]); the drive reads the folders the vault follows
-//! itself (`shell.files-followed`). The app coming forward is heard as `Lifecycle`.
+//! itself (`shell.files-followed`).
 
 use std::collections::{BTreeSet, VecDeque};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use serde_json::{Value, json};
@@ -46,15 +48,14 @@ use wire::app_query_response::Answer;
 use wire::imports_files_event::Kind as F;
 use wire::screen_event::Kind as E;
 
-use super::gate::{FollowGate, Step};
 use super::{effect, squash};
 use crate::catalog::{act, load};
+use crate::follow::Store;
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::imports as words;
 
-const SETTLE_TIMER: &str = "files-settle";
 const READ_TIMER: &str = "files-read";
 /// A read that has not answered in two minutes is abandoned.
 pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
@@ -65,8 +66,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         return None;
     };
     Some(Box::new(Files {
-        epoch: Instant::now(),
-        gate: FollowGate::default(),
         held: Vec::new(),
         refusal: String::new(),
         pass: None,
@@ -162,8 +161,6 @@ struct Pass {
 }
 
 struct Files {
-    epoch: Instant,
-    gate: FollowGate<()>,
     held: Vec<Held>,
     refusal: String,
     pass: Option<Pass>,
@@ -198,10 +195,6 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
 }
 
 impl Files {
-    fn now(&self) -> Duration {
-        self.epoch.elapsed()
-    }
-
     fn reload(&mut self, ctx: &Ctx) -> bool {
         match read_held(ctx) {
             Reading::Data(held) => {
@@ -212,28 +205,21 @@ impl Files {
         }
     }
 
-    /// The folder store may have changed, or the app came forward: follow soon. Nothing for a
-    /// vault that follows no folder.
+    /// The folder store may have changed: the coordinator coalesces it with every other trigger
+    /// and asks for a pass ([`crate::follow`]). Nothing for a vault that follows no folder.
     fn request(&mut self, ctx: &Ctx) {
         if self.held.is_empty() {
             return;
         }
-        let now = self.now();
-        if let Step::Arm(after) = self.gate.request(&(), now) {
-            ctx.start_timer(SETTLE_TIMER, after);
-        }
+        ctx.follows().changed(ctx, Store::Files);
     }
 
-    fn settled(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let now = self.now();
-        if self.gate.fire(&(), now) == Step::Start {
-            return self.begin(ctx);
-        }
-        Vec::new()
-    }
-
-    /// One pass: read what the vault holds, then ask the shell for the folders' listing.
+    /// One pass, when the coordinator asks: read what the vault holds, then ask the shell for the
+    /// folders' listing. A pass already out is the one it asked for.
     fn begin(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        if self.pass.is_some() {
+            return Vec::new();
+        }
         // A vault that would not say is a pass that did nothing: the next trigger tries again.
         if !self.reload(ctx) || self.held.is_empty() {
             return self.finish(ctx);
@@ -254,14 +240,13 @@ impl Files {
         }))]
     }
 
-    /// The pass is over, however it ended: the queued one, if a trigger came during it, goes now.
+    /// The pass is over, however it ended: the coordinator is told, and runs the one it queued if
+    /// a trigger came during this one.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         ctx.cancel_timer(READ_TIMER);
         self.pass = None;
         self.reload(ctx);
-        if self.gate.finish(&()) == Step::Start {
-            return self.begin(ctx);
-        }
+        ctx.follows().files_ended(ctx);
         Vec::new()
     }
 
@@ -512,9 +497,12 @@ impl Screen for Files {
                 self.reload(ctx);
                 Vec::new()
             }
-            // THE APP CAME FORWARD: the folders may have changed while it was away.
-            Some(E::Lifecycle(wire::AppLifecycle { foreground: true })) => {
-                self.request(ctx);
+            // The coordinator asks for a pass (the app came forward, a trigger settled, a
+            // background window): it wakes this service by name.
+            Some(E::Signalled(_)) => {
+                if ctx.follows().take_run_files() {
+                    return self.begin(ctx);
+                }
                 Vec::new()
             }
             Some(E::ImportsFiles(files)) => {
@@ -528,7 +516,6 @@ impl Screen for Files {
                 }
                 Vec::new()
             }
-            Some(E::TimerFired(fired)) if fired.timer == SETTLE_TIMER => self.settled(ctx),
             Some(E::TimerFired(fired)) if fired.timer == READ_TIMER => {
                 if self.pass.is_some() {
                     self.finish(ctx)

@@ -443,8 +443,9 @@ fn the_sentence_an_import_ends_on() {
 // The flow, through the runtime
 // ---------------------------------------------------------------------------
 
-/// A long-lived screen that hosts the flow the way Agenda's home does: the
-/// Import tap is the proof screen's copy tap, and the status line is its title.
+/// A long-lived screen that hosts the import the way Calendar's home does: the Import tap is the
+/// proof screen's copy tap, and the status line is its title. Following is the coordinator's
+/// (`centraid_screens::follow`), which the following tests run beside it.
 struct Host {
     follow: CalendarFollow,
 }
@@ -486,12 +487,16 @@ fn host_route() -> wire::Route {
     }
 }
 
-fn world() -> World {
-    World::with(Registry::default().with("test.calendar", |_| {
+fn hosts() -> Registry {
+    Registry::default().with("test.calendar", |_| {
         Some(Box::new(Host {
             follow: CalendarFollow::new(),
         }))
-    }))
+    })
+}
+
+fn world() -> World {
+    World::with(hosts())
 }
 
 fn status(world: &World, host: u64) -> String {
@@ -548,6 +553,11 @@ fn is_keychain(kind: &wire::effect::Kind) -> bool {
     matches!(kind, wire::effect::Kind::Keychain(_))
 }
 
+/// The habit read: what a device asks the keychain before it follows.
+fn is_habit_read(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Keychain(op) if op.op == wire::keychain_op::Op::Get as i32)
+}
+
 fn reads(world: &World) -> Vec<wire::CalendarRead> {
     world
         .driver
@@ -575,11 +585,25 @@ fn watches(world: &World) -> Vec<bool> {
         .collect()
 }
 
-fn changed(world: &mut World, host: u64) {
+/// The OS says the calendar changed, under the one effect id of the watch the coordinator asked.
+fn changed(world: &mut World) {
+    let watch = world
+        .driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::PhoneWatch(watch))
+                    if watch.on && watch.source == wire::ImportSource::Calendar as i32
+            )
+        })
+        .cloned()
+        .expect("the coordinator watches the calendar");
     world.driver.send(
-        host,
+        watch.instance,
         E::EffectResult(wire::EffectResult {
-            effect_id: 0,
+            effect_id: watch.effect_id,
             outcome: Some(wire::effect_result::Outcome::PhoneChanged(
                 wire::PhoneChanged {
                     source: wire::ImportSource::Calendar as i32,
@@ -625,8 +649,6 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
             value: vec![],
         }),
     );
-    assert!(watches(&world).is_empty());
-
     tap_import(&mut world, host);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
@@ -652,12 +674,13 @@ fn the_import_tap_asks_the_os_reads_say_importing_and_the_vault_merges_what_it_i
     assert_eq!(dentist.len(), 1);
     // The wall clock and its zone: noon in Paris in March is 11:00Z, and reads back in London as 11:00.
     assert_eq!(dentist[0].local_start, "2099-03-11T11:00");
-    // This device follows from now on: remembered, and the store is watched.
+    // This device follows from now on: remembered. The store is watched by the follow
+    // coordinator, not by this screen.
     assert!(done.effects.iter().any(|r| matches!(
         r.effect.as_ref().and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::Keychain(op)) if op.op == wire::keychain_op::Op::Set as i32 && op.key == "agenda_calendar_imported"
     )));
-    assert_eq!(watches(&world), [true]);
+    assert!(watches(&world).is_empty(), "this screen watches nothing");
 
     assert!(reads(&world).is_empty(), "the second tap was nothing");
 
@@ -835,48 +858,52 @@ fn a_repeating_series_imports_as_one_event_that_skips_what_the_phone_does_not_sh
 // The follow (PhoneFollowSpec, Agenda's pass)
 // ---------------------------------------------------------------------------
 
-fn following_world() -> (World, u64) {
-    let mut world = world();
-    let host = world.driver.push("calendar", host_route());
+/// The coordinator runs beside a screen that hosts the import; nobody has imported yet.
+fn following_world() -> World {
+    World::following(hosts())
+}
+
+/// The coordinator's habit read is answered: this device did import (`found`), or never did.
+fn habit(world: &mut World, found: bool) {
     answer(
-        &mut world,
-        is_keychain,
+        world,
+        is_habit_read,
         wire::effect_result::Outcome::Keychain(wire::KeychainValue {
-            found: true,
-            value: b"1".to_vec(),
+            found,
+            value: if found { b"1".to_vec() } else { Vec::new() },
         }),
     );
-    (world, host)
+}
+
+/// The OS says it changed, the settle passes, and the pass reads the habit; the device imported.
+fn changed_and_followed(world: &mut World) {
+    changed(world);
+    world.driver.pump(Duration::from_millis(2_500));
+    habit(world, true);
 }
 
 #[test]
 fn a_device_that_never_imported_is_not_followed_and_the_phone_is_not_even_read() {
-    let mut world = world();
-    let host = world.driver.push("calendar", host_route());
-    answer(
-        &mut world,
-        is_keychain,
-        wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
-    );
-    assert!(watches(&world).is_empty());
-    changed(&mut world, host);
+    let mut world = following_world();
+    changed(&mut world);
     world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, false);
     assert!(reads(&world).is_empty());
 }
 
 #[test]
-fn an_imported_device_watches_the_store_and_follows_once_the_two_seconds_are_up_never_asking_the_os()
- {
-    let (mut world, host) = following_world();
-    assert_eq!(watches(&world), [true]);
-    // Following starts at once, after the settle time, and not before.
-    world.driver.pump(Duration::from_millis(1_500));
-    assert!(reads(&world).is_empty(), "not before the two seconds");
+fn an_imported_device_follows_once_the_two_seconds_are_up_never_asking_the_os() {
+    let mut world = following_world();
+    changed(&mut world);
+    // Following starts after the settle time, and not before.
     world.driver.pump(Duration::from_millis(1_000));
+    assert!(reads(&world).is_empty(), "not before the two seconds");
+    world.driver.pump(Duration::from_millis(1_600));
+    habit(&mut world, true);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
     assert!(!ask[0].ask_permission, "a pass never asks the OS");
-    assert_eq!(status(&world, host), "", "a pass says nothing");
+    assert_eq!((ask[0].days_back, ask[0].days_on), (7, 62));
 
     answer(
         &mut world,
@@ -888,17 +915,12 @@ fn an_imported_device_watches_the_store_and_follows_once_the_two_seconds_are_up_
         )])),
     );
     assert_eq!(in_window(&world, "Offsite").len(), 1);
-    assert_eq!(
-        status(&world, host),
-        "",
-        "a pass says nothing, even when it wrote"
-    );
 }
 
 #[test]
 fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_more() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+    let mut world = following_world();
+    changed_and_followed(&mut world);
     answer(
         &mut world,
         is_read,
@@ -908,20 +930,22 @@ fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_mo
 
     // TEN TRIGGERS, ONE PASS.
     for _ in 0..10 {
-        changed(&mut world, host);
+        changed(&mut world);
     }
     world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, true);
     assert_eq!(reads(&world).len(), 1);
 
     // FOUR MORE DURING THE PASS: the one in flight read before them, so one more follows it, and no third.
     for _ in 0..4 {
-        changed(&mut world, host);
+        changed(&mut world);
     }
     answer(
         &mut world,
         is_read,
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
     );
+    habit(&mut world, true);
     assert_eq!(reads(&world).len(), 1, "the queued pass starts at once");
     answer(
         &mut world,
@@ -929,13 +953,20 @@ fn a_burst_of_changes_is_one_pass_and_changes_during_a_pass_queue_exactly_one_mo
         wire::effect_result::Outcome::Calendar(snapshot(vec![])),
     );
     world.driver.pump(Duration::from_millis(2_500));
-    assert!(reads(&world).is_empty(), "and no third follows");
+    assert!(
+        !world.driver.effects.iter().any(|request| request
+            .effect
+            .as_ref()
+            .and_then(|e| e.kind.as_ref())
+            .is_some_and(is_habit_read)),
+        "and no third follows"
+    );
 }
 
 #[test]
 fn a_pass_with_no_access_asks_nothing_and_the_next_change_follows_again() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+    let mut world = following_world();
+    changed_and_followed(&mut world);
     answer(
         &mut world,
         is_read,
@@ -945,40 +976,52 @@ fn a_pass_with_no_access_asks_nothing_and_the_next_change_follows_again() {
             ..Default::default()
         }),
     );
-    assert_eq!(
-        status(&world, host),
-        "",
-        "a following pass is silent when access is off"
+    assert!(
+        world.driver.effects.iter().all(|request| !request
+            .effect
+            .as_ref()
+            .and_then(|e| e.kind.as_ref())
+            .is_some_and(is_keychain)),
+        "a following pass is silent when access is off: it asks no one"
     );
-    assert!(world.driver.effects.iter().all(|r| !matches!(
-        r.effect.as_ref().and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::Keychain(_))
-    )));
-    changed(&mut world, host);
-    world.driver.pump(Duration::from_millis(2_500));
+    changed_and_followed(&mut world);
     assert_eq!(reads(&world).len(), 1);
+    assert!(!reads(&world)[0].ask_permission);
 }
 
 #[test]
-fn an_import_tapped_during_a_pass_waits_for_it() {
-    let (mut world, host) = following_world();
-    world.driver.pump(Duration::from_millis(2_500));
+fn an_import_turns_the_follow_on_and_a_pass_follows_it_without_asking() {
+    let mut world = World::following(hosts());
+    let host = world.driver.push("calendar", host_route());
+    // The screen's own habit read is the oldest: this device has not imported yet.
+    answer(
+        &mut world,
+        is_habit_read,
+        wire::effect_result::Outcome::Keychain(wire::KeychainValue::default()),
+    );
     tap_import(&mut world, host);
-    assert_eq!(
-        reads(&world).len(),
-        1,
-        "the pass in flight is the only read out"
+    assert!(
+        reads(&world)[0].ask_permission,
+        "the member's import may ask"
     );
     answer(
         &mut world,
         is_read,
-        wire::effect_result::Outcome::Calendar(snapshot(vec![])),
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
     );
+    assert_eq!(status(&world, host), "1 event imported");
+    // The import told the coordinator; after the settle it reads the habit the import kept.
+    world.driver.pump(Duration::from_millis(2_500));
+    habit(&mut world, true);
     let ask = reads(&world);
     assert_eq!(ask.len(), 1);
     assert!(
-        ask[0].ask_permission,
-        "then the member's import, which may ask"
+        !ask[0].ask_permission,
+        "the follow that comes of it never asks"
     );
 }
 

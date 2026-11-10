@@ -7,11 +7,11 @@
 //! | Screen | Replaces (KMP) | Hosts |
 //! |---|---|---|
 //! | [`CAMERA_ROLL`] | `CameraRoll`, `CameraRollRunner`, `CameraRollSeat`, `LibraryFeed` | the walk, the grant, the cursor, the bytes asked for again |
-//! | [`FILES`] | `PhoneFollow`, `FollowGate`, `FilesFollow`, `FilesImport`, `DocsFollowBridge` | a followed folder |
+//! | [`FILES`] | `PhoneFollow`, `FollowGate`, `FilesFollow`, `FilesImport`, `DocsFollowBridge` | a followed folder (its pass runs when [`crate::follow`] asks) |
 //! | [`MADE`] | `PhoneImport.made*` | what a made vault brings in, as one line |
 //!
 //! Dropped with the Kotlin architecture: `PhoneFollowSource`/`PhoneFollowPass` (one seam for
-//! sources that no longer exist: contacts and calendar follow in `people`/`agenda`), the
+//! sources that no longer exist: contacts and calendar follow in `people`/`calendar`, and every store's trigger is [`crate::follow`]'s), the
 //! held-origin question (`PhoneFollowQuestion`, `PhoneFollowWords`, `OriginGone`: the vault's
 //! `follow.*` decides what a file gone from a complete read does, so nothing is held for a
 //! question), `PhoneDevice` (the shell mints the install id and sends it with every listing),
@@ -22,7 +22,6 @@
 
 pub mod camera_roll;
 pub mod files;
-pub mod gate;
 pub mod made;
 pub mod reminders;
 
@@ -99,6 +98,17 @@ pub fn runtime() -> crate::Runtime {
 #[must_use]
 pub fn runtime_with(secrets: &VaultSecrets) -> crate::Runtime {
     crate::Runtime::new(registry(secrets), roots())
+}
+
+/// [`runtime`] with the follow coordinator ([`crate::follow`]) beside the services, which is what
+/// decides when the folder follower runs a pass.
+#[must_use]
+pub fn runtime_following() -> crate::Runtime {
+    crate::Runtime::new(
+        registry(&VaultSecrets::new()).merge(crate::follow::registry()),
+        roots(),
+    )
+    .with_services(crate::follow::services())
 }
 
 pub(crate) fn effect(kind: wire::effect::Kind) -> wire::Effect {

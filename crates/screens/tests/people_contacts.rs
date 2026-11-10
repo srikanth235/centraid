@@ -90,8 +90,9 @@ fn the_day_one_tap_reads_the_address_book_and_a_snapshot_becomes_people() {
         contact("", "lookup:nameless", "", ""),
     ]));
     assert_eq!(status(&d, i), "2 people imported");
-    // This device follows from now on: the flag is kept off the vault, and the store watched.
-    assert_eq!(kinds(&d), ["keychain:2", "watch:true"]);
+    // This device follows from now on: the flag is kept off the vault. The store is watched and
+    // read by the follow coordinator, not by this screen.
+    assert_eq!(kinds(&d), ["keychain:2"]);
 
     let names: Vec<String> = roster_of(&d)
         .people
@@ -152,46 +153,20 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
 }
 
 #[test]
-fn a_device_that_imported_follows_a_burst_of_changes_as_one_silent_pass() {
+fn a_device_that_imported_asks_the_phone_nothing_from_the_home() {
     let mut d = clean();
     let i = begin(&mut d);
-    // The keychain says this device imported: watch the store, and follow once at once.
+    // The keychain says this device imported: the home only knows it, to draw the row. Watching
+    // the store and reading it are the follow coordinator's (`follow_coordinator.rs`: a burst of
+    // changes is one pass, a pass never asks the OS), whichever screen is showing.
     d.answer_effect(O::Keychain(wire::KeychainValue {
         found: true,
         value: b"1".to_vec(),
     }));
-    assert_eq!(kinds(&d), ["watch:true"]);
-    let watch = d.effects.remove(0);
-
-    // A burst of store changes arms ONE two-second timer; the pass waits it out.
-    for _ in 0..3 {
-        d.send(
-            i,
-            wire::screen_event::Kind::EffectResult(wire::EffectResult {
-                effect_id: watch.effect_id,
-                outcome: Some(O::PhoneChanged(wire::PhoneChanged {
-                    source: wire::ImportSource::Contacts as i32,
-                })),
-            }),
-        );
-    }
-    assert!(d.effects.is_empty(), "nothing is read before the settle");
-    d.pump(Duration::from_millis(2600));
-    // A following pass never asks the OS for permission.
-    assert_eq!(kinds(&d), ["read:ask=false"]);
-    d.answer_effect(snapshot(vec![contact("Ana", "lookup:ana", "", "")]));
-    assert!(d.effects.is_empty());
-    // And it says nothing: a following pass is silent.
-    assert_eq!(status(&d, i), "");
-    d.pump(Duration::from_millis(300));
-    assert_eq!(
-        roster_of(&d)
-            .people
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>(),
-        ["Ana"]
-    );
+    assert!(d.effects.is_empty(), "{:?}", kinds(&d));
+    d.pump(Duration::from_millis(2_600));
+    assert!(d.effects.is_empty(), "{:?}", kinds(&d));
+    assert_eq!(status(&d, i), "", "and says nothing");
 }
 
 fn row(d: &Driver, i: u64) -> wire::PeopleContactsRow {
@@ -226,9 +201,9 @@ fn the_phone_contacts_row_says_on_off_paused_and_no_access_and_its_action_fits()
     assert!(on.detail.starts_with("2 followed"), "{}", on.detail);
     d.effects.clear();
 
-    // Pause: the follow stops, the store is no longer watched, and the keychain says paused.
+    // Pause: the keychain says paused, and the coordinator's next pass finds it so and reads nothing.
     send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
-    assert_eq!(kinds(&d), ["keychain:2", "watch:false"]);
+    assert_eq!(kinds(&d), ["keychain:2"]);
     let paused = row(&d, i);
     assert_eq!(
         (paused.state, paused.action_label.as_str()),
@@ -236,9 +211,9 @@ fn the_phone_contacts_row_says_on_off_paused_and_no_access_and_its_action_fits()
     );
     d.effects.clear();
 
-    // Resume: watched again and a pass at once.
+    // Resume: the keychain says so, and the coordinator is asked for a pass.
     send_home(&mut d, i, H::ContactsAction(ev::ContactsActionTapped {}));
-    assert_eq!(kinds(&d), ["keychain:2", "watch:true"]);
+    assert_eq!(kinds(&d), ["keychain:2"]);
     assert_eq!(row(&d, i).state, State::Following as i32);
 }
 

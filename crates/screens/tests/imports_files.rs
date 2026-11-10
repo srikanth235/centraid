@@ -16,7 +16,7 @@ use wire::imports_files_event as files;
 
 /// The services open together; the camera roll's first read of the grant is not this file's.
 fn shell() -> Shell {
-    let mut shell = imports_support::shell();
+    let mut shell = imports_support::shell_over(centraid_screens::imports::runtime_following());
     shell.d.effects.clear();
     shell
 }

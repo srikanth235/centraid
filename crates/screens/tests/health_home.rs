@@ -248,7 +248,7 @@ fn a_record_days_write_redraws_today_with_no_tap() {
 
 #[test]
 fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_behind_a_confirm() {
-    let mut d = driver();
+    let (mut d, follower) = driver_following_on("ios", "de-DE");
     let today = today(&d);
     connect_store(&d);
     record(&d, &today, &[(0, "steps", 8_412.0), (1, "weight_kg", 71.4)]);
@@ -256,8 +256,15 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     // The phone's habit: connected, with steps, sleep, weight and workouts chosen.
     assert!(matches!(pending(&d), wire::effect::Kind::Keychain(_)));
     d.answer_effect(keychain("1|steps,sleep_min,weight_kg,workouts"));
-    // The pass it starts asks the shell to read the store, and never asks the OS.
-    match pending(&d) {
+    // The pass the coordinator starts reads the same habit, then asks the shell to read the
+    // store, and never asks the OS.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(
+        &mut d,
+        follower,
+        keychain("1|steps,sleep_min,weight_kg,workouts"),
+    );
+    match pending_for(&d, follower) {
         wire::effect::Kind::HealthRead(read) => {
             assert!(!read.ask_permission);
             assert_eq!(read.chosen, ["steps", "sleep_min", "weight_kg", "workouts"]);
@@ -265,13 +272,17 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
         }
         other => panic!("{other:?}"),
     }
-    d.answer_effect(wire::effect_result::Outcome::Health(wire::HealthSnapshot {
-        store: wire::health_snapshot::Store::AppleHealth as i32,
-        store_present: true,
-        workouts_complete: true,
-        device_id: "phone-a".to_owned(),
-        ..Default::default()
-    }));
+    answer_for(
+        &mut d,
+        follower,
+        wire::effect_result::Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::AppleHealth as i32,
+            store_present: true,
+            workouts_complete: true,
+            device_id: "phone-a".to_owned(),
+            ..Default::default()
+        }),
+    );
     let state = home_state(d.view(i));
     let rows: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(rows, ["reads", "choose", "stop"]);
@@ -339,18 +350,25 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
 
 #[test]
 fn health_connect_names_a_refused_type_exactly() {
-    let mut d = driver_on("android", "en-GB");
+    let (mut d, follower) = driver_following_on("android", "en-GB");
     let today = today(&d);
     connect_store(&d);
     record(&d, &today, &[(0, "steps", 8_412.0)]);
     let i = root(&d);
     d.answer_effect(keychain("1|steps,sleep_min"));
-    d.answer_effect(wire::effect_result::Outcome::Health(wire::HealthSnapshot {
-        store: wire::health_snapshot::Store::HealthConnect as i32,
-        store_present: true,
-        refused: vec!["sleep_min".to_owned()],
-        ..Default::default()
-    }));
+    // The home asked the coordinator for a pass: after the settle it reads the same habit.
+    d.pump(std::time::Duration::from_millis(2_600));
+    answer_for(&mut d, follower, keychain("1|steps,sleep_min"));
+    answer_for(
+        &mut d,
+        follower,
+        wire::effect_result::Outcome::Health(wire::HealthSnapshot {
+            store: wire::health_snapshot::Store::HealthConnect as i32,
+            store_present: true,
+            refused: vec!["sleep_min".to_owned()],
+            ..Default::default()
+        }),
+    );
     let facts = &home_state(d.view(i)).reads_facts;
     let last = facts.last().unwrap();
     assert_eq!(

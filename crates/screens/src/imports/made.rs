@@ -7,8 +7,8 @@
 //! bring, says nothing, and no line shows when nothing came in.
 //!
 //! The importers are the apps' own: People's [`ContactsFollow`] and Agenda's [`CalendarFollow`]
-//! (so a calendar imported here is followed from now on, exactly as one imported from Agenda's
-//! home), and [`super::reminders`]. This screen only sequences them and says the result.
+//! (so a calendar imported here is followed from now on, exactly as one imported from Calendar's
+//! home: the follow coordinator takes it from the import), and [`super::reminders`]. This screen only sequences them and says the result.
 //!
 //! The shell tells it when the vault is made (`Made`), answers the photo prompt
 //! (`LibraryPermission{ask}`) and the importers' reads as it always does, and stops drawing its
@@ -306,12 +306,6 @@ impl Screen for Made {
                 Some(O::Failed(_)) => self.next(ctx),
                 _ => Vec::new(),
             },
-            // The importers' own timers and watches, once they are following.
-            (E::TimerFired(_), Step::Contacts | Step::Calendar) => {
-                let mut effects = self.contacts.on_event(&kind, ctx).unwrap_or_default();
-                effects.extend(self.calendar.on_event(&kind, ctx).unwrap_or_default());
-                effects
-            }
             _ => Vec::new(),
         }
     }
