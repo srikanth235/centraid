@@ -392,6 +392,7 @@ message MoneyCashflowSeries {
   string in_label = 4;
   string out_label = 5;
   string partial_label = 6;
+  string net_label = 7;
 }
 
 message MoneyCashflowMonth {

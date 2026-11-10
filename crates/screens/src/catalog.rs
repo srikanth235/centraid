@@ -3909,7 +3909,7 @@ pub mod act {
             }
         }
 
-        /// Turn a person's birthday reminder on or off through person.set_birthday_reminder: the birthday is the person's own column, so the switch is theirs and event.edit does not reach it. The date stays on their sheet.
+        /// Ensure a person's birthday reminder is on through person.set_birthday_reminder. Birthday reminders always stay on; requests to turn one off are refused.
         #[derive(Clone, Debug, Default)]
         pub struct SetBirthdayReminder {
             pub person_id: String,

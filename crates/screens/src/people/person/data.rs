@@ -341,7 +341,7 @@ pub fn person(
                     &words::date_a11y(locale),
                     &[("label", &date.label), ("day", &day)],
                 ),
-                toggleable: true,
+                toggleable: !date.date_id.starts_with(BIRTHDAY_PREFIX),
                 day_label: day,
             }
         })

@@ -1,0 +1,36 @@
+   Compiling tokio-rustls v0.26.5
+   Compiling centraid-assist v1.0.0-alpha.0 (/Users/srikanth/gitspace/centraid/crates/assist)
+   Compiling centraid-gateway v1.0.0-alpha.0 (/Users/srikanth/gitspace/centraid/crates/gateway)
+   Compiling centraid-core v1.0.0-alpha.0 (/Users/srikanth/gitspace/centraid/crates/core)
+   Compiling centraid-screens v1.0.0-alpha.0 (/Users/srikanth/gitspace/centraid/crates/screens)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.19s
+     Running tests/calendar_grid.rs (target/debug/deps/calendar_grid-864106c1bd446f13)
+
+running 24 tests
+test a_move_keeps_the_length_and_undo_puts_it_back ... ok
+test a_layout_choice_keeps_the_day_and_only_a_calendar_view_is_one ... ok
+test a_refused_write_says_the_vaults_sentence_and_leaves_the_event ... ok
+test a_resize_sets_the_end_and_is_never_under_fifteen_minutes ... ok
+test a_search_term_draws_no_grid ... ok
+test a_run_over_midnight_and_an_all_day_event_cannot_be_dragged ... ok
+test a_period_step_is_a_day_a_week_a_month_or_a_year ... ok
+test a_long_press_opens_the_add_sheet_at_the_snapped_time_and_writes_nothing ... ok
+test a_search_term_puts_the_header_away ... ok
+test a_week_page_moves_whole_weeks_and_keeps_the_weekday ... ok
+test a_strip_day_is_chosen_in_the_layout_it_was_picked_in ... ok
+test an_event_with_other_guests_cannot_be_dragged_and_a_move_writes_nothing ... ok
+test an_occurrence_of_a_series_moves_alone ... ok
+test day_draws_one_column_and_the_strip_of_its_week ... ok
+test month_draws_whole_weeks_and_a_start_on_the_week_start_has_no_leading_days ... ok
+test the_all_day_lane_holds_days_chips_once_and_week_keeps_its_columns ... ok
+test the_chip_goes_back_to_the_month_of_the_anchor ... ok
+test the_list_style_draws_dots_and_the_selected_days_rows ... ok
+test the_today_key_shows_off_today_and_the_tap_brings_the_day_back ... ok
+test day_and_week_carry_the_header_and_nothing_else_keeps_it ... ok
+test the_view_menu_is_day_week_month_list_year_and_lights_the_calendar_tab ... ok
+test toolbar_words_follow_the_view ... ok
+test week_reads_the_whole_week_from_the_regions_first_weekday ... ok
+test year_is_twelve_months_of_whole_weeks_and_a_month_opens_the_month ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.51s
+

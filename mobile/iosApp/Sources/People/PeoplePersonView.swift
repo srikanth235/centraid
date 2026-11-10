@@ -611,8 +611,7 @@ private struct PeoplePersonSheetView: View {
         SheetRoom(
             title: frame.title,
             status: frame.hasFailure ? frame.failure.sentence : "",
-            primary: SheetPrimary(label: frame.submitLabel) {
-                guard frame.submitEnabled else { return }
+            primary: SheetPrimary(label: frame.submitLabel, enabled: frame.submitEnabled) {
                 send(PeopleEvents.person { $0.submitted = .init() })
             },
             outlines: frame.cancelLabel.isEmpty ? [] : [

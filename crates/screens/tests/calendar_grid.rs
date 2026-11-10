@@ -24,12 +24,9 @@ use wire::screen_event::Kind as E;
 /// Wednesday 9 June 2027: its week is 7 to 13 June from Monday, 6 to 12 June
 /// from Sunday.
 const WED: &str = "2027-06-09";
-
-/// The instant the example scenario is seeded as of: Monday 2 March 2026, 12:00 UTC. The scenario
-/// is laid out from "now" and its weekly series starts tomorrow, so on the machine's clock it fell
-/// on a different weekday each day the suite ran and, on a Tuesday, put a "Morning run" on the
-/// Wednesday these tests draw. Fixed, it is a Tuesday series every time.
-const SEEDED_AT_MS: i64 = 1_772_452_800_000;
+/// Monday 9 November 2026, 09:00 UTC. The sample's weekly run stays on Tuesday,
+/// rather than moving into a test's Wednesday when the real machine's day changes.
+const SCENARIO_AT: i64 = 1_794_214_800_000;
 
 struct Rig {
     driver: Driver,
@@ -44,7 +41,7 @@ fn rig(destination: Dest) -> Rig {
             agenda::registry(),
             vec![(agenda::TAB.to_owned(), routes::home(destination, ""))],
         ),
-        SEEDED_AT_MS,
+        SCENARIO_AT,
     );
     driver.start();
     let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
@@ -331,9 +328,7 @@ fn week_reads_the_whole_week_from_the_regions_first_weekday() {
         .collect();
     assert_eq!(initials, "MTWTFSS");
     assert!(strip.days[2].is_selected && strip.days[6].dot_hue_keys.len() == 1);
-    // The seeded vault's weekly "Morning run" is a Tuesday series, so a day can hold a dot this
-    // test did not put there: what it asserts is that none of ITS events is on Monday, the day
-    // nobody wrote to.
+    // The seeded weekly run is on Tuesday. None of this test's own events is on Monday.
     assert!(
         r.grid().days[0]
             .blocks
@@ -626,7 +621,11 @@ fn a_long_press_opens_the_add_sheet_at_the_snapped_time_and_writes_nothing() {
     }));
     assert!(r.opened().is_none());
     r.settle();
-    assert!(r.grid().days[0].blocks.is_empty());
+    assert!(
+        r.grid().days[0].blocks.is_empty(),
+        "unexpected grid after long press: {:?}",
+        r.grid().days[0].blocks
+    );
     assert!(r.state().status.is_none());
 }
 

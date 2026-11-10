@@ -74,26 +74,16 @@ fn phase(v: &wire::ViewState) -> Phase {
 }
 
 fn rent(d: &Driver) -> String {
-    rent_on(d, &day(d, 4))
-}
-
-/// The reminder "Rent", due at nine on `day`.
-fn rent_on(d: &Driver, day: &str) -> String {
     add(
         d,
         act::reminders::AddTask {
             title: "Rent".into(),
             description: Field::Is("Standing order".into()),
-            due: due(&format!("{day}T09:00")),
+            due: due(&format!("{}T09:00", day(d, 4))),
             ..Default::default()
         },
     )
 }
-
-/// A Wednesday far enough ahead to be a future day whenever the suite runs: a test about the
-/// weekdays of a repeat names its day rather than reading it off the machine's clock, where four
-/// days from today is a Saturday one day in seven.
-const A_WEDNESDAY: &str = "2099-06-03";
 
 // -----------------------------------------------------------------------------
 // Reading
@@ -651,7 +641,16 @@ fn custom_event(d: &mut Driver, i: u64, kind: wire::agenda_editor_event::Kind) {
 fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
     use wire::agenda_editor_event as ee;
     let mut d = driver();
-    let id = rent_on(&d, A_WEDNESDAY);
+    // The default weekly rule selects the due weekday. Keep it Wednesday so
+    // toggling Saturday below adds a second day, regardless of the machine date.
+    let id = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Rent".into(),
+            due: due("2027-06-09T09:00"),
+            ..Default::default()
+        },
+    );
     let i = open(&mut d, &id);
     // Custom is a choice beside the presets, and no sheet is up until it is chosen.
     let repeats = field(d.view(i), "repeats");
@@ -667,6 +666,15 @@ fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
         .clone()
         .expect("the sheet");
     assert!(!sheet.read_only && sheet.can_apply);
+    assert_eq!(
+        sheet
+            .weekdays
+            .iter()
+            .filter(|day| day.selected)
+            .map(|day| day.key.as_str())
+            .collect::<Vec<_>>(),
+        ["WE"]
+    );
     // Closing the sheet drops the working rule and writes nothing.
     let before = task_of(&d, &id).updated_at;
     send_detail(&mut d, i, de::Kind::FieldClosed(de::FieldClosed {}));

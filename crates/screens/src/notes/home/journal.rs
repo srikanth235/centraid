@@ -63,7 +63,7 @@ impl Journal {
     /// The core's days, as sections.
     pub fn data(
         locale: Locale,
-        cycle: HourCycle,
+        _cycle: HourCycle,
         journal: &wire::NotesJournal,
     ) -> wire::NotesJournalData {
         let days: Vec<wire::NotesJournalDaySection> = journal
@@ -81,15 +81,9 @@ impl Journal {
                     .iter()
                     .map(|entry| {
                         let title = fold::title_of(locale, entry.title.as_deref(), &entry.preview);
-                        let time = if entry.local_time.is_empty() {
-                            String::new()
-                        } else {
-                            civil::clock_for(
-                                locale,
-                                &format!("{}T{}", day.day, entry.local_time),
-                                cycle,
-                            )
-                        };
+                        // Journal entries are filed on a day. Their storage timestamp is a
+                        // noon anchor, not the time the member wrote the entry.
+                        let time = String::new();
                         let check = fold::check_label(locale, entry.check_done, entry.check_total);
                         wire::NotesJournalRow {
                             note_id: entry.note_id.clone(),

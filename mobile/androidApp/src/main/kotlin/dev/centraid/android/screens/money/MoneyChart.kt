@@ -161,7 +161,7 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
             .fillMaxWidth()
             .heightIn(min = MONTH_ROW_MIN)
             .testTag(testTag)
-            .clearAndSetSemantics { contentDescription = spoken(month.accessibility_label, month.net) },
+            .clearAndSetSemantics { contentDescription = month.accessibility_label },
     ) {
         MoneyHairline()
         Row(

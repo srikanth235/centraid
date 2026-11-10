@@ -18,6 +18,7 @@
   ],
   "groups" : [
     {
+      "name" : "teal-blue",
       "layers" : [
         {
           "glass" : true,
@@ -36,6 +37,7 @@
       }
     },
     {
+      "name" : "orange-pink",
       "layers" : [
         {
           "glass" : true,

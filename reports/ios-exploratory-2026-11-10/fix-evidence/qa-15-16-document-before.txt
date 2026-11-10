@@ -1,0 +1,74 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 text Description: Docs › Travel, ID: docs-document-subtitle, Secondary Actions: Cancel
+					15 text Description: Bring tickets, water, and a rain jacket., ID: docs-reader, Secondary Actions: Cancel
+					16 button Description: Edit, ID: docs-reader, Secondary Actions: Cancel
+					17 text Description: Document · 40 bytes, Secondary Actions: Cancel
+					18 text Description: Changed today, Secondary Actions: Cancel
+					19 button Description: Versions, 4 versions, ID: docs-versions, Secondary Actions: Cancel
+					20 heading Description: ABOUT, ID: link-section-title, Secondary Actions: Cancel
+					21 button Description: Add person, ID: link-add-person, Secondary Actions: Cancel
+					22 heading Description: DETAILS, Secondary Actions: Cancel
+					23 text Description: Kind, Document, Secondary Actions: Cancel
+					24 text Description: Size, 40 bytes, Secondary Actions: Cancel
+					25 text Description: Media type, text/plain, Secondary Actions: Cancel
+					26 text Description: Folder, Travel, Secondary Actions: Cancel
+					27 text Description: Added, Tue 10 November 15:04, Secondary Actions: Cancel
+					28 text Description: Changed, Tue 10 November 15:05, Secondary Actions: Cancel
+					29 text Description: Versions, 4, Secondary Actions: Cancel
+					30 button Description: Share, ID: docs-bar-share, Secondary Actions: Cancel
+					31 button Description: Star, ID: docs-bar-star, Secondary Actions: Cancel
+					32 button Description: Labels, ID: docs-bar-labels, Secondary Actions: Cancel
+					33 button Description: Move, ID: docs-bar-move, Secondary Actions: Cancel
+					34 button Description: Move to trash, ID: docs-bar-trash, Secondary Actions: Cancel
+				35 button Description: Home, ID: app.grid.3x3
+				36 button Description: Screenshot, ID: camera.viewfinder
+				37 button Description: Record, ID: record.circle
+				38 button Rotate Right
+	39 toolbar
+		40 menu button Add, Help: Add Device, ID: plus
+		41 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		42 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		43 toggle button Description: Capture Keyboard, Value: off
+		44 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		45 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		46 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		47 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		48 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		49 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		50 menu button More, Help: More Actions, ID: ellipsis
+		51 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		52 radio button Description: text.document, Help: Reports, Value: 0
+		53 radio button Description: Info, Value: 0, ID: info
+	54 close button
+	55 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	56 minimize button
+	57 text c1173-review iOS 26.5
+58 menu bar
+	59 Device Hub
+	60 File
+	61 Edit
+	62 View
+	63 Device
+	64 Controls
+	65 Window
+	66 Help

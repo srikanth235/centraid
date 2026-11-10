@@ -332,6 +332,9 @@ impl Person {
     }
 
     fn reminder(&mut self, ctx: &Ctx, date_id: &str) {
+        if date_id.starts_with(BIRTHDAY_PREFIX) {
+            return;
+        }
         let Some((sheet, _)) = self.loaded() else {
             return;
         };

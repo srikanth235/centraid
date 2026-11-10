@@ -636,9 +636,9 @@ private struct NotesJournalComposeSheet: View {
         SheetRoom(
             title: compose.title,
             status: compose.status,
-            primary: compose.canSave
-                ? SheetPrimary(label: compose.save) { send(NotesEvents.home { $0.composeSaved = .init() }) }
-                : nil,
+            primary: SheetPrimary(label: compose.save, enabled: compose.canSave) {
+                send(NotesEvents.home { $0.composeSaved = .init() })
+            },
             titleIdentifier: "notes-journal-compose"
         ) {
             TextField(compose.moodPlaceholder, text: $mood)

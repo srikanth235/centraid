@@ -6,6 +6,7 @@
 //! it to its own `strings/photos_<screen>.rs`, not here.
 
 catalog! {
+    counted photos_places_cluster = ("{n} place", "{n} places");
     plain photograph = ("Photo", "Photo");
     plain photos_add = ("Add", "Add");
     plain photos_attach = ("Attach", "Attach");
@@ -206,7 +207,7 @@ catalog! {
     plain photos_places_map = ("Map", "Map");
     plain photos_places_map_empty = ("No place has a location yet.", "No place has a location yet.");
     plain photos_places_map_empty_caption = ("Photos with a location appear on the map.", "Photos with a location appear on the map.");
-    plain photos_places_map_note = ("Nothing is downloaded; this is drawn from your own coordinates.", "Nothing is downloaded; this is drawn from your own coordinates.");
+    plain photos_places_map_note = ("Places are grouped by area from your own coordinates.", "Places are grouped by area from your own coordinates.");
     plain photos_places_name_this = ("Name this place", "Name this place");
     plain photos_places_north = ("N ↑", "N ↑");
     plain photos_places_open_them = ("Open them.", "Open them.");

@@ -399,7 +399,8 @@ fn icon_json(tokens: &Tokens) -> Result<String> {
             .collect::<Vec<_>>()
             .join(",\n");
         format!(
-            "    {{\n      \"layers\" : [\n{layers}\n      ],\n      \"shadow\" : {{\n        \"kind\" : \"layer-color\",\n        \"opacity\" : 0.35\n      }}\n    }}"
+            "    {{\n      \"name\" : \"{}\",\n      \"layers\" : [\n{layers}\n      ],\n      \"shadow\" : {{\n        \"kind\" : \"layer-color\",\n        \"opacity\" : 0.35\n      }}\n    }}",
+            keys.join("-")
         )
     };
     Ok(format!(

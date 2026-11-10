@@ -273,6 +273,13 @@ pub(crate) fn local_stamp(zone: &str, instant: &str) -> Option<Stamp> {
     }
 }
 
+/// Creation dates use the same minute precision as `Stamp::parse` and parked writes.
+/// Convert the zone first so the date and minute are both the member's.
+fn local_created_stamp(zone: &str, instant: &str) -> Option<Stamp> {
+    let stamp = local_stamp(zone, instant)?;
+    Stamp::parse(&stamp.vault())
+}
+
 /// The instant a wall-clock time of `zone` is, as the vault keeps one (`2026-03-04T12:00:00Z`).
 pub(crate) fn utc_instant(zone: &str, civil: jiff::civil::DateTime) -> Option<String> {
     let tz = jiff::tz::TimeZone::get(zone).ok()?;
@@ -726,7 +733,7 @@ impl World {
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let created = text(entity, "created_at").unwrap_or_default();
             self.insert(Row {
-                date: Stamp::parse(&created),
+                date: local_created_stamp(&self.zone, &created),
                 ..Row::of(Kind::Note, &id, entity, fields)
             });
         }
@@ -818,7 +825,7 @@ impl World {
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let created = text(entity, "created_at").unwrap_or_default();
             self.insert(Row {
-                date: Stamp::parse(&created),
+                date: local_created_stamp(&self.zone, &created),
                 ..Row::of(Kind::Document, &id, entity, fields)
             });
             if let Some(folder) = text(document, "folder_id") {

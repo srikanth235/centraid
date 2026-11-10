@@ -122,6 +122,42 @@ pub fn plot(cards: &[wire::PhotosPlaceCard]) -> Vec<Option<(f64, f64, f64)>> {
         .collect()
 }
 
+/// Six disjoint areas keep the private plate selectable even when thousands of places
+/// project into the same neighbourhood. A group menu preserves every original shelf route.
+#[must_use]
+pub fn map_pins(rows: &[wire::PhotosPlaceRow], locale: Locale) -> Vec<wire::PhotosPlaceRow> {
+    let mut areas = std::collections::BTreeMap::<(u8, u8), Vec<wire::PhotosPlaceRow>>::new();
+    for row in rows.iter().filter(|row| row.pinned) {
+        let x = if row.pin_x < 1.0 / 3.0 {
+            0
+        } else if row.pin_x < 2.0 / 3.0 {
+            1
+        } else {
+            2
+        };
+        let y = u8::from(row.pin_y >= 0.5);
+        areas.entry((x, y)).or_default().push(row.clone());
+    }
+    areas
+        .into_iter()
+        .filter_map(|((x, y), choices)| {
+            let mut pin = choices.first()?.clone();
+            pin.pin_x = (f64::from(x) + 0.5) / 3.0;
+            pin.pin_y = (f64::from(y) + 0.5) / 2.0;
+            if choices.len() > 1 {
+                pin.place_id = format!("area-{x}-{y}");
+                pin.title = words::photos_places_cluster(locale, choices.len() as u64);
+                pin.spoken.clone_from(&pin.title);
+                pin.count_mark = choices.len().to_string();
+                pin.pin_size = PIN_CEILING;
+                pin.open = None;
+                pin.choices = choices;
+            }
+            Some(pin)
+        })
+        .collect()
+}
+
 impl Places {
     fn reload(&mut self, ctx: &Ctx) {
         let reading = read::read(
@@ -225,6 +261,7 @@ impl Places {
             place_id,
             title,
             spoken,
+            choices: Vec::new(),
         }
     }
 
@@ -282,6 +319,7 @@ impl Places {
             },
             map_note: words::photos_places_map_note(locale),
             north_label: words::photos_places_north(locale),
+            map_pins: map_pins(&rows, locale),
             places: rows,
         }
     }

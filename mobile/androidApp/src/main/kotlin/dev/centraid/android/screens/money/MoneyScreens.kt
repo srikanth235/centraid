@@ -357,9 +357,15 @@ private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Un
                 MoneySection(series.heading)
                 MoneyCashflowChart(
                     months = series.months,
-                    summary = MoneyGeometry.chartSummary(series.months.map { spoken(it.accessibility_label, it.net) }),
+                    summary = MoneyGeometry.chartSummary(series.months.map { it.accessibility_label }),
                 )
                 MoneyLegend(incoming = series.in_label, outgoing = series.out_label, partial = series.partial_label)
+                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f))
+                    listOf(series.in_label, series.out_label, series.net_label).forEach { label ->
+                        Text(label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.width(68.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    }
+                }
             }
         }
         // NEWEST FIRST under the chart, which runs oldest to newest.

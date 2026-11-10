@@ -1,0 +1,104 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Sheet Grabber, Help: Double tap to dismiss the keyboard., Value: Expanded, Secondary Actions: Cancel
+					15 heading Description: Add channel, ID: kit-sheet-title, Secondary Actions: Cancel
+					16 button Description: Phone, ID: people-kind-phone, Secondary Actions: Cancel
+					17 button (selected) Description: Email, ID: people-kind-email, Secondary Actions: Cancel
+					18 button Description: Address, ID: people-kind-address, Secondary Actions: Cancel
+					19 button Description: Handle, ID: people-kind-handle, Secondary Actions: Cancel
+					20 text Description: Value, Secondary Actions: Cancel
+					21 text field (settable) Description: Value, Value: qa.channel@example.com, ID: people-sheet-channel-value, Secondary Actions: Cancel
+					22 text Description: Label, Secondary Actions: Cancel
+					23 text field (settable) Description: Label, ID: people-sheet-channel-label, Secondary Actions: Cancel
+					24 switch Description: Preferred, Value: 0, ID: people-sheet-preferred, Secondary Actions: Cancel
+					25 button Description: Save, ID: kit-primary, Secondary Actions: Cancel
+					26 button Description: Cancel, ID: people-sheet-cancel
+					27 element Description: “com”, Secondary Actions: Cancel
+					28 element Secondary Actions: Cancel
+					29 element Secondary Actions: Cancel
+					30 button q
+					31 button w
+					32 button e
+					33 button r
+					34 button t
+					35 button y
+					36 button u
+					37 button i
+					38 button o
+					39 button p
+					40 button a
+					41 button s
+					42 button d
+					43 button f
+					44 button g
+					45 button h
+					46 button j
+					47 button k
+					48 button l
+					49 button Description: shift, Help: Quadruple-tap to enter caps lock, Secondary Actions: Caps Lock
+					50 button z
+					51 button x
+					52 button c
+					53 button v
+					54 button b
+					55 button n
+					56 button m
+					57 button delete
+					58 button Description: numbers, ID: more
+					59 button Description: Emoji, ID: emoji
+					60 button Description:  , ID: space
+					61 button Description: return, ID: Return
+					62 element Secondary Actions: Cancel
+					63 button Description: Next keyboard, Help: Double-tap and hold, then drag up to select another keyboard, Value: Nederlands, Secondary Actions: Cancel
+					64 button Description: Dictate, Help: Double-tap to start dictation. Double-tap with two fingers when finished., ID: dictation, Secondary Actions: Cancel
+				65 button Description: Home, ID: app.grid.3x3
+				66 button Description: Screenshot, ID: camera.viewfinder
+				67 button Description: Record, ID: record.circle
+				68 button Rotate Right
+	69 toolbar
+		70 menu button Add, Help: Add Device, ID: plus
+		71 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		72 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		73 toggle button Description: Capture Keyboard, Value: off
+		74 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		75 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		76 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		77 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		78 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		79 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		80 menu button More, Help: More Actions, ID: ellipsis
+		81 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		82 radio button Description: text.document, Help: Reports, Value: 0
+		83 radio button Description: Info, Value: 0, ID: info
+	84 close button
+	85 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	86 minimize button
+	87 text c1173-review iOS 26.5
+88 menu bar
+	89 Device Hub
+	90 File
+	91 Edit
+	92 View
+	93 Device
+	94 Controls
+	95 Window
+	96 Help

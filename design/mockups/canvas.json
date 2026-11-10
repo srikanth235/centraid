@@ -1,5 +1,4 @@
 {
-  "v": 3,
   "attachments": {},
   "boards": {
     "AgendaCatchUp.dc.html": {
@@ -98,22 +97,6 @@
       "x": 960,
       "y": 23200
     },
-    "AgendaWidgets.dc.html": {
-      "h": 1290,
-      "page": "light",
-      "title": "1 · Widgets (iPhone and Android)",
-      "w": 880,
-      "x": 0,
-      "y": 23200
-    },
-    "AgendaWidgetsDark.dc.html": {
-      "h": 1290,
-      "page": "dark",
-      "title": "1 · Widgets (iPhone and Android) · dark",
-      "w": 880,
-      "x": 0,
-      "y": 23200
-    },
     "AgendaTaskDetail.dc.html": {
       "h": 844,
       "page": "light",
@@ -129,6 +112,22 @@
       "w": 390,
       "x": 6110,
       "y": 3480
+    },
+    "AgendaWidgets.dc.html": {
+      "h": 1290,
+      "page": "light",
+      "title": "1 · Widgets (iPhone and Android)",
+      "w": 880,
+      "x": 0,
+      "y": 23200
+    },
+    "AgendaWidgetsDark.dc.html": {
+      "h": 1290,
+      "page": "dark",
+      "title": "1 · Widgets (iPhone and Android) · dark",
+      "w": 880,
+      "x": 0,
+      "y": 23200
     },
     "AndroidChat.dc.html": {
       "h": 915,
@@ -409,6 +408,30 @@
       "w": 390,
       "x": 0,
       "y": 3480
+    },
+    "CalendarMonth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar (Month view)",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "CalendarMonthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar (Month view) · dark",
+      "w": 390,
+      "x": 470,
+      "y": 3480
+    },
+    "CalendarReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "A day with reminders: tick, repeat, overdue",
+      "w": 390,
+      "x": 470,
+      "y": 25960
     },
     "CalendarStyle.dc.html": {
       "h": 844,
@@ -730,6 +753,14 @@
       "x": 470,
       "y": 8120
     },
+    "HealthSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Health search",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
+    },
     "HealthWorkout.dc.html": {
       "h": 844,
       "page": "light",
@@ -817,22 +848,6 @@
       "w": 390,
       "x": 1410,
       "y": 3480
-    },
-    "RemindersToday.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Today, Overdue first",
-      "w": 390,
-      "x": 0,
-      "y": 25960
-    },
-    "CalendarReminders.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "A day with reminders: tick, repeat, overdue",
-      "w": 390,
-      "x": 470,
-      "y": 25960
     },
     "ListDark.dc.html": {
       "h": 844,
@@ -994,6 +1009,22 @@
       "x": 0,
       "y": 10440
     },
+    "MoneyCashflow.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Cash flow · Labelled amounts",
+      "w": 390,
+      "x": 4700,
+      "y": 9280
+    },
+    "MoneyCashflowDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Cash flow · Labelled amounts · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 9280
+    },
     "MoneyCategories.dc.html": {
       "h": 844,
       "page": "light",
@@ -1032,6 +1063,22 @@
       "title": "6 · Import statement · dark",
       "w": 390,
       "x": 2350,
+      "y": 10440
+    },
+    "MoneyImportDone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Import statement · Done and status",
+      "w": 390,
+      "x": 5170,
+      "y": 10440
+    },
+    "MoneyImportDoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Import statement · Done and status · dark",
+      "w": 390,
+      "x": 5170,
       "y": 10440
     },
     "MoneyRecurring.dc.html": {
@@ -1130,6 +1177,54 @@
       "x": 2350,
       "y": 13920
     },
+    "MoneyTransactionDetail.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · A transaction, with Move to trash",
+      "w": 390,
+      "x": 0,
+      "y": 29520
+    },
+    "MoneyTransactionDetailDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · A transaction, with Move to trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 29520
+    },
+    "MoreCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar More, with Trash",
+      "w": 390,
+      "x": 0,
+      "y": 28360
+    },
+    "MoreCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar More, with Trash · dark",
+      "w": 390,
+      "x": 0,
+      "y": 28360
+    },
+    "MoreHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Health More, with Trash",
+      "w": 390,
+      "x": 470,
+      "y": 28360
+    },
+    "MoreHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Health More, with Trash · dark",
+      "w": 390,
+      "x": 470,
+      "y": 28360
+    },
     "MoreMenu.dc.html": {
       "h": 844,
       "page": "light",
@@ -1145,6 +1240,22 @@
       "w": 390,
       "x": 940,
       "y": 17400
+    },
+    "MoreMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Money More, with Trash",
+      "w": 390,
+      "x": 940,
+      "y": 28360
+    },
+    "MoreMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Money More, with Trash · dark",
+      "w": 390,
+      "x": 940,
+      "y": 28360
     },
     "NoteEditor.dc.html": {
       "h": 844,
@@ -1178,6 +1289,38 @@
       "x": 2350,
       "y": 15080
     },
+    "NoteMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note, its menu",
+      "w": 390,
+      "x": 3760,
+      "y": 29520
+    },
+    "NoteMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A note, its menu · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 29520
+    },
+    "NotesAbout.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Notes about",
+      "w": 390,
+      "x": 1890,
+      "y": 24000
+    },
+    "NotesAboutPage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Note about",
+      "w": 390,
+      "x": 2370,
+      "y": 24000
+    },
     "NotesHome.dc.html": {
       "h": 844,
       "page": "light",
@@ -1192,6 +1335,30 @@
       "title": "1 · Notes home · dark",
       "w": 390,
       "x": 0,
+      "y": 11600
+    },
+    "NotesImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import notes",
+      "w": 390,
+      "x": 1410,
+      "y": 24000
+    },
+    "NotesJournal.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Journal · Required entry fields",
+      "w": 390,
+      "x": 4700,
+      "y": 11600
+    },
+    "NotesJournalDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Journal · Required entry fields · dark",
+      "w": 390,
+      "x": 4700,
       "y": 11600
     },
     "PairCheck.dc.html": {
@@ -1242,6 +1409,22 @@
       "x": 0,
       "y": 5800
     },
+    "PeopleImport.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Import people",
+      "w": 390,
+      "x": 3330,
+      "y": 24000
+    },
+    "PeopleMoreContacts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · People more",
+      "w": 390,
+      "x": 2850,
+      "y": 24000
+    },
     "PermissionPhotos.dc.html": {
       "h": 844,
       "page": "light",
@@ -1290,6 +1473,14 @@
       "x": 470,
       "y": 13920
     },
+    "PersonLinks.dc.html": {
+      "h": 760,
+      "page": "light",
+      "title": "8 · Person links (Money, Photos, Docs, Locker)",
+      "w": 2070,
+      "x": 0,
+      "y": 24960
+    },
     "PhotoEditor.dc.html": {
       "h": 844,
       "page": "light",
@@ -1320,6 +1511,22 @@
       "title": "2 · A photo · dark",
       "w": 390,
       "x": 470,
+      "y": 12760
+    },
+    "PhotoViewerInfo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A photo, details open",
+      "w": 390,
+      "x": 940,
+      "y": 12760
+    },
+    "PhotoViewerInfoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A photo, details open · dark",
+      "w": 390,
+      "x": 940,
       "y": 12760
     },
     "PhotosLibrary.dc.html": {
@@ -1369,6 +1576,22 @@
       "w": 390,
       "x": 470,
       "y": 16240
+    },
+    "PhotosPlacesMap.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Places · Map groups",
+      "w": 390,
+      "x": 4700,
+      "y": 12760
+    },
+    "PhotosPlacesMapDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Places · Map groups · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 12760
     },
     "PhotosShelf.dc.html": {
       "h": 844,
@@ -1426,6 +1649,14 @@
       "x": 7050,
       "y": 3480
     },
+    "RemindersToday.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Today, Overdue first",
+      "w": 390,
+      "x": 0,
+      "y": 25960
+    },
     "RestoreHeld.dc.html": {
       "h": 844,
       "page": "light",
@@ -1482,6 +1713,14 @@
       "x": 2350,
       "y": 17400
     },
+    "SettingsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Settings · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 17400
+    },
     "SettingsDownload.dc.html": {
       "h": 844,
       "page": "light",
@@ -1496,14 +1735,6 @@
       "title": "7 · Download settings · dark",
       "w": 390,
       "x": 2820,
-      "y": 17400
-    },
-    "SettingsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Settings · dark",
-      "w": 390,
-      "x": 2350,
       "y": 17400
     },
     "SolidBand.dc.html": {
@@ -1594,6 +1825,22 @@
       "x": 1410,
       "y": 17400
     },
+    "TrashCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Calendar trash",
+      "w": 390,
+      "x": 2350,
+      "y": 27200
+    },
+    "TrashCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Calendar trash · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 27200
+    },
     "TrashDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -1601,166 +1848,6 @@
       "w": 390,
       "x": 1410,
       "y": 17400
-    },
-    "Welcome.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Welcome (onboarding)",
-      "w": 390,
-      "x": 0,
-      "y": 0
-    },
-    "WelcomeDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "1 · Welcome (onboarding) · dark",
-      "w": 390,
-      "x": 0,
-      "y": 0
-    },
-    "WheelIcon.dc.html": {
-      "h": 1100,
-      "page": "archive",
-      "title": "The Wheel (replaced by four quarters)",
-      "w": 1200,
-      "x": 3840,
-      "y": 0
-    },
-    "CalendarMonth.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Calendar (Month view)",
-      "w": 390,
-      "x": 470,
-      "y": 3480
-    },
-    "CalendarMonthDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "1 · Calendar (Month view) · dark",
-      "w": 390,
-      "x": 470,
-      "y": 3480
-    },
-    "PhotoViewerInfo.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · A photo, details open",
-      "w": 390,
-      "x": 940,
-      "y": 12760
-    },
-    "PhotoViewerInfoDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "2 · A photo, details open · dark",
-      "w": 390,
-      "x": 940,
-      "y": 12760
-    },
-    "NotesImport.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Import notes",
-      "w": 390,
-      "x": 1410,
-      "y": 24000
-    },
-    "NotesAbout.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Notes about",
-      "w": 390,
-      "x": 1890,
-      "y": 24000
-    },
-    "NotesAboutPage.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Note about",
-      "w": 390,
-      "x": 2370,
-      "y": 24000
-    },
-    "PeopleMoreContacts.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · People more",
-      "w": 390,
-      "x": 2850,
-      "y": 24000
-    },
-    "PeopleImport.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Import people",
-      "w": 390,
-      "x": 3330,
-      "y": 24000
-    },
-    "HealthSearch.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Health search",
-      "w": 390,
-      "x": 3810,
-      "y": 24000
-    },
-    "PersonLinks.dc.html": {
-      "h": 760,
-      "page": "light",
-      "title": "8 · Person links (Money, Photos, Docs, Locker)",
-      "w": 2070,
-      "x": 0,
-      "y": 24960
-    },
-    "TrashNotes.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Notes trash",
-      "w": 390,
-      "x": 0,
-      "y": 27200
-    },
-    "TrashNotesDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "1 · Notes trash · dark",
-      "w": 390,
-      "x": 0,
-      "y": 27200
-    },
-    "TrashPeople.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · People trash, after a restore",
-      "w": 390,
-      "x": 470,
-      "y": 27200
-    },
-    "TrashPeopleDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "2 · People trash, after a restore · dark",
-      "w": 390,
-      "x": 470,
-      "y": 27200
-    },
-    "TrashReminders.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "3 · Reminders trash",
-      "w": 390,
-      "x": 940,
-      "y": 27200
-    },
-    "TrashRemindersDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "3 · Reminders trash · dark",
-      "w": 390,
-      "x": 940,
-      "y": 27200
     },
     "TrashDocs.dc.html": {
       "h": 844,
@@ -1778,36 +1865,20 @@
       "x": 1410,
       "y": 27200
     },
-    "TrashPhotos.dc.html": {
+    "TrashEmpty.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "5 · Photos trash",
+      "title": "9 · Empty trash, confirmed",
       "w": 390,
-      "x": 1880,
+      "x": 3760,
       "y": 27200
     },
-    "TrashPhotosDark.dc.html": {
+    "TrashEmptyDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "5 · Photos trash · dark",
+      "title": "9 · Empty trash, confirmed · dark",
       "w": 390,
-      "x": 1880,
-      "y": 27200
-    },
-    "TrashCalendar.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Calendar trash",
-      "w": 390,
-      "x": 2350,
-      "y": 27200
-    },
-    "TrashCalendarDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Calendar trash · dark",
-      "w": 390,
-      "x": 2350,
+      "x": 3760,
       "y": 27200
     },
     "TrashHealth.dc.html": {
@@ -1842,68 +1913,100 @@
       "x": 3290,
       "y": 27200
     },
-    "TrashEmpty.dc.html": {
+    "TrashNotes.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "9 · Empty trash, confirmed",
-      "w": 390,
-      "x": 3760,
-      "y": 27200
-    },
-    "TrashEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "9 · Empty trash, confirmed · dark",
-      "w": 390,
-      "x": 3760,
-      "y": 27200
-    },
-    "MoreCalendar.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Calendar More, with Trash",
+      "title": "1 · Notes trash",
       "w": 390,
       "x": 0,
-      "y": 28360
+      "y": 27200
     },
-    "MoreCalendarDark.dc.html": {
+    "TrashNotesDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · Calendar More, with Trash · dark",
+      "title": "1 · Notes trash · dark",
       "w": 390,
       "x": 0,
-      "y": 28360
+      "y": 27200
     },
-    "MoreHealth.dc.html": {
+    "TrashPeople.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Health More, with Trash",
+      "title": "2 · People trash, after a restore",
       "w": 390,
       "x": 470,
-      "y": 28360
+      "y": 27200
     },
-    "MoreHealthDark.dc.html": {
+    "TrashPeopleDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Health More, with Trash · dark",
+      "title": "2 · People trash, after a restore · dark",
       "w": 390,
       "x": 470,
-      "y": 28360
+      "y": 27200
     },
-    "MoreMoney.dc.html": {
+    "TrashPhotos.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Money More, with Trash",
+      "title": "5 · Photos trash",
       "w": 390,
-      "x": 940,
-      "y": 28360
+      "x": 1880,
+      "y": 27200
     },
-    "MoreMoneyDark.dc.html": {
+    "TrashPhotosDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Money More, with Trash · dark",
+      "title": "5 · Photos trash · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 27200
+    },
+    "TrashReminders.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Reminders trash",
       "w": 390,
       "x": 940,
+      "y": 27200
+    },
+    "TrashRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Reminders trash · dark",
+      "w": 390,
+      "x": 940,
+      "y": 27200
+    },
+    "UndoHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health Workouts, after a delete",
+      "w": 390,
+      "x": 2350,
+      "y": 28360
+    },
+    "UndoHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health Workouts, after a delete · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 28360
+    },
+    "UndoMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Money, after a delete",
+      "w": 390,
+      "x": 2820,
+      "y": 28360
+    },
+    "UndoMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Money, after a delete · dark",
+      "w": 390,
+      "x": 2820,
       "y": 28360
     },
     "UndoNotes.dc.html": {
@@ -1938,38 +2041,6 @@
       "x": 1880,
       "y": 28360
     },
-    "UndoHealth.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Health Workouts, after a delete",
-      "w": 390,
-      "x": 2350,
-      "y": 28360
-    },
-    "UndoHealthDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Health Workouts, after a delete · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 28360
-    },
-    "UndoMoney.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Money, after a delete",
-      "w": 390,
-      "x": 2820,
-      "y": 28360
-    },
-    "UndoMoneyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "7 · Money, after a delete · dark",
-      "w": 390,
-      "x": 2820,
-      "y": 28360
-    },
     "UndoPhotos.dc.html": {
       "h": 844,
       "page": "light",
@@ -1986,20 +2057,36 @@
       "x": 3290,
       "y": 28360
     },
-    "MoneyTransactionDetail.dc.html": {
+    "VersionsEvent.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "1 · A transaction, with Move to trash",
+      "title": "3 · Earlier versions of an event",
       "w": 390,
-      "x": 0,
+      "x": 940,
       "y": 29520
     },
-    "MoneyTransactionDetailDark.dc.html": {
+    "VersionsEventDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "1 · A transaction, with Move to trash · dark",
+      "title": "3 · Earlier versions of an event · dark",
       "w": 390,
-      "x": 0,
+      "x": 940,
+      "y": 29520
+    },
+    "VersionsLocker.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Earlier versions of a Locker item",
+      "w": 390,
+      "x": 3290,
+      "y": 29520
+    },
+    "VersionsLockerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Earlier versions of a Locker item · dark",
+      "w": 390,
+      "x": 3290,
       "y": 29520
     },
     "VersionsPerson.dc.html": {
@@ -2018,20 +2105,20 @@
       "x": 470,
       "y": 29520
     },
-    "VersionsEvent.dc.html": {
+    "VersionsPhoto.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Earlier versions of an event",
+      "title": "6 · Earlier versions of a photo",
       "w": 390,
-      "x": 940,
+      "x": 2350,
       "y": 29520
     },
-    "VersionsEventDark.dc.html": {
+    "VersionsPhotoDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Earlier versions of an event · dark",
+      "title": "6 · Earlier versions of a photo · dark",
       "w": 390,
-      "x": 940,
+      "x": 2350,
       "y": 29520
     },
     "VersionsTask.dc.html": {
@@ -2066,22 +2153,6 @@
       "x": 1880,
       "y": 29520
     },
-    "VersionsPhoto.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Earlier versions of a photo",
-      "w": 390,
-      "x": 2350,
-      "y": 29520
-    },
-    "VersionsPhotoDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Earlier versions of a photo · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 29520
-    },
     "VersionsWorkout.dc.html": {
       "h": 844,
       "page": "light",
@@ -2098,37 +2169,29 @@
       "x": 2820,
       "y": 29520
     },
-    "VersionsLocker.dc.html": {
+    "Welcome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "8 · Earlier versions of a Locker item",
+      "title": "1 · Welcome (onboarding)",
       "w": 390,
-      "x": 3290,
-      "y": 29520
+      "x": 0,
+      "y": 0
     },
-    "VersionsLockerDark.dc.html": {
+    "WelcomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "8 · Earlier versions of a Locker item · dark",
+      "title": "1 · Welcome (onboarding) · dark",
       "w": 390,
-      "x": 3290,
-      "y": 29520
+      "x": 0,
+      "y": 0
     },
-    "NoteMenu.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · A note, its menu",
-      "w": 390,
-      "x": 3760,
-      "y": 29520
-    },
-    "NoteMenuDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "2 · A note, its menu · dark",
-      "w": 390,
-      "x": 3760,
-      "y": 29520
+    "WheelIcon.dc.html": {
+      "h": 1100,
+      "page": "archive",
+      "title": "The Wheel (replaced by four quarters)",
+      "w": 1200,
+      "x": 3840,
+      "y": 0
     }
   },
   "createdOnFiles": {
@@ -2307,6 +2370,42 @@
       "w": 240,
       "x": 0,
       "y": 2120
+    },
+    "dark20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
+    },
+    "dark21": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: Trash, Empty trash and More in every app",
+      "w": 240,
+      "x": 0,
+      "y": 27000
+    },
+    "dark22": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: where Trash lives, and Undo after a delete",
+      "w": 240,
+      "x": 0,
+      "y": 28160
+    },
+    "dark23": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "Change safely: earlier versions of every record",
+      "w": 240,
+      "x": 0,
+      "y": 29320
     },
     "dark3": {
       "kind": "title1",
@@ -2488,6 +2587,42 @@
       "x": 0,
       "y": 2120
     },
+    "light20": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Agenda: widgets and the quick-add chip",
+      "w": 240,
+      "x": 0,
+      "y": 23000
+    },
+    "light21": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: Trash, Empty trash and More in every app",
+      "w": 240,
+      "x": 0,
+      "y": 27000
+    },
+    "light22": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: where Trash lives, and Undo after a delete",
+      "w": 240,
+      "x": 0,
+      "y": 28160
+    },
+    "light23": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "Change safely: earlier versions of every record",
+      "w": 240,
+      "x": 0,
+      "y": 29320
+    },
     "light3": {
       "kind": "title1",
       "maxW": 2740,
@@ -2550,78 +2685,6 @@
       "w": 240,
       "x": 0,
       "y": 10240
-    },
-    "light20": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "light",
-      "text": "Agenda: widgets and the quick-add chip",
-      "w": 240,
-      "x": 0,
-      "y": 23000
-    },
-    "dark20": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "dark",
-      "text": "Agenda: widgets and the quick-add chip",
-      "w": 240,
-      "x": 0,
-      "y": 23000
-    },
-    "light21": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "light",
-      "text": "Change safely: Trash, Empty trash and More in every app",
-      "w": 240,
-      "x": 0,
-      "y": 27000
-    },
-    "dark21": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "dark",
-      "text": "Change safely: Trash, Empty trash and More in every app",
-      "w": 240,
-      "x": 0,
-      "y": 27000
-    },
-    "light22": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "light",
-      "text": "Change safely: where Trash lives, and Undo after a delete",
-      "w": 240,
-      "x": 0,
-      "y": 28160
-    },
-    "dark22": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "dark",
-      "text": "Change safely: where Trash lives, and Undo after a delete",
-      "w": 240,
-      "x": 0,
-      "y": 28160
-    },
-    "light23": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "light",
-      "text": "Change safely: earlier versions of every record",
-      "w": 240,
-      "x": 0,
-      "y": 29320
-    },
-    "dark23": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "dark",
-      "text": "Change safely: earlier versions of every record",
-      "w": 240,
-      "x": 0,
-      "y": 29320
     }
   },
   "order": [
@@ -2864,7 +2927,15 @@
     "VersionsPhoto.dc.html",
     "VersionsWorkout.dc.html",
     "VersionsLocker.dc.html",
-    "NoteMenu.dc.html"
+    "NoteMenu.dc.html",
+    "NotesJournal.dc.html",
+    "NotesJournalDark.dc.html",
+    "MoneyCashflow.dc.html",
+    "MoneyCashflowDark.dc.html",
+    "PhotosPlacesMap.dc.html",
+    "PhotosPlacesMapDark.dc.html",
+    "MoneyImportDone.dc.html",
+    "MoneyImportDoneDark.dc.html"
   ],
   "pages": [
     {
@@ -2888,5 +2959,6 @@
       "name": "Archive"
     }
   ],
-  "title": "Centraid Native Redesign"
+  "title": "Centraid Native Redesign",
+  "v": 3
 }

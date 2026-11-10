@@ -173,7 +173,7 @@ internal fun HealthWorkoutScreen(
                                     Modifier
                                         .padding(bottom = 6.dp)
                                         .clip(CircleShape)
-                                        .background(appAccent("health").tile)
+                                        .background(appAccent("health").tint ?: Surface.fill)
                                         .padding(horizontal = 10.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),

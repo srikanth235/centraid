@@ -1,0 +1,73 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 slider (settable, float) Description: Scrub the timeline by month, Value: nan, Details: November 2026, Secondary Actions: Cancel, Previous month, Next month
+					15 text Description: Centraid needs access to your photos to import them., Secondary Actions: Cancel
+					16 button Description: Allow photo access, Secondary Actions: Cancel
+					17 heading Description: November 2026, Secondary Actions: Cancel
+					18 heading Description: Sun, Nov 8, Secondary Actions: Cancel
+					19 heading Description: Sat, Nov 7, Secondary Actions: Cancel
+					20 heading Description: Fri, Nov 6, Secondary Actions: Cancel
+					21 heading Description: Thu, Nov 5, Secondary Actions: Cancel
+					22 heading Description: Wed, Nov 4, Secondary Actions: Cancel
+					23 heading Description: Tue, Nov 3, Secondary Actions: Cancel
+					24 heading Description: Sun, Nov 1, Secondary Actions: Cancel
+					25 heading Description: October 2026, Secondary Actions: Cancel
+					26 heading Description: Sat, Oct 31, Secondary Actions: Cancel
+					27 heading Description: Fri, Oct 30, Secondary Actions: Cancel
+					28 button Description: Home, ID: photos-band-home, Secondary Actions: Cancel
+					29 button Description: Library, ID: photos-band-places, Secondary Actions: Cancel
+					30 button Description: Years, ID: photos-grain-years, Secondary Actions: Cancel
+					31 button Description: Months, ID: photos-grain-months, Secondary Actions: Cancel
+					32 button (selected) Description: All, ID: photos-grain-all, Secondary Actions: Cancel
+					33 button Description: Search photos, places, albums, ID: band-search, Secondary Actions: Cancel
+				34 button Description: Home, ID: app.grid.3x3
+				35 button Description: Screenshot, ID: camera.viewfinder
+				36 button Description: Record, ID: record.circle
+				37 button Rotate Right
+	38 toolbar
+		39 menu button Add, Help: Add Device, ID: plus
+		40 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		41 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		42 toggle button Description: Capture Keyboard, Value: off
+		43 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		44 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		45 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		46 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		47 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		48 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		49 menu button More, Help: More Actions, ID: ellipsis
+		50 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		51 radio button Description: text.document, Help: Reports, Value: 0
+		52 radio button Description: Info, Value: 0, ID: info
+	53 close button
+	54 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	55 minimize button
+	56 text c1173-review iOS 26.5
+57 menu bar
+	58 Device Hub
+	59 File
+	60 Edit
+	61 View
+	62 Device
+	63 Controls
+	64 Window
+	65 Help
