@@ -2113,6 +2113,22 @@
       "w": 390,
       "x": 3290,
       "y": 29520
+    },
+    "NoteMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note, its menu",
+      "w": 390,
+      "x": 3760,
+      "y": 29520
+    },
+    "NoteMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A note, its menu · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 29520
     }
   },
   "createdOnFiles": {
@@ -2847,7 +2863,8 @@
     "VersionsTransaction.dc.html",
     "VersionsPhoto.dc.html",
     "VersionsWorkout.dc.html",
-    "VersionsLocker.dc.html"
+    "VersionsLocker.dc.html",
+    "NoteMenu.dc.html"
   ],
   "pages": [
     {
