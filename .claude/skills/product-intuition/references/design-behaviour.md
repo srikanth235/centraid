@@ -57,6 +57,16 @@ State is reported on **one status line** and never a toast. It is a single persi
 
 A screen's load is a skeleton (`ReadStateView`). A spinner (`KitSpinner`, `StageSpinner`) exists only for work with no shape to draw (a save in flight, a transfer starting). Work whose count is known gets a determinate bar and exact counts: a local-first product always knows how long.
 
+## Trash
+
+**One rule in every app (#1185).** Every item can be moved to trash, restored and deleted forever, and every trash can be emptied. No app offers restore only, and none promises a destruction it cannot perform: the vault's shared verbs (`entity.trash`, `entity.restore`, `entity.purge`, `entity.empty_trash`) do all four for every kind. The `promises` rule in `cargo xtask rules` holds the register of which app keeps it. The words are the kit's (`strings/shared.rs`, `kit/trash.rs`); an app passes only its noun (item, note, person, task, document, photo, event, workout, transaction) and, where something goes with the record, the first sentence of the purge confirm.
+
+- **Verb and line.** "Move to trash", asking nothing (Undo and the trash restore it). Then the status line "{title} moved to trash" with Undo; a restore says "{title} restored" with Undo.
+- **Entry.** "Trash", secondary "30 days, then erased", in the app's More sheet. The page header is "Trash · {n}".
+- **Row.** "Deleted {day date} · Erased {day date}", actions "Restore" and "Delete forever".
+- **Confirms** (outlined, destructive). One row: "Delete this {noun} forever?" / "It leaves this vault for good. This cannot be undone." / "Delete forever". The whole trash: "Empty trash?" / "Everything in trash leaves this vault for good. This cannot be undone." / "Empty trash". An app may replace the first sentence with what goes with the record; the last is always "This cannot be undone."
+- **A trashed record is gone from every surface**: the grid, the agenda, search, notifications. A repeating event or a holder is trashed whole. A followed record the member trashed stays trashed when the source sends it again.
+
 ## Search and Ask about
 
 Search says what it searched for, and offers the assistant when it found nothing ([#1097](https://github.com/srikanth235/centraid/issues/1097)).
