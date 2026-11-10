@@ -197,10 +197,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "the photo's info sheet has no Earlier versions entry (#1185)",
     ),
-    owed(
+    kept(
         "reminders",
         Promise::History,
-        "the task page has no Earlier versions entry (#1185)",
+        "crates/screens/src/reminders/earlier.rs",
     ),
 ];
 

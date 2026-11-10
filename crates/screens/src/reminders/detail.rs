@@ -25,6 +25,7 @@ use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::earlier;
 use crate::kit::read::{self, Reading};
 use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::custom::{Custom, Done};
@@ -171,6 +172,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         finished: false,
         attachments: Attachments::of(Of::Task, &args.task_id),
         custom: None,
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -190,6 +192,8 @@ struct Detail {
     /// The Custom repeat sheet's working rule, while it is open: the editor's own
     /// model (#1173), saved to this task on Done.
     custom: Option<Custom>,
+    /// The entry to the task's earlier versions, read with the page (#1185).
+    earlier: earlier::Foot,
 }
 
 impl Detail {
@@ -230,6 +234,12 @@ impl Detail {
             return;
         };
         self.attachments.reload(ctx);
+        let title = if task.title.trim().is_empty() {
+            words::untitled(ctx.locale())
+        } else {
+            task.title.clone()
+        };
+        self.earlier = earlier::foot(ctx, super::EARLIER, &self.task_id, &title);
         let open: Vec<&wire::AgendaTask> = task
             .children
             .iter()
@@ -949,8 +959,13 @@ impl Screen for Detail {
                 confirm: self.confirm(locale),
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
-                status: self.ops.status.clone(),
+                status: self
+                    .ops
+                    .status
+                    .clone()
+                    .or_else(|| self.earlier.status(locale)),
                 finished: self.finished,
+                earlier: self.earlier.entry.clone(),
             })),
             ..wire::ViewState::default()
         }
@@ -1019,7 +1034,7 @@ fn simple(key: &str, label: String, selected: bool) -> wire::TodoChoice {
     chip(key, label, selected, true, String::new())
 }
 
-fn lead_label(locale: Locale, lead: u32) -> String {
+pub(super) fn lead_label(locale: Locale, lead: u32) -> String {
     match lead {
         0 => words::remind_at_time(locale),
         60 => words::remind_hour(locale),

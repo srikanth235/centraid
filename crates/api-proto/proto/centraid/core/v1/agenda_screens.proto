@@ -2550,6 +2550,8 @@ message TodoDetailState {
   StatusLine status = 15;
   // THE TASK LEFT (deleted): the shell pops.
   bool finished = 16;
+  // "Earlier versions   2 ›" at the foot of the page (#1185); absent when there are none.
+  optional EarlierEntry earlier = 18;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
