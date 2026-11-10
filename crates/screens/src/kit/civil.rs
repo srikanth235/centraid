@@ -46,6 +46,53 @@ pub fn iso_weekday_of(day: &str) -> Option<u32> {
     epoch_day_of(day).map(|epoch| u32::try_from((epoch + 3).rem_euclid(7)).unwrap_or(0) + 1)
 }
 
+/// Regions whose week opens on Sunday; every other region's opens on Monday.
+const SUNDAY_FIRST: [&str; 20] = [
+    "US", "CA", "MX", "BR", "JP", "IL", "PH", "KR", "TW", "HK", "IN", "ZA", "SA", "CO", "PE", "VE",
+    "GT", "PA", "DO", "PR",
+];
+
+/// The first weekday of a week.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeekStart {
+    #[default]
+    Monday,
+    Sunday,
+}
+
+impl WeekStart {
+    /// ISO weekday: 1 is Monday, 7 is Sunday.
+    fn iso(self) -> u32 {
+        match self {
+            Self::Monday => 1,
+            Self::Sunday => 7,
+        }
+    }
+}
+
+/// The week a region keeps (`US` of `en-US`, any case; empty is Monday).
+#[must_use]
+pub fn week_start_of(region: &str) -> WeekStart {
+    if SUNDAY_FIRST
+        .iter()
+        .any(|sunday| sunday.eq_ignore_ascii_case(region.trim()))
+    {
+        WeekStart::Sunday
+    } else {
+        WeekStart::Monday
+    }
+}
+
+// ---- civil arithmetic ------------------------------------------------------
+
+/// The first day of the week `day` is in.
+#[must_use]
+pub fn week_first(day: &str, start: WeekStart) -> Option<String> {
+    let weekday = iso_weekday_of(day)?;
+    let back = (weekday + 7 - start.iso()) % 7;
+    plus_days(day, -i64::from(back))
+}
+
 /// The day of the month of `day`, 1 to 31.
 #[must_use]
 pub fn day_of_month_of(day: &str) -> Option<u32> {

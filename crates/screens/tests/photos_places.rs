@@ -47,6 +47,43 @@ fn card(lat: Option<f64>, lng: Option<f64>, count: u32) -> wire::PhotosPlaceCard
     }
 }
 
+#[test]
+fn crowded_map_areas_keep_every_shelf_reachable_without_overlapping_pins() {
+    use centraid_screens::photos::places::map_pins;
+    use centraid_screens::strings::Locale;
+    let rows: Vec<_> = (0..100)
+        .map(|index| wire::PhotosPlaceRow {
+            place_id: format!("p-{index}"),
+            title: format!("Place {index}"),
+            pinned: true,
+            pin_x: if index < 80 { 0.01 } else { 0.99 },
+            pin_y: if index < 80 { 0.99 } else { 0.01 },
+            pin_size: PIN_CEILING,
+            open: Some(photos::routes::shelf(
+                wire::PhotosShelfKind::Place,
+                &format!("p-{index}"),
+                "",
+            )),
+            ..Default::default()
+        })
+        .collect();
+    let pins = map_pins(&rows, Locale::En);
+    assert_eq!(pins.len(), 2);
+    let mut reached: Vec<_> = pins
+        .iter()
+        .flat_map(|pin| &pin.choices)
+        .map(|row| {
+            assert!(row.open.is_some());
+            row.place_id.clone()
+        })
+        .collect();
+    let mut expected: Vec<_> = rows.iter().map(|row| row.place_id.clone()).collect();
+    reached.sort();
+    expected.sort();
+    assert_eq!(reached, expected);
+    assert!((pins[0].pin_x - pins[1].pin_x).abs() >= 1.0 / 3.0);
+}
+
 // -- The screen ----------------------------------------------------------------
 
 #[test]

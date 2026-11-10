@@ -31,7 +31,7 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.unlock_label, "Unlock with your face");
     // A CANCEL IS NOT A FAILURE: the wall says only the member's lock setting.
-    assert_eq!(wall.notice, "Locked after 5 minutes idle.");
+    assert_eq!(wall.notice, "Locks after 5 minutes idle.");
     // The wall reads nothing: no content under it.
     assert!(home(&d, id).content.is_none() && !home(&d, id).secure);
 }

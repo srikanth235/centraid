@@ -1,0 +1,78 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 container ID: tasks-list, Secondary Actions: Cancel, Scroll Up
+						15 text Description: Tuesday 10 November · 9 to do, Secondary Actions: Cancel
+						16 heading Description: OVERDUE, Secondary Actions: Cancel
+						17 text Description: 7, Secondary Actions: Cancel
+						18 button Description: Catch up, Secondary Actions: Cancel
+						19 button Description: Mark Renew the car registration done, ID: tasks-row-check-01a1c01c-de66-7e68-af69-5360a9daf251, Secondary Actions: Cancel, Delete, Unflag, Details
+						20 button Description: Renew the car registration, 6 days ago, Errands, High priority, ID: tasks-row-01a1c01c-de66-7e68-af69-5360a9daf251, Secondary Actions: Cancel, Delete, Unflag, Details
+						21 button Description: Mark Replace the hallway bulb done, ID: tasks-row-check-01a1c01c-de5f-7e68-b112-ad68a9cb61c0, Secondary Actions: Cancel, Delete, Flag, Details
+						22 button Description: Replace the hallway bulb, 4 days ago, Home, High priority, ID: tasks-row-01a1c01c-de5f-7e68-b112-ad68a9cb61c0, Secondary Actions: Cancel, Delete, Flag, Details
+						23 button Description: Mark Send the design review notes done, ID: tasks-row-check-01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel, Delete, Unflag, Details
+						24 button Description: Send the design review notes, Yesterday, Work, High priority, ID: tasks-row-01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel, Delete, Unflag, Details
+						25 button Description: Mark Ask the landlord about the heater done, ID: tasks-row-check-01a1c01c-de60-7e68-a7e7-7280ad90604d, Secondary Actions: Cancel, Delete, Unflag, Details
+						26 button Description: Ask the landlord about the heater, 2 days ago, Home, High priority, ID: tasks-row-01a1c01c-de60-7e68-a7e7-7280ad90604d, Secondary Actions: Cancel, Delete, Unflag, Details
+						27 button Description: Mark Expense the October train pass done, ID: tasks-row-check-01a1c01c-de64-7e68-b518-3d441a04f552, Secondary Actions: Cancel, Delete, Flag, Details
+						28 button Description: Expense the October train pass, 7 days ago, Work, High priority, ID: tasks-row-01a1c01c-de64-7e68-b518-3d441a04f552, Secondary Actions: Cancel, Delete, Flag, Details
+						29 button Description: Mark Rotate the tires before the drive done, ID: tasks-row-check-01a1c01c-de55-7e68-80b2-4c5a83c7805a, Secondary Actions: Cancel, Delete, Flag, Details
+						30 button Description: Rotate the tires before the drive, 3 days ago, High priority, ID: tasks-row-01a1c01c-de55-7e68-80b2-4c5a83c7805a, Secondary Actions: Cancel, Delete, Flag, Details
+						31 button Description: Mark Pick up the dry cleaning done, ID: tasks-row-check-01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel, Delete, Flag, Details
+						32 button Description: Pick up the dry cleaning, Yesterday, High priority, ID: tasks-row-01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel, Delete, Flag, Details
+						33 heading Description: AFTERNOON, Secondary Actions: Cancel
+						34 text Description: 2, Secondary Actions: Cancel
+						35 button Description: Mark Pick up the prescription done, ID: tasks-row-check-01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Delete, Flag, Details
+						36 button Description: Pick up the prescription, 14:30, Errands, High priority, ID: tasks-row-01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Delete, Flag, Details
+						37 button Description: Mark Book dentist appointment done, ID: tasks-row-check-01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Delete, Flag, Details
+						38 button Description: Book dentist appointment, 14:30, ~15 min, High priority, ID: tasks-row-01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Delete, Flag, Details
+				39 button Description: Home, ID: app.grid.3x3
+				40 button Description: Screenshot, ID: camera.viewfinder
+				41 button Description: Record, ID: record.circle
+				42 button Rotate Right
+	43 toolbar
+		44 menu button Add, Help: Add Device, ID: plus
+		45 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		46 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		47 toggle button Description: Capture Keyboard, Value: off
+		48 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		49 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		50 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		51 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		52 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		53 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		54 menu button More, Help: More Actions, ID: ellipsis
+		55 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		56 radio button Description: text.document, Help: Reports, Value: 0
+		57 radio button Description: Info, Value: 0, ID: info
+	58 close button
+	59 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	60 minimize button
+	61 text c1173-review iOS 26.5
+62 menu bar
+	63 Device Hub
+	64 File
+	65 Edit
+	66 View
+	67 Device
+	68 Controls
+	69 Window
+	70 Help

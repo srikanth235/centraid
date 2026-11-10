@@ -247,7 +247,7 @@ private struct PlacesPlot: View {
     /// The plate's inset, so a pin on the edge is not clipped. Geometry, not copy.
     private let inset: CGFloat = 32
 
-    private var pinned: [Centraid_Core_V1_PhotosPlaceRow] { data.places.filter(\.pinned) }
+    private var pinned: [Centraid_Core_V1_PhotosPlaceRow] { data.mapPins }
 
     var body: some View {
         GeometryReader { geometry in
@@ -274,13 +274,20 @@ private struct PlacesPlot: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 // REAL BUTTONS OVER THE CANVAS: every pin is a control with a name.
                 ForEach(pinned, id: \.placeID) { row in
-                    Button {
-                        open(row.open)
-                    } label: {
-                        PlacePin(row: row)
+                    Group {
+                        if row.choices.isEmpty {
+                            Button { open(row.open) } label: { PlacePin(row: row) }
+                        } else {
+                            Menu {
+                                ForEach(row.choices, id: \.placeID) { place in
+                                    Button(place.spoken) { open(place.open) }
+                                }
+                            } label: { PlacePin(row: row) }
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(row.spoken)
+                    .accessibilityIdentifier("places-pin-\(row.placeID)")
                     .position(
                         x: inset + CGFloat(row.pinX) * max(1, geometry.size.width - inset * 2),
                         y: inset + CGFloat(row.pinY) * max(1, geometry.size.height - inset * 2)

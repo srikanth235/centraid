@@ -108,7 +108,7 @@ pub struct PersonRow {
     pub nickname: String,
     pub met: String,
     pub birthday: Option<String>,
-    /// Whether the birthday's reminder is on (the member's per-person switch; on by default).
+    /// A birthday always has its reminder; legacy switch values are ignored.
     pub birthday_reminder: bool,
     /// 0 is no cadence.
     pub cadence_days: i64,
@@ -208,10 +208,8 @@ fn members(door: &dyn PageDoor, entities: &[Row], with_owner: bool) -> KitResult
                 nickname: text_of(kind, "nickname").unwrap_or_default(),
                 met: text_of(kind, "met").unwrap_or_default(),
                 birthday: text_of(kind, "birthday"),
-                birthday_reminder: kind
-                    .get("birthday_reminder")
-                    .and_then(Cell::integer)
-                    .is_none_or(|on| on != 0),
+                // Birthdays always remind, including profiles whose legacy switch was off.
+                birthday_reminder: true,
                 cadence_days: kind
                     .get("cadence_days")
                     .and_then(Cell::integer)
@@ -1140,8 +1138,7 @@ fn attached_documents(
 }
 
 /// The important dates of these people: the birthday column, and the yearly
-/// all-day events `about` them. **A birthday has its reminder unless the member turned it off**
-/// (`person.set_birthday_reminder`); any other date has one when its event does.
+/// all-day events `about` them. **A birthday always has its reminder**; any other date has one when its event does.
 pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec<DateRow>> {
     let mut found: Vec<DateRow> = people
         .iter()

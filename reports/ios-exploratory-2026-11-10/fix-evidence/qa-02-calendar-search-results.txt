@@ -1,0 +1,97 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 container ID: agenda-list, Secondary Actions: Cancel, Scroll Up
+						15 element Secondary Actions: Cancel
+						16 heading Description: Tue 17 November, Secondary Actions: Cancel
+						17 button Description: Dentist — cleaning, 15:00 to 16:00, ID: agenda-row-2026-11-17|01a1c01c-de75-7e68-b5d8-f99da24effba, Secondary Actions: Cancel
+						18 button Description: Ask about “dentist”, ID: search-ask-about, Secondary Actions: Cancel
+						19 element Secondary Actions: Cancel
+					20 text field (settable) Value: dentist, Placeholder: Search events, ID: calendar-search-field, Secondary Actions: Cancel
+					21 button Description: Clear search, Secondary Actions: Cancel
+					22 button Description: Close, ID: calendar-search-close, Secondary Actions: Cancel
+					23 button q
+					24 button w
+					25 button e
+					26 button r
+					27 button t
+					28 button y
+					29 button u
+					30 button i
+					31 button o
+					32 button p
+					33 button a
+					34 button s
+					35 button d
+					36 button f
+					37 button g
+					38 button h
+					39 button j
+					40 button k
+					41 button l
+					42 button Description: shift, Help: Quadruple-tap to enter caps lock, Secondary Actions: Caps Lock
+					43 button z
+					44 button x
+					45 button c
+					46 button v
+					47 button b
+					48 button n
+					49 button m
+					50 button delete
+					51 button Description: numbers, ID: more
+					52 button Description: Emoji, ID: emoji
+					53 button Description:  , ID: space
+					54 button Description: search, ID: Search
+					55 element Secondary Actions: Cancel
+					56 button Description: Next keyboard, Help: Double-tap and hold, then drag up to select another keyboard, Value: Nederlands, Secondary Actions: Cancel
+					57 button Description: Dictate, Help: Double-tap to start dictation. Double-tap with two fingers when finished., ID: dictation, Secondary Actions: Cancel
+				58 button Description: Home, ID: app.grid.3x3
+				59 button Description: Screenshot, ID: camera.viewfinder
+				60 button Description: Record, ID: record.circle
+				61 button Rotate Right
+	62 toolbar
+		63 menu button Add, Help: Add Device, ID: plus
+		64 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		65 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		66 toggle button Description: Capture Keyboard, Value: off
+		67 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		68 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		69 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		70 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		71 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		72 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		73 menu button More, Help: More Actions, ID: ellipsis
+		74 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		75 radio button Description: text.document, Help: Reports, Value: 0
+		76 radio button Description: Info, Value: 0, ID: info
+	77 close button
+	78 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	79 minimize button
+	80 text c1173-review iOS 26.5
+81 menu bar
+	82 Device Hub
+	83 File
+	84 Edit
+	85 View
+	86 Device
+	87 Controls
+	88 Window
+	89 Help

@@ -488,6 +488,9 @@ struct AgendaTimeGridView: View {
             ForEach(grid.days, id: \.day) { day in
                 Text(day.heading)
                     .centraidType(day.isToday ? "smallStrong" : "small")
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
                     .foregroundStyle(day.isToday ? accent.text : Theme.color("textSoft", scheme))
                     .frame(width: columnWidth, alignment: .center)
                     .padding(.vertical, day.heading.isEmpty ? 0 : 6)
@@ -609,6 +612,8 @@ struct AgendaTimeGridView: View {
                 let clashes = grid.hasNow && abs(Int(grid.now.minute) - Int(mark.minute)) < AgendaGridMetrics.nowClash
                 Text(mark.label)
                     .centraidType("annotLabel")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
                     .padding(.trailing, 6)
@@ -1172,7 +1177,7 @@ struct AgendaYearView: View {
     var body: some View {
         let columns = Array(
             repeating: GridItem(.flexible(), spacing: 12, alignment: .top),
-            count: typeSize.isAccessibilitySize ? 2 : 3
+            count: typeSize.isAccessibilitySize ? 1 : (typeSize >= .xLarge ? 2 : 3)
         )
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
@@ -1213,10 +1218,11 @@ private struct AgendaYearMonthView: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(month.isCurrent ? accent.text : Theme.color("text", scheme))
                 ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                    HStack(spacing: 0) {
+                    HStack(spacing: 2) {
                         ForEach(Array(week.enumerated()), id: \.offset) { _, day in
                             Text(day.dayNumber)
                                 .centraidType("annotLabel")
+                                .monospacedDigit()
                                 // ONE LINE: a two-digit day in a seventh of a third of the screen wrapped
                                 // ("3" over "0") and pushed the week out of its columns.
                                 .lineLimit(1)

@@ -641,7 +641,16 @@ fn custom_event(d: &mut Driver, i: u64, kind: wire::agenda_editor_event::Kind) {
 fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
     use wire::agenda_editor_event as ee;
     let mut d = driver();
-    let id = rent(&d);
+    // The default weekly rule selects the due weekday. Keep it Wednesday so
+    // toggling Saturday below adds a second day, regardless of the machine date.
+    let id = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Rent".into(),
+            due: due("2027-06-09T09:00"),
+            ..Default::default()
+        },
+    );
     let i = open(&mut d, &id);
     // Custom is a choice beside the presets, and no sheet is up until it is chosen.
     let repeats = field(d.view(i), "repeats");
@@ -657,6 +666,15 @@ fn a_reminder_takes_a_custom_repeat_and_a_stored_custom_rule_opens_editable() {
         .clone()
         .expect("the sheet");
     assert!(!sheet.read_only && sheet.can_apply);
+    assert_eq!(
+        sheet
+            .weekdays
+            .iter()
+            .filter(|day| day.selected)
+            .map(|day| day.key.as_str())
+            .collect::<Vec<_>>(),
+        ["WE"]
+    );
     // Closing the sheet drops the working rule and writes nothing.
     let before = task_of(&d, &id).updated_at;
     send_detail(&mut d, i, de::Kind::FieldClosed(de::FieldClosed {}));

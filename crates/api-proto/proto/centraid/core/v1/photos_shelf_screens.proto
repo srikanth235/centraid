@@ -284,6 +284,8 @@ message PhotosPlaceRow {
   double pin_size = 12;
   // The bare number a pin carries (`12`); empty when the count is not known.
   string count_mark = 13;
+  // Map group choices. Empty for a single place; a group opens a native menu.
+  repeated PhotosPlaceRow choices = 14;
 }
 
 message PhotosPlacesData {
@@ -300,6 +302,8 @@ message PhotosPlacesData {
   string unpinned_label = 7;
   string map_note = 8;
   string north_label = 9;
+  // A bounded set of area groups, with every located place reachable by name.
+  repeated PhotosPlaceRow map_pins = 10;
 }
 
 message PhotosPlacesState {

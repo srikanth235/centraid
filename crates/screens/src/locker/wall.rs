@@ -542,7 +542,7 @@ impl Wall {
         })
     }
 
-    /// "Locked after 5 minutes idle." — what the wall says of the member's lock
+    /// "Locks after 5 minutes idle." — what the wall says of the member's lock
     /// setting; empty before the core has answered.
     #[must_use]
     pub fn idle_line(&self, locale: Locale) -> String {
@@ -702,13 +702,13 @@ mod tests {
         let en = Locale::En;
         let cases = [
             (None, ""),
-            (Some(0), "Locked as soon as you stop."),
-            (Some(30_000), "Locked after 30 seconds idle."),
-            (Some(60_000), "Locked after 1 minute idle."),
-            (Some(300_000), "Locked after 5 minutes idle."),
-            (Some(90_000), "Locked after 2 minutes idle."),
-            (Some(3_600_000), "Locked after 1 hour idle."),
-            (Some(7_200_000), "Locked after 2 hours idle."),
+            (Some(0), "Locks as soon as you stop."),
+            (Some(30_000), "Locks after 30 seconds idle."),
+            (Some(60_000), "Locks after 1 minute idle."),
+            (Some(300_000), "Locks after 5 minutes idle."),
+            (Some(90_000), "Locks after 2 minutes idle."),
+            (Some(3_600_000), "Locks after 1 hour idle."),
+            (Some(7_200_000), "Locks after 2 hours idle."),
         ];
         for (idle, line) in cases {
             assert_eq!(wall_with(idle).idle_line(en), line, "{idle:?}");
@@ -763,7 +763,7 @@ mod tests {
                 String::new()
             };
             let notice = wall.view(en).expect("a wall").notice;
-            assert!(notice.ends_with("Locked after 5 minutes idle."), "{notice}");
+            assert!(notice.ends_with("Locks after 5 minutes idle."), "{notice}");
         }
     }
 }

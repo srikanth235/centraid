@@ -2,7 +2,7 @@
 //!
 //! The model drives [`native::Session`](crate::native::Session), eight flat tools over a vault, one
 //! call per message, up to [`STEP_CAP`] messages per question. Every question about the vault
-//! takes this loop; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
+//! takes this loop; an explicit exact-title Find runs its two read calls without model generation; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
 //! (R-1088-9). The order is the driver loop's of the retired Python rig (`eval/run.py`, `train/hf_backend.py`, #1171), in Rust:
 //!
 //! ```text
@@ -64,6 +64,7 @@
 
 pub mod cards;
 pub mod log;
+mod lookup;
 pub mod pending;
 pub mod words;
 
@@ -320,32 +321,37 @@ impl<'a> NativePlane<'a> {
         // A RETRACTION ENDS THE TURN IN THE RUNTIME, before any call (`decline never_mind`): no
         // message is asked of the model and the log holds only the user turn.
         let mut last = user.get("ended").cloned();
+        let mut lookup = lookup::calls(&chat.session, &message).into_iter();
         let mut step = 0;
         while last.is_none() && step < STEP_CAP + 2 {
             step += 1;
             if cancel.is_cancelled() {
                 return Err(Refusal::Cancelled);
             }
-            let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
-            let written = decode_step(
-                self.model,
-                &prompt,
-                dates,
-                TraceMode::V4,
-                self.options,
-                cancel,
-            )
-            .map_err(failed)?;
-            if written.info.cancelled || cancel.is_cancelled() {
-                return Err(Refusal::Cancelled);
-            }
-            let sent = first_call(&written.text);
-            let call = parse_call(sent).ok();
+            let sent = if let Some(call) = lookup.next() {
+                call
+            } else {
+                let prompt = chat.log.prompt().map_err(Refusal::ModelFailed)?;
+                let written = decode_step(
+                    self.model,
+                    &prompt,
+                    dates,
+                    TraceMode::V4,
+                    self.options,
+                    cancel,
+                )
+                .map_err(failed)?;
+                if written.info.cancelled || cancel.is_cancelled() {
+                    return Err(Refusal::Cancelled);
+                }
+                first_call(&written.text).to_owned()
+            };
+            let call = parse_call(&sent).ok();
             if let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call)) {
                 sink(Event::Activity { app, tool });
             }
-            let reply = chat.session.call_text(sent);
-            chat.log.assistant(sent);
+            let reply = chat.session.call_text(&sent);
+            chat.log.assistant(&sent);
             chat.log.tool(
                 usize_of(&reply["obs"]),
                 reply["text"].as_str().unwrap_or_default(),
@@ -765,6 +771,9 @@ fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
         return Ok(said(say(Say::of_decline(reason))));
     }
     if let Some(question) = effect["ask"]["question"].as_str() {
+        if effect["failsoft"].is_string() {
+            return Ok(said(say(Say::Cap)));
+        }
         let (cards, _) = cards_of(session, &effect["ask"]["options"]);
         return Ok(Answered {
             text: question.trim().to_owned(),

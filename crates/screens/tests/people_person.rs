@@ -616,7 +616,7 @@ fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
+fn a_birthday_reminder_stays_on_and_has_no_off_control() {
     let mut d = clean();
     let id = id_of(&arrange(
         &d,
@@ -636,7 +636,7 @@ fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
             .clone()
     };
     let before = birthday(&d, i);
-    assert!(before.reminder_on && before.toggleable, "{before:?}");
+    assert!(before.reminder_on && !before.toggleable, "{before:?}");
     send_person(
         &mut d,
         i,
@@ -645,12 +645,8 @@ fn a_birthday_reminder_is_turned_off_from_the_sheet_and_the_date_stays() {
         }),
     );
     let after = birthday(&d, i);
-    assert!(!after.reminder_on, "{after:?}");
-    assert_eq!(after.reminder_label, "Reminder off");
-    assert_eq!(
-        person_state(d.view(i)).status.as_ref().unwrap().sentence,
-        "Reminder off · Birthday"
-    );
+    assert!(after.reminder_on && !after.toggleable, "{after:?}");
+    assert_eq!(after.reminder_label, "Reminder on");
 }
 
 fn hero_keys(d: &Driver, i: u64) -> Vec<String> {

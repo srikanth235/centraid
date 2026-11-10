@@ -215,7 +215,8 @@ private fun PlaceCard(
 /** THE PRIVATE PLOT: the pins over a plate, and no basemap at all. */
 @Composable
 private fun PlacesPlot(data: PhotosPlacesData, onOpen: (Route) -> Unit) {
-    val plotted = data.places.filter { it.pinned }
+    val plotted = data.map_pins
+    var expanded by remember { mutableStateOf<String?>(null) }
     val line = centraidColor("line")
     BoxWithConstraints(
         modifier = Modifier
@@ -267,10 +268,18 @@ private fun PlacesPlot(data: PhotosPlacesData, onOpen: (Route) -> Unit) {
                     .clip(shape)
                     .background(centraidColor(if (cover != null) "bgElev" else "stage"))
                     .border(CentraidGeometry.HAIRLINE.dp, centraidColor("line"), shape)
-                    .clickable { row.open_?.let(onOpen) }
+                    .clickable { if (row.choices.isEmpty()) row.open_?.let(onOpen) else expanded = row.place_id }
                     .semantics { contentDescription = row.spoken },
                 contentAlignment = Alignment.Center,
             ) {
+                androidx.compose.material3.DropdownMenu(expanded = expanded == row.place_id, onDismissRequest = { expanded = null }) {
+                    row.choices.forEach { place ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(place.spoken) }, onClick = {
+                            expanded = null
+                            place.open_?.let(onOpen)
+                        })
+                    }
+                }
                 if (cover != null) {
                     ContentImage(path = cover)
                     if (row.count_mark.isNotEmpty()) {

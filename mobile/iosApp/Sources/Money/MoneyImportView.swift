@@ -41,10 +41,18 @@ struct MoneyImportView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
-                    identifier: "money-import-status"
-                )
+                VStack(spacing: 0) {
+                    if let plan = content.loaded, !plan.doneLabel.isEmpty {
+                        MoneyInkButton(label: plan.doneLabel, identifier: "money-import-done") {
+                            send(event { $0.done = .init() })
+                        }
+                    }
+                    MoneyStatusFoot(
+                        status: MoneyWords.line(state.hasStatus ? state.status : nil),
+                        identifier: "money-import-status"
+                    )
+                }
+                .background(Theme.color("bg", scheme))
             }
         }
         .sheet(isPresented: sheetBinding) {
@@ -122,11 +130,6 @@ struct MoneyImportView: View {
         } else if !plan.discardLabel.isEmpty {
             MoneyQuietButton(label: plan.discardLabel, identifier: "money-import-discard") {
                 send(event { $0.discard = .init() })
-            }
-        }
-        if !plan.doneLabel.isEmpty {
-            MoneyInkButton(label: plan.doneLabel, identifier: "money-import-done") {
-                send(event { $0.done = .init() })
             }
         }
     }

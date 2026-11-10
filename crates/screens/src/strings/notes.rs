@@ -70,11 +70,11 @@ catalog! {
         "Entries you write about people in People appear here."
     );
     plain journal_empty_headline = ("No journal entries yet", "No journal entries yet");
-    plain journal_line = ("A line about your day", "A line about your day");
-    plain journal_mood = ("Mood", "Mood");
+    plain journal_line = ("Entry (required)", "Entry (required)");
+    plain journal_mood = ("Mood (required)", "Mood (required)");
     plain journal_origin = (
-        "Journal entries are written in People and kept apart from your notes.",
-        "Journal entries are written in People and kept apart from your notes."
+        "Journal entries are kept apart from your notes.",
+        "Journal entries are kept apart from your notes."
     );
     plain journal_save = ("Save", "Save");
     plain journal_title = ("Journal", "Journal");

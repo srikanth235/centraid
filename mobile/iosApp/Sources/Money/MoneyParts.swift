@@ -686,7 +686,7 @@ struct MoneyMonthRow: View {
         .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
         .overlay(alignment: .top) { KitHairline() }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(MoneyWords.spoken(month.accessibilityLabel, month.net))
+        .accessibilityLabel(month.accessibilityLabel)
         .accessibilityIdentifier(identifier)
     }
 

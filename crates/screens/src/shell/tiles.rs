@@ -486,7 +486,13 @@ fn calendar_tile(locale: Locale, cycle: HourCycle, upcoming: &wire::AgendaUpcomi
         .collect();
     let rest = todays.len().saturating_sub(DAY_EVENTS);
     let foot = if todays.is_empty() {
-        words::tile_agenda_none_today(locale)
+        if upcoming.events.iter().any(|event| {
+            event.local_days.iter().any(|day| day == today) || day_of(&event.local_start) == today
+        }) {
+            words::tile_agenda_finished_today(locale)
+        } else {
+            words::tile_agenda_none_today(locale)
+        }
     } else if rest > 0 {
         fill(
             &words::tile_agenda_foot_more(locale),
@@ -990,7 +996,7 @@ mod tests {
         assert_eq!(body.foot, "Calendar \u{b7} 2 more");
         // The count is what the spoken label says: four events in the week.
         assert_eq!(count(&made), 4);
-        assert_eq!(made.count_label, "on your plate");
+        assert_eq!(made.count_label, "upcoming events");
     }
 
     #[test]
@@ -1007,6 +1013,17 @@ mod tests {
         assert!(body.events.is_empty());
         assert_eq!(body.foot, "No events today");
         assert_eq!(count(&later), 1);
+    }
+
+    #[test]
+    fn a_finished_day_is_distinct_from_a_day_with_no_events() {
+        let made = agenda_of(vec![
+            timed("a", "Breakfast", "2026-06-15T07:00", "2026-06-15T08:00"),
+            timed("b", "Tomorrow", "2026-06-16T11:00", "2026-06-16T12:00"),
+        ]);
+        assert!(agenda_body(&made).events.is_empty());
+        assert_eq!(agenda_body(&made).foot, "No more events today");
+        assert_eq!(count(&made), 1);
     }
 
     #[test]
@@ -1122,7 +1139,7 @@ mod tests {
         assert_eq!(made.status, Status::Empty);
         assert_eq!(count(&made), 0);
         assert!(made.body.is_none());
-        assert_eq!(made.count_label, "on your plate");
+        assert_eq!(made.count_label, "upcoming events");
         // An event that is over leaves the same: nothing to say.
         let over = agenda_of(vec![timed(
             "e",

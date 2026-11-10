@@ -1713,6 +1713,70 @@
       "w": 2070,
       "x": 0,
       "y": 24960
+    },
+    "NotesJournal.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Journal · Required entry fields",
+      "w": 390,
+      "x": 4700,
+      "y": 11600
+    },
+    "NotesJournalDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Journal · Required entry fields · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 11600
+    },
+    "MoneyCashflow.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Cash flow · Labelled amounts",
+      "w": 390,
+      "x": 4700,
+      "y": 9280
+    },
+    "MoneyCashflowDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Cash flow · Labelled amounts · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 9280
+    },
+    "PhotosPlacesMap.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Places · Map groups",
+      "w": 390,
+      "x": 4700,
+      "y": 12760
+    },
+    "PhotosPlacesMapDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Places · Map groups · dark",
+      "w": 390,
+      "x": 4700,
+      "y": 12760
+    },
+    "MoneyImportDone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Import statement · Done and status",
+      "w": 390,
+      "x": 5170,
+      "y": 10440
+    },
+    "MoneyImportDoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Import statement · Done and status · dark",
+      "w": 390,
+      "x": 5170,
+      "y": 10440
     }
   },
   "createdOnFiles": {
@@ -2362,7 +2426,15 @@
     "PeopleMoreContacts.dc.html",
     "PeopleImport.dc.html",
     "HealthSearch.dc.html",
-    "PersonLinks.dc.html"
+    "PersonLinks.dc.html",
+    "NotesJournal.dc.html",
+    "NotesJournalDark.dc.html",
+    "MoneyCashflow.dc.html",
+    "MoneyCashflowDark.dc.html",
+    "PhotosPlacesMap.dc.html",
+    "PhotosPlacesMapDark.dc.html",
+    "MoneyImportDone.dc.html",
+    "MoneyImportDoneDark.dc.html"
   ],
   "pages": [
     {

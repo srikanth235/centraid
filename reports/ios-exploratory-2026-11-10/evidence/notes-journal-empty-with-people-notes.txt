@@ -1,0 +1,60 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 text Description: No journal entries yet, Secondary Actions: Cancel
+					15 text Description: Entries you write about people in People appear here., Secondary Actions: Cancel
+					16 button Description: Home, ID: notes-band-home, Secondary Actions: Cancel
+					17 button Description: Notes, ID: notes-band-notes, Secondary Actions: Cancel
+					18 button Description: Notebooks, ID: notes-band-notebooks, Secondary Actions: Cancel
+					19 button (selected) Description: Journal, current place, ID: notes-band-journal, Secondary Actions: Cancel
+					20 button Description: More, ID: notes-band-more, Secondary Actions: Cancel
+				21 button Description: Home, ID: app.grid.3x3
+				22 button Description: Screenshot, ID: camera.viewfinder
+				23 button Description: Record, ID: record.circle
+				24 button Rotate Right
+	25 toolbar
+		26 menu button Add, Help: Add Device, ID: plus
+		27 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		28 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		29 toggle button Description: Capture Keyboard, Value: off
+		30 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		31 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		32 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		33 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		34 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		35 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		36 menu button More, Help: More Actions, ID: ellipsis
+		37 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		38 radio button Description: text.document, Help: Reports, Value: 0
+		39 radio button Description: Info, Value: 0, ID: info
+	40 close button
+	41 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	42 minimize button
+	43 text c1173-review iOS 26.5
+44 menu bar
+	45 Device Hub
+	46 File
+	47 Edit
+	48 View
+	49 Device
+	50 Controls
+	51 Window
+	52 Help

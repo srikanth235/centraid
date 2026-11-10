@@ -54,52 +54,7 @@ const SEPARATOR: &str = ", ";
 /// Between the time and the place on a block's second line.
 const META_SEPARATOR: &str = " · ";
 
-/// Regions whose week opens on Sunday; every other region's opens on Monday.
-const SUNDAY_FIRST: [&str; 20] = [
-    "US", "CA", "MX", "BR", "JP", "IL", "PH", "KR", "TW", "HK", "IN", "ZA", "SA", "CO", "PE", "VE",
-    "GT", "PA", "DO", "PR",
-];
-
-/// The first weekday of a week.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum WeekStart {
-    #[default]
-    Monday,
-    Sunday,
-}
-
-impl WeekStart {
-    /// ISO weekday: 1 is Monday, 7 is Sunday.
-    fn iso(self) -> u32 {
-        match self {
-            Self::Monday => 1,
-            Self::Sunday => 7,
-        }
-    }
-}
-
-/// The week a region keeps (`US` of `en-US`, any case; empty is Monday).
-#[must_use]
-pub fn week_start_of(region: &str) -> WeekStart {
-    if SUNDAY_FIRST
-        .iter()
-        .any(|sunday| sunday.eq_ignore_ascii_case(region.trim()))
-    {
-        WeekStart::Sunday
-    } else {
-        WeekStart::Monday
-    }
-}
-
-// ---- civil arithmetic ------------------------------------------------------
-
-/// The first day of the week `day` is in.
-#[must_use]
-pub fn week_first(day: &str, start: WeekStart) -> Option<String> {
-    let weekday = civil::iso_weekday_of(day)?;
-    let back = (weekday + 7 - start.iso()) % 7;
-    civil::plus_days(day, -i64::from(back))
-}
+pub use crate::kit::civil::{WeekStart, week_first, week_start_of};
 
 fn year_month(day: &str) -> Option<(i64, i64)> {
     civil::epoch_day_of(day)?;
@@ -522,7 +477,7 @@ fn time_grid(input: &Input) -> Option<wire::AgendaTimeGrid> {
         .map(|day| wire::AgendaGridDay {
             day: day.clone(),
             heading: if input.destination == Dest::Week {
-                format!("{} {}", civil::weekday_short(locale, day), day_number(day))
+                format!("{}\n{}", civil::weekday_short(locale, day), day_number(day))
             } else {
                 String::new()
             },
@@ -1273,7 +1228,7 @@ mod tests {
         let week =
             time_grid(&parts.view(Dest::Week, "2026-11-05", WeekStart::Monday)).expect("a week");
         assert_eq!(week.days.len(), 7);
-        assert_eq!(week.days[3].heading, "Thu 5");
+        assert_eq!(week.days[3].heading, "Thu\n5");
         let run = &week.days[3].blocks[0];
         assert_eq!((run.start_minute, run.end_minute), (0, 120));
         assert_eq!(run.time_label, "Until 02:00");

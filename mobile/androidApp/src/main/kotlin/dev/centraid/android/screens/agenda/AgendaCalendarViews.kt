@@ -440,7 +440,8 @@ private fun WeekHeadings(grid: AgendaTimeGrid) {
                     day.heading,
                     style = kitTextStyle(KitType.Meta),
                     color = if (day.is_today) accent.text else Surface.body,
-                    maxLines = 1,
+                    maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

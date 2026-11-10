@@ -204,8 +204,8 @@ catalog! {
     plain lock_body_lead = ("Items stay hidden until you unlock with", "Items stay hidden until you unlock with");
     plain lock_body_tail = (".", ".");
     plain lock_did_not_open = ("Locker did not open on this phone.", "Locker did not open on this phone.");
-    plain lock_idle_line = ("Locked after {span} idle.", "Locked after {span} idle.");
-    plain lock_idle_line_now = ("Locked as soon as you stop.", "Locked as soon as you stop.");
+    plain lock_idle_line = ("Locks after {span} idle.", "Locks after {span} idle.");
+    plain lock_idle_line_now = ("Locks as soon as you stop.", "Locks as soon as you stop.");
     counted span_hours = ("{n} hour", "{n} hours");
     counted span_minutes = ("{n} minute", "{n} minutes");
     counted span_seconds = ("{n} second", "{n} seconds");
