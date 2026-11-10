@@ -639,6 +639,88 @@ pub(crate) fn attendees_merge(
     Ok(changed)
 }
 
+/// Make the guests what the phone last stated (one guest, named by its [`attendees_items`] key,
+/// or all): a person's answer is put back, a guest the member added is taken off, and one they took
+/// off is invited again with the stated answer. A guest nobody's email matches is only in the
+/// statement and has nothing to put back. Returns whether an edge changed.
+pub(crate) fn attendees_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let wanted = matched_guests(connection, Some(stated))?;
+    let held = held_guests(connection, id)?;
+    // The key each person goes by: the stated guest's email, else how the read names a guest the
+    // member added.
+    let mut keys = std::collections::BTreeMap::new();
+    for guest in stated.as_array().into_iter().flatten() {
+        let guest = guest_canon(guest);
+        if let Some(email) = guest.get("email").and_then(Json::as_str)
+            && let Some(person) = person_of_email(connection, email)?
+        {
+            keys.entry(person).or_insert_with(|| email.to_owned());
+        }
+    }
+    for person in held.keys() {
+        if keys.contains_key(person) {
+            continue;
+        }
+        let name: String =
+            connection.query_row("SELECT title FROM entity WHERE id = ?1", [person], |row| {
+                row.get(0)
+            })?;
+        let email: Option<String> = connection
+            .query_row(
+                "SELECT value FROM contact_point WHERE person_id = ?1 AND kind = 'email'
+                  ORDER BY position, id LIMIT 1",
+                [person],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let key = email.map_or_else(
+            || format!("name:{}", name.to_lowercase()),
+            |email| email.to_lowercase(),
+        );
+        keys.insert(person.clone(), key);
+    }
+    let people: std::collections::BTreeSet<&String> = wanted.keys().chain(held.keys()).collect();
+    let mut changed = false;
+    for person in people {
+        if item.is_some_and(|item| keys.get(person).map(String::as_str) != Some(item)) {
+            continue;
+        }
+        let (mine, wants) = (held.get(person), wanted.get(person));
+        if mine == wants {
+            continue;
+        }
+        match wants {
+            None => {
+                changed |= connection.execute(
+                    "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
+                    [id, person],
+                )? > 0;
+            }
+            Some(state) => {
+                edge::put(
+                    ctx,
+                    id,
+                    Rel::Attendee,
+                    person,
+                    None,
+                    &Extras {
+                        state: Some(state),
+                        ..Extras::default()
+                    },
+                )?;
+                changed = true;
+            }
+        }
+    }
+    Ok(changed)
+}
+
 // ---------------------------------------------------------------------------
 // A series
 // ---------------------------------------------------------------------------
@@ -1494,6 +1576,73 @@ pub(crate) fn overrides_canon(statement: &Json) -> Json {
     statement.clone()
 }
 
+/// Make one day of a series what the rule and a statement imply (`None`: no row of its own).
+fn write_day(ctx: &CommandCtx<'_, '_>, id: &str, key: &str, wanted: Option<&Day>) -> Result<()> {
+    let connection = ctx.connection();
+    match wanted {
+        None => {
+            connection.execute(
+                "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2
+                                          AND scope = 'occurrence'",
+                [id, key],
+            )?;
+        }
+        Some(day) => {
+            let place = day
+                .place
+                .as_deref()
+                .map(|name| crate::commands::place::find_or_found_named(ctx, name))
+                .transpose()?;
+            connection.execute(
+                "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
+                                         ends, timing, zone, title, description, url, place_id)
+                 VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ON CONFLICT (series_id, original_start, scope)
+                 DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
+                               title = ?8, description = ?9, url = ?10, place_id = ?11",
+                rusqlite::params![
+                    id,
+                    key,
+                    day.cancelled,
+                    day.starts,
+                    day.ends,
+                    day.timing,
+                    day.zone,
+                    day.title,
+                    day.description,
+                    day.url,
+                    place
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Put a series' days back to what its source's statement implies, every day of the window the
+/// statement covers: the member's skips and changes there are undone. Returns whether a day changed.
+pub(crate) fn overrides_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    _item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    let Some(said) = observed(stated) else {
+        return Ok(false);
+    };
+    let (after, rows) = (derive(connection, id, &said)?, held(connection, id)?);
+    let mut changed = false;
+    for key in &after.window {
+        let wanted = after.rows.get(key);
+        if wanted != rows.get(key) {
+            write_day(ctx, id, key, wanted)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
 /// A three-way merge of a series' days: for each day of the window the rule
 /// produces, the source's new word replaces the vault's row when the member
 /// never changed it (the vault's row is what the source's last word implied),
@@ -1529,43 +1678,7 @@ pub(crate) fn overrides_merge(
         if !ours {
             continue;
         }
-        match wanted {
-            None => {
-                connection.execute(
-                    "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2
-                                              AND scope = 'occurrence'",
-                    [id, key],
-                )?;
-            }
-            Some(day) => {
-                let place = day
-                    .place
-                    .as_deref()
-                    .map(|name| crate::commands::place::find_or_found_named(ctx, name))
-                    .transpose()?;
-                connection.execute(
-                    "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
-                                             ends, timing, zone, title, description, url, place_id)
-                     VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                     ON CONFLICT (series_id, original_start, scope)
-                     DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
-                                   title = ?8, description = ?9, url = ?10, place_id = ?11",
-                    rusqlite::params![
-                        id,
-                        key,
-                        day.cancelled,
-                        day.starts,
-                        day.ends,
-                        day.timing,
-                        day.zone,
-                        day.title,
-                        day.description,
-                        day.url,
-                        place
-                    ],
-                )?;
-            }
-        }
+        write_day(ctx, id, key, wanted)?;
         changed = true;
     }
     Ok(changed)

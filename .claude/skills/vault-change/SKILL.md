@@ -45,7 +45,7 @@ The vault is one SQLite file on the phone. The Rust core is its only writer. Eve
 - **No dormant schema.** A table, column or wire field with no producer and no consumer leaves; intent lives in an issue. A wire field no table can fill is `reserved`.
 - **Time and identity.** Ids are UUIDv7 minted from the injected clock, so fixtures stay deterministic. Civil time is the vault's zone, never the host's. Money keeps its currency (minor units plus a code); a bare amount is not a balance.
 - **Reads paginate by keyset** (`(sort_key, pk)`), never `OFFSET`, and always take a window. A keyset cannot continue over a NULLABLE sort column; the kit refuses it.
-- **Follow is a three-way merge** against `source.stated`: the member's edit wins per field, the system's change lands on the rest. A new followed field needs its map entry.
+- **Follow is a three-way merge** against `source.stated`: the member's edit wins per field (and per item for a child such as contact points, guests or workout measures), the system's change lands on the rest. "Edited" is never stored: it is held != stated, so a field re-attaches by itself when they are equal. A new followed field needs its map entry; a new child needs `items` and `take` beside its `merge`. `follow::differences` reads the fields that differ and `follow.take_stated` copies the stated value back.
 - **There is no backwards compatibility with a file before the #1135 model** (`CEN1`): it is refused with a sentence at open and restore, never migrated.
 
 ## 4. What an app must declare

@@ -45,6 +45,7 @@ pub const MEASURES: Child = Child {
     canon,
     merge,
     items: Some(items),
+    take,
 };
 
 /// The measures by column.
@@ -130,7 +131,29 @@ fn merge(ctx: &CommandCtx<'_, '_>, id: &str, before: Option<&Json>, new: &Json) 
             }
         }
     }
-    let new = stated;
+    store(ctx, id, &stated)
+}
+
+/// Make the measures what the store last stated (one column, or all): a figure the member changed
+/// is put back, one they cleared comes back and one they added is cleared.
+fn take(ctx: &CommandCtx<'_, '_>, id: &str, item: Option<&str>, stated: &Json) -> Result<bool> {
+    let (said, mut target) = (canon(stated), canon(&read(ctx.connection(), id)?));
+    for column in COLUMNS
+        .iter()
+        .filter(|column| item.is_none_or(|item| item == **column))
+    {
+        match said.get(*column) {
+            Some(value) => target[*column] = value.clone(),
+            None => {
+                target.as_object_mut().map(|map| map.remove(*column));
+            }
+        }
+    }
+    store(ctx, id, &target)
+}
+
+/// Write the measures (in [`canon`]'s form) as the activity's row, adding it if it has none.
+fn store(ctx: &CommandCtx<'_, '_>, id: &str, new: &Json) -> Result<bool> {
     let bind = |column: &str| -> Sql {
         match new.get(column) {
             Some(Json::Number(number)) if WHOLE.contains(&column) => {

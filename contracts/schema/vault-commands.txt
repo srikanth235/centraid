@@ -43,6 +43,7 @@ follow.health
 follow.pushed
 follow.statement
 follow.stop
+follow.take_stated
 locker.add_item
 locker.clear_passkey
 locker.counts

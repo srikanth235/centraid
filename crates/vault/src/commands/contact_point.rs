@@ -136,6 +136,65 @@ pub(crate) fn canon(points: &Json) -> Json {
     )
 }
 
+/// Make one point what `wants` says (`None`: not there), given whether the person holds it now.
+fn put_point(
+    ctx: &CommandCtx<'_, '_>,
+    person: &str,
+    (kind, normalized): &(String, String),
+    held: bool,
+    wants: Option<&(String, Option<String>)>,
+) -> Result<bool> {
+    let connection = ctx.connection();
+    Ok(match wants {
+        None => {
+            connection.execute(
+                "DELETE FROM contact_point WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
+                [person, kind, normalized],
+            )? > 0
+        }
+        Some((value, label)) if held => {
+            connection.execute(
+                "UPDATE contact_point SET value = ?4, label = ?5
+                  WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
+                rusqlite::params![person, kind, normalized, value, label],
+            )? > 0
+        }
+        Some((value, label)) => {
+            connection.execute(
+                "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, position)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6,
+                         (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
+                rusqlite::params![ctx.next_id(), person, kind, value, normalized, label],
+            )? > 0
+        }
+    })
+}
+
+/// Make the points what the source last stated (one point, named by its [`items`] key, or all):
+/// a point the member removed comes back, one they relabelled or added is put back to the statement
+/// or taken off. Returns whether a row changed.
+pub(crate) fn take(
+    ctx: &CommandCtx<'_, '_>,
+    person: &str,
+    item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    let (said, held) = (keyed(stated), keyed(&read(ctx.connection(), person)?));
+    let keys: std::collections::BTreeSet<&(String, String)> =
+        said.keys().chain(held.keys()).collect();
+    let mut changed = false;
+    for key in keys {
+        if item.is_some_and(|item| format!("{}:{}", key.0, key.1) != item) {
+            continue;
+        }
+        let (mine, wants) = (held.get(key), said.get(key));
+        if mine != wants {
+            changed |= put_point(ctx, person, key, mine.is_some(), wants)?;
+        }
+    }
+    Ok(changed)
+}
+
 /// The points of a canonical list by the key that names each across statements: its kind and
 /// reach key.
 pub(crate) fn items(points: &Json) -> BTreeMap<String, Json> {
@@ -178,30 +237,7 @@ pub(crate) fn merge(
         if mine != said || mine == wants {
             continue;
         }
-        let (kind, normalized) = (&key.0, &key.1);
-        match wants {
-            None => {
-                changed |= connection.execute(
-                    "DELETE FROM contact_point WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
-                    [person, kind, normalized],
-                )? > 0;
-            }
-            Some((value, label)) if mine.is_some() => {
-                changed |= connection.execute(
-                    "UPDATE contact_point SET value = ?4, label = ?5
-                      WHERE person_id = ?1 AND kind = ?2 AND normalized = ?3",
-                    rusqlite::params![person, kind, normalized, value, label],
-                )? > 0;
-            }
-            Some((value, label)) => {
-                changed |= connection.execute(
-                    "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, label, position)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6,
-                             (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
-                    rusqlite::params![ctx.next_id(), person, kind, value, normalized, label],
-                )? > 0;
-            }
-        }
+        changed |= put_point(ctx, person, key, mine.is_some(), wants)?;
     }
     Ok(changed)
 }

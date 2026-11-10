@@ -18,7 +18,8 @@
 //! removal; one they changed, added or removed stands
 //! ([#1183](https://github.com/srikanth235/centraid/issues/1183)). A field is "edited" only
 //! while the vault's value differs from the statement, so it follows again by itself once
-//! they are equal. A record that is new is
+//! they are equal. [`differences`] reads, per call, where a field differs from what the
+//! source said, and `follow.take_stated` copies the stated value back. A record that is new is
 //! **matched** first, by the system's match key (a name; a title and a start; a
 //! file name; a workout kind and its start) against rows nothing follows yet,
 //! and only then added. What a record gone from a *complete* read does is the
@@ -114,7 +115,14 @@ pub struct Child {
     /// child whose items the member changes one at a time. `None` for a child that is judged
     /// whole ([`differences`] then reports the field as one).
     pub items: Option<Items>,
+    /// Make the rows what the source last stated (`stated`, as stated): the one item named by the
+    /// key, or all of them. The same writes the merge makes, forced. Returns whether anything
+    /// changed.
+    pub take: Take,
 }
+
+/// See [`Child::take`].
+pub type Take = fn(&CommandCtx<'_, '_>, &str, Option<&str>, &Json) -> Result<bool>;
 
 /// See [`Child::items`].
 pub type Items = fn(&Json) -> BTreeMap<String, Json>;
@@ -353,6 +361,10 @@ fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
         .unwrap_or(Json::Null))
 }
 
+fn stated_take(_: &CommandCtx<'_, '_>, _: &str, _: Option<&str>, _: &Json) -> Result<bool> {
+    Ok(false)
+}
+
 fn stated_canon(value: &Json) -> Json {
     value.clone()
 }
@@ -372,6 +384,7 @@ const STAT: Child = Child {
     canon: stated_canon,
     merge: stated_merge,
     items: None,
+    take: stated_take,
 };
 
 /// What a statement said of a line beyond what the model keeps: its memo, its
@@ -382,6 +395,7 @@ const LINE: Child = Child {
     canon: stated_canon,
     merge: stated_merge,
     items: None,
+    take: stated_take,
 };
 
 /// The five systems the vault follows.
@@ -401,6 +415,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             canon: contact_point::canon,
             merge: contact_point::merge,
             items: Some(contact_point::items),
+            take: contact_point::take,
         }],
         match_on: &[Match::Title],
         gone: Gone::Trash,
@@ -441,6 +456,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 merge: event::overrides_merge,
                 // Judged whole: a day is not an item the screens name one at a time.
                 items: None,
+                take: event::overrides_take,
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
@@ -450,6 +466,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 canon: event::attendees_canon,
                 merge: event::attendees_merge,
                 items: Some(event::attendees_items),
+                take: event::attendees_take,
             },
         ],
         match_on: &[Match::Title, Match::Column("starts")],
@@ -1723,6 +1740,88 @@ fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "stopped": true, "forgotten": forgotten }))
 }
 
+const TAKE_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["entity", "field"],
+  "additionalProperties": false,
+  "properties": {
+    "entity": { "type": "string", "minLength": 1 },
+    "field": { "type": "string", "minLength": 1,
+      "description": "A name `follow::differences` reports: `title`, a column, or a child such as `points`." },
+    "item_key": { "type": "string", "minLength": 1,
+      "description": "For a field made of items, the one item to take (a key `follow::differences` reports); leave out for the whole field." }
+  }
+}"#;
+
+fn pre_take(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (id, field) = (ctx.required_str("entity")?, ctx.required_str("field")?);
+    let connection = ctx.connection();
+    let Some((map, stated)) = live_link(connection, id)? else {
+        return Ok(Some(
+            "that is not following anything on the phone, so there is nothing to take".to_owned(),
+        ));
+    };
+    if !map.states(field) || map.fixed.contains(&field) || stated.get(field).is_none() {
+        return Ok(Some(format!(
+            "the phone has never said what its {field} should be"
+        )));
+    }
+    if let Some(item) = ctx.optional_str("item_key") {
+        let Some(items) = map.child(field).and_then(|child| child.items) else {
+            return Ok(Some(format!(
+                "the {field} is taken as a whole, not item by item"
+            )));
+        };
+        let child = map.child(field).ok_or_else(|| VaultError::Invariant {
+            context: "a field with items is a child".to_owned(),
+        })?;
+        let held = (child.read)(connection, id)?;
+        let known = |value: &Json| items(&(child.canon)(value)).contains_key(item);
+        if !known(&held) && !known(&stated[field]) {
+            return Ok(Some(format!("there is no `{item}` in the {field}")));
+        }
+    }
+    if field == "blob" {
+        let held: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM blob WHERE hash = ?1",
+            [stated["blob"].as_str().unwrap_or_default()],
+            |row| row.get(0),
+        )?;
+        if held == 0 {
+            return Ok(Some(
+                "the file the phone last stated is no longer held".to_owned(),
+            ));
+        }
+    }
+    Ok(None)
+}
+
+/// Take what the source last stated for a field the member changed: the held field (or one held
+/// item) becomes the stated value through the same writes the merge makes, as an ordinary edit. The
+/// field then agrees with the statement again, so it is no longer reported and the next pass
+/// treats it as untouched. A field that already agrees is left alone.
+fn take_stated(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (id, field) = (ctx.required_str("entity")?, ctx.required_str("field")?);
+    let connection = ctx.connection();
+    let (map, stated) = live_link(connection, id)?.ok_or_else(|| VaultError::Invariant {
+        context: "a take names a live source link".to_owned(),
+    })?;
+    let said = stated.get(field).cloned().unwrap_or(Json::Null);
+    let changed = if let Some(child) = map.child(field) {
+        let changed = (child.take)(ctx, id, ctx.optional_str("item_key"), &said)?;
+        if changed {
+            ctx.touch(id)?;
+        }
+        changed
+    } else if map.agree(field, current(connection, map, id)?.get(field), Some(&said)) {
+        false
+    } else {
+        write_fields(ctx, map, id, &[(field, &said)])?;
+        true
+    };
+    Ok(serde_json::json!({ "id": id, "field": field, "changed": changed }))
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     let mut definitions: Vec<CommandDefinition> = SYSTEMS
@@ -1751,6 +1850,17 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_stop,
         }],
         stop,
+    ));
+    definitions.push(CommandDefinition::plain(
+        "follow.take_stated",
+        "follow",
+        TAKE_SCHEMA,
+        Idempotency::Idempotent,
+        &[CommandCondition {
+            predicate: "field_is_one_the_phone_stated_of_a_followed_row",
+            check: pre_take,
+        }],
+        take_stated,
     ));
     definitions.extend(calendar_push::definitions());
     definitions
