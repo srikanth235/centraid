@@ -475,6 +475,11 @@ struct FieldWrite<'a> {
     position: i64,
 }
 
+/// The custom field kinds whose value is a secret, kept sealed.
+fn is_sealed_kind(kind: &str) -> bool {
+    matches!(kind, "sealed" | "otp")
+}
+
 fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) -> Result<String> {
     // "Does this id already name a row on this item" is a LOOKUP, not a
     // precondition: the same call creates and rewrites, and which one it did
@@ -494,18 +499,10 @@ fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) 
         Some(field_id) => field_id.to_owned(),
         None => ctx.next_id(),
     };
-    let sealed = write.kind == "sealed";
+    // A `sealed` field and a one-time-code (`otp`) field both keep their value only as `lk1:`
+    // ciphertext in `value_sealed`; `otp` keeps its kind so a page shows a rolling code.
+    let sealed = is_sealed_kind(write.kind);
     let supplied = write.value.filter(|value| !value.is_empty());
-    // A one-time-code seed is a secret, and `value_text` is a plain column that history and the
-    // backup's readers can see. `otp` is the one non-`sealed` kind that names a secret, so it
-    // never carries a value: a seed belongs in the login's sealed `otp_seed` or a `sealed` field.
-    if write.kind == "otp" && supplied.is_some() {
-        return Err(invalid(
-            "value",
-            "a one-time-code seed is a secret and cannot be kept in a plain field; \
-             keep it in the login's one-time code or in a sealed field",
-        ));
-    }
     let unchanged = supplied == Some(SEALED_PLACEHOLDER);
     let value_sealed: Option<String> = if sealed {
         if unchanged {
@@ -518,6 +515,13 @@ fn write_field(ctx: &CommandCtx<'_, '_>, item_id: &str, write: &FieldWrite<'_>) 
     } else {
         None
     };
+    // The schema says an `otp` field holds a seed; say it in a sentence before it says it in SQL.
+    if write.kind == "otp" && value_sealed.is_none() {
+        return Err(invalid(
+            "value",
+            "a one-time-code field needs its setup key; there is nothing to keep without one",
+        ));
+    }
     let value_text: Option<String> = if sealed {
         None
     } else if unchanged {
@@ -737,7 +741,7 @@ const ALIAS_IS_FREE: CommandCondition = CommandCondition {
 const FIELD_VALUE_IS_SEALED: CommandCondition = CommandCondition {
     predicate: "field_value_is_sealed",
     check: |ctx| {
-        if ctx.optional_str("kind") != Some("sealed") {
+        if !ctx.optional_str("kind").is_some_and(is_sealed_kind) {
             return Ok(None);
         }
         let value = ctx.optional_str("value");
@@ -1371,7 +1375,7 @@ fn duplicate_item() -> CommandDefinition {
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("text");
                     let value = field.get("value").and_then(serde_json::Value::as_str);
-                    if kind == "sealed" {
+                    if is_sealed_kind(kind) {
                         assert_sealed_cell("fields[].value", value)?;
                     }
                     assert_fresh_id(ctx, "fields[].field_id", field_id)?;
@@ -1469,11 +1473,11 @@ fn set_field() -> CommandDefinition {
             let label = ctx.required_str("label")?.to_owned();
             let value = ctx.optional_str("value").map(str::to_owned);
             let field_id = ctx.optional_str("field_id").map(str::to_owned);
-            let sealed_value = kind == "sealed"
+            let sealed_value = is_sealed_kind(&kind)
                 && value
                     .as_deref()
                     .is_some_and(|value| !value.is_empty() && value != SEALED_PLACEHOLDER);
-            if kind == "sealed" {
+            if is_sealed_kind(&kind) {
                 assert_sealed_cell("value", value.as_deref())?;
             }
             assert_key_generation(ctx, sealed_value)?;
@@ -1814,6 +1818,20 @@ fn totp_code() -> CommandDefinition {
         predicate: "item_has_seed",
         check: |ctx| {
             let item_id = ctx.required_str("item_id")?;
+            // A custom one-time-code field names itself; the item must be live and the field a
+            // sealed `otp` field of it.
+            if let Some(field_id) = ctx.optional_str("field_id") {
+                let found = count(
+                    ctx,
+                    "SELECT COUNT(*) FROM locker_item_field f JOIN entity e ON e.id = f.item_id
+                      WHERE f.field_id = ?1 AND f.item_id = ?2 AND f.kind = 'otp'
+                        AND f.value_sealed IS NOT NULL AND e.deleted_at IS NULL",
+                    &[field_id, item_id],
+                )?;
+                return Ok(
+                    (found != 1).then(|| "that item carries no one-time-code seed".to_owned())
+                );
+            }
             // THE PRESENCE OF A SEALED CELL IS A FACT THE COMMAND PLANE KNOWS.
             // `otp_seed IS NOT NULL` reads a column without reading a value,
             // which is exactly the line the trust premise draws: the command
@@ -1834,7 +1852,8 @@ fn totp_code() -> CommandDefinition {
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
-            "item_id": { "type": "string", "minLength": 1 }
+            "item_id": { "type": "string", "minLength": 1 },
+            "field_id": { "type": "string", "minLength": 1 }
           }
         }"#,
         Idempotency::RetrySafe,

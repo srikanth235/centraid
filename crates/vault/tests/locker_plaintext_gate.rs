@@ -56,7 +56,7 @@ use centraid_vault::model::Kind;
 /// Chosen to be **findable**: long, unique, and not a substring of anything a
 /// payload would legitimately carry. A short plaintext that happened to appear
 /// in a base64 blob would make this test pass for the wrong reason.
-const PLANTED: [(&str, &str, &str, &str); 5] = [
+const PLANTED: [(&str, &str, &str, &str); 6] = [
     (
         "locker_item",
         "item-1",
@@ -80,6 +80,12 @@ const PLANTED: [(&str, &str, &str, &str); 5] = [
         "field-1",
         "value_sealed",
         "PLANTED-CUSTOMFIELD-kp5ny1-not-in-any-payload",
+    ),
+    (
+        "locker_item_field",
+        "field-2",
+        "value_sealed",
+        "PLANTED-OTPFIELD-bn8qc3-not-in-any-payload",
     ),
     (
         "locker_item_passkey",
@@ -148,6 +154,16 @@ impl Sealed {
                     "INSERT INTO locker_item_field
                        (field_id, item_id, section, label, kind, created_at, updated_at, key_id)
                      VALUES ('field-1', 'item-1', '', 'Recovery code', 'sealed',
+                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
+                    [],
+                )?;
+                // A one-time-code custom field: kind `otp`, and its seed sealed like the rest (the
+                // schema requires a sealed value and forbids a plain one).
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (field_id, item_id, section, label, kind, value_sealed, created_at,
+                        updated_at, key_id)
+                     VALUES ('field-2', 'item-1', '', 'Backup code', 'otp', 'lk1:placeholder',
                              '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
                     [],
                 )?;
@@ -658,13 +674,16 @@ fn the_command_plane_cannot_be_talked_into_storing_a_plaintext_secret() {
     }
 }
 
-/// A custom field of kind `otp` is a one-time-code seed, a secret, and `value_text` is a plain
-/// column: the vault refuses to write one (the login's own `otp_seed` and a `sealed` field are the
-/// sealed homes), and a row that an older vault already holds in the clear never enters history.
+/// A custom field of kind `otp` is a one-time-code seed, a secret: the schema keeps it out of the
+/// plain `value_text` column (a plain value is refused, and an `otp` field without a sealed one
+/// is), the vault takes only its ciphertext, and no revision, plain column or search row holds it.
 #[test]
-fn an_otp_custom_field_is_never_stored_plain_nor_copied_into_history() {
+fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_index() {
     const SEED: &str = "PLANTED-OTPFIELD-bn8qc3-not-in-any-payload";
     let vault = Sealed::founded();
+    let key = locker_key();
+
+    // The vault takes no plaintext seed, however it arrives.
     for (command, input) in [
         (
             "locker.set_field",
@@ -694,65 +713,115 @@ fn an_otp_custom_field_is_never_stored_plain_nor_copied_into_history() {
         assert_eq!(
             outcome.status,
             CommandStatus::Failed,
-            "{command} stored an otp field's value in a plain column"
+            "{command} stored an otp field's value in the clear"
         );
     }
-    let stored: i64 = vault
-        .scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT count(*) FROM locker_item_field WHERE kind = 'otp' AND value_text IS NOT NULL",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .expect("the count reads");
-    assert_eq!(stored, 0);
-
-    // A row an older vault wrote in the clear: history must not copy it.
-    vault
-        .scratch
-        .vault
-        .commit(|tx| {
+    // The schema itself refuses a plain seed, and an `otp` field with no sealed one.
+    for statement in [
+        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, created_at)
+         VALUES ('plain-otp', 'item-1', 'x', 'otp', 'PLAIN', '2026-01-01T00:00:00.000Z')",
+        "INSERT INTO locker_item_field (field_id, item_id, label, kind, value_text, value_sealed, created_at)
+         VALUES ('both-otp', 'item-1', 'x', 'otp', 'PLAIN', 'lk1:x', '2026-01-01T00:00:00.000Z')",
+        "INSERT INTO locker_item_field (field_id, item_id, label, kind, created_at)
+         VALUES ('empty-otp', 'item-1', 'x', 'otp', '2026-01-01T00:00:00.000Z')",
+    ] {
+        let refused = vault.scratch.vault.commit(|tx| {
             tx.set_producer("test.fixture");
-            tx.connection().execute(
-                "INSERT INTO locker_item_field
-                   (field_id, item_id, section, label, kind, value_text, created_at, updated_at)
-                 VALUES ('field-legacy', 'item-1', '', 'Old code', 'otp', ?1,
-                         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
-                [SEED],
-            )?;
+            tx.connection().execute(statement, [])?;
             Ok(())
-        })
-        .expect("the legacy row lands");
+        });
+        assert!(refused.is_err(), "the schema took: {statement}");
+    }
+
+    // A sealed seed is taken, keeps its kind, and its plaintext is nowhere a reader can see.
+    let sealed = encrypt_under_locker_key(&key, "key-1", "field-otp", SEED).expect("seals");
+    let stored = vault.run(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1", "field_id": "field-otp", "label": "Backup code",
+            "kind": "otp", "value": sealed, "key_id": "key-1"
+        }),
+    );
+    assert!(stored.contains("Executed"), "{stored}");
+    // Rewriting it with the placeholder keeps the seed and the kind.
+    let kept = vault.run(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1", "field_id": "field-otp", "label": "Backup codes",
+            "kind": "otp", "value": "«sealed»"
+        }),
+    );
+    assert!(kept.contains("Executed"), "{kept}");
+    // The edit makes a revision (so the scan below is not vacuous).
     let edited = vault.run(
         "locker.edit_item",
         serde_json::json!({ "item_id": "item-1", "username": "someone-else" }),
     );
-    assert!(
-        edited.contains("Applied") || edited.contains("Ok"),
-        "{edited}"
-    );
-    let revisions: Vec<String> = vault
+    assert!(edited.contains("Executed"), "{edited}");
+    vault
         .scratch
         .vault
         .read(|connection| {
-            let mut statement = connection.prepare("SELECT CAST(state AS TEXT) FROM revision")?;
-            Ok(statement
+            let kind_and_plain: (String, Option<String>, Option<String>) = connection.query_row(
+                "SELECT kind, value_text, value_sealed FROM locker_item_field
+                  WHERE field_id = 'field-otp'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+            assert_eq!(kind_and_plain.0, "otp");
+            assert_eq!(kind_and_plain.1, None);
+            assert!(
+                kind_and_plain
+                    .2
+                    .as_deref()
+                    .is_some_and(is_locker_ciphertext)
+            );
+            // No plain column of any table holds the seed or a word of it.
+            for table in ["locker_item", "locker_item_field", "locker_item_address"] {
+                let rows: Vec<String> = connection
+                    .prepare(&format!("SELECT * FROM {table}"))?
+                    .query_map([], |row| {
+                        let mut line = String::new();
+                        for index in 0..row.as_ref().column_count() {
+                            if let Ok(text) = row.get::<_, String>(index) {
+                                line.push_str(&text);
+                                line.push(' ');
+                            }
+                        }
+                        Ok(line)
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for line in rows.iter().filter(|line| !line.contains("lk1:")) {
+                    carries_no_secret(table, line.as_bytes());
+                    carries_no_secret_token(table, line.as_bytes());
+                }
+            }
+            // No revision holds it, and one was written.
+            let revisions: Vec<String> = connection
+                .prepare("SELECT CAST(state AS TEXT) FROM revision")?
                 .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?)
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            assert!(
+                revisions.iter().any(|state| state.contains("someone-else")
+                    || state.contains("plainuser-xylophone9")),
+                "the edit made a revision (the scan is not vacuous)"
+            );
+            for state in &revisions {
+                assert!(!state.contains(SEED), "history copied an otp field's seed");
+                assert!(
+                    !state.contains("Backup code"),
+                    "history holds the otp field at all"
+                );
+                assert!(!state.contains("lk1:"), "history holds a sealed cell");
+            }
+            // And the search index holds no word of it.
+            let text = centraid_vault::index::text_of(connection, "item-1", Kind::LockerItem)?
+                .unwrap_or_default();
+            carries_no_secret("text_of", text.as_bytes());
+            carries_no_secret_token("text_of", text.as_bytes());
+            Ok(())
         })
-        .expect("the revisions read");
-    assert!(
-        revisions
-            .iter()
-            .any(|state| state.contains("someone-else") || state.contains("plainuser-xylophone9")),
-        "the edit made a revision (the scan is not vacuous)"
-    );
-    for state in &revisions {
-        assert!(!state.contains(SEED), "history copied an otp field's value");
-    }
+        .expect("the file reads");
 }
 
 /// THE FALSIFICATION.

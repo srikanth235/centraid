@@ -439,8 +439,11 @@ CREATE TABLE locker_item_field (
   -- while the version is unchanged, and its own UPDATE moves it). Nothing compares it; it is not an
   -- entity version (#1146, R-1146-0-2).
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1), key_id TEXT,
-  CHECK (kind = 'sealed' OR value_sealed IS NULL),
-  CHECK (kind <> 'sealed' OR value_text IS NULL)
+  -- A one-time-code seed is a secret like a `sealed` value: `otp` keeps its kind so the page shows
+  -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
+  CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
+  CHECK (kind NOT IN ('sealed', 'otp') OR value_text IS NULL),
+  CHECK (kind <> 'otp' OR value_sealed IS NOT NULL)
 ) STRICT;
 
 -- table locker_item_passkey on locker_item_passkey

@@ -425,15 +425,38 @@ impl crate::file::Vault {
         item_id: &str,
         field_id: &str,
     ) -> crate::error::Result<Option<SealedItemCell>> {
+        self.field_cell(item_id, field_id, "sealed")
+    }
+
+    /// One custom one-time-code (`otp`) field's sealed seed, for the rolling code and for an
+    /// export: never for a reveal, which refuses a seed. Bound to the FIELD's id like a sealed
+    /// field's value, and `None` in the same cases (no live item, no such field, not `otp`).
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_otp_field_cell(
+        &self,
+        item_id: &str,
+        field_id: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
+        self.field_cell(item_id, field_id, "otp")
+    }
+
+    fn field_cell(
+        &self,
+        item_id: &str,
+        field_id: &str,
+        kind: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
         self.read(|connection| {
             let mut statement = connection.prepare(
                 "SELECT f.value_sealed, f.key_id
                    FROM locker_item_field f
                    JOIN entity i ON i.id = f.item_id
                   WHERE f.field_id = ?1 AND f.item_id = ?2
-                    AND f.kind = 'sealed' AND i.deleted_at IS NULL",
+                    AND f.kind = ?3 AND i.deleted_at IS NULL",
             )?;
-            let mut rows = statement.query([field_id, item_id])?;
+            let mut rows = statement.query([field_id, item_id, kind])?;
             Ok(match rows.next()? {
                 Some(row) => {
                     let ciphertext: Option<String> = row.get(0)?;

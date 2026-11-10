@@ -141,8 +141,8 @@ pub const TABLES: &[(&str, Role)] = &[
         },
     ),
     // A sealed custom field is its sealed value and nothing else worth keeping: it is not state.
-    // An `otp` field is a one-time-code seed: the vault no longer writes a value for one, but an
-    // older file may hold one in `value_text`, and history must never copy it.
+    // An `otp` field is a one-time-code seed, sealed like the rest (the schema forbids its plain
+    // column), so it is not state either.
     (
         "locker_item_field",
         Role::Child {
