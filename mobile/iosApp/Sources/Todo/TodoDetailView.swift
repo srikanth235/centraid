@@ -187,6 +187,8 @@ struct TodoDetailView: View {
                         send: { attachment in send(event { $0.attachment = attachment }) }
                     )
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                 HStack(spacing: 12) {
                     if !detail.deleteLabel.isEmpty {
                         KitOutlineButton(label: detail.deleteLabel, tone: "net") { send(event { $0.delete = .init() }) }

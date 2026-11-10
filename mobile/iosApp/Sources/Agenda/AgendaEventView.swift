@@ -193,6 +193,8 @@ struct AgendaEventView: View {
                         .padding(.top, 12)
                         .accessibilityIdentifier("agenda-event-status")
                 }
+                // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+                EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                 // THE ACTIONS IN ONE ROW OF EQUAL KEYS (#1173): Open in Maps, Edit and Cancel share
                 // the width, Cancel in the red outline.
                 KitChoiceRow {

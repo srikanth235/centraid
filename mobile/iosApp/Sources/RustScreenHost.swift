@@ -415,6 +415,7 @@ struct RustScreenView: View {
             HealthWorkoutView(
                 state: state,
                 send: { store.send(instance, .healthWorkout($0)) },
+                open: open,
                 onBack: pop,
                 onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
             )

@@ -116,6 +116,8 @@ struct MoneyTransactionView: View {
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
         if transaction.hasWithOffer { offer(transaction.withOffer, key: "with") }
+        // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
+        EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
         // THE ACTIONS ARE ALTERNATIVES: one stack.
         KitChoiceStack {
             ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in
