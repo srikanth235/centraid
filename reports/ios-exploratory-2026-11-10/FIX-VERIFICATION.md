@@ -1,6 +1,6 @@
 # Fix verification — iOS exploratory audit
 
-Status: all 21 original reproductions verified in the simulator; final automated gate results pending. The original [audit report](REPORT.md) remains the historical record.
+Status: all 21 original reproductions verified in the simulator; full PR gate awaiting a rerun after correcting the Journal test's old copy expectations. The original [audit report](REPORT.md) remains the historical record.
 
 ## Build and environment
 
@@ -47,7 +47,8 @@ Additional views: [Calendar hour labels](fix-evidence/qa-19-calendar-hours-large
 - Swift fixes cover photo status duplication, disabled channel Save, persistent Journal Save, larger text, workout contrast and the import completion footer. Android renderers consume the new shared fields.
 - Light mockups updated; dark boards, icon resources and other generated outputs emitted by `cargo xtask design`. No ratchet, lint or budget was loosened; no duration assertion was added.
 - `cargo xtask gate --profile mobile-jvm`: PASS on the final core; 43 JVM tests, 0 failures. Native iOS: 73 tests, 0 failures.
-- Full PR gate results are being finalized. The final local run passed every non-test lane, then exposed a machine-date-dependent Calendar fixture. A weekly sample event occupied the test’s supposedly empty Wednesday. The grid fixture now has a fixed scenario anchor; all 24 Calendar grid tests pass with the original assertions intact. Initial sandbox failures were localhost/cache access restrictions; the unrestricted rerun passed restore drills, dependency audit, TypeScript checks, rules, protobuf compatibility, release build, design and fault-door. The full suite also exposed a creation-time precision mismatch, corrected without changing the check. See [local gate before the fixture correction](checks/pr-gate-before-fixture.txt), [Calendar grid tests](checks/calendar-grid.txt), [JVM gate](checks/mobile-jvm.txt) and [iOS tests](checks/ios-tests.txt).
+- Full PR gate results are being finalized. The previous local run passed every non-test lane, then exposed a machine-date-dependent Calendar fixture. A weekly sample event occupied the test’s supposedly empty Wednesday. The grid fixture now has a fixed scenario anchor; all 24 Calendar grid tests pass with the original assertions intact. Initial sandbox failures were localhost/cache access restrictions; the unrestricted rerun passed restore drills, dependency audit, TypeScript checks, rules, protobuf compatibility, release build, design and fault-door. The full suite also exposed a creation-time precision mismatch, corrected without changing the check. See [local gate before the fixture correction](checks/pr-gate-before-fixture.txt), [Calendar grid tests](checks/calendar-grid.txt), [JVM gate](checks/mobile-jvm.txt) and [iOS tests](checks/ios-tests.txt).
+- [CI on `0cf9f3545`](https://github.com/srikanth235/centraid/actions/runs/42808977922/job/129805429522) passed every non-test gate lane, iOS and engine checks, but stopped at `notes_places::a_new_entry_opens_the_sheet_and_save_files_it_through_peoples_action_on_the_day_read`: it still expected `Mood` instead of `Mood (required)`. Both Journal field expectations now match the required-field labels verified in QA-13. Save eligibility and persistence assertions remain intact.
 
 Commands used for the final iOS build (repository root, then `mobile/iosApp/`):
 

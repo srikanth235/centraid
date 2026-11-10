@@ -442,8 +442,8 @@ fn a_new_entry_opens_the_sheet_and_save_files_it_through_peoples_action_on_the_d
     let compose = home_state(d.view(i)).compose.clone().expect("the sheet");
     assert_eq!(compose.day, today);
     assert_eq!(compose.title, "New entry for today");
-    assert_eq!(compose.mood_placeholder, "Mood");
-    assert_eq!(compose.text_placeholder, "A line about your day");
+    assert_eq!(compose.mood_placeholder, "Mood (required)");
+    assert_eq!(compose.text_placeholder, "Entry (required)");
     assert_eq!(compose.save, "Save");
     assert!(!compose.can_save);
     // A save with a blank half writes nothing.
