@@ -860,6 +860,9 @@ fn read(
                 tz,
             },
         )?,
+        ("health", "trash") => {
+            app_query::health_trash::trash(vault, door, &wire::HealthTrashRequest { tz })?
+        }
         ("health", "follow-view") => {
             app_query::health::follow_view(vault, door, now, &wire::HealthFollowViewRequest { tz })?
         }

@@ -23,3 +23,4 @@ pub mod door;
 pub mod figures;
 pub mod manifest;
 pub mod queries;
+pub mod trash;

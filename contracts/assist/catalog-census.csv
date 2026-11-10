@@ -38,11 +38,13 @@ docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
-health,delete-workout,delete,workout,direct,no,yes
+health,delete-workout,delete,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
 health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
 health,log-workout,create,workout,direct,no,yes
 health,edit-workout,edit,workout,direct,no,yes
-health,restore-workout,restore,workout,direct,no,yes
+health,restore-workout,restore,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
+health,purge-workout,purge,workout,card,yes: crates/screens/src/health/trash.rs,no
+health,empty-trash,purge,workout,card,yes: crates/screens/src/health/trash.rs,no
 health,edit-figure,edit,daily_figure,direct,no,yes
 health,log-figure,create,daily_figure,direct,no,yes
 health,clear-figure,delete,daily_figure,direct,no,yes

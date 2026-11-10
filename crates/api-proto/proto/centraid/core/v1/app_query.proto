@@ -150,7 +150,7 @@ message AppQueryRequest {
     MoneySearchRequest money_search = 109;
     // Home's tile, as the manifest's `home-tile` query (it also rides `Request.money`).
     MoneyHomeTileRequest money_home_tile = 110;
-    // Health (#1129, R-1129-12): 120-125. 126-139 stay reserved for Health. The
+    // Health (#1129, R-1129-12): 120-126. 127-139 stay reserved for Health. The
     // writes are `health.*` commands; `health_follow_view` is the follower
     // engine's read, not a screen's.
     HealthTodayRequest health_today = 120;
@@ -159,6 +159,8 @@ message AppQueryRequest {
     HealthWorkoutsRequest health_workouts = 123;
     HealthWorkoutRequest health_workout = 124;
     HealthFollowViewRequest health_follow_view = 125;
+    // The workouts in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    HealthTrashRequest health_trash = 126;
   }
 }
 
@@ -256,6 +258,7 @@ message AppQueryResponse {
     HealthWorkouts health_workouts = 123;
     HealthWorkout health_workout = 124;
     HealthFollowView health_follow_view = 125;
+    HealthTrash health_trash = 126;
     // ---- the shell's own queries (1300-1599, lane H2): `shell.manifest.json` ----
     // `backup-status` (1450-1499 are the backup's).
     ShellBackupStatus shell_backup_status = 1450;

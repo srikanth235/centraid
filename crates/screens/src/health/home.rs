@@ -52,6 +52,8 @@ const BAND_MORE: &str = "more";
 const MORE_READS: &str = "reads";
 const MORE_CHOOSE: &str = "choose";
 const MORE_STOP: &str = "stop";
+/// The row to the trash (#1185): a route the shell pushes.
+const MORE_TRASH: &str = "trash";
 
 /// The kind section's key and its All option's key (`health-filter-kind-all` on a
 /// screen); every other option is keyed by the kind's concept.
@@ -556,6 +558,7 @@ impl Home {
                 icon_key: "Shield".to_owned(),
                 tone: neutral,
                 route: None,
+                meta: String::new(),
             },
             wire::HealthMoreRow {
                 key: MORE_CHOOSE.to_owned(),
@@ -563,6 +566,16 @@ impl Home {
                 icon_key: "Sliders".to_owned(),
                 tone: neutral,
                 route: Some(routes::connect(&words::app_title(locale))),
+                meta: String::new(),
+            },
+            // THE TRASH (`MoreHealth.dc.html`), with the rule every trash states.
+            wire::HealthMoreRow {
+                key: MORE_TRASH.to_owned(),
+                label: shared::trash_entry(locale),
+                icon_key: "Trash".to_owned(),
+                tone: neutral,
+                route: Some(routes::trash()),
+                meta: shared::trash_entry_meta(locale),
             },
         ];
         if connected {
@@ -575,6 +588,7 @@ impl Home {
                 icon_key: "Stop".to_owned(),
                 tone: wire::status_chip::Tone::Net as i32,
                 route: None,
+                meta: String::new(),
             });
         }
         rows

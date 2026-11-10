@@ -47,7 +47,7 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(more, ["reads", "choose"]);
+    assert_eq!(more, ["reads", "choose", "trash"]);
     // The row that opens Connect carries the route, and the empty state's
     // action does too: no shell names a destination.
     assert_eq!(
@@ -285,9 +285,9 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     );
     let state = home_state(d.view(i));
     let rows: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(rows, ["reads", "choose", "stop"]);
-    assert_eq!(state.more_rows[2].label, "Stop reading Apple Health");
-    assert_eq!(state.more_rows[2].tone, wire::status_chip::Tone::Net as i32);
+    assert_eq!(rows, ["reads", "choose", "trash", "stop"]);
+    assert_eq!(state.more_rows[3].label, "Stop reading Apple Health");
+    assert_eq!(state.more_rows[3].tone, wire::status_chip::Tone::Net as i32);
     let facts: Vec<(&str, &str)> = state
         .reads_facts
         .iter()

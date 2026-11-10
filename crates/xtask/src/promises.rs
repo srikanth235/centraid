@@ -105,10 +105,10 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/calendar/trash.rs",
     ),
     kept("docs", Promise::Trash, "crates/screens/src/docs/trash.rs"),
-    owed(
+    kept(
         "health",
         Promise::Trash,
-        "#1185: a workout moves to trash and restores, but there is no trash screen",
+        "crates/screens/src/health/trash.rs",
     ),
     kept(
         "locker",

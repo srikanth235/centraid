@@ -85,6 +85,16 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
         "schema": "measurement",
         "table": "clear",
         "verbs": "act"
@@ -557,6 +567,90 @@
       }
     },
     {
+      "name": "purge-workout",
+      "verb": "purge",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the morning run forever",
+        "permanently delete the trashed swim",
+        "purge that trashed workout"
+      ],
+      "description": "Delete one ALREADY-TRASHED workout forever through entity.purge. Irreversible: the workout, its figures and the words kept of it go now. A workout a health store still states is not brought back by the next read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "workout",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the workout trash",
+        "clear out the trashed workouts for good",
+        "permanently delete everything in the Health trash"
+      ],
+      "description": "Empty the workout trash through entity.empty_trash with kind activity. Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["activity"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "edit-figure",
       "verb": "edit",
       "kind": "daily_figure",
@@ -869,6 +963,28 @@
       "output": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "trash",
+      "kind": "workout",
+      "figures": ["workouts", "purge_dates"],
+      "description": "Workouts in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "workouts": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
       }
     },
     {

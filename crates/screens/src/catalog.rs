@@ -1438,6 +1438,61 @@ pub mod act {
             }
         }
 
+        /// Delete one ALREADY-TRASHED workout forever through entity.purge. Irreversible: the workout, its figures and the words kept of it go now. A workout a health store still states is not brought back by the next read.
+        #[derive(Clone, Debug, Default)]
+        pub struct PurgeWorkout {
+            pub workout_id: String,
+        }
+        impl PurgeWorkout {
+            pub const NAME: &str = "purge-workout";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.workout_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<PurgeWorkout> for wire::ActRequest {
+            fn from(value: PurgeWorkout) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Activity,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Activity => "activity",
+                }
+            }
+        }
+
+        /// Empty the workout trash through entity.empty_trash with kind activity. Irreversible and takes no id: every workout in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
+                value.request()
+            }
+        }
+
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum EditFigureMetric {
             #[default]
@@ -6112,6 +6167,24 @@ pub mod load {
         }
         impl From<Workout> for wire::LoadRequest {
             fn from(value: Workout) -> Self {
+                value.request()
+            }
+        }
+
+        /// Workouts in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased.
+        #[derive(Clone, Debug, Default)]
+        pub struct Trash {
+        }
+        impl Trash {
+            pub const NAME: &str = "trash";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Trash> for wire::LoadRequest {
+            fn from(value: Trash) -> Self {
                 value.request()
             }
         }

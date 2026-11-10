@@ -266,6 +266,38 @@ pub fn entities_statement(activity_ids: &[String]) -> KitResult<PageQuery> {
     .filter(&fragment.sql, fragment.bind))
 }
 
+/// `health.trash` — the entities of kind `activity` in the trash, most recently trashed first.
+/// A trashed activity is a workout when it still has its `workout` row; [`crate::trash`] asks.
+#[must_use]
+pub fn trashed_activities_statement() -> PageQuery {
+    PageQuery::new(
+        "health.trash",
+        "id, deleted_at, purge_at",
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
+    )
+    .filter(
+        "kind = ? AND deleted_at IS NOT NULL",
+        vec![PageBindValue::from("activity")],
+    )
+}
+
+/// `health.trash.activities` — the spans of a set of activities.
+///
+/// # Errors
+///
+/// An empty id list.
+pub fn activities_statement(activity_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("id", activity_ids)?;
+    Ok(PageQuery::new(
+        "health.trash.activities",
+        ACTIVITY_COLUMNS,
+        "activity",
+        PageOrder::asc("id", "id"),
+    )
+    .filter(&fragment.sql, fragment.bind))
+}
+
 // ---------------------------------------------------------------------------
 // Reads.
 // ---------------------------------------------------------------------------
@@ -479,4 +511,28 @@ pub fn trashed(door: &dyn PageDoor, activity_ids: &[String]) -> KitResult<Vec<St
         );
     }
     Ok(gone)
+}
+
+/// The spans of the activities asked about, by id.
+///
+/// # Errors
+///
+/// A door failure.
+pub fn activities(
+    door: &dyn PageDoor,
+    activity_ids: &[String],
+) -> KitResult<BTreeMap<String, ActivityRow>> {
+    let mut found = BTreeMap::new();
+    for chunk in activity_ids.chunks(MEASURE_CHUNK) {
+        let rows = read_pages(
+            door,
+            &activities_statement(chunk)?,
+            FanOutBound::new(MEASURE_CHUNK, 1),
+        )?;
+        for row in &rows {
+            let activity = activity_of(row);
+            found.insert(activity.activity_id.clone(), activity);
+        }
+    }
+    Ok(found)
 }

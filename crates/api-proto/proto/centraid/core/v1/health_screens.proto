@@ -36,7 +36,7 @@ message HealthBandTab {
   bool current = 4;
 }
 
-// A row of More (an OptionSheet): `reads`, `choose`, `stop`.
+// A row of More (an OptionSheet): `reads`, `choose`, `stop`, `trash`.
 message HealthMoreRow {
   string key = 1;
   string label = 2;
@@ -46,6 +46,8 @@ message HealthMoreRow {
   // Where a tap goes, for the row that opens a page (`choose`); the others are
   // events.
   optional Route route = 5;
+  // The row's second line (#1185): Trash says "30 days, then erased". Empty for the others.
+  string meta = 6;
 }
 
 message HealthFact {
@@ -454,14 +456,25 @@ message HealthWorkoutData {
   // WHAT THE STORE SAYS (#1183), under the figures, one per figure the member changed or cleared
   // ("Apple Health says 5.0 km", "Apple Health still has 148 bpm"). Absent when they agree.
   repeated PhoneSays figures_phone_says = 8;
+  // "Move to trash" (#1185), the destructive control under the figures; empty while the workout is
+  // gone. It asks nothing: the status line says what happened with Undo.
+  string trash_label = 9;
 }
 
 message HealthWorkoutEvent {
   oneof kind {
     Refreshed refreshed = 1;
+    // "Move to trash" was tapped (#1185).
+    TrashTapped trash = 2;
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 3;
   }
 
   message Refreshed {}
+
+  message TrashTapped {}
+
+  message StatusActed {}
 }
 
 // ---------------------------------------------------------------------------

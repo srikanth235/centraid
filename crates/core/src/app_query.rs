@@ -81,6 +81,7 @@ mod named;
 pub(crate) mod docs;
 // Health's arm (#1129): six answers, every figure the app crate's (R-1129-12).
 pub(crate) mod health;
+pub(crate) mod health_trash;
 // Locker's arm (#1047): metadata only; a secret is the session's.
 pub(crate) mod locker;
 // Money's arm (#1099): ten answers, the import plan and Home's tile.
@@ -190,6 +191,7 @@ pub(crate) fn answer_recording(
         Q::HealthWorkouts(asked) => health::workouts(vault, &door, asked)?,
         Q::HealthWorkout(asked) => health::workout(vault, &door, asked)?,
         Q::HealthFollowView(asked) => health::follow_view(vault, &door, &now, asked)?,
+        Q::HealthTrash(asked) => health_trash::trash(vault, &door, asked)?,
     };
     *tables = door.take_tables();
     Ok(wire::AppQueryResponse {

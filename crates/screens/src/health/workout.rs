@@ -10,12 +10,14 @@ use wire::screen_event::Kind as E;
 
 use super::figures;
 use super::{Metric, Phase, Store, Units, denied, kinds};
-use crate::catalog::load;
+use crate::catalog::{act, load};
+use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::follow::{self, Source};
 use crate::kit::read;
+use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, health as words};
+use crate::strings::{Locale, fill, health as words, shared};
 
 /// The kinds a pace means something for.
 const PACED: [&str; 3] = [kinds::RUN, kinds::WALK, kinds::HIKE];
@@ -34,6 +36,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         differences: follow::Phone::default(),
         status: None,
+        undo: None,
     }))
 }
 
@@ -44,6 +47,16 @@ struct WorkoutPage {
     /// Where the store's figures differ from the member's (#1183), read with the page.
     differences: follow::Phone,
     status: Option<wire::StatusLine>,
+    /// What the status line's Undo does: put the workout back in the trash, or back in the list.
+    undo: Option<Undo>,
+}
+
+/// The workout the status line's Undo reverses, and which way.
+struct Undo {
+    activity_id: String,
+    title: String,
+    /// The workout is in the trash now, so Undo restores it.
+    restore: bool,
 }
 
 /// The measure columns a line can name, in the order the page draws their figures.
@@ -131,6 +144,83 @@ impl WorkoutPage {
             action_label: String::new(),
             refused: true,
         });
+        self.reload(ctx);
+    }
+
+    /// MOVE TO TRASH (#1185): it asks nothing, because Undo and the trash restore it for 30 days. A
+    /// workout a health store states goes like any other and stays in the trash when the store reads
+    /// it again. The page stays, reads the workout as gone, and keeps the status line.
+    fn trash_workout(&mut self, ctx: &Ctx) {
+        let Some(row) = self.phase.data().and_then(|answer| answer.workout.as_ref()) else {
+            return;
+        };
+        let title = figures::title(
+            ctx.locale(),
+            &row.kind_key,
+            &civil::clock_for(ctx.locale(), &row.local_start, ctx.hour_cycle()),
+        );
+        self.trash_or_restore(ctx, self.activity_id.clone(), title, false);
+    }
+
+    /// The status line's Undo: reverse the last move.
+    fn undone(&mut self, ctx: &Ctx) {
+        let has_undo = self
+            .status
+            .as_ref()
+            .is_some_and(|status| !status.action_label.is_empty());
+        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
+            return;
+        };
+        self.trash_or_restore(ctx, undo.activity_id, undo.title, undo.restore);
+    }
+
+    fn trash_or_restore(&mut self, ctx: &Ctx, activity_id: String, title: String, restore: bool) {
+        let locale = ctx.locale();
+        self.status = None;
+        self.undo = None;
+        let settled = if restore {
+            let key = kit_act::key(&["restore-workout", &activity_id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::health::RestoreWorkout {
+                    workout_id: activity_id.clone(),
+                },
+                &key,
+            )
+        } else {
+            let key = kit_act::key(&["delete-workout", &activity_id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::health::DeleteWorkout {
+                    workout_id: activity_id.clone(),
+                },
+                &key,
+            )
+        };
+        self.status = Some(if settled.committed {
+            wire::StatusLine {
+                sentence: if restore {
+                    trash::restored(locale, &title)
+                } else {
+                    trash::moved_to_trash(locale, &title)
+                },
+                action_label: shared::trash_undo(locale),
+                refused: false,
+            }
+        } else {
+            wire::StatusLine {
+                sentence: settled.refusal,
+                action_label: String::new(),
+                refused: true,
+            }
+        });
+        if settled.committed {
+            self.undo = Some(Undo {
+                activity_id,
+                title,
+                restore: !restore,
+            });
+        }
         self.reload(ctx);
     }
 
@@ -246,6 +336,7 @@ impl WorkoutPage {
             figures: figures_,
             foot,
             gone: None,
+            trash_label: shared::trash_move(locale),
             figures_phone_says: phone_says(
                 locale,
                 units,
@@ -263,11 +354,12 @@ impl Screen for WorkoutPage {
                 self.reload(ctx);
             }
             Some(E::PhoneSaysTaken(taken)) => self.take_store(ctx, &taken),
-            Some(E::HealthWorkout(event)) => {
-                if let Some(W::Refreshed(_)) = event.kind {
-                    self.reload(ctx);
-                }
-            }
+            Some(E::HealthWorkout(event)) => match event.kind {
+                Some(W::Refreshed(_)) => self.reload(ctx),
+                Some(W::Trash(_)) => self.trash_workout(ctx),
+                Some(W::StatusActed(_)) => self.undone(ctx),
+                None => {}
+            },
             _ => {}
         }
         Vec::new()

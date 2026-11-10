@@ -42,6 +42,7 @@ pub mod highlights;
 pub mod home;
 pub mod kinds;
 pub mod metric;
+pub mod trash;
 pub mod workout;
 
 pub const HOME: &str = "health.home";
@@ -49,6 +50,8 @@ pub const METRIC: &str = "health.metric";
 pub const WORKOUT: &str = "health.workout";
 pub const CONNECT: &str = "health.connect";
 pub const SEARCH: &str = "health.search";
+/// The workouts in the trash (#1185).
+pub const TRASH: &str = "health.trash";
 
 /// The tab Health's pages are pushed under.
 pub const TAB: &str = "health";
@@ -61,6 +64,7 @@ pub fn registry() -> Registry {
         .with(METRIC, metric::build)
         .with(WORKOUT, workout::build)
         .with(CONNECT, connect::build)
+        .with(TRASH, trash::build)
         .with(SEARCH, crate::shell::search::build_health)
 }
 
@@ -284,7 +288,7 @@ pub const WIDE_CARDS: usize = 2;
 
 /// The routes Health's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{CONNECT, HOME, METRIC, WORKOUT, wire};
+    use super::{CONNECT, HOME, METRIC, TRASH, WORKOUT, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -348,5 +352,11 @@ pub mod routes {
                 parent: parent.to_owned(),
             }),
         )
+    }
+
+    /// The trash: the kit's one trash screen over Health's spec (#1185).
+    #[must_use]
+    pub fn trash() -> wire::Route {
+        route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
     }
 }

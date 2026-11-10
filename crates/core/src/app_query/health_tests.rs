@@ -569,3 +569,67 @@ fn what_a_request_states_is_checked_never_guessed() {
         wire::HealthFollowViewRequest { tz: String::new() }
     )));
 }
+
+/// `health.trash` (#1185): the trashed workouts, newest trashed first, each with the wall clock it
+/// started at and the two civil days read in the request's zone. An activity that is not a workout
+/// (a touch logged on a person) is in the trash too, and is not listed.
+#[test]
+fn the_trash_lists_the_trashed_workouts_with_their_days_and_never_a_touch() {
+    let scratch = Scratch::fortnight();
+    let trash = |tz: &str| match scratch.ask(Q::HealthTrash(wire::HealthTrashRequest {
+        tz: tz.to_owned(),
+    })) {
+        Answer::HealthTrash(trash) => trash,
+        other => panic!("trash answered as {other:?}"),
+    };
+    assert!(
+        trash(UTC).workouts.is_empty(),
+        "nothing is in the trash yet"
+    );
+
+    let (run, walk) = (scratch.workout_id("wk-run"), scratch.workout_id("wk-walk"));
+    scratch.run("entity.trash", json!({ "id": walk }));
+    scratch.run("entity.trash", json!({ "id": run }));
+    let person = scratch.run("person.add", json!({ "title": "Ada", "cadence_days": 30 }))["id"]
+        .as_str()
+        .expect("a party")
+        .to_owned();
+    scratch.run(
+        "person.log_interaction",
+        json!({ "id": person, "kind": "call" }),
+    );
+    scratch.run("entity.trash", json!({ "id": person }));
+
+    let shelf = trash("America/Los_Angeles");
+    assert!(!shelf.truncated);
+    let listed: Vec<(&str, &str)> = shelf
+        .workouts
+        .iter()
+        .map(|row| (row.activity_id.as_str(), row.kind_key.as_str()))
+        .collect();
+    // Both went at the same fixed instant: the id breaks the tie, and the touch is not a workout.
+    assert_eq!(listed.len(), 2, "{listed:?}");
+    assert!(listed.contains(&(run.as_str(), "run")));
+    assert!(listed.contains(&(walk.as_str(), "walk")));
+    let row = shelf
+        .workouts
+        .iter()
+        .find(|row| row.activity_id == run)
+        .expect("the run");
+    // 07:00Z is midnight on the Pacific wall clock; trashed at 15:00Z (08:00 there), erased 30 days on.
+    assert_eq!(row.local_start, "2026-10-20T00:00");
+    assert_eq!(row.deleted_local_day, "2026-10-20");
+    assert_eq!(row.purge_local_day, "2026-11-19");
+    assert_eq!(row.started_at, "2026-10-20T07:00:00.000Z");
+    // With no zone the days are empty, never a guess from the UTC text.
+    let bare = trash(UTC);
+    assert_eq!(bare.workouts.len(), 2);
+    assert_eq!(bare.workouts[0].deleted_local_day, "2026-10-20");
+
+    scratch.run("entity.restore", json!({ "id": run }));
+    assert_eq!(
+        trash(UTC).workouts.len(),
+        1,
+        "a restored workout leaves the shelf"
+    );
+}
