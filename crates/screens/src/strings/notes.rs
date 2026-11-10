@@ -13,7 +13,6 @@ catalog! {
     plain checklist_unchecked = ("Not checked", "Not checked");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
-    plain current_version = ("Current version", "Current version");
     plain delete_note_body = (
         "It stays restorable for 30 days, with its links, tags and files.",
         "It stays restorable for 30 days, with its links, tags and files."
@@ -56,12 +55,6 @@ catalog! {
     plain filter_about_people = ("About people", "About people");
     plain filter_pinned = ("Pinned", "Pinned");
     plain filter_title = ("Show", "Show");
-    plain history_empty_body = (
-        "Versions appear here as the note changes.",
-        "Versions appear here as the note changes."
-    );
-    plain history_empty_headline = ("No earlier versions", "No earlier versions");
-    plain history_title = ("Version history", "Version history");
     plain home = ("Home", "Home");
     plain item_checked = ("Item checked", "Item checked");
     plain item_unchecked = ("Item unchecked", "Item unchecked");
@@ -104,7 +97,6 @@ catalog! {
     plain link_trashed_spoken = ("Note in trash {title}", "Note in trash {title}");
     plain link_web_spoken = ("Link {label}", "Link {label}");
     plain loading = ("Loading notes", "Loading notes");
-    plain loading_history = ("Loading versions", "Loading versions");
     plain loading_journal = ("Loading the journal", "Loading the journal");
     plain loading_links = ("Looking for things to link", "Looking for things to link");
     plain loading_notebooks = ("Loading notebooks", "Loading notebooks");
@@ -133,7 +125,6 @@ catalog! {
     plain tag_placeholder = ("Add a tag", "Add a tag");
     plain rename = ("Rename", "Rename");
     plain rename_notebook = ("Rename notebook", "Rename notebook");
-    plain restore = ("Restore", "Restore");
     plain retry = ("Try again", "Try again");
     plain row_menu = ("Note actions", "Note actions");
     plain notebook_menu = ("Notebook actions", "Notebook actions");

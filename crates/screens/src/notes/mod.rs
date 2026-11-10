@@ -1,5 +1,5 @@
 //! NOTES' SCREENS (#1135): the library, notebooks and journal under one band, the
-//! editor with its link powerbox, a note's version history and the kit's trash.
+//! editor with its link powerbox, a note's earlier versions and the kit's trash.
 //! Every decision a person sees is made here; SwiftUI and Compose draw
 //! [`wire::ViewState`].
 //!
@@ -7,7 +7,7 @@
 //! |---|---|---|
 //! | Notes · Notebooks · Journal, with Search and More | [`HOME`] | [`home`] |
 //! | One note, autosaving, with the powerbox | [`EDITOR`] | [`editor`] |
-//! | One note's versions | [`HISTORY`] | [`history`] |
+//! | One note's earlier versions | [`EARLIER`] | [`earlier`] |
 //! | The trash | [`TRASH`] | [`trash`] |
 //!
 //! The band's three places are ONE screen with the place a value, so a tap on
@@ -21,9 +21,9 @@ use centraid_api_proto::core_v1 as wire;
 use crate::Registry;
 use crate::kit::read::Reading;
 
+pub mod earlier;
 pub mod editor;
 pub mod fold;
-pub mod history;
 pub mod home;
 pub(crate) mod rich;
 pub mod transfer;
@@ -31,7 +31,7 @@ pub mod trash;
 
 pub const HOME: &str = "notes.home";
 pub const EDITOR: &str = "notes.editor";
-pub const HISTORY: &str = "notes.history";
+pub const EARLIER: &str = "notes.earlier";
 pub const TRASH: &str = "notes.trash";
 pub const IMPORT: &str = "notes.import";
 pub const EXPORT: &str = "notes.export";
@@ -45,7 +45,7 @@ pub fn registry() -> Registry {
     Registry::default()
         .with(HOME, home::build)
         .with(EDITOR, editor::build)
-        .with(HISTORY, history::build)
+        .with(EARLIER, earlier::build)
         .with(TRASH, trash::build)
         .with(IMPORT, transfer::build_import)
         .with(EXPORT, transfer::build_export)
@@ -109,7 +109,7 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, EXPORT, HISTORY, HOME, IMPORT, TRASH, wire};
+    use super::{EDITOR, EXPORT, HOME, IMPORT, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -216,18 +216,6 @@ pub mod routes {
             wire::route::Args::NotesEditor(wire::NotesEditorRoute {
                 note_id: String::new(),
                 is_new: true,
-            }),
-        )
-    }
-
-    /// One note's versions; `note_title` rides along for the back control.
-    #[must_use]
-    pub fn history(note_id: &str, note_title: &str) -> wire::Route {
-        route(
-            HISTORY,
-            wire::route::Args::NotesHistory(wire::NotesHistoryRoute {
-                note_id: note_id.to_owned(),
-                note_title: note_title.to_owned(),
             }),
         )
     }

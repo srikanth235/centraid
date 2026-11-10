@@ -61,6 +61,7 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
+use crate::kit::earlier;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, notes as words};
@@ -230,6 +231,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         resolutions: HashMap::new(),
         own: BTreeSet::new(),
         link: None,
+        earlier: earlier::Foot::default(),
         started: false,
     }))
 }
@@ -294,6 +296,8 @@ struct Editor {
     /// tables the act did not write, none carried across `EnvironmentChanged`).
     own: BTreeSet<String>,
     link: Option<LinkSheet>,
+    /// The entry to the note's earlier versions (#1185), read with the note.
+    earlier: earlier::Foot,
     /// `Appeared` has been seen.
     started: bool,
 }
@@ -331,6 +335,7 @@ impl Editor {
                     .collect();
                 self.meta = Self::meta_of(ctx, &note);
                 self.about = fold::about_chips(ctx.locale(), &note.about);
+                self.earlier = earlier::foot(ctx, super::EARLIER, &id, "");
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -1282,7 +1287,6 @@ impl Screen for Editor {
                 } else {
                     words::pin(locale)
                 },
-                history_label: words::history_title(locale),
                 send_to_agenda_label: words::send_to_reminders(locale),
                 link_label: words::link_label(locale),
                 status: if autosave.refused {
@@ -1291,6 +1295,7 @@ impl Screen for Editor {
                     self.read_failure
                         .clone()
                         .or_else(|| self.status.clone())
+                        .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
                         .unwrap_or(save_status)
                 },
                 // Undo, or a dead link's Create or Restore, is offered while its sentence is the
@@ -1314,7 +1319,6 @@ impl Screen for Editor {
                     words::new_note(locale)
                 },
                 menu_label: words::row_menu(locale),
-                history_enabled: exists && draft.is_some(),
                 retry: words::retry(locale),
                 // Tags belong to a note, so the field waits for the first save.
                 tag_placeholder: if exists {
@@ -1324,13 +1328,14 @@ impl Screen for Editor {
                 },
                 checklist_label: words::checklist(locale),
                 keyboard_label: words::keyboard_hide(locale),
+                // `history_label` and `history_enabled` are no longer sent (#1185).
+                ..wire::NotesEditorChrome::default()
             }),
             autosave: Some(autosave),
             link: self
                 .link
                 .as_ref()
                 .map(|sheet| self.sheet_view(locale, sheet)),
-            history: None,
             send_to_agenda: None,
             meta: if exists {
                 self.meta.clone()
@@ -1356,12 +1361,22 @@ impl Screen for Editor {
                 caret,
                 seq: self.selection_seq,
             }),
+            // `history` is no longer sent (#1185): the menu's row is `earlier`.
+            ..wire::NotesEditorState::default()
         };
         if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
-        if let Some(id) = draft.and_then(|draft| draft.id.as_deref()) {
-            state.history = Some(routes::history(id, &title));
+        // THE MENU'S "Earlier versions" ROW: the kit's entry, its route naming the note as the
+        // page the member comes from.
+        if let (Some(id), Some(entry)) = (
+            draft.and_then(|draft| draft.id.as_deref()),
+            &self.earlier.entry,
+        ) {
+            state.earlier = Some(wire::EarlierEntry {
+                route: Some(earlier::route(super::EARLIER, id, &title)),
+                ..entry.clone()
+            });
         }
         // SEND TO REMINDERS: Reminders' quick add, the words waiting in it (the Inbox
         // is where they land). Nothing is written until the member adds them.

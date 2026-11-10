@@ -109,7 +109,7 @@ notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,y
 notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
 notes,purge-note,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
 notes,empty-trash,purge,note,card,yes: crates/screens/src/notes/trash.rs,no
-notes,restore-note-version,restore,note,card,yes: crates/screens/src/notes/history.rs,no
+notes,restore-note-version,restore,note,card,no,no
 notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
 notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
 notes,link,link,note,card,no,no

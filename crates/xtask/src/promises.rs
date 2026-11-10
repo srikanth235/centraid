@@ -18,6 +18,9 @@
 //! GRID trash an app declares by name in [`GRID_TRASH`] (Photos: thumbnails picked many at a time).
 //! The grid shape proves the same four verbs and the kit's words; it is not a way out of them.
 //!
+//! HISTORY'S ENTRY HAS TWO PLACEMENTS: the foot of a detail page, and, for a full-screen editor
+//! with no rows, a row of its menu, declared by name in [`MENU_ENTRY`] and held to more, not less.
+//!
 //! `Owed` is honest debt listed in one place. It is not an exemption from any
 //! other rule: every other gate runs over the same tree whatever this table says.
 //!
@@ -182,10 +185,11 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "crates/screens/src/money/earlier.rs",
     ),
-    owed(
+    // The note's entry is a row of its menu ([`MENU_ENTRY`]): the editor has no rows to end in.
+    kept(
         "notes",
         Promise::History,
-        "its own history screen (history.rs) has not moved onto the kit's, and the note's menu has no entry (#1185)",
+        "crates/screens/src/notes/earlier.rs",
     ),
     kept(
         "people",
@@ -740,6 +744,33 @@ pub const HISTORY_KINDS: &[(&str, &[(&str, &str)])] = &[
     ("reminders", &[("task", "detail.rs")]),
 ];
 
+/// A DETAIL PAGE WHOSE ENTRY IS A MENU ROW, not a foot (#1185).
+///
+/// A page of rows ends in "Earlier versions   2 ›". A full-screen editor has no rows and no foot,
+/// so Notes keeps the entry as the row of the note's menu, the menu's existing shape (a label, a
+/// route, a count). It is declared HERE, by name, so the register cannot grow a second placement by
+/// accident, and it is held to MORE than a foot: the page still reads the shared count
+/// (`earlier::foot(` over the app's `EARLIER` route), and in the same screen the entry is handed to
+/// the view state ([`MenuEntry::entry`]) beside the menu's own label ([`MenuEntry::menu`]). Every
+/// other app is held to the foot, whatever it has in its folder.
+pub struct MenuEntry {
+    pub app: &'static str,
+    /// The primary kind whose page this is (a key of [`HISTORY_KINDS`]).
+    pub kind: &'static str,
+    /// What the page spells to hand the entry to its view state.
+    pub entry: &'static str,
+    /// What the page spells for the menu the entry sits in.
+    pub menu: &'static str,
+}
+
+/// The menu entries. Only Notes: an editor with no detail rows.
+pub const MENU_ENTRY: &[MenuEntry] = &[MenuEntry {
+    app: "notes",
+    kind: "note",
+    entry: "state.earlier = ",
+    menu: "menu_label",
+}];
+
 /// The shell's catalogue, where the shared read and the two commands live.
 const SHELL_MANIFEST: &str = "crates/core/src/shell/manifest.json";
 
@@ -765,6 +796,11 @@ fn spec_sets(text: &str, field: &str) -> bool {
 /// 4. the detail screen of each primary kind ([`HISTORY_KINDS`]) embeds the shared entry
 ///    (`earlier::foot(` over the app's `EARLIER` route), so a count and a way in are on the page.
 fn history_missing(root: &Path, app: &str) -> Vec<String> {
+    history_missing_in(root, app, MENU_ENTRY)
+}
+
+/// [`history_missing`] over a stated list of menu entries (a fixture states its own).
+fn history_missing_in(root: &Path, app: &str, menus: &[MenuEntry]) -> Vec<String> {
     let mut gaps = Vec::new();
     let dir = root.join("crates/screens/src").join(app);
     let spec_rel = format!("crates/screens/src/{app}/earlier.rs");
@@ -856,6 +892,17 @@ fn history_missing(root: &Path, app: &str) -> Vec<String> {
         if !text.contains("earlier::foot(") || !text.contains("EARLIER") {
             gaps.push(format!(
                 "crates/screens/src/{app}/{screen}: the {kind} page does not embed the shared entry (`earlier::foot(` over the app's `EARLIER` route)"
+            ));
+        }
+        if let Some(menu) = menus
+            .iter()
+            .find(|menu| menu.app == app && menu.kind == *kind)
+            && (!text.contains(menu.entry) || !text.contains(menu.menu))
+        {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page declares its entry as a menu row but does not hand it to the view (`{}`) beside the menu (`{}`)",
+                menu.entry.trim(),
+                menu.menu
             ));
         }
     }

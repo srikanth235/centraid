@@ -454,7 +454,7 @@ message NotesEditorState {
   Autosave autosave = 7;
   // The powerbox, while open.
   optional NotesLinkSheet link = 8;
-  // Where History goes; absent until the note exists.
+  // No longer sent (#1185): the menu's earlier-versions row is `earlier`.
   optional Route history = 9;
   // Where Send to Agenda goes (To-do's quick add holds the words); absent
   // while there are none.
@@ -472,6 +472,9 @@ message NotesEditorState {
   optional NotesEditorSelection selection = 14;
   // What the note is about, above its words (#1173): chips that open the subject.
   repeated NotesAboutChip about = 15;
+  // The menu's "Earlier versions   2 ›" row (#1185): the kit's entry, absent until the note holds
+  // an earlier version. Its route is the kit's one screen, `notes.earlier`.
+  optional EarlierEntry earlier = 16;
 }
 
 message NotesEditorTag {
@@ -584,6 +587,7 @@ message NotesEditorChrome {
   string title_placeholder = 2;
   string body_placeholder = 3;
   string pin_label = 4;
+  // No longer sent (#1185): the entry carries its own label.
   string history_label = 5;
   string send_to_agenda_label = 6;
   string link_label = 7;
@@ -592,6 +596,7 @@ message NotesEditorChrome {
   // "New note" or "Note".
   string title = 9;
   string menu_label = 10;
+  // No longer sent (#1185): the entry is absent until there is something earlier.
   bool history_enabled = 11;
   string retry = 12;
   // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
@@ -718,7 +723,9 @@ message NotesEditorEvent {
 }
 
 // ---------------------------------------------------------------------------
-// notes.history
+// notes.history: NO LONGER SENT (#1185). A note's earlier versions are the kit's one screen
+// (`notes.earlier`, `EarlierView`); these messages stay until the shells delete the views that
+// read them, and are then `reserved`.
 // ---------------------------------------------------------------------------
 
 message NotesHistoryState {

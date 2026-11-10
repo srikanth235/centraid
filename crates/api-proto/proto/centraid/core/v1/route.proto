@@ -446,8 +446,8 @@ message NotesEditorRoute {
   bool is_new = 2;
 }
 
-// `notes.history`: one note's versions. The title rides along so the back
-// control has words before the read lands.
+// `notes.history`: NO LONGER SENT (#1185); the kit's `notes.earlier` replaced it. Stays until the
+// shells delete the view.
 message NotesHistoryRoute {
   string note_id = 1;
   string note_title = 2;

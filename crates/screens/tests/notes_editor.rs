@@ -76,8 +76,10 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
         state.chrome.as_ref().unwrap().body_placeholder,
         "Write something"
     );
-    assert!(!state.chrome.as_ref().unwrap().history_enabled);
-    assert!(state.history.is_none());
+    assert!(
+        state.earlier.is_none(),
+        "nothing earlier before the note exists"
+    );
     assert_eq!(draft(d.view(i)).title, "");
 
     type_title(&mut d, i, "Groceries");
@@ -99,10 +101,9 @@ fn a_new_note_reads_nothing_creates_on_first_save_then_edits() {
     assert_eq!(state.autosave.as_ref().unwrap().label, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().status, "Saved");
     assert_eq!(state.chrome.as_ref().unwrap().title, "Note");
-    assert!(state.chrome.as_ref().unwrap().history_enabled);
-    assert_eq!(
-        state.history,
-        Some(routes::history(&state.note_id, "Groceries"))
+    assert!(
+        state.earlier.is_none(),
+        "a note saved once holds nothing earlier"
     );
     let id = state.note_id.clone();
     let stored = note_of(&d, &id);
@@ -179,13 +180,6 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
     assert_eq!(
         editor_state(d.view(i)).chrome.as_ref().unwrap().close,
         "Cancel"
-    );
-    assert!(
-        editor_state(d.view(i))
-            .chrome
-            .as_ref()
-            .unwrap()
-            .history_enabled
     );
     type_title(&mut d, i, "Plans v2");
     settle(&mut d);

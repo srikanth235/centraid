@@ -137,13 +137,6 @@ pub fn editor_state(v: &wire::ViewState) -> &wire::NotesEditorState {
     }
 }
 
-pub fn history_state(v: &wire::ViewState) -> &wire::NotesHistoryState {
-    match &v.kind {
-        Some(wire::view_state::Kind::NotesHistory(state)) => state,
-        other => panic!("not the notes history: {other:?}"),
-    }
-}
-
 pub fn trash_state(v: &wire::ViewState) -> &wire::TrashView {
     match &v.kind {
         Some(wire::view_state::Kind::Trash(state)) => state,
@@ -188,13 +181,6 @@ pub fn send_editor(d: &mut Driver, i: u64, event: wire::notes_editor_event::Kind
     d.send(
         i,
         wire::screen_event::Kind::NotesEditor(wire::NotesEditorEvent { kind: Some(event) }),
-    );
-}
-
-pub fn send_history(d: &mut Driver, i: u64, event: wire::notes_history_event::Kind) {
-    d.send(
-        i,
-        wire::screen_event::Kind::NotesHistory(wire::NotesHistoryEvent { kind: Some(event) }),
     );
 }
 

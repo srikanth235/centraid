@@ -520,7 +520,64 @@ fn history_tree(name: &str) -> PathBuf {
 }
 
 fn history_lacking(root: &Path) -> String {
-    history_missing(root, "notes").join("\n")
+    history_missing_in(root, "notes", &[]).join("\n")
+}
+
+const MENU: &[MenuEntry] = &[MenuEntry {
+    app: "notes",
+    kind: "note",
+    entry: "state.earlier = ",
+    menu: "menu_label",
+}];
+
+fn menu_lacking(root: &Path) -> String {
+    history_missing_in(root, "notes", MENU).join("\n")
+}
+
+const MENU_PAGE: &str = "fn view() { let foot = earlier::foot(ctx, EARLIER, &id, &title);\n  chrome.menu_label = x;\n  state.earlier = foot.entry; }";
+
+#[test]
+fn a_menu_entry_declared_by_name_and_wired_to_the_view_keeps_history() {
+    let root = history_tree("history-menu-clean");
+    write(&root, "crates/screens/src/notes/editor.rs", MENU_PAGE);
+    assert_eq!(menu_lacking(&root), "");
+}
+
+#[test]
+fn a_menu_entry_that_never_reaches_the_view_or_the_menu_is_named() {
+    let root = history_tree("history-menu-unwired");
+    // The foot alone satisfies an app that is not declared, but not one declared a menu entry.
+    assert_eq!(history_lacking(&root), "");
+    let gaps = menu_lacking(&root);
+    assert!(
+        gaps.contains("declares its entry as a menu row but does not hand it to the view"),
+        "{gaps}"
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        &MENU_PAGE.replace("chrome.menu_label = x;", ""),
+    );
+    assert!(menu_lacking(&root).contains("beside the menu (`menu_label`)"));
+}
+
+#[test]
+fn a_menu_entry_still_needs_the_shared_count() {
+    let root = history_tree("history-menu-no-foot");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn view() { chrome.menu_label = x; state.earlier = mine; }",
+    );
+    assert!(menu_lacking(&root).contains("the note page does not embed the shared entry"));
+}
+
+#[test]
+fn the_menu_placement_is_declared_only_for_notes() {
+    assert_eq!(
+        MENU_ENTRY.iter().map(|menu| menu.app).collect::<Vec<_>>(),
+        ["notes"]
+    );
 }
 
 #[test]
