@@ -27,6 +27,9 @@ catalog! {
     plain edit_fallback_name = ("photo", "photo");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
     plain utc = ("UTC", "UTC");
+    plain earlier_caption = ("Caption: {caption}", "Caption: {caption}");
+    plain earlier_no_caption = ("No caption", "No caption");
+    plain earlier_no_place = ("No place", "No place");
     plain captured_fact = ("{when} · {zone}", "{when} · {zone}");
     plain stamp_line = ("{clock} · {place}", "{clock} · {place}");
     counted trash_days_left = ("1 day left in the trash", "{n} days left in the trash");

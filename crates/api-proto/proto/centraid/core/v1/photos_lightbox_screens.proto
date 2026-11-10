@@ -138,6 +138,8 @@ message PhotosLightboxPhoto {
   string spoken = 25;
   // "People in this photo" (#1173): who the member says is in it, by hand. Nothing recognises a face.
   LinkSection people = 26;
+  // "Earlier versions   2 ›" at the foot of the details (#1185); absent when there are none.
+  optional EarlierEntry earlier = 27;
 }
 
 message PhotosLightboxFact {

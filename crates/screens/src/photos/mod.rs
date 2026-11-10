@@ -35,6 +35,7 @@ use crate::Registry;
 
 pub mod album_choice;
 pub mod cells;
+pub mod earlier;
 pub mod editor;
 pub mod fetch;
 pub mod free_up;
@@ -53,6 +54,8 @@ pub const PICKER: &str = "photos.picker";
 pub const PLACES: &str = "photos.places";
 pub const LIGHTBOX: &str = "photos.lightbox";
 pub const EDITOR: &str = "photos.editor";
+/// The earlier versions of a photograph (#1185).
+pub const EARLIER: &str = "photos.earlier";
 
 /// A copy of the originals `photo_ids` for the platform (`ExportOriginals`),
 /// with the words the shell names it by: the share sheet's title and the stems
@@ -88,6 +91,7 @@ pub fn registry() -> Registry {
         .with(PLACES, places::build)
         .with(LIGHTBOX, lightbox::build)
         .with(EDITOR, editor::build)
+        .with(EARLIER, earlier::build)
 }
 
 /// A runtime with Photos' screens and one tab, `photos`, rooted at its home. The

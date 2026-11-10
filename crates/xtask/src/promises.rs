@@ -192,10 +192,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "crates/screens/src/people/earlier.rs",
     ),
-    owed(
+    kept(
         "photos",
         Promise::History,
-        "the photo's info sheet has no Earlier versions entry (#1185)",
+        "crates/screens/src/photos/earlier.rs",
     ),
     kept(
         "reminders",

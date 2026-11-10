@@ -54,6 +54,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::civil::HourCycle;
+use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash;
@@ -90,6 +91,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         dismissed: false,
         pending: VecDeque::new(),
         links: Links::new(&[Kind::Person]),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -174,6 +176,8 @@ struct Lightbox {
     pending: VecDeque<Pending>,
     /// The people picker (#1173).
     links: Links,
+    /// The entry to the photograph's earlier versions, read with it (#1185).
+    earlier: earlier::Foot,
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -237,9 +241,32 @@ impl Lightbox {
                 }
             }
         }
+        self.earlier = self.read_foot(ctx);
         self.locate(ctx);
         self.fill_film(ctx);
         self.camera_effects()
+    }
+
+    /// The entry to this photograph's earlier versions: only a photograph that was read has one.
+    fn read_foot(&self, ctx: &Ctx) -> earlier::Foot {
+        let Content::Data(detail) = &self.content else {
+            return earlier::Foot::default();
+        };
+        let cell = &detail.cell;
+        let locale = ctx.locale();
+        let offset = cell.offset_min.unwrap_or(0);
+        let back = [
+            cell.title.trim().to_owned(),
+            cell.taken_at
+                .as_deref()
+                .map(|at| media::stamp_date(locale, at, offset))
+                .unwrap_or_default(),
+            own::edit_fallback_name(locale),
+        ]
+        .into_iter()
+        .find(|name| !name.is_empty())
+        .unwrap_or_default();
+        earlier::foot(ctx, super::EARLIER, &self.photo_id, &back)
     }
 
     /// The original's file and a Live Photo's movie, once this phone holds them.
@@ -917,6 +944,7 @@ impl Lightbox {
                 String::new()
             },
             labels,
+            earlier: self.earlier.entry.clone(),
             people: Some({
                 let mut section = self.links.section(
                     locale,
@@ -1454,7 +1482,7 @@ impl Screen for Lightbox {
                 )
             }),
             slideshow_line: words::photos_slideshow_line(locale),
-            status: self.status.clone(),
+            status: self.status.clone().or_else(|| self.earlier.status(locale)),
             album_choice: Some(self.albums.view(locale, Link::default())),
             people_picker: Some(self.links.picker(locale, &self.people_ids())),
             place_choices: self.place_choices(locale),
