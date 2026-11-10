@@ -25,6 +25,12 @@ use wire::screen_event::Kind as E;
 /// from Sunday.
 const WED: &str = "2027-06-09";
 
+/// The instant the example scenario is seeded as of: Monday 2 March 2026, 12:00 UTC. The scenario
+/// is laid out from "now" and its weekly series starts tomorrow, so on the machine's clock it fell
+/// on a different weekday each day the suite ran and, on a Tuesday, put a "Morning run" on the
+/// Wednesday these tests draw. Fixed, it is a Tuesday series every time.
+const SEEDED_AT_MS: i64 = 1_772_452_800_000;
+
 struct Rig {
     driver: Driver,
     id: u64,
@@ -33,10 +39,13 @@ struct Rig {
 }
 
 fn rig(destination: Dest) -> Rig {
-    let mut driver = Driver::with_runtime(Runtime::new(
-        agenda::registry(),
-        vec![(agenda::TAB.to_owned(), routes::home(destination, ""))],
-    ));
+    let mut driver = Driver::with_runtime_at(
+        Runtime::new(
+            agenda::registry(),
+            vec![(agenda::TAB.to_owned(), routes::home(destination, ""))],
+        ),
+        SEEDED_AT_MS,
+    );
     driver.start();
     let id = driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
     Rig {
@@ -322,9 +331,9 @@ fn week_reads_the_whole_week_from_the_regions_first_weekday() {
         .collect();
     assert_eq!(initials, "MTWTFSS");
     assert!(strip.days[2].is_selected && strip.days[6].dot_hue_keys.len() == 1);
-    // The seeded vault's weekly "Morning run" lands on whichever weekday tomorrow is, so a day can
-    // hold a dot this test did not put there: what it asserts is that none of ITS events is on
-    // Monday, the day nobody wrote to.
+    // The seeded vault's weekly "Morning run" is a Tuesday series, so a day can hold a dot this
+    // test did not put there: what it asserts is that none of ITS events is on Monday, the day
+    // nobody wrote to.
     assert!(
         r.grid().days[0]
             .blocks

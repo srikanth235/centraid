@@ -137,7 +137,20 @@ impl Driver {
     /// When the scratch vault cannot be made; this is test support.
     #[must_use]
     pub fn with_runtime(runtime: Runtime) -> Self {
-        Self::opened(runtime, false)
+        Self::opened(runtime, false, centraid_core::example::now_ms())
+    }
+
+    /// [`Self::with_runtime`] with the example scenario seeded as of `now_ms`
+    /// instead of the machine's clock. The scenario is laid out from "now" (a
+    /// weekly series starts tomorrow, so which weekday it falls on moves with the
+    /// day the suite runs), so a test that asserts on exact days passes a fixed
+    /// instant and sees the same vault on every day it runs.
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made.
+    #[must_use]
+    pub fn with_runtime_at(runtime: Runtime, now_ms: i64) -> Self {
+        Self::opened(runtime, false, now_ms)
     }
 
     /// [`Self::with_runtime`] over a core that holds the vault's keys, so a
@@ -147,7 +160,7 @@ impl Driver {
     /// When the scratch vault cannot be made.
     #[must_use]
     pub fn keyed(runtime: Runtime) -> Self {
-        Self::opened(runtime, true)
+        Self::opened(runtime, true, centraid_core::example::now_ms())
     }
 
     /// A core that holds no vault at all: the file is not there and is not
@@ -173,7 +186,7 @@ impl Driver {
         }
     }
 
-    fn opened(runtime: Runtime, keyed: bool) -> Self {
+    fn opened(runtime: Runtime, keyed: bool, seeded_at_ms: i64) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the scratch directory is made");
         let config = CoreConfig::new(dir.join("vault.db"));
@@ -207,7 +220,7 @@ impl Driver {
                     handle.registry(),
                     &handle.owner(),
                     &|_| true,
-                    centraid_core::example::now_ms(),
+                    seeded_at_ms,
                 )
             })
             .expect("the scenario seeds");
