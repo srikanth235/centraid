@@ -34,6 +34,16 @@ impl World {
 
     /// [`Self::new`] with more screens registered.
     pub fn with(registry: Registry) -> Self {
+        Self::build(registry, None)
+    }
+
+    /// [`Self::new`] over a vault seeded as of `now_ms` rather than the machine's clock, so a
+    /// result cannot turn on the day of the week the suite runs.
+    pub fn seeded_at(now_ms: i64) -> Self {
+        Self::build(Registry::default(), Some(now_ms))
+    }
+
+    fn build(registry: Registry, seeded_at_ms: Option<i64>) -> Self {
         let registry = registry
             .with(proof::NAME, proof::build)
             .with(
@@ -45,7 +55,10 @@ impl World {
                 centraid_screens::calendar::editor::build,
             );
         let runtime = Runtime::new(registry, vec![(agenda::TAB.to_owned(), proof::route())]);
-        let mut driver = Driver::with_runtime(runtime);
+        let mut driver = match seeded_at_ms {
+            Some(now_ms) => Driver::with_runtime_at(runtime, now_ms),
+            None => Driver::with_runtime(runtime),
+        };
         driver.start();
         driver.call(wire::screen_request::Kind::Environment(wire::Environment {
             locale: "en".to_owned(),

@@ -44,4 +44,20 @@ catalog! {
     plain remove_title = ("Remove this attachment?", "Remove this attachment?");
     counted reminder_minutes_before = ("{n} minute before", "{n} minutes before");
     plain spoken_range = ("{from} to {to}", "{from} to {to}");
+    // The "phone says" line (#1183): a time as the page words it, and what each thing is called
+    // to a screen reader.
+    plain says_all_day = ("{day}, all day", "{day}, all day");
+    plain says_at = ("{day}, {time}", "{day}, {time}");
+    plain says_ends = ("ends {when}", "ends {when}");
+    plain says_noun_alerts = ("alerts", "alerts");
+    plain says_noun_availability = ("availability", "availability");
+    plain says_noun_guest = ("guest", "guest");
+    plain says_noun_link = ("link", "link");
+    plain says_noun_notes = ("notes", "notes");
+    plain says_noun_repeat = ("repeat", "repeat");
+    plain says_noun_time = ("time", "time");
+    plain says_noun_title = ("title", "title");
+    plain says_noun_zone = ("time zone", "time zone");
+    plain says_starts = ("starts {when}", "starts {when}");
+    plain says_zoned = ("{when}, {zone}", "{when}, {zone}");
 }

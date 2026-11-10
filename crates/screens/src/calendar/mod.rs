@@ -11,6 +11,7 @@
 use crate::Registry;
 pub mod editor;
 pub mod event;
+pub mod event_phone;
 pub mod follow;
 pub mod home;
 pub mod hues;

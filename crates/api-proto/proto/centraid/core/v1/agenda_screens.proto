@@ -1177,6 +1177,18 @@ message AgendaEventData {
   // The guests the phone's calendar states for an event the vault follows,
   // read-only.
   repeated AgendaFollowedGuestRow followed_guests = 19;
+  // WHAT THE PHONE SAYS (#1183), only where the member's value differs from the phone's, each
+  // under the field or list it belongs to. The title, under the title.
+  optional PhoneSays title_phone_says = 20;
+  // Under the date and time: the start and the end.
+  repeated PhoneSays when_phone_says = 21;
+  // Under the notes.
+  optional PhoneSays notes_phone_says = 22;
+  // Under the facts: the zone, the repeat, the joining link, availability and the alerts.
+  repeated PhoneSays facts_phone_says = 23;
+  // Under the guests: a guest whose reply the member changed ("Phone says ...") and one they
+  // took off ("Phone still has ..."). A guest the member added has no line.
+  repeated PhoneSays guests_phone_says = 24;
 }
 
 // One guest the phone's calendar states: a name or an address, and the reply

@@ -42,11 +42,13 @@ use wire::app_query_response::Answer;
 use crate::kit::schedule::rule_words::{self, long_day};
 use wire::screen_event::Kind as E;
 
+use crate::calendar::event_phone;
 use crate::calendar::hues::Hues;
 use crate::calendar::routes;
 use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::civil::{self, HourCycle};
+use crate::kit::follow;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::attachments::{Attachments, Of};
 use crate::kit::schedule::rows::hue_role;
@@ -88,6 +90,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         dismissed: false,
         attachments,
+        differences: Vec::new(),
     }))
 }
 
@@ -111,6 +114,8 @@ struct EventPage {
     dismissed: bool,
     /// The photos and files on the event (#1173).
     attachments: Attachments,
+    /// Where the phone's calendar says otherwise than the event does (#1183), read with the page.
+    differences: Vec<follow::Difference>,
 }
 
 impl EventPage {
@@ -130,6 +135,10 @@ impl EventPage {
             Answer::AgendaEvent(detail) => Some(detail),
             _ => None,
         });
+        self.differences = match &reading {
+            Reading::Data(_) => follow::read(ctx, &self.route.event_id),
+            _ => Vec::new(),
+        };
         match reading {
             Reading::Data(detail) => self.content = Content::Data(detail),
             Reading::Denied(denial) => self.content = Content::Denied(denial),
@@ -183,6 +192,22 @@ impl EventPage {
         };
         self.status = None;
         let settled = kit_act::act(ctx, request, &key);
+        if !settled.committed {
+            self.refused(&settled);
+        }
+        self.reload(ctx);
+    }
+
+    /// The action under a "phone says" line: take the calendar's value, then read again so the
+    /// line goes. A refusal is the status line, over the event as it still is.
+    fn take_phone(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.event().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.route.event_id, taken) else {
+            return;
+        };
+        self.status = None;
         if !settled.committed {
             self.refused(&settled);
         }
@@ -307,6 +332,7 @@ impl Screen for EventPage {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
             }
+            Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
             Some(E::AgendaEvent(event)) => match event.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
@@ -562,7 +588,23 @@ impl EventPage {
             .iter()
             .map(|guest| followed_row(locale, guest))
             .collect();
+        let phone = event_phone::lines(
+            event_phone::Wording {
+                locale,
+                cycle,
+                device_zone,
+                event_zone: (event.recurrence_semantics.as_deref() == Some("zoned"))
+                    .then_some(event.start_tz.as_deref())
+                    .flatten(),
+            },
+            &self.differences,
+        );
         wire::AgendaEventData {
+            title_phone_says: phone.title,
+            when_phone_says: phone.when,
+            notes_phone_says: phone.notes,
+            facts_phone_says: phone.facts,
+            guests_phone_says: phone.guests,
             followed_heading: if followed.is_empty() {
                 String::new()
             } else {
