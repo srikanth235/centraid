@@ -480,3 +480,190 @@ fn a_table_row_with_no_action_is_named() {
     let gaps = undo_missing(&root, "notes").join("\n");
     assert!(gaps.contains("delete-note: (B) a row of the table, but no such action"));
 }
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+
+const EARLIER_SPEC: &str = r#"use crate::kit::earlier::{self, EarlierSpec};
+pub static SPEC: EarlierSpec = EarlierSpec {
+    app: "notes",
+    noun: shared::trash_noun_note,
+    denied,
+    line,
+};
+"#;
+
+const SHELL: &str = r#"{
+ "queries":[{"name":"earlier-versions"},{"name":"earlier-count"}],
+ "actions":[
+  {"name":"restore-version","command":"history.restore_version"},
+  {"name":"undo-change","command":"history.undo"}]}"#;
+
+/// A `notes` app that keeps History in full: the spec, the registration, the shell's door and the
+/// note page's entry.
+fn history_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/screens/src/notes/earlier.rs", EARLIER_SPEC);
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "pub const EARLIER: &str = \"notes.earlier\";\nregistry().with(EARLIER, earlier::build)",
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn view() { let foot = earlier::foot(ctx, EARLIER, &id, &title); }",
+    );
+    write(&root, "crates/core/src/shell/manifest.json", SHELL);
+    root
+}
+
+fn history_lacking(root: &Path) -> String {
+    history_missing(root, "notes").join("\n")
+}
+
+#[test]
+fn an_app_that_embeds_the_entry_and_registers_the_screen_keeps_history() {
+    let root = history_tree("history-clean");
+    assert_eq!(history_lacking(&root), "");
+}
+
+#[test]
+fn no_spec_is_named_by_file() {
+    let root = history_tree("history-no-spec");
+    fs::remove_file(root.join("crates/screens/src/notes/earlier.rs")).expect("remove");
+    assert!(history_lacking(&root).contains("crates/screens/src/notes/earlier.rs is missing"));
+}
+
+#[test]
+fn a_spec_with_no_line_is_named() {
+    let root = history_tree("history-no-line");
+    write(
+        &root,
+        "crates/screens/src/notes/earlier.rs",
+        &EARLIER_SPEC.replace("    line,\n", ""),
+    );
+    assert!(history_lacking(&root).contains("the spec has no `line`"));
+}
+
+#[test]
+fn a_spec_that_is_not_the_kits_is_named() {
+    let root = history_tree("history-not-kit");
+    write(
+        &root,
+        "crates/screens/src/notes/earlier.rs",
+        "pub static SPEC: Mine = Mine { app: \"notes\", noun, denied, line };",
+    );
+    assert!(
+        history_lacking(&root).contains("does not define an EarlierSpec built on kit::earlier")
+    );
+}
+
+#[test]
+fn a_screen_not_registered_under_the_apps_name_is_named() {
+    let root = history_tree("history-unregistered");
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "registry().with(TRASH, trash::build)",
+    );
+    assert!(history_lacking(&root).contains("does not register the screen (`earlier::build`"));
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "pub const EARLIER: &str = \"notes.history\";\nregistry().with(EARLIER, earlier::build)",
+    );
+    assert!(history_lacking(&root).contains("does not register the screen"));
+}
+
+#[test]
+fn a_detail_page_with_no_entry_is_named_by_file_and_kind() {
+    let root = history_tree("history-no-entry");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn view() { let history = my_own_history(); }",
+    );
+    assert!(
+        history_lacking(&root)
+            .contains("crates/screens/src/notes/editor.rs: the note page does not embed")
+    );
+}
+
+#[test]
+fn an_entry_only_a_test_module_embeds_does_not_count() {
+    let root = history_tree("history-test-only");
+    write(
+        &root,
+        "crates/screens/src/notes/editor.rs",
+        "fn view() {}\n#[cfg(test)]\nmod t { fn x() { earlier::foot(c, EARLIER, i, t); } }",
+    );
+    assert!(history_lacking(&root).contains("the note page does not embed"));
+}
+
+#[test]
+fn a_shell_manifest_without_the_shared_door_is_named() {
+    let root = history_tree("history-no-door");
+    write(
+        &root,
+        "crates/core/src/shell/manifest.json",
+        r#"{"queries":[{"name":"earlier-count"}],"actions":[{"name":"undo-change","command":"entity.trash"}]}"#,
+    );
+    let gaps = history_lacking(&root);
+    assert!(gaps.contains("declares no `earlier-versions` query"));
+    assert!(
+        gaps.contains("declares no `restore-version` action that runs `history.restore_version`")
+    );
+    assert!(gaps.contains("declares no `undo-change` action that runs `history.undo`"));
+}
+
+#[test]
+fn an_owed_history_row_prints_each_gap_with_its_file() {
+    let root = history_tree("history-owed");
+    fs::remove_file(root.join("crates/screens/src/notes/earlier.rs")).expect("remove");
+    write(&root, "crates/screens/src/notes/mod.rs", "registry()");
+    let table: Vec<Row> = APPS
+        .iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::History,
+            status: Status::Owed("#1185"),
+        })
+        .collect();
+    let report = check(&root, &table);
+    let notes = report
+        .details
+        .iter()
+        .filter(|line| line.starts_with("owed notes / History:"))
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(notes.contains("crates/screens/src/notes/earlier.rs is missing"));
+    assert!(notes.contains("does not register the screen"));
+}
+
+#[test]
+fn the_committed_history_register_names_every_apps_kinds_and_people_keeps_it() {
+    for app in APPS {
+        assert!(
+            HISTORY_KINDS.iter().any(|(name, _)| *name == app),
+            "{app} names no primary kind"
+        );
+    }
+    assert!(REGISTER.iter().any(|row| row.app == "people"
+        && row.promise == Promise::History
+        && matches!(row.status, Status::Kept(_))));
+    for (app, kinds) in HISTORY_KINDS {
+        for (_, screen) in *kinds {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../screens/src")
+                .join(app)
+                .join(screen);
+            assert!(
+                path.exists(),
+                "{app}'s detail screen `{screen}` is not there"
+            );
+        }
+    }
+}

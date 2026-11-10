@@ -57,16 +57,20 @@ pub enum Promise {
     /// Every action can be taken back from the status line, or is confirmed first because it
     /// cannot be; the manifests and the core's inverse table say one thing.
     Undo,
+    /// Every record keeps its earlier values (the vault's one history, at the commit door), and
+    /// the detail screen of each primary kind lists them on the kit's one screen, with Restore.
+    History,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 2] = [Promise::Trash, Promise::Undo];
+    pub const ALL: [Promise; 3] = [Promise::Trash, Promise::Undo, Promise::History];
 
     fn name(self) -> &'static str {
         match self {
             Promise::Trash => "Trash",
             Promise::Undo => "Undo",
+            Promise::History => "History",
         }
     }
 }
@@ -151,6 +155,53 @@ pub const REGISTER: &[Row] = &[
     owed("people", Promise::Undo, UNDO_OWED),
     owed("photos", Promise::Undo, UNDO_OWED),
     owed("reminders", Promise::Undo, UNDO_OWED),
+    // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
+    // others' work list.
+    owed(
+        "calendar",
+        Promise::History,
+        "the event page has no Earlier versions entry (#1185)",
+    ),
+    owed(
+        "docs",
+        Promise::History,
+        "its own versions screen (versions.rs) has not moved onto the kit's, and the document page has no entry (#1185)",
+    ),
+    owed(
+        "health",
+        Promise::History,
+        "the workout page has no Earlier versions entry (#1185)",
+    ),
+    owed(
+        "locker",
+        Promise::History,
+        "the item page has no Earlier versions entry (#1185)",
+    ),
+    owed(
+        "money",
+        Promise::History,
+        "the transaction page has no Earlier versions entry (#1185)",
+    ),
+    owed(
+        "notes",
+        Promise::History,
+        "its own history screen (history.rs) has not moved onto the kit's, and the note's menu has no entry (#1185)",
+    ),
+    kept(
+        "people",
+        Promise::History,
+        "crates/screens/src/people/earlier.rs",
+    ),
+    owed(
+        "photos",
+        Promise::History,
+        "the photo's info sheet has no Earlier versions entry (#1185)",
+    ),
+    owed(
+        "reminders",
+        Promise::History,
+        "the task page has no Earlier versions entry (#1185)",
+    ),
 ];
 
 const UNDO_OWED: &str = "actions neither in the core's inverse table nor confirmed, or the manifest and the table disagree (#1185)";
@@ -239,6 +290,7 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
     match promise {
         Promise::Trash => trash_missing(root, app),
         Promise::Undo => undo_missing(root, app),
+        Promise::History => history_missing(root, app),
     }
 }
 
@@ -665,6 +717,148 @@ fn undo_missing(root: &Path, app: &str) -> Vec<String> {
     )];
     gaps.extend(unclassified);
     gaps.extend(mismatched);
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+
+/// The primary kinds of each app and the screen that shows one: a file, or a folder, under
+/// `crates/screens/src/<app>/`. The detail screen of a kind is where its "Earlier versions" entry
+/// sits at the foot (design/mockups/Versions*.dc.html), so each is named here and must embed it. A
+/// kind that is not listed has no promise; adding an app's kind is a row here.
+pub const HISTORY_KINDS: &[(&str, &[(&str, &str)])] = &[
+    ("calendar", &[("event", "event.rs")]),
+    ("docs", &[("document", "document.rs")]),
+    ("health", &[("workout", "workout.rs")]),
+    ("locker", &[("item", "item.rs")]),
+    ("money", &[("transaction", "transaction.rs")]),
+    ("notes", &[("note", "editor.rs")]),
+    ("people", &[("person", "person")]),
+    ("photos", &[("photo", "lightbox.rs")]),
+    ("reminders", &[("task", "detail.rs")]),
+];
+
+/// The shell's catalogue, where the shared read and the two commands live.
+const SHELL_MANIFEST: &str = "crates/core/src/shell/manifest.json";
+
+/// What the spec literal must set: the app, the noun, the gate and the one-line formatter.
+const HISTORY_SPEC_FIELDS: [&str; 4] = ["app", "noun", "denied", "line"];
+
+/// Whether the spec literal sets `field`, long form (`line: format,`) or shorthand (`line,`).
+fn spec_sets(text: &str, field: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with(&format!("{field}:")) || line == format!("{field},")
+    })
+}
+
+/// History is kept when, for `app`:
+///
+/// 1. the shell's manifest declares the shared reads (`earlier-versions`, `earlier-count`) and the
+///    two commands (`restore-version` is `history.restore_version`, `undo-change` is
+///    `history.undo`);
+/// 2. `crates/screens/src/<app>/earlier.rs` defines an `EarlierSpec` built on `kit::earlier`, with
+///    its app, noun, gate and line;
+/// 3. the app's `mod.rs` registers it (`earlier::build`) under a `<app>.earlier` name;
+/// 4. the detail screen of each primary kind ([`HISTORY_KINDS`]) embeds the shared entry
+///    (`earlier::foot(` over the app's `EARLIER` route), so a count and a way in are on the page.
+fn history_missing(root: &Path, app: &str) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let dir = root.join("crates/screens/src").join(app);
+    let spec_rel = format!("crates/screens/src/{app}/earlier.rs");
+
+    // 1. the shared door
+    match fs::read_to_string(root.join(SHELL_MANIFEST))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    {
+        None => gaps.push(format!("{SHELL_MANIFEST} could not be read")),
+        Some(manifest) => {
+            let named = |list: &str, name: &str, command: Option<&str>| {
+                manifest
+                    .get(list)
+                    .and_then(|entries| entries.as_array())
+                    .is_some_and(|entries| {
+                        entries.iter().any(|entry| {
+                            entry.get("name").and_then(|n| n.as_str()) == Some(name)
+                                && command.is_none_or(|command| {
+                                    entry.get("command").and_then(|c| c.as_str()) == Some(command)
+                                })
+                        })
+                    })
+            };
+            for query in ["earlier-versions", "earlier-count"] {
+                if !named("queries", query, None) {
+                    gaps.push(format!("{SHELL_MANIFEST} declares no `{query}` query"));
+                }
+            }
+            for (action, command) in [
+                ("restore-version", "history.restore_version"),
+                ("undo-change", "history.undo"),
+            ] {
+                if !named("actions", action, Some(command)) {
+                    gaps.push(format!(
+                        "{SHELL_MANIFEST} declares no `{action}` action that runs `{command}`"
+                    ));
+                }
+            }
+        }
+    }
+
+    // 2. the spec
+    match live_source(&dir.join("earlier.rs")) {
+        None => gaps.push(format!(
+            "{spec_rel} is missing: no earlier-versions screen built on kit::earlier::EarlierSpec"
+        )),
+        Some(text) => {
+            if !text.contains("kit::earlier") || !text.contains("EarlierSpec") {
+                gaps.push(format!(
+                    "{spec_rel} does not define an EarlierSpec built on kit::earlier"
+                ));
+            }
+            for field in HISTORY_SPEC_FIELDS {
+                if !spec_sets(&text, field) {
+                    gaps.push(format!("{spec_rel}: the spec has no `{field}`"));
+                }
+            }
+        }
+    }
+
+    // 3. registered under the app's own name
+    let registered = live_source(&dir.join("mod.rs")).is_some_and(|text| {
+        text.contains("earlier::build") && text.contains(&format!("\"{app}.earlier\""))
+    });
+    if !registered {
+        gaps.push(format!(
+            "crates/screens/src/{app}/mod.rs does not register the screen (`earlier::build` under \"{app}.earlier\")"
+        ));
+    }
+
+    // 4. the entry on each primary kind's detail screen
+    let kinds = HISTORY_KINDS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, kinds)| *kinds);
+    for (kind, screen) in kinds {
+        let path = dir.join(screen);
+        let files = if path.is_dir() {
+            source_files(&path, "rs")
+        } else {
+            vec![path]
+        };
+        let text: String = files
+            .iter()
+            .filter_map(|file| live_source(file))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.contains("earlier::foot(") || !text.contains("EARLIER") {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page does not embed the shared entry (`earlier::foot(` over the app's `EARLIER` route)"
+            ));
+        }
+    }
     gaps
 }
 
