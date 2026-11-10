@@ -165,10 +165,10 @@ pub const REGISTER: &[Row] = &[
         Promise::History,
         "crates/screens/src/calendar/earlier.rs",
     ),
-    owed(
+    kept(
         "docs",
         Promise::History,
-        "its own versions screen (versions.rs) has not moved onto the kit's, and the document page has no entry (#1185)",
+        "crates/screens/src/docs/earlier.rs",
     ),
     kept(
         "health",

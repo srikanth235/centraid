@@ -365,7 +365,8 @@ message DocsEditorRoute {
   string title = 2;
 }
 
-// `docs.versions`: one document's version history.
+// `docs.versions`: NO LONGER SENT (#1185); the kit's `docs.earlier` replaced it. Stays until the
+// shells delete the view.
 message DocsVersionsRoute {
   string document_id = 1;
   string title = 2;

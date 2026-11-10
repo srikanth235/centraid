@@ -1,4 +1,4 @@
-//! One document, its version history, its editor and its trash: ports of the
+//! One document, its editor and its trash: ports of the
 //! `DocsSpec` document, editor and trash cases, through `Driver`.
 
 mod docs_support;
@@ -250,102 +250,6 @@ fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves
     document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
     assert!(document_state(d.view(i)).dismissed);
     assert!(document(&d, &id).document.is_none());
-}
-
-#[test]
-fn version_history_is_a_page_and_an_earlier_version_is_made_current_by_a_restore() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    arrange(
-        &d,
-        act::docs::Edit {
-            document_id: id.clone(),
-            body_text: Some("second".to_owned()),
-            title: None,
-        },
-    );
-    let i = open(&mut d, &id, "Letter", "Docs");
-    let link = document_data(d.view(i))
-        .versions
-        .as_ref()
-        .expect("a versions row");
-    assert_eq!(link.label, "Versions");
-    assert_eq!(link.count_label, "2 versions");
-    let route = link.route.clone().unwrap();
-    assert_eq!(route.screen, docs::VERSIONS);
-    let page = d.push(docs::TAB, route);
-    let state = versions_state(d.view(page));
-    assert_eq!(state.chrome.as_ref().unwrap().back, "Letter");
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!("{:?}", state.content);
-    };
-    assert_eq!(data.versions.len(), 2);
-    assert_eq!(data.versions[0].label, "Version 2");
-    assert!(data.versions[0].current);
-    assert!(
-        data.versions[0].meta.starts_with("Current"),
-        "{}",
-        data.versions[0].meta
-    );
-    assert_eq!(data.versions[0].restore_label, "");
-    assert_eq!(data.versions[1].label, "Version 1");
-    assert_eq!(data.versions[1].restore_label, "Restore");
-    d.send(
-        page,
-        wire::screen_event::Kind::DocsVersions(wire::DocsVersionsEvent {
-            kind: Some(wire::docs_versions_event::Kind::Restored(
-                wire::docs_versions_event::Restored {
-                    key: "1".to_owned(),
-                },
-            )),
-        }),
-    );
-    // Version 1's words are the document again, and the history walks on.
-    assert_eq!(document(&d, &id).body.as_deref(), Some("first"));
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!();
-    };
-    assert_eq!(data.versions.len(), 3);
-    assert!(state.status.is_none());
-    // The current version is nothing to restore.
-    d.send(
-        page,
-        wire::screen_event::Kind::DocsVersions(wire::DocsVersionsEvent {
-            kind: Some(wire::docs_versions_event::Kind::Restored(
-                wire::docs_versions_event::Restored {
-                    key: "3".to_owned(),
-                },
-            )),
-        }),
-    );
-    assert_eq!(document(&d, &id).versions.len(), 3);
-}
-
-#[test]
-fn a_trashed_documents_versions_offer_no_restore() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    arrange(
-        &d,
-        act::docs::Edit {
-            document_id: id.clone(),
-            body_text: Some("second".to_owned()),
-            title: None,
-        },
-    );
-    arrange(
-        &d,
-        act::docs::Trash {
-            document_id: id.clone(),
-        },
-    );
-    let page = d.push(docs::TAB, routes::versions(&id, "Letter"));
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!();
-    };
-    assert!(data.versions.iter().all(|v| v.restore_label.is_empty()));
 }
 
 // ---------------------------------------------------------------------------
@@ -643,49 +547,6 @@ fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
     assert_eq!(
         document_state(d.view(i)).status.as_ref().unwrap().sentence,
         "This document isn't on this phone yet."
-    );
-}
-
-#[test]
-fn only_the_current_version_says_current_and_none_is_dimmed() {
-    let mut d = driver();
-    let id = text(&d, "Letter", "first");
-    for body in ["second", "third"] {
-        arrange(
-            &d,
-            act::docs::Edit {
-                document_id: id.clone(),
-                body_text: Some(body.to_owned()),
-                title: None,
-            },
-        );
-    }
-    let i = open(&mut d, &id, "Letter", "Docs");
-    let route = document_data(d.view(i))
-        .versions
-        .as_ref()
-        .unwrap()
-        .route
-        .clone()
-        .unwrap();
-    let page = d.push(docs::TAB, route);
-    let state = versions_state(d.view(page));
-    let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
-        panic!("{:?}", state.content);
-    };
-    let current: Vec<&str> = data
-        .versions
-        .iter()
-        .filter(|version| version.meta.contains("Current"))
-        .map(|version| version.label.as_str())
-        .collect();
-    assert_eq!(current, ["Version 3"]);
-    assert_eq!(
-        data.versions
-            .iter()
-            .filter(|version| version.current)
-            .count(),
-        1
     );
 }
 

@@ -30,7 +30,7 @@ docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crat
 docs,recolor-label,edit,document,card,no,no
 docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
 docs,replace,edit:content,document,card,no,no
-docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions.rs,no
+docs,restore-version,restore,document,card,no,no
 docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
 docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes

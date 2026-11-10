@@ -416,7 +416,9 @@ pub fn document(
         surface: Some(surface),
         facts: facts(locale, cycle, found, answer, &view),
         path: folders::path_crumbs(locale, &answer.path, &view.title),
-        versions: versions_link(locale, answer, found, &view.title),
+        // `versions` is no longer sent (#1185): the foot's row is `earlier`, set by the page.
+        versions: None,
+        earlier: None,
         actions: head_actions(locale, found),
         bar: bar_actions(locale, found),
         kind_size: [view.kind_label.clone(), found.size.clone()]
@@ -458,19 +460,6 @@ fn subtitle(locale: Locale, answer: &wire::DocsDocument) -> String {
         ),
         None => root,
     }
-}
-
-fn versions_link(
-    locale: Locale,
-    answer: &wire::DocsDocument,
-    row: &wire::DocsDocumentRow,
-    title: &str,
-) -> Option<wire::DocsVersionsLink> {
-    (answer.versions.len() > 1).then(|| wire::DocsVersionsLink {
-        label: words::versions_heading(locale),
-        count_label: words::version_count(locale, answer.versions.len() as u64),
-        route: Some(routes::versions(&row.document_id, title)),
-    })
 }
 
 fn reader(
@@ -587,39 +576,6 @@ fn facts(
         ));
     }
     facts
-}
-
-/// One version of the history page.
-#[must_use]
-pub fn version(
-    locale: Locale,
-    cycle: HourCycle,
-    version: &wire::DocsVersion,
-    trashed: bool,
-) -> wire::DocsVersionRow {
-    let meta = [
-        version.current.then(|| words::current(locale)),
-        Some(version.size.clone()).filter(|size| !size.is_empty()),
-        stamp(locale, cycle, &version.asserted_local),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join(" · ");
-    wire::DocsVersionRow {
-        // THE VERSION'S KEY is its number: two versions can hold the same bytes.
-        key: version.number.to_string(),
-        label: format!("{} {}", words::version(locale), version.number),
-        meta,
-        current: version.current,
-        // An earlier version of a LIVE document can be made current again; a
-        // trashed one is restored first (the vault refuses otherwise).
-        restore_label: if !version.current && !trashed {
-            words::action_restore(locale)
-        } else {
-            String::new()
-        },
-    }
 }
 
 /// The grace window's end is when the next launch may empty the trash, never a

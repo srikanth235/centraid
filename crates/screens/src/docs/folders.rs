@@ -41,7 +41,7 @@ fn tree(folders: &[wire::DocsFolder]) -> Vec<Node> {
         .collect()
 }
 
-fn label(locale: Locale, name: &str) -> String {
+pub(crate) fn label(locale: Locale, name: &str) -> String {
     if name.trim().is_empty() {
         words::untitled(locale)
     } else {

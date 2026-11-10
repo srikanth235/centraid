@@ -634,8 +634,7 @@ message DocsDocumentData {
   repeated DocsFact facts = 6;
   // The folder path, top level first, for the breadcrumb.
   repeated DocsCrumb path = 7;
-  // The version history row: "Versions" and how many. Absent for a document
-  // with one version.
+  // No longer sent (#1185): the foot's row is `earlier`.
   optional DocsVersionsLink versions = 8;
   // 9 and 10 were the Activity rows and their empty line: the rail read the command journal,
   // which is gone (#1146).
@@ -666,9 +665,12 @@ message DocsDocumentData {
   // WHAT THE FOLDER SAYS (#1183), under the name, when the member renamed a document a followed
   // folder still names otherwise. Absent when they agree.
   optional PhoneSays title_phone_says = 21;
+  // The foot's "Earlier versions   2 ›" row (#1185): the kit's entry, absent until the document
+  // holds an earlier version. Its route is the kit's one screen, `docs.earlier`.
+  optional EarlierEntry earlier = 22;
 }
 
-// The row that opens the version history.
+// NO LONGER SENT (#1185): the row that opened the version history.
 message DocsVersionsLink {
   string label = 1;
   // How many versions: "3 versions".
@@ -799,7 +801,9 @@ message DocsDocumentEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Version history (`docs.versions`): `docs.history` and `restore-version`
+// Version history (`docs.versions`): NO LONGER SENT (#1185). A document's earlier versions are the
+// kit's one screen (`docs.earlier`, `EarlierView`); these messages stay until the shells delete
+// the views that read them, and are then `reserved`.
 // ---------------------------------------------------------------------------
 
 message DocsVersionsState {

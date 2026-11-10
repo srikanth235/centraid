@@ -39,7 +39,6 @@ catalog! {
     plain clear_filters = ("Clear filters", "Clear filters");
     plain close = ("Close", "Close");
     plain create = ("Create", "Create");
-    plain current = ("Current", "Current");
     plain deleted = ("Deleted", "Deleted");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Docs cannot read your documents", "Docs cannot read your documents");
@@ -151,7 +150,6 @@ catalog! {
     plain type_word = ("Documents", "Documents");
     plain untitled = ("Untitled", "Untitled");
     plain version = ("Version", "Version");
-    plain versions_heading = ("Versions", "Versions");
     plain view_grid = ("Grid", "Grid");
     plain view_list = ("List", "List");
     plain view_title = ("View", "View");
@@ -159,7 +157,6 @@ catalog! {
     plain where_top = ("At the top level", "At the top level");
     counted recents_subtitle = ("Changed lately · {n} document in Docs", "Changed lately · {n} documents in Docs");
     counted document_count = ("{n} document", "{n} documents");
-    counted version_count = ("{n} version", "{n} versions");
     counted followed_detail = ("{n} document stays in Docs", "{n} documents stay in Docs");
     // What the "folder says" line calls the name, to a screen reader (#1183).
     plain says_noun_name = ("name", "name");

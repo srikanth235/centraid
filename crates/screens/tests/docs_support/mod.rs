@@ -173,13 +173,6 @@ pub fn editor_state(v: &wire::ViewState) -> &wire::DocsEditorState {
     }
 }
 
-pub fn versions_state(v: &wire::ViewState) -> &wire::DocsVersionsState {
-    match &v.kind {
-        Some(wire::view_state::Kind::DocsVersions(state)) => state,
-        other => panic!("not a version history: {other:?}"),
-    }
-}
-
 pub fn trash_view(v: &wire::ViewState) -> &wire::TrashView {
     match &v.kind {
         Some(wire::view_state::Kind::Trash(view)) => view,

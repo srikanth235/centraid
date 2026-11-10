@@ -4,8 +4,8 @@
 //! The core says which surface opens it — the reader over the decoded text, the
 //! media stage over the bytes (or why they are not on this device), or the facts
 //! for a kind the phone cannot render — and this draws that with the facts under
-//! it. Its version history is a page of its own
-//! (`docs.versions`), reached by a row. The head's writes are the drive row's
+//! it. Its earlier versions are the kit's one screen
+//! (`docs.earlier`), reached by the row at its foot. The head's writes are the drive row's
 //! (star, rename inline, move, labels, trash behind a confirm), plus restore and
 //! Delete forever on a trashed document.
 //!
@@ -27,6 +27,7 @@ use super::rename::Rename;
 use super::{Phase, denied, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
@@ -74,6 +75,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         dismissed: false,
         links: Links::new(&[Kind::Person]),
         differences: follow::Phone::default(),
+        earlier: earlier::Foot::default(),
     }))
 }
 
@@ -95,6 +97,8 @@ struct Document {
     /// Where the followed folder's name for the document differs from the member's (#1183), read
     /// with the page.
     differences: follow::Phone,
+    /// The entry to the document's earlier versions (#1185), read with the page.
+    earlier: earlier::Foot,
 }
 
 impl Document {
@@ -127,6 +131,12 @@ impl Document {
         self.differences = match &document {
             Reading::Data(_) => follow::read(ctx, &self.document_id),
             _ => follow::Phone::default(),
+        };
+        self.earlier = match &document {
+            Reading::Data(found) if found.document.is_some() => {
+                earlier::foot(ctx, super::EARLIER, &self.document_id, "")
+            }
+            _ => earlier::Foot::default(),
         };
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
@@ -576,6 +586,17 @@ impl Screen for Document {
                             None,
                         )
                     });
+                // THE FOOT'S "Earlier versions" ROW (#1185): the kit's entry, its route naming the
+                // page the member comes from by the title drawn.
+                let drawn = data.row.as_ref().map(|row| row.title.clone());
+                data.earlier = self.earlier.entry.as_ref().map(|entry| wire::EarlierEntry {
+                    route: Some(earlier::route(
+                        super::EARLIER,
+                        &self.document_id,
+                        drawn.as_deref().unwrap_or_default(),
+                    )),
+                    ..entry.clone()
+                });
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id
@@ -597,7 +618,8 @@ impl Screen for Document {
                     status: self
                         .status
                         .clone()
-                        .or_else(|| self.differences.status(locale, Source::Folder)),
+                        .or_else(|| self.differences.status(locale, Source::Folder))
+                        .or_else(|| self.earlier.status(locale)),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
                     sheet,

@@ -1,4 +1,4 @@
-//! DOCS' SCREENS (#1135): the drive, one document, its versions, its text
+//! DOCS' SCREENS (#1135): the drive, one document, its earlier versions, its text
 //! editor and its trash. Every decision a person sees is made here; SwiftUI and
 //! Compose draw [`wire::ViewState`].
 //!
@@ -6,7 +6,7 @@
 //! |---|---|---|
 //! | Recents · Browse · Starred · Recently added, a folder's page, Search | [`DRIVE`] | [`drive`] |
 //! | One document | [`DOCUMENT`] | [`document`] |
-//! | A document's version history | [`VERSIONS`] | [`versions`] |
+//! | A document's earlier versions | [`EARLIER`] | [`earlier`] |
 //! | A text document's editor | [`EDITOR`] | [`editor`] |
 //! | The trash | [`TRASH`] | [`trash`] |
 //!
@@ -31,21 +31,20 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
-use crate::kit::read::Reading;
 use crate::strings::{Locale, docs as words};
 
 pub mod document;
 pub mod drive;
+pub mod earlier;
 pub mod editor;
 pub mod fold;
 pub mod folders;
 pub mod rename;
 pub mod trash;
-pub mod versions;
 
 pub const DRIVE: &str = "docs.drive";
 pub const DOCUMENT: &str = "docs.document";
-pub const VERSIONS: &str = "docs.versions";
+pub const EARLIER: &str = "docs.earlier";
 pub const EDITOR: &str = "docs.editor";
 pub const TRASH: &str = "docs.trash";
 
@@ -55,7 +54,7 @@ pub fn registry() -> Registry {
     Registry::default()
         .with(DRIVE, drive::build)
         .with(DOCUMENT, document::build)
-        .with(VERSIONS, versions::build)
+        .with(EARLIER, earlier::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
 }
@@ -88,14 +87,6 @@ pub(crate) enum Phase<T> {
 }
 
 impl<T> Phase<T> {
-    pub(crate) fn of(reading: Reading<T>) -> Self {
-        match reading {
-            Reading::Data(data) => Self::Ready(data),
-            Reading::Denied(denial) => Self::Denied(denial),
-            Reading::Failed => Self::Failed,
-        }
-    }
-
     pub(crate) fn data(&self) -> Option<&T> {
         match self {
             Self::Ready(data) => Some(data),
@@ -124,7 +115,7 @@ pub(crate) fn refusal(sentence: String) -> wire::StatusLine {
 
 /// The routes Docs' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{DOCUMENT, DRIVE, EDITOR, TRASH, VERSIONS, wire};
+    use super::{DOCUMENT, DRIVE, EDITOR, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -179,18 +170,6 @@ pub mod routes {
         route(
             EDITOR,
             wire::route::Args::DocsEditor(wire::DocsEditorRoute {
-                document_id: document_id.to_owned(),
-                title: title.to_owned(),
-            }),
-        )
-    }
-
-    /// A document's version history.
-    #[must_use]
-    pub fn versions(document_id: &str, title: &str) -> wire::Route {
-        route(
-            VERSIONS,
-            wire::route::Args::DocsVersions(wire::DocsVersionsRoute {
                 document_id: document_id.to_owned(),
                 title: title.to_owned(),
             }),
