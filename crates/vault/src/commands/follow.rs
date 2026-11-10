@@ -1272,6 +1272,22 @@ pub fn differences(connection: &Connection, id: &str) -> Result<Vec<Difference>>
     Ok(out)
 }
 
+/// A pass read a record that changes nothing about its source link. `seen_at` is when the link
+/// last changed (it was made, re-pointed or re-stated), and the only readers that need more are
+/// a statement's: Money's "last import" is the newest line a statement spoke of, so an import of
+/// the same statement again still dates it. A phone store's pass is not an event anyone reads, so
+/// an unchanged record there writes nothing (`match_tombstone` only orders by it, with the id
+/// breaking ties).
+fn spoke_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap, source_id: &str) -> Result<()> {
+    if map.system == "statement" {
+        ctx.connection().execute(
+            "UPDATE source SET seen_at = ?2 WHERE id = ?1",
+            [source_id, &ctx.now],
+        )?;
+    }
+    Ok(())
+}
+
 fn merge_record(
     ctx: &CommandCtx<'_, '_>,
     map: &SystemMap,
@@ -1328,10 +1344,7 @@ fn merge_record(
     };
     // A tombstone: the row was purged, and the source never takes another.
     let Some(entity_id) = entity_id else {
-        connection.execute(
-            "UPDATE source SET seen_at = ?2 WHERE id = ?1",
-            [&source_id, &ctx.now],
-        )?;
+        spoke_of(ctx, map, &source_id)?;
         tally.unchanged += 1;
         return Ok(());
     };
@@ -1342,10 +1355,7 @@ fn merge_record(
         // the member made stands, and the statement is left where it was so a
         // restore finds a row that still compares as untouched.
         if gone_at != held.deleted_at || edited(connection, map, &entity_id, &stated)? {
-            connection.execute(
-                "UPDATE source SET seen_at = ?2 WHERE id = ?1",
-                [&source_id, &ctx.now],
-            )?;
+            spoke_of(ctx, map, &source_id)?;
             tally.unchanged += 1;
             return Ok(());
         }
@@ -1380,10 +1390,17 @@ fn merge_record(
         }
         statement.insert(name.clone(), value.clone());
     }
-    connection.execute(
-        "UPDATE source SET stated = ?2, seen_at = ?3, gone_at = NULL WHERE id = ?1",
-        rusqlite::params![source_id, Json::Object(statement).to_string(), ctx.now],
-    )?;
+    // A record that says what it said, on a link that is not marked gone, changes nothing:
+    // one comparison and no write.
+    let statement = Json::Object(statement);
+    if statement != stated || gone_at.is_some() {
+        connection.execute(
+            "UPDATE source SET stated = ?2, seen_at = ?3, gone_at = NULL WHERE id = ?1",
+            rusqlite::params![source_id, statement.to_string(), ctx.now],
+        )?;
+    } else {
+        spoke_of(ctx, map, &source_id)?;
+    }
     if writes.is_empty() && !rows_changed {
         tally.unchanged += 1;
     } else {

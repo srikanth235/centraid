@@ -611,3 +611,90 @@ fn the_banks_words_stay_in_the_statement_whatever_the_line_is_called_now() {
         "Amazon"
     );
 }
+
+// ---------------------------------------------------------------------------
+// An unchanged record writes nothing
+
+impl World {
+    /// Count every row written to `source` or `revision` from now on, on the writer's own
+    /// connection (a TEMP trigger lives and dies with it, so the file's schema is untouched).
+    fn count_writes(&self) {
+        self.sql("CREATE TEMP TABLE probe (what TEXT NOT NULL)", &[]);
+        for table in ["source", "revision"] {
+            for (event, op) in [
+                ("INSERT", "insert"),
+                ("UPDATE", "update"),
+                ("DELETE", "delete"),
+            ] {
+                self.sql(
+                    &format!(
+                        "CREATE TEMP TRIGGER probe_{table}_{op} AFTER {event} ON main.{table}
+                         BEGIN INSERT INTO probe VALUES ('{table}'); END"
+                    ),
+                    &[],
+                );
+            }
+        }
+    }
+
+    fn written(&self, table: &str) -> i64 {
+        self.scratch
+            .vault
+            .commit(|tx| {
+                Ok(tx.connection().query_row(
+                    "SELECT count(*) FROM temp.probe WHERE what = ?1",
+                    [table],
+                    |row| row.get(0),
+                )?)
+            })
+            .expect("a count")
+            .value
+    }
+}
+
+#[test]
+fn a_second_identical_pass_writes_no_source_row_and_makes_no_revision() {
+    let w = World::new();
+    let names: Vec<(String, String)> = (0..12)
+        .map(|i| (format!("c{i}"), format!("Person {i}")))
+        .collect();
+    let names: Vec<(&str, &str)> = names
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let events: Vec<Value> = (0..12).map(event).collect();
+
+    people(&w, Some("phone-1"), true, &names);
+    calendar(&w, true, events.clone());
+    w.count_writes();
+
+    let first = people(&w, Some("phone-1"), true, &names);
+    calendar(&w, true, events);
+    assert_eq!(first["unchanged"], 12, "{first}");
+    assert_eq!(
+        w.written("source"),
+        0,
+        "an unchanged record writes no source row"
+    );
+    assert_eq!(
+        w.written("revision"),
+        0,
+        "an unchanged record makes no revision"
+    );
+}
+
+#[test]
+fn a_changed_record_still_writes_its_source_and_a_returned_one_clears_gone() {
+    let w = World::new();
+    people(&w, Some("phone-1"), true, &[("c1", "Ada"), ("c2", "Bo")]);
+    w.count_writes();
+    people(&w, Some("phone-1"), true, &[("c1", "Ada L"), ("c2", "Bo")]);
+    assert_eq!(w.written("source"), 1, "only the record that changed");
+    // Bo leaves a complete read (trashed, marked gone), then returns: the link is written once.
+    people(&w, Some("phone-1"), true, &[("c1", "Ada L")]);
+    let gone: Option<String> = w.one("SELECT gone_at FROM source WHERE external_id = 'c2'", &[]);
+    assert!(gone.is_some());
+    people(&w, Some("phone-1"), true, &[("c1", "Ada L"), ("c2", "Bo")]);
+    let gone: Option<String> = w.one("SELECT gone_at FROM source WHERE external_id = 'c2'", &[]);
+    assert!(gone.is_none());
+}
