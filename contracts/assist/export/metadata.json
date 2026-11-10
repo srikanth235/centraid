@@ -1303,6 +1303,42 @@
         "verb": "restore"
       },
       {
+        "action": "purge-event",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "erase the dentist event forever",
+          "permanently delete the trashed team offsite",
+          "purge that trashed event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "calendar",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "empty the calendar trash",
+          "clear out the trashed events for good",
+          "permanently delete everything in the Calendar trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "attach",
         "also": [],
         "app": "calendar",
@@ -2085,6 +2121,24 @@
           "erase the old Netflix login forever",
           "permanently delete the expired card",
           "purge that trashed item"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "locker",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "empty the Locker trash",
+          "clear out the trashed items for good",
+          "permanently delete everything in the Locker trash"
         ],
         "qualifier": null,
         "sealed": [],
@@ -2997,6 +3051,42 @@
         "verb": "restore"
       },
       {
+        "action": "purge-note",
+        "also": [],
+        "app": "notes",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "erase the plumber note forever",
+          "permanently delete the trashed trip itinerary",
+          "purge that trashed note"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "notes",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "empty the notes trash",
+          "clear out the trashed notes for good",
+          "permanently delete everything in the Notes trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "restore-note-version",
         "also": [],
         "app": "notes",
@@ -3297,6 +3387,24 @@
           "erase Sam Lee forever",
           "permanently delete Maria",
           "purge the trashed Priya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "people",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "empty the people trash",
+          "clear out the trashed people for good",
+          "permanently delete everyone in the trash"
         ],
         "qualifier": null,
         "sealed": [],
@@ -4281,6 +4389,24 @@
         "verb": "purge"
       },
       {
+        "action": "empty-trash",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "empty the task trash",
+          "clear out the trashed tasks for good",
+          "permanently delete everything in the reminders trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
         "action": "restore-task",
         "also": [],
         "app": "reminders",
@@ -4541,6 +4667,15 @@
         ],
         "kind": "task",
         "query": "dated-reminders"
+      },
+      {
+        "app": "calendar",
+        "figures": [
+          "events",
+          "purge_dates"
+        ],
+        "kind": "event",
+        "query": "trash"
       },
       {
         "app": "docs",
