@@ -86,6 +86,7 @@ pub(crate) mod health_trash;
 pub(crate) mod locker;
 // Money's arm (#1099): ten answers, the import plan and Home's tile.
 pub(crate) mod money;
+pub(crate) mod money_trash;
 pub(crate) mod notes;
 pub(crate) mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
@@ -184,6 +185,7 @@ pub(crate) fn answer_recording(
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
         Q::MoneyHomeTile(asked) => Answer::MoneyHomeTile(money::home_tile(vault, asked)?),
+        Q::MoneyTrash(asked) => money_trash::trash(vault, &door, asked)?,
         // Health (#1129): no zone and no clock; the request states its day.
         Q::HealthToday(asked) => health::today(vault, &door, &now, asked)?,
         Q::HealthSeries(asked) => health::series(vault, &door, &now, asked)?,

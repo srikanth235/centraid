@@ -136,7 +136,7 @@ message AppQueryRequest {
     PhotosPhotoRequest photos_photo = 94;
     PhotosAlbumsRequest photos_albums = 95;
     PhotosPlacesRequest photos_places = 96;
-    // Money (#1099, R-1099-12): 100-109. 111-119 stay reserved for Money. The
+    // Money (#1099, R-1099-12): 100-112 (111 is the import plan's answer). 113-119 stay reserved for Money. The
     // import plan rides `Request.money` (`money.proto`).
     MoneySpendingRequest money_spending = 100;
     MoneyActivityRequest money_activity = 101;
@@ -150,6 +150,8 @@ message AppQueryRequest {
     MoneySearchRequest money_search = 109;
     // Home's tile, as the manifest's `home-tile` query (it also rides `Request.money`).
     MoneyHomeTileRequest money_home_tile = 110;
+    // The transactions in the trash (#1185): the shelf the page door cannot read, since the trash is the entity's.
+    MoneyTrashRequest money_trash = 112;
     // Health (#1129, R-1129-12): 120-126. 127-139 stay reserved for Health. The
     // writes are `health.*` commands; `health_follow_view` is the follower
     // engine's read, not a screen's.
@@ -250,6 +252,7 @@ message AppQueryResponse {
     MoneyRecurring money_recurring = 108;
     MoneySearch money_search = 109;
     MoneyHomeTile money_home_tile = 110;
+    MoneyTrash money_trash = 112;
     // The plan a statement would make, as the manifest's `import-plan` query.
     MoneyImportPlan money_import_plan = 111;
     HealthToday health_today = 120;

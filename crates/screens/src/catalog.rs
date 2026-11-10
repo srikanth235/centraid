@@ -2645,13 +2645,13 @@ pub mod act {
             }
         }
 
-        /// Remove a transaction from every figure. A voided line stays in the account and stays void.
+        /// Move a transaction to the trash through entity.trash: it leaves every balance, total, recurring charge and search result, the vault keeps it thirty days, and restoring it brings it back exactly. What the bank wrote is never changed.
         #[derive(Clone, Debug, Default)]
-        pub struct VoidTransaction {
+        pub struct TrashTransaction {
             pub transaction_id: String,
         }
-        impl VoidTransaction {
-            pub const NAME: &str = "void-transaction";
+        impl TrashTransaction {
+            pub const NAME: &str = "trash-transaction";
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
@@ -2659,8 +2659,83 @@ pub mod act {
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
-        impl From<VoidTransaction> for wire::ActRequest {
-            fn from(value: VoidTransaction) -> Self {
+        impl From<TrashTransaction> for wire::ActRequest {
+            fn from(value: TrashTransaction) -> Self {
+                value.request()
+            }
+        }
+
+        /// Bring a transaction back from the trash through entity.restore: it counts in every figure again, exactly as it was.
+        #[derive(Clone, Debug, Default)]
+        pub struct RestoreTransaction {
+            pub transaction_id: String,
+        }
+        impl RestoreTransaction {
+            pub const NAME: &str = "restore-transaction";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.transaction_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RestoreTransaction> for wire::ActRequest {
+            fn from(value: RestoreTransaction) -> Self {
+                value.request()
+            }
+        }
+
+        /// Delete one ALREADY-TRASHED transaction forever through entity.purge. Irreversible: the line, its name and its links go now. A statement imported again does not bring it back.
+        #[derive(Clone, Debug, Default)]
+        pub struct PurgeTransaction {
+            pub transaction_id: String,
+        }
+        impl PurgeTransaction {
+            pub const NAME: &str = "purge-transaction";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.transaction_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<PurgeTransaction> for wire::ActRequest {
+            fn from(value: PurgeTransaction) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EmptyTrashKind {
+            #[default]
+            Txn,
+        }
+        impl EmptyTrashKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Txn => "txn",
+                }
+            }
+        }
+
+        /// Empty the transaction trash through entity.empty_trash with kind txn. Irreversible and takes no id: every transaction in the trash is destroyed now, as purge destroys one.
+        #[derive(Clone, Debug, Default)]
+        pub struct EmptyTrash {
+            pub due_only: Option<bool>,
+            pub kind: Option<EmptyTrashKind>,
+        }
+        impl EmptyTrash {
+            pub const NAME: &str = "empty-trash";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.due_only { map.insert("due_only".to_owned(), flag(it)); }
+                if let Some(it) = self.kind { map.insert("kind".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<EmptyTrash> for wire::ActRequest {
+            fn from(value: EmptyTrash) -> Self {
                 value.request()
             }
         }
@@ -6616,6 +6691,24 @@ pub mod load {
         }
         impl From<Search> for wire::LoadRequest {
             fn from(value: Search) -> Self {
+                value.request()
+            }
+        }
+
+        /// Transactions in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased.
+        #[derive(Clone, Debug, Default)]
+        pub struct Trash {
+        }
+        impl Trash {
+            pub const NAME: &str = "trash";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Trash> for wire::LoadRequest {
+            fn from(value: Trash) -> Self {
                 value.request()
             }
         }

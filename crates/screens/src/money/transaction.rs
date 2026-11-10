@@ -1,8 +1,13 @@
 //! ONE TRANSACTION (`money.transaction`): what the bank said never changes; the
 //! category and the name are the member's decisions, layered on top. The page
-//! draws what the core derived and offers four acts: file it, name it, void it,
-//! and take back a transfer. A transfer and a rule are PROPOSED by the app and
+//! draws what the core derived and offers four acts: file it, name it, move it to
+//! the trash, and take back a transfer. A transfer and a rule are PROPOSED by the app and
 //! written only when the member accepts.
+//!
+//! MOVE TO TRASH (#1185) is the member's way to remove a line, and it replaces the final void: it asks
+//! nothing (the status line says what happened with Undo, and the trash restores it for 30 days), the
+//! line leaves every balance, total, recurring charge and search result, and the bank's own words are
+//! untouched. The page stays open on the gone state so the line shows.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::MoneyFlag as Flag;
@@ -17,13 +22,15 @@ use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
+use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, links as link_words, money as words};
+use crate::strings::{Locale, fill, links as link_words, money as words, shared};
 
 const ACTION_CATEGORY: &str = "category";
 const ACTION_NAME: &str = "name";
 const ACTION_UNLINK: &str = "unlink";
-const ACTION_VOID: &str = "void";
+/// Move the line to the trash (#1185).
+const ACTION_TRASH: &str = "trash";
 /// The "With" row (#1173): who the line was with, picked by name.
 const ACTION_WITH: &str = "with";
 const OFFER_TRANSFER: &str = "transfer";
@@ -44,8 +51,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         sheet: Sheet::None,
         name_draft: String::new(),
-        confirm_void: false,
         status: None,
+        undo: None,
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
     }))
@@ -60,14 +67,22 @@ struct Loaded {
     with_proposal: Option<links::Person>,
 }
 
+/// The line the status line's Undo reverses, and which way.
+struct Undo {
+    title: String,
+    /// The line is in the trash now, so Undo restores it.
+    restore: bool,
+}
+
 struct Transaction {
     txn_id: String,
     parent: String,
     phase: Phase<Loaded>,
     sheet: Sheet,
     name_draft: String,
-    confirm_void: bool,
     status: Option<wire::StatusLine>,
+    /// What the status line's Undo does: put the line back in the trash, or back in the account.
+    undo: Option<Undo>,
     /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
     dismissed: Vec<String>,
     /// The "With" row's picker and the people it lists.
@@ -179,6 +194,71 @@ impl Transaction {
         self.reload(ctx);
     }
 
+    /// MOVE TO TRASH: the title the status line names is the line's own, as its page shows it.
+    fn trash_line(&mut self, ctx: &Ctx) {
+        let Some(loaded) = self.phase.data() else {
+            return;
+        };
+        let title = if loaded.txn.display_name.is_empty() {
+            loaded.txn.raw.clone()
+        } else {
+            loaded.txn.display_name.clone()
+        };
+        self.trash_or_restore(ctx, title, false);
+    }
+
+    /// The status line's Undo: reverse the last move.
+    fn undone(&mut self, ctx: &Ctx) {
+        let has_undo = self
+            .status
+            .as_ref()
+            .is_some_and(|status| !status.action_label.is_empty());
+        let Some(undo) = self.undo.take().filter(|_| has_undo) else {
+            return;
+        };
+        self.trash_or_restore(ctx, undo.title, undo.restore);
+    }
+
+    fn trash_or_restore(&mut self, ctx: &Ctx, title: String, restore: bool) {
+        let locale = ctx.locale();
+        self.status = None;
+        self.undo = None;
+        let id = self.txn_id.clone();
+        let settled = if restore {
+            let key = kit_act::key(&["restore-transaction", &id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::money::RestoreTransaction { transaction_id: id },
+                &key,
+            )
+        } else {
+            let key = kit_act::key(&["trash-transaction", &id], kit_act::fresh());
+            kit_act::act(
+                ctx,
+                act::money::TrashTransaction { transaction_id: id },
+                &key,
+            )
+        };
+        if settled.committed {
+            self.status = Some(wire::StatusLine {
+                sentence: if restore {
+                    trash::restored(locale, &title)
+                } else {
+                    trash::moved_to_trash(locale, &title)
+                },
+                action_label: shared::trash_undo(locale),
+                refused: false,
+            });
+            self.undo = Some(Undo {
+                title,
+                restore: !restore,
+            });
+        } else {
+            self.status = Some(fold::refusal(locale, &settled.refusal));
+        }
+        self.reload(ctx);
+    }
+
     fn action(&mut self, key: &str, ctx: &Ctx) {
         match key {
             ACTION_CATEGORY => self.sheet = Sheet::Category,
@@ -197,7 +277,7 @@ impl Transaction {
                 },
                 words::done_unlinked(ctx.locale()),
             ),
-            ACTION_VOID => self.confirm_void = true,
+            ACTION_TRASH => self.trash_line(ctx),
             ACTION_WITH => {
                 let linked = self.with_ids();
                 let open = wire::LinkEvent {
@@ -303,17 +383,7 @@ impl Transaction {
             Some(T::OfferAccepted(accepted)) => self.accept(&accepted.key, ctx),
             Some(T::OfferDismissed(dismissed)) => self.dismiss(&dismissed.key),
             Some(T::WithLink(link)) => self.link_event(&link, ctx),
-            Some(T::ConfirmAccepted(_)) if self.confirm_void => {
-                self.confirm_void = false;
-                self.submit(
-                    ctx,
-                    act::money::VoidTransaction {
-                        transaction_id: self.txn_id.clone(),
-                    },
-                    words::done_void(locale),
-                );
-            }
-            Some(T::ConfirmDismissed(_)) => self.confirm_void = false,
+            Some(T::StatusActed(_)) => self.undone(ctx),
             _ => {}
         }
     }
@@ -490,15 +560,13 @@ impl Transaction {
                 false,
             ));
         }
-        if !voided {
-            actions.push(action(
-                ACTION_VOID,
-                words::action_void(locale),
-                "Trash",
-                true,
-                true,
-            ));
-        }
+        actions.push(action(
+            ACTION_TRASH,
+            shared::trash_move(locale),
+            "Trash",
+            true,
+            true,
+        ));
         let mut category_options = vec![fold::choice(
             "",
             &words::no_category(locale),
@@ -577,6 +645,14 @@ impl Screen for Transaction {
         use wire::money_transaction_state::Content;
         let locale = ctx.locale();
         let content = match &self.phase {
+            // The member just moved the line to the trash from this page: it reads as gone, and the
+            // status line (with Undo) shows over it. A line that was never here stays a failure.
+            Phase::Failed if self.undo.as_ref().is_some_and(|undo| undo.restore) => {
+                Content::Gone(wire::EmptyState {
+                    headline: words::transaction_gone(locale),
+                    ..Default::default()
+                })
+            }
             Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
             Phase::Failed => Content::Failure(read::failure(locale)),
             Phase::Denied => Content::Denied(fold::denied(locale)),
@@ -587,12 +663,6 @@ impl Screen for Transaction {
                 wire::MoneyTransactionState {
                     txn_id: self.txn_id.clone(),
                     content: Some(content),
-                    confirm: self.confirm_void.then(|| wire::Confirm {
-                        title: words::void_title(locale),
-                        body: words::void_body(locale),
-                        confirm_label: words::void_confirm(locale),
-                        destructive: true,
-                    }),
                     sheet: self.sheet as i32,
                     with_picker: Some(self.links.picker(locale, &self.with_ids())),
                     name_draft: self.name_draft.clone(),

@@ -494,8 +494,13 @@ message MoneyTransactionState {
     Failure failure = 4;
     Denied denied = 5;
     MoneyTransactionData data = 6;
+    // The line is in the trash (#1185): the page stays open on this so the status line (Move to
+    // trash, with Undo) shows over it.
+    EmptyState gone = 14;
   }
-  optional Confirm confirm = 8;
+  // 8 was `confirm`, the confirm over Void: a transaction goes to the trash and asks nothing (#1185).
+  reserved 8;
+  reserved "confirm";
   Sheet sheet = 9;
   // THE "WITH" PICKER (#1173): who the line was with, picked by name. Open while the sheet is up.
   LinkPicker with_picker = 13;
@@ -570,11 +575,16 @@ message MoneyTransactionEvent {
     SheetClosed sheet_closed = 7;
     OfferAccepted offer_accepted = 8;
     OfferDismissed offer_dismissed = 9;
-    ConfirmAccepted confirm_accepted = 10;
-    ConfirmDismissed confirm_dismissed = 11;
+    // 10 and 11 were `confirm_accepted` and `confirm_dismissed`, the confirm over Void (#1185).
+    // "Undo" on the status line after Move to trash or its Undo (#1185).
+    StatusActed status_acted = 12;
     // The "With" picker's own events (#1173).
     LinkEvent with_link = 31;
   }
+  reserved 10, 11;
+  reserved "confirm_accepted", "confirm_dismissed";
+
+  message StatusActed {}
 
   message ActionPicked {
     string key = 1;
@@ -600,10 +610,6 @@ message MoneyTransactionEvent {
   message OfferDismissed {
     string key = 1;
   }
-
-  message ConfirmAccepted {}
-
-  message ConfirmDismissed {}
 
   message Refreshed {}
 }

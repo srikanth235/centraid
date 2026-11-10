@@ -74,7 +74,7 @@ fn a_transaction_page_shows_what_the_bank_wrote_and_how_to_change_it() {
     assert_eq!(category.action, "category");
     assert!(data.amount.contains('$'));
     let keys: Vec<&str> = data.actions.iter().map(|a| a.key.as_str()).collect();
-    assert!(keys.contains(&"category") && keys.contains(&"name") && keys.contains(&"void"));
+    assert!(keys.contains(&"category") && keys.contains(&"name") && keys.contains(&"trash"));
 }
 
 #[test]
@@ -191,39 +191,19 @@ fn naming_a_line_saves_the_name_and_a_cleared_name_goes_back_to_the_banks() {
     assert_eq!(txn_data(d.view(i)).title, raw);
 }
 
+/// A void is what a member could do before the trash (#1185), and a vault may still hold one: the
+/// page draws it struck with its chip, offers no more changes to it, and offers no void (the one
+/// control left is Move to trash).
 #[test]
-fn voiding_asks_first_and_a_void_line_offers_no_more_changes() {
+fn a_void_line_a_vault_already_holds_offers_no_more_changes_and_no_void() {
     let mut d = driver();
     let id = a_line(&mut d);
+    let voided = d
+        .handle
+        .command("txn.void", &serde_json::json!({ "id": id }), "void-fixture")
+        .expect("the vault voids it");
+    assert_eq!(voided.status, centraid_vault::CommandStatus::Executed);
     let i = open(&mut d, &id);
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::Action(te::ActionPicked { key: "void".into() })),
-    );
-    let confirm = txn_state(d.view(i))
-        .confirm
-        .clone()
-        .expect("a confirmation");
-    assert_eq!(confirm.title, "Void this transaction?");
-    assert!(confirm.destructive);
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::ConfirmDismissed(te::ConfirmDismissed {})),
-    );
-    assert!(txn_state(d.view(i)).confirm.is_none());
-    assert!(txn_data(d.view(i)).chips.iter().all(|c| c.label != "Void"));
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::Action(te::ActionPicked { key: "void".into() })),
-    );
-    event(
-        &mut d,
-        i,
-        txn_event(te::Kind::ConfirmAccepted(te::ConfirmAccepted {})),
-    );
     let data = txn_data(d.view(i));
     assert!(data.chips.iter().any(|c| c.label == "Void"));
     assert!(data.actions.iter().all(|a| a.key != "void"));
@@ -233,10 +213,13 @@ fn voiding_asks_first_and_a_void_line_offers_no_more_changes() {
             .filter(|a| a.key == "category" || a.key == "name")
             .all(|a| !a.enabled)
     );
-    assert_eq!(
-        txn_state(d.view(i)).status.as_ref().unwrap().sentence,
-        "Marked void"
-    );
+    let trash = data
+        .actions
+        .iter()
+        .find(|a| a.key == "trash")
+        .expect("a voided line can still go to the trash");
+    assert!(trash.enabled && trash.destructive);
+    assert_eq!(trash.label, "Move to trash");
 }
 
 #[test]

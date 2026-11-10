@@ -16,13 +16,16 @@
 //! | Categories | [`CATEGORIES`] | [`categories`] |
 //! | Rules | [`RULES`] | [`rules`] |
 //! | Import a statement | [`IMPORT`] | [`import`] |
+//! | The transactions in the trash | [`TRASH`] | [`trash`] |
 //!
 //! A row that opens a page carries the [`wire::Route`] to push (built by
 //! [`routes`]), so a shell never names a screen.
 //!
 //! ## Pending is not posted
 //!
-//! A line is `posted` or `void` in the vault, and a view shows exactly that:
+//! A line is `posted` or `void` in the vault (a void is what a member could do before the trash, and
+//! stays void in a vault that holds one; the member now moves a line to the trash instead), and a
+//! view shows exactly that:
 //! the chips on a row are the core's flags (`transfer`, `void`, `later`, `no
 //! category`), never a state this crate infers from a date or an amount.
 
@@ -41,6 +44,7 @@ pub mod rules;
 pub mod search;
 pub mod target;
 pub mod transaction;
+pub mod trash;
 
 pub const HOME: &str = "money.home";
 pub const TRANSACTION: &str = "money.transaction";
@@ -51,6 +55,8 @@ pub const ACCOUNTS: &str = "money.accounts";
 pub const CATEGORIES: &str = "money.categories";
 pub const RULES: &str = "money.rules";
 pub const IMPORT: &str = "money.import";
+/// The transactions in the trash (#1185).
+pub const TRASH: &str = "money.trash";
 
 /// The tab Money's home is the root of.
 pub const TAB: &str = "money";
@@ -68,6 +74,7 @@ pub fn registry() -> Registry {
         .with(CATEGORIES, categories::build)
         .with(RULES, rules::build)
         .with(IMPORT, import::build)
+        .with(TRASH, trash::build)
 }
 
 /// A runtime with Money's screens and one tab, `money`, rooted at its home.
@@ -87,7 +94,8 @@ pub fn runtime() -> crate::Runtime {
 /// The routes Money's own screens hand to a shell inside a view state.
 pub mod routes {
     use super::{
-        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, SEARCH, TARGET, TRANSACTION, wire,
+        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, SEARCH, TARGET, TRANSACTION, TRASH,
+        wire,
     };
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
@@ -171,5 +179,11 @@ pub mod routes {
     #[must_use]
     pub fn import(parent: &str) -> wire::Route {
         route(IMPORT, wire::route::Args::MoneyImport(page(parent)))
+    }
+
+    /// The trash: the kit's one trash screen over Money's spec (#1185).
+    #[must_use]
+    pub fn trash() -> wire::Route {
+        route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
     }
 }

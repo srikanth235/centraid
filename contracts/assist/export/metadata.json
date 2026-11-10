@@ -496,6 +496,26 @@
       "verb": "unarchive"
     },
     {
+      "action": "trash-transaction",
+      "app": "money",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-transaction",
+      "app": "money",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
       "action": "set-display-name",
       "app": "money",
       "command": "entity.retitle",
@@ -2653,22 +2673,76 @@
         "verb": "categorize"
       },
       {
-        "action": "void-transaction",
+        "action": "trash-transaction",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-transaction",
+        "kind": "transaction",
+        "phrasings": [
+          "delete the duplicate Netflix charge",
+          "remove that charge from my figures",
+          "trash the Amazon line from Tuesday"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-transaction",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash-transaction",
+        "kind": "transaction",
+        "phrasings": [
+          "restore the Netflix charge I deleted",
+          "bring back that transaction",
+          "undo deleting the Amazon line"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge-transaction",
         "also": [],
         "app": "money",
         "bulk": false,
         "chat": "card",
-        "command": "txn.void",
+        "command": "entity.purge",
         "inverse": null,
         "kind": "transaction",
         "phrasings": [
-          "void the duplicate Netflix charge",
-          "remove that charge from my figures",
-          "void the Amazon line from Tuesday"
+          "erase the duplicate charge forever",
+          "permanently delete the trashed Amazon line",
+          "purge that trashed transaction"
         ],
         "qualifier": null,
         "sealed": [],
-        "verb": "void"
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "money",
+        "bulk": true,
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "empty the Money trash",
+          "clear out the trashed transactions for good",
+          "permanently delete everything in the Money trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
       },
       {
         "action": "set-display-name",
@@ -4989,6 +5063,15 @@
         "query": "search"
       },
       {
+        "app": "money",
+        "figures": [
+          "transactions",
+          "purge_dates"
+        ],
+        "kind": "transaction",
+        "query": "trash"
+      },
+      {
         "app": "notes",
         "figures": [
           "targets"
@@ -6181,7 +6264,7 @@
       ]
     },
     {
-      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit unlink",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit delete restore unlink",
       "container": false,
       "date": {
         "label": "posted",
@@ -6265,6 +6348,8 @@
       "trash": false,
       "verbs": [
         "edit",
+        "delete",
+        "restore",
         "unlink"
       ],
       "where_fields": [
@@ -7127,6 +7212,10 @@
           "entity.trash"
         ],
         [
+          "transaction",
+          "entity.trash"
+        ],
+        [
           "daily_figure",
           "measurement.clear"
         ],
@@ -7173,6 +7262,10 @@
         ],
         [
           "locker_item",
+          "entity.restore"
+        ],
+        [
+          "transaction",
           "entity.restore"
         ],
         [

@@ -814,6 +814,10 @@ fn read(
             },
         )?,
 
+        ("money", "trash") => {
+            app_query::money_trash::trash(vault, door, &wire::MoneyTrashRequest { tz })?
+        }
+
         // Health (#1129): no zone and no clock; the request states its day.
         ("health", "today") => {
             app_query::health::today(vault, door, now, &wire::HealthTodayRequest { tz })?

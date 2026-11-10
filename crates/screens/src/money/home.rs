@@ -24,7 +24,7 @@ use super::{routes, rows};
 use crate::catalog::load;
 use crate::kit::{menu, read};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, money as words};
+use crate::strings::{Locale, fill, money as words, shared};
 
 /// Activity rows asked for per page.
 pub const PAGE: u32 = 50;
@@ -598,6 +598,13 @@ impl Home {
                     words::more_import_meta(locale),
                     "Download",
                     routes::import(&title),
+                ),
+                // THE TRASH (`MoreMoney.dc.html`), with the rule every trash states.
+                more(
+                    shared::trash_entry(locale),
+                    shared::trash_entry_meta(locale),
+                    "Trash",
+                    routes::trash(),
                 ),
             ],
             search_placeholder: words::search_placeholder(locale),

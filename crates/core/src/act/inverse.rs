@@ -92,6 +92,8 @@ const MONEY: &[Row] = &[
     ("link-transfer", "unlink-transfer", Input::Id),
     ("add-with", "remove-with", Input::Same),
     ("remove-with", "add-with", Input::Same),
+    ("trash-transaction", "restore-transaction", Input::Id),
+    ("restore-transaction", "trash-transaction", Input::Id),
 ];
 const NOTES: &[Row] = &[
     ("create-note", "delete-note", Input::Created),

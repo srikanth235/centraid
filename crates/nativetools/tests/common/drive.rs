@@ -124,6 +124,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                     Kind::Note => "Diary",
                     Kind::Document => "Lease",
                     Kind::Photo => "Hike",
+                    Kind::Transaction => "To savings",
                     _ => "Bank",
                 },
             };
@@ -132,6 +133,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         }
         // a trashed album leaves the model with what it held, so no selector reaches it
         "restore" if kind == Kind::Album => return None,
+        // a trashed transaction is in no read the model has: the runtime's undo brings it back
+        "restore" if kind == Kind::Transaction => return None,
         "restore" => {
             // The fixture's own trashed task where it has one (its trashed person is past the restore window); otherwise
             // delete one first.

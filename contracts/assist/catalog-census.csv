@@ -80,7 +80,10 @@ money,import-transactions,import,transaction,card,yes: crates/screens/src/money/
 money,record-checkpoint,log,account,card,yes: crates/screens/src/money/import.rs,no
 money,save-import-profile,edit,account,card,yes: crates/screens/src/money/import.rs,no
 money,categorize,categorize,transaction,card,yes: crates/screens/src/money/transaction.rs,no
-money,void-transaction,void,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,trash-transaction,delete,transaction,direct,yes: crates/screens/src/money/transaction.rs; crates/screens/src/money/trash.rs,no
+money,restore-transaction,restore,transaction,direct,yes: crates/screens/src/money/transaction.rs; crates/screens/src/money/trash.rs,no
+money,purge-transaction,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
+money,empty-trash,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
 money,set-display-name,edit,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
 money,link-transfer,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
 money,unlink-transfer,unlink,transaction,direct,yes: crates/screens/src/money/transaction.rs,no

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "money",
   "name": "Money",
-  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is never edited, only named, filed under a category or voided; importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
+  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is never edited, only named, filed under a category or moved to the trash (and brought back, exactly as it was); importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
   "version": "0.2.0",
   "iconKey": "Coin",
   "colorKey": "indigo",
@@ -110,8 +110,23 @@
         "verbs": "act"
       },
       {
-        "schema": "txn",
-        "table": "void",
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
         "verbs": "act"
       },
       {
@@ -738,19 +753,19 @@
       }
     },
     {
-      "name": "void-transaction",
-      "verb": "void",
+      "name": "trash-transaction",
+      "verb": "delete",
       "kind": "transaction",
-      "inverse": null,
+      "inverse": "restore-transaction",
       "sealed": [],
-      "command": "txn.void",
+      "command": "entity.trash",
       "phrasings": [
-        "void the duplicate Netflix charge",
+        "delete the duplicate Netflix charge",
         "remove that charge from my figures",
-        "void the Amazon line from Tuesday"
+        "trash the Amazon line from Tuesday"
       ],
-      "description": "Remove a transaction from every figure. A voided line stays in the account and stays void.",
-      "confirmation": "required",
+      "description": "Move a transaction to the trash through entity.trash: it leaves every balance, total, recurring charge and search result, the vault keeps it thirty days, and restoring it brings it back exactly. What the bank wrote is never changed.",
+      "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
@@ -761,6 +776,130 @@
         },
         "required": ["id"],
         "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "restore-transaction",
+      "verb": "restore",
+      "kind": "transaction",
+      "inverse": "trash-transaction",
+      "sealed": [],
+      "command": "entity.restore",
+      "phrasings": [
+        "restore the Netflix charge I deleted",
+        "bring back that transaction",
+        "undo deleting the Amazon line"
+      ],
+      "description": "Bring a transaction back from the trash through entity.restore: it counts in every figure again, exactly as it was.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "purge-transaction",
+      "verb": "purge",
+      "kind": "transaction",
+      "inverse": null,
+      "sealed": [],
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the duplicate charge forever",
+        "permanently delete the trashed Amazon line",
+        "purge that trashed transaction"
+      ],
+      "description": "Delete one ALREADY-TRASHED transaction forever through entity.purge. Irreversible: the line, its name and its links go now. A statement imported again does not bring it back.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-trash",
+      "verb": "purge",
+      "kind": "transaction",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the Money trash",
+        "clear out the trashed transactions for good",
+        "permanently delete everything in the Money trash"
+      ],
+      "description": "Empty the transaction trash through entity.empty_trash with kind txn. Irreversible and takes no id: every transaction in the trash is destroyed now, as purge destroys one.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["txn"]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
       },
       "output": {
         "type": "object",
@@ -1851,6 +1990,28 @@
       "output": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "trash",
+      "kind": "transaction",
+      "figures": ["transactions", "purge_dates"],
+      "description": "Transactions in reversible trash, most recently trashed first, with the day each was trashed and the day it will be erased.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
       }
     }
   ],

@@ -28,7 +28,6 @@ catalog! {
     plain action_name = ("Set name", "Set name");
     plain action_restore = ("Restore", "Restore");
     plain action_unlink = ("Not a transfer", "Not a transfer");
-    plain action_void = ("Void transaction", "Void transaction");
     plain activity_empty = ("Nothing this month.", "Nothing this month.");
     plain add_account = ("Add account", "Add account");
     plain all_accounts = ("All accounts", "All accounts");
@@ -126,7 +125,6 @@ catalog! {
     plain done_rule = ("Rule saved", "Rule saved");
     plain done_rule_deleted = ("Rule deleted", "Rule deleted");
     plain done_unlinked = ("Transfer link removed", "Transfer link removed");
-    plain done_void = ("Marked void", "Marked void");
     plain fact_account = ("Account", "Account");
     plain fact_bank_type = ("Type", "Type");
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");
@@ -311,13 +309,11 @@ catalog! {
     plain tile_caption = ("spent in {month}", "spent in {month}");
     plain tile_caption_no_month = ("spent this month", "spent this month");
     plain to_word = ("to", "to");
+    plain transaction_gone = ("This transaction is no longer here.", "This transaction is no longer here.");
     plain transaction_title = ("Transaction", "Transaction");
     plain transfer_accept = ("Link as transfer", "Link as transfer");
     plain transfer_offer_body = ("Matches a row in {account} on {day}.", "Matches a row in {account} on {day}.");
     plain transfer_offer_title = ("Possible transfer", "Possible transfer");
-    plain void_body = ("The row stays, marked void, and no figure counts it.", "The row stays, marked void, and no figure counts it.");
-    plain void_confirm = ("Void", "Void");
-    plain void_title = ("Void this transaction?", "Void this transaction?");
     plain warn_profile_changed = ("This file’s columns changed, so they were read again.", "This file’s columns changed, so they were read again.");
     plain warn_sign_guessed = ("Which sign means money out was guessed.", "Which sign means money out was guessed.");
     plain whole_units = ("This currency has no decimals.", "This currency has no decimals.");

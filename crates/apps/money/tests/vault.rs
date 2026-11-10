@@ -13,6 +13,7 @@ use centraid_apps_money::queries::{
     load_transfer_links,
 };
 use centraid_apps_money::rules::{self, Candidate, MatchKind, Rule};
+use centraid_apps_money::trash::load_trash;
 use common::World;
 use serde_json::{Value, json};
 
@@ -548,4 +549,144 @@ fn a_rule_that_names_a_payee_reads_back_and_applies_in_the_app_as_in_the_vault()
         rules::apply(&rules, &candidate("BLUE COFFEE CO")).display_name,
         None
     );
+}
+
+/// A TRANSACTION IN THE TRASH (#1185) is `entity.deleted_at` and nothing of the line: the bank's
+/// amount, day and account are untouched (the line's triggers are never fired), every window and
+/// the ledger leave it out, the trash reads it with the name the member sees, and a restore brings
+/// the line back exactly.
+#[test]
+fn a_trashed_line_is_the_entitys_stamp_alone_and_a_restore_brings_it_back_exactly() {
+    let world = World::founded("trashed-line");
+    world.account("acct-1", "Everyday", "checking", "USD");
+    world.import(
+        "acct-1",
+        &[
+            ("csv:aaaaa", "2024-03-05", -4_250, "WHOLE FOODS MKT 123"),
+            ("csv:bbbbb", "2024-03-06", 300_000, "ACME PAYROLL"),
+        ],
+    );
+    let grocer = world.line("csv:aaaaa");
+    world.ok(
+        "entity.retitle",
+        json!({ "id": grocer, "title": "Groceries" }),
+    );
+    let figures = |world: &World| {
+        let month = read(world, |door| {
+            load_month(door, "2024-03", &ActivityFilter::default()).expect("month")
+        });
+        let ledger = read(world, |door| load_ledger(door, "acct-1").expect("ledger"));
+        (
+            month.value.iter().map(|row| row.amount_minor).sum::<i64>(),
+            month.value.len(),
+            ledger.value.len(),
+        )
+    };
+    let before = figures(&world);
+    // `amount_minor` is the magnitude: the sum is of what moved, in or out.
+    assert_eq!(before, (4_250 + 300_000, 2, 2));
+    let line_before = read(&world, |door| load_transaction(door, &grocer).expect("one"));
+
+    world.ok("entity.trash", json!({ "id": grocer }));
+    assert_eq!(
+        figures(&world),
+        (300_000, 1, 1),
+        "the trashed line is in no figure"
+    );
+    assert_eq!(
+        read(&world, |door| load_transaction(door, &grocer).expect("one")),
+        None,
+        "and its page reads it as gone"
+    );
+    let shelf = read(&world, |door| load_trash(door).expect("trash"));
+    assert!(!shelf.truncated);
+    assert_eq!(shelf.transactions.len(), 1);
+    assert_eq!(shelf.transactions[0].txn_id, grocer);
+    assert_eq!(shelf.transactions[0].title, "Groceries");
+    assert!(shelf.transactions[0].deleted_at.is_some() && shelf.transactions[0].purge_at.is_some());
+
+    world.ok("entity.restore", json!({ "id": grocer }));
+    assert_eq!(figures(&world), before, "restored: every figure is back");
+    assert_eq!(
+        read(&world, |door| load_transaction(door, &grocer).expect("one")),
+        line_before,
+        "the line is exactly what it was"
+    );
+    assert!(
+        read(&world, |door| load_trash(door).expect("trash"))
+            .transactions
+            .is_empty()
+    );
+}
+
+/// A STATEMENT IMPORTED AGAIN NEVER BRINGS A TRASHED LINE BACK (#1185): the follow engine finds the
+/// line by its statement id, sees the trash is the member's (not its own for an absence, and a
+/// statement line is never removed for one), and leaves it; the plan counts it as already in.
+#[test]
+fn a_reimported_statement_leaves_a_trashed_line_in_the_trash_and_the_plan_calls_it_already_in() {
+    let world = World::founded("reimport");
+    world.account("acct-1", "Everyday", "checking", "USD");
+    let lines = [
+        ("csv:aaaaa", "2024-03-05", -4_250, "WHOLE FOODS MKT 123"),
+        ("csv:bbbbb", "2024-03-06", 300_000, "ACME PAYROLL"),
+    ];
+    world.import("acct-1", &lines);
+    let grocer = world.line("csv:aaaaa");
+    world.ok("entity.trash", json!({ "id": grocer }));
+
+    // The plan keeps the trashed line in its view of the account, marked, so the row is `already_in`.
+    let existing = read(&world, |door| {
+        load_existing(door, "acct-1", "2024-03-01", "2024-03-31").expect("existing")
+    });
+    assert_eq!(existing.len(), 2);
+    let held = existing
+        .iter()
+        .find(|line| line.txn_id == grocer)
+        .expect("the trashed line");
+    assert_eq!(
+        (held.external_id.as_deref(), held.trashed, held.void),
+        (Some("csv:aaaaa"), true, false)
+    );
+
+    // The same statement again: nothing is added, nothing is restored, the line stays in the trash.
+    let again = world.import("acct-1", &lines);
+    assert_eq!(again["added"], 0, "{again}");
+    assert_eq!(again["restored"], 0, "{again}");
+    let ledger = read(&world, |door| load_ledger(door, "acct-1").expect("ledger"));
+    assert_eq!(ledger.value.len(), 1, "still only the payroll");
+    let shelf = read(&world, |door| load_trash(door).expect("trash"));
+    assert_eq!(shelf.transactions.len(), 1);
+    assert_eq!(world.line("csv:aaaaa"), grocer, "no second line was made");
+
+    // A statement that no longer holds the line (the bank dropped it) does not take it out either:
+    // a statement line is never removed, so the member's restore still finds it.
+    world.import("acct-1", &lines[1..]);
+    world.ok("entity.restore", json!({ "id": grocer }));
+    let ledger = read(&world, |door| load_ledger(door, "acct-1").expect("ledger"));
+    assert_eq!(ledger.value.len(), 2);
+}
+
+/// A TRANSFER WITH A HALF IN THE TRASH IS NOT LIVE (#1185): the half that is left counts as the
+/// ordinary line it is, and the link is whole again when the other half is restored.
+#[test]
+fn a_transfer_with_a_trashed_half_is_not_a_link_until_the_half_is_restored() {
+    let world = World::founded("transfer-trash");
+    world.account("acct-1", "Everyday", "checking", "USD");
+    world.account("acct-2", "Savings", "savings", "USD");
+    world.import(
+        "acct-1",
+        &[("csv:out", "2024-03-05", -10_000, "TO SAVINGS")],
+    );
+    world.import(
+        "acct-2",
+        &[("csv:in", "2024-03-05", 10_000, "FROM CHECKING")],
+    );
+    let (out, into) = (world.line("csv:out"), world.line("csv:in"));
+    world.ok("txn.link_transfer", json!({ "id": out, "other_id": into }));
+    let links = |world: &World| read(world, |door| load_transfer_links(door).expect("links")).value;
+    assert_eq!(links(&world).len(), 1);
+    world.ok("entity.trash", json!({ "id": into }));
+    assert!(links(&world).is_empty());
+    world.ok("entity.restore", json!({ "id": into }));
+    assert_eq!(links(&world).len(), 1);
 }

@@ -542,6 +542,30 @@ message MoneySearchRequest {
   uint32 limit = 4;
 }
 
+// `money.trash` (#1185): the transactions in the trash, most recently trashed first. A line is named
+// as the member sees it: their name for it, else the bank's words.
+message MoneyTrashRequest {
+  // The zone the rows' days are read in: as `PeopleTrashRequest.tz`.
+  string tz = 1;
+}
+
+message MoneyTrash {
+  repeated MoneyTrashRow transactions = 1;
+  // The shelf is longer than its 500-row window.
+  bool truncated = 2;
+}
+
+// One trashed transaction: its name, when it was trashed and the two civil days (`YYYY-MM-DD`) in the
+// request's zone. EMPTY when the instant is absent or no zone resolved.
+message MoneyTrashRow {
+  string txn_id = 1;
+  string title = 2;
+  optional string purge_at = 3;
+  string deleted_at = 4;
+  string deleted_local_day = 5;
+  string purge_local_day = 6;
+}
+
 message MoneySearch {
   string term = 1;
   repeated MoneyActivityRow rows = 2;

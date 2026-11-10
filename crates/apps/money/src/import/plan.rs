@@ -58,6 +58,9 @@ pub struct ExistingTxn {
     /// Voided by the member: it still claims its `external_id` (a re-import is
     /// `already_in`), but it is never proposed as a duplicate.
     pub void: bool,
+    /// In the trash (#1185): it holds its place the same way. A statement imported again finds
+    /// it `already_in` and never brings it back, and it is never proposed as a duplicate.
+    pub trashed: bool,
 }
 
 /// What one row would do.
@@ -254,7 +257,7 @@ pub fn plan(
     // Step 4: the fuzzy proposal, one-to-one over what is left.
     let mut index: HashMap<(Direction, i64), Vec<usize>> = HashMap::new();
     for (at, e) in existing.iter().enumerate() {
-        if !claimed.contains(&at) && !e.void {
+        if !claimed.contains(&at) && !e.void && !e.trashed {
             index
                 .entry((e.direction, e.amount_minor))
                 .or_default()

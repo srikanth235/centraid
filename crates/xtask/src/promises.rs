@@ -115,11 +115,7 @@ pub const REGISTER: &[Row] = &[
         Promise::Trash,
         "crates/screens/src/locker/trash.rs",
     ),
-    owed(
-        "money",
-        Promise::Trash,
-        "#1185: a transaction cannot be moved to trash",
-    ),
+    kept("money", Promise::Trash, "crates/screens/src/money/trash.rs"),
     kept("notes", Promise::Trash, "crates/screens/src/notes/trash.rs"),
     kept(
         "people",
