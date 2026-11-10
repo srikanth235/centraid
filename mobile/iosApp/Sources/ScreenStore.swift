@@ -672,7 +672,9 @@ final class ScreenStore: ObservableObject {
     }
 
     /// START OR STOP WATCHING A PHONE STORE. While on, each change of the store
-    /// is answered under the one `effect_id` that asked, as `PhoneChanged`.
+    /// is answered under the one `effect_id` that asked, as `PhoneChanged`. The
+    /// follow coordinator asks once per session for contacts and calendar; the
+    /// app coming forward is not this watch's, Rust hears the lifecycle itself.
     private func watch(_ request: Centraid_Core_V1_EffectRequest, _ watch: Centraid_Core_V1_PhoneWatch) {
         if watch.on {
             watches[request.effectID] = (request.instance, watch.source)

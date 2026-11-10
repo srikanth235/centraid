@@ -404,8 +404,9 @@ final class ShellModel: ObservableObject {
     // MARK: Lifecycle
 
     /// THE APP CAME FORWARD OR LEFT: Rust hears it (the Locker relocks on leaving,
-    /// the pass service decides what coming back is worth, the follower reads its
-    /// folders again), and the photo library is watched while the app is in view.
+    /// the pass service decides what coming back is worth, the follow coordinator
+    /// follows every phone store the member connected), and the photo library is
+    /// watched while the app is in view.
     func lifecycle(foreground: Bool) {
         guard let screens else { return }
         if foreground {

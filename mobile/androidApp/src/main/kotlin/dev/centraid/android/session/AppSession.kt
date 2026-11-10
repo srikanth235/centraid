@@ -59,15 +59,14 @@ internal object AppSession {
         /**
          * The app came forward or left (the activity's start and stop). The runtime tells every open
          * screen and service (the Locker relocks on leaving; the pass service decides whether coming
-         * back is worth a pass, the imports whether to walk and follow); coming forward also reports
-         * the locale, zone and 12 or 24 hour clock again and tells every phone-store watch, and
-         * MediaStore is watched while the app is in view.
+         * back is worth a pass, the follow coordinator that every phone store may have changed);
+         * coming forward also reports the locale, zone and 12 or 24 hour clock again, and MediaStore
+         * is watched while the app is in view.
          */
         suspend fun foreground(on: Boolean) {
             if (on) AppSession.environment(context, screens)
             screens.lifecycle(foreground = on)
             imports.foreground(on)
-            if (on) effects.watchers.foregrounded()
         }
     }
 

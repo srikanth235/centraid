@@ -10,20 +10,21 @@ import android.provider.ContactsContract
 import centraid.core.v1.ImportSource
 
 /**
- * THE WATCH ON A PHONE STORE (`PhoneWatch`, #1127, #1135): Agenda's calendar follow and People's
- * contacts follow ask to hear when the calendar or the address book changes, and each is told also
- * whenever the app comes forward. What is read and when is Rust's (`agenda/calendar.rs`,
- * `people/contacts.rs`); a pass never asks the OS for a grant.
+ * THE WATCH ON A PHONE STORE (`PhoneWatch`, #1127, #1135, #1183): the follow coordinator in Rust
+ * (`crates/screens/src/follow`) asks to hear when the calendar or the address book changes, and
+ * is told each time it does. The app coming forward is not this class's: Rust hears the
+ * lifecycle itself and follows every store, as it does on iOS. What is read and when is Rust's;
+ * a pass never asks the OS for a grant.
  */
 internal class PhoneWatchers(context: Context) {
     private val context: Context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private val watching = mutableMapOf<ImportSource, Pair<ContentObserver, () -> Unit>>()
+    private val watching = mutableMapOf<ImportSource, ContentObserver>()
 
     /** Whether this shell watches [source] at all. */
     fun watches(source: ImportSource): Boolean = uriOf(source) != null
 
-    /** Tell [changed] each time [source] changes and each time the app comes forward, until [stop]. */
+    /** Tell [changed] each time [source] changes, until [stop]. */
     @Synchronized
     fun watch(source: ImportSource, changed: () -> Unit) {
         val uri = uriOf(source) ?: return
@@ -32,19 +33,13 @@ internal class PhoneWatchers(context: Context) {
             override fun onChange(selfChange: Boolean) = changed()
         }
         runCatching { context.contentResolver.registerContentObserver(uri, true, observer) }
-        watching[source] = observer to changed
+        watching[source] = observer
     }
 
     @Synchronized
     fun stop(source: ImportSource) {
-        val (observer, _) = watching.remove(source) ?: return
+        val observer = watching.remove(source) ?: return
         runCatching { context.contentResolver.unregisterContentObserver(observer) }
-    }
-
-    /** The app came forward: every watch hears it. */
-    @Synchronized
-    fun foregrounded() {
-        watching.values.forEach { (_, changed) -> changed() }
     }
 
     private fun uriOf(source: ImportSource): Uri? = when (source) {
