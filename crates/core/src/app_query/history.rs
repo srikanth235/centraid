@@ -62,7 +62,7 @@ pub(crate) fn versions(
                 since_local: local(&version.since),
                 store_system: system(version.by),
                 since_store_system: system(version.since_by),
-                changes: version
+                field_changes: version
                     .changes
                     .iter()
                     .map(|change| wire::EarlierChange {

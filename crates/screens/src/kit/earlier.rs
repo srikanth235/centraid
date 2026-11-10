@@ -237,7 +237,7 @@ fn json(text: &str) -> Value {
 fn parsed(version: wire::EarlierVersion) -> Version {
     let side = |after: bool| {
         version
-            .changes
+            .field_changes
             .iter()
             .map(|change| Field {
                 name: change.field.clone(),

@@ -362,7 +362,7 @@ message EarlierVersion {
   string since_store_system = 6;
   // What the replacing change moved, field by field: `entity.title`, `<kind table>.<column>`,
   // `contact_point[<key>].<column>`, `attendee[<person>]`.
-  repeated EarlierChange changes = 5;
+  repeated EarlierChange field_changes = 5;
 }
 
 message EarlierChange {
