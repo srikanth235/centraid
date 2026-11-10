@@ -162,4 +162,6 @@ catalog! {
     counted document_count = ("{n} document", "{n} documents");
     counted version_count = ("{n} version", "{n} versions");
     counted followed_detail = ("{n} document stays in Docs", "{n} documents stay in Docs");
+    // What the "folder says" line calls the name, to a screen reader (#1183).
+    plain says_noun_name = ("name", "name");
 }

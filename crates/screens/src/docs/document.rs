@@ -27,6 +27,7 @@ use super::rename::Rename;
 use super::{Phase, denied, refusal};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
@@ -72,6 +73,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         rename: None,
         dismissed: false,
         links: Links::new(&[Kind::Person]),
+        differences: Vec::new(),
     }))
 }
 
@@ -90,6 +92,9 @@ struct Document {
     dismissed: bool,
     /// The About section's picker (#1173).
     links: Links,
+    /// Where the followed folder's name for the document differs from the member's (#1183), read
+    /// with the page.
+    differences: Vec<follow::Difference>,
 }
 
 impl Document {
@@ -119,6 +124,10 @@ impl Document {
             },
         );
         let about = links::read_people(ctx, &self.document_id);
+        self.differences = match &document {
+            Reading::Data(_) => follow::read(ctx, &self.document_id),
+            _ => Vec::new(),
+        };
         self.phase = match document {
             Reading::Data(document) => Phase::Ready(Answered {
                 document,
@@ -186,6 +195,19 @@ impl Document {
         }
         self.reload(ctx);
         settled.committed
+    }
+
+    /// The action under the "folder says" line: take the folder's name, then read again so the
+    /// line goes. A refusal is the status line, over the page as it still is.
+    fn take_folder(&mut self, ctx: &Ctx, taken: &wire::PhoneSaysTaken) {
+        if self.row().is_none() {
+            return;
+        }
+        let Some(settled) = follow::take(ctx, &self.document_id, taken) else {
+            return;
+        };
+        self.status = (!settled.committed).then(|| refusal(settled.refusal));
+        self.reload(ctx);
     }
 
     /// Hand the document's file to the platform's share sheet: the bytes are a
@@ -508,6 +530,7 @@ impl Screen for Document {
                 }
             }
             Some(E::DocsDocument(event)) => return self.event(event, ctx),
+            Some(E::PhoneSaysTaken(taken)) => self.take_folder(ctx, &taken),
             _ => {}
         }
         Vec::new()
@@ -538,6 +561,21 @@ impl Screen for Document {
                         String::new(),
                     ));
                 }
+                // THE FOLDER'S NAME, under the title, where the member renamed it (#1183). `blob`
+                // and `media_type` are the file's own bytes and kind, which the page never offers
+                // to edit, so only the title has a line.
+                data.title_phone_says = follow::of(&self.differences, "title")
+                    .and_then(|title| follow::text(&title.stated))
+                    .map(|name| {
+                        follow::says(
+                            locale,
+                            Source::Folder,
+                            &name,
+                            &words::says_noun_name(locale),
+                            "title",
+                            None,
+                        )
+                    });
                 // The title being typed is the title drawn.
                 if let (Some(rename), Some(row)) = (self.rename.as_ref(), data.row.as_mut())
                     && rename.document_id() == row.document_id

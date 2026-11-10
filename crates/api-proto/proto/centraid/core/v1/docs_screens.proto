@@ -661,6 +661,9 @@ message DocsDocumentData {
   string labels_heading = 19;
   // "About" (#1173): the people the document is about.
   LinkSection about = 20;
+  // WHAT THE FOLDER SAYS (#1183), under the name, when the member renamed a document a followed
+  // folder still names otherwise. Absent when they agree.
+  optional PhoneSays title_phone_says = 21;
 }
 
 // The row that opens the version history.
