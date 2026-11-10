@@ -43,6 +43,8 @@ follow.health
 follow.statement
 follow.stop
 follow.take_stated
+history.restore_version
+history.undo
 locker.add_item
 locker.clear_passkey
 locker.counts

@@ -217,14 +217,24 @@ CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
 -- History, and the keys of acts already run.
 -- ---------------------------------------------------------------------------------------------
 
+-- Every record's history: one row per commit that changed an entity, holding the entity's state
+-- as it was BEFORE that commit (so a creation writes none, and the current state is the rows
+-- themselves). `state` is the canonical JSON of the entity's title, its kind row and the child
+-- rows that hang off it, minus the columns `history::OMITTED` says are not kept (sealed cells
+-- above all). The entity's content is the exception, kept in a cell of its own so a blob is a real
+-- foreign key the garbage collector sees: a note's words in `body`, a document's bytes in `blob`
+-- and `media_type`. `cause` is the command that made the change (a `follow.<system>` pass is a
+-- phone store's, anything else the member's). `history::settle` writes these at commit.
 CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
   at         TEXT NOT NULL,
+  cause      TEXT NOT NULL DEFAULT '',
+  state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
-  CHECK ((body IS NULL) <> (blob IS NULL)),
+  CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;

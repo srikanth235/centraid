@@ -626,10 +626,12 @@ CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
   at         TEXT NOT NULL,
+  cause      TEXT NOT NULL DEFAULT '',
+  state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
   body       TEXT,
   blob       TEXT REFERENCES blob(hash),
   media_type TEXT,
-  CHECK ((body IS NULL) <> (blob IS NULL)),
+  CHECK (body IS NULL OR blob IS NULL),
   CHECK ((blob IS NULL) = (media_type IS NULL)),
   PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;

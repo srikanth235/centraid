@@ -26,7 +26,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "kernel",
         "the kernel",
-        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, revisions and the one search index.",
+        "What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, every record's earlier values (revisions) and the one search index.",
     ),
     (
         "words",
@@ -88,7 +88,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "revision",
-        "The words or bytes an edit replaced, numbered from one per entity.",
+        "Every record's earlier values: the state an entity had before a commit changed it, numbered from one per entity, with a note's words and a document's bytes in cells of their own. Written at the commit door for every kind; a creation writes none, a purge takes them with the record, and sealed cells are never kept.",
     ),
     (
         "kernel",

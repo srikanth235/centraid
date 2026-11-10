@@ -482,17 +482,21 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                         .unwrap_or_default();
                     assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
                 }
-                // The action keys hold a caller's id and a digest, and a Locker item has no
-                // revision to carry a cell.
+                // The action keys hold a caller's id and a digest, and a Locker item's history
+                // keeps its plain fields only: no revision carries a sealed cell.
                 let keys: String = connection
                     .prepare("SELECT key || ' ' || asked FROM action_key")?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
                 carries_no_secret("the action keys", keys.as_bytes());
-                let revisions: i64 =
-                    connection.query_row("SELECT COUNT(*) FROM revision", [], |row| row.get(0))?;
-                assert_eq!(revisions, 0, "a Locker item left a revision");
+                let revisions: String = connection
+                    .prepare("SELECT state || ' ' || COALESCE(body, '') FROM revision")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+                    .join("\n");
+                carries_no_secret("the history", revisions.as_bytes());
+                carries_no_secret_token("the history", revisions.as_bytes());
                 Ok(())
             })
             .expect("the readers answer");

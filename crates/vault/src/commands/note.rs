@@ -7,13 +7,13 @@
 //! (`tag.add`), a notebook (`container.create`, `entity.retitle`), a link made
 //! by hand or an attachment (`edge.add`). What is here is what only a note has.
 //!
-//! ## History is the words that were replaced
+//! ## History is the commit door's
 //!
-//! An edit that changes the body writes the body it replaced as a `revision`
-//! (`seq` counts up from one); the current words live only on the note. A
-//! restore writes the current words as a revision and the chosen ones as
-//! current, and an edit or a restore that lands on the words already there
-//! writes nothing, because it revised nothing.
+//! An edit that changes a note keeps the note as it was (its words in `revision.body`, its
+//! title and notebook in `revision.state`) without this file doing anything: the commit door
+//! writes every record's history ([`crate::history`]). A restore of a version's words is the same
+//! generic restore limited to the words, and an edit or a restore that lands on what is already
+//! there writes nothing, because it changed nothing.
 //!
 //! ## The text is the source; the edges are its compilation (Q-1047-9)
 //!
@@ -188,16 +188,6 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(serde_json::json!({ "id": id }))
 }
 
-/// Write the words a note is about to stop having as its newest revision.
-fn keep_replaced(ctx: &CommandCtx<'_, '_>, id: &str, replaced: &str) -> Result<()> {
-    ctx.connection().execute(
-        "INSERT INTO revision (entity_id, seq, at, body)
-         VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1), ?2, ?3)",
-        rusqlite::params![id, ctx.now, replaced],
-    )?;
-    Ok(())
-}
-
 /// Set a note's words: the one path an edit and a restore both take.
 /// Returns whether the words changed.
 fn set_body(ctx: &CommandCtx<'_, '_>, id: &str, body: &str) -> Result<bool> {
@@ -209,7 +199,6 @@ fn set_body(ctx: &CommandCtx<'_, '_>, id: &str, body: &str) -> Result<bool> {
     if current == body {
         return Ok(false);
     }
-    keep_replaced(ctx, id, &current)?;
     ctx.connection()
         .execute("UPDATE note SET body = ?2 WHERE id = ?1", [id, body])?;
     compile_wikilinks(ctx, id, body)?;
@@ -247,16 +236,23 @@ fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let chosen: String = ctx.connection().query_row(
-        "SELECT body FROM revision WHERE entity_id = ?1 AND seq = ?2",
-        rusqlite::params![id, ctx.input["seq"].as_i64()],
-        |row| row.get(0),
-    )?;
-    let restored = set_body(ctx, id, &chosen)?;
-    if restored {
-        ctx.touch(id)?;
-    }
+    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    // The words of the version: one path with every other restore (`history.restore_version`),
+    // limited to the words, as this verb always was. The words it replaces are kept as a version
+    // by the commit door.
+    let restored = crate::history::restore_version(ctx, id, seq, crate::history::Scope::Content)?
+        .is_some_and(|restored| restored.restored);
     Ok(serde_json::json!({ "id": id, "restored": restored }))
+}
+
+/// Compile the links a note's words name again, after something other than an edit set them.
+pub(crate) fn relink(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    let body: String =
+        ctx.connection()
+            .query_row("SELECT body FROM note WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+    compile_wikilinks(ctx, id, &body)
 }
 
 // ---------------------------------------------------------------------------

@@ -131,6 +131,7 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
                 "container",
                 "blob",
                 "derivative",
+                "history",
                 "person",
                 "follow",
                 "locker",

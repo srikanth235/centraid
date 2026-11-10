@@ -17,7 +17,8 @@
 //! by walking what the file says points at a person or at an entity (every
 //! foreign key into `person` or `entity`, read from `PRAGMA foreign_key_list`,
 //! as the blob plane reads what rents a blob) and the `edge` table, and then the
-//! merged person is purged. Nothing here lists a renting table: a table added
+//! merged person is purged (its history, a `revision` row, goes with it: it is the history of a
+//! person who no longer exists, and is never re-pointed). Nothing here lists a renting table: a table added
 //! tomorrow that points at `entity` is merged correctly today
 //! ([#1146](https://github.com/srikanth235/centraid/issues/1146)). **A merge is
 //! confirmed**: it ends a person for good, like a purge.
@@ -144,7 +145,8 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 fn references_to_a_person(connection: &rusqlite::Connection) -> Result<Vec<(String, String)>> {
     let tables: Vec<String> = connection
         .prepare(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('person', 'edge')
+            "SELECT name FROM sqlite_master WHERE type = 'table'
+                AND name NOT IN ('person', 'edge', 'revision')
                AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
               ORDER BY name",
         )?

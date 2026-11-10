@@ -1662,6 +1662,11 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "ends", Reach::Not("an instant")),
     ("action_key", "at", Reach::Not("an instant")),
     ("revision", "at", Reach::Not("an instant")),
+    (
+        "revision",
+        "cause",
+        Reach::Not("the name of the command that made the change"),
+    ),
     // Locker: the plain cells a member sees in the list are found by; every
     // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
     ("locker_item", "username", Reach::Own),

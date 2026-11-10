@@ -205,65 +205,15 @@ pub fn found(
     Ok(id)
 }
 
-/// Put a document's current bytes down as its newest revision, if they are about
-/// to be replaced by `blob` of `media_type`. Returns whether they differ.
-pub(crate) fn keep_replaced(
-    ctx: &CommandCtx<'_, '_>,
-    id: &str,
-    blob: &str,
-    media_type: &str,
-) -> Result<bool> {
+/// Make `blob` the document's bytes. The ones it had are kept as a version by the commit door
+/// ([`crate::history`]). Returns whether anything changed.
+fn set_content(ctx: &CommandCtx<'_, '_>, id: &str, blob: &str, media_type: &str) -> Result<bool> {
     let (held, held_type): (String, String) = ctx.connection().query_row(
         "SELECT blob, media_type FROM document WHERE id = ?1",
         [id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     if held == blob && held_type == media_type {
-        return Ok(false);
-    }
-    ctx.connection().execute(
-        "INSERT INTO revision (entity_id, seq, at, blob, media_type)
-         VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1),
-                 ?2, ?3, ?4)",
-        rusqlite::params![id, ctx.now, held, held_type],
-    )?;
-    Ok(true)
-}
-
-/// The files follower's hook: a source that states other bytes for a document the
-/// member never changed replaces them, and the ones it had become a revision.
-pub(crate) fn keep_replaced_by_write(
-    ctx: &CommandCtx<'_, '_>,
-    id: &str,
-    writes: &[(&str, &serde_json::Value)],
-) -> Result<()> {
-    let stated = |name: &str| {
-        writes
-            .iter()
-            .find(|(written, _)| *written == name)
-            .and_then(|(_, value)| value.as_str())
-    };
-    if stated("blob").is_none() && stated("media_type").is_none() {
-        return Ok(());
-    }
-    let (blob, media_type): (String, String) = ctx.connection().query_row(
-        "SELECT blob, media_type FROM document WHERE id = ?1",
-        [id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
-    keep_replaced(
-        ctx,
-        id,
-        stated("blob").unwrap_or(&blob),
-        stated("media_type").unwrap_or(&media_type),
-    )?;
-    Ok(())
-}
-
-/// Make `blob` the document's bytes, keeping the ones it had. Returns whether
-/// anything changed.
-fn set_content(ctx: &CommandCtx<'_, '_>, id: &str, blob: &str, media_type: &str) -> Result<bool> {
-    if !keep_replaced(ctx, id, blob, media_type)? {
         return Ok(false);
     }
     ctx.connection().execute(
@@ -379,15 +329,11 @@ fn move_document(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
-    let (blob, media_type): (String, String) = ctx.connection().query_row(
-        "SELECT blob, media_type FROM revision WHERE entity_id = ?1 AND seq = ?2",
-        rusqlite::params![id, ctx.input["seq"].as_i64()],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
-    let restored = set_content(ctx, id, &blob, &media_type)?;
-    if restored {
-        ctx.touch(id)?;
-    }
+    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    // The bytes of the version: one path with every other restore (`history.restore_version`),
+    // limited to the content, as this verb always was.
+    let restored = crate::history::restore_version(ctx, id, seq, crate::history::Scope::Content)?
+        .is_some_and(|restored| restored.restored);
     Ok(serde_json::json!({ "id": id, "restored": restored }))
 }
 

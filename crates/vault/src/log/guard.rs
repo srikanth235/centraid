@@ -79,6 +79,8 @@ pub struct Pending {
     /// The ids already stamped in this commit, so a second touch does not stamp
     /// `updated_at` a second time: a commit is one change.
     stamped: BTreeSet<String>,
+    /// The command (or other producer) the commit is for: the `cause` of the history it keeps.
+    producer: String,
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -92,7 +94,9 @@ impl<'conn> CommitTx<'conn> {
     /// enricher. Kept for the diagnostic line a commit writes; nothing
     /// persists it since the log rows went.
     pub fn set_producer(&self, producer: impl Into<String>) {
-        *self.producer.borrow_mut() = producer.into();
+        let producer = producer.into();
+        self.pending.borrow_mut().producer.clone_from(&producer);
+        *self.producer.borrow_mut() = producer;
     }
 
     /// Stamp an entity as changed: `updated_at`, and a place on the
@@ -255,6 +259,19 @@ impl Vault {
             // land together or not at all.
             let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             crate::index::reindex(&connection, &owed)?;
+            // The history is part of the commit too: the states it replaced are kept with the
+            // change that replaced them, or neither lands.
+            let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
+            let now = self.clock().now_text();
+            crate::history::settle(
+                &connection,
+                &now,
+                if producer.is_empty() {
+                    "unnamed"
+                } else {
+                    &producer
+                },
+            )?;
             bump_writes(&connection, &census, &self.clock().now_text())?;
             Ok(value)
         })();

@@ -64,7 +64,7 @@ use serde_json::{Map, Value as Json};
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{contact_point, container, document, event, workout};
+use crate::commands::{contact_point, container, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -234,10 +234,6 @@ pub struct SystemMap {
     /// What a row derives from what the source stated (a rule's support), run
     /// after the fields are written.
     pub settle: Settle,
-    /// What a row keeps of what the source is about to replace (a file's old
-    /// bytes, as a revision), run on a row that exists before its fields are
-    /// written.
-    pub replaced: Replaced,
     /// What a row the source has just ADDED is called, run once after its fields are written
     /// (a statement line takes the payee a rule names; a re-import never renames).
     pub named: Settle,
@@ -248,9 +244,6 @@ pub type Shape = fn(&CommandCtx<'_, '_>, &mut Map<String, Json>) -> std::result:
 
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
-
-/// See [`SystemMap::replaced`].
-pub type Replaced = fn(&CommandCtx<'_, '_>, &str, &[(&str, &Json)]) -> Result<()>;
 
 fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
     Ok(())
@@ -264,10 +257,6 @@ fn event_shape(
 }
 
 fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
-    Ok(())
-}
-
-fn nothing_replaced(_: &CommandCtx<'_, '_>, _: &str, _: &[(&str, &Json)]) -> Result<()> {
     Ok(())
 }
 
@@ -432,7 +421,6 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
     },
     SystemMap {
@@ -485,7 +473,6 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: Some(container::follow_calendar),
         shape: event_shape,
         settle: event::settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
     },
     SystemMap {
@@ -505,7 +492,6 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: document::keep_replaced_by_write,
         named: nothing_to_settle,
     },
     // A workout: an activity of a workout kind, its span, and what the store
@@ -529,7 +515,6 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: workout::shape,
         settle: workout::settle,
-        replaced: nothing_replaced,
         named: nothing_to_settle,
     },
     // A line of a statement: its title is the bank's words until the member
@@ -552,7 +537,6 @@ pub const SYSTEMS: &[SystemMap] = &[
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
-        replaced: nothing_replaced,
         named: super::rule::name_new_line,
     },
 ];
@@ -887,7 +871,6 @@ fn write_fields(
     if fields.is_empty() {
         return Ok(());
     }
-    (map.replaced)(ctx, id, fields)?;
     let connection = ctx.connection();
     for (name, value) in fields {
         if *name == "title" {
@@ -1222,6 +1205,15 @@ pub struct Difference {
     /// For a field made of items, those that differ, in key order; empty for a field judged
     /// whole.
     pub items: Vec<ItemDifference>,
+}
+
+/// The system a `follow.<system>` pass command is for, `None` for any other command: what the
+/// history reads to say a change came from a phone's store and not from the member.
+pub(crate) fn system_of(command: &str) -> Option<&'static str> {
+    SYSTEMS
+        .iter()
+        .find(|map| map.command == command)
+        .map(|map| map.system)
 }
 
 /// The system and statement of the live source link of an entity: the entity is live (not in the

@@ -134,8 +134,8 @@ fn an_edit_keeps_the_words_it_replaced_and_a_no_op_keeps_nothing() {
         .expect("revisions");
     assert_eq!(
         kept,
-        ["first", "second"],
-        "the replaced words, oldest first; a repeat and a title edit keep none"
+        ["first", "second", "second"],
+        "the replaced words, oldest first; a repeat keeps none, a title edit keeps the note as it was"
     );
     assert_eq!(
         w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
