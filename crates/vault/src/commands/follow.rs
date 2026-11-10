@@ -119,7 +119,17 @@ pub struct Child {
     /// key, or all of them. The same writes the merge makes, forced. Returns whether anything
     /// changed.
     pub take: Take,
+    /// Note, in the statement the source link keeps, what a merge of the child depended on and
+    /// the statement alone cannot say (a guest's person at the time it was merged), so the next
+    /// merge judges the member's changes against what was applied then and not against what is
+    /// true now. Given the statement the child last had, the value now, and whether this pass
+    /// merged the child (an unchanged child keeps what was noted). `None` for a child with
+    /// nothing to note.
+    pub stamp: Option<Stamp>,
 }
+
+/// See [`Child::stamp`].
+pub type Stamp = fn(&Connection, Option<&Json>, &Json, bool) -> Result<Json>;
 
 /// See [`Child::take`].
 pub type Take = fn(&CommandCtx<'_, '_>, &str, Option<&str>, &Json) -> Result<bool>;
@@ -380,6 +390,7 @@ const STAT: Child = Child {
     merge: stated_merge,
     items: None,
     take: stated_take,
+    stamp: None,
 };
 
 /// What a statement said of a line beyond what the model keeps: its memo, its
@@ -391,6 +402,7 @@ const LINE: Child = Child {
     merge: stated_merge,
     items: None,
     take: stated_take,
+    stamp: None,
 };
 
 /// The five systems the vault follows.
@@ -411,6 +423,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             merge: contact_point::merge,
             items: Some(contact_point::items),
             take: contact_point::take,
+            stamp: None,
         }],
         match_on: &[Match::Title],
         gone: Gone::Trash,
@@ -451,6 +464,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 // Judged whole: a day is not an item the screens name one at a time.
                 items: None,
                 take: event::overrides_take,
+                stamp: None,
             },
             // The guests the phone states: a guest whose email is a person's is that person's
             // `attendee` edge; the rest stay in the statement and are read from it.
@@ -461,6 +475,7 @@ pub const SYSTEMS: &[SystemMap] = &[
                 merge: event::attendees_merge,
                 items: Some(event::attendees_items),
                 take: event::attendees_take,
+                stamp: Some(event::attendees_stamp),
             },
         ],
         match_on: &[Match::Title, Match::Column("starts")],
@@ -971,6 +986,28 @@ fn merge_children(
     Ok(changed)
 }
 
+/// The fields of a record as the source link keeps them: each child that notes something
+/// ([`Child::stamp`]) carries its note. `stated` is what the link kept before (`None` for a
+/// record the link is new for).
+fn statement_fields(
+    connection: &Connection,
+    map: &SystemMap,
+    stated: Option<&Json>,
+    fields: &Map<String, Json>,
+) -> Result<Map<String, Json>> {
+    let mut out = fields.clone();
+    for (name, value) in fields {
+        let Some(stamp) = map.child(name).and_then(|child| child.stamp) else {
+            continue;
+        };
+        let before = stated.and_then(|stated| stated.get(name.as_str()));
+        // The same test `merge_children` makes: a child that agrees was not merged.
+        let merged = before.is_none_or(|before| !map.agree(name, Some(before), Some(value)));
+        out.insert(name.clone(), stamp(connection, before, value, merged)?);
+    }
+    Ok(out)
+}
+
 fn link(
     ctx: &CommandCtx<'_, '_>,
     map: &SystemMap,
@@ -996,7 +1033,13 @@ fn link(
             record.device_id,
             entity_id,
             map.kind.as_str(),
-            Json::Object(record.fields.clone()).to_string(),
+            Json::Object(statement_fields(
+                ctx.connection(),
+                map,
+                None,
+                &record.fields
+            )?)
+            .to_string(),
             ctx.now
         ],
     )?;
@@ -1381,7 +1424,8 @@ fn merge_record(
     write_fields(ctx, map, &entity_id, &writes)?;
     let rows_changed = merge_children(ctx, map, &entity_id, Some(&stated), &record.fields)?;
     let mut statement = stated.as_object().cloned().unwrap_or_default();
-    for (name, value) in &record.fields {
+    let fields = statement_fields(connection, map, Some(&stated), &record.fields)?;
+    for (name, value) in &fields {
         // A field written once and never after keeps the source's first words:
         // a statement line's payee is the bank's, whatever a later import (its
         // rules, the member's rename) calls it.

@@ -46,6 +46,7 @@ pub const MEASURES: Child = Child {
     merge,
     items: Some(items),
     take,
+    stamp: None,
 };
 
 /// The measures by column.

@@ -307,3 +307,74 @@ fn a_guest_the_member_took_off_or_added_is_left_alone_and_an_untouched_one_goes_
     );
     assert!(!held.contains(&ann) && !held.contains(&ben));
 }
+
+fn the_attendee_differences(w: &World, event: &str) -> Vec<String> {
+    w.scratch
+        .vault
+        .read(|c| centraid_vault::commands::follow::differences(c, event))
+        .expect("differences")
+        .into_iter()
+        .filter(|difference| difference.field == "attendees")
+        .flat_map(|difference| difference.items.into_iter().map(|item| item.key))
+        .collect()
+}
+
+#[test]
+fn a_guest_who_only_now_matches_a_person_is_attached_when_the_statement_changes() {
+    let w = World::new();
+    let guest = |name: &str, email: &str, state: &str| json!({ "name": name, "email": email, "state": state });
+    // Followed while Ada matches nobody: no edge, and nothing for the member to have removed.
+    w.calendar(json!([
+        guest("Ada", "ada@example.com", "needs-action"),
+        guest("Bob", "bob@example.com", "needs-action"),
+    ]));
+    let event = w.event();
+    let ada = w.person_with_email("Ada", "ada@example.com");
+    assert!(w.guests(&event).is_empty());
+    assert!(
+        the_attendee_differences(&w, &event).is_empty(),
+        "a guest nobody held is not a difference"
+    );
+    // Another guest replies: the statement changes and Ada is attached as new.
+    w.calendar(json!([
+        guest("Ada", "ada@example.com", "needs-action"),
+        guest("Bob", "bob@example.com", "accepted"),
+    ]));
+    assert_eq!(
+        w.guests(&event),
+        vec![(ada, "needs-action".to_owned())],
+        "Ada is a guest now"
+    );
+    assert!(the_attendee_differences(&w, &event).is_empty());
+}
+
+#[test]
+fn a_matched_guest_the_member_took_off_stays_off_and_is_still_reported() {
+    let w = World::new();
+    let guest = |name: &str, email: &str, state: &str| json!({ "name": name, "email": email, "state": state });
+    let ada = w.person_with_email("Ada", "ada@example.com");
+    w.calendar(json!([
+        guest("Ada", "ada@example.com", "needs-action"),
+        guest("Bob", "bob@example.com", "needs-action"),
+    ]));
+    let event = w.event();
+    assert_eq!(w.guests(&event).len(), 1);
+    w.ok("event.edit", json!({ "id": event, "attendees": [] }));
+    assert_eq!(
+        the_attendee_differences(&w, &event),
+        vec!["ada@example.com".to_owned()]
+    );
+    w.calendar(json!([
+        guest("Ada", "ada@example.com", "needs-action"),
+        guest("Bob", "bob@example.com", "accepted"),
+    ]));
+    assert!(
+        !w.guests(&event).iter().any(|(id, _)| *id == ada),
+        "the member's removal stands"
+    );
+    assert_eq!(
+        the_attendee_differences(&w, &event),
+        vec!["ada@example.com".to_owned()],
+        "the phone still has Ada"
+    );
+}

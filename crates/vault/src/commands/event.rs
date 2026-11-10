@@ -501,6 +501,69 @@ fn matched_guests(
     Ok(people)
 }
 
+/// The people the guests of a statement were matched to when the statement was merged
+/// ([`attendees_stamp`]), with the answer each gave. A guest with no note matched nobody then.
+fn merged_guests(statement: Option<&Json>) -> std::collections::BTreeMap<String, String> {
+    let mut people = std::collections::BTreeMap::new();
+    for guest in statement.and_then(Json::as_array).into_iter().flatten() {
+        let Some(person) = guest.get("person").and_then(Json::as_str) else {
+            continue;
+        };
+        let state = guest_canon(guest)
+            .get("state")
+            .and_then(Json::as_str)
+            .unwrap_or("needs-action")
+            .to_owned();
+        people.insert(person.to_owned(), state);
+    }
+    people
+}
+
+/// Note on each stated guest the person it was matched to when the statement was merged (a
+/// `person` key; [`guest_canon`] leaves it out, so it never counts as a difference). A pass that
+/// did not merge the guests keeps the notes already there. This is what lets a later merge tell a
+/// guest the member took off (matched then, no edge now) from one who matches a person only now
+/// (matched then: nobody), and so attach her.
+pub(crate) fn attendees_stamp(
+    connection: &Connection,
+    before: Option<&Json>,
+    now: &Json,
+    merged: bool,
+) -> Result<Json> {
+    let Some(list) = now.as_array() else {
+        return Ok(now.clone());
+    };
+    let noted = |email: &str| {
+        before
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+            .find(|guest| guest_canon(guest).get("email").and_then(Json::as_str) == Some(email))
+            .and_then(|guest| guest.get("person").cloned())
+    };
+    let mut out = Vec::with_capacity(list.len());
+    for guest in list {
+        let mut guest = guest.clone();
+        let email = guest_canon(&guest)
+            .get("email")
+            .and_then(Json::as_str)
+            .map(str::to_owned);
+        if let Some(object) = guest.as_object_mut() {
+            object.remove("person");
+            let person = match email.as_deref() {
+                Some(email) if merged => person_of_email(connection, email)?.map(Json::String),
+                Some(email) => noted(email),
+                None => None,
+            };
+            if let Some(person) = person {
+                object.insert("person".to_owned(), person);
+            }
+        }
+        out.push(guest);
+    }
+    Ok(Json::Array(out))
+}
+
 /// The answer each person the event has an `attendee` edge to holds now (a blank answer is
 /// `needs-action`, as a statement spells it).
 fn held_guests(
@@ -552,19 +615,34 @@ pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> 
         .into_iter()
         .flatten()
     {
+        let noted = guest
+            .get("person")
+            .and_then(Json::as_str)
+            .map(str::to_owned);
         let mut guest = guest_canon(guest);
-        let person = match guest.get("email").and_then(Json::as_str) {
-            Some(email) => person_of_email(connection, email)?,
-            None => None,
+        // The person the guest was merged as, else (never merged as anyone) the person the
+        // member made of her since, if they hold her as a guest.
+        let (person, merged) = match noted {
+            Some(person) => (Some(person), true),
+            None => {
+                let today = match guest.get("email").and_then(Json::as_str) {
+                    Some(email) => person_of_email(connection, email)?,
+                    None => None,
+                };
+                (today.filter(|person| held.contains_key(person)), false)
+            }
         };
         let Some(person) = person else {
             out.push(guest);
             continue;
         };
-        // A person's guest carries the answer held, and is not there when the edge is gone. The
-        // people the member added are the edges left once the stated guests are accounted for.
+        // A person's guest carries the answer held, and a guest merged as a person is not there
+        // when the edge is gone. The people the member added are the edges left once the stated
+        // guests are accounted for.
         if let Some(state) = held.get(&person) {
             guest["state"] = Json::String(state.clone());
+            out.push(guest);
+        } else if !merged {
             out.push(guest);
         }
         covered.insert(person);
@@ -595,6 +673,11 @@ pub(crate) fn attendees_read(connection: &Connection, id: &str) -> Result<Json> 
 /// phone's word; one the member changed (answered differently, took off, or added) stands. A
 /// guest nobody's email matches mints no person and stays in the statement
 /// ([`attendees_read`]). Guests are read from the phone and never written to it.
+///
+/// What the phone "had" said is the guests the last merge matched to people, as noted in the
+/// statement ([`attendees_stamp`]), not who the guests match today: a guest whose email became a
+/// person's after that merge was never attached or taken off, so she is attached now. A statement
+/// from before the notes were kept notes nobody, so each of its guests is attached once.
 pub(crate) fn attendees_merge(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
@@ -603,7 +686,7 @@ pub(crate) fn attendees_merge(
 ) -> Result<bool> {
     let connection = ctx.connection();
     let wanted = matched_guests(connection, Some(now))?;
-    let had = matched_guests(connection, before)?;
+    let had = merged_guests(before);
     let held = held_guests(connection, id)?;
     let people: std::collections::BTreeSet<&String> = wanted.keys().chain(had.keys()).collect();
     let mut changed = false;
