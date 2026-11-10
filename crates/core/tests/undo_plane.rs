@@ -427,6 +427,71 @@ fn a_claim_of_writing_nothing_is_proven_by_running_the_action() {
     }
 }
 
+fn docs(w: &World) {
+    let doc = w.make(
+        "docs",
+        "create-text",
+        &json!({ "title": "Lease", "body_text": "first words" }),
+    );
+    let folder = w.make(
+        "docs",
+        "create-folder",
+        &json!({ "kind": "folder", "title": "Home papers" }),
+    );
+    w.round_trip(
+        "docs",
+        "rename",
+        &doc,
+        &json!({ "id": doc, "title": "Lease 2026" }),
+    );
+    w.round_trip(
+        "docs",
+        "move",
+        &doc,
+        &json!({ "id": doc, "folder_id": folder }),
+    );
+    w.round_trip(
+        "docs",
+        "rename-folder",
+        &folder,
+        &json!({ "id": folder, "title": "Papers" }),
+    );
+    w.round_trip(
+        "docs",
+        "edit",
+        &doc,
+        &json!({ "id": doc, "body_text": "second words", "title": "Lease final" }),
+    );
+    let bytes = "a replacement document";
+    let hash = centraid_vault::blob::content_digest(bytes.as_bytes());
+    w.sample
+        .handle
+        .command(
+            "blob.stage",
+            &json!({ "hash": hash, "size": bytes.len() }),
+            "stage-bytes",
+        )
+        .expect("stage");
+    w.round_trip(
+        "docs",
+        "replace",
+        &doc,
+        &json!({ "id": doc, "blob": hash, "media_type": "text/plain" }),
+    );
+    // A change that stays, so that the first version is a state to go back to.
+    w.ok(
+        "docs",
+        "edit",
+        &json!({ "id": doc, "body_text": "kept words" }),
+    );
+    w.round_trip(
+        "docs",
+        "restore-version",
+        &doc,
+        &json!({ "id": doc, "seq": 1 }),
+    );
+}
+
 fn photos(w: &World) {
     let photo = w.first("photo");
     let album = w.make(
@@ -495,6 +560,7 @@ fn photos(w: &World) {
 fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     let w = World::new();
     reminders(&w);
+    docs(&w);
     photos(&w);
     let proven = w.proven.borrow().clone();
 

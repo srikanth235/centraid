@@ -1727,7 +1727,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.edit",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "change the second line of my packing list",
@@ -1745,7 +1745,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.replace",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "replace the lease with the new scan",
@@ -1763,7 +1763,7 @@
         "bulk": false,
         "chat": "card",
         "command": "document.restore_version",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "document",
         "phrasings": [
           "go back to yesterday's version of the lease",

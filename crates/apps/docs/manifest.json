@@ -776,7 +776,7 @@
       "name": "edit",
       "verb": "edit",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.edit",
       "phrasings": [
@@ -823,7 +823,7 @@
       "name": "replace",
       "verb": "edit:content",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.replace",
       "phrasings": [
@@ -882,7 +882,7 @@
       "name": "restore-version",
       "verb": "restore",
       "kind": "document",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "document.restore_version",
       "phrasings": [

@@ -108,6 +108,12 @@ const DOCS: &[Row] = &[
     ("untag", "tag", Input::Same),
     ("add-about", "remove-about", Input::Same),
     ("remove-about", "add-about", Input::Same),
+    ("rename", "rename", Input::Earlier),
+    ("move", "move", Input::Earlier),
+    ("rename-folder", "rename-folder", Input::Earlier),
+    ("edit", "undo-change", Input::Earlier),
+    ("replace", "undo-change", Input::Earlier),
+    ("restore-version", "undo-change", Input::Earlier),
     ("recolor-label", "recolor-label", Input::Replaced),
 ];
 const LOCKER: &[Row] = &[
@@ -363,9 +369,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &[
-        "calendar", "docs", "health", "locker", "money", "notes", "people",
-    ];
+    const OWED: &[&str] = &["calendar", "health", "locker", "money", "notes", "people"];
 
     /// EVERY ACTION IS TAKEN BACK, ASKS FIRST, OR WRITES NOTHING, AND THE TWO LISTS ARE ONE.
     ///
