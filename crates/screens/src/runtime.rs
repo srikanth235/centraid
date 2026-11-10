@@ -333,6 +333,29 @@ impl Runtime {
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
+        // THE EFFECTS ARE NUMBERED, AND THE SCREEN TOLD, BEFORE ANYTHING IT POSTED IS DELIVERED:
+        // a post can come straight back to this screen, and its answer to that must not be taken
+        // for the numbering of this update's effects. An effect the runtime keeps for itself has
+        // no number.
+        let kept_by_runtime = |effect: &wire::Effect| match &effect.kind {
+            Some(wire::effect::Kind::VaultCommand(command)) => {
+                !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
+                    && core.vaults().is_some()
+            }
+            Some(wire::effect::Kind::SelectTab(_)) => true,
+            _ => false,
+        };
+        let numbers: Vec<Option<u64>> = effects
+            .iter()
+            .map(|effect| {
+                (!kept_by_runtime(effect)).then(|| {
+                    let number = state.next_effect;
+                    state.next_effect += 1;
+                    number
+                })
+            })
+            .collect();
+        instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
             let view_ctx = Ctx::new(core, &env).with_follows(follows);
@@ -381,7 +404,7 @@ impl Runtime {
             state.jobs.insert(job, (id, tag));
             core.off_thread(job, work);
         }
-        for effect in effects {
+        for (effect, number) in effects.into_iter().zip(numbers) {
             // WHEN THE CORE IS THE DOOR TO A SHELF, THE SHELF IS RUST'S: a
             // screen's request of it (Home's switch, make, restore, forget and
             // rename) is the shelf service's to perform and never reaches a
@@ -410,8 +433,9 @@ impl Runtime {
                 }
                 continue;
             }
-            let effect_id = state.next_effect;
-            state.next_effect += 1;
+            let Some(effect_id) = number else {
+                continue;
+            };
             out.effects.push(wire::EffectRequest {
                 effect_id,
                 instance: id,

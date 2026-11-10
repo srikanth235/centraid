@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::custody::secrets::VaultSecrets;
 use centraid_screens::field::Keyed;
+use centraid_screens::follow::coordinator::READ_TIMER;
 use centraid_screens::testing::Driver;
 use centraid_screens::{Registry, Runtime, follow, imports, people, proof};
 use people_support::{home_state, roster_of, send_home};
@@ -443,4 +444,131 @@ fn a_read_the_phone_refuses_is_said_on_the_row_and_changes_nothing() {
             .iter()
             .all(|person| person.name != "Ana")
     );
+}
+
+// ---- the backstop, and an answer that arrives after it ------------------------------------------
+
+impl Rig {
+    /// The read backstop fires on the coordinator that owns `request`: what the runtime does
+    /// when its timer comes due. Nothing here waits for it.
+    fn read_timed_out(&mut self, request: &wire::EffectRequest) {
+        self.d.send(
+            request.instance,
+            E::TimerFired(wire::TimerFired {
+                timer: READ_TIMER.to_owned(),
+            }),
+        );
+    }
+
+    /// The effects asked now, as the requests themselves.
+    fn take_asked(&mut self) -> Vec<wire::EffectRequest> {
+        std::mem::take(&mut self.d.effects)
+    }
+}
+
+fn named(request: &wire::EffectRequest) -> String {
+    match request.effect.as_ref().and_then(|e| e.kind.as_ref()) {
+        Some(F::Keychain(op)) => format!("habit:{}", op.key),
+        Some(F::ContactsRead(_)) => "contacts-read".to_owned(),
+        Some(F::CalendarRead(_)) => "calendar-read".to_owned(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Both stores connected, both changed: the first to run is out, the other waits its turn.
+fn two_stores_out() -> Rig {
+    let mut rig = Rig::new()
+        .connected(CONTACTS_KEY, b"1")
+        .connected(CALENDAR_KEY, b"1");
+    rig.changed(wire::ImportSource::Contacts);
+    rig.changed(wire::ImportSource::Calendar);
+    rig.settle();
+    rig
+}
+
+#[test]
+fn the_late_answer_of_an_abandoned_pass_is_not_the_next_passes() {
+    let mut rig = two_stores_out();
+    // The first pass waits on its keychain habit, which never answers.
+    let stale = rig.take_asked();
+    assert_eq!(stale.len(), 1);
+    rig.read_timed_out(&stale[0]);
+    let next = rig.take_asked();
+    assert_eq!(next.len(), 1);
+    assert_ne!(named(&next[0]), named(&stale[0]), "the other store's habit");
+    rig.d.effects = next;
+
+    // The late habit answer of the first (found) is not the second's: nothing is read on it.
+    rig.d.send(
+        stale[0].instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: stale[0].effect_id,
+            outcome: Some(O::Keychain(wire::KeychainValue {
+                found: true,
+                value: b"1".to_vec(),
+            })),
+        }),
+    );
+    assert_eq!(
+        rig.asked().len(),
+        1,
+        "still the one habit: {:?}",
+        rig.asked()
+    );
+    assert!(rig.asked()[0].starts_with("habit:"));
+
+    // The second pass goes on to read on its own answer.
+    rig.answer_next();
+    assert!(rig.asked()[0].ends_with("-read"), "{:?}", rig.asked());
+}
+
+#[test]
+fn the_late_snapshot_of_an_abandoned_pass_does_not_end_the_next_pass() {
+    let mut rig = two_stores_out();
+    rig.answer_next();
+    let stale = rig.take_asked();
+    assert_eq!(stale.len(), 1);
+    // The first store's read never answers; the other store's pass runs to its own read.
+    rig.read_timed_out(&stale[0]);
+    rig.answer_next();
+    let second = rig.take_asked();
+    assert_eq!(second.len(), 1, "{second:?}");
+    assert!(named(&second[0]).ends_with("-read"));
+    rig.d.effects = second;
+
+    // The first store's late snapshot arrives while the second's read is out.
+    let late = match stale[0].effect.as_ref().and_then(|e| e.kind.as_ref()) {
+        Some(F::ContactsRead(_)) => O::Contacts(wire::ContactsSnapshot {
+            complete: true,
+            device_id: "this-install".to_owned(),
+            ..Default::default()
+        }),
+        _ => O::Calendar(wire::CalendarSnapshot {
+            complete: true,
+            ..Default::default()
+        }),
+    };
+    rig.d.send(
+        stale[0].instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: stale[0].effect_id,
+            outcome: Some(late),
+        }),
+    );
+
+    // The second pass is still out: a change to its store queues behind it and starts nothing.
+    let second_source = if named(&rig.d.effects[0]) == "contacts-read" {
+        wire::ImportSource::Contacts
+    } else {
+        wire::ImportSource::Calendar
+    };
+    rig.changed(second_source);
+    rig.settle();
+    assert_eq!(rig.d.effects.len(), 1, "{:?}", rig.asked());
+
+    // It completes with its own read, and the change queued behind it runs exactly one more pass.
+    let before = rig.reads.contacts + rig.reads.calendar;
+    rig.answer_next();
+    rig.serve();
+    assert_eq!(rig.reads.contacts + rig.reads.calendar, before + 2);
 }

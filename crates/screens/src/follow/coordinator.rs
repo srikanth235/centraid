@@ -16,9 +16,11 @@
 //!
 //! A [`FollowGate`] over [`Store`] folds a burst (the first trigger arms a settle timer, the
 //! ones that follow join it), keeps one pass per store running and one queued behind it. The
-//! stores that read through this service (contacts, calendar, health) take turns, so the
-//! effect it hears back is always the one it asked for; the folder follower is a screen of its
-//! own and is woken by name, and tells this service when its pass ended.
+//! stores that read through this service (contacts, calendar, health) take turns, and the pass
+//! that is out knows the number the runtime gave its one effect ([`Screen::effects_numbered`]): an answer
+//! that names another number is the late answer of a pass given up on ([`READ_TIMEOUT`]), and is
+//! ignored. The folder follower is a screen of its own and is woken by name, and tells this
+//! service when its pass ended.
 //!
 //! ## What a pass is
 //!
@@ -57,8 +59,10 @@ pub const NAME: &str = "follow.coordinator";
 /// A read that has not answered in two minutes is abandoned, so one stuck read cannot hold the
 /// follow for good. A safety bound, not a cadence.
 pub const READ_TIMEOUT: Duration = Duration::from_secs(120);
-const READ_TIMER: &str = "follow-read";
-const WINDOW_TIMER: &str = "follow-window";
+/// The timer that abandons a read that never answered.
+pub const READ_TIMER: &str = "follow-read";
+/// The timer that gives up on a background window's follows.
+pub const WINDOW_TIMER: &str = "follow-window";
 const SETTLE_PREFIX: &str = "follow-settle:";
 
 /// The route that opens the service.
@@ -97,6 +101,8 @@ enum Read {
 struct Active {
     store: Store,
     stage: Stage,
+    /// The number the runtime gave the effect this pass waits on; every other answer is not its.
+    effect: Option<u64>,
 }
 
 struct Coordinator {
@@ -109,6 +115,9 @@ struct Coordinator {
     ready: VecDeque<Store>,
     /// The pass this service reads for, if one is out.
     active: Option<Active>,
+    /// Where, in the effects the last update asked for, the one the pass waits on stands; the
+    /// runtime says its number next ([`Screen::effects_numbered`]).
+    asking: Option<usize>,
     /// The folder follower was asked to run and has not said it ended.
     files_running: bool,
     /// Background windows whose follows are owed, and the stores they wait on.
@@ -125,6 +134,7 @@ impl Coordinator {
             foreground: None,
             ready: VecDeque::new(),
             active: None,
+            asking: None,
             files_running: false,
             windows: Vec::new(),
             pending: BTreeSet::new(),
@@ -245,7 +255,9 @@ impl Coordinator {
         self.active = Some(Active {
             store,
             stage: Stage::Habit,
+            effect: None,
         });
+        self.asking = Some(out.len());
         out.push(habit);
     }
 
@@ -268,7 +280,7 @@ impl Coordinator {
                 let device = health::device_of(value);
                 let window = device.connected.then(|| health::window(ctx)).flatten();
                 let Some(window) = window else {
-                    return self.end(ctx, store);
+                    return self.end_taken(ctx, store);
                 };
                 let effect = health::read_effect(&window, &device.chosen, false);
                 (
@@ -279,12 +291,14 @@ impl Coordinator {
                     effect,
                 )
             }
-            _ => return self.end(ctx, store),
+            _ => return self.end_taken(ctx, store),
         };
         self.active = Some(Active {
             store,
             stage: Stage::Read(read),
+            effect: None,
         });
+        self.asking = Some(out.len());
         out.push(effect);
     }
 
@@ -334,17 +348,20 @@ impl Coordinator {
             }
             return;
         }
-        let Some(Active { store, stage }) = self.active.take() else {
+        // Only the answer to the effect the pass waits on is its answer: one that names another
+        // is the late word of a pass that was given up on, and says nothing of this store.
+        if self
+            .active
+            .as_ref()
+            .is_none_or(|active| active.effect != Some(result.effect_id))
+        {
+            return;
+        }
+        let Some(Active { store, stage, .. }) = self.active.take() else {
             return;
         };
         match (stage, outcome) {
-            (Stage::Habit, O::Keychain(value)) => {
-                self.active = Some(Active {
-                    store,
-                    stage: Stage::Habit,
-                });
-                self.habit(ctx, store, &value, out);
-            }
+            (Stage::Habit, O::Keychain(value)) => self.habit(ctx, store, &value, out),
             (Stage::Habit, O::Failed(_)) => self.end_taken(ctx, store),
             (
                 Stage::Read(read),
@@ -352,8 +369,14 @@ impl Coordinator {
             ) => {
                 self.read(ctx, store, read, outcome);
             }
-            // Not the answer to what is out: the pass goes on waiting.
-            (stage, _) => self.active = Some(Active { store, stage }),
+            // Not the kind of answer the effect asked for: the pass goes on waiting.
+            (stage, _) => {
+                self.active = Some(Active {
+                    store,
+                    stage,
+                    effect: Some(result.effect_id),
+                });
+            }
         }
     }
 
@@ -408,6 +431,14 @@ impl Screen for Coordinator {
         }
         self.pump(ctx, &mut out);
         out
+    }
+
+    fn effects_numbered(&mut self, ids: &[Option<u64>]) {
+        if let Some(index) = self.asking.take()
+            && let Some(active) = self.active.as_mut()
+        {
+            active.effect = ids.get(index).copied().flatten();
+        }
     }
 
     fn view(&self, _ctx: &Ctx) -> wire::ViewState {

@@ -26,6 +26,15 @@ pub trait Screen: Send {
     /// state in the view (the read law), never a panic and never an empty list.
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect>;
 
+    /// The runtime numbered the effects the last [`Screen::update`] asked for: one entry per
+    /// effect, in the order returned, `None` for one the runtime kept for itself (a tab
+    /// selection, a shelf command) that no shell performs. The answer to an effect names its
+    /// number, so a screen that can be asked twice about one thing (a read it gave up on and
+    /// asked again) tells the late answer of the first from the answer of the second.
+    fn effects_numbered(&mut self, ids: &[Option<u64>]) {
+        let _ = ids;
+    }
+
     /// The finished state. `instance` and `revision` are stamped by the runtime.
     fn view(&self, ctx: &Ctx) -> wire::ViewState;
 
