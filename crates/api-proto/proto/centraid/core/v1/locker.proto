@@ -353,6 +353,9 @@ message LockerTotpAsk {
   string item_id = 1;
   // The code goes to the clipboard, not the screen.
   bool copy = 2;
+  // A custom one-time-code (`otp`) field of `item_id`, whose seed is bound to this id; empty asks
+  // for the login's own `otp_seed`.
+  string field_id = 3;
 }
 
 enum LockerExportFormat {

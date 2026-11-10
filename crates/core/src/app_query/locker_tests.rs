@@ -969,6 +969,104 @@ fn a_one_time_code_stamps_first_and_is_rfc_6238s_code_for_now() {
     );
 }
 
+/// A CUSTOM ONE-TIME-CODE FIELD is a sealed secret that keeps its kind: its setup key is sealed
+/// against the field's id on the way in, makes the RFC 6238 code while unlocked, and is never
+/// answered (a reveal refuses it), served plain, or opened while locked.
+#[test]
+fn a_custom_one_time_code_field_is_sealed_makes_codes_and_never_shows_its_seed() {
+    let scratch = stocked();
+    // Locked, a typed seed is refused before anything is written.
+    let typed = json!({ "item_id": "item-bank", "field_id": "field-otp", "section": "Backup",
+                        "label": "Backup authenticator", "kind": "otp",
+                        "value": "otpauth://totp/Bank:maya?secret=gezd-gnbv-gy3t-qojq-gezd-gnbv-gy3t-qojq" });
+    assert!(scratch.try_run("locker.set_field", typed.clone()).is_err());
+    scratch.unlock();
+    // A seed that is not one is refused in a sentence, before it is sealed.
+    assert!(
+        matches!(
+            scratch.try_run(
+                "locker.set_field",
+                json!({ "item_id": "item-bank", "field_id": "field-bad", "label": "x",
+                        "kind": "otp", "value": "not a seed!" }),
+            ),
+            Err(CoreError::InvalidRequest { .. })
+        ),
+        "a field with no seed in it is refused"
+    );
+    scratch.run("locker.set_field", typed);
+
+    let stored = scratch
+        .handle
+        .with_vault(|vault| Ok(vault.locker_otp_field_cell("item-bank", "field-otp")?))
+        .expect("the cell reads")
+        .and_then(|cell| cell.ciphertext)
+        .expect("a ciphertext");
+    assert!(stored.starts_with("lk1:") && !stored.contains("GEZDGNBV"));
+    // The page lists it as a sealed value of kind otp, with no value.
+    let item_bytes = scratch.ask_bytes(Q::LockerItem(wire::LockerItemRequest {
+        item_id: "item-bank".to_owned(),
+        tz: TZ.to_owned(),
+    }));
+    assert!(!contains(&item_bytes, "GEZDGNBV") && !contains(&item_bytes, "gezd"));
+    let field = scratch
+        .item("item-bank")
+        .expect("bank")
+        .fields
+        .into_iter()
+        .find(|field| field.field_id == "field-otp")
+        .expect("the field is listed");
+    assert!(field.kind == "otp" && field.sealed && field.present && field.value.is_empty());
+
+    // The code is RFC 6238's, stamped first; the seed is not revealable, and nothing opens locked.
+    let ask = |copy: bool| {
+        scratch.session(Step::Totp(wire::LockerTotpAsk {
+            item_id: "item-bank".to_owned(),
+            field_id: "field-otp".to_owned(),
+            copy,
+        }))
+    };
+    let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
+    let expected = centraid_apps_locker::totp::code_at(
+        "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+        now,
+        crate::locker::phone::hmac_sha1_for_test,
+    )
+    .expect("the RFC seed makes a code");
+    assert_eq!(ask(false).totp.expect("a code").code, expected.code);
+    let asked = scratch.step_reveal(wire::LockerReveal {
+        item_id: "item-bank".to_owned(),
+        column: "value_sealed".to_owned(),
+        field_id: "field-otp".to_owned(),
+        copy: false,
+    });
+    assert_eq!(
+        asked.refusal,
+        wire::LockerRevealRefusal::SeedNotShown as i32
+    );
+    assert!(asked.revealed.is_none());
+    assert_eq!(
+        scratch
+            .session(Step::Totp(wire::LockerTotpAsk {
+                item_id: "item-bank".to_owned(),
+                field_id: "field-nobody".to_owned(),
+                copy: false,
+            }))
+            .refusal,
+        wire::LockerRevealRefusal::NotSealed as i32
+    );
+    // Rewriting it with the placeholder keeps the seed (and the kind).
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-otp", "label": "Backup authenticator",
+                "kind": "otp", "value": "«sealed»" }),
+    );
+    assert_eq!(ask(false).totp.expect("still a code").code, expected.code);
+    scratch.relock();
+    let locked = ask(false);
+    assert_eq!(locked.refusal, wire::LockerRevealRefusal::Locked as i32);
+    assert!(locked.totp.is_none());
+}
+
 // ---------------------------------------------------------------------------
 // #1047 T2: custom sealed fields, passkeys, import, export. #1146: use and refusals.
 // ---------------------------------------------------------------------------
@@ -1489,6 +1587,11 @@ fn a_json_export_imports_back_whole() {
                 "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
     );
     scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-otp", "label": "Backup authenticator",
+                "kind": "otp", "value": "JBSWY3DPEHPK3PXP" }),
+    );
+    scratch.run(
         "locker.set_memo",
         json!({ "item_id": "item-bank", "note": "the memo" }),
     );
@@ -1532,6 +1635,24 @@ fn a_json_export_imports_back_whole() {
         .expect("it reveals")
         .value;
     assert_eq!(value, "rc-4411");
+    // A one-time-code field's seed rode the file like a sealed value, and came back sealed.
+    let otp = bank
+        .fields
+        .iter()
+        .find(|field| field.label == "Backup authenticator")
+        .expect("the one-time-code field came back");
+    assert!(otp.kind == "otp" && otp.sealed && otp.present && otp.value.is_empty());
+    assert!(
+        restored
+            .session(Step::Totp(wire::LockerTotpAsk {
+                item_id: bank_id.clone(),
+                field_id: otp.field_id.clone(),
+                copy: false,
+            }))
+            .totp
+            .is_some(),
+        "the imported seed makes codes"
+    );
     assert_eq!(
         restored.items(true).items.len(),
         1,

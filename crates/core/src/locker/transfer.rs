@@ -108,12 +108,22 @@ pub(super) fn export(
             }
         }
         for (field_id, index) in &source.sealed_fields {
-            let opened = vault
-                .locker_sealed_field_cell(&source.item_id, field_id)?
-                .and_then(|sealed| {
-                    let ciphertext = sealed.ciphertext?;
-                    open(sealed.key_id, field_id, &ciphertext)
-                });
+            // An export follows the one rule for every sealed value: a one-time-code field's
+            // seed opens like a sealed field's value (a reveal, which refuses a seed, is not this).
+            let otp = source
+                .entry
+                .fields
+                .get(*index)
+                .is_some_and(|field| field.kind == "otp");
+            let cell = if otp {
+                vault.locker_otp_field_cell(&source.item_id, field_id)?
+            } else {
+                vault.locker_sealed_field_cell(&source.item_id, field_id)?
+            };
+            let opened = cell.and_then(|sealed| {
+                let ciphertext = sealed.ciphertext?;
+                open(sealed.key_id, field_id, &ciphertext)
+            });
             match (opened, source.entry.fields.get_mut(*index)) {
                 (Some(value), Some(field)) => field.value = value,
                 _ => unopened += 1,

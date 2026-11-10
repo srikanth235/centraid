@@ -97,6 +97,8 @@ struct FieldSheet {
     label: String,
     value: String,
     sealed: bool,
+    /// A one-time-code field: sealed, and kept as that kind when rewritten.
+    otp: bool,
 }
 
 struct Item {
@@ -316,8 +318,8 @@ impl Item {
                 self.secrets
                     .copy(ctx, &code, Duration::from_secs(u64::from(left.max(1))))
             }
-            "code" | "copy_code" if stored && key == SEED => {
-                self.code(ctx, verb == "copy_code", verb == "code")
+            "code" | "copy_code" if stored && (key == SEED || is_code_field(&item, key)) => {
+                self.code(ctx, key, verb == "copy_code", verb == "code")
             }
             // A REVEALED VALUE COPIES WITHOUT A SECOND STAMP: it is already
             // revealed, and the item already says it was used.
@@ -328,7 +330,7 @@ impl Item {
             }
             // THE SEED ITSELF IS NOT SHOWN OR COPIED from this page: its row
             // makes codes.
-            "reveal" | "copy" if stored && key != SEED => {
+            "reveal" | "copy" if stored && key != SEED && !is_code_field(&item, key) => {
                 self.reveal(ctx, &item, key, verb == "copy")
             }
             // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never stamped.
@@ -396,10 +398,12 @@ impl Item {
     }
 
     /// The code the seed makes now: shown with its life, or copied.
-    fn code(&mut self, ctx: &Ctx, copy: bool, follow: bool) -> Vec<wire::Effect> {
+    fn code(&mut self, ctx: &Ctx, key: &str, copy: bool, follow: bool) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         let id = self.id();
-        match shared::totp(ctx, &id, copy) {
+        // The login's own seed, or a one-time-code field's (`field:<id>`).
+        let field_id = key.strip_prefix(FIELD).unwrap_or("");
+        match shared::totp(ctx, &id, field_id, copy) {
             Err(Refused::Locked) => self.locked(ctx),
             Err(Refused::Said(sentence)) => {
                 self.status = shared::refused(sentence);
@@ -420,12 +424,12 @@ impl Item {
                 // after the tick that follows it.
                 effects.extend(self.secrets.show(
                     ctx,
-                    SEED,
+                    key,
                     &code.code,
                     Duration::from_secs(u64::from(code.remaining) + 1),
                 ));
                 self.shown = Some(Shown {
-                    column: SEED.to_owned(),
+                    column: key.to_owned(),
                     seconds_left: code.remaining,
                     code: Some(Code {
                         period: code.period,
@@ -458,7 +462,7 @@ impl Item {
         self.shown = None;
         let mut effects = self.secrets.hide(ctx, &column);
         if follow {
-            effects.extend(self.code(ctx, false, false));
+            effects.extend(self.code(ctx, &column, false, false));
         }
         effects
     }
@@ -671,6 +675,7 @@ impl Item {
                 .map(|field| field.value.clone())
                 .unwrap_or_default(),
             sealed: existing.is_some_and(|field| field.sealed),
+            otp: existing.is_some_and(|field| field.kind == "otp"),
         });
     }
 
@@ -715,7 +720,9 @@ impl Item {
             },
             |field| field.position,
         );
-        let kind = if sheet.sealed {
+        let kind = if sheet.otp {
+            act::locker::SetFieldKind::Otp
+        } else if sheet.sealed {
             act::locker::SetFieldKind::Sealed
         } else {
             act::locker::SetFieldKind::Text
@@ -1121,7 +1128,7 @@ impl Item {
                 let secret = item.secrets.iter().find(|secret| secret.column == *column);
                 match secret {
                     Some(secret) if secret.present => Some(if *column == SEED {
-                        self.code_row(locale)
+                        self.code_row(locale, SEED, words::verification_code(locale), &[])
                     } else {
                         self.sealed_row(locale, column, types::label(locale, column), &[])
                     }),
@@ -1182,7 +1189,9 @@ impl Item {
                     } else {
                         Vec::new()
                     };
-                    if field.sealed && field.present {
+                    if field.kind == "otp" && field.present {
+                        self.code_row(locale, &key, field.label.clone(), &edit)
+                    } else if field.sealed && field.present {
                         self.sealed_row(locale, &key, field.label.clone(), &edit)
                     } else if field.sealed {
                         wire::LockerFieldRow {
@@ -1269,9 +1278,14 @@ impl Item {
 
     /// A ONE-TIME CODE'S ROW: the code, grouped, with its seconds and a
     /// countdown while shown; a mask with Show code and Copy code otherwise.
-    fn code_row(&self, locale: Locale) -> wire::LockerFieldRow {
-        let label = words::verification_code(locale);
-        if let (Some(code), Some(shown)) = (self.secrets.value(SEED), self.shown_code(SEED)) {
+    fn code_row(
+        &self,
+        locale: Locale,
+        key: &str,
+        label: String,
+        more: &[wire::LockerVerb],
+    ) -> wire::LockerFieldRow {
+        if let (Some(code), Some(shown)) = (self.secrets.value(key), self.shown_code(key)) {
             let grouped = if code.chars().count() == 6 {
                 format!(
                     "{} {}",
@@ -1282,7 +1296,7 @@ impl Item {
                 code.to_owned()
             };
             return wire::LockerFieldRow {
-                key: SEED.to_owned(),
+                key: key.to_owned(),
                 label: label.clone(),
                 value: grouped.clone(),
                 sealed: true,
@@ -1305,15 +1319,19 @@ impl Item {
             };
         }
         wire::LockerFieldRow {
-            key: SEED.to_owned(),
+            key: key.to_owned(),
             label: label.clone(),
             sealed: true,
             mask: CODE_MASK.to_owned(),
             note: words::otp_note(locale),
-            verbs: vec![
-                verb("code", words::show_code(locale)),
-                verb("copy_code", words::copy_code(locale)),
-            ],
+            verbs: {
+                let mut verbs = vec![
+                    verb("code", words::show_code(locale)),
+                    verb("copy_code", words::copy_code(locale)),
+                ];
+                verbs.extend(more.iter().cloned());
+                verbs
+            },
             accessibility_label: format!("{label}, {}", words::sealed(locale)),
             monospace: true,
             ..wire::LockerFieldRow::default()
@@ -1660,6 +1678,16 @@ fn passkey_section(
         rows,
         note: String::new(),
     }
+}
+
+/// Whether `key` names a one-time-code field of this item, whose row makes codes and never
+/// shows its seed.
+fn is_code_field(item: &wire::LockerItem, key: &str) -> bool {
+    key.strip_prefix(FIELD).is_some_and(|id| {
+        item.fields
+            .iter()
+            .any(|field| field.field_id == id && field.kind == "otp")
+    })
 }
 
 /// Whether `key` names a sealed value this item holds: one of its cells, or a

@@ -194,7 +194,7 @@ pub(super) struct Code {
     pub remaining: u32,
 }
 
-pub(super) fn totp(ctx: &Ctx, item_id: &str, copy: bool) -> Result<Code, Refused> {
+pub(super) fn totp(ctx: &Ctx, item_id: &str, field_id: &str, copy: bool) -> Result<Code, Refused> {
     let locale = ctx.locale();
     let answer = ctx
         .locker(&wire::LockerSessionRequest {
@@ -202,6 +202,7 @@ pub(super) fn totp(ctx: &Ctx, item_id: &str, copy: bool) -> Result<Code, Refused
                 wire::LockerTotpAsk {
                     item_id: item_id.to_owned(),
                     copy,
+                    field_id: field_id.to_owned(),
                 },
             )),
         })

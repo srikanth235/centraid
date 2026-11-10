@@ -253,6 +253,71 @@ fn a_seed_is_never_revealed_and_a_code_ticks_with_its_step() {
     assert_eq!(seed.countdown.as_ref().unwrap().period, 30);
 }
 
+/// A custom one-time-code field is added through the catalog's `SetField` (kind otp), is sealed
+/// like any seed, reads as a code row (never a reveal), edits keep its kind, and the seed is never
+/// on the page.
+#[test]
+fn a_one_time_code_field_is_added_makes_codes_and_keeps_its_seed_to_itself() {
+    let mut d = driver();
+    login(&d, "i3", "Bank");
+    let added = arrange(
+        &d,
+        act::locker::SetField {
+            item_id: "i3".to_owned(),
+            kind: act::locker::SetFieldKind::Otp,
+            label: "Backup authenticator".to_owned(),
+            field_id: Some("f-otp".to_owned()),
+            value: Some("JBSWY3DPEHPK3PXP".to_owned()),
+            ..Default::default()
+        },
+    );
+    assert_eq!(added.status, wire::ActStatus::Executed as i32);
+    d.start();
+    d.answer_effect(passed(wire::Biometry::Face));
+    let id = push_item(&mut d, "i3");
+    let data = item_data(&d, id);
+    let row = row_of(&data, "field:f-otp");
+    let verbs: Vec<&str> = row.verbs.iter().map(|v| v.key.as_str()).collect();
+    assert_eq!(verbs, ["code", "copy_code", "edit"]);
+    assert!(row.sealed && row.value.is_empty());
+    // The seed is not revealable from the page; a code is.
+    verb(&mut d, id, "field:f-otp", "reveal");
+    assert!(!row_of(&item_data(&d, id), "field:f-otp").revealed);
+    verb(&mut d, id, "field:f-otp", "code");
+    let data = item_data(&d, id);
+    let row = row_of(&data, "field:f-otp");
+    assert!(
+        row.revealed && row.value.len() == 7,
+        "grouped: {}",
+        row.value
+    );
+    assert_eq!(row.countdown.as_ref().unwrap().period, 30);
+    assert!(!format!("{data:?}").contains("JBSWY3DP"));
+    // Editing it (rename, the seed left alone) keeps the kind and the seed.
+    verb(&mut d, id, "field:f-otp", "edit");
+    item_event(
+        &mut d,
+        id,
+        I::FieldTyped(wire::locker_item_event::FieldTyped {
+            key: "label".to_owned(),
+            value: "Backup app".to_owned(),
+        }),
+    );
+    item_event(
+        &mut d,
+        id,
+        I::FieldSaved(wire::locker_item_event::FieldSaved {}),
+    );
+    assert!(item(&d, id).field_sheet.is_none(), "the edit was refused");
+    let data = item_data(&d, id);
+    let row = row_of(&data, "field:f-otp");
+    assert_eq!(row.label, "Backup app");
+    assert!(
+        row.verbs.iter().any(|v| v.key.ends_with("code")),
+        "it is still a one-time-code row"
+    );
+}
+
 #[test]
 fn a_field_is_added_one_at_a_time_and_a_sealed_one_is_never_shown_back() {
     let (mut d, id) = opened_item();
