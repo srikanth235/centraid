@@ -211,12 +211,15 @@ struct PhotosLightboxView: View {
     private func lightToolbar(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
         VStack(spacing: 4) {
             if state.hasStatus, !state.status.sentence.isEmpty, !state.status.refused {
-                Text(state.status.sentence)
-                    .kitType(.meta)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Surface.meta)
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .accessibilityIdentifier("photos.lightbox.status")
+                HStack(spacing: 8) {
+                    Text(state.status.sentence)
+                        .kitType(.meta)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Surface.meta)
+                        .accessibilityIdentifier("photos.lightbox.status")
+                    statusAction(Surface.ink, "photos-lightbox-status-action")
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
             toolbar(light: true)
         }
@@ -286,10 +289,13 @@ struct PhotosLightboxView: View {
             // over it and never instead of the photograph.
             if state.hasStatus, !state.status.sentence.isEmpty {
                 // ON ITS OWN PLATE, clear of the photograph's pixels beneath it.
-                Text(state.status.sentence)
-                    .centraidType("small")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Theme.color("onStage", scheme))
+                HStack(spacing: 8) {
+                    Text(state.status.sentence)
+                        .centraidType("small")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.color("onStage", scheme))
+                    statusAction(Theme.color("onStage", scheme), "photos-lightbox-status-action")
+                }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Theme.color("stageSunken", scheme), in: Capsule())
@@ -315,6 +321,23 @@ struct PhotosLightboxView: View {
 
     /// THE ONE STATUS LINE, drawn only when it has something to say.
     @ViewBuilder
+    /// The status line's action ("Undo" after Move to trash, #1185); empty label, no button.
+    @ViewBuilder
+    private func statusAction(_ ink: Color, _ identifier: String) -> some View {
+        if state.hasStatus, !state.status.actionLabel.isEmpty {
+            Button { send(.statusActed(.init())) } label: {
+                Text(state.status.actionLabel)
+                    .kitType(.meta)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ink)
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(identifier)
+        }
+    }
+
     private func statusLine(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
         let line = state.slideshow
             ? state.slideshowLine

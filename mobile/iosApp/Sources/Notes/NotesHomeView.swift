@@ -550,7 +550,7 @@ private struct NotesHomeSheet: View {
             // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
             OptionSheet(title: chrome.moreTitle) {
                 ForEach(state.moreRows, id: \.key) { row in
-                    SheetRow(iconKey: row.iconKey, label: row.label, identifier: "notes-more-\(row.key)") {
+                    SheetRow(iconKey: row.iconKey, label: row.label, detail: row.meta, identifier: "notes-more-\(row.key)") {
                         send(NotesEvents.home { $0.sheetClosed = .init() })
                         open(row.route)
                     }

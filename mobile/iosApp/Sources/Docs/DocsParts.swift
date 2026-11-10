@@ -33,6 +33,7 @@ struct DocsSheetView: View {
                         SheetRow(
                             iconKey: action.iconKey,
                             label: action.label,
+                            detail: action.meta,
                             destructive: action.destructive,
                             identifier: "docs-action-\(action.key)",
                             onTap: { actions.onAction(action) }

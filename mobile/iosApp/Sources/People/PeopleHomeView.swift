@@ -633,7 +633,7 @@ private struct PeopleHomeSheet: View {
                 }
             }
             ForEach(state.moreRows, id: \.key) { row in
-                SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
+                SheetRow(iconKey: row.iconKey, label: row.label, detail: row.meta, identifier: "people-more-\(row.key)") {
                     send(PeopleEvents.home { $0.sheetClosed = .init() })
                     open(row.route)
                 }
