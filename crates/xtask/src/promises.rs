@@ -67,15 +67,23 @@ pub enum Promise {
     /// the path passes `arrived_system` and `arrived_label` (a system and a file or device name) to the command that adds
     /// it, and the vault keeps one origin per name and one source per item.
     Arrive,
+    /// Every app can export its data as a file, on the kit's one export screen, behind the owner
+    /// check (#1185, take out).
+    Export,
+    /// A primary record can be handed, one at a time, to the OS share sheet, the same way in every
+    /// app (#1185, take out). Locker's contents leave only through its export (D11).
+    Share,
 }
 
 impl Promise {
     /// Every promise, in the order the table is read.
-    pub const ALL: [Promise; 4] = [
+    pub const ALL: [Promise; 6] = [
         Promise::Trash,
         Promise::Undo,
         Promise::History,
         Promise::Arrive,
+        Promise::Export,
+        Promise::Share,
     ];
 
     fn name(self) -> &'static str {
@@ -84,6 +92,8 @@ impl Promise {
             Promise::Undo => "Undo",
             Promise::History => "History",
             Promise::Arrive => "Arrive",
+            Promise::Export => "Export",
+            Promise::Share => "Share",
         }
     }
 }
@@ -94,16 +104,7 @@ pub enum Status {
     /// Kept; the string is the file that proves it (read by the checker, and it
     /// must exist).
     Kept(&'static str),
-    /// A known gap; the string says why, and names the issue that tracks it. No promise is owed
-    /// today (every row above is Kept), so only the checker's own tests build one; the mechanism
-    /// stays for the next gap.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "no promise is owed today; the next gap is listed here"
-        )
-    )]
+    /// A known gap; the string says why, and names the issue that tracks it.
     Owed(&'static str),
 }
 
@@ -120,6 +121,14 @@ const fn kept(app: &'static str, promise: Promise, proof: &'static str) -> Row {
         app,
         promise,
         status: Status::Kept(proof),
+    }
+}
+
+const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
+    Row {
+        app,
+        promise,
+        status: Status::Owed(why),
     }
 }
 
@@ -266,7 +275,47 @@ pub const REGISTER: &[Row] = &[
         Promise::Arrive,
         "crates/screens/src/imports/reminders.rs",
     ),
+    // Export and Share (#1185, take out): the kit's `ExportSpec` screen and share helper; the
+    // checkers' gaps are the adopters' work list.
+    owed("calendar", Promise::Export, EXPORT_OWED),
+    owed("docs", Promise::Export, EXPORT_OWED),
+    owed("health", Promise::Export, EXPORT_OWED),
+    // Locker's export keeps its own machine ([`OWN_EXPORT`]).
+    kept(
+        "locker",
+        Promise::Export,
+        "crates/screens/src/locker/transfer.rs",
+    ),
+    owed("money", Promise::Export, EXPORT_OWED),
+    owed("notes", Promise::Export, EXPORT_OWED),
+    owed("people", Promise::Export, EXPORT_OWED),
+    owed("photos", Promise::Export, EXPORT_OWED),
+    owed("reminders", Promise::Export, EXPORT_OWED),
+    owed("calendar", Promise::Share, SHARE_OWED),
+    kept(
+        "docs",
+        Promise::Share,
+        "crates/screens/src/docs/document.rs",
+    ),
+    owed("health", Promise::Share, SHARE_OWED),
+    kept(
+        "locker",
+        Promise::Share,
+        "crates/screens/src/locker/item.rs",
+    ),
+    owed("money", Promise::Share, SHARE_OWED),
+    owed("notes", Promise::Share, SHARE_OWED),
+    owed("people", Promise::Share, SHARE_OWED),
+    kept(
+        "photos",
+        Promise::Share,
+        "crates/screens/src/photos/lightbox.rs",
+    ),
+    owed("reminders", Promise::Share, SHARE_OWED),
 ];
+
+const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
+const SHARE_OWED: &str = "no share of one record on the kit's share helper (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -354,6 +403,8 @@ pub fn missing(root: &Path, app: &str, promise: Promise) -> Vec<String> {
         Promise::Undo => undo_missing(root, app),
         Promise::History => history_missing(root, app),
         Promise::Arrive => arrive_missing(root, app),
+        Promise::Export => export_missing(root, app),
+        Promise::Share => share_missing(root, app),
     }
 }
 
@@ -1136,6 +1187,258 @@ fn arrive_missing_in(root: &Path, app: &str, sites: &[ArrivalSite]) -> Vec<Strin
                     "{rel}: builds `act::{app}::{ident}` in an arrival-shaped file that ARRIVAL_SITES does not list; list it and pass `arrived`"
                 ));
             }
+        }
+    }
+    gaps
+}
+
+// ---------------------------------------------------------------------------
+// Export and Share (take out)
+// ---------------------------------------------------------------------------
+
+/// What the export spec literal must set: the app, the page's words, the gate, the rows, the
+/// call and what happens on a phone with no passcode.
+const EXPORT_SPEC_FIELDS: [&str; 8] = [
+    "app",
+    "title",
+    "lede",
+    "back_label",
+    "denied",
+    "choices",
+    "export",
+    "no_passcode",
+];
+
+/// AN EXPORT THAT KEEPS ITS OWN MACHINE, declared by name (D11, D15). Locker's export is a mass
+/// reveal behind its own owner check that REFUSES on a phone with no passcode, so it is not a kit
+/// `ExportSpec` screen yet. It is held to less than the kit and named here so the register cannot
+/// grow a second shape by accident: the screen file exists, is registered as `<app>.export`, and a
+/// screen other than it routes to it.
+pub struct OwnExport {
+    pub app: &'static str,
+    /// The screen's file under `crates/screens/src/<app>/`.
+    pub file: &'static str,
+    pub reason: &'static str,
+}
+
+/// The exports that keep their own machine. Only Locker.
+pub const OWN_EXPORT: &[OwnExport] = &[OwnExport {
+    app: "locker",
+    file: "transfer.rs",
+    reason: "a mass reveal of secrets behind its own owner check, refused on a phone with no passcode (D15)",
+}];
+
+/// Export is kept when, for `app`:
+///
+/// 1. `crates/screens/src/<app>/export.rs` defines an `ExportSpec` built on `kit::export`, with
+///    every field of [`EXPORT_SPEC_FIELDS`];
+/// 2. the app's `mod.rs` registers it (`export::build` under `"<app>.export"`);
+/// 3. a screen other than the export reaches it through the kit's one entry (`export::entry(`);
+/// 4. every `act::<app>::X` the spec calls is a manifest action that declares
+///    `"writes_nothing": true` (an export writes nothing, so there is nothing to take back).
+///
+/// An app named in [`OWN_EXPORT`] is held to its own file, its registration and its entry.
+fn export_missing(root: &Path, app: &str) -> Vec<String> {
+    export_missing_in(root, app, OWN_EXPORT)
+}
+
+fn export_missing_in(root: &Path, app: &str, own: &[OwnExport]) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let dir = root.join("crates/screens/src").join(app);
+    let own = own.iter().find(|own| own.app == app);
+    let file = own.map_or("export.rs", |own| own.file);
+    let spec_path = dir.join(file);
+    let spec_rel = format!("crates/screens/src/{app}/{file}");
+
+    // 1. the spec
+    let mut called = Vec::new();
+    match live_source(&spec_path) {
+        None => gaps.push(format!(
+            "{spec_rel} is missing: no export screen built on kit::export::ExportSpec{}",
+            own.map_or_else(String::new, |own| format!(
+                " (declared its own: {})",
+                own.reason
+            ))
+        )),
+        Some(_) if own.is_some() => {}
+        Some(text) => {
+            if !text.contains("kit::export") || !text.contains("ExportSpec") {
+                gaps.push(format!(
+                    "{spec_rel} does not define an ExportSpec built on kit::export"
+                ));
+            }
+            for field in EXPORT_SPEC_FIELDS {
+                if !spec_sets(&text, field) {
+                    gaps.push(format!("{spec_rel}: the spec has no `{field}`"));
+                }
+            }
+            called = act_idents(&text, app)
+                .into_iter()
+                .filter(|ident| ident != "APP")
+                .collect();
+        }
+    }
+
+    // 2. registered under the app's own name
+    let registered = live_source(&dir.join("mod.rs")).is_some_and(|text| {
+        text.contains(if own.is_some() {
+            "transfer::build_export"
+        } else {
+            "export::build"
+        }) && text.contains(&format!("\"{app}.export\""))
+    });
+    if !registered {
+        gaps.push(format!(
+            "crates/screens/src/{app}/mod.rs does not register the screen (under \"{app}.export\")"
+        ));
+    }
+
+    // 3. one entry from another screen
+    let entered = source_files(&dir, "rs")
+        .into_iter()
+        .filter(|path| *path != spec_path)
+        .filter_map(|path| live_source(&path))
+        .any(|text| {
+            if own.is_some() {
+                text.contains("more_export")
+            } else {
+                text.contains("export::entry(")
+            }
+        });
+    if !entered {
+        gaps.push(format!(
+            "crates/screens/src/{app}/: no screen reaches the export through the kit's one entry (`export::entry(`)"
+        ));
+    }
+
+    // 4. what the spec calls writes nothing
+    if own.is_none() && spec_path.is_file() {
+        let actions = undo_actions(root, app);
+        if actions.is_empty() {
+            gaps.push(format!("crates/apps/{app}/manifest.json could not be read"));
+        }
+        if called.is_empty() {
+            gaps.push(format!("{spec_rel}: the spec calls no manifest action"));
+        }
+        for ident in called {
+            match actions.iter().find(|action| pascal(&action.name) == ident) {
+                None => gaps.push(format!(
+                    "{spec_rel}: calls `act::{app}::{ident}`, which is not a manifest action"
+                )),
+                Some(action) if !action.writes_nothing => gaps.push(format!(
+                    "crates/apps/{app}/manifest.json: `{}` is called by the export but does not declare `\"writes_nothing\": true`",
+                    action.name
+                )),
+                Some(_) => {}
+            }
+        }
+    }
+    gaps
+}
+
+/// A SHARE THAT IS NOT THE KIT'S HELPER, declared by name: the two apps whose records already
+/// have a file or a photograph the platform's share sheet takes straight from the store (Docs'
+/// `ShareFile`, Photos' `ExportOriginals`), on the detail screen named.
+pub struct OwnShare {
+    pub app: &'static str,
+    /// The detail screen's file under `crates/screens/src/<app>/`.
+    pub screen: &'static str,
+    /// The effect the screen raises.
+    pub effect: &'static str,
+}
+
+/// The shares that use an effect of their own.
+pub const OWN_SHARE: &[OwnShare] = &[
+    OwnShare {
+        app: "docs",
+        screen: "document.rs",
+        effect: "ShareFile",
+    },
+    OwnShare {
+        app: "photos",
+        screen: "lightbox.rs",
+        effect: "ExportOriginals",
+    },
+];
+
+/// NO SHARE, BY DECISION (D11): a Locker item cannot be handed to another app; its contents leave
+/// only through its own export. Declared by name with the reason; the checker holds the app's
+/// screens to NOT sharing.
+pub struct NoShare {
+    pub app: &'static str,
+    pub reason: &'static str,
+}
+
+pub const NO_SHARE: &[NoShare] = &[NoShare {
+    app: "locker",
+    reason: "D11: a Locker item cannot be handed to another app; its contents leave only through its export",
+}];
+
+/// What a screen spells to hand something to the OS.
+const SHARE_EFFECTS: [&str; 4] = ["ShareFile", "ShareBytes", "ExportOriginals", "kit::share"];
+
+/// Share is kept when, for `app`:
+///
+/// - an app in [`NO_SHARE`] has no screen that shares anything ([`SHARE_EFFECTS`]);
+/// - an app in [`OWN_SHARE`] raises its named effect on its detail screen;
+/// - every other app's detail screen of each primary kind ([`HISTORY_KINDS`]) uses the kit's share
+///   helper (`kit::share`), which asks the owner check before the item leaves.
+fn share_missing(root: &Path, app: &str) -> Vec<String> {
+    share_missing_in(root, app, OWN_SHARE, NO_SHARE)
+}
+
+fn screen_text(dir: &Path, screen: &str) -> String {
+    let path = dir.join(screen);
+    let files = if path.is_dir() {
+        source_files(&path, "rs")
+    } else {
+        vec![path]
+    };
+    files
+        .iter()
+        .filter_map(|file| live_source(file))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn share_missing_in(root: &Path, app: &str, own: &[OwnShare], none: &[NoShare]) -> Vec<String> {
+    let dir = root.join("crates/screens/src").join(app);
+    let mut gaps = Vec::new();
+    if let Some(no) = none.iter().find(|no| no.app == app) {
+        for file in source_files(&dir, "rs") {
+            let Some(text) = live_source(&file) else {
+                continue;
+            };
+            for effect in SHARE_EFFECTS {
+                if text.contains(effect) {
+                    gaps.push(format!(
+                        "{}: shares with `{effect}`, but {app} has no share by decision ({})",
+                        relative(root, &file),
+                        no.reason
+                    ));
+                }
+            }
+        }
+        return gaps;
+    }
+    if let Some(own) = own.iter().find(|own| own.app == app) {
+        if !screen_text(&dir, own.screen).contains(own.effect) {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{}: the detail screen does not raise `{}`",
+                own.screen, own.effect
+            ));
+        }
+        return gaps;
+    }
+    let kinds = HISTORY_KINDS
+        .iter()
+        .find(|(name, _)| *name == app)
+        .map_or(&[][..], |(_, kinds)| *kinds);
+    for (kind, screen) in kinds {
+        if !screen_text(&dir, screen).contains("kit::share") {
+            gaps.push(format!(
+                "crates/screens/src/{app}/{screen}: the {kind} page does not hand the item to the OS through the kit's share helper (`kit::share`)"
+            ));
         }
     }
     gaps

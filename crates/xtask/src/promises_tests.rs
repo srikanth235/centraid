@@ -801,6 +801,191 @@ fn an_import_that_does_not_pass_the_arrival_is_named_by_file() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Export and Share (take out)
+// ---------------------------------------------------------------------------
+
+const EXPORT_SPEC: &str = r"use crate::kit::export::{self, ExportSpec};
+pub static SPEC: ExportSpec = ExportSpec {
+    app: act::notes::APP,
+    title,
+    lede,
+    back_label,
+    denied,
+    choices: |ctx| choices(ctx),
+    export: |ctx, key| act(ctx, act::notes::ExportNotes {}),
+    no_passcode: NoPasscode::Warn,
+};
+";
+
+const EXPORT_MANIFEST: &str = r#"{"actions":[
+ {"name":"export-notes","command":"note.export","writes_nothing":true}]}"#;
+
+/// A `notes` app that keeps Export in full.
+fn export_tree(name: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/screens/src/notes/export.rs", EXPORT_SPEC);
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "registry().with(\"notes.export\", export::build)",
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn more() { let row = export::entry(locale, EXPORT, &back); }",
+    );
+    write(&root, "crates/apps/notes/manifest.json", EXPORT_MANIFEST);
+    root
+}
+
+fn export_lacking(root: &Path) -> String {
+    export_missing_in(root, "notes", &[]).join("\n")
+}
+
+#[test]
+fn an_app_with_the_whole_export_is_clean() {
+    assert_eq!(export_lacking(&export_tree("export-clean")), "");
+}
+
+#[test]
+fn an_export_with_no_screen_registration_or_entry_is_named() {
+    let root = fixture_dir("export-none");
+    write(&root, "crates/apps/notes/manifest.json", EXPORT_MANIFEST);
+    let gaps = export_lacking(&root);
+    assert!(gaps.contains("crates/screens/src/notes/export.rs is missing"));
+    assert!(gaps.contains("does not register the screen"));
+    assert!(gaps.contains("no screen reaches the export"));
+}
+
+#[test]
+fn a_spec_that_leaves_out_the_passcode_rule_or_the_gate_is_named() {
+    let root = export_tree("export-fields");
+    write(
+        &root,
+        "crates/screens/src/notes/export.rs",
+        "use crate::kit::export::ExportSpec;\nstatic SPEC: ExportSpec = ExportSpec {\n    app: x,\n    title,\n    lede,\n    back_label,\n    choices,\n    export: |c| act::notes::ExportNotes {},\n};",
+    );
+    let gaps = export_lacking(&root);
+    assert!(gaps.contains("the spec has no `no_passcode`"));
+    assert!(gaps.contains("the spec has no `denied`"));
+}
+
+#[test]
+fn an_export_action_that_does_not_declare_writes_nothing_is_named() {
+    let root = export_tree("export-writes");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[{"name":"export-notes","command":"note.export"}]}"#,
+    );
+    assert!(export_lacking(&root).contains("does not declare `\"writes_nothing\": true`"));
+}
+
+#[test]
+fn an_export_that_calls_a_stranger_is_named() {
+    let root = export_tree("export-stranger");
+    write(
+        &root,
+        "crates/apps/notes/manifest.json",
+        r#"{"actions":[{"name":"other","command":"x","writes_nothing":true}]}"#,
+    );
+    assert!(export_lacking(&root).contains("which is not a manifest action"));
+}
+
+#[test]
+fn a_test_module_does_not_reach_the_export() {
+    let root = export_tree("export-test-entry");
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "#[cfg(test)]\nmod t { fn x() { export::entry(); } }",
+    );
+    assert!(export_lacking(&root).contains("no screen reaches the export"));
+}
+
+#[test]
+fn an_export_that_keeps_its_own_machine_is_declared_by_name_and_only_locker_is() {
+    let apps: Vec<&str> = OWN_EXPORT.iter().map(|own| own.app).collect();
+    assert_eq!(apps, ["locker"]);
+    let root = fixture_dir("export-own");
+    let own = [OwnExport {
+        app: "notes",
+        file: "transfer.rs",
+        reason: "x",
+    }];
+    let found = export_missing_in(&root, "notes", &own).join("\n");
+    assert!(found.contains("transfer.rs is missing"));
+    write(
+        &root,
+        "crates/screens/src/notes/transfer.rs",
+        "fn build_export() {}",
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/mod.rs",
+        "with(\"notes.export\", transfer::build_export)",
+    );
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn r() { more_export(); }",
+    );
+    assert_eq!(export_missing_in(&root, "notes", &own).join("\n"), "");
+}
+
+fn share_tree(name: &str, page: &str) -> PathBuf {
+    let root = fixture_dir(name);
+    write(&root, "crates/screens/src/notes/editor.rs", page);
+    root
+}
+
+fn share_lacking(root: &Path) -> String {
+    share_missing_in(root, "notes", &[], &[]).join("\n")
+}
+
+#[test]
+fn a_detail_page_on_the_kits_share_helper_keeps_share() {
+    let root = share_tree("share-clean", "use crate::kit::share::Share;\nfn x() {}");
+    assert_eq!(share_lacking(&root), "");
+}
+
+#[test]
+fn a_detail_page_with_no_share_is_named() {
+    let root = share_tree("share-none", "fn x() {}");
+    assert!(share_lacking(&root).contains("the note page does not hand the item to the OS"));
+}
+
+#[test]
+fn a_share_in_a_test_module_does_not_count() {
+    let root = share_tree(
+        "share-test",
+        "fn x() {}\n#[cfg(test)]\nmod t { use crate::kit::share::Share; }",
+    );
+    assert!(share_lacking(&root).contains("does not hand the item"));
+}
+
+#[test]
+fn a_declared_own_share_must_raise_its_effect() {
+    let root = share_tree("share-own", "fn x() { Kind::ShareFile }");
+    let own = [OwnShare {
+        app: "notes",
+        screen: "editor.rs",
+        effect: "ShareFile",
+    }];
+    assert_eq!(share_missing_in(&root, "notes", &own, &[]).join("\n"), "");
+    let other = [OwnShare {
+        app: "notes",
+        screen: "editor.rs",
+        effect: "ExportOriginals",
+    }];
+    assert!(
+        share_missing_in(&root, "notes", &other, &[])
+            .join("\n")
+            .contains("does not raise `ExportOriginals`")
+    );
+}
+
 #[test]
 fn an_arrival_only_a_comment_or_a_test_spells_does_not_count() {
     let root = arrive_tree("arrive-comment");
@@ -890,4 +1075,28 @@ fn the_committed_arrival_paths_exist_and_agree_with_their_rows() {
             "{app} records its arrivals in the vault and lists no path"
         );
     }
+}
+
+#[test]
+fn an_app_with_no_share_by_decision_that_shares_is_named() {
+    let root = share_tree("share-no", "use crate::kit::share::Share;");
+    let none = [NoShare {
+        app: "notes",
+        reason: "D11",
+    }];
+    assert!(
+        share_missing_in(&root, "notes", &[], &none)
+            .join("\n")
+            .contains("has no share by decision (D11)")
+    );
+    let quiet = share_tree("share-no-quiet", "fn x() {}");
+    assert_eq!(share_missing_in(&quiet, "notes", &[], &none).join("\n"), "");
+}
+
+#[test]
+fn only_locker_has_no_share_and_only_docs_and_photos_have_their_own() {
+    let none: Vec<&str> = NO_SHARE.iter().map(|no| no.app).collect();
+    assert_eq!(none, ["locker"]);
+    let own: Vec<&str> = OWN_SHARE.iter().map(|own| own.app).collect();
+    assert_eq!(own, ["docs", "photos"]);
 }
