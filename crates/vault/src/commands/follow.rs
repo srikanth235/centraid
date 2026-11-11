@@ -63,7 +63,7 @@ use serde_json::{Map, Value as Json};
 
 use crate::blob;
 use crate::commands::entity::{self, trash_stamp};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::commands::{contact_point, container, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
@@ -1089,10 +1089,18 @@ fn match_existing(
         "SELECT e.id FROM entity e JOIN {} k ON k.id = e.id
           WHERE e.kind = ?1 AND e.deleted_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
+                              AND s.system NOT IN ({})
                               AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id",
         crate::log::quoted(map.kind.host()),
+        // An item that only arrived once (a vCard, a Markdown file) is nobody's to follow
+        // yet: the store that now states it takes the row over.
+        arrival::SYSTEMS
+            .iter()
+            .map(|(system, _)| format!("'{system}'"))
+            .collect::<Vec<_>>()
+            .join(","),
         clauses.join(" AND ")
     );
     let candidates = connection

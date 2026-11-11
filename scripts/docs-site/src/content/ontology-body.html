@@ -462,7 +462,7 @@
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="follow"><span class="sid">follow</span><h3>following</h3><p class="sdesc">An origin is a system the member follows; a source is one record of it, with what it last stated.</p></div>
-<div class="tbl rv in" data-group="follow" data-table="origin"><header><h4>origin</h4><p class="tp">A system the member follows: a phone's contacts, calendar, files or health store, or a bank statement.</p></header>
+<div class="tbl rv in" data-group="follow" data-table="origin"><header><h4>origin</h4><p class="tp">Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">system</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -473,7 +473,7 @@
 <div class="colrow"><span class="cn">config</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="follow" data-table="source"><header><h4>source</h4><p class="tp">One record of an origin, with what it last stated, so the next pass merges per field against it.</p></header>
+<div class="tbl rv in" data-group="follow" data-table="source"><header><h4>source</h4><p class="tp">One record of an origin, with what it last stated, so the next pass merges per field against it; for a one-shot arrival it only says which origin the item came from.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">origin_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ origin.id</span><span class="cnote"></span></div>

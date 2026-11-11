@@ -43,7 +43,9 @@ use rusqlite::OptionalExtension;
 
 use crate::commands::blob::{claim, pre_claimable};
 use crate::commands::entity::lookup_live;
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, place};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival, place,
+};
 use crate::error::Result;
 use crate::model::Kind;
 
@@ -242,6 +244,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         }
     }
     derive_image_tiers(ctx, blob, media_type)?;
+    arrival::record(ctx, &id, Kind::Photo)?;
     Ok(serde_json::json!({ "id": id, "deduped": false }))
 }
 
@@ -412,7 +415,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "photo.add",
             "photo",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["blob", "media_type"],
               "additionalProperties": false,
@@ -435,9 +439,13 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "lon": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
                 "place_id": { "type": ["string", "null"] },
                 "phash": { "type": ["string", "null"], "maxLength": 128 },
-                "thumbhash": { "type": ["string", "null"], "maxLength": 512 }
+                "thumbhash": { "type": ["string", "null"], "maxLength": 512 },
+                "#,
+                crate::commands::arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Once,
             ADD,
             add,

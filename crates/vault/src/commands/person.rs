@@ -41,7 +41,9 @@ use crate::commands::event::{self, NewEvent};
 use crate::commands::note;
 use crate::commands::tag::{ensure_concept, set_tagged};
 use crate::commands::task::{self, NewTask};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk, arrival,
+};
 use crate::error::{Result, VaultError};
 use crate::model::{Kind, Rel};
 use crate::time::Semantics;
@@ -1090,6 +1092,7 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                         },
                     )?;
                     write_points(ctx, &id, card, &(0..card.points.len()).collect::<Vec<_>>())?;
+                    arrival::record(ctx, &id, Kind::Person)?;
                 }
             }
         }
@@ -1195,16 +1198,21 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "person.import_vcf",
             "person",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["cards"],
               "additionalProperties": false,
               "properties": {
                 "cards": { "type": "string" },
                 "dry_run": { "type": "boolean" },
-                "merge": { "type": "boolean" }
+                "merge": { "type": "boolean" },
+                "#,
+                arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Idempotent,
             &[],
             import_vcf,

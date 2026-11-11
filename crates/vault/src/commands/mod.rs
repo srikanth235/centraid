@@ -43,6 +43,7 @@
 //! nothing (#1146). A write a shell may re-offer without a key is idempotent by
 //! its own content, or by an id the phone minted before the first attempt.
 
+pub mod arrival;
 pub mod blob;
 pub mod contact_point;
 pub mod container;

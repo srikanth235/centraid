@@ -39,7 +39,7 @@ use rusqlite::OptionalExtension;
 use crate::commands::blob::{claim, pre_claimable};
 use crate::commands::entity::lookup_live;
 use crate::commands::note::BODY_BUDGET_BYTES;
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
 
@@ -264,6 +264,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         ctx.required_str("media_type")?,
         ctx.optional_str("folder_id"),
     )?;
+    arrival::record(ctx, &id, Kind::Document)?;
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -367,7 +368,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "document.add",
             "document",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["title", "blob", "media_type"],
               "additionalProperties": false,
@@ -378,9 +380,13 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "media_type": { "type": "string", "minLength": 1 },
                 "size": { "type": "integer", "minimum": 0 },
                 "folder_id": { "type": ["string", "null"] },
-                "text": { "type": "string", "maxLength": 200000 }
+                "text": { "type": "string", "maxLength": 200000 },
+                "#,
+                crate::commands::arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Once,
             ADD,
             add,

@@ -233,12 +233,12 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "follow",
         "origin",
-        "A system the member follows: a phone's contacts, calendar, files or health store, or a bank statement.",
+        "Where rows came from: a system the member follows (a phone's contacts, calendar, files or health store, a bank statement) or a file or device an item arrived from once (camera roll, picker, vCard, Markdown, CSV, scan, upload, Reminders). A typed row has none.",
     ),
     (
         "follow",
         "source",
-        "One record of an origin, with what it last stated, so the next pass merges per field against it.",
+        "One record of an origin, with what it last stated, so the next pass merges per field against it; for a one-shot arrival it only says which origin the item came from.",
     ),
     (
         "locker",

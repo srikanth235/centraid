@@ -172,7 +172,11 @@ CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
 
 CREATE TABLE origin (
   id         TEXT PRIMARY KEY,
-  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement')),
+  -- Where a row came from: the five stores the engine follows, and the eight one-shot arrivals
+  -- (camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) that name a file or a
+  -- device once (crates/vault/src/commands/arrival.rs). A typed row has neither.
+  system     TEXT NOT NULL CHECK (system IN ('contacts','calendar','files','health','statement',
+    'camera_roll','picker','vcard','markdown','csv','scan','upload','phone_reminders')),
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT,
@@ -205,7 +209,9 @@ CREATE TABLE source (
   CHECK ((entity_id IS NULL) = (entity_kind IS NULL)),
   CHECK (system <> 'statement' OR device_id IS NULL),
   CHECK (entity_kind IS NULL OR system || '/' || entity_kind IN
-    ('contacts/person','calendar/event','files/document','health/activity','statement/txn'))
+    ('contacts/person','calendar/event','files/document','health/activity','statement/txn',
+     'camera_roll/photo','picker/photo','vcard/person','markdown/note','csv/locker_item',
+     'scan/document','upload/document','phone_reminders/task'))
 ) STRICT;
 CREATE UNIQUE INDEX source_key    ON source(origin_id, external_id, ifnull(device_id, ''));
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;

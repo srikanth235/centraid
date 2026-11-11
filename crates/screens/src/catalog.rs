@@ -682,12 +682,29 @@ pub mod act {
         use super::*;
         pub const APP: &str = "docs";
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum UploadArrivedSystem {
+            #[default]
+            Scan,
+            Upload,
+        }
+        impl UploadArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Scan => "scan",
+                    Self::Upload => "upload",
+                }
+            }
+        }
+
         /// Add a file through document.add: the bytes (already staged, so identical bytes are one blob) become a document, filed into a folder or left at the top level. The words the phone read out of them, when it sent them, are what search finds.
         #[derive(Clone, Debug, Default)]
         pub struct Upload {
             pub blob: String,
             pub media_type: String,
             pub title: String,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<UploadArrivedSystem>,
             pub folder_id: Option<String>,
             pub document_id: Option<String>,
             pub size: Option<i64>,
@@ -701,6 +718,8 @@ pub mod act {
                 map.insert("blob".to_owned(), text(self.blob));
                 map.insert("media_type".to_owned(), text(self.media_type));
                 map.insert("title".to_owned(), text(self.title));
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 if let Some(it) = self.folder_id { map.insert("folder_id".to_owned(), text(it)); }
                 if let Some(it) = self.document_id { map.insert("id".to_owned(), text(it)); }
                 if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
@@ -1726,6 +1745,19 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum AddItemArrivedSystem {
+            #[default]
+            Csv,
+        }
+        impl AddItemArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Csv => "csv",
+                }
+            }
+        }
+
         /// Save a new item through locker.add_item — any of the fifteen item types. Secret fields not belonging to the chosen type are dropped, never stored; a type that owns no columns of its own arrives as the template fields the vault mints for it.
         #[derive(Clone, Debug, Default)]
         pub struct AddItem {
@@ -1733,6 +1765,8 @@ pub mod act {
             pub r#type: AddItemType,
             pub address: Option<String>,
             pub alias: Option<String>,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<AddItemArrivedSystem>,
             pub brand: Option<String>,
             pub card_number: Option<String>,
             pub cardholder: Option<String>,
@@ -1760,6 +1794,8 @@ pub mod act {
                 map.insert("type".to_owned(), text(self.r#type.wire()));
                 if let Some(it) = self.address { map.insert("address".to_owned(), text(it)); }
                 if let Some(it) = self.alias { map.insert("alias".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 if let Some(it) = self.brand { map.insert("brand".to_owned(), text(it)); }
                 if let Some(it) = self.card_number { map.insert("card_number".to_owned(), text(it)); }
                 if let Some(it) = self.cardholder { map.insert("cardholder".to_owned(), text(it)); }
@@ -3803,10 +3839,25 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportNotesArrivedSystem {
+            #[default]
+            Markdown,
+        }
+        impl ImportNotesArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Markdown => "markdown",
+                }
+            }
+        }
+
         /// Read Markdown and text files as notes through note.import: [[links]] become links, #tags become tags, a folder becomes a notebook. With dry_run it only says what would happen.
         #[derive(Clone, Debug, Default)]
         pub struct ImportNotes {
             pub files: String,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<ImportNotesArrivedSystem>,
             pub dry_run: Option<bool>,
         }
         impl ImportNotes {
@@ -3815,6 +3866,8 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("files".to_owned(), text(self.files));
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 if let Some(it) = self.dry_run { map.insert("dry_run".to_owned(), flag(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -4583,10 +4636,25 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportVcfArrivedSystem {
+            #[default]
+            Vcard,
+        }
+        impl ImportVcfArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Vcard => "vcard",
+                }
+            }
+        }
+
         /// Read vCards as people through person.import_vcf: a card naming someone already in the vault is a proposal to merge (it fills blanks and adds missing points, replacing nothing); with dry_run it only says what would happen.
         #[derive(Clone, Debug, Default)]
         pub struct ImportVcf {
             pub cards: String,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<ImportVcfArrivedSystem>,
             pub dry_run: Option<bool>,
             pub merge: Option<bool>,
         }
@@ -4596,6 +4664,8 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("cards".to_owned(), text(self.cards));
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 if let Some(it) = self.dry_run { map.insert("dry_run".to_owned(), flag(it)); }
                 if let Some(it) = self.merge { map.insert("merge".to_owned(), flag(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
@@ -4633,6 +4703,21 @@ pub mod act {
         pub const APP: &str = "photos";
 
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum UploadArrivedSystem {
+            #[default]
+            CameraRoll,
+            Picker,
+        }
+        impl UploadArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::CameraRoll => "camera_roll",
+                    Self::Picker => "picker",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum UploadForm {
             #[default]
             Photo,
@@ -4654,6 +4739,8 @@ pub mod act {
         pub struct Upload {
             pub blob: String,
             pub media_type: String,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<UploadArrivedSystem>,
             pub burst: Field<String>,
             pub duration_s: Field<f64>,
             pub edited_from: Field<String>,
@@ -4679,6 +4766,8 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("blob".to_owned(), text(self.blob));
                 map.insert("media_type".to_owned(), text(self.media_type));
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 put_field(&mut map, "burst", self.burst, |it| text(it));
                 put_field(&mut map, "duration_s", self.duration_s, |it| real(it));
                 put_field(&mut map, "edited_from", self.edited_from, |it| text(it));
@@ -5241,11 +5330,26 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum AddTaskArrivedSystem {
+            #[default]
+            PhoneReminders,
+        }
+        impl AddTaskArrivedSystem {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::PhoneReminders => "phone_reminders",
+                }
+            }
+        }
+
         /// Add a task through task.add: dated, prioritized, estimated, repeating, reminded, linked, filed in a project and section, or as a subtask of an open top-level task; or founded already done (`done_at`), which is how a completed imported item lands.
         #[derive(Clone, Debug, Default)]
         pub struct AddTask {
             pub title: String,
             pub anchor: Option<AddTaskAnchor>,
+            pub arrived_label: Option<String>,
+            pub arrived_system: Option<AddTaskArrivedSystem>,
             pub description: Field<String>,
             pub done_at: Field<String>,
             pub due: Field<String>,
@@ -5268,6 +5372,8 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("title".to_owned(), text(self.title));
                 if let Some(it) = self.anchor { map.insert("anchor".to_owned(), text(it.wire())); }
+                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
+                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 put_field(&mut map, "description", self.description, |it| text(it));
                 put_field(&mut map, "done_at", self.done_at, |it| text(it));
                 put_field(&mut map, "due", self.due, |it| text(it));

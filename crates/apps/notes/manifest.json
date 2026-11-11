@@ -1078,7 +1078,17 @@
             "type": "string",
             "description": "A JSON array of {path, text}: each file's path relative to the picked folder, and its text."
           },
-          "dry_run": { "type": "boolean" }
+          "dry_run": { "type": "boolean" },
+          "arrived_system": {
+            "type": "string",
+            "enum": ["markdown"],
+            "description": "How the item came in when the member did not type it. Omit it for a typed item."
+          },
+          "arrived_label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The file or device it came from: a name, never content. Required with arrived_system."
+          }
         },
         "required": ["files"],
         "additionalProperties": false

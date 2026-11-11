@@ -117,7 +117,9 @@
 
 use std::collections::BTreeSet;
 
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk, arrival,
+};
 use crate::custody::locker_key::{assert_live_locker_key_id, is_locker_ciphertext};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
@@ -1009,6 +1011,8 @@ fn add_item() -> CommandDefinition {
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
             "#,
+            arrival::arrived_property!(),
+            r#","#,
             field_schema!(),
             r#"
           }
@@ -1082,6 +1086,7 @@ fn add_item() -> CommandDefinition {
             // them. Empty needs no key, so a vault with no `K` can still make
             // a passport item and list it.
             let minted = mint_template_fields(ctx, &item_id, &item_type)?;
+            arrival::record(ctx, &item_id, Kind::LockerItem)?;
             Ok(serde_json::json!({ "item_id": item_id, "template_fields": minted }))
         },
     );

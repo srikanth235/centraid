@@ -38,7 +38,7 @@ use rusqlite::OptionalExtension;
 use crate::commands::tag::{ensure_concept, next_color, set_tagged};
 
 use crate::commands::entity::lookup_live;
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::Result;
 use crate::model::Kind;
 
@@ -532,6 +532,7 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             }
             set_tagged(ctx, &id, &concept, true)?;
         }
+        arrival::record(ctx, &id, Kind::Note)?;
         made.push((id, note.body.clone()));
     }
     // A link to a note imported after the one that names it resolves now that all are there.
@@ -661,15 +662,20 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "note.import",
             "note",
-            r#"{
+            concat!(
+                r#"{
               "type": "object",
               "required": ["files"],
               "additionalProperties": false,
               "properties": {
                 "files": { "type": ["array", "string"] },
-                "dry_run": { "type": "boolean" }
+                "dry_run": { "type": "boolean" },
+                "#,
+                arrival::arrived_property!(),
+                r#"
               }
-            }"#,
+            }"#
+            ),
             Idempotency::Idempotent,
             &[],
             import,
