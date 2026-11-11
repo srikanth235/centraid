@@ -25,6 +25,8 @@
 //! was written for its own sake (a command's edge, a kind's column) and is not
 //! kept in step by anything.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use rusqlite::Connection;
 
 use crate::error::Result;
@@ -168,89 +170,73 @@ pub enum Direction {
 /// # Errors
 /// Whatever SQLite refused.
 pub fn links_at(connection: &Connection, id: &str, direction: Direction) -> Result<Vec<Link>> {
-    let (own, other) = match direction {
-        Direction::Outgoing => ("from_id", "to_id"),
-        Direction::Incoming => ("to_id", "from_id"),
+    let end = match direction {
+        Direction::Outgoing => End::From,
+        Direction::Incoming => End::To,
     };
+    // The edges that join (a tag, a container and a `related` pair are not what is joined).
+    let rels: Vec<&str> = EDGE_RELATIONS
+        .iter()
+        .copied()
+        .filter(|rel| !matches!(*rel, "tagged" | "contains" | "related"))
+        .collect();
+    let found = around(&ConnectionSource(connection), id, end, &rels)?;
+    // An end is a live entity of some kind: a join to or from the trash is not read.
+    let ends: Vec<String> = found
+        .iter()
+        .flat_map(|join| [join.from.clone(), join.to.clone()])
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let kinds = live_kinds(connection, &ends)?;
     let mut links = Vec::new();
-    let mut edges = connection.prepare_cached(&format!(
-        "SELECT e.from_id, f.kind, e.to_id, t.kind, e.rel
-           FROM edge e
-           JOIN entity f ON f.id = e.from_id AND f.deleted_at IS NULL
-           JOIN entity t ON t.id = e.to_id AND t.deleted_at IS NULL
-          WHERE e.{own} = ?1 AND e.rel NOT IN ('tagged', 'contains', 'related')
-          ORDER BY e.{other}, e.rel"
-    ))?;
-    let rows = edges.query_map([id], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, String>(4)?,
-        ))
-    })?;
-    for row in rows {
-        let (from, from_kind, to, to_kind, rel) = row?;
-        let Some(relation) = EDGE_RELATIONS.iter().find(|name| **name == rel) else {
+    for join in found {
+        let (Some(from_kind), Some(to_kind)) = (kinds.get(&join.from), kinds.get(&join.to)) else {
+            continue;
+        };
+        let word = match join.via {
+            Via::Edge => EDGE_RELATIONS.iter().find(|name| **name == join.relation),
+            Via::Column => COLUMN_LINKS
+                .iter()
+                .map(|link| &link.relation)
+                .find(|name| **name == join.relation),
+        };
+        let Some(relation) = word else {
             continue;
         };
         links.push(Link {
-            from,
-            from_kind,
-            to,
-            to_kind,
+            from: join.from,
+            from_kind: from_kind.clone(),
+            to: join.to,
+            to_kind: to_kind.clone(),
             relation,
-            via: Via::Edge,
+            via: join.via,
         });
-    }
-    for column in COLUMN_LINKS {
-        let sql = match direction {
-            Direction::Outgoing => {
-                format!(
-                    "SELECT k.id, f.kind, k.{c}, t.kind FROM {t} k
-                       JOIN entity f ON f.id = k.id AND f.deleted_at IS NULL
-                       JOIN entity t ON t.id = k.{c} AND t.deleted_at IS NULL
-                      WHERE k.id = ?1",
-                    t = column.table,
-                    c = column.column
-                )
-            }
-            Direction::Incoming => {
-                format!(
-                    "SELECT k.id, f.kind, k.{c}, t.kind FROM {t} k
-                       JOIN entity f ON f.id = k.id AND f.deleted_at IS NULL
-                       JOIN entity t ON t.id = k.{c} AND t.deleted_at IS NULL
-                      WHERE k.{c} = ?1 ORDER BY k.id",
-                    t = column.table,
-                    c = column.column
-                )
-            }
-        };
-        let mut statement = connection.prepare_cached(&sql)?;
-        let rows = statement.query_map([id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?;
-        for row in rows {
-            let (from, from_kind, to, to_kind) = row?;
-            links.push(Link {
-                from,
-                from_kind,
-                to,
-                to_kind,
-                relation: column.relation,
-                via: Via::Column,
-            });
-        }
     }
     links.sort();
     links.dedup();
     Ok(links)
+}
+
+/// The kind of each of `ids` that is a live entity; one that is in the trash or is no entity is
+/// not in the answer.
+fn live_kinds(connection: &Connection, ids: &[String]) -> Result<BTreeMap<String, String>> {
+    let mut kinds = BTreeMap::new();
+    for chunk in ids.chunks(400) {
+        let mut statement = connection.prepare(&format!(
+            "SELECT id, kind FROM entity WHERE deleted_at IS NULL AND id IN ({})",
+            marks(chunk.len())
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params_from_iter(chunk.iter().map(String::as_str)),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?;
+        for row in rows {
+            let (id, kind) = row?;
+            kinds.insert(id, kind);
+        }
+    }
+    Ok(kinds)
 }
 
 /// [`links_at`] for a reader that is not Locker: the same, without any link
@@ -332,6 +318,44 @@ pub trait GraphSource {
     ) -> std::result::Result<Vec<(String, String)>, Self::Error>;
 }
 
+/// The joins at `ids` from `end`: the edges of `rels`, and the catalogue's columns `columns`
+/// accepts. Each as the pair of ids a column row answers, in the direction the join points.
+fn joins<S: GraphSource>(
+    source: &S,
+    end: End,
+    ids: &[String],
+    rels: &[&str],
+    columns: impl Fn(&ColumnLink) -> bool,
+) -> std::result::Result<Vec<Join>, S::Error> {
+    let mut out = Vec::new();
+    if ids.is_empty() {
+        return Ok(out);
+    }
+    if !rels.is_empty() {
+        for edge in source.edges(end, ids, rels)? {
+            out.push(Join {
+                from: edge.from,
+                to: edge.to,
+                relation: edge.rel,
+                via: Via::Edge,
+            });
+        }
+    }
+    for link in COLUMN_LINKS.iter().filter(|link| columns(link)) {
+        for (from, to) in source.column_rows(link, end, ids)? {
+            out.push(Join {
+                from,
+                to,
+                relation: link.relation.to_owned(),
+                via: Via::Column,
+            });
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
 /// The joins that END at `id`, by `rels` (edge relations) and by every column of the catalogue
 /// that points at a kind named `to_kind`. Sorted, each once.
 ///
@@ -343,31 +367,9 @@ pub fn incoming<S: GraphSource>(
     to_kind: &str,
     rels: &[&str],
 ) -> std::result::Result<Vec<Join>, S::Error> {
-    let ids = [id.to_owned()];
-    let mut out = Vec::new();
-    if !rels.is_empty() {
-        for edge in source.edges(End::To, &ids, rels)? {
-            out.push(Join {
-                from: edge.from,
-                to: edge.to,
-                relation: edge.rel,
-                via: Via::Edge,
-            });
-        }
-    }
-    for link in COLUMN_LINKS.iter().filter(|link| link.to_kind == to_kind) {
-        for (from, _) in source.column_rows(link, End::To, &ids)? {
-            out.push(Join {
-                from,
-                to: id.to_owned(),
-                relation: link.relation.to_owned(),
-                via: Via::Column,
-            });
-        }
-    }
-    out.sort();
-    out.dedup();
-    Ok(out)
+    joins(source, End::To, &[id.to_owned()], rels, |link| {
+        link.to_kind == to_kind
+    })
 }
 
 /// The joins that START at any of `ids`, which are all of kind `from_kind`: by `rels` (edge
@@ -381,30 +383,79 @@ pub fn outgoing<S: GraphSource>(
     from_kind: &str,
     rels: &[&str],
 ) -> std::result::Result<Vec<Join>, S::Error> {
-    let mut out = Vec::new();
-    if !rels.is_empty() && !ids.is_empty() {
-        for edge in source.edges(End::From, ids, rels)? {
-            out.push(Join {
-                from: edge.from,
-                to: edge.to,
-                relation: edge.rel,
-                via: Via::Edge,
-            });
-        }
+    joins(source, End::From, ids, rels, |link| link.table == from_kind)
+}
+
+/// The joins at `id` from `end` when the id's kind is not known: the edges of `rels` and EVERY
+/// column of the catalogue (a column that is not the id's kind's answers nothing). Sorted, each
+/// once.
+///
+/// # Errors
+/// The source's own refusal.
+pub fn around<S: GraphSource>(
+    source: &S,
+    id: &str,
+    end: End,
+    rels: &[&str],
+) -> std::result::Result<Vec<Join>, S::Error> {
+    joins(source, end, &[id.to_owned()], rels, |_| true)
+}
+
+/// The catalogue's reads over one open connection: an edge or a column is a statement of its own,
+/// named by the catalogue and never by the caller.
+pub struct ConnectionSource<'a>(pub &'a Connection);
+
+fn marks(count: usize) -> String {
+    vec!["?"; count].join(", ")
+}
+
+impl GraphSource for ConnectionSource<'_> {
+    type Error = crate::error::OntologyError;
+
+    fn edges(&self, end: End, ids: &[String], rels: &[&str]) -> Result<Vec<EdgeRow>> {
+        let (own, other) = match end {
+            End::From => ("from_id", "to_id"),
+            End::To => ("to_id", "from_id"),
+        };
+        let mut statement = self.0.prepare(&format!(
+            "SELECT from_id, to_id, rel, anchor FROM edge
+              WHERE {own} IN ({}) AND rel IN ({})
+              ORDER BY {other}, rel",
+            marks(ids.len()),
+            marks(rels.len())
+        ))?;
+        let binds = ids.iter().map(String::as_str).chain(rels.iter().copied());
+        let rows = statement.query_map(rusqlite::params_from_iter(binds), |row| {
+            Ok(EdgeRow {
+                from: row.get(0)?,
+                to: row.get(1)?,
+                rel: row.get(2)?,
+                anchor: row.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
-    if !ids.is_empty() {
-        for link in COLUMN_LINKS.iter().filter(|link| link.table == from_kind) {
-            for (from, to) in source.column_rows(link, End::From, ids)? {
-                out.push(Join {
-                    from,
-                    to,
-                    relation: link.relation.to_owned(),
-                    via: Via::Column,
-                });
-            }
-        }
+
+    fn column_rows(
+        &self,
+        link: &ColumnLink,
+        end: End,
+        ids: &[String],
+    ) -> Result<Vec<(String, String)>> {
+        let held = match end {
+            End::From => "id",
+            End::To => link.column,
+        };
+        let mut statement = self.0.prepare(&format!(
+            "SELECT id, {c} FROM {t} WHERE {held} IN ({}) AND {c} IS NOT NULL ORDER BY id",
+            marks(ids.len()),
+            t = link.table,
+            c = link.column
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params_from_iter(ids.iter().map(String::as_str)),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
-    out.sort();
-    out.dedup();
-    Ok(out)
 }

@@ -196,3 +196,41 @@ fn the_owner_is_the_person_a_founded_vault_names() {
     let owner = read(&f, |door| graph::owner(door).expect("reads"));
     assert!(owner.is_some_and(|id| !id.is_empty() && id != f.maya));
 }
+
+#[test]
+fn the_door_and_the_connection_are_two_sources_of_one_reading() {
+    use centraid_ontology::graph::{ConnectionSource, incoming, outgoing};
+    let f = fixture();
+    let first = [f.first.clone()];
+    f.world
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            let source = ConnectionSource(connection);
+            for (id, kind, rels) in [
+                (&f.maya, "person", vec!["about"]),
+                (&f.maya, "person", vec![]),
+                (&f.book, "notebook", vec![]),
+                (&f.trashed, "note", vec!["links", "about"]),
+            ] {
+                assert_eq!(
+                    graph::incoming(&door, BOUND, id, kind, &rels).expect("the door reads"),
+                    incoming(&source, id, kind, &rels).expect("the connection reads"),
+                    "incoming {kind} {rels:?}"
+                );
+            }
+            for (kind, rels) in [
+                ("note", vec!["about", "links"]),
+                ("note", vec![]),
+                ("person", vec!["about"]),
+            ] {
+                assert_eq!(
+                    graph::outgoing(&door, BOUND, &first, kind, &rels).expect("the door reads"),
+                    outgoing(&source, &first, kind, &rels).expect("the connection reads"),
+                    "outgoing {kind} {rels:?}"
+                );
+            }
+            Ok(())
+        })
+        .expect("reads");
+}
