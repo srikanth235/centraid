@@ -136,20 +136,20 @@ mod tests {
             counts,
             [
                 ("calendar", 20),
-                ("docs", 23),
+                ("docs", 24),
                 ("health", 17),
                 ("locker", 23),
                 ("money", 31),
                 ("notes", 22),
                 ("people", 35),
-                ("photos", 26),
+                ("photos", 27),
                 ("reminders", 25),
             ],
             "each app's declared actions"
         );
         assert_eq!(
-            actions, 222,
-            "the nine manifests declare 222 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts, and the one that stops following the phone's calendars, and the ten that give Docs, Health, Money, People and Photos the attach and detach every app has, and the nine that give Calendar, Health, People and Reminders the general link and unlink and Notes its unlink, and the two that follow and stop following the phone's Reminders, and the two that export Money's transactions and Health's measurements and workouts as a spreadsheet file, less People's birthday-reminder switch that was always on and had no screen (#1185)"
+            actions, 224,
+            "the nine manifests declare 224 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts, and the one that stops following the phone's calendars, and the ten that give Docs, Health, Money, People and Photos the attach and detach every app has, and the nine that give Calendar, Health, People and Reminders the general link and unlink and Notes its unlink, and the two that follow and stop following the phone's Reminders, and the two that export Money's transactions and Health's measurements and workouts as a spreadsheet file, and the two that export Docs' originals and the Photos library as one archive, less People's birthday-reminder switch that was always on and had no screen (#1185)"
         );
     }
 
