@@ -81,7 +81,7 @@ struct HealthHomeView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("health-home-list")
                 }
-                StatusLineView(status: state.status, identifier: "health-status-action") {}
+                StatusLineView(status: state.status, identifier: "health-status-action")
             }
         }
         .sheet(isPresented: healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }) {

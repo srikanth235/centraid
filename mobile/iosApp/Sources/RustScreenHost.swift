@@ -106,6 +106,7 @@ struct RustScreenView: View {
             }
         }
         .environment(\.placeHome, { shell.popToRoot() })
+        .environment(\.statusActed, { store.send(instance, .statusActed(.init())) })
     }
 
     /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets

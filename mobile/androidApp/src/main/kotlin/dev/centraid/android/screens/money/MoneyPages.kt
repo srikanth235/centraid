@@ -19,6 +19,7 @@ import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,7 +84,7 @@ internal fun MoneyImportScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -322,7 +323,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-account-add") { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -489,7 +490,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-rule-add") { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -661,7 +662,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-category-add") { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),

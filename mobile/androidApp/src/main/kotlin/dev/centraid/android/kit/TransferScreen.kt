@@ -39,7 +39,7 @@ public fun TransferScreen(
         title = view.title,
         parentTitle = view.back_label,
         onBack = onBack,
-        status = view.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(view.status) },
     ) {
         LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
             item(key = "lede") {

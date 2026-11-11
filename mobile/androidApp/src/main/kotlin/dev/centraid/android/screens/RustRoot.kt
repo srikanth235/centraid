@@ -34,6 +34,7 @@ import centraid.core.v1.NavPopped
 import centraid.core.v1.NavPush
 import centraid.core.v1.NavSelectTab
 import centraid.core.v1.PhotosDestination
+import centraid.core.v1.StatusActed
 import centraid.core.v1.PhotosHomeEvent
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
@@ -96,6 +97,7 @@ import dev.centraid.android.glance.AgendaIntents
 import dev.centraid.android.kit.HostScreenEffects
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.LocalShellLine
+import dev.centraid.android.kit.LocalStatusActed
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.session.AppSession
 import kotlinx.coroutines.CoroutineScope
@@ -432,6 +434,16 @@ internal class RustRoot(
      */
     @Composable
     private fun Page(runtime: Screens, view: centraid.core.v1.ViewState, instance: Long) {
+        // THE KIT'S ONE `StatusActed`, stated once: a status line's verb on any page sends it
+        // (`ScreenEvent.status_acted`) unless the page has an event of its own.
+        val statusActed: () -> Unit = remember(runtime, instance) {
+            { scope?.launch { runtime.send(instance, ScreenEvent(status_acted = StatusActed())) }; Unit }
+        }
+        CompositionLocalProvider(LocalStatusActed provides statusActed) { PageBody(runtime, view, instance) }
+    }
+
+    @Composable
+    private fun PageBody(runtime: Screens, view: centraid.core.v1.ViewState, instance: Long) {
         val context = LocalContext.current
         val send: (ScreenEvent) -> Unit = { event -> scope?.launch { runtime.send(instance, event) } }
         val open: (Route) -> Unit = ::push

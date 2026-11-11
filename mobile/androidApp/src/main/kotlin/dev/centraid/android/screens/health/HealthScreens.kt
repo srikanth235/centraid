@@ -20,6 +20,7 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitCardGrid
 import dev.centraid.android.kit.KitGeometry
@@ -78,7 +79,7 @@ internal fun HealthHomeScreen(
                 onClear = { onEvent(HealthHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
             )
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
         band = {
             AppBand(
                 app = "health",

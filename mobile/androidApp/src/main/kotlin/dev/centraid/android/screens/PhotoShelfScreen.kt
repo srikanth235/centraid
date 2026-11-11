@@ -2,6 +2,7 @@ package dev.centraid.android.screens
 
 import dev.centraid.android.kit.KitWords
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -39,6 +42,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.LocalStatusActed
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhotoCellsGrid
@@ -53,6 +57,7 @@ import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -197,11 +202,29 @@ public fun PhotoShelfScreen(
             if (status.refused) {
                 ScreenFailure(status.sentence, "")
             } else {
-                androidx.compose.material3.Text(
-                    text = status.sentence,
-                    color = centraidColor("textSoft"),
-                    style = centraidType("small"),
-                )
+                val kitActed = LocalStatusActed.current
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Text(
+                        text = status.sentence,
+                        color = centraidColor("textSoft"),
+                        style = centraidType("small"),
+                        modifier = Modifier.weight(1f),
+                    )
+                    // THE LINE'S ONE VERB (Undo): the kit's StatusActed.
+                    if (status.action_label.isNotEmpty()) {
+                        KitText(
+                            status.action_label,
+                            KitType.Row,
+                            appAccent().text,
+                            modifier = Modifier
+                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .clickable(onClick = kitActed)
+                                .padding(horizontal = 12.dp)
+                                .testTag("photos-status-action")
+                                .semantics { role = Role.Button },
+                        )
+                    }
+                }
             }
         }
         if (state.notice.isNotEmpty()) {

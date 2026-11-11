@@ -17,6 +17,7 @@ import dev.centraid.android.kit.KitRowAction
 import dev.centraid.android.kit.KitSwipeRow
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.SearchAskRow
@@ -145,7 +146,7 @@ public fun NotesHomeScreen(
                 onClear = { onEvent(NotesHomeEvent(notebook_scope_cleared = NotesHomeEvent.NotebookScopeCleared())) },
             )
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status) },
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
     ) {
         val results = search?.results

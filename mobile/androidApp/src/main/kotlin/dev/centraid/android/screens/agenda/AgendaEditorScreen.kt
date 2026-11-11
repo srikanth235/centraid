@@ -118,7 +118,7 @@ internal fun AgendaEditorScreen(
             GoneCard(gone, leave)
             return@EditorRoom
         }
-        StatusLine(state.status?.sentence.orEmpty())
+        StatusLine(state.status)
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },

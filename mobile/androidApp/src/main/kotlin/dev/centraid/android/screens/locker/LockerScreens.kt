@@ -324,7 +324,7 @@ internal fun LockerHomeScreen(
             },
             status = if (generating) "" else data?.status_line.orEmpty(),
             statusLine = state.status?.let { line ->
-                { StatusLine(line) {} }
+                { StatusLine(line) }
             },
             band = if (state.band.isEmpty()) {
                 null

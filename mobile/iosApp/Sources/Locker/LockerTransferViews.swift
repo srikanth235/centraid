@@ -61,7 +61,7 @@ struct LockerExportView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status, identifier: "locker-export-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-export-status")
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }
@@ -162,7 +162,7 @@ struct LockerImportView: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if state.hasStatus {
-                        StatusLineView(status: state.status, identifier: "locker-import-status") {}
+                        StatusLineView(status: state.status, identifier: "locker-import-status")
                             .padding(.vertical, 4)
                             .background(Theme.color("bg", scheme))
                     }

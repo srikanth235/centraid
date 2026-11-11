@@ -69,7 +69,7 @@ internal fun LockerExportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status) {} },
+            statusLine = { StatusLine(state.status) },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -152,7 +152,7 @@ internal fun LockerImportScreen(
             title = chrome?.title.orEmpty(),
             parentTitle = chrome?.back_label.orEmpty(),
             onBack = onBack,
-            statusLine = { StatusLine(state.status) {} },
+            statusLine = { StatusLine(state.status) },
         ) {
             ReadStateView(
                 content = screenContentOf(state.loading, state.failure, state.data_, state.denied),

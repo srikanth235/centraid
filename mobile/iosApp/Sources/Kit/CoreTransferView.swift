@@ -75,7 +75,7 @@ struct CoreTransferView: View {
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 4)
                 }
-                StatusLineView(status: state.status, identifier: "transfer-status-action") {}
+                StatusLineView(status: state.status, identifier: "transfer-status-action")
             }
         }
         .environment(\.appAccent, AppAccent(state.appID))

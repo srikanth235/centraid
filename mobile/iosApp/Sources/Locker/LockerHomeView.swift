@@ -144,7 +144,7 @@ struct LockerHomeView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if state.hasStatus {
-                StatusLineView(status: state.status, identifier: "locker-home-status") {}
+                StatusLineView(status: state.status, identifier: "locker-home-status")
                     .padding(.vertical, 4)
                     .background(Theme.color("bg", scheme))
             }

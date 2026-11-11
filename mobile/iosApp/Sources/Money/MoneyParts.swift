@@ -545,8 +545,8 @@ struct MoneyFormSheet<Content: View>: View {
 struct MoneyStatusFoot: View {
     let status: Centraid_Core_V1_StatusLine
     var identifier: String = "money-status"
-    /// The line's action (Undo after Move to trash); the pages whose line has none leave it.
-    var onAct: () -> Void = {}
+    /// The line's action (Undo after Move to trash): the page's own event, else the kit's.
+    var onAct: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
 

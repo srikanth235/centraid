@@ -112,7 +112,7 @@ struct PhotoShelfView: View {
                         .accessibilityIdentifier("photos.shelf.writeFailure")
                 } else if state.hasStatus {
                     // WHAT THE LAST BATCH DID, said once where the member made it.
-                    StatusLineView(status: state.status, onAct: {})
+                    StatusLineView(status: state.status)
                         .accessibilityIdentifier("photos.shelf.receipt")
                 }
 

@@ -541,7 +541,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         title = chrome?.title.orEmpty(),
         onDismiss = onBack,
         foot = {
-            if (state.status != null) StatusLine(state.status?.sentence.orEmpty())
+            StatusLine(state.status)
             if (data != null) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),

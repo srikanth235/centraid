@@ -60,7 +60,7 @@ struct NotesHomeView: View {
                         placeContent
                     }
                 }
-                StatusLineView(status: state.status, identifier: "notes-status-action") {}
+                StatusLineView(status: state.status, identifier: "notes-status-action")
             }
         }
         .sheet(isPresented: sheetShown) {
