@@ -14,7 +14,7 @@ import UIKit
 ///
 /// | Identifier | Request | What it runs |
 /// |---|---|---|
-/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network AND external power | the full pass: snapshot when due, prepare, settle, then hand the next batch to the OS |
+/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network, and external power when the window requires charging | the full pass: snapshot when due, prepare, settle, then hand the next batch to the OS |
 /// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | a short pass whose deadline leaves it time to settle and hand off, not to prepare much |
 ///
 /// **On power, now** (#1080). The processing window used to ask for a network
@@ -22,7 +22,9 @@ import UIKit
 /// never charged overnight would never have been backed up. The bytes are the
 /// OS's to carry now, whenever the app is suspended; what is left for this
 /// window is hashing and sealing, which is the battery cost, and iOS grants a
-/// processing task on power far longer windows than one off it.
+/// processing task on power far longer windows than one off it. The charger is the
+/// window's own `requiresCharging`, as on Android: the one-off nudge after a
+/// capture or an import does not wait for one.
 ///
 /// ## The rules a handler here keeps
 ///
@@ -103,14 +105,19 @@ enum BackgroundPasses {
 
     /// Keep exactly the windows Rust asked for scheduled (`ScheduleWindows`), and answer which
     /// the OS took. A window that requires charging is a processing request (network and
-    /// power); the others are app-refresh requests; a one-off has no earliest date.
+    /// power); a one-off is one too, on power only if it requires charging; the others are
+    /// app-refresh requests; a one-off has no earliest date.
     @MainActor static func schedule(_ windows: [Centraid_Core_V1_Window]) -> Centraid_Core_V1_WindowsScheduled {
         var answer = Centraid_Core_V1_WindowsScheduled()
         var refusals: [String] = []
         for window in windows {
             let identifier = window.requiresCharging || window.periodMinutes == 0
                 ? processingIdentifier : refreshIdentifier
-            if let refusal = submit(identifier: identifier, oneOff: window.periodMinutes == 0) {
+            if let refusal = submit(
+                identifier: identifier,
+                oneOff: window.periodMinutes == 0,
+                requiresCharging: window.requiresCharging
+            ) {
                 answer.refused.append(window.name)
                 refusals.append("\(window.name): \(refusal)")
             } else {
@@ -177,13 +184,13 @@ enum BackgroundPasses {
     /// `BGAppRefreshTaskRequest` and a processing identifier takes a
     /// `BGProcessingTaskRequest`, and submitting the wrong class for an
     /// identifier is another exception.
-    private static func submit(identifier: String, oneOff: Bool) -> String? {
+    private static func submit(identifier: String, oneOff: Bool, requiresCharging: Bool) -> String? {
         let request: BGTaskRequest
         if identifier == processingIdentifier {
             let processing = BGProcessingTaskRequest(identifier: identifier)
             processing.requiresNetworkConnectivity = true
-            // ON POWER (#1080): see the header.
-            processing.requiresExternalPower = true
+            // ON POWER (#1080) when the window says so: see the header.
+            processing.requiresExternalPower = requiresCharging
             request = processing
         } else {
             request = BGAppRefreshTaskRequest(identifier: identifier)
