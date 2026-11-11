@@ -61,5 +61,10 @@ export default defineConfig({
     // not hand-formatted source. Change them in the canvas and copy them back.
     "design/mockups/*.dc.html",
     "design/mockups/canvas.json",
+    // The photo editor's geometry golden (#1185): written by
+    // `crates/screens/tests/photos_editor_geometry.rs`, which asserts it byte
+    // for byte, one case per line because both shells read it with a line
+    // regex.
+    "contracts/photos/editor-geometry.json",
   ],
 });
