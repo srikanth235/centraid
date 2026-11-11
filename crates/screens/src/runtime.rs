@@ -62,9 +62,10 @@ struct State {
     handed: Option<(u64, Handed)>,
     /// The line being handed to one screen during the event the runtime sends it after a pop.
     handing: Option<(u64, Handed)>,
-    /// A line a closed page left for the page the shell opens next (`Undo::hand_onward`): it
-    /// lives between the pop that closed that page and the push that follows it.
-    onward: Option<Handed>,
+    /// A line a page left for the page the shell opens next (`Undo::hand_onward`), and which page
+    /// left it: it lives until the next push takes it. A pop that does not close that page, a tab
+    /// change or any other navigation drops it.
+    onward: Option<(u64, Handed)>,
     /// What the screens and the follow coordinator tell one another (`crate::follow`).
     follows: crate::follow::Follows,
     band: Option<BandFn>,
@@ -361,7 +362,11 @@ impl Runtime {
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
         if let Some(handed) = done.handed {
-            state.handed = Some((id, handed));
+            if handed.onward() {
+                state.onward = Some((id, handed));
+            } else {
+                state.handed = Some((id, handed));
+            }
         }
         instance.tables.extend(done.tables);
         if let Some(vault_id) = done.switch {
@@ -551,13 +556,16 @@ impl Runtime {
         if !matches!(kind, N::Popped(_) | N::PopToRoot(_)) {
             state.handed = None;
         }
-        // A LINE FOR THE PAGE OPENED NEXT lives between the pop and the push that follows it:
-        // the push takes it, any other navigation drops it.
-        let onward = if matches!(kind, N::Push(_)) {
-            state.onward.take()
-        } else {
-            state.onward = None;
-            None
+        // A LINE FOR THE PAGE OPENED NEXT waits for the push that opens it (after the pop that
+        // closes the page that left it, when there is one): the push takes it, a pop that does
+        // not close that page and any other navigation drop it.
+        let onward = match kind {
+            N::Push(_) => state.onward.take().map(|(_, handed)| handed),
+            N::Popped(_) | N::PopToRoot(_) => None,
+            _ => {
+                state.onward = None;
+                None
+            }
         };
         match kind {
             N::Push(push) => {
@@ -586,6 +594,7 @@ impl Runtime {
                 };
                 let gone = stack.split_off(at);
                 Self::close_all(state, core, &gone, out);
+                Self::keep_onward_for(state, &gone);
                 Self::hand_to_top(state, core, index, &gone, out);
             }
             N::SelectTab(select) => {
@@ -596,6 +605,7 @@ impl Runtime {
                 let index = tab_index(state, &pop.tab)?;
                 let gone = state.tabs[index].stack.split_off(1);
                 Self::close_all(state, core, &gone, out);
+                Self::keep_onward_for(state, &gone);
                 Self::hand_to_top(state, core, index, &gone, out);
             }
         }
@@ -637,12 +647,19 @@ impl Runtime {
         if !gone.contains(&from) {
             return;
         }
-        // THE PAGE CLOSED FOR ANOTHER THE SHELL OPENS NEXT: the line waits for that push.
-        if handed.onward() {
-            state.onward = Some(handed);
-            return;
-        }
         Self::hand_to(state, core, top, handed, out);
+    }
+
+    /// A pop closed `gone`: a line left for the page opened next survives only when it was one
+    /// of these pages that left it.
+    fn keep_onward_for(state: &mut State, gone: &[u64]) {
+        if state
+            .onward
+            .as_ref()
+            .is_some_and(|(from, _)| !gone.contains(from))
+        {
+            state.onward = None;
+        }
     }
 
     /// Give `handed` to screen `id`, once: a `DataChanged` that names no table (the page reloads

@@ -88,12 +88,33 @@ fn upload_picks_then_files_the_staged_bytes_and_opens_the_document() {
     // The shell is asked to open its page, back word "Docs".
     let route = opened(&d).expect("the document opens");
     assert_eq!(route.screen, docs::DOCUMENT);
-    let Some(wire::route::Args::DocsDocument(args)) = route.args else {
+    let Some(wire::route::Args::DocsDocument(args)) = route.args.clone() else {
         panic!("a document route");
     };
     assert_eq!(args.document_id, row.document_id);
     // The page it was filed from is Recents now, and the back word names it.
     assert_eq!(args.parent, "Recents");
+    // THE MEMBER LANDS ON THE DOCUMENT, and its line is drawn there: "Lease.pdf added · Undo".
+    let page = d.push(docs::TAB, route.clone());
+    let line = document_state(d.view(page))
+        .status
+        .clone()
+        .expect("the line is on the document");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Lease.pdf added", "Undo")
+    );
+    // Undo moves the document to trash.
+    d.send(
+        page,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(
+        document(&d, &args.document_id)
+            .document
+            .is_some_and(|found| found.trashed),
+        "undo moves the added document to trash"
+    );
     // The line never clears itself: the member puts it away.
     drive_send(&mut d, i, D::IngestDismissed(de::IngestDismissed {}));
     assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);

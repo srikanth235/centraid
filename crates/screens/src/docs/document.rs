@@ -628,6 +628,9 @@ impl Screen for Document {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE INGEST OPENED THIS DOCUMENT: its line ("<title> added · Undo") is drawn
+                // here, and Undo moves the document to trash.
+                self.undo.take_handed(ctx);
             }
             Some(E::TimerFired(fired)) => {
                 if let Some(rename) = self.rename.as_mut() {

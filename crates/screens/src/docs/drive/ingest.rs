@@ -26,6 +26,7 @@ use wire::docs_ingest_view::Phase;
 use crate::catalog::act;
 use crate::docs::routes;
 use crate::kit::act as kit_act;
+use crate::kit::undo::Undo;
 use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, fill};
 
@@ -225,9 +226,13 @@ impl Ingest {
             }
         };
         let key = kit_act::key(&[&request.action, &subject], kit_act::fresh());
-        // undo-exempt: the ingest sheet draws no status line; it opens the new document, whose
-        // Move to trash takes the filing back.
-        let settled = kit_act::act(ctx, request, &key);
+        // THE MEMBER LANDS ON THE NEW DOCUMENT, so its line ("<title> added · Undo") is drawn
+        // there: Undo moves the document to trash. The door is this write's alone, and the line
+        // waits for the page the route below opens.
+        let title = self.title.clone();
+        let settled = Undo::default().act_handing_onward(ctx, request, &key, |locale| {
+            fill(&words::ingest_added(locale), &[("title", &title)])
+        });
         if !settled.committed {
             let sentence = if settled.refusal.trim().is_empty() {
                 words::ingest_no_file(ctx.locale())
