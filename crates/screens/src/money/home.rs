@@ -164,6 +164,21 @@ impl Home {
         self.asked = self.question();
     }
 
+    /// THE PAGE'S OWN EMPTY STATE: a tab that has nothing to draw. Activity with no row (or none the
+    /// filter lets through), Spending for a month with nothing and Cash flow with no money moved
+    /// each draw only the sentence, so it is the page's.
+    fn nothing(&self, locale: Locale, loaded: &Loaded) -> Option<wire::EmptyState> {
+        match loaded {
+            Loaded::Spending(answer) if answer.empty => Some(day_one(locale)),
+            Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(day_one(locale)),
+            Loaded::Activity { activity, .. } => activity.rows.is_empty().then(|| {
+                let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
+                activity_empty(locale, filtered)
+            }),
+            _ => None,
+        }
+    }
+
     /// What the page on screen answers: the tab, the month, the account and the category.
     fn question(&self) -> String {
         format!(
@@ -410,24 +425,10 @@ impl Home {
         answer: &wire::MoneyActivity,
         overview: Option<&wire::MoneySpending>,
     ) -> wire::MoneyActivityData {
-        let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
         let needs_count: u32 = answer.needs_category.iter().map(|c| c.count).sum();
         let shown = u32::try_from(answer.rows.len()).unwrap_or(u32::MAX);
         let at_ceiling = answer.next.is_some() && shown >= MAX_ROWS;
-        let empty = answer.rows.is_empty().then(|| {
-            if filtered {
-                wire::EmptyState {
-                    headline: words::filter_empty(locale),
-                    ..Default::default()
-                }
-            } else {
-                wire::EmptyState {
-                    headline: words::activity_empty(locale),
-                    action_label: words::import_action(locale),
-                    ..Default::default()
-                }
-            }
-        });
+
         // THE REVIEW BANNER: the count in its badge, "Need a category · ₹4,310".
         let needs_amounts = answer
             .needs_category
@@ -498,7 +499,6 @@ impl Home {
                 String::new()
             },
             more: answer.next.is_some() && !at_ceiling,
-            empty,
         }
     }
 
@@ -656,6 +656,22 @@ impl Home {
     }
 }
 
+/// What an Activity list with no row says: nothing matches the filter, or nothing is here yet.
+fn activity_empty(locale: Locale, filtered: bool) -> wire::EmptyState {
+    if filtered {
+        wire::EmptyState {
+            headline: words::filter_empty(locale),
+            ..Default::default()
+        }
+    } else {
+        wire::EmptyState {
+            headline: words::activity_empty(locale),
+            action_label: words::import_action(locale),
+            ..Default::default()
+        }
+    }
+}
+
 fn day_one(locale: Locale) -> wire::EmptyState {
     wire::EmptyState {
         headline: words::day_one(locale),
@@ -777,11 +793,9 @@ fn days_left_label(locale: Locale, answer: &wire::MoneySpending) -> String {
 }
 
 fn spending(locale: Locale, answer: &wire::MoneySpending, view: &Home) -> wire::MoneySpendingData {
+    // Nothing in the month is the page's own empty state (see `Home::nothing`).
     if answer.empty {
-        return wire::MoneySpendingData {
-            empty: Some(day_one(locale)),
-            ..Default::default()
-        };
+        return wire::MoneySpendingData::default();
     }
     let current_month = answer.month == fold::month_of(&answer.today);
     let heroes = heroes(
@@ -930,7 +944,6 @@ fn spending(locale: Locale, answer: &wire::MoneySpending, view: &Home) -> wire::
         } else {
             String::new()
         },
-        ..Default::default()
     }
 }
 
@@ -1259,9 +1272,10 @@ fn category_options(
     (options, name)
 }
 
-fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflowData {
+/// The series that moved money in some month shown; a flow with none is the page's own empty state.
+fn used_series(answer: &wire::MoneyCashflow) -> Vec<&wire::money_cashflow::Series> {
     let side = |amount: &Option<wire::MoneyAmount>| amount.as_ref().map_or(0, |a| a.minor);
-    let used: Vec<&wire::money_cashflow::Series> = answer
+    answer
         .series
         .iter()
         .filter(|series| {
@@ -1270,12 +1284,14 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                 .iter()
                 .any(|m| side(&m.incoming) != 0 || side(&m.outgoing) != 0)
         })
-        .collect();
+        .collect()
+}
+
+fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflowData {
+    let side = |amount: &Option<wire::MoneyAmount>| amount.as_ref().map_or(0, |a| a.minor);
+    let used = used_series(answer);
     if used.is_empty() {
-        return wire::MoneyCashflowData {
-            empty: Some(day_one(locale)),
-            ..Default::default()
-        };
+        return wire::MoneyCashflowData::default();
     }
     let series = used
         .iter()
@@ -1361,7 +1377,6 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
         } else {
             String::new()
         },
-        ..Default::default()
     }
 }
 
@@ -1397,7 +1412,15 @@ impl Screen for Home {
             .page
             .data()
             .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))));
-        let page = fold::wire_page(&self.page, locale, wire::EmptyState::default);
+        // A tab with nothing to draw is the page's own empty state; the answer stays, because the
+        // month and the filter in the header are built from it.
+        let nothing = self
+            .page
+            .data()
+            .and_then(|loaded| self.nothing(locale, loaded));
+        let page = fold::wire_page_keeping(&self.page, locale, nothing.is_some(), || {
+            nothing.clone().unwrap_or_default()
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyHome(wire::MoneyHomeState {
                 destination: self.destination as i32,

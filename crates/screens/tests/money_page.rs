@@ -55,6 +55,18 @@ impl ScreenCtx for Door<'_> {
                         "search" => wire::app_query_response::Answer::MoneySearch(
                             wire::MoneySearch::default(),
                         ),
+                        "activity" => wire::app_query_response::Answer::MoneyActivity(
+                            wire::MoneyActivity::default(),
+                        ),
+                        "spending" => {
+                            wire::app_query_response::Answer::MoneySpending(wire::MoneySpending {
+                                empty: true,
+                                ..Default::default()
+                            })
+                        }
+                        "cashflow" => wire::app_query_response::Answer::MoneyCashflow(
+                            wire::MoneyCashflow::default(),
+                        ),
                         other => panic!("the empty door has no answer for {other}"),
                     }),
                 }),
@@ -342,4 +354,21 @@ fn a_line_that_is_gone_is_a_final_failure_and_a_refusal_is_the_gate() {
     shell.reads(Mode::Refuses);
     shell.changed(gone);
     refused(shell.page(gone));
+}
+
+#[test]
+fn a_month_or_filter_with_nothing_is_the_pages_empty_state_with_the_header_kept() {
+    let d = Driver::founded();
+    for (name, route) in pages().into_iter().take(3) {
+        let mut shell = Shell::new(&d.handle);
+        shell.reads(Mode::Empty);
+        let i = shell.push(route);
+        assert!(!empty(shell.page(i)).headline.is_empty(), "{name}");
+        // The band and the answer stay: the month and the filter in the header are built from it.
+        let Some(wire::view_state::Kind::MoneyHome(state)) = &shell.views[&i].kind else {
+            panic!("not Money's home");
+        };
+        assert!(!state.band.is_empty(), "{name}");
+        assert!(state.content.is_some(), "{name}");
+    }
 }

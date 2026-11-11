@@ -226,8 +226,9 @@ message MoneyHomeData {
 }
 
 message MoneySpendingData {
-  // Day one: no account or no transaction yet. One sentence and Import.
-  optional EmptyState empty = 1;
+  // 1 was `empty`: a month with nothing is the page's own empty state (#1185).
+  reserved 1;
+  reserved "empty";
   // One per currency, in the core's order.
   repeated MoneyHero heroes = 2;
   // "17 days left".
@@ -366,7 +367,9 @@ message MoneyActivityData {
   // "Showing 50"; empty when every row is drawn.
   string window = 6;
   bool more = 7;
-  optional EmptyState empty = 8;
+  // 8 was `empty`: no row, or none the filter lets through, is the page's own empty state (#1185).
+  reserved 8;
+  reserved "empty";
   // The category filter that lists the rows `needs_label` counts; empty while
   // there are none. A tap on the Needs row sends it as `category_picked`.
   string needs_key = 9;
@@ -383,7 +386,9 @@ message MoneyActivityData {
 }
 
 message MoneyCashflowData {
-  optional EmptyState empty = 1;
+  // 1 was `empty`: a flow with nothing is the page's own empty state (#1185).
+  reserved 1;
+  reserved "empty";
   repeated MoneyCashflowSeries series = 2;
   repeated MoneyFact definitions = 3;
   string window_note = 4;

@@ -395,18 +395,7 @@ pub(crate) fn wire_page_keeping<T>(
     holds_nothing: bool,
     empty: impl FnOnce() -> wire::EmptyState,
 ) -> wire::PageState {
-    match page {
-        Page::Ready { note, .. } if holds_nothing => {
-            let failed = note.is_some();
-            let shown = if failed {
-                Page::<()>::Failed
-            } else {
-                Page::<()>::Empty
-            };
-            shown.wire(locale, |_| denied(locale), empty)
-        }
-        _ => wire_page(page, locale, empty),
-    }
+    page.wire_keeping(locale, |_| denied(locale), holds_nothing, empty)
 }
 
 /// The gate drawn when the vault will not let Money read.

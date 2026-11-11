@@ -259,6 +259,31 @@ impl<T> Page<T> {
         }
     }
 
+    /// [`Self::wire`] for a screen that keeps its answer while it holds nothing, because something
+    /// still reads it (a header's filter, a sheet's choices): an answer that holds nothing is the
+    /// page's empty state; one whose refresh failed over nothing is the failure, never an empty
+    /// list. Any other page is as [`Self::wire`] words it.
+    #[must_use]
+    pub fn wire_keeping(
+        &self,
+        locale: Locale,
+        denied: impl FnOnce(&wire::AppQueryDenial) -> wire::Denied,
+        holds_nothing: bool,
+        empty: impl FnOnce() -> wire::EmptyState,
+    ) -> wire::PageState {
+        match self {
+            Self::Ready { note, .. } if holds_nothing => {
+                let shown = if note.is_some() {
+                    Page::<()>::Failed
+                } else {
+                    Page::<()>::Empty
+                };
+                shown.wire(locale, denied, empty)
+            }
+            _ => self.wire(locale, denied, empty),
+        }
+    }
+
     /// The wire state. `denied` words the gate (apps word their own and add the receipt); `empty`
     /// is the screen's empty state, asked only when the page is empty.
     #[must_use]

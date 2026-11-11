@@ -103,7 +103,8 @@ struct MoneyHomeView: View {
         } content: {
             PageReadStateView(
                 page: state.page,
-                onRetry: { send(event { $0.refreshed = .init() }) }
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                onEmptyAction: addStatement
             ) {
                 if case let .data(home)? = state.content {
                 ScrollView {
@@ -158,93 +159,89 @@ struct MoneyHomeView: View {
     /// selected one), the categories with their progress, then the notes and the recurring row.
     @ViewBuilder
     private func spending(_ spending: Centraid_Core_V1_MoneySpendingData) -> some View {
-        if spending.hasEmpty {
-            EmptyStateView(spending.empty, onAction: addStatement)
-        } else {
-            ForEach(Array(spending.bars.enumerated()), id: \.offset) { index, bars in
-                let hero = index < spending.heroes.count ? spending.heroes[index] : spending.heroes.first
-                VStack(alignment: .leading, spacing: 12) {
-                    if !bars.heading.isEmpty {
-                        Text(bars.heading).kitType(.group).foregroundStyle(Surface.meta)
-                    }
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(hero?.spentLabel ?? "")
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                            Text(hero?.spent ?? "")
-                                .kitType(.title)
-                                .monospacedDigit()
-                                .foregroundStyle(Surface.ink)
-                                .minimumScaleFactor(0.7)
-                                .lineLimit(1)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("money-hero")
-                        Spacer(minLength: 8)
-                        KitSegmented(
-                            options: bars.modes.map { (key: $0.key, label: $0.label) },
-                            selected: bars.modes.first(where: { $0.selected })?.key ?? "",
-                            identifier: "money-bars-mode",
-                            onSelect: { key in send(event { $0.barsModePicked = .with { $0.key = key } }) }
-                        )
-                    }
-                    MoneyBarsChart(bars: bars) { picked in
-                        send(event { $0.barPicked = .with { $0.index = UInt32(picked) } })
-                    }
+        ForEach(Array(spending.bars.enumerated()), id: \.offset) { index, bars in
+            let hero = index < spending.heroes.count ? spending.heroes[index] : spending.heroes.first
+            VStack(alignment: .leading, spacing: 12) {
+                if !bars.heading.isEmpty {
+                    Text(bars.heading).kitType(.group).foregroundStyle(Surface.meta)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .kitCard()
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(hero?.spentLabel ?? "")
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                        Text(hero?.spent ?? "")
+                            .kitType(.title)
+                            .monospacedDigit()
+                            .foregroundStyle(Surface.ink)
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("money-hero")
+                    Spacer(minLength: 8)
+                    KitSegmented(
+                        options: bars.modes.map { (key: $0.key, label: $0.label) },
+                        selected: bars.modes.first(where: { $0.selected })?.key ?? "",
+                        identifier: "money-bars-mode",
+                        onSelect: { key in send(event { $0.barsModePicked = .with { $0.key = key } }) }
+                    )
+                }
+                MoneyBarsChart(bars: bars) { picked in
+                    send(event { $0.barPicked = .with { $0.index = UInt32(picked) } })
+                }
             }
-            ForEach(Array(spending.tables.enumerated()), id: \.offset) { _, table in
-                if !table.heading.isEmpty {
-                    Text(table.heading).kitType(.group).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kitCard()
+        }
+        ForEach(Array(spending.tables.enumerated()), id: \.offset) { _, table in
+            if !table.heading.isEmpty {
+                Text(table.heading).kitType(.group).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+            }
+            MoneyCardStack {
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { index, line in
+                    if index > 0 { KitHairline(inset: 16) }
+                    MoneyCategoryProgressRow(line: line) { open(line.route) }
+                        .accessibilityIdentifier("money-category-\(line.route.moneyTarget.categoryID)")
                 }
-                MoneyCardStack {
-                    ForEach(Array(table.rows.enumerated()), id: \.offset) { index, line in
-                        if index > 0 { KitHairline(inset: 16) }
-                        MoneyCategoryProgressRow(line: line) { open(line.route) }
-                            .accessibilityIdentifier("money-category-\(line.route.moneyTarget.categoryID)")
+                if table.hasMore {
+                    KitHairline(inset: 16)
+                    MoneyRestRow(line: table.more, identifier: "money-categories-more") {
+                        send(event { $0.categoriesExpanded = .init() })
                     }
-                    if table.hasMore {
-                        KitHairline(inset: 16)
-                        MoneyRestRow(line: table.more, identifier: "money-categories-more") {
-                            send(event { $0.categoriesExpanded = .init() })
-                        }
-                    }
-                    if table.hasUncategorised {
-                        KitHairline(inset: 16)
-                        let needsKey = table.uncategorised.key
-                        MoneyRestRow(line: table.uncategorised, pending: true, identifier: "money-needs-category") {
-                            send(event { $0.categoryPicked = .with { $0.key = needsKey } })
-                        }
+                }
+                if table.hasUncategorised {
+                    KitHairline(inset: 16)
+                    let needsKey = table.uncategorised.key
+                    MoneyRestRow(line: table.uncategorised, pending: true, identifier: "money-needs-category") {
+                        send(event { $0.categoryPicked = .with { $0.key = needsKey } })
                     }
                 }
             }
-            if !spending.recurringLabel.isEmpty {
-                MoneyCardStack {
-                    CentraidRow(
-                        title: spending.recurringLabel,
-                        meta: spending.recurringMeta,
-                        identifier: "money-recurring",
-                        divider: false
-                    ) { open(spending.recurringRoute) }
-                }
+        }
+        if !spending.recurringLabel.isEmpty {
+            MoneyCardStack {
+                CentraidRow(
+                    title: spending.recurringLabel,
+                    meta: spending.recurringMeta,
+                    identifier: "money-recurring",
+                    divider: false
+                ) { open(spending.recurringRoute) }
             }
-            ForEach(Array(spending.notes.enumerated()), id: \.offset) { _, note in
-                Text(note).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+        }
+        ForEach(Array(spending.notes.enumerated()), id: \.offset) { _, note in
+            Text(note).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+        }
+        ForEach(Array(spending.definitions.enumerated()), id: \.offset) { _, fact in
+            VStack(alignment: .leading, spacing: 2) {
+                Text(fact.label).kitType(.meta).fontWeight(.semibold).foregroundStyle(Surface.body)
+                Text(fact.detail).kitType(.meta).foregroundStyle(Surface.meta)
             }
-            ForEach(Array(spending.definitions.enumerated()), id: \.offset) { _, fact in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(fact.label).kitType(.meta).fontWeight(.semibold).foregroundStyle(Surface.body)
-                    Text(fact.detail).kitType(.meta).foregroundStyle(Surface.meta)
-                }
-                .padding(.horizontal, 4)
-            }
-            if !spending.windowNote.isEmpty {
-                Text(spending.windowNote).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
-            }
+            .padding(.horizontal, 4)
+        }
+        if !spending.windowNote.isEmpty {
+            Text(spending.windowNote).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
         }
     }
 
@@ -252,78 +249,70 @@ struct MoneyHomeView: View {
     /// a card under its heading and what it came to.
     @ViewBuilder
     private func activity(_ activity: Centraid_Core_V1_MoneyActivityData) -> some View {
-        if activity.hasEmpty {
-            EmptyStateView(activity.empty, onAction: addStatement)
-        } else {
-            ForEach(Array(activity.heroes.enumerated()), id: \.offset) { index, hero in
-                MoneyOverviewCard(
-                    hero: hero,
-                    daysLeft: activity.daysLeftLabel,
-                    inOut: index < activity.inOutNet.count ? activity.inOutNet[index] : nil
-                )
-            }
-            if !activity.needsTitle.isEmpty {
-                // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
-                let needsKey = activity.needsKey
-                MoneyReviewBanner(
-                    count: activity.needsCount,
-                    title: activity.needsTitle,
-                    review: activity.reviewLabel,
-                    spoken: activity.needsLabel
-                ) {
-                    send(event { $0.categoryPicked = .with { $0.key = needsKey } })
-                }
-            }
-            ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
-                MoneyDayHeading(section: section)
-                MoneyCardStack {
-                    ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
-                        if index > 0 { KitHairline(inset: 64) }
-                        MoneyTxnRow(row: row) { open(row.route) }
-                    }
-                }
-            }
-            if !activity.window.isEmpty {
-                Text(activity.window).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
-            }
-            ShowMoreFooter(visible: activity.more) { send(event { $0.showMore = .init() }) }
+        ForEach(Array(activity.heroes.enumerated()), id: \.offset) { index, hero in
+            MoneyOverviewCard(
+                hero: hero,
+                daysLeft: activity.daysLeftLabel,
+                inOut: index < activity.inOutNet.count ? activity.inOutNet[index] : nil
+            )
         }
+        if !activity.needsTitle.isEmpty {
+            // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
+            let needsKey = activity.needsKey
+            MoneyReviewBanner(
+                count: activity.needsCount,
+                title: activity.needsTitle,
+                review: activity.reviewLabel,
+                spoken: activity.needsLabel
+            ) {
+                send(event { $0.categoryPicked = .with { $0.key = needsKey } })
+            }
+        }
+        ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
+            MoneyDayHeading(section: section)
+            MoneyCardStack {
+                ForEach(Array(section.rows.enumerated()), id: \.offset) { index, row in
+                    if index > 0 { KitHairline(inset: 64) }
+                    MoneyTxnRow(row: row) { open(row.route) }
+                }
+            }
+        }
+        if !activity.window.isEmpty {
+            Text(activity.window).kitType(.meta).foregroundStyle(Surface.meta).padding(.horizontal, 4)
+        }
+        ShowMoreFooter(visible: activity.more) { send(event { $0.showMore = .init() }) }
     }
 
     @ViewBuilder
     private func cashflow(_ flow: Centraid_Core_V1_MoneyCashflowData) -> some View {
-        if flow.hasEmpty {
-            EmptyStateView(flow.empty, onAction: addStatement)
-        } else {
-            ForEach(Array(flow.series.enumerated()), id: \.offset) { _, series in
-                MoneySection(title: series.heading)
-                MoneyCashflowChart(
-                    months: series.months,
-                    summary: series.months.map(\.accessibilityLabel).joined(separator: ". ")
-                )
-                MoneyLegend(
-                    incoming: series.inLabel,
-                    outgoing: series.outLabel,
-                    partial: series.partialLabel
-                )
-                HStack(spacing: 8) {
-                    Spacer(minLength: 0)
-                    ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
-                        Text(label).kitType(.meta).foregroundStyle(Surface.meta)
-                            .frame(width: 68, alignment: .trailing)
-                    }
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                // NEWEST FIRST under the chart, which runs oldest to newest.
-                ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
-                    MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")
+        ForEach(Array(flow.series.enumerated()), id: \.offset) { _, series in
+            MoneySection(title: series.heading)
+            MoneyCashflowChart(
+                months: series.months,
+                summary: series.months.map(\.accessibilityLabel).joined(separator: ". ")
+            )
+            MoneyLegend(
+                incoming: series.inLabel,
+                outgoing: series.outLabel,
+                partial: series.partialLabel
+            )
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
+                    Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+                        .frame(width: 68, alignment: .trailing)
                 }
             }
-            ForEach(Array(flow.definitions.enumerated()), id: \.offset) { _, fact in
-                FieldRow(key: fact.label, value: fact.detail)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            // NEWEST FIRST under the chart, which runs oldest to newest.
+            ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
+                MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")
             }
-            MoneyNote(text: flow.windowNote)
         }
+        ForEach(Array(flow.definitions.enumerated()), id: \.offset) { _, fact in
+            FieldRow(key: fact.label, value: fact.detail)
+        }
+        MoneyNote(text: flow.windowNote)
     }
 
     // MARK: - Sheets

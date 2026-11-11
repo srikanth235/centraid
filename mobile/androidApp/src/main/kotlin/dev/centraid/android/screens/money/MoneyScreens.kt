@@ -62,7 +62,6 @@ import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.InkButton
@@ -157,11 +156,12 @@ internal fun MoneyHomeScreen(
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(MoneyHomeEvent(refreshed = MoneyHomeEvent.Refreshed())) },
+            onEmptyAction = addStatement,
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
         ) {
             val home = state.data_ ?: return@ReadStateView
             if (state.destination == MoneyHomeState.Destination.DESTINATION_CASHFLOW) {
-                LazyColumn { cashflow(state, addStatement) }
+                LazyColumn { cashflow(state) }
             } else {
                 // ACTIVITY (home) AND SPENDING are pages of cards on the page colour.
                 LazyColumn(
@@ -169,9 +169,9 @@ internal fun MoneyHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (state.destination == MoneyHomeState.Destination.DESTINATION_SPENDING) {
-                        spending(state, onEvent, onOpen, addStatement)
+                        spending(state, onEvent, onOpen)
                     } else {
-                        activity(state, onEvent, onOpen, addStatement)
+                        activity(state, onEvent, onOpen)
                     }
                 }
             }
@@ -208,14 +208,8 @@ private fun LazyListScope.spending(
     state: MoneyHomeState,
     onEvent: (MoneyHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
-    addStatement: () -> Unit,
 ) {
     val spending = state.data_?.spending ?: return
-    val empty = spending.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     items(spending.bars.size, key = { "bars-$it" }) { index ->
         val bars = spending.bars[index]
         val hero = spending.heroes.getOrNull(index) ?: spending.heroes.firstOrNull()
@@ -301,14 +295,8 @@ private fun LazyListScope.activity(
     state: MoneyHomeState,
     onEvent: (MoneyHomeEvent) -> Unit,
     onOpen: (Route) -> Unit,
-    addStatement: () -> Unit,
 ) {
     val activity = state.data_?.activity ?: return
-    val empty = activity.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     items(activity.heroes.size, key = { "hero-$it" }) { index ->
         MoneyOverviewCard(activity.heroes[index], activity.days_left_label, activity.in_out_net.getOrNull(index))
     }
@@ -346,13 +334,8 @@ private fun LazyListScope.activity(
     }
 }
 
-private fun LazyListScope.cashflow(state: MoneyHomeState, addStatement: () -> Unit) {
+private fun LazyListScope.cashflow(state: MoneyHomeState) {
     val flow = state.data_?.cashflow ?: return
-    val empty = flow.empty
-    if (empty != null) {
-        item(key = "empty") { EmptyStateView(empty, onAction = addStatement) }
-        return
-    }
     flow.series.forEach { series ->
         item(key = "series-${series.currency}") {
             Column {

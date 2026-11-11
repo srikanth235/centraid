@@ -46,6 +46,19 @@ pub fn home_data(v: &wire::ViewState) -> &wire::MoneyHomeData {
     }
 }
 
+/// The page state of Money's home.
+pub fn home_page(v: &wire::ViewState) -> &wire::PageState {
+    home_state(v).page.as_ref().expect("a page")
+}
+
+/// The empty state of Money's home, when the page is empty.
+pub fn home_empty(v: &wire::ViewState) -> &wire::EmptyState {
+    match home_page(v).state.as_ref() {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("Money's home is not empty: {other:?}"),
+    }
+}
+
 pub fn home_event(kind: wire::money_home_event::Kind) -> wire::screen_event::Kind {
     wire::screen_event::Kind::MoneyHome(wire::MoneyHomeEvent { kind: Some(kind) })
 }
