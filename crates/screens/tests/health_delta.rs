@@ -101,7 +101,7 @@ fn total(d: &Driver, day: &str, metric: &str, value: f64) -> wire::HealthDayTota
 
 /// One pass over `snapshot`, as the coordinator runs it.
 fn run(d: &Driver, snapshot: &wire::HealthSnapshot) -> health::Outcome {
-    d.with_ctx(|ctx| {
+    d.with_ctx_in(ZONE, |ctx| {
         let window = health::window(ctx).expect("the window");
         let chosen: Vec<String> = CHOSEN.iter().map(|key| (*key).to_owned()).collect();
         health::run(ctx, snapshot, &window, &chosen, "phone-a")
@@ -111,7 +111,7 @@ fn run(d: &Driver, snapshot: &wire::HealthSnapshot) -> health::Outcome {
 /// What the vault holds of `metric`, by day.
 fn held(d: &Driver, metric: &str) -> Vec<(String, f64)> {
     let mut days: Vec<(String, f64)> = d
-        .with_ctx(|ctx| health::window(ctx).expect("the window").held)
+        .with_ctx_in(ZONE, |ctx| health::window(ctx).expect("the window").held)
         .into_iter()
         .filter(|total| total.metric == metric)
         .map(|total| (total.day, total.value))

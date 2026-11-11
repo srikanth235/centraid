@@ -10,15 +10,37 @@ use centraid_screens::health;
 use centraid_screens::kit::act as kit_act;
 use centraid_screens::kit::civil;
 use centraid_screens::testing::Driver;
+use centraid_vault::clock::FixedClock;
 use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
-/// A driver over Health's own runtime, on the platform and locale named.
+/// The member's zone in these tests. Every request, every environment and every helper that
+/// reads "today" names this one zone; a test that spelled another would read another day.
+pub const ZONE: &str = "Europe/Berlin";
+
+/// The vault clock's instant in these tests: 23:30 UTC on 10 November 2026, which is 00:30 on
+/// 11 November in [`ZONE`]. The suite always runs in the hour where the UTC day and the member's
+/// day differ, so a read or a write that placed "today" by the UTC day fails on every run and
+/// not only on the runs that happen to start between 23:00 and 24:00 UTC.
+pub const NOW_MS: i64 = 1_794_353_400_000;
+
+/// The clock the vault is stopped at, `now_ms` after the epoch.
+pub fn clock_at(now_ms: i64) -> std::sync::Arc<FixedClock> {
+    std::sync::Arc::new(FixedClock::at(now_ms))
+}
+
+/// A driver over Health's own runtime, on the platform and locale named, the vault's clock
+/// stopped at [`NOW_MS`].
 pub fn driver_on(platform: &str, locale: &str) -> Driver {
-    let mut driver = Driver::with_runtime(health::runtime());
+    driver_in(platform, locale, ZONE, NOW_MS)
+}
+
+/// [`driver_on`] in `zone`, the vault's clock stopped at `now_ms`.
+pub fn driver_in(platform: &str, locale: &str, zone: &str, now_ms: i64) -> Driver {
+    let mut driver = Driver::with_runtime_clocked(health::runtime(), clock_at(now_ms));
     driver.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: locale.to_owned(),
-        zone: "Europe/Berlin".to_owned(),
+        zone: zone.to_owned(),
         platform: platform.to_owned(),
         ..Default::default()
     }));
@@ -38,10 +60,10 @@ pub fn driver_following_on(platform: &str, locale: &str) -> (Driver, u64) {
         )],
     )
     .with_services(centraid_screens::follow::services());
-    let mut driver = Driver::with_runtime(runtime);
+    let mut driver = Driver::with_runtime_clocked(runtime, clock_at(NOW_MS));
     driver.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: locale.to_owned(),
-        zone: "Europe/Berlin".to_owned(),
+        zone: ZONE.to_owned(),
         platform: platform.to_owned(),
         ..Default::default()
     }));
@@ -93,8 +115,13 @@ pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActRes
 }
 
 pub fn answer(d: &Driver, request: impl Into<wire::LoadRequest>) -> Answer {
+    answer_in(d, ZONE, request)
+}
+
+/// [`answer`] asked in `zone`.
+pub fn answer_in(d: &Driver, zone: &str, request: impl Into<wire::LoadRequest>) -> Answer {
     let mut request = request.into();
-    request.zone = "Europe/Berlin".to_owned();
+    request.zone = zone.to_owned();
     let answered = d
         .handle
         .call(&wire::Request {
@@ -110,6 +137,14 @@ pub fn answer(d: &Driver, request: impl Into<wire::LoadRequest>) -> Answer {
 /// The vault clock's day in the driver's zone.
 pub fn today(d: &Driver) -> String {
     match answer(d, load::health::Today {}) {
+        Answer::HealthToday(today) => today.today,
+        other => panic!("today answered {other:?}"),
+    }
+}
+
+/// [`today`] in `zone`.
+pub fn today_in(d: &Driver, zone: &str) -> String {
+    match answer_in(d, zone, load::health::Today {}) {
         Answer::HealthToday(today) => today.today,
         other => panic!("today answered {other:?}"),
     }

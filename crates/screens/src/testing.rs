@@ -153,6 +153,24 @@ impl Driver {
         Self::opened(runtime, false, now_ms)
     }
 
+    /// [`Self::with_runtime`] with the VAULT'S OWN CLOCK stopped at `clock`'s instant, and the
+    /// scenario seeded as of it. Every read that asks "today" (`vault.clock()`), every
+    /// `committed_at` and every minted id come from `clock`, so a test can stand the vault at a
+    /// moment where the UTC day and a member's zone day differ (late in the UTC day for a zone
+    /// ahead of UTC, early for one behind) and see the same vault on every hour it runs. The
+    /// test keeps the `Arc` to move time.
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made.
+    #[must_use]
+    pub fn with_runtime_clocked(
+        runtime: Runtime,
+        clock: std::sync::Arc<centraid_vault::clock::FixedClock>,
+    ) -> Self {
+        let seeded_at_ms = centraid_vault::Clock::now_ms(&*clock);
+        Self::opened_on(runtime, false, seeded_at_ms, Some(clock))
+    }
+
     /// [`Self::with_runtime`] over a core that holds the vault's keys, so a
     /// Locker session can open (the all-`abandon` words' seed).
     ///
@@ -187,6 +205,15 @@ impl Driver {
     }
 
     fn opened(runtime: Runtime, keyed: bool, seeded_at_ms: i64) -> Self {
+        Self::opened_on(runtime, keyed, seeded_at_ms, None)
+    }
+
+    fn opened_on(
+        runtime: Runtime,
+        keyed: bool,
+        seeded_at_ms: i64,
+        clock: Option<std::sync::Arc<centraid_vault::clock::FixedClock>>,
+    ) -> Self {
         let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the scratch directory is made");
         let config = CoreConfig::new(dir.join("vault.db"));
@@ -198,6 +225,13 @@ impl Driver {
             config.with_seed(seed, 0)
         } else {
             config
+        };
+        let config = match clock {
+            Some(clock) => config.with_clock(
+                clock.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock))),
+            ),
+            None => config,
         };
         let handle = Core::open(config).expect("a core opens with create");
         handle
@@ -414,6 +448,18 @@ impl Driver {
     /// sheet) is tested through when no screen carries its events yet.
     pub fn with_ctx<R>(&self, body: impl FnOnce(&Ctx) -> R) -> R {
         let environment = Environment::default();
+        body(&Ctx::new(&*self.handle, &environment))
+    }
+
+    /// [`Self::with_ctx`] in the member's `zone` instead of UTC: the same door, placing "today" and
+    /// every civil reading where the screens do once the shell has said the phone's zone. A test
+    /// that arranges days in a zone reads them back through this, or through the default zone it
+    /// cannot see them in.
+    pub fn with_ctx_in<R>(&self, zone: &str, body: impl FnOnce(&Ctx) -> R) -> R {
+        let environment = Environment {
+            zone: zone.to_owned(),
+            ..Environment::default()
+        };
         body(&Ctx::new(&*self.handle, &environment))
     }
 

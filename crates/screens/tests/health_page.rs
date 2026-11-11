@@ -18,7 +18,7 @@ use centraid_core::screens::{ScreenCtx, ScreenHost};
 use centraid_core::{CoreError, Handle, Result};
 use centraid_screens::health::{self, routes};
 use centraid_screens::strings::{Locale, shared};
-use health_support::{connect_store, driver, record, today, workout};
+use health_support::{ZONE, connect_store, driver, record, today, workout};
 use wire::page_state::State;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -83,7 +83,7 @@ impl<'a> Shell<'a> {
         };
         shell.call(wire::screen_request::Kind::Environment(wire::Environment {
             locale: "en".to_owned(),
-            zone: "UTC".to_owned(),
+            zone: ZONE.to_owned(),
             platform: "ios".to_owned(),
             ..Default::default()
         }));

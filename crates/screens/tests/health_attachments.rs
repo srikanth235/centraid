@@ -21,7 +21,10 @@ use wire::screen_event::Kind as E;
 const NOW: i64 = 1_794_214_800_000;
 
 fn seeded() -> (Driver, String) {
-    let mut driver = Driver::with_runtime_at(health::runtime(), NOW);
+    let mut driver = Driver::with_runtime_clocked(
+        health::runtime(),
+        std::sync::Arc::new(centraid_vault::clock::FixedClock::at(NOW)),
+    );
     driver.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: "en-GB".to_owned(),
         zone: "Europe/Berlin".to_owned(),

@@ -28,7 +28,10 @@ fn runtime() -> Runtime {
 const SERVICE: u64 = 1;
 
 fn driver_in(locale: &str) -> Driver {
-    let mut d = Driver::with_runtime(runtime());
+    let mut d = Driver::with_runtime_clocked(
+        runtime(),
+        std::sync::Arc::new(centraid_vault::clock::FixedClock::at(NOW_MS)),
+    );
     d.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: locale.to_owned(),
         zone: "Europe/Berlin".to_owned(),

@@ -18,7 +18,10 @@ const SEEDED_AT_MS: i64 = 1_772_452_800_000;
 const STARTS: &str = "2026-03-04T07:00:00Z";
 
 fn driver_in(region: &str) -> Driver {
-    let mut d = Driver::with_runtime_at(health::runtime(), SEEDED_AT_MS);
+    let mut d = Driver::with_runtime_clocked(
+        health::runtime(),
+        std::sync::Arc::new(centraid_vault::clock::FixedClock::at(SEEDED_AT_MS)),
+    );
     d.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: format!("en-{region}"),
         zone: "Europe/Berlin".to_owned(),
