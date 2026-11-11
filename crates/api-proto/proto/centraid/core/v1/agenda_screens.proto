@@ -1341,7 +1341,7 @@ message AgendaGuestRow {
 message AgendaRsvp {
   string question = 1;
   repeated AgendaRsvpChoice choices = 2;
-  // "Your answer is for every occurrence." on a series.
+  // "Your answer is for every event in the series." on a series.
   string note = 3;
 }
 
@@ -1616,7 +1616,7 @@ message AgendaEditorData {
   // Why Save is not armed: "Add a title to save." / "An event must end after
   // it starts." Empty when it is, or when nothing changed.
   string blocked_reason = 19;
-  // "Skip this occurrence", on a series occurrence.
+  // "Skip this one", on an event of a series.
   bool show_skip = 20;
   string skip_label = 21;
   string foot_note = 22;

@@ -226,7 +226,7 @@ fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_sa
     assert_eq!(data.actions.last().expect("trash").label, "Move to trash");
     assert_eq!(
         data.rsvp.as_ref().expect("a guest").note,
-        "Your answer is for every occurrence."
+        "Your answer is for every event in the series."
     );
     assert!(
         data.accessibility_label.ends_with(", repeats"),
@@ -464,7 +464,7 @@ fn cancelling_a_series_asks_which_occurrences_none_pre_chosen_and_each_scope_wri
     assert_eq!(
         labels,
         [
-            "This occurrence",
+            "Only this one",
             "This and the ones after",
             "The whole series"
         ]

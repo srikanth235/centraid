@@ -604,7 +604,7 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
     let page = open(&mut world);
     let data = world.editor_data(page);
     assert!(data.show_skip);
-    assert_eq!(data.skip_label, "Skip this occurrence");
+    assert_eq!(data.skip_label, "Skip this one");
     assert_eq!(
         data.repeat_note,
         "A repeat rule belongs to the whole series."
@@ -719,7 +719,7 @@ fn a_series_occurrence_asks_which_occurrences_and_each_scope_writes_its_command(
     assert!(!series_row.enabled);
     assert_eq!(
         series_row.note,
-        "To move every occurrence, edit the first one."
+        "To move every event in the series, edit the first one."
     );
 }
 
@@ -753,7 +753,7 @@ fn skip_asks_then_skips_the_occurrence_and_a_one_off_has_no_skip() {
     let state = world.editor_state(page);
     assert_eq!(
         state.confirm.as_ref().expect("question").title,
-        "Skip this occurrence?"
+        "Skip this one?"
     );
     // Not now: nothing is written.
     world.send_editor(

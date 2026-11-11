@@ -5,7 +5,7 @@
 
 catalog! {
     plain event_saved = ("Event saved", "Event saved");
-    plain occurrence_skipped = ("Occurrence skipped", "Occurrence skipped");
+    plain occurrence_skipped = ("Skipped", "Skipped");
     plain field_location = ("Location", "Location");
     plain field_first_alert = ("Reminder", "Reminder");
     plain field_second_alert = ("Second reminder", "Second reminder");
