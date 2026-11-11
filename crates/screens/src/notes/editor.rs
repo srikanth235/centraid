@@ -65,6 +65,7 @@ use crate::kit::earlier;
 use crate::kit::export::ExportFile;
 use crate::kit::read::{self, Reading};
 use crate::kit::share::{self, Share};
+use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, notes as words};
 use std::collections::{BTreeSet, HashMap};
@@ -228,6 +229,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         said: false,
         undo: None,
         offer: None,
+        door: Door::default(),
         selection: None,
         selection_seq: 0,
         resolutions: HashMap::new(),
@@ -274,6 +276,9 @@ struct Editor {
     undo: Option<Undo>,
     /// The Create or Restore a dead link's sentence carries; shown while its sentence is.
     offer: Option<Offer>,
+    /// The kit's status line for the writes that go through its door (a pin, a tag, a made or
+    /// restored note), with the Undo the core offered; shown when no editing sentence is.
+    door: Door,
     /// Where the caret goes after a core edit, until the shell's next edit.
     selection: Option<u32>,
     selection_seq: u64,
@@ -432,6 +437,7 @@ impl Editor {
     fn forget_sentence(&mut self) {
         self.undo = None;
         self.offer = None;
+        self.door.clear();
         if self.said {
             self.status = None;
             self.said = false;
@@ -695,11 +701,17 @@ impl Editor {
             ),
         };
         let key = kit_act::key(&[&request.action.clone(), &title], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
         self.forget_sentence();
+        let made = known.is_none();
+        let settled = self.door.act(ctx, request, &key, |locale| {
+            if made {
+                words::note_created(locale)
+            } else {
+                crate::kit::trash::restored(locale, &title)
+            }
+        });
+        self.wrote(&settled);
         if !settled.committed {
-            self.say(settled.refusal);
             return Vec::new();
         }
         // The act is this editor's own commit, which keeps the cache: this title means the note
@@ -774,12 +786,20 @@ impl Editor {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), id], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
-        self.status = (!settled.committed).then_some(settled.refusal);
-        self.undo = None;
-        self.offer = None;
+        self.forget_sentence();
+        self.status = None;
         self.said = false;
+        let settled = self.door.act(
+            ctx,
+            request,
+            &key,
+            if pinned {
+                words::note_pinned
+            } else {
+                words::note_unpinned
+            },
+        );
+        self.wrote(&settled);
     }
 
     fn pin(&mut self, ctx: &Ctx) {
@@ -793,7 +813,7 @@ impl Editor {
         if let Some(id) = self.note_id.clone() {
             let pinned = self.pinned;
             self.write_pin(ctx, &id, pinned);
-            if self.status.is_some() {
+            if self.door.status().is_some_and(|line| line.refused) {
                 self.pinned = !pinned;
             }
         }
@@ -824,12 +844,20 @@ impl Editor {
             .into()
         };
         let key = kit_act::key(&[&request.action.clone(), &id, label], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.wrote(&settled);
-        self.status = (!settled.committed).then_some(settled.refusal);
-        self.undo = None;
-        self.offer = None;
+        self.forget_sentence();
+        self.status = None;
         self.said = false;
+        let settled = self.door.act(
+            ctx,
+            request,
+            &key,
+            if adding {
+                words::tag_added
+            } else {
+                words::tag_removed
+            },
+        );
+        self.wrote(&settled);
         self.reload(ctx);
     }
 
@@ -968,15 +996,7 @@ impl Editor {
                 self.reload_all(ctx);
             }
             Some(N::ChecklistToggled(tapped)) => self.toggle(ctx, tapped.at),
-            Some(N::StatusActed(_)) => {
-                return match self.offer.take() {
-                    Some(offer) => self.accept(ctx, offer),
-                    None => {
-                        self.undo(ctx);
-                        Vec::new()
-                    }
-                };
-            }
+            Some(N::StatusActed(_)) => return self.status_acted(ctx),
             Some(N::LinkOpened(opened)) => return self.open_chip(ctx, opened.at),
             Some(N::ReturnPressed(pressed)) => self.return_pressed(ctx, pressed.caret),
             Some(N::Save(_)) => self.save_now(ctx),
@@ -985,6 +1005,24 @@ impl Editor {
             None => {}
         }
         Vec::new()
+    }
+
+    /// THE STATUS LINE'S VERB (the kit's `StatusActed`, or the editor's own): a dead link's Create
+    /// or Restore, the checklist toggle's Undo, or the Undo of a write that went through the door.
+    fn status_acted(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        match self.offer.take() {
+            Some(offer) => self.accept(ctx, offer),
+            None if self.undo.is_some() => {
+                self.undo(ctx);
+                Vec::new()
+            }
+            None => {
+                if self.door.acted(ctx) {
+                    self.reload(ctx);
+                }
+                Vec::new()
+            }
+        }
     }
 
     /// The vault changed under this screen. Our own commit (every table has a
@@ -1241,6 +1279,7 @@ impl Screen for Editor {
             // words and notes that the vault moved. The core sends a change for
             // every local commit, this editor's own saves included.
             Some(E::DataChanged(changed)) => self.data_changed(ctx, &changed.tables),
+            Some(E::StatusActed(_)) => return self.status_acted(ctx),
             Some(E::EnvironmentChanged(_)) => {
                 self.own.clear();
                 self.reload_all(ctx);
@@ -1341,6 +1380,7 @@ impl Screen for Editor {
                         .clone()
                         .or_else(|| self.status.clone())
                         .or_else(|| self.share.status().map(|line| line.sentence))
+                        .or_else(|| self.door.status().map(|line| line.sentence))
                         .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
                         .unwrap_or(save_status)
                 },
@@ -1356,6 +1396,12 @@ impl Screen for Editor {
                         Some(Offer::Restore { .. }) => words::link_restore(locale),
                         None => words::undo(locale),
                     }
+                } else if self.status.is_none() && self.read_failure.is_none() && !autosave.refused
+                {
+                    self.door
+                        .status()
+                        .map(|line| line.action_label)
+                        .unwrap_or_default()
                 } else {
                     String::new()
                 },
@@ -2102,7 +2148,9 @@ mod tests {
         let made = opens_editor(&effects).expect("the new note opens");
         let view = state(&*screen, &ctx);
         let chrome = view.chrome.clone().expect("chrome");
-        assert_eq!(chrome.status_action, "");
+        // What happened is said, and the core's inverse (delete the note) is the Undo.
+        assert_eq!(chrome.status, "Note created");
+        assert_eq!(chrome.status_action, "Undo");
         let chips = chips(&view);
         assert_eq!(
             chips[0].resolution,

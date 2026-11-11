@@ -13,6 +13,7 @@ use wire::screen_event::Kind as E;
 use crate::catalog::act;
 use crate::kit::act as kit_act;
 use crate::kit::transfer::{self, TextFile, action, row};
+use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, notes as words};
 
@@ -48,7 +49,7 @@ pub fn build_import(route: &wire::Route) -> Option<Box<dyn Screen>> {
         files: Vec::new(),
         plan: None,
         stage: Stage::Choosing,
-        status: None,
+        line: Door::default(),
     }))
 }
 
@@ -83,26 +84,17 @@ struct Transfer {
     files: Vec<TextFile>,
     plan: Option<Plan>,
     stage: Stage,
-    status: Option<wire::StatusLine>,
+    line: Door,
 }
 
 impl Transfer {
     fn refuse(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: true,
-        });
+        self.line.refuse(sentence);
     }
 
     fn say(&mut self, sentence: String) {
-        self.status = Some(wire::StatusLine {
-            sentence,
-            action_label: String::new(),
-            refused: false,
-        });
+        self.line.say(sentence);
     }
-
     fn pick(folder: bool) -> Vec<wire::Effect> {
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::PickBytes(wire::PickBytes {
@@ -118,10 +110,12 @@ impl Transfer {
             return;
         }
         self.files = transfer::picked_files(picked);
-        self.status = None;
+        self.line.clear();
         self.stage = Stage::Reading;
         let key = kit_act::key(&["note.import", "dry"], kit_act::fresh());
-        let settled = kit_act::act(ctx, import_request(&self.files, Some(true)), &key);
+        let settled = self
+            .line
+            .act_quietly(ctx, import_request(&self.files, Some(true)), &key);
         if !settled.committed {
             self.stage = Stage::Choosing;
             self.refuse(settled.refusal);
@@ -147,7 +141,9 @@ impl Transfer {
         };
         self.stage = Stage::Writing;
         let key = kit_act::key(&["note.import"], kit_act::fresh());
-        let settled = kit_act::act(ctx, import_request(&self.files, None), &key);
+        let settled = self
+            .line
+            .act_quietly(ctx, import_request(&self.files, None), &key);
         if settled.committed {
             let made = transfer::count(&settled.output, "notes");
             self.say(fill(
@@ -299,7 +295,7 @@ impl Screen for Transfer {
                 rows,
                 actions,
                 busy: matches!(self.stage, Stage::Reading | Stage::Writing),
-                status: self.status.clone(),
+                status: self.line.status(),
             })),
             ..wire::ViewState::default()
         }

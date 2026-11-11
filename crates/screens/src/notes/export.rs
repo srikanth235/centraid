@@ -58,6 +58,7 @@ fn choices(ctx: &Ctx) -> Reading<Vec<Choice>> {
 }
 
 fn export(ctx: &Ctx, key: &str) -> Result<export::ExportFile, String> {
+    // undo-exempt: an export writes nothing (`writes_nothing` in the manifest), so there is nothing to take back.
     let settled = kit_act::act(
         ctx,
         act::notes::ExportNotes {

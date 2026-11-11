@@ -176,6 +176,16 @@ catalog! {
     plain transfer_row_tags = ("Tags", "Tags");
     plain transfer_row_unlinked = ("Links to nothing yet", "Links to nothing yet");
     plain unfiled_row = ("Unfiled", "Unfiled");
+    plain entry_added = ("Entry added", "Entry added");
+    plain note_created = ("Note created", "Note created");
+    plain note_moved = ("Note moved", "Note moved");
+    plain note_pinned = ("Note pinned", "Note pinned");
+    plain note_unpinned = ("Note unpinned", "Note unpinned");
+    plain notebook_created = ("Notebook created", "Notebook created");
+    plain notebook_deleted = ("Notebook deleted", "Notebook deleted");
+    plain notebook_renamed = ("Notebook renamed", "Notebook renamed");
+    plain tag_added = ("Tag added", "Tag added");
+    plain tag_removed = ("Tag removed", "Tag removed");
     plain undo = ("Undo", "Undo");
     plain unpin = ("Unpin", "Unpin");
     plain untitled = ("Untitled note", "Untitled note");
