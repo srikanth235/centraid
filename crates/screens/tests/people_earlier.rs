@@ -324,3 +324,32 @@ fn a_record_with_no_id_opens_nothing() {
     );
     let _ = &mut d;
 }
+
+// ---- where it came from (#1185) ----
+
+#[test]
+fn a_person_who_came_from_a_file_says_so_and_a_typed_one_does_not() {
+    let mut d = driver();
+    arrange(
+        &d,
+        act::people::ImportVcf {
+            cards: "BEGIN:VCARD\nVERSION:3.0\nFN:Maya Rao\nEND:VCARD\n".to_owned(),
+            arrived_system: Some(act::people::ImportVcfArrivedSystem::Vcard),
+            arrived_label: Some("contacts.vcf".to_owned()),
+            ..Default::default()
+        },
+    );
+    let typed = person(&d, "Ada");
+    let maya = roster_of(&d)
+        .people
+        .into_iter()
+        .find(|row| row.name == "Maya Rao")
+        .expect("Maya")
+        .party_id;
+    let i = open_person(&mut d, &maya, "Maya Rao");
+    let line = person_state(d.view(i)).origin.clone().expect("a line");
+    assert_eq!(line.text, "From contacts.vcf");
+    assert_eq!(line.accessibility_label, "Came from contacts.vcf");
+    let i = open_person(&mut d, &typed, "Ada");
+    assert_eq!(person_state(d.view(i)).origin, None);
+}

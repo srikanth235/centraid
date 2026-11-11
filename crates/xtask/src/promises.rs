@@ -443,7 +443,11 @@ pub const REGISTER: &[Row] = &[
     owed("locker", Promise::Origin, ORIGIN_OWED),
     owed("money", Promise::Origin, ORIGIN_OWED),
     owed("notes", Promise::Origin, ORIGIN_OWED),
-    owed("people", Promise::Origin, ORIGIN_OWED),
+    kept(
+        "people",
+        Promise::Origin,
+        "crates/screens/src/people/earlier.rs",
+    ),
     owed("photos", Promise::Origin, ORIGIN_OWED),
     owed("reminders", Promise::Origin, ORIGIN_OWED),
 ];
