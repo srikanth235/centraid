@@ -13,9 +13,9 @@
 //!
 //! * a photograph is a hit when it is **live** (`Standing::is_live`): the archive is
 //!   not searched, and an edit's original is not offered beside the edit;
-//! * a photograph found only by what it was once captioned (#1185) is Home's row, not a
-//!   tile: the grid has no line to say "In an earlier version", so it keeps to what the
-//!   photographs say now;
+//! * a photograph found only by what it was once captioned (#1185) is not a tile: the grid
+//!   has no line to say "In an earlier version". It stands under the grid as a row of its
+//!   own ([`earlier_only`]), unless another leg already put it in the grid;
 //! * a place's, an album's and the no-location bucket's count is the shelf it opens:
 //!   a place's live photographs, an album's members that are not in the trash;
 //! * of the places a word names, three stand above the grid, then the no-location
@@ -352,6 +352,41 @@ pub struct SearchHits {
     pub truncated: bool,
     pub top_hits: Vec<TopHit>,
     pub labels: Vec<Named>,
+    /// The live photographs the full-text index found only in an earlier version (#1185) and
+    /// no leg above put in the grid, in rank order, at most `limit`.
+    pub earlier_cells: Vec<PhotoCell>,
+    /// Every photograph any leg reached, the ones past `limit` too: what [`earlier_cells`] does
+    /// not repeat.
+    pub reached: BTreeSet<String>,
+}
+
+/// The live photographs the full-text index found ONLY in an earlier version (#1185) and no leg
+/// of `hits` reached, as cells, in the index's rank order, at most `limit`.
+///
+/// # Errors
+/// The door's refusal, or a walk past the library's bound.
+pub fn earlier_only(
+    door: &dyn PageDoor,
+    standing: &Standing,
+    now_ms: i64,
+    limit: usize,
+    earlier_ids: &[String],
+    hits: &SearchHits,
+) -> KitResult<Vec<PhotoCell>> {
+    let apart: Vec<String> = earlier_ids
+        .iter()
+        .filter(|id| !hits.reached.contains(id.as_str()))
+        .take(limit.clamp(1, HIT_CEILING))
+        .cloned()
+        .collect();
+    // `live_among` answers in the table's order; the rank is the order these stand in.
+    let standing_now: BTreeSet<String> = live_among(door, standing, &apart)?.into_iter().collect();
+    let apart: Vec<String> = apart
+        .into_iter()
+        .filter(|id| standing_now.contains(id))
+        .collect();
+    let mut cells = read_cells(door, standing, &apart, now_ms)?;
+    Ok(apart.iter().filter_map(|id| cells.remove(id)).collect())
 }
 
 fn members_of(door: &dyn PageDoor, albums: &[String]) -> KitResult<BTreeMap<String, Vec<String>>> {
@@ -511,8 +546,8 @@ pub fn assemble(
     for photos in structured.tagged.values() {
         reached.extend(photos.iter().cloned());
     }
-    let reached: Vec<String> = reached.into_iter().collect();
-    let live = live_among(door, standing, &reached)?;
+    let reached_ids: Vec<String> = reached.into_iter().collect();
+    let live = live_among(door, standing, &reached_ids)?;
     let mut cells = read_cells(door, standing, &live, now_ms)?;
     let mut ordered: Vec<PhotoCell> = live.iter().filter_map(|id| cells.remove(id)).collect();
     ordered.sort_by(crate::cells::timeline_order);
@@ -525,6 +560,8 @@ pub fn assemble(
         truncated: total > limit,
         top_hits,
         labels: structured.labels.clone(),
+        earlier_cells: Vec::new(),
+        reached: reached_ids.into_iter().collect(),
     })
 }
 

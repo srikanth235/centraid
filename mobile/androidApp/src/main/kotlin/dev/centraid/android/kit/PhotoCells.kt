@@ -76,6 +76,9 @@ public fun PhotoCellsGrid(
     /** Rows a surface puts ABOVE its cells inside the same scroller, so the
      *  head scrolls with the grid rather than sitting in a second one. */
     header: (LazyGridScope.() -> Unit)? = null,
+    /** Rows a surface puts BELOW its cells inside the same scroller (search's photographs found
+     *  only by what they said before). */
+    footer: (LazyGridScope.() -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = minimumCell.dp),
@@ -98,6 +101,7 @@ public fun PhotoCellsGrid(
                 onFetch = onFetch,
             )
         }
+        footer?.invoke(this)
     }
 }
 

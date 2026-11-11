@@ -365,6 +365,23 @@ message PhotosSearchHits {
   reserved "truncated_label";
   // `Matched Lisbon, beach`: why these were found, in the vault's own words.
   string matched_label = 9;
+  // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185), a group under the grid: a tile has
+  // no line to say so, so each is a row (thumbnail, title, "In an earlier version") that opens
+  // that photograph's Earlier versions. Empty when nothing was found only in the past.
+  repeated PhotosEarlierRow earlier = 10;
+}
+
+// One photograph the words matched only in an earlier version of it.
+message PhotosEarlierRow {
+  // The thumbnail, drawn small; its `photo_id` identifies the row.
+  PhotoTile tile = 1;
+  // The photograph's own title, or what it is (Photograph, Video) when it has none.
+  string title = 2;
+  // "In an earlier version".
+  string line = 3;
+  string accessibility_label = 4;
+  // That photograph's Earlier versions, backing out to Search.
+  Route route = 5;
 }
 
 message PhotosSearchDoor {

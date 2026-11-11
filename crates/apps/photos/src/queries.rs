@@ -125,6 +125,10 @@ pub fn parse_instant_ms(text: &str) -> Option<i64> {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchData {
     pub photo_ids: Vec<String>,
+    /// The live photographs found ONLY by what they once said (#1185), in rank order: not in
+    /// `photo_ids`, so the grid does not draw them, and drawn by Photos' search as rows that
+    /// say so and open Earlier versions.
+    pub earlier_ids: Vec<String>,
 }
 
 /// Ask the index for `term` over photographs and keep the hits that are LIVE
@@ -167,18 +171,23 @@ pub fn load_search_term(
         }
         Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
     };
+    let (earlier, now): (Vec<centraid_search::Target>, Vec<centraid_search::Target>) = page
+        .rows
+        .into_iter()
+        .partition(|target| target.in_earlier_version);
+    let live = |targets: Vec<centraid_search::Target>| -> Vec<String> {
+        targets
+            .into_iter()
+            .map(|target| target.id)
+            .filter(|id| standing.is_live(id))
+            .collect()
+    };
     Ok((
         SearchData {
-            // Photos' search draws a grid of tiles, which has no line to say "in an earlier
-            // version": a photograph found only by what it was once captioned is Home's hit
-            // (a row), and the grid keeps to what the photographs say now (#1185).
-            photo_ids: page
-                .rows
-                .into_iter()
-                .filter(|target| !target.in_earlier_version)
-                .map(|target| target.id)
-                .filter(|id| standing.is_live(id))
-                .collect(),
+            // The grid draws what the photographs say now; a photograph found only by what it
+            // was once captioned is a row of its own, with the line that says so (#1185).
+            photo_ids: live(now),
+            earlier_ids: live(earlier),
         },
         None,
     ))

@@ -53,6 +53,16 @@ struct PhotosSearchBody: View {
                             onTap: { photoID in open(PhotosHomeEvents.lightbox(hits.open, photoID)) },
                             onFetch: { photoID, _ in send(PhotosHomeEvents.make { $0.originalRequested = photoID }) }
                         )
+                        // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185): a tile has no
+                        // line to say so, so each is a row under the grid, and a tap opens that
+                        // photograph's Earlier versions.
+                        if !hits.earlier.isEmpty {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(hits.earlier, id: \.tile.photoID) { row in
+                                    EarlierPhotoRow(row: row, open: open)
+                                }
+                            }
+                        }
                     case nil:
                         EmptyView()
                     }
@@ -103,6 +113,51 @@ private struct DoorRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(door.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// One photograph the words matched only in an earlier version of it: its thumbnail, its title and
+/// the line "In an earlier version". A tap opens that photograph's Earlier versions.
+private struct EarlierPhotoRow: View {
+    let row: Centraid_Core_V1_PhotosEarlierRow
+    let open: (Centraid_Core_V1_Route) -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    private var path: String? {
+        row.tile.hasThumbnailPath && !row.tile.thumbnailPath.isEmpty ? row.tile.thumbnailPath : nil
+    }
+
+    var body: some View {
+        Button {
+            open(row.route)
+        } label: {
+            HStack(spacing: 12) {
+                Theme.color("skel", scheme)
+                    .frame(width: 52, height: 52)
+                    .overlay {
+                        if let path { ContentImage(path: path) }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                    Text(row.line)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme))
+            }
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.accessibilityLabel)
         .accessibilityAddTraits(.isButton)
     }
 }

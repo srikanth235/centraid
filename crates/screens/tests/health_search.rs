@@ -5,7 +5,7 @@
 mod health_support;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::catalog::act;
+use centraid_screens::catalog::{act, load};
 use centraid_screens::health;
 use centraid_screens::shell;
 use centraid_screens::testing::Driver;
@@ -126,4 +126,74 @@ fn home_lists_health_and_money_as_groups_of_their_own() {
             .iter()
             .any(|g| g.app_id == "health" && g.rows.iter().any(|r| r.kind_label == "Metric"))
     );
+}
+
+/// A WORKOUT RENAMED SINCE is found by the name it had, as the workout once, with the line that
+/// says so, opening that workout's Earlier versions (#1185); by what it is called now it is the
+/// ordinary row.
+#[test]
+fn health_search_finds_a_workout_by_an_earlier_name_and_opens_earlier_versions() {
+    let mut d = Driver::with_runtime(health::runtime());
+    d.start();
+    arrange(
+        &d,
+        act::health::LogWorkout {
+            starts: "2026-03-04T07:00:00Z".to_owned(),
+            r#type: Some("run".to_owned()),
+            title: Some("Zqquokka loop".to_owned()),
+            moving_s: Some(1800),
+            ..Default::default()
+        },
+    );
+    let id = match health_support::answer(
+        &d,
+        load::health::Workouts {
+            limit: 10,
+            ..Default::default()
+        },
+    ) {
+        wire::app_query_response::Answer::HealthWorkouts(found) => {
+            found.workouts[0].activity_id.clone()
+        }
+        other => panic!("{other:?}"),
+    };
+    arrange(
+        &d,
+        act::health::EditWorkout {
+            workout_id: id.clone(),
+            title: Some("Harbour run".to_owned()),
+            ..Default::default()
+        },
+    );
+    let i = d.push("health", health::routes::search());
+    type_term(&mut d, i, "Zqquokka");
+    let found = data(&d, i);
+    let rows: Vec<&wire::HomeSearchRow> = found
+        .groups
+        .iter()
+        .filter(|group| group.app_id == "health")
+        .flat_map(|group| group.rows.iter())
+        .collect();
+    assert_eq!(rows.len(), 1, "{found:?}");
+    let row = rows[0];
+    assert_eq!(row.id, id);
+    assert_eq!(row.title, "Harbour run", "the workout, not its old name");
+    assert_eq!(row.earlier_label, "In an earlier version");
+    assert!(row.accessibility_label.ends_with("In an earlier version"));
+    let route = row.route.as_ref().expect("a route");
+    assert_eq!(route.screen, health::EARLIER);
+    let Some(wire::route::Args::Earlier(args)) = &route.args else {
+        panic!("an earlier-versions route");
+    };
+    assert_eq!(args.entity_id, id);
+    type_term(&mut d, i, "Harbour");
+    let found = data(&d, i);
+    let row = found
+        .groups
+        .iter()
+        .flat_map(|group| group.rows.iter())
+        .find(|row| row.id == id)
+        .expect("found by its name now");
+    assert!(row.earlier_label.is_empty());
+    assert_eq!(row.route.as_ref().unwrap().screen, "health.workout");
 }

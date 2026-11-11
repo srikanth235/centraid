@@ -622,6 +622,7 @@ mod tests {
             earlier("document", "d1", "docs"),
             earlier("transaction", "x1", "money"),
             earlier("photo", "ph1", "photos"),
+            earlier("workout", "w1", "health"),
             hit("note", "n2", "Now", "notes"),
         ]);
         let screen_of = |app: &str, id: &str| {
@@ -649,6 +650,7 @@ mod tests {
             ("docs", "d1", crate::docs::EARLIER),
             ("money", "x1", crate::money::EARLIER),
             ("photos", "ph1", crate::photos::EARLIER),
+            ("health", "w1", crate::health::EARLIER),
         ] {
             let (label, route, entity, spoken) = screen_of(app, id);
             assert_eq!(label, "In an earlier version", "{app}");

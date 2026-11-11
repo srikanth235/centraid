@@ -1933,6 +1933,54 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
 }
 
 #[test]
+fn a_photograph_found_only_by_an_earlier_caption_is_a_row_under_the_grid_that_opens_earlier_versions()
+ {
+    let mut r = rig();
+    let old = r.photo("search old", Some("2026-02-03T10:00:00Z"), None);
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: old.clone(),
+        title: "Zqquokka at dusk".to_owned(),
+    });
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: old.clone(),
+        title: "Zqtwilight at dusk".to_owned(),
+    });
+    let now = r.photo("search now", Some("2026-02-04T10:00:00Z"), None);
+    r.arrange(act::photos::RetitlePhoto {
+        photo_id: now.clone(),
+        title: "Zqquokka today".to_owned(),
+    });
+    r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
+    search_for(&mut r, "Zqquokka");
+    let hits = r.hits();
+    assert_eq!(
+        hits.tiles
+            .iter()
+            .map(|t| t.photo_id.as_str())
+            .collect::<Vec<_>>(),
+        [now.as_str()],
+        "the grid keeps to what the photographs say now"
+    );
+    assert_eq!(hits.earlier.len(), 1);
+    let row = &hits.earlier[0];
+    assert_eq!(row.tile.as_ref().unwrap().photo_id, old);
+    assert_eq!(row.title, "Zqtwilight at dusk");
+    assert_eq!(row.line, "In an earlier version");
+    assert!(row.accessibility_label.ends_with("In an earlier version"));
+    let route = row.route.as_ref().expect("a route");
+    assert_eq!(route.screen, photos::EARLIER);
+    let Some(wire::route::Args::Earlier(args)) = &route.args else {
+        panic!("an earlier-versions route");
+    };
+    assert_eq!(args.entity_id, old);
+    // A photograph that says the words now is the ordinary tile and has no row.
+    search_for(&mut r, "Zqtwilight");
+    let hits = r.hits();
+    assert_eq!(hits.tiles.len(), 1);
+    assert!(hits.earlier.is_empty());
+}
+
+#[test]
 fn nothing_matched_is_data_with_no_cells_never_a_refusal_and_says_everywhere_it_looked() {
     let mut r = rig();
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));

@@ -145,7 +145,11 @@ impl Search {
         let nothing = self
             .answer
             .as_ref()
-            .filter(|found| found.cells.is_empty() && found.top_hits.is_empty())
+            .filter(|found| {
+                found.cells.is_empty()
+                    && found.top_hits.is_empty()
+                    && found.earlier_cells.is_empty()
+            })
             .filter(|_| self.page.data().is_some() && !term.is_empty());
         let page = if nothing.is_some() {
             Page::Empty
@@ -240,6 +244,11 @@ fn hits(locale: Locale, link: Link, found: &wire::PhotosSearch) -> wire::PhotosS
         count_label: cells::count_phrase(locale, found.total_hits, found.truncated),
         open: Some(routes::lightbox("", &ids, "")),
         tiles,
+        earlier: found
+            .earlier_cells
+            .iter()
+            .map(|cell| earlier_row(locale, link, cell))
+            .collect(),
         labels_title: sentences::library_search_labels(locale),
         labels,
         matched_label: if matched.is_empty() {
@@ -250,6 +259,28 @@ fn hits(locale: Locale, link: Link, found: &wire::PhotosSearch) -> wire::PhotosS
                 &[("matches", &matched.join(", "))],
             )
         },
+    }
+}
+
+/// A photograph the words matched only in an earlier version of it (#1185): a row that says so
+/// and opens that photograph's Earlier versions, where the words can be read.
+fn earlier_row(locale: Locale, link: Link, cell: &wire::PhotosCell) -> wire::PhotosEarlierRow {
+    let title = if cell.title.trim().is_empty() {
+        cells::noun(locale, cell)
+    } else {
+        cell.title.clone()
+    };
+    let line = ask::in_earlier_version(locale);
+    wire::PhotosEarlierRow {
+        tile: Some(cells::tile(cell, link, locale)),
+        accessibility_label: format!("{title}, {line}"),
+        title,
+        line,
+        route: Some(ask::earlier_route(
+            locale,
+            crate::photos::EARLIER,
+            &cell.photo_id,
+        )),
     }
 }
 

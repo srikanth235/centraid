@@ -220,6 +220,75 @@ fn a_task_and_a_person_are_found_by_what_they_said_before() {
 }
 
 #[test]
+fn a_workout_is_found_by_the_name_it_had_before() {
+    let scratch = common::Scratch::founded("earlier-workout").expect("a vault");
+    let (vault, registry) = (
+        &scratch.vault,
+        Registry::with_system_commands().expect("a registry"),
+    );
+    let logged = vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "workout.log",
+                json!({"type": "run", "title": "Quokka loop", "starts": "2026-03-04", "moving_s": 1800}),
+            ),
+        )
+        .expect("logs");
+    assert_eq!(
+        logged.status,
+        CommandStatus::Executed,
+        "{:?}",
+        logged.reason
+    );
+    let id = logged.output["workout_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert_eq!(past_rows(vault), 0, "a creation has no earlier version");
+    go(
+        vault,
+        &registry,
+        "workout.edit",
+        json!({"id": id, "title": "Harbour run"}),
+    );
+    assert_eq!(
+        finds(vault, "quokka"),
+        (0, 1),
+        "the old name is in the past"
+    );
+    assert_eq!(
+        finds(vault, "harbour"),
+        (1, 0),
+        "the new one is in the present"
+    );
+    assert_eq!(past_rows(vault), 1);
+    // The numbers a workout holds are not text: the version an edit of one keeps holds the title
+    // it had, where that first appeared, and nothing else.
+    go(
+        vault,
+        &registry,
+        "workout.edit",
+        json!({"id": id, "moving_s": 1750}),
+    );
+    assert_eq!(past_rows(vault), 2);
+    assert_eq!(finds(vault, "quokka"), (0, 1));
+    assert_eq!(finds(vault, "harbour"), (1, 1));
+    go(
+        vault,
+        &registry,
+        "workout.edit",
+        json!({"id": id, "moving_s": 1700}),
+    );
+    assert_eq!(
+        past_rows(vault),
+        2,
+        "a title already indexed is not indexed again"
+    );
+}
+
+#[test]
 fn a_locker_items_earlier_cells_are_not_found() {
     let scratch = common::Scratch::founded("earlier-locker").expect("a vault");
     let vault = &scratch.vault;

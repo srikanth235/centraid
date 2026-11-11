@@ -237,14 +237,21 @@ fn positive(value: Option<i64>) -> u32 {
 
 /// What a screen reader says of a cell: the noun, with the preview's absence
 /// when no thumbnail is here.
-fn accessibility(locale: Locale, cell: &wire::PhotosCell, kind: Kind) -> String {
-    let noun = if cell.live {
+/// What the cell is, in a word: Live photo, Video or Photograph.
+#[must_use]
+pub fn noun(locale: Locale, cell: &wire::PhotosCell) -> String {
+    let kind = kind_of(cell.form.as_deref());
+    if cell.live {
         words::photos_cell_live(locale)
     } else if kind == Kind::Video {
         words::photos_cell_video(locale)
     } else {
         words::photograph(locale)
-    };
+    }
+}
+
+fn accessibility(locale: Locale, cell: &wire::PhotosCell) -> String {
+    let noun = noun(locale, cell);
     if cell
         .thumbnail_path
         .as_deref()
@@ -276,7 +283,7 @@ pub fn tile(cell: &wire::PhotosCell, link: Link, locale: Locale) -> wire::PhotoT
     wire::PhotoTile {
         photo_id: cell.photo_id.clone(),
         content_id: cell.content_id.clone(),
-        accessibility_label: accessibility(locale, cell, kind),
+        accessibility_label: accessibility(locale, cell),
         thumbnail_path,
         held: held as i32,
         kind: kind as i32,

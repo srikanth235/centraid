@@ -1737,6 +1737,22 @@
       "x": 4700,
       "y": 12760
     },
+    "PhotosSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Search, found before",
+      "w": 390,
+      "x": 1410,
+      "y": 12760
+    },
+    "PhotosSearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Search, found before · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 12760
+    },
     "PhotosShelf.dc.html": {
       "h": 844,
       "page": "light",

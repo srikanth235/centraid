@@ -131,6 +131,7 @@ fn search_to_wire(searched: Searched, corrected: String) -> wire::PhotosSearch {
             })
             .collect(),
         labels: searched.hits.labels.into_iter().map(named_wire).collect(),
+        earlier_cells: searched.hits.earlier_cells.iter().map(cell).collect(),
         resting_places: searched
             .resting
             .places
@@ -439,12 +440,18 @@ fn answer(
             &[PHOTO_KIND, "album"],
             term,
             |(data, albums, structured): &Found| {
-                data.photo_ids.len() + albums.len() + structured.found()
+                data.photo_ids.len() + data.earlier_ids.len() + albums.len() + structured.found()
             },
             |(exact, exact_albums, exact_legs), (again, again_albums, again_legs)| {
                 (
                     photos::queries::SearchData {
                         photo_ids: filled(exact.photo_ids, again.photo_ids, limit, Clone::clone),
+                        earlier_ids: filled(
+                            exact.earlier_ids,
+                            again.earlier_ids,
+                            limit,
+                            Clone::clone,
+                        ),
                     },
                     filled_targets(exact_albums, again_albums, limit.min(named::CONTAINER_ROWS)),
                     exact_legs.filled(again_legs),
@@ -479,7 +486,7 @@ fn answer(
             label: target.title.clone(),
         })
         .collect();
-    let hits = photos::search::assemble(
+    let mut hits = photos::search::assemble(
         door,
         &standing,
         now_ms,
@@ -488,6 +495,9 @@ fn answer(
         &names,
         &structured,
     )?;
+    // The photographs found only by what they said before stand under the grid (#1185).
+    hits.earlier_cells =
+        photos::search::earlier_only(door, &standing, now_ms, limit, &data.earlier_ids, &hits)?;
     Ok((
         (
             Searched {

@@ -70,11 +70,16 @@ pub fn past_rowid(n: i64, seq: i64) -> Option<i64> {
 }
 
 /// The kinds that have past rows: the ones with an Earlier versions page to open, where the
-/// words a hit matched can be read (note, event, task, person, document, photo, transaction). A
-/// container, a chat thread, a place or an activity keeps versions, but no screen lists them,
-/// and a hit that opens an item whose past cannot be seen would be a hit the member cannot
-/// check. A Locker item has none: its history is sealed (owner decisions D4 and D11).
-pub const EARLIER_KINDS: [Kind; 7] = [
+/// words a hit matched can be read (note, event, task, person, document, photo, transaction,
+/// activity: a workout's page is Health's). A container, a chat thread or a place keeps
+/// versions, but no screen lists them, and a hit that opens an item whose past cannot be seen
+/// would be a hit the member cannot check. A Locker item has none: its history is sealed (owner
+/// decisions D4 and D11).
+///
+/// An activity has no typed text column of its own (its kind, its place and its times are
+/// concepts, links and instants, and a workout's measures are numbers), so its past row holds
+/// the title the member gave it, and [`EARLIER_COLUMNS`] has no line for it.
+pub const EARLIER_KINDS: [Kind; 8] = [
     Kind::Note,
     Kind::Event,
     Kind::Task,
@@ -82,6 +87,7 @@ pub const EARLIER_KINDS: [Kind; 7] = [
     Kind::Document,
     Kind::Photo,
     Kind::Txn,
+    Kind::Activity,
 ];
 
 fn has_past(kind: Kind) -> bool {

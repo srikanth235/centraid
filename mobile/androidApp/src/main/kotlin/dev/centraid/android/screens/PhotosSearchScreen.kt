@@ -1,13 +1,17 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.SearchAskRow
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,18 +19,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.PhotosHomeEvent
+import centraid.core.v1.PhotosEarlierRow
 import centraid.core.v1.PhotosSearchDoor
 import centraid.core.v1.PhotosSearchResting
 import centraid.core.v1.PhotosSearchView
 import centraid.core.v1.Route
 import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.PhotoCellsGrid
@@ -95,6 +102,13 @@ internal fun PhotosSearchScreen(
                         // THE ASK ROW closes the answer (#1097).
                         item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
                     },
+                    // PHOTOGRAPHS FOUND ONLY BY WHAT THEY SAID BEFORE (#1185): a tile has no line to
+                    // say so, so each is a row under the grid, opening its Earlier versions.
+                    footer = {
+                        hits.earlier.forEach { row ->
+                            item(span = { GridItemSpan(maxLineSpan) }) { EarlierPhotoRow(row, onOpen) }
+                        }
+                    },
                 )
             }
         }
@@ -118,6 +132,41 @@ private fun HitsHead(doors: List<PhotosSearchDoor>, matched: String, onOpen: (Ro
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * One photograph the words matched only in an earlier version of it: its thumbnail, its title and
+ * the line "In an earlier version". A tap opens that photograph's Earlier versions.
+ */
+@Composable
+private fun EarlierPhotoRow(row: PhotosEarlierRow, onOpen: (Route) -> Unit) {
+    val path = row.tile?.thumbnail_path
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .clickable { row.route?.let(onOpen) }
+            .semantics(mergeDescendants = true) {
+                contentDescription = row.accessibility_label
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(centraidColor("skel")),
+        ) {
+            if (!path.isNullOrEmpty()) ContentImage(path)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = centraidType("body"), color = centraidColor("text"), maxLines = 1)
+            Text(row.line, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = 1)
+        }
+        CentraidIcon(iconKey = "ChevronRight", tint = centraidColor("textFaint"))
     }
 }
 

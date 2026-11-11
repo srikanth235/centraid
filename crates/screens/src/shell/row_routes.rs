@@ -131,6 +131,8 @@ pub fn earlier(
         ("docs", "document") => docs::EARLIER,
         ("money", "transaction") => money::EARLIER,
         ("photos", "photo") => photos::EARLIER,
+        // A workout is an activity in the vault; its Earlier versions are Health's.
+        ("health", "workout") => health::EARLIER,
         _ => return None,
     };
     Some(crate::kit::search::earlier_route(locale, screen, id))
