@@ -162,7 +162,7 @@ impl Show {
     fn checked(&mut self, result: &wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome;
         let checked = match &result.outcome {
-            Some(Outcome::OwnerChecked(checked)) => checked.clone(),
+            Some(Outcome::OwnerChecked(checked)) => *checked,
             Some(Outcome::Failed(_)) => wire::OwnerChecked {
                 outcome: wire::owner_checked::Outcome::Failed as i32,
                 ..Default::default()
