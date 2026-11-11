@@ -12,8 +12,8 @@
 //! served to a read that is not Locker's, so nothing here filters it again and
 //! nothing here can leak it.
 
-pub use centraid_ontology::graph::Via;
-use centraid_ontology::graph::{self, ColumnLink, EdgeRow, End, GraphSource};
+use centraid_ontology::graph::{self, ColumnLink};
+pub use centraid_ontology::graph::{EdgeRow, End, GraphSource, Via};
 
 use crate::error::KitResult;
 use crate::reads::{FanOutBound, PageDoor, in_list, read_pages};

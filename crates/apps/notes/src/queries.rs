@@ -35,7 +35,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::graph;
+use centraid_apps_kit::graph::{self, GraphSource};
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, Read, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
@@ -547,25 +547,13 @@ fn links_of(
     BTreeMap<String, Vec<ReferenceEntry>>,
     BTreeMap<String, Vec<BacklinkEntry>>,
 )> {
-    let links = Some(("rel = ?", vec![PageBindValue::Text("links".to_owned())]));
-    let out = Read {
-        name: "notes.library.links",
-        table: "edge",
-        select: "from_id, to_id, anchor",
-        order: ("from_id", "to_id"),
-        column: "from_id",
-    }
-    .of(door, ids, links.clone())?;
-    let back = Read {
-        name: "notes.library.backlinks",
-        table: "edge",
-        select: "from_id, to_id",
-        order: ("to_id", "from_id"),
-        column: "to_id",
-    }
-    .of(door, ids, links)?;
-    let mut others: Vec<String> = texts(&out, "to_id");
-    others.extend(texts(&back, "from_id"));
+    // THE GRAPH'S OWN READER: the `links` edges that start at the notes and the ones that end at
+    // them, planned by the catalogue and read through this door.
+    let source = graph::DoorSource::new(door, JOIN_FAN_OUT);
+    let out = source.edges(graph::End::From, ids, &["links"])?;
+    let back = source.edges(graph::End::To, ids, &["links"])?;
+    let mut others: Vec<String> = out.iter().map(|edge| edge.to.clone()).collect();
+    others.extend(back.iter().map(|edge| edge.from.clone()));
     let cards = cards::resolve(door, &others)?;
     let card = |id: &str| {
         cards
@@ -577,26 +565,30 @@ fn links_of(
     // is never named here, in either direction.
     let locker = |id: &str| card(id).kind == "locker_item";
     let mut references: BTreeMap<String, Vec<ReferenceEntry>> = BTreeMap::new();
-    for row in &out {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id"))
-            && !locker(&to)
-        {
-            references.entry(from).or_default().push(ReferenceEntry {
-                // An unreadable anchor is just an unanchored reference.
-                selector: text_of(row, "anchor").and_then(|json| serde_json::from_str(&json).ok()),
-                card: card(&to),
-            });
+    for edge in &out {
+        if !locker(&edge.to) {
+            references
+                .entry(edge.from.clone())
+                .or_default()
+                .push(ReferenceEntry {
+                    // An unreadable anchor is just an unanchored reference.
+                    selector: edge
+                        .anchor
+                        .as_deref()
+                        .and_then(|json| serde_json::from_str(json).ok()),
+                    card: card(&edge.to),
+                });
         }
     }
     let mut backlinks: BTreeMap<String, Vec<BacklinkEntry>> = BTreeMap::new();
-    for row in &back {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id"))
-            && !locker(&from)
-        {
+    for edge in &back {
+        if !locker(&edge.from) {
             backlinks
-                .entry(to)
+                .entry(edge.to.clone())
                 .or_default()
-                .push(BacklinkEntry { card: card(&from) });
+                .push(BacklinkEntry {
+                    card: card(&edge.from),
+                });
         }
     }
     Ok((references, backlinks))
