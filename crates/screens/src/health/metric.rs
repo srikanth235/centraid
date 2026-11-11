@@ -114,7 +114,7 @@ impl MetricPage {
     }
 
     fn data(&self, ctx: &Ctx, series: &wire::HealthSeries) -> wire::HealthMetricData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let metric = self.metric;
         let bars_of = Bars::of(self.range);
         let caption = caption(locale, self.range, &series.buckets);
@@ -130,7 +130,7 @@ impl MetricPage {
         }
         let (number, unit) = series
             .average
-            .map(|average| figures::figure(locale, metric, average, units))
+            .map(|average| figures::measure(metric, average).figure(locale, units))
             .unwrap_or_default();
         let versus = match (series.average, series.typical) {
             (Some(_), Some(_)) => {
@@ -187,7 +187,7 @@ impl MetricPage {
             .map(|(index, bucket)| {
                 let value = bucket.value;
                 let figure = value
-                    .map(|value| figures::phrase(locale, metric, value, units))
+                    .map(|value| figures::measure(metric, value).words(locale, units))
                     .unwrap_or_default();
                 let words_ = [bucket_words(locale, bars_of, bucket), figure.clone()];
                 wire::HealthChartBar {
@@ -281,12 +281,15 @@ fn facts(
         if let Some(value) = best.value {
             facts.push(wire::HealthFact {
                 label,
-                detail: format!("{at} · {}", figures::phrase(locale, metric, value, units)),
+                detail: format!(
+                    "{at} · {}",
+                    figures::measure(metric, value).words(locale, units)
+                ),
             });
         }
     }
     if let Some(total) = series.total {
-        let phrase = figures::phrase(locale, metric, total, units);
+        let phrase = figures::measure(metric, total).words(locale, units);
         facts.push(wire::HealthFact {
             label: words::fact_total(locale),
             detail: if metric == Metric::Steps {

@@ -15,6 +15,7 @@ use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
+use crate::kit::quantity::Quantity;
 use crate::kit::read;
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
@@ -93,13 +94,10 @@ fn phone_says(
         let Some(stated) = item.stated.as_ref().and_then(serde_json::Value::as_f64) else {
             continue;
         };
-        let join = |(n, u): (String, String)| {
-            if u.is_empty() { n } else { format!("{n} {u}") }
-        };
         let (label, value) = match column {
             "distance_m" => (
                 words::figure_distance(locale),
-                join(figures::distance(locale, stated, units)),
+                Quantity::distance_m(stated).words(locale, units),
             ),
             "moving_s" => (
                 words::figure_time(locale),
@@ -107,7 +105,7 @@ fn phone_says(
             ),
             "energy_kcal" => (
                 words::figure_energy(locale),
-                join(figures::figure(locale, Metric::Energy, stated, units)),
+                figures::measure(Metric::Energy, stated).words(locale, units),
             ),
             "heart_bpm" => (
                 words::figure_heart(locale),
@@ -115,7 +113,7 @@ fn phone_says(
             ),
             _ => (
                 words::figure_elevation(locale),
-                join(figures::climb(locale, stated, units)),
+                Quantity::climb_m(stated).words(locale, units),
             ),
         };
         let (noun, source) = (label.to_lowercase(), Source::Store(store));
@@ -261,7 +259,7 @@ impl WorkoutPage {
     }
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
-        let (locale, units, cycle) = (ctx.locale(), Units::of(ctx), ctx.hour_cycle());
+        let (locale, units, cycle) = (ctx.locale(), ctx.units(), ctx.hour_cycle());
         let Some(row) = &answer.workout else {
             return wire::HealthWorkoutData {
                 gone: Some(wire::EmptyState {
@@ -277,7 +275,7 @@ impl WorkoutPage {
         let seconds = (row.length_sec > 0).then_some(row.length_sec);
         let mut figures_ = Vec::new();
         if let Some(metres) = row.distance_m.filter(|metres| *metres > 0.0) {
-            let (n, u) = figures::distance(locale, metres, units);
+            let (n, u) = Quantity::distance_m(metres).figure(locale, units);
             figures_.push(figure(words::figure_distance(locale), n, u));
         }
         if let Some(seconds) = seconds {
@@ -289,16 +287,14 @@ impl WorkoutPage {
         }
         if PACED.contains(&row.kind_key.as_str())
             && let (Some(seconds), Some(metres)) = (seconds, row.distance_m)
-            && let Some((n, u)) = figures::pace(locale, seconds, metres, units)
+            && let Some(pace) = Quantity::pace(seconds, metres)
         {
+            let (n, u) = pace.figure(locale, units);
             figures_.push(figure(words::figure_pace(locale), n, u));
         }
         if let Some(kcal) = row.energy_kcal {
-            figures_.push(figure(
-                words::figure_energy(locale),
-                figures::figure(locale, Metric::Energy, kcal, units).0,
-                words::unit_kcal(locale),
-            ));
+            let (n, u) = figures::measure(Metric::Energy, kcal).figure(locale, units);
+            figures_.push(figure(words::figure_energy(locale), n, u));
         }
         if let Some(bpm) = row.avg_hr_bpm {
             figures_.push(figure(
@@ -308,7 +304,7 @@ impl WorkoutPage {
             ));
         }
         if let Some(metres) = row.elevation_gain_m {
-            let (n, u) = figures::climb(locale, metres, units);
+            let (n, u) = Quantity::climb_m(metres).figure(locale, units);
             figures_.push(figure(words::figure_elevation(locale), n, u));
         }
         let store = Store::of(ctx).name(locale);

@@ -283,7 +283,7 @@ impl Home {
     // --- Today -------------------------------------------------------------
 
     fn today_data(&self, ctx: &Ctx, loaded: &Loaded) -> wire::HealthTodayData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let day = &loaded.today.today;
         let parent = self.title(locale);
         let lines: Vec<wire::HealthMetricLine> = PINNED
@@ -337,7 +337,7 @@ impl Home {
     // --- Trends ------------------------------------------------------------
 
     fn trends_data(&self, ctx: &Ctx, answer: &wire::HealthTrends) -> wire::HealthTrendsData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let parent = self.title(locale);
         let compare = match self.trend_range {
             TrendRange::Days90 => words::trends_compare_90(locale),
@@ -350,7 +350,7 @@ impl Home {
             .filter_map(|trend| {
                 let metric = Metric::of_wire(trend.metric)?;
                 let average = trend.average?;
-                let (number, unit) = figures::figure(locale, metric, average, units);
+                let (number, unit) = figures::measure(metric, average).figure(locale, units);
                 let (delta, _) =
                     figures::delta(locale, metric, trend.change, trend.change_pct, units);
                 let values: Vec<f64> = trend.buckets.iter().filter_map(|b| b.value).collect();
@@ -401,7 +401,7 @@ impl Home {
         answer: &wire::HealthWorkouts,
         today: &str,
     ) -> wire::HealthWorkoutsData {
-        let (locale, units) = (ctx.locale(), Units::of(ctx));
+        let (locale, units) = (ctx.locale(), ctx.units());
         let parent = self.title(locale);
         let week = civil::week_first(today, civil::week_start_of(ctx.region()))
             .unwrap_or_else(|| today.to_owned());
@@ -717,7 +717,7 @@ fn metric_line(
 ) -> wire::HealthMetricLine {
     let value = answer.and_then(|answer| answer.value);
     let (number, unit) = value
-        .map(|value| figures::figure(locale, metric, value, units))
+        .map(|value| figures::measure(metric, value).figure(locale, units))
         .unwrap_or_default();
     let when = match (value, answer.and_then(|answer| answer.day.as_deref())) {
         (None, _) => words::when_nothing(locale),
@@ -786,7 +786,7 @@ fn typical_words(
     let typical = answer.and_then(|answer| answer.typical);
     let low = answer.and_then(|answer| answer.low);
     let high = answer.and_then(|answer| answer.high);
-    let number = |value: f64| figures::figure(locale, metric, value, units).0;
+    let number = |value: f64| figures::measure(metric, value).figure(locale, units).0;
     match (typical, low, high, value) {
         (None, ..) => (String::new(), false),
         (Some(_), Some(low), Some(high), Some(value)) if wide => {
@@ -819,7 +819,10 @@ fn typical_words(
         (Some(typical), ..) => (
             fill(
                 &words::typical(locale),
-                &[("value", &figures::phrase(locale, metric, typical, units))],
+                &[(
+                    "value",
+                    &figures::measure(metric, typical).words(locale, units),
+                )],
             ),
             false,
         ),

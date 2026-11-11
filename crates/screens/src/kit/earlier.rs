@@ -35,6 +35,7 @@ use wire::screen_event::Kind as E;
 
 use super::act as kit_act;
 use super::civil::{self, HourCycle};
+use super::quantity::UnitsPref;
 use super::read::{self, Reading};
 use super::secret::Secrets;
 use crate::catalog::{act, load};
@@ -60,8 +61,8 @@ pub struct Look<'a> {
     pub cycle: HourCycle,
     /// The phone's own zone.
     pub zone: &'a str,
-    /// The phone's region (`US`, `GB`), which decides units.
-    pub region: &'a str,
+    /// The member's units (their choice, else the phone's region).
+    pub units: UnitsPref,
     /// Names by id (a guest, a category), read with the list; empty when the spec has no hook.
     pub names: &'a Names,
 }
@@ -367,7 +368,7 @@ impl Earlier {
             locale: ctx.locale(),
             cycle: ctx.hour_cycle(),
             zone: ctx.zone(),
-            region: ctx.region(),
+            units: ctx.units(),
             names: &self.names,
         };
         // Only a secret this version held, and one that can be shown at all.
@@ -700,7 +701,7 @@ impl Screen for Earlier {
                         locale,
                         cycle: ctx.hour_cycle(),
                         zone: ctx.zone(),
-                        region: ctx.region(),
+                        units: ctx.units(),
                         names: &self.names,
                     },
                     versions,

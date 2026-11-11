@@ -126,20 +126,6 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
 /// The member's units (#1185): `kit::quantity`'s one switch.
 pub use crate::kit::quantity::UnitsPref as Units;
 
-impl Units {
-    /// The units of the device `ctx` describes: the member's choice, else the region's.
-    #[must_use]
-    pub fn of(ctx: &Ctx) -> Self {
-        ctx.units()
-    }
-
-    /// The units a phone in `region` uses.
-    #[must_use]
-    pub fn in_region(region: &str) -> Self {
-        Self::of_region(region)
-    }
-}
-
 /// The health store this phone has: Apple Health on iOS, Health Connect on
 /// Android. One origin each (R-1129-2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

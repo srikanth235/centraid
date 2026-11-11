@@ -317,7 +317,8 @@ pub(crate) fn tenths(value: f64) -> String {
 }
 
 /// A stopwatch: `31:04`, `1:06:12`.
-fn stopwatch(seconds: i64) -> String {
+#[must_use]
+pub(crate) fn stopwatch(seconds: i64) -> String {
     let s = seconds.max(0);
     let (hours, minutes, rest) = (s / 3_600, (s / 60) % 60, s % 60);
     if hours == 0 {

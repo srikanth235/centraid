@@ -9,9 +9,10 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
-use super::{Metric, Units, denied, figures};
+use super::{Metric, denied, figures};
 use crate::kit::civil;
 use crate::kit::earlier::{self, EarlierSpec, Field, Look};
+use crate::kit::quantity::Quantity;
 use crate::screen::Screen;
 use crate::strings::{fill, health as words, shared};
 
@@ -43,14 +44,10 @@ fn local(look: &Look, stored: &str) -> Option<String> {
     ))
 }
 
-fn join((n, u): (String, String)) -> String {
-    if u.is_empty() { n } else { format!("{n} {u}") }
-}
-
 /// The one line a workout's fields read as.
 fn line(look: &Look, fields: &[Field]) -> String {
     let locale = look.locale;
-    let units = Units::in_region(look.region);
+    let units = look.units;
     let named = |name: &str| fields.iter().find(|field| field.name == name);
     let moment = |name: &str| {
         named(name)
@@ -83,17 +80,11 @@ fn line(look: &Look, fields: &[Field]) -> String {
         when,
         real("distance_m")
             .filter(|metres| *metres > 0.0)
-            .map(|metres| join(figures::distance(locale, metres, units))),
+            .map(|metres| Quantity::distance_m(metres).words(locale, units)),
         real("moving_s").map(|seconds| figures::stopwatch(seconds.round() as i64)),
-        real("energy_kcal").map(|kcal| {
-            format!(
-                "{} {}",
-                figures::figure(locale, Metric::Energy, kcal, units).0,
-                words::unit_kcal(locale)
-            )
-        }),
+        real("energy_kcal").map(|kcal| figures::measure(Metric::Energy, kcal).words(locale, units)),
         real("heart_bpm").map(|bpm| format!("{} {}", bpm.round(), words::unit_bpm(locale))),
-        real("climb_m").map(|metres| join(figures::climb(locale, metres, units))),
+        real("climb_m").map(|metres| Quantity::climb_m(metres).words(locale, units)),
     ]
     .into_iter()
     .flatten()

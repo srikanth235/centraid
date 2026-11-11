@@ -173,7 +173,7 @@ pub const REGISTER: &[Row] = &[
     kept("people", Promise::Units, UNITS_PROOF),
     owed("calendar", Promise::Units, UNITS_OWED),
     owed("docs", Promise::Units, UNITS_OWED),
-    owed("health", Promise::Units, UNITS_OWED),
+    kept("health", Promise::Units, UNITS_PROOF),
     owed("photos", Promise::Units, UNITS_OWED),
     owed("reminders", Promise::Units, UNITS_OWED),
     kept(
