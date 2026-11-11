@@ -188,6 +188,7 @@ impl Draft {
             cancel_label: words::cancel(locale),
             // The host that may remove what the sheet edits sets this.
             delete_label: String::new(),
+            delete_note: String::new(),
         }
     }
 

@@ -8,6 +8,8 @@
 //! this is a read of its own, bounded by [`TRASH_ROWS`] with the truncation
 //! reported.
 
+use std::collections::BTreeMap;
+
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::reads::{PageDoor, read_window};
 use centraid_apps_kit::row::text_of;
@@ -31,6 +33,8 @@ pub struct TrashRow {
     pub purge_at: Option<String>,
     /// The row is a calendar, not an event: the shelf names it so.
     pub calendar: bool,
+    /// For a calendar: how many events went to the trash with it. They are not rows of their own.
+    pub members: u32,
 }
 
 /// The shelf, and whether it is longer than its window.
@@ -63,7 +67,7 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
         }
         Err(other) => return Err(other),
     };
-    let events = window
+    let mut events: Vec<TrashRow> = window
         .rows
         .iter()
         .filter_map(|row| {
@@ -73,9 +77,43 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
                 deleted_at: text_of(row, "deleted_at"),
                 purge_at: text_of(row, "purge_at"),
                 calendar: text_of(row, "kind").as_deref() == Some("calendar"),
+                members: 0,
             })
         })
         .collect();
+    // THE EVENTS THAT WENT WITH A CALENDAR ARE ITS MEMBERS, NOT ROWS OF THEIR OWN: an event whose
+    // calendar is in the trash under the very stamp the event carries is hidden from the shelf and
+    // counted on the calendar's row (one restore of the calendar brings exactly those back; an
+    // event trashed on its own, before or after, is still a row).
+    let stamps: BTreeMap<String, Option<String>> = events
+        .iter()
+        .filter(|row| row.calendar)
+        .map(|row| (row.event_id.clone(), row.deleted_at.clone()))
+        .collect();
+    if !stamps.is_empty() {
+        let ids: Vec<String> = events
+            .iter()
+            .filter(|row| !row.calendar)
+            .map(|row| row.event_id.clone())
+            .collect();
+        let homes = calendars_of(door, &ids)?;
+        let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+        events.retain(|row| {
+            let Some(home) = homes.get(&row.event_id) else {
+                return true;
+            };
+            let with_it = stamps
+                .get(home)
+                .is_some_and(|stamp| *stamp == row.deleted_at);
+            if with_it {
+                *counts.entry(home.clone()).or_default() += 1;
+            }
+            !with_it
+        });
+        for row in events.iter_mut().filter(|row| row.calendar) {
+            row.members = counts.get(&row.event_id).copied().unwrap_or_default();
+        }
+    }
     Ok((
         TrashData {
             events,
@@ -83,4 +121,33 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
         },
         None,
     ))
+}
+
+/// The calendar each of `events` is on, by event id: one read of the `event` rows, in the shelf's
+/// window (so no more binds than [`TRASH_ROWS`]).
+fn calendars_of(door: &dyn PageDoor, events: &[String]) -> KitResult<BTreeMap<String, String>> {
+    if events.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let marks = vec!["?"; events.len()].join(", ");
+    let query = PageQuery::new(
+        "calendar.trash.homes",
+        "id, calendar_id",
+        "event",
+        PageOrder::asc("id", "id"),
+    )
+    .filter(
+        &format!("id IN ({marks})"),
+        events.iter().map(|id| text(id)).collect(),
+    );
+    let window = match read_window(door, &query, TRASH_ROWS) {
+        Ok(window) => window,
+        Err(KitError::Door(_)) => return Ok(BTreeMap::new()),
+        Err(other) => return Err(other),
+    };
+    Ok(window
+        .rows
+        .iter()
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "calendar_id")?)))
+        .collect())
 }

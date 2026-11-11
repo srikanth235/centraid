@@ -85,6 +85,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                 .people
                 .into_iter()
                 .map(|row| TrashItem {
+                    with: String::new(),
                     id: row.party_id,
                     title: row.name,
                     deleted_day: row.deleted_local_day,

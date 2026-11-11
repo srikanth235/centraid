@@ -29,6 +29,7 @@ pub(crate) fn trash(
                     title: row.title,
                     purge_at: row.purge_at,
                     calendar: row.calendar,
+                    members: row.members,
                 })
                 .collect(),
             truncated: data.truncated,

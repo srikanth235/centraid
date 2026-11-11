@@ -36,6 +36,9 @@ pub struct TrashItem {
     /// What this row is called when it is not what the app's spec says (a calendar on a shelf of
     /// events); `None` is the spec's own noun.
     pub noun: Option<Words>,
+    /// What went to the trash with this row, already worded ("42 events"); empty for none. The
+    /// row's meta line leads with it.
+    pub with: String,
 }
 
 /// A sentence in a locale.
@@ -64,6 +67,18 @@ pub fn purge_body(locale: Locale, lead: Option<Words>) -> String {
 #[must_use]
 pub fn moved_to_trash(locale: Locale, title: &str) -> String {
     shared::trash_moved(locale).replace("{title}", &titled(locale, title))
+}
+
+/// `Work and 42 events moved to trash`: the line after a holder goes to the trash with what it
+/// holds. `things` is the quantity, already worded ("42 events"); an empty one is the plain line.
+#[must_use]
+pub fn moved_to_trash_with(locale: Locale, title: &str, things: &str) -> String {
+    if things.is_empty() {
+        return moved_to_trash(locale, title);
+    }
+    shared::trash_moved_with(locale)
+        .replace("{title}", &titled(locale, title))
+        .replace("{things}", things)
 }
 
 /// `Standup restored`.
@@ -300,6 +315,7 @@ impl Trash {
 
     fn row(&self, locale: Locale, item: &TrashItem) -> wire::TrashRow {
         let meta = [
+            item.with.clone(),
             deleted_meta(locale, &item.deleted_day),
             erased_meta(locale, &item.purge_day),
         ]

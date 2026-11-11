@@ -43,7 +43,8 @@ use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    agenda as words, agenda_calendar as calendar_words, agenda_reminders as reminders, shared,
+    agenda as words, agenda_calendar as calendar_words, agenda_home, agenda_reminders as reminders,
+    shared,
 };
 
 pub(super) struct Home {
@@ -82,6 +83,9 @@ pub(super) struct Home {
     /// what the menu's stop and turn-on row say, right after a cold start too. `None` until the
     /// read has landed.
     stored: Option<Vec<String>>,
+    /// The calendars of the vault that are read from the phone (what the followed origins fill): a
+    /// member cannot delete one while it is.
+    followed_calendars: Option<Vec<String>>,
 }
 
 /// The registry factory for Calendar's home.
@@ -127,6 +131,7 @@ impl Home {
             calendar: CalendarFollow::new(),
             asking_stop: false,
             stored: None,
+            followed_calendars: None,
         }
     }
 
@@ -145,6 +150,15 @@ impl Home {
     /// Read what the vault stores of the phone's calendars (the stop slot's truth).
     fn read_stored(&mut self, ctx: &Ctx) {
         self.stored = crate::follow::stored_origins(ctx, "calendar");
+        self.followed_calendars = crate::follow::stored_fills(ctx, "calendar");
+    }
+
+    /// Whether the calendar is read from the phone, so a member cannot delete it (unknown counts as
+    /// not deletable: nothing is offered on a read that did not land).
+    fn read_from_phone(&self, id: &str) -> bool {
+        self.followed_calendars
+            .as_ref()
+            .is_none_or(|fills| fills.iter().any(|fill| fill == id))
     }
 
     /// Whether the menu offers "Stop reading": the vault follows calendars from the phone.
@@ -507,6 +521,7 @@ impl Home {
         let Some(id) = draft
             .editing_id()
             .filter(|id| *id != centraid_vault::model::DEFAULT_CALENDAR_ID)
+            .filter(|id| !self.read_from_phone(id))
             .map(str::to_owned)
         else {
             self.style = Some(draft);
@@ -524,6 +539,16 @@ impl Home {
             |locale| crate::kit::trash::moved_to_trash(locale, &name),
         );
         if settled.committed {
+            // HOW MUCH WENT: the calendar and its events ("Work and 42 events moved to trash").
+            let went = trashed_with(&settled.output);
+            if went > 0 {
+                let locale = ctx.locale();
+                self.ops.line.reword(crate::kit::trash::moved_to_trash_with(
+                    locale,
+                    &name,
+                    &agenda_home::event_count(locale, went),
+                ));
+            }
             self.sheet = Sheet::None;
         } else {
             self.style = Some(draft);
@@ -790,14 +815,23 @@ impl Screen for Home {
                         .filter(|_| matches!(self.sheet, Sheet::NewCalendar | Sheet::EditCalendar))
                         .map(|draft| {
                             let mut sheet = draft.sheet(locale);
-                            // MOVE TO TRASH on a calendar the vault may remove: its own edit
-                            // sheet, never the one every vault is founded with.
+                            // MOVE TO TRASH on a calendar the vault may remove: its own edit sheet,
+                            // never the one every vault is founded with, and never one read from
+                            // the phone: there one plain line says to stop reading first.
                             if self.sheet == Sheet::EditCalendar
-                                && draft.editing_id().is_some_and(|id| {
-                                    id != centraid_vault::model::DEFAULT_CALENDAR_ID
-                                })
+                                && let Some(id) = draft.editing_id()
+                                && id != centraid_vault::model::DEFAULT_CALENDAR_ID
                             {
-                                sheet.delete_label = shared::trash_move(locale);
+                                if self.followed_calendars.is_none() {
+                                    // The read has not landed: nothing is offered.
+                                } else if self.read_from_phone(id) {
+                                    sheet.delete_note = crate::kit::follow::delete_note(
+                                        locale,
+                                        &chrome::stop_store(locale),
+                                    );
+                                } else {
+                                    sheet.delete_label = shared::trash_move(locale);
+                                }
                             }
                             Box::new(sheet)
                         }),
@@ -818,4 +852,13 @@ impl Screen for Home {
             ..wire::ViewState::default()
         }
     }
+}
+
+/// How many entities went to the trash with the one the write named: the command answers every
+/// one it trashed (the holder first or last, whichever), so the members are all but one.
+fn trashed_with(output: &[u8]) -> u64 {
+    serde_json::from_slice::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| value.get("trashed")?.as_array().map(Vec::len))
+        .map_or(0, |all| u64::try_from(all.saturating_sub(1)).unwrap_or(0))
 }

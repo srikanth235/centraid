@@ -15,7 +15,7 @@ use crate::catalog::{act, load};
 use crate::kit::read::{self, Reading};
 use crate::kit::trash::{self, TrashItem, TrashSpec};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, agenda as words, shared};
+use crate::strings::{Locale, agenda as words, agenda_home, shared};
 
 /// Calendar's trash, as the kit's screen takes it.
 pub static SPEC: TrashSpec = TrashSpec {
@@ -99,6 +99,12 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                 .events
                 .into_iter()
                 .map(|row| TrashItem {
+                    // What went with a calendar, counted on its row: "42 events".
+                    with: if row.calendar && row.members > 0 {
+                        agenda_home::event_count(ctx.locale(), u64::from(row.members))
+                    } else {
+                        String::new()
+                    },
                     id: row.event_id,
                     title: row.title,
                     deleted_day: row.deleted_local_day,

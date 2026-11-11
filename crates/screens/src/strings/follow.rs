@@ -57,6 +57,10 @@ catalog! {
         "Only part of {source} was readable, so this shows what was read.",
         "Only part of {source} was readable, so this shows what was read."
     );
+    plain delete_note = (
+        "Read from your phone. To delete it, stop reading {store} first.",
+        "Read from your phone. To delete it, stop reading {store} first."
+    );
     plain source_calendar = ("your phone’s calendars", "your phone’s calendars");
     plain source_contacts = ("your phone’s contacts", "your phone’s contacts");
     plain source_files = ("the folder", "the folder");

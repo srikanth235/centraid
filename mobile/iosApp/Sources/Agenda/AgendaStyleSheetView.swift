@@ -113,6 +113,14 @@ struct AgendaStyleSheetView: View {
                             onIcon("")
                         }
                     }
+                    // A calendar read from the phone cannot be deleted: one plain line, where the
+                    // control would be, says to stop reading first.
+                    if !style.deleteNote.isEmpty {
+                        Text(style.deleteNote)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .accessibilityIdentifier("agenda-style-delete-note")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

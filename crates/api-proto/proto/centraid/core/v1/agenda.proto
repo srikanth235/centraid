@@ -427,6 +427,9 @@ message CalendarTrashRow {
   // The row is a calendar, not an event (`event_id` names it all the same): a calendar in the trash
   // took its events with it, and one restore brings back exactly those.
   bool calendar = 7;
+  // For a calendar: how many events went to the trash with it (they are not rows of their own),
+  // so the shelf and the line after the move say "42 events".
+  uint32 members = 8;
 }
 
 // A reminder on its day: its title, due day, due time, state and nothing else.

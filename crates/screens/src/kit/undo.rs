@@ -159,6 +159,15 @@ impl Undo {
         true
     }
 
+    /// Say the line again in other words, keeping what is on offer: a sentence that needs the
+    /// answer's numbers ("Work and 42 events moved to trash") is worded once the write has
+    /// answered, and its Undo stays.
+    pub fn reword(&mut self, sentence: String) {
+        if let Some(line) = &mut self.line {
+            line.sentence = sentence;
+        }
+    }
+
     /// Drop the line and the offer (a screen left, or a newer line replaces this one).
     pub fn clear(&mut self) {
         self.offer = None;

@@ -309,6 +309,9 @@ message FollowedStore {
   string label = 4;
   // The install that last followed it.
   string device_id = 5;
+  // What the origin fills: the id of the calendar a phone calendar feeds, the folder a folder
+  // follow feeds; empty when it fills nothing (an account of contacts).
+  string fills = 6;
 }
 
 // The cursor a phone store's origin holds for this install (#1183): the shell query

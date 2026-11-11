@@ -345,6 +345,25 @@ impl Follows {
 /// followed. `None` when the read did not land: the caller says nothing, never a wrong thing.
 #[must_use]
 pub(crate) fn stored_origins(ctx: &Ctx, system: &str) -> Option<Vec<String>> {
+    stored_stores(ctx, system)
+        .map(|stores| stores.into_iter().map(|store| store.origin_ref).collect())
+}
+
+/// What the vault's followed origins of `system` FILL (a followed calendar's own id), as it stores
+/// them: the things a member cannot delete while they are read from the phone. `None` when the
+/// read did not land.
+#[must_use]
+pub(crate) fn stored_fills(ctx: &Ctx, system: &str) -> Option<Vec<String>> {
+    stored_stores(ctx, system).map(|stores| {
+        stores
+            .into_iter()
+            .map(|store| store.fills)
+            .filter(|fills| !fills.is_empty())
+            .collect()
+    })
+}
+
+fn stored_stores(ctx: &Ctx, system: &str) -> Option<Vec<wire::FollowedStore>> {
     use wire::app_query_response::Answer;
     match read::read(
         ctx,
@@ -358,7 +377,6 @@ pub(crate) fn stored_origins(ctx: &Ctx, system: &str) -> Option<Vec<String>> {
             stores
                 .into_iter()
                 .filter(|store| store.system == system)
-                .map(|store| store.origin_ref)
                 .collect(),
         ),
         _ => None,

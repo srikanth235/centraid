@@ -252,6 +252,7 @@ mod kit {
     fn two_rows(_: &centraid_screens::Ctx) -> Reading<Vec<TrashItem>> {
         Reading::Data(vec![
             TrashItem {
+                with: String::new(),
                 id: "t1".into(),
                 title: "Buy milk".into(),
                 deleted_day: "2026-03-12".into(),
@@ -259,6 +260,7 @@ mod kit {
                 noun: None,
             },
             TrashItem {
+                with: String::new(),
                 id: "t2".into(),
                 title: "  ".into(),
                 deleted_day: String::new(),

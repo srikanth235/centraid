@@ -61,7 +61,7 @@ pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::FollowedStores, Option<centraid_apps_kit::Denial>)> {
         let query = PageQuery::new(
             "followed.stores",
-            "id, system, ref, label, device_id",
+            "id, system, ref, label, device_id, fills",
             "origin",
             PageOrder::asc("id", "id"),
         )
@@ -79,6 +79,7 @@ pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
                 origin_ref: text_of(row, "ref").unwrap_or_default(),
                 label: text_of(row, "label").unwrap_or_default(),
                 device_id: text_of(row, "device_id").unwrap_or_default(),
+                fills: text_of(row, "fills").unwrap_or_default(),
             })
             .collect();
         stores.sort_by(|a, b| {

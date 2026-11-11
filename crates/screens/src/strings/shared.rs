@@ -97,6 +97,7 @@ catalog! {
     plain trash_erased = ("Erased", "Erased");
     plain trash_move = ("Move to trash", "Move to trash");
     plain trash_moved = ("{title} moved to trash", "{title} moved to trash");
+    plain trash_moved_with = ("{title} and {things} moved to trash", "{title} and {things} moved to trash");
     plain trash_noun_calendar = ("calendar", "calendar");
     plain trash_noun_document = ("document", "document");
     plain trash_noun_event = ("event", "event");

@@ -73,6 +73,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                 .notes
                 .into_iter()
                 .map(|row| TrashItem {
+                    with: String::new(),
                     title: fold::title_of(locale, row.title.as_deref(), &row.preview),
                     id: row.note_id,
                     deleted_day: row.deleted_local_day,

@@ -12,7 +12,7 @@ use calendar_support::World;
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda::notify::{Inputs, desired};
 use centraid_screens::catalog::act;
-use centraid_screens::field::Field;
+use centraid_screens::field::{Field, Keyed};
 use centraid_screens::kit::civil;
 use centraid_screens::strings::Locale;
 use centraid_screens::{Registry, agenda, calendar};
@@ -502,7 +502,7 @@ fn a_calendar_moves_to_trash_from_its_edit_sheet_with_its_events_and_undo_brings
         .expect("a status line");
     assert_eq!(
         (line.sentence.as_str(), line.action_label.as_str()),
-        ("Work moved to trash", "Undo")
+        ("Work and 1 event moved to trash", "Undo")
     );
     assert_eq!(
         home_state(&world, home).sheet,
@@ -546,7 +546,7 @@ fn the_calendar_every_vault_is_founded_with_has_no_move_to_trash() {
 #[test]
 fn a_calendar_in_the_trash_is_a_row_that_restores_with_its_events_and_empty_trash_takes_both() {
     let mut world = world();
-    let (calendar, _) = calendar_with_an_event(&mut world, "Work", "Standup");
+    let (calendar, standup) = calendar_with_an_event(&mut world, "Work", "Standup");
     world.act(act::calendar::DeleteCalendar {
         calendar_id: calendar.clone(),
     });
@@ -557,6 +557,27 @@ fn a_calendar_in_the_trash_is_a_row_that_restores_with_its_events_and_empty_tras
         .find(|row| row.id == calendar)
         .expect("the calendar is a row of the shelf");
     assert_eq!(row.title, "Work");
+
+    // THE EVENTS THAT WENT WITH IT ARE NOT ROWS OF THEIR OWN: only the calendar is, and its meta
+    // says how many went ("1 event").
+    assert!(
+        held.iter().all(|row| row.title != "Standup"),
+        "an event that went with its calendar is not a row: {held:?}"
+    );
+    assert!(row.meta.starts_with("1 event · Deleted"), "{}", row.meta);
+    // Restoring ONE of them alone is refused with the vault's sentence: the calendar comes first.
+    let alone = world.driver.act(
+        wire::ActRequest::from(act::calendar::RestoreEvent {
+            event_id: standup.clone(),
+        })
+        .keyed("alone".to_owned()),
+    );
+    assert_ne!(alone.status, wire::ActStatus::Executed as i32);
+    assert!(
+        alone.reason.contains("restore the calendar first"),
+        "{}",
+        alone.reason
+    );
 
     // One restore brings the calendar back with the events that went with it.
     send_trash(
@@ -578,8 +599,8 @@ fn a_calendar_in_the_trash_is_a_row_that_restores_with_its_events_and_empty_tras
     send_trash(&mut world, page, T::Refreshed(te::Refreshed {}));
     assert_eq!(
         rows(&world, page).len(),
-        before + 2,
-        "the calendar and the event that went with it"
+        before + 1,
+        "the calendar is one row; the event that went with it is not"
     );
     send_trash(&mut world, page, T::Empty(te::EmptyTapped {}));
     send_trash(&mut world, page, T::Confirmed(te::Confirmed {}));
@@ -588,4 +609,55 @@ fn a_calendar_in_the_trash_is_a_row_that_restores_with_its_events_and_empty_tras
         "everything in the trash went"
     );
     assert!(!world.calendar_names().iter().any(|(id, _)| *id == calendar));
+}
+
+#[test]
+fn a_calendar_read_from_the_phone_offers_no_delete_but_one_plain_line_until_it_is_stopped() {
+    use wire::agenda_home_event::Kind as H;
+    let mut world = world();
+    let before: Vec<String> = world
+        .calendar_names()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    // The vault follows a phone calendar (a pass in an earlier launch stored it): it feeds a calendar.
+    let followed = world.act(act::calendar::FollowCalendar {
+        origin: serde_json::json!({ "ref": "cal-1", "label": "Phone work", "device_id": "phone" })
+            .to_string(),
+        records: "[]".to_owned(),
+        complete: Some(false),
+        since: None,
+    });
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    let (calendar, _) = world
+        .calendar_names()
+        .into_iter()
+        .find(|(id, _)| !before.contains(id))
+        .expect("the follow made a calendar");
+    let home = world.driver.push(agenda::TAB, agenda_home());
+    edit_calendar(&mut world, home, &calendar);
+    let sheet = home_state(&world, home).style.clone().expect("the sheet");
+    assert_eq!(
+        sheet.delete_label, "",
+        "no Move to trash on a calendar read from the phone"
+    );
+    assert_eq!(
+        sheet.delete_note,
+        "Read from your phone. To delete it, stop reading Phone calendars first."
+    );
+    // After a stop it is an ordinary calendar and the control appears.
+    world.act(act::calendar::StopFollowing {
+        r#ref: "cal-1".to_owned(),
+    });
+    world.driver.send(home, E::Appeared(wire::Appeared {}));
+    edit_calendar(&mut world, home, &calendar);
+    let sheet = home_state(&world, home).style.clone().expect("the sheet");
+    assert_eq!(sheet.delete_label, "Move to trash");
+    assert_eq!(sheet.delete_note, "");
+    let _ = H::StyleTrashed(wire::agenda_home_event::StyleTrashed {});
 }

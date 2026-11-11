@@ -328,6 +328,15 @@ pub fn turn_on_row(locale: Locale, store: &str) -> String {
     fill(&shared::follow_turn_on_row(locale), &[("store", store)])
 }
 
+/// THE PLAIN LINE where a Delete would be, for a thing read from the phone: "Read from your phone.
+/// To delete it, stop reading Phone calendars first." `store` is the shared store name ("Phone
+/// calendars"). Twelve words is the note cap, so it does not say what the thing is: it is the
+/// sheet's own.
+#[must_use]
+pub fn delete_note(locale: Locale, store: &str) -> String {
+    fill(&words::delete_note(locale), &[("store", store)])
+}
+
 /// THE STOP SHEET: "Stop reading {store}?", what stays ("The days and workouts already here
 /// stay"), and a destructive "Stop reading". `app` is the app's name and `kept` what it already
 /// holds from the store, which stopping leaves as ordinary rows.

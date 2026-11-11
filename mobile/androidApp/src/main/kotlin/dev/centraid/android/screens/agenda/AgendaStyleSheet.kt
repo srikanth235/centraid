@@ -152,6 +152,16 @@ internal fun AgendaStyleSheetView(
             Box(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
                 StyleChip(style.no_icon_label, "agenda-style-icon-none", style.no_icon_selected) { onIcon("") }
             }
+            // A calendar read from the phone cannot be deleted: one plain line, where the control
+            // would be, says to stop reading first.
+            if (style.delete_note.isNotEmpty()) {
+                Text(
+                    style.delete_note,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("agenda-style-delete-note"),
+                )
+            }
         }
     }
 }

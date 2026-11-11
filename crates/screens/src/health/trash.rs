@@ -83,6 +83,7 @@ fn trashed(ctx: &Ctx) -> Reading<Vec<TrashItem>> {
                 .workouts
                 .into_iter()
                 .map(|row| TrashItem {
+                    with: String::new(),
                     title: title_of(ctx, locale, &row.kind_key, &row.local_start),
                     id: row.activity_id,
                     deleted_day: row.deleted_local_day,

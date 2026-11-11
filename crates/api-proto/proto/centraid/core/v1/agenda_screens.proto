@@ -2272,6 +2272,10 @@ message AgendaStyleSheet {
   // vault is founded with): its tap is `StyleTrashed`, which asks nothing and says "<name> moved to
   // trash" with Undo. Empty: the sheet has no such control.
   string delete_label = 15;
+  // A calendar read from the phone cannot be deleted while it is: where the control would be,
+  // "Read from your phone. To delete it, stop reading Phone calendars first."
+  // Empty when there is nothing to say.
+  string delete_note = 16;
 }
 
 message AgendaStyleSwatch {
