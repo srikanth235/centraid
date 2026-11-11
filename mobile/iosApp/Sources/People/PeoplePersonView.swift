@@ -87,6 +87,7 @@ struct PeoplePersonView: View {
                 onDismiss: { send(PeopleEvents.person { $0.dismissed = .init() }) }
             )
         }
+        .linkPickerSheet(state.linkPicker) { link in send(PeopleEvents.person { $0.link = link }) }
         .onChange(of: state.done) { _, done in
             if done { onBack() }
         }
@@ -216,6 +217,13 @@ private struct PeoplePersonBody: View {
 
                 if !person.vault.isEmpty {
                     vault
+                }
+
+                // LINKED TO (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+                if person.hasLinks {
+                    LinkSectionView(section: person.links, send: { link in
+                        send(PeopleEvents.person { $0.link = link })
+                    }, open: open)
                 }
 
                 SectionHeader(

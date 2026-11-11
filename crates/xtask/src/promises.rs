@@ -547,7 +547,11 @@ pub const REGISTER: &[Row] = &[
     owed("locker", Promise::Link, LINK_OWED),
     owed("money", Promise::Link, LINK_OWED),
     kept("notes", Promise::Link, "crates/screens/src/notes/editor.rs"),
-    owed("people", Promise::Link, LINK_OWED),
+    kept(
+        "people",
+        Promise::Link,
+        "crates/screens/src/people/person/mod.rs",
+    ),
     owed("photos", Promise::Link, LINK_OWED),
     // Stale save (#1185): a save names the revision it replaces and handles the refusal.
     kept(

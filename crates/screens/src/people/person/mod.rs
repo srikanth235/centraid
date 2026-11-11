@@ -36,11 +36,12 @@ use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::export::{self, ExportFile};
 use crate::kit::follow;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read;
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, people as words};
+use crate::strings::{Locale, fill, links as link_label, people as words};
 
 mod data;
 mod phone;
@@ -72,6 +73,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
         share: Share::default(),
+        // A person may link to another person; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL).for_entity(&args.party_id),
+        linked: None,
+        linked_unread: false,
     }))
 }
 
@@ -118,6 +123,14 @@ struct Person {
     earlier: earlier::Foot,
     /// The person handed to the OS share sheet as a vCard (#1185).
     share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the person can link to, any item but a
+    /// Locker one.
+    links: Links,
+    /// What the person is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 impl Person {
@@ -149,6 +162,7 @@ impl Person {
             }
             _ => earlier::Foot::default(),
         };
+        self.read_linked(ctx);
         match &self.phase {
             // GONE: nothing to write to, and no sheet over nothing.
             Phase::Ready(None) => {
@@ -162,6 +176,63 @@ impl Person {
             }
             _ => {}
         }
+    }
+
+    /// What the person is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section; a person who is gone has none.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if !matches!(self.phase, Phase::Ready(Some(_))) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.links.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.party_id) {
+            read::Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            read::Reading::Denied(_) | read::Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back); the page is read again.
+    fn link_person(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.party_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::people::Link {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    link_label::person_link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::people::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    link_label::person_link_removed,
+                ),
+            };
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        self.undo.act(ctx, request, &key, said);
+        self.reload(ctx);
     }
 
     /// The sheet's data, once it has arrived.
@@ -627,6 +698,7 @@ impl Person {
             P::Dismissed(_) => self.asking = Asking::Nothing,
             P::Channel(tapped) => return self.channel_tapped(&tapped.channel_id),
             P::Hero(tapped) => return self.hero_tapped(ctx, &tapped.key),
+            P::Link(link) => self.link_person(ctx, &link),
         }
         Vec::new()
     }
@@ -758,6 +830,14 @@ impl Screen for Person {
                 page.nickname_phone_says = lines.nickname;
                 page.birthday_phone_says = lines.birthday;
                 page.channels_phone_says = lines.channels;
+                page.links = self.linked.as_ref().map(|linked| {
+                    self.links.section(
+                        locale,
+                        link_label::section_linked(locale),
+                        links::rows(locale, linked),
+                        link_label::person_links_empty(locale),
+                    )
+                });
                 C::Data(Box::new(page))
             }
         };
@@ -773,11 +853,20 @@ impl Screen for Person {
                 .status()
                 .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
-                .or_else(|| self.earlier.status(locale)),
+                .or_else(|| self.earlier.status(locale))
+                .or_else(|| {
+                    self.linked_unread.then(|| wire::StatusLine {
+                        sentence: link_label::person_links_unread(locale),
+                        action_label: String::new(),
+                        refused: false,
+                    })
+                }),
             done: self.done,
             edit: self.loaded().map(|_| routes::editor(&self.party_id)),
             earlier: self.earlier.entry.clone(),
             origin: self.earlier.origin.clone(),
+            link_picker: (self.linked.is_some() && self.links.is_open())
+                .then(|| self.links.picker(locale, &self.linked_ids())),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeoplePerson(Box::new(state))),
@@ -785,3 +874,6 @@ impl Screen for Person {
         }
     }
 }
+
+#[cfg(test)]
+mod link_tests;

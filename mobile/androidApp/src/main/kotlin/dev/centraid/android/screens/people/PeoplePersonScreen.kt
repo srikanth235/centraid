@@ -114,6 +114,9 @@ public fun PeoplePersonScreen(
     }
 
     state.sheet?.let { sheet -> PersonSheet(sheet, onEvent) }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(PeoplePersonEvent(link = link)) }
+    }
     state.confirm?.let { confirm ->
         ConfirmSheet(
             confirm = confirm,
@@ -231,6 +234,13 @@ private fun PersonBody(
 
         if (person.vault.isNotEmpty()) {
             item(key = "vault") { VaultCard(person, onOpen) }
+        }
+
+        // LINKED TO (#1185): the kit's section, after "In your vault"; Rust makes every word and row.
+        person.links?.let { section ->
+            item(key = "links") {
+                dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(PeoplePersonEvent(link = link)) }, onOpen)
+            }
         }
 
         person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }

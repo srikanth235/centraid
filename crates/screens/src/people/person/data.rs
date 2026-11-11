@@ -497,6 +497,8 @@ pub fn person(
         nickname_phone_says: None,
         birthday_phone_says: None,
         channels_phone_says: Vec::new(),
+        // The "Linked to" section is the screen's own read, laid on by `Person::view`.
+        links: None,
     }
 }
 

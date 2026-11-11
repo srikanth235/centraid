@@ -47,6 +47,13 @@ catalog! {
     plain search_accounts = ("Search accounts", "Search accounts");
     plain search_documents = ("Search documents", "Search documents");
     plain search_events = ("Search events", "Search events");
+    plain person_link_added = ("Linked", "Linked");
+    plain person_link_removed = ("Link removed", "Link removed");
+    plain person_links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain person_links_unread = (
+        "Couldn’t read what this person is linked to.",
+        "Couldn’t read what this person is linked to."
+    );
     plain search_kinds = ("Kind of item", "Kind of item");
     plain search_notes = ("Search notes", "Search notes");
     plain search_people = ("Search people", "Search people");
