@@ -24,7 +24,7 @@ final class PhotoEditGeometryTests: XCTestCase {
 
     func testEveryFixtureCaseIsCutWhereRustCutsIt() throws {
         let cases = try fixture()
-        XCTAssertEqual(cases.count, 17)
+        XCTAssertEqual(cases.count, 20)
         for item in cases {
             let name = item["name"] as? String ?? "?"
             let frame = (item["frame"] as? [NSNumber])?.map { $0.intValue } ?? []

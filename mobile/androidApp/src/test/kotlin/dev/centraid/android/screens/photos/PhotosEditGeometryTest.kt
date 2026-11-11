@@ -28,7 +28,7 @@ class PhotosEditGeometryTest {
             """"name": "([^"]+)".*?"crop": (null|\{"x": $number, "y": $number, "w": $number, "h": $number\}), """ +
                 """"frame": \[(\d+), (\d+)\], "expected": \[(\d+), (\d+), (\d+), (\d+)\]""",
         ).findAll(fixture).toList()
-        assertEquals(17, cases.size)
+        assertEquals(20, cases.size)
         cases.forEach { match ->
             val g = match.groupValues
             val crop = if (g[2] == "null") {
