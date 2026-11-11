@@ -105,6 +105,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         scope: None,
         save_tried: false,
         rev: None,
+        saving_day: false,
         undo: Undo::default(),
         dismissed: false,
     }))
@@ -145,6 +146,8 @@ struct Editor {
     asking: Asking,
     /// The save scope picked.
     scope: Option<wire::AgendaScope>,
+    /// The save in flight changes one day or the days from it, not the event itself.
+    saving_day: bool,
     /// Save was pressed, which is when a blocked draft says why even before
     /// anything was typed.
     save_tried: bool,
@@ -383,6 +386,7 @@ impl Editor {
             .map(|a| a.party_id.clone())
             .collect();
         let occurrence = event.original_start_local.clone().unwrap_or_default();
+        self.saving_day = false;
         if !self.is_series_edit() {
             let request = act::calendar::EditEvent {
                 expected_rev: self.rev,
@@ -411,6 +415,7 @@ impl Editor {
                 self.committed(ctx, request, &key, editor_words::event_saved)
             }
             wire::AgendaScope::Occurrence | wire::AgendaScope::Future => {
+                self.saving_day = true;
                 let word = scope_word(scope);
                 let wire_scope = if scope == wire::AgendaScope::Future {
                     act::calendar::EditOccurrenceScope::Future
@@ -459,16 +464,21 @@ impl Editor {
     /// read (#1185). The words typed are kept as an earlier version of the event, the event is read
     /// again, and the line says what happened and where the words went.
     fn stale(&mut self, ctx: &Ctx, stale: stale::Stale) {
-        let mut fields = Vec::new();
-        if let (Some(draft), Some(base)) = (&self.draft, &self.baseline) {
-            if draft.title.trim() != base.title.trim() {
-                fields.push(("entity.title".to_owned(), draft.title.trim().into()));
-            }
-            if draft.notes.trim() != base.notes.trim() {
-                let notes = Some(draft.notes.trim()).filter(|notes| !notes.is_empty());
-                fields.push(("event.description".to_owned(), notes.into()));
-            }
-        }
+        let owner_ids: Vec<String> = self.event().map_or_else(Vec::new, |event| {
+            event
+                .attendees
+                .iter()
+                .filter(|a| a.is_you)
+                .map(|a| a.party_id.clone())
+                .collect()
+        });
+        let fields = match (&self.draft, &self.baseline) {
+            // A day (or the days from it) has its own times and words, which are no state of the
+            // event: its words are what is kept.
+            (Some(draft), Some(base)) if self.saving_day => write::kept_words(draft, base),
+            (Some(draft), Some(base)) => write::kept_event(draft, base, &owner_ids),
+            _ => Vec::new(),
+        };
         let locale = ctx.locale();
         let said = stale::on_button(
             ctx,
@@ -477,6 +487,7 @@ impl Editor {
             stale,
             fields,
         );
+        self.saving_day = false;
         self.draft = None;
         self.baseline = None;
         self.typed_place.clear();

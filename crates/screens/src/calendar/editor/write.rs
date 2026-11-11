@@ -119,6 +119,83 @@ pub fn propose(draft: &Draft) -> act_cal::Propose {
     }
 }
 
+/// What a refused `edit-event` keeps (`keep-version`): every field the member changed, named as the
+/// event's history names it. Times go as the wall clock and zone the draft holds (the vault turns
+/// them into the instants the row would hold), the guests as the people the event would have.
+#[must_use]
+pub fn kept_event(
+    draft: &Draft,
+    base: &Draft,
+    owner_ids: &[String],
+) -> Vec<(String, serde_json::Value)> {
+    use serde_json::Value;
+    let mut kept = kept_words(draft, base);
+    if times_changed(draft, base) {
+        let times = Times::of(draft);
+        let (timing, zone) = match &times.placing {
+            Placing::AllDay => ("all-day", None),
+            Placing::Floating => ("floating", None),
+            Placing::Zoned(zone) => ("zoned", Some(zone.clone())),
+        };
+        kept.push(("event.starts".to_owned(), times.starts.into()));
+        kept.push(("event.ends".to_owned(), times.ends.into()));
+        kept.push(("event.timing".to_owned(), timing.into()));
+        kept.push(("event.zone".to_owned(), zone.into()));
+    }
+    if !same_repeat(draft, base) {
+        kept.push(("event.rule".to_owned(), rule_for(draft).into()));
+    }
+    if draft.place_id != base.place_id {
+        kept.push((
+            "event.place_id".to_owned(),
+            non_blank(&draft.place_id).into(),
+        ));
+    }
+    if draft.free != base.free {
+        kept.push(("event.busy".to_owned(), Value::from(i64::from(!draft.free))));
+    }
+    if draft.travel_min != base.travel_min {
+        let travel = (draft.travel_min > 0).then_some(i64::from(draft.travel_min));
+        kept.push(("event.travel_min".to_owned(), travel.into()));
+    }
+    if draft.calendar_id != base.calendar_id && !draft.calendar_id.is_empty() {
+        kept.push((
+            "event.calendar_id".to_owned(),
+            draft.calendar_id.clone().into(),
+        ));
+    }
+    if draft.link.trim() != base.link.trim() {
+        kept.push(("event.url".to_owned(), non_blank(&draft.link).into()));
+    }
+    if draft.reminder_key != base.reminder_key
+        || draft.second_reminder_key != base.second_reminder_key
+    {
+        kept.push(("event.reminders".to_owned(), alerts_of(draft).into()));
+    }
+    if guests_changed(draft, base) {
+        let mut everyone = owner_ids.to_vec();
+        everyone.extend(draft.guest_ids.iter().cloned());
+        kept.push(("attendee".to_owned(), everyone.into()));
+    }
+    kept
+}
+
+/// What a refused change to one day (or the days from it) keeps: the words it was given.
+#[must_use]
+pub fn kept_words(draft: &Draft, base: &Draft) -> Vec<(String, serde_json::Value)> {
+    let mut kept = Vec::new();
+    if draft.title.trim() != base.title.trim() {
+        kept.push(("entity.title".to_owned(), draft.title.trim().into()));
+    }
+    if draft.notes.trim() != base.notes.trim() {
+        kept.push((
+            "event.description".to_owned(),
+            non_blank(&draft.notes).into(),
+        ));
+    }
+    kept
+}
+
 /// `edit-event`: the changed fields only. The owner stays on their own invitation:
 /// replacing the guest list never drops `owner_ids`.
 #[must_use]

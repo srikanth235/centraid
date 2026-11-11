@@ -403,3 +403,80 @@ fn filing_one_line_checks_the_revision_it_replaces_and_filing_several_names_none
     );
     assert!(several.get("rev").is_none());
 }
+
+#[test]
+fn the_times_alerts_and_guests_of_a_refused_event_save_are_kept_and_restore_puts_them_back() {
+    let w = World::new();
+    let ben = w.ok("person.add", json!({ "title": "Ben" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let id = w.ok(
+        "event.propose",
+        json!({ "title": "Lunch", "starts": "2026-03-02T12:00", "ends": "2026-03-02T13:00",
+                "zone": "Europe/Paris" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    // What the member typed: a wall clock and its zone, alerts as numbers, a guest to invite.
+    let kept = w.ok(
+        "history.keep_version",
+        json!({ "id": id, "fields": {
+            "event.starts": "2026-03-03T10:00:00", "event.ends": "2026-03-03T11:30:00",
+            "event.timing": "zoned", "event.zone": "Asia/Tokyo",
+            "event.reminders": [30, 60], "attendee": [ben] } }),
+    );
+    assert_eq!(kept["kept"], true);
+    assert_eq!(w.versions(&id), 1);
+    // The event itself is as it was.
+    let held = |sql: &str| -> Option<String> {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(sql, [&id], |row| row.get(0))?))
+            .expect("a row")
+    };
+    assert_eq!(
+        held("SELECT zone FROM event WHERE id = ?1").as_deref(),
+        Some("Europe/Paris")
+    );
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'attendee'",
+            &id
+        ),
+        0
+    );
+    // Restoring it brings every field back, the instants resolved in the zone typed.
+    w.ok("history.restore_version", json!({ "id": id, "seq": 1 }));
+    assert_eq!(
+        held("SELECT starts FROM event WHERE id = ?1").as_deref(),
+        Some("2026-03-03T01:00:00.000Z")
+    );
+    assert_eq!(
+        held("SELECT ends FROM event WHERE id = ?1").as_deref(),
+        Some("2026-03-03T02:30:00.000Z")
+    );
+    assert_eq!(
+        held("SELECT zone FROM event WHERE id = ?1").as_deref(),
+        Some("Asia/Tokyo")
+    );
+    assert_eq!(
+        held("SELECT reminders FROM event WHERE id = ?1").as_deref(),
+        Some("[30,60]")
+    );
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'attendee'",
+            &id
+        ),
+        1
+    );
+    // A time that is no time is refused, and nothing is kept.
+    let bad = w.run(
+        "history.keep_version",
+        json!({ "id": id, "fields": { "event.starts": "2026-03-03T12:00:00",
+            "event.ends": "2026-03-03T11:00:00", "event.timing": "zoned", "event.zone": "Asia/Tokyo" } }),
+    );
+    assert_eq!(bad.status, CommandStatus::Failed);
+}

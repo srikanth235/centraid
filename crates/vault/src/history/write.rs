@@ -22,9 +22,21 @@ pub enum Kept {
     Same,
 }
 
+/// The overlay's field for an event's guests: the people it holds, by id. Not a column: a guest is
+/// a row of its own (`attendee`), so the list stands for them all; a guest already held keeps their
+/// answer, one added is invited and has not answered.
+pub const GUESTS: &str = "attendee";
+
 /// Why a field cannot be kept, or `None` when it can: it must be a `table.column` the entity's
 /// state holds (its title, its kind row), not a sealed cell and not the bytes of a document.
-fn refusal(state: &Json, name: &str) -> Option<String> {
+fn refusal(state: &Json, name: &str, value: &Json) -> Option<String> {
+    if name == GUESTS {
+        let held = state.get(GUESTS).is_some_and(Json::is_array);
+        let people = value
+            .as_array()
+            .is_some_and(|people| people.iter().all(Json::is_string));
+        return (!(held && people)).then(|| format!("`{name}` is a list of the people it holds"));
+    }
     let Some((table, column)) = name.split_once('.') else {
         return Some(format!("`{name}` is not a field of a record"));
     };
@@ -54,7 +66,9 @@ pub fn overlay_refusal(
     let Some(state) = current_state(connection, id)? else {
         return Ok(Some(format!("there is nothing with the id `{id}`")));
     };
-    Ok(overlay.keys().find_map(|name| refusal(&state, name)))
+    Ok(overlay
+        .iter()
+        .find_map(|(name, value)| refusal(&state, name, value)))
 }
 
 /// Keep the record as the member had it: the state it holds now with `overlay`'s fields
@@ -75,7 +89,9 @@ pub fn keep_overlay(
     };
     let mut held = now_state.clone();
     for (name, value) in overlay {
-        if let Some((table, column)) = name.split_once('.')
+        if name == GUESTS {
+            put_guests(&mut held, value, now);
+        } else if let Some((table, column)) = name.split_once('.')
             && let Some(row) = held.get_mut(table).and_then(Json::as_object_mut)
         {
             row.insert(column.to_owned(), value.clone());
@@ -93,4 +109,39 @@ pub fn keep_overlay(
         cause,
     )?;
     Ok(Kept::Version(head(connection, id)?))
+}
+
+/// Put `people` (ids) over the guests `held` has: the rows of those already held stay as they are,
+/// the others are new invitations, in the order the state keeps them (by person).
+fn put_guests(held: &mut Json, people: &Json, now: &str) {
+    let wanted: std::collections::BTreeSet<&str> = people
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_str)
+        .collect();
+    let Some(rows) = held.get_mut(GUESTS).and_then(Json::as_array_mut) else {
+        return;
+    };
+    rows.retain(|row| {
+        row.get("to_id")
+            .and_then(Json::as_str)
+            .is_some_and(|person| wanted.contains(person))
+    });
+    for person in wanted {
+        if !rows
+            .iter()
+            .any(|row| row.get("to_id").and_then(Json::as_str) == Some(person))
+        {
+            rows.push(serde_json::json!({
+                "anchor": null, "created_at": now, "label_id": null, "position": null,
+                "rel": "attendee", "state": "needs-action", "to_id": person,
+            }));
+        }
+    }
+    rows.sort_by(|a, b| {
+        a.get("to_id")
+            .and_then(Json::as_str)
+            .cmp(&b.get("to_id").and_then(Json::as_str))
+    });
 }

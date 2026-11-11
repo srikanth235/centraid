@@ -372,6 +372,27 @@ pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::
     Ok(())
 }
 
+/// What a refused save of an event keeps, in the form the vault holds it (`history.keep_version`):
+/// the overlay's times (`event.starts`, `event.ends`, `event.timing`, `event.zone`) and alerts
+/// (`event.reminders`) are stated as a source states them, so a wall clock and its zone become the
+/// instant the row would hold and the alerts the one text of the column. `Err` is a sentence.
+pub(crate) fn shape_overlay(
+    overlay: &mut serde_json::Map<String, Json>,
+) -> std::result::Result<(), String> {
+    const OWN: [&str; 5] = ["starts", "ends", "timing", "zone", "reminders"];
+    let mut stated = serde_json::Map::new();
+    for name in OWN {
+        if let Some(value) = overlay.remove(&format!("event.{name}")) {
+            stated.insert(name.to_owned(), value);
+        }
+    }
+    shape(&mut stated)?;
+    for (name, value) in stated {
+        overlay.insert(format!("event.{name}"), value);
+    }
+    Ok(())
+}
+
 /// The alerts a source states (minutes before it starts), in the one text the `reminders` column
 /// holds: a JSON array in the order stated, a minute once. No alert is `null`.
 fn alerts_text(alerts: &Json) -> std::result::Result<Json, String> {
