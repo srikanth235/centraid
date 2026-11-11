@@ -269,6 +269,12 @@ private fun PersonBody(
                         testTag = "people-person-star",
                         onTap = { onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled())) },
                     )
+                    SheetRow(
+                        chrome.share,
+                        iconKey = "Share",
+                        testTag = "people-person-share",
+                        onTap = { onEvent(PeoplePersonEvent(share_requested = PeoplePersonEvent.ShareRequested())) },
+                    )
                     SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-person-merge", onTap = { open(Which.WHICH_MERGE) })
                     SheetRow(
                         chrome.move_to_trash,

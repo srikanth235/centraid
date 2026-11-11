@@ -171,3 +171,26 @@ fn an_export_is_a_vcf_that_reads_back_and_a_list_is_its_own_file() {
     let back = other.ok("person.import_vcf", json!({ "cards": text }));
     assert_eq!(back["added"], 3);
 }
+
+#[test]
+fn one_person_is_their_own_card_named_for_them() {
+    let w = World::new();
+    w.ok("person.import_vcf", json!({ "cards": FILE }));
+    let who = w.ok("person.add", json!({ "title": "Ada Lovelace" }));
+    let id = who["id"].as_str().expect("an id").to_owned();
+    let one = w.ok("person.export_vcf", json!({ "person_id": id }));
+    assert_eq!(one["name"], "Ada Lovelace.vcf");
+    assert_eq!(one["count"], 1);
+    let text = String::from_utf8(
+        base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            one["content"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(text.matches("BEGIN:VCARD").count(), 1);
+    assert!(text.contains("FN:Ada Lovelace") && !text.contains("Maya Rao"));
+    let none = w.ok("person.export_vcf", json!({ "person_id": "nobody" }));
+    assert_eq!(none["count"], 0);
+}

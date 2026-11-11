@@ -460,6 +460,8 @@ message PeoplePersonChrome {
   string back = 10;
   // "More": the label of the glass key that holds Star, Merge and Move to trash.
   string more = 11;
+  // "Share": the More key's row that hands the person to the OS as a vCard (#1185).
+  string share = 12;
 }
 
 // A label and a value on the sheet: "Nickname", "How you met".
@@ -730,7 +732,11 @@ message PeoplePersonEvent {
     ChannelTapped channel = 16;
     // A hero action by `PeopleHeroAction.key`.
     HeroTapped hero = 17;
+    // The More key's Share row (#1185): Rust asks the owner check, then hands the vCard to the OS.
+    ShareRequested share_requested = 18;
   }
+
+  message ShareRequested {}
 
   message HeroTapped {
     string key = 1;

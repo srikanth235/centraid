@@ -338,8 +338,16 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/locker/item.rs",
     ),
     owed("money", Promise::Share, SHARE_OWED),
-    owed("notes", Promise::Share, SHARE_OWED),
-    owed("people", Promise::Share, SHARE_OWED),
+    kept(
+        "notes",
+        Promise::Share,
+        "crates/screens/src/notes/editor.rs",
+    ),
+    kept(
+        "people",
+        Promise::Share,
+        "crates/screens/src/people/person/mod.rs",
+    ),
     kept(
         "photos",
         Promise::Share,

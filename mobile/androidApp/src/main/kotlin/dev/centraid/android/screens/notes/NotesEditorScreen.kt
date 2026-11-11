@@ -222,6 +222,7 @@ public fun NotesEditorScreen(
                 add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
             }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
+            add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
         }.filter { it.label.isNotEmpty() }
         OptionSheet(
             title = chrome.menu_label,
@@ -233,6 +234,7 @@ public fun NotesEditorScreen(
                     MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
                     MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
+                    MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
                 }
             },
             onDismiss = { menuOpen = false },
@@ -348,3 +350,4 @@ private const val MENU_PIN = "pin"
 private const val MENU_LINK = "link"
 private const val MENU_EARLIER = "earlier-entry"
 private const val MENU_SEND = "send-to-agenda"
+private const val MENU_SHARE = "share"

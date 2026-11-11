@@ -62,7 +62,9 @@ use crate::kit::act as kit_act;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
 use crate::kit::earlier;
+use crate::kit::export::ExportFile;
 use crate::kit::read::{self, Reading};
+use crate::kit::share::{self, Share};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, notes as words};
 use std::collections::{BTreeSet, HashMap};
@@ -232,6 +234,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         own: BTreeSet::new(),
         link: None,
         earlier: earlier::Foot::default(),
+        share: Share::default(),
         started: false,
     }))
 }
@@ -298,6 +301,8 @@ struct Editor {
     link: Option<LinkSheet>,
     /// The entry to the note's earlier versions (#1185), read with the note.
     earlier: earlier::Foot,
+    /// The note handed to the OS share sheet as a Markdown file (#1185).
+    share: Share,
     /// `Appeared` has been seen.
     started: bool,
 }
@@ -903,11 +908,40 @@ impl Editor {
         self.resolve(ctx);
     }
 
+    fn note_exists(&self) -> bool {
+        self.auto.draft().is_some_and(|draft| draft.id.is_some())
+    }
+
+    /// The note as the member sees it, as a Markdown file: its title as the heading, then its
+    /// body. The file is named by the title (the first line of the body when there is none).
+    fn markdown(&self) -> Option<ExportFile> {
+        let draft = self.auto.draft().filter(|draft| draft.id.is_some())?;
+        let title = if draft.title.trim().is_empty() {
+            fold::first_line(&draft.body)
+        } else {
+            draft.title.trim().to_owned()
+        };
+        let text = if title.is_empty() {
+            draft.body.clone()
+        } else {
+            format!("# {title}\n\n{}", draft.body)
+        };
+        Some(ExportFile {
+            name: share::file_name(&title, "md", "Note"),
+            media_type: "text/markdown".to_owned(),
+            content: text.into_bytes(),
+        })
+    }
+
     fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
             Some(N::Pin(_)) => self.pin(ctx),
+            Some(N::ShareRequested(_)) if self.note_exists() => {
+                return self.share.tap(ctx.locale());
+            }
+            Some(N::ShareRequested(_)) => {}
             Some(N::ChecklistRequested(_)) => self.checklist(ctx),
             // THE POWERBOX. The link button opens it at the END of the note,
             // whatever a field's caret says (no shell reports one); a pick
@@ -1218,7 +1252,18 @@ impl Screen for Editor {
                 self.after_save(ctx);
             }
             // CLOSE = DONE: leaving saves what is unsaved.
-            Some(E::Left(_)) => self.save_now(ctx),
+            Some(E::Left(_)) => {
+                self.save_now(ctx);
+                return self.share.left();
+            }
+            // The owner check's answer, or the share sheet's: the note as Markdown goes out only
+            // after the check passed.
+            Some(E::EffectResult(result)) => {
+                let file = self.markdown();
+                return self
+                    .share
+                    .result(ctx, &result, |_| file.ok_or_else(String::new));
+            }
             Some(E::NotesEditor(event)) => return self.event(event, ctx),
             _ => {}
         }
@@ -1295,6 +1340,7 @@ impl Screen for Editor {
                     self.read_failure
                         .clone()
                         .or_else(|| self.status.clone())
+                        .or_else(|| self.share.status().map(|line| line.sentence))
                         .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
                         .unwrap_or(save_status)
                 },
@@ -1319,6 +1365,12 @@ impl Screen for Editor {
                     words::new_note(locale)
                 },
                 menu_label: words::row_menu(locale),
+                // Share waits for the first save: a note that does not exist is not shared.
+                share_label: if exists {
+                    share::label(locale)
+                } else {
+                    String::new()
+                },
                 retry: words::retry(locale),
                 // Tags belong to a note, so the field waits for the first save.
                 tag_placeholder: if exists {

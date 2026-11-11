@@ -69,6 +69,7 @@ fn export(ctx: &Ctx, key: &str) -> Result<export::ExportFile, String> {
         ctx,
         act::people::ExportVcf {
             list_id: (key != ALL).then(|| key.to_owned()),
+            person_id: None,
         },
         &kit_act::key(&["person.export_vcf", key], kit_act::fresh()),
     );

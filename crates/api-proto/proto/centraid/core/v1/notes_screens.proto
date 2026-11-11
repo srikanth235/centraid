@@ -610,6 +610,8 @@ message NotesEditorChrome {
   string keyboard_label = 15;
   // The status line's verb after a checklist tap: "Undo", or empty.
   string status_action = 16;
+  // "Share", the menu's row (#1185); empty until the note exists.
+  string share_label = 17;
 }
 
 message NotesLinkSheet {
@@ -671,7 +673,11 @@ message NotesEditorEvent {
     ReturnPressed return_pressed = 15;
     // The status line's verb (Undo).
     StatusActed status_acted = 16;
+    // The menu's Share row (#1185): Rust asks the owner check, then hands the note to the OS.
+    ShareRequested share_requested = 17;
   }
+
+  message ShareRequested {}
 
   message ChecklistToggled {
     uint32 at = 1;

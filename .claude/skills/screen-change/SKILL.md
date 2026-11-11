@@ -98,3 +98,23 @@ The vault keeps every record's earlier values at its commit door (#1185); `kit/e
 7. **Register.** Flip the app's `Promise::History` row in `promises.rs` to `kept(.., "crates/screens/src/<app>/earlier.rs")`; the rule fails a `Kept` that is false and an `Owed` that is satisfied.
 8. **Secrets in a version (a wall).** An app whose records hold sealed values (only Locker) gives its spec a `kit::earlier::Wall` as `gate`: `closed` (the lock), `secrets` (the sealed values a version held, named, from the fields it held) and `open` (the core's owner-checked reveal of that version's cell). The kit then draws each as `EarlierSecret` (dots, Reveal) and answers `EarlierEvent.reveal` / `conceal`; no value is ever worded in a line. `locker/earlier.rs` is the model.
 9. **Shells.** List in the report the new fields (the `earlier` arms of `ViewState` and `ScreenEvent`, the kind's `earlier` entry) for the Compose and SwiftUI agents; the shared screen is drawn once.
+
+## 9. Adopting export in an app
+
+`kit/export.rs` is the one export screen (drawn with the wire Transfer view, so no shell work); `cargo xtask rules` prints what an app still owes (`owed <app> / Export: ...`). Written from Notes and People.
+
+1. **Manifest**: the app's export action declares `"writes_nothing": true` (an export writes nothing) and returns `{name, content (base64), count}`; run `cargo xtask screens-catalog` after a change.
+2. **The spec** `crates/screens/src/<app>/export.rs`: a `static SPEC: ExportSpec` with `app`, `title`, `lede`, `back_label` (words), `denied`, `choices: fn(&Ctx) -> Reading<Vec<Choice>>` (the rows: "Everything in <App>", or "All notes" and each notebook), `export: fn(&Ctx, &str) -> Result<ExportFile, String>` (call the command, then `export::file_of(&settled, media_type, fallback_name)`) and `no_passcode: NoPasscode::Warn`; and `pub fn build(route) { export::build(&SPEC, route) }`. Write no words for the kit's parts: `strings/shared.rs` has the headline, the saved line and the failure.
+3. **Register** `.with(EXPORT, export::build)` under `"<app>.export"` in `mod.rs`.
+4. **The entry**: a row of the More sheet built from `export::entry(locale, EXPORT)` (key, label, icon, route), the same row in every app.
+5. **Register the promise**: flip the app's `Promise::Export` row in `promises.rs` to `kept(.., "crates/screens/src/<app>/export.rs")`. Locker keeps its own machine (`OWN_EXPORT`).
+
+## 10. Adopting share in an app
+
+`kit/share.rs` is the one hand-off of a single item to the OS share sheet (`ShareBytes`: a small file made in memory); the owner check is inside it.
+
+1. **The item** is a file the screen already has or one vault read away (a note as Markdown from the open draft, a vCard from `person.export_vcf` with `person_id`). A new read or command follows `vault-change`.
+2. **The detail screen** of the primary record holds a `Share`: its menu row (`share::label(locale)`, icon `share::ICON`) sends a `ShareRequested` event (add it to the screen's event proto, and the label to its chrome) whose handler returns `self.share.tap(locale)`; the `EffectResult` arm returns `self.share.result(ctx, &result, |ctx| Ok(file))`; `Left` returns `self.share.left()`; `status` ORs in `self.share.status()`.
+3. **Shells**: add the row beside the menu's others in Compose and SwiftUI (`chrome.share_label` / `chrome.shareLabel`, the event). The effect's performers exist in both.
+4. **Register**: flip the app's `Promise::Share` row to `kept(.., "<the detail screen>")`. Docs (`ShareFile`) and Photos (`ExportOriginals`) are named in `OWN_SHARE`; Locker has no share by decision (`NO_SHARE`, D11).
+

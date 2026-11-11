@@ -34,8 +34,10 @@ use super::{Phase, denied, fold, routes};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::earlier;
+use crate::kit::export::{self, ExportFile};
 use crate::kit::follow;
 use crate::kit::read;
+use crate::kit::share::{self, Share};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, people as words};
 
@@ -68,7 +70,24 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         done: false,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
+        share: Share::default(),
     }))
+}
+
+/// One person as a vCard file, through the same command the export screen calls.
+fn vcard(ctx: &Ctx, person_id: &str) -> Result<ExportFile, String> {
+    let settled = kit_act::act(
+        ctx,
+        act::people::ExportVcf {
+            list_id: None,
+            person_id: Some(person_id.to_owned()),
+        },
+        &kit_act::key(&["person.export_vcf", person_id], kit_act::fresh()),
+    );
+    if settled.committed && crate::kit::transfer::count(&settled.output, "count") == 0 {
+        return Err(String::new());
+    }
+    export::file_of(&settled, "text/vcard", "Contact.vcf")
 }
 
 /// What a confirm on screen will do once the member says so.
@@ -94,6 +113,8 @@ struct Person {
     differences: follow::Phone,
     /// The entry to the person's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
+    /// The person handed to the OS share sheet as a vCard (#1185).
+    share: Share,
 }
 
 impl Person {
@@ -563,6 +584,11 @@ impl Person {
         match kind {
             P::Refreshed(_) => self.reload(ctx),
             P::Star(_) => self.star(ctx),
+            P::ShareRequested(_) => {
+                if self.loaded().is_some() && !self.is_me() {
+                    return self.share.tap(ctx.locale());
+                }
+            }
             P::SheetOpened(opened) => self.sheet_opened(
                 ctx,
                 wire::people_person_event::sheet_opened::Which::try_from(opened.which)
@@ -619,6 +645,7 @@ impl Person {
             loading: words::loading(locale),
             back: words::app_title(locale),
             more: words::more_title(locale),
+            share: share::label(locale),
         }
     }
 }
@@ -716,6 +743,13 @@ impl Screen for Person {
             }
             Some(E::PeoplePerson(person)) => return self.event(person, ctx),
             Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
+            // The owner check's answer, or the share sheet's: the vCard is made only after the
+            // check passed.
+            Some(E::EffectResult(result)) => {
+                let id = self.party_id.clone();
+                return self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
+            }
+            Some(E::Left(_)) => return self.share.left(),
             _ => {}
         }
         Vec::new()
@@ -750,6 +784,7 @@ impl Screen for Person {
             status: self
                 .status
                 .clone()
+                .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale)),
             done: self.done,

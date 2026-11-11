@@ -4677,10 +4677,11 @@ pub mod act {
             }
         }
 
-        /// Answer everyone, or one list's people, as vCards in one file through person.export_vcf. Writes nothing.
+        /// Answer everyone, one list's people, or one person, as vCards in one file through person.export_vcf. Writes nothing.
         #[derive(Clone, Debug, Default)]
         pub struct ExportVcf {
             pub list_id: Option<String>,
+            pub person_id: Option<String>,
         }
         impl ExportVcf {
             pub const NAME: &str = "export-vcf";
@@ -4688,6 +4689,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 if let Some(it) = self.list_id { map.insert("list_id".to_owned(), text(it)); }
+                if let Some(it) = self.person_id { map.insert("person_id".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }

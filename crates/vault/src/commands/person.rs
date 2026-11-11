@@ -1109,12 +1109,14 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }))
 }
 
-/// `person.export_vcf`: everyone (or one list's people) as vCards in one file. Writes nothing.
+/// `person.export_vcf`: everyone, one list's people, or one person (`person_id`, what a detail
+/// page shares) as vCards in one file. Writes nothing.
 /// The owner's own card is not in it: it is the member's, not someone to add to another book.
 fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let list = ctx.optional_str("list_id");
+    let person = ctx.optional_str("person_id");
     let mut file_name = "People".to_owned();
-    if let Some(list) = list {
+    if let Some(list) = list.or(person) {
         let title: Option<String> = ctx
             .connection()
             .query_row("SELECT title FROM entity WHERE id = ?1", [list], |row| {
@@ -1128,10 +1130,11 @@ fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
            FROM entity e JOIN person p ON p.id = e.id
           WHERE e.kind = 'person' AND e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
             AND (?1 IS NULL OR e.id IN (SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'))
+            AND (?2 IS NULL OR e.id = ?2)
           ORDER BY e.title COLLATE NOCASE, e.created_at, e.id",
     )?;
     let rows = people
-        .query_map([list], |row| {
+        .query_map(rusqlite::params![list, person], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1224,7 +1227,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "list_id": { "type": ["string", "null"] }
+                "list_id": { "type": ["string", "null"] },
+                "person_id": { "type": ["string", "null"] }
               }
             }"#,
             Idempotency::Idempotent,

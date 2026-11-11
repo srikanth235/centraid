@@ -98,6 +98,9 @@ struct NotesEditorView: View {
                     if state.hasSendToAgenda {
                         Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
                     }
+                    if !chrome.shareLabel.isEmpty {
+                        Button(chrome.shareLabel) { send(event { $0.shareRequested = .init() }) }
+                    }
                 } label: {
                     ToolbarIconFace(iconKey: "MoreHoriz")
                 }

@@ -527,6 +527,8 @@ message Effect {
     StopFollowing stop_following = 202;
     // Hand one document's file to the platform's share sheet.
     ShareFile share_file = 203;
+    // Hand one small item made in memory (a note, a vCard) to the platform's share sheet as a file.
+    ShareBytes share_bytes = 204;
     // ---- pairing (1340-1349, lane H2): pair_screens.proto ----
     ScanCode scan_code = 1340;
     BrowseGateways browse_gateways = 1341;
@@ -1239,6 +1241,20 @@ message ShareFile {
   // The file's name as the receiver sees it: the title with its extension.
   string name = 2;
   string media_type = 3;
+  // The share sheet's title.
+  string chooser_title = 4;
+}
+
+// SHARE ONE SMALL ITEM AS A FILE (#1185, take out): write `content` to a temporary file called
+// `name` (the receiver sees it: "Plan.md", "Ada Lovelace.vcf") and open the platform's share
+// sheet on it, Android's `ACTION_SEND` through the app's `FileProvider`, iOS's
+// `UIActivityViewController`. The copy is plaintext outside the vault, so the shell removes it
+// when the sheet closes (iOS) or when the next share replaces it (Android). Answers done once the
+// sheet is up, or `EffectFailed` when the file cannot be written. Rust asks the owner check first.
+message ShareBytes {
+  string name = 1;
+  string media_type = 2;
+  bytes content = 3;
   // The share sheet's title.
   string chooser_title = 4;
 }

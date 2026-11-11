@@ -1722,12 +1722,13 @@
         "save a list as vCards",
         "back up my contacts to a file"
       ],
-      "description": "Answer everyone, or one list's people, as vCards in one file through person.export_vcf. Writes nothing.",
+      "description": "Answer everyone, one list's people, or one person, as vCards in one file through person.export_vcf. Writes nothing.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] }
+          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] },
+          "person_id": { "type": "string", "minLength": 1, "aliases": ["person"] }
         },
 
         "additionalProperties": false

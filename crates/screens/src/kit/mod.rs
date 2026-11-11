@@ -17,5 +17,6 @@ pub mod read;
 pub mod schedule;
 pub mod search;
 pub mod secret;
+pub mod share;
 pub mod transfer;
 pub mod trash;

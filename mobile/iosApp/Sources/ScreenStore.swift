@@ -602,6 +602,12 @@ final class ScreenStore: ObservableObject {
             } else {
                 answer(request, .failed(Self.failure("the file could not be read")))
             }
+        case .shareBytes(let share)?:
+            if DocsShare.presentBytes(share) {
+                answer(request, done)
+            } else {
+                answer(request, .failed(Self.failure("the file could not be written")))
+            }
         case .followFolder?:
             DocsFollow.shared.request { outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }

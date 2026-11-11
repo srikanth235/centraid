@@ -103,6 +103,12 @@ struct PeoplePersonView: View {
                 send(PeopleEvents.person { $0.star = .init() })
             }
             .accessibilityIdentifier("people-person-star")
+            if !chrome.share.isEmpty {
+                Button(chrome.share) {
+                    send(PeopleEvents.person { $0.shareRequested = .init() })
+                }
+                .accessibilityIdentifier("people-person-share")
+            }
             if !chrome.merge.isEmpty {
                 Button(chrome.merge) {
                     send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
