@@ -209,3 +209,5 @@ reminders,style-container,edit:color,list,direct,no,no
 reminders,attach,attach,task,card,no,no
 reminders,detach,detach,task,card,no,no
 reminders,export-ics,log,task,card,no,no
+reminders,follow-reminders,import,task,card,no,no
+reminders,stop-following,detach,task,card,no,no
