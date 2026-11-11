@@ -182,13 +182,11 @@ impl Trash {
     /// The writes for `id`'s row: the restore, and the move back to the trash. A row of another
     /// kind than the app's records takes its own (`TrashSpec::of_row`).
     fn writes_for(&self, id: &str) -> (wire::ActRequest, wire::ActRequest) {
-        let own = match &self.phase {
-            Phase::Ready(items) => items
-                .iter()
-                .find(|item| item.id == id)
-                .and_then(|item| self.spec.of_row.and_then(|of_row| of_row(item))),
-            _ => None,
-        };
+        let own = self
+            .page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .and_then(|item| self.spec.of_row.and_then(|of_row| of_row(item)));
         own.unwrap_or_else(|| ((self.spec.restore)(id), (self.spec.trash)(id)))
     }
 
