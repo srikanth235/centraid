@@ -173,7 +173,18 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["person", "place", "event", "task", "note", "document", "photo", "account", "transaction", "workout"]
+            "enum": [
+              "person",
+              "place",
+              "event",
+              "task",
+              "note",
+              "document",
+              "photo",
+              "account",
+              "transaction",
+              "workout"
+            ]
           },
           "term": {
             "type": "string",
