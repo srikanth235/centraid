@@ -507,7 +507,6 @@ const SHARE_OWED: &str = "no share of one record on the kit's share helper (#118
 
 const UNITS_PROOF: &str = "crates/screens/src/kit/quantity.rs";
 
-const UNITS_OWED: &str = "words a measure by hand instead of `kit::quantity` (#1185)";
 const ATTACH_OWED: &str =
     "the detail screen does not embed the kit's attachments section yet (#1185)";
 
