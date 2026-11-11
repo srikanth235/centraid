@@ -543,6 +543,66 @@ fn notes(w: &World) {
     assert!(!w.live(&made), "the task is in the trash");
 }
 
+fn calendar(w: &World) {
+    let person = w.first("person");
+    let event = w.make(
+        "calendar",
+        "propose",
+        &json!({ "title": "Standup", "starts": "2030-01-10T09:00:00", "ends": "2030-01-10T09:30:00", "timing": "floating", "attendees": [person] }),
+    );
+    w.round_trip(
+        "calendar",
+        "edit-event",
+        &event,
+        &json!({ "id": event, "title": "Standup moved", "description": "Room 4" }),
+    );
+    w.round_trip(
+        "calendar",
+        "rsvp",
+        &event,
+        &json!({ "id": event, "person_id": person, "state": "accepted" }),
+    );
+    w.round_trip("calendar", "cancel-event", &event, &json!({ "id": event }));
+    let series = w.make(
+        "calendar",
+        "propose",
+        &json!({ "title": "Weekly review", "starts": "2030-02-04T14:00:00", "ends": "2030-02-04T14:30:00", "timing": "floating", "rule": "FREQ=WEEKLY" }),
+    );
+    w.round_trip(
+        "calendar",
+        "edit-occurrence",
+        &series,
+        &json!({ "id": series, "original_start": "2030-02-11T14:00:00", "scope": "occurrence", "action": "skip" }),
+    );
+    let side = w.make(
+        "calendar",
+        "create-calendar",
+        &json!({ "kind": "calendar", "title": "Side" }),
+    );
+    w.round_trip(
+        "calendar",
+        "rename-calendar",
+        &side,
+        &json!({ "id": side, "title": "Side projects" }),
+    );
+    w.round_trip(
+        "calendar",
+        "style-calendar",
+        &side,
+        &json!({ "id": side, "color": "violet" }),
+    );
+    // What an act created goes to the trash when taken back.
+    let made = w.ok("calendar", "add-place", &json!({ "title": "Mistake cove" }));
+    let (undo, back) = made
+        .inverse()
+        .unwrap_or_else(|| panic!("a creation is taken back: {:?}", made.response));
+    assert_eq!(undo, "undo-create");
+    let id = back["id"].as_str().expect("an id").to_owned();
+    assert!(w.live(&id));
+    w.ok("calendar", &undo, &back);
+    assert!(!w.live(&id), "the place is in the trash");
+}
+
 fn photos(w: &World) {
     let photo = w.first("photo");
     let album = w.make(
@@ -611,6 +671,7 @@ fn photos(w: &World) {
 fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     let w = World::new();
     reminders(&w);
+    calendar(&w);
     docs(&w);
     notes(&w);
     photos(&w);

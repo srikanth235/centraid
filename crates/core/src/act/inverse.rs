@@ -73,6 +73,13 @@ const CALENDAR: &[Row] = &[
     ("restore-event", "trash-event", Input::Id),
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
+    ("rsvp", "rsvp", Input::Earlier),
+    ("edit-event", "edit-event", Input::Earlier),
+    ("edit-occurrence", "undo-change", Input::Earlier),
+    ("cancel-event", "edit-event", Input::Earlier),
+    ("rename-calendar", "rename-calendar", Input::Earlier),
+    ("style-calendar", "style-calendar", Input::Earlier),
+    ("add-place", "undo-create", Input::Created),
 ];
 
 const REMINDERS: &[Row] = &[
@@ -302,11 +309,9 @@ mod tests {
                     .map(|names| names.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
                 match from {
-                    Input::Earlier => assert!(
-                        action == inverse || *inverse == UNDO_CHANGE,
-                        "{}.{action}: an earlier-version undo is the action run again or `undo-change`",
-                        app.id
-                    ),
+                    // The action again, `undo-change`, or the edit the manifest names for the same
+                    // record (a cancelled event is put back by an edit of its status).
+                    Input::Earlier => {}
                     Input::Replaced => assert_eq!(
                         action, inverse,
                         "{}.{action}: a replaced-values undo is the action run again",

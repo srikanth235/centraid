@@ -149,7 +149,7 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/trash.rs",
     ),
     // Undo (#1185, Phase 1): the checker's gaps are the adopters' work list.
-    owed("calendar", Promise::Undo, UNDO_OWED),
+    owed("calendar", Promise::Undo, CALENDAR_UNDO_OWED),
     kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
     owed("health", Promise::Undo, UNDO_OWED),
     owed("locker", Promise::Undo, UNDO_OWED),
@@ -207,6 +207,8 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/earlier.rs",
     ),
 ];
+
+const CALENDAR_UNDO_OWED: &str = "two actions left (#1185): follow-calendar is a pass of the phone's store, not a member's act, so neither an inverse nor a question fits it; create-calendar has no inverse because a calendar is deleted, never trashed";
 
 const UNDO_OWED: &str = "actions neither in the core's inverse table nor confirmed, or the manifest and the table disagree (#1185)";
 

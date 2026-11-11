@@ -429,7 +429,7 @@
       "name": "edit-occurrence",
       "verb": "reschedule",
       "kind": "event",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "event.edit_occurrence",
       "phrasings": [
@@ -1073,7 +1073,7 @@
       "name": "add-place",
       "verb": "create",
       "kind": "event",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "place.add",
       "phrasings": [

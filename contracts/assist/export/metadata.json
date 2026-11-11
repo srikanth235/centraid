@@ -1257,7 +1257,7 @@
         "bulk": false,
         "chat": "card",
         "command": "event.edit_occurrence",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "event",
         "phrasings": [
           "skip this week's standup",
@@ -1473,7 +1473,7 @@
         "bulk": false,
         "chat": "card",
         "command": "place.add",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "event",
         "phrasings": [
           "remember the Café Roma as a place",
