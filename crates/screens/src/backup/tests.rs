@@ -692,7 +692,10 @@ fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
         say(S::Empty, 0),
         "Your backup device has everything that was ready."
     );
-    assert_eq!(say(S::Deadline, 2_000_000), "Still backing up. 2 MB to go.");
+    assert_eq!(
+        say(S::Deadline, 2_000_000),
+        "Still backing up. 2.0 MB to go."
+    );
     assert_eq!(
         say(S::Unreachable, 99),
         "Backup device didn't answer. Will try again."
@@ -728,6 +731,10 @@ fn a_pass_is_told_in_one_sentence_per_reason_and_a_deadline_is_not_an_error() {
 fn bytes_are_decimal_and_rounded_down() {
     assert_eq!(claim::bytes(999), "999 bytes");
     assert_eq!(claim::bytes(12_345), "12 KB");
+    assert_eq!(claim::bytes(12_345_678), "12.3 MB");
+    // A TENTH BELOW 100 OF THE UNIT, WHOLE FROM THERE, rounded down: both sides of the line.
+    assert_eq!(claim::bytes(99_999_999), "99.9 MB");
+    assert_eq!(claim::bytes(100_000_000), "100 MB");
     assert_eq!(claim::bytes(340_000_000), "340 MB");
     // GIGABYTES UNDER A HUNDRED KEEP ONE DECIMAL, never rounded up (#1144).
     assert_eq!(claim::bytes(2_999_999_999), "2.9 GB");
@@ -1869,12 +1876,12 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
         [
             ("Photos", "1,240 photos and videos · 4.4 GB", "Backed up"),
             ("Docs", "58 documents · 412 MB", "Backed up"),
-            ("Locker", "86 items · 96 MB", "Backed up"),
-            ("Notes", "312 notes · 38 MB", "Backed up"),
-            ("Money", "3,412 transactions · 21 MB", "Backed up"),
-            ("People", "418 people · 14 MB", "Backed up"),
-            ("Calendar", "640 events · 6 MB", "Backed up"),
-            ("Health", "731 days, 96 workouts · 3 MB", "Backed up"),
+            ("Locker", "86 items · 96.0 MB", "Backed up"),
+            ("Notes", "312 notes · 38.0 MB", "Backed up"),
+            ("Money", "3,412 transactions · 21.0 MB", "Backed up"),
+            ("People", "418 people · 14.0 MB", "Backed up"),
+            ("Calendar", "640 events · 6.0 MB", "Backed up"),
+            ("Health", "731 days, 96 workouts · 3.0 MB", "Backed up"),
         ]
     );
     assert!(
@@ -1884,7 +1891,7 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     );
     assert_eq!(
         data.apps[3].accessibility_label,
-        "Notes. 312 notes · 38 MB. Backed up"
+        "Notes. 312 notes · 38.0 MB. Backed up"
     );
     assert_eq!(data.apps[0].app_id, "photos");
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.

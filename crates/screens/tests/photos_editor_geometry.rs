@@ -92,7 +92,14 @@ fn cases() -> Vec<Case> {
         ),
         // THE STRAIGHTENED FRAME'S SIZE (#1185): the box grows, so the frame the crop is measured in
         // is the rotated box, either way of level, on a quarter turn, and at the slider's limit.
-        case("straighten_minus_10_full_frame", (4000, 3000), 0, -10, "none", None),
+        case(
+            "straighten_minus_10_full_frame",
+            (4000, 3000),
+            0,
+            -10,
+            "none",
+            None,
+        ),
         case(
             "straighten_7_after_a_quarter_turn",
             (4000, 3000),

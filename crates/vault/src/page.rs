@@ -446,6 +446,25 @@ const DOCUMENT_BYTES_COLUMN: &str = "document_bytes";
 /// it lands, which is the whole reason the contract put the formatting behind
 /// the core instead of in two shells.
 pub fn format_byte_size(count: i64) -> String {
+    sized(count, Rounding::Nearest)
+}
+
+/// The same phrase, ROUNDED DOWN: a size that is a claim (what is backed up) never says a byte more
+/// than there is, so `4.96 GB` is `4.9 GB`, not `5.0 GB`.
+pub fn format_byte_size_floor(count: i64) -> String {
+    sized(count, Rounding::Down)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Rounding {
+    Nearest,
+    Down,
+}
+
+/// THE ONE RULE FOR EVERY BYTE UNIT: a tenth below 100 of the unit (`1.2 MB`, `42.5 GB`), whole
+/// numbers from 100 up (`205 MB`, `512 GB`), kilobytes always whole, and below a kilobyte the
+/// count itself.
+fn sized(count: i64, rounding: Rounding) -> String {
     const KB: i64 = 1_000;
     const MB: i64 = 1_000_000;
     const GB: i64 = 1_000_000_000;
@@ -465,42 +484,53 @@ pub fn format_byte_size(count: i64) -> String {
         // member could act on, and where truncating also keeps 999 999 bytes
         // from rounding itself out of its own unit.
         KB..MB => format!("{} KB", count / KB),
-        MB..GB => {
-            let (whole, tenth) = tenths(count, MB);
-            // ROUNDING CAN CROSS THE RUNG. 999 999 999 bytes is 1000.0 MB by
+        MB..GB => match in_unit(count, MB, rounding) {
+            // ROUNDING CAN CROSS THE RUNG. 999 999 999 bytes is 1000 MB by
             // arithmetic and 1.0 GB to a reader, and a column that printed the
             // first would be the one row in a stack nobody could scan past.
-            if whole == 1_000 {
-                let (whole, tenth) = tenths(count, GB);
-                format!("{whole}.{tenth} GB")
-            } else {
-                format!("{whole}.{tenth} MB")
-            }
-        }
+            Amount::Whole(1_000..) => sized(GB, rounding),
+            amount => format!("{amount} MB"),
+        },
         // NO RUNG ABOVE THIS ONE, deliberately: a terabyte on a phone is not a
         // state v0 has, and a unit nothing can produce is a unit nothing tests.
-        _ => {
-            let (whole, tenth) = tenths(count, GB);
-            format!("{whole}.{tenth} GB")
+        _ => format!("{} GB", in_unit(count, GB, rounding)),
+    }
+}
+
+/// An amount of a unit: a tenth below 100, whole from there.
+enum Amount {
+    Tenths(i64, i64),
+    Whole(i64),
+}
+
+impl std::fmt::Display for Amount {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tenths(whole, tenth) => write!(out, "{whole}.{tenth}"),
+            Self::Whole(whole) => write!(out, "{whole}"),
         }
     }
 }
 
-/// `count / unit` as `(whole, tenth)`, ROUNDED rather than truncated, in
-/// integer arithmetic.
+/// `count / unit` in integer arithmetic: a tenth under 100 of the unit, whole from there, ROUNDED
+/// (nearest) or cut (down).
 ///
 /// Rounded because 1 999 999 bytes is `2.0 MB` to everyone who is not a
 /// computer, and integer because a float formatted with `{:.1}` would take its
-/// decimal separator from nobody's locale in particular. `count % unit` is
-/// below `unit`, and `unit` is at most a billion, so the `* 10` cannot overflow.
-fn tenths(count: i64, unit: i64) -> (i64, i64) {
-    let mut whole = count / unit;
-    let mut tenth = ((count % unit) * 10 + unit / 2) / unit;
-    if tenth == 10 {
-        whole += 1;
-        tenth = 0;
+/// decimal separator from nobody's locale in particular. `count` is below a
+/// terabyte-scale `i64` and `unit` at most a billion, so the `* 10` cannot overflow.
+fn in_unit(count: i64, unit: i64, rounding: Rounding) -> Amount {
+    let divide = |numerator: i64, by: i64| match rounding {
+        Rounding::Nearest => (numerator + by / 2) / by,
+        Rounding::Down => numerator / by,
+    };
+    let tenths = divide(count * 10, unit);
+    if tenths >= 1_000 {
+        // 99.96 rounds up to 100: from here on the amount is a whole number.
+        Amount::Whole(divide(count, unit))
+    } else {
+        Amount::Tenths(tenths / 10, tenths % 10)
     }
-    (whole, tenth)
 }
 
 /// THE READS THAT MAY SEE A LOCKER ITEM'S ROW.
@@ -1497,15 +1527,53 @@ mod keyset_tests {
             // ROUNDED, NOT TRUNCATED.
             (1_999_999, "2.0 MB"),
             (4_100_000, "4.1 MB"),
+            // A TENTH BELOW 100 OF THE UNIT, WHOLE FROM 100 UP: both sides of the line, in both
+            // units.
+            (99_900_000, "99.9 MB"),
+            (99_949_999, "99.9 MB"),
+            (99_950_000, "100 MB"),
+            (100_000_000, "100 MB"),
+            (205_000_000, "205 MB"),
+            (562_500_000, "563 MB"),
+            (999_499_999, "999 MB"),
             (999_999_999, "1.0 GB"),
             (1_000_000_000, "1.0 GB"),
+            (42_500_000_000, "42.5 GB"),
             (84_200_000_000, "84.2 GB"),
+            (99_949_999_999, "99.9 GB"),
+            (99_950_000_000, "100 GB"),
+            (512_000_000_000, "512 GB"),
         ] {
             assert_eq!(format_byte_size(count), said, "{count} was said wrong");
         }
         // A NEGATIVE COUNT CANNOT REACH HERE (`blob.size` is CHECKed >= 0) and
         // it is clamped rather than panicking.
         assert_eq!(format_byte_size(-1), "0 bytes");
+    }
+
+    #[test]
+    fn a_size_that_is_a_claim_is_rounded_down_by_the_same_rule() {
+        for (count, said) in [
+            (999, "999 bytes"),
+            (12_345, "12 KB"),
+            (12_345_678, "12.3 MB"),
+            (99_999_999, "99.9 MB"),
+            (100_000_000, "100 MB"),
+            (340_000_000, "340 MB"),
+            (999_999_999, "999 MB"),
+            (2_999_999_999, "2.9 GB"),
+            (5_000_000_000, "5.0 GB"),
+            (99_999_999_999, "99.9 GB"),
+            (100_000_000_000, "100 GB"),
+            (120_400_000_000, "120 GB"),
+        ] {
+            assert_eq!(
+                format_byte_size_floor(count),
+                said,
+                "{count} was said wrong"
+            );
+        }
+        assert_eq!(format_byte_size_floor(-1), "0 bytes");
     }
 
     /// A DOCUMENTS PAGE CARRIES THE SIZE THE DOCUMENT ACTUALLY IS, AS WORDS, and

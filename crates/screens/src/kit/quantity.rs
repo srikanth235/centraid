@@ -16,7 +16,7 @@
 //! | `Temperature` | degrees Celsius | `36.6 °C` | `97.9 °F` |
 //! | `Volume` | millilitres | `250 ml`, `1.5 L` | `8.5 fl oz` |
 //! | `Bytes` | bytes | `1.4 MB` | the same (bytes ignore the switch) |
-//! | `BytesFloor` | bytes | `340 MB`, `4.9 GB` (rounded down) | the same |
+//! | `BytesFloor` | bytes | `340 MB`, `4.9 GB` (the same phrase, rounded down) | the same |
 //! | `Duration` | seconds | `7 h 12 min` | the same |
 //! | `Span` | seconds | `1 h 06 min` | the same |
 //! | `Minutes`, `Beats`, `Steps` | the count | `31 min`, `62 bpm`, `8,412` | the same |
@@ -32,7 +32,7 @@
 //! region measures in ([`UnitsPref::of_region`]). Settings changes it with [`set_op`].
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::page::format_byte_size;
+use centraid_vault::page::{format_byte_size, format_byte_size_floor};
 
 use crate::custody::secrets::VaultSecrets;
 use crate::strings::{Locale, fill, quantity as words};
@@ -131,7 +131,7 @@ pub enum Unit {
     /// Bytes; the vault's phrase, whatever the switch.
     Bytes,
     /// Bytes said ROUNDED DOWN, never a byte more than there is: how much is backed up is a claim
-    /// (#1144). Whole kilobytes and megabytes, a tenth of a gigabyte under a hundred, whole above.
+    /// (#1144). The same phrase and the same rule as `Bytes` (a tenth below 100 of the unit).
     BytesFloor,
     /// Seconds, said as `7 h 12 min` (a night's sleep).
     Duration,
@@ -281,7 +281,7 @@ impl Quantity {
     /// The vault's phrase for a size, or the rounded-down one for a size that is a claim.
     fn byte_phrase(&self) -> String {
         if self.unit == Unit::BytesFloor {
-            floor_byte_size(round(self.value))
+            format_byte_size_floor(round(self.value))
         } else {
             format_byte_size(round(self.value))
         }
@@ -299,25 +299,6 @@ impl Quantity {
         } else {
             format!("{number} {unit}")
         }
-    }
-}
-
-/// A size rounded DOWN: decimal, whole units, a tenth of a gigabyte under a hundred (`4.9 GB` and
-/// `4 GB` are a phone's worth of photographs apart, #1144), and never a byte more than there is.
-fn floor_byte_size(count: i64) -> String {
-    const KB: i64 = 1_000;
-    const MB: i64 = 1_000_000;
-    const GB: i64 = 1_000_000_000;
-    let count = count.max(0);
-    match count {
-        0..KB => format!("{count} bytes"),
-        KB..MB => format!("{} KB", count / KB),
-        MB..GB => format!("{} MB", count / MB),
-        GB..=99_999_999_999 => {
-            let tenths = count / (GB / 10);
-            format!("{}.{} GB", tenths / 10, tenths % 10)
-        }
-        _ => format!("{} GB", count / GB),
     }
 }
 

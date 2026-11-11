@@ -114,6 +114,30 @@ fn a_size_reads_byte_for_byte_as_the_vaults_phrase_whatever_the_switch() {
 }
 
 #[test]
+fn every_byte_unit_says_a_tenth_below_100_and_whole_from_100_in_every_unit_switch() {
+    // ONE RULE, BOTH SIDES OF THE LINE, in Attachments, Chat and Backup alike: the quantity says it.
+    for pref in [UnitsPref::Metric, UnitsPref::Imperial] {
+        for (count, nearest, floor) in [
+            (880_000_i64, "880 KB", "880 KB"),
+            (1_200_000, "1.2 MB", "1.2 MB"),
+            (99_960_000, "100 MB", "99.9 MB"),
+            (100_000_000, "100 MB", "100 MB"),
+            (205_000_000, "205 MB", "205 MB"),
+            (42_550_000_000, "42.6 GB", "42.5 GB"),
+            (99_960_000_000, "100 GB", "99.9 GB"),
+            (512_000_000_000, "512 GB", "512 GB"),
+        ] {
+            assert_eq!(said(Quantity::bytes(count), pref), nearest, "{count}");
+            assert_eq!(
+                said(Quantity::bytes_floor(u64::try_from(count).unwrap()), pref),
+                floor,
+                "{count}"
+            );
+        }
+    }
+}
+
+#[test]
 fn only_the_regions_that_measure_in_miles_default_to_imperial() {
     for region in ["US", "LR", "MM"] {
         assert_eq!(UnitsPref::of_region(region), UnitsPref::Imperial);

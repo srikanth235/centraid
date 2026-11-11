@@ -67,7 +67,7 @@ fn no_model_draws_the_download_step_with_the_size_the_sentence_and_the_action() 
     let state = chat.state();
     assert_eq!(state.phase(), Phase::NeedsModel);
     let step = state.model_step.clone().expect("a step");
-    assert_eq!(step.size_line, "563.0 MB download");
+    assert_eq!(step.size_line, "563 MB download");
     assert_eq!(
         step.note_line,
         "This is the only time Centraid fetches anything."
@@ -320,7 +320,7 @@ fn a_photo_with_no_reader_on_the_phone_is_the_offer_with_the_size_and_a_send_wai
     assert_eq!(state.pending.len(), 1);
     assert_eq!(state.pending[0].label, "Lake");
     let step = state.vision_step.clone().expect("the reader's offer");
-    assert_eq!(step.size_line, "Reading photos needs a 205.0 MB download");
+    assert_eq!(step.size_line, "Reading photos needs a 205 MB download");
     assert_eq!(step.action_label, "Download");
     assert!(state.vision_blocked);
     chat.say("what is this?");
