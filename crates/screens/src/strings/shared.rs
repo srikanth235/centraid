@@ -124,4 +124,12 @@ catalog! {
     plain owner_reason_share = ("Confirm it's you to share this.", "Confirm it's you to share this.");
     plain owner_title = ("Confirm it's you", "Confirm it's you");
     plain owner_unprotected = ("This phone has no passcode, so nothing confirmed it's you.", "This phone has no passcode, so nothing confirmed it's you.");
+    // TAKE OUT (#1185): the one export screen and the one Share entry, said the same in every app.
+    plain export_done = ("Export saved", "Export saved");
+    plain export_entry = ("Export", "Export");
+    plain export_failed = ("Could not export", "Could not export");
+    plain export_headline = ("Choose what to export", "Choose what to export");
+    plain share_entry = ("Share", "Share");
+    plain share_failed = ("Could not share", "Could not share");
+    plain share_title = ("Share a copy", "Share a copy");
 }

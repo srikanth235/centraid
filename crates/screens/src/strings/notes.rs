@@ -147,15 +147,11 @@ catalog! {
     plain title = ("Notes", "Notes");
     plain title_placeholder = ("Title", "Title");
     plain trash_label = ("Trash", "Trash");
-    plain more_export = ("Export", "Export");
     plain more_import = ("Import", "Import");
     plain transfer_choose_files_action = ("Choose files", "Choose files");
     plain transfer_choose_folder_action = ("Choose folder", "Choose folder");
     plain transfer_choose_again_action = ("Choose again", "Choose again");
     plain transfer_export_all = ("All notes", "All notes");
-    plain transfer_export_done = ("Exported {n} notes", "Exported {n} notes");
-    plain transfer_export_failed = ("Could not export", "Could not export");
-    plain transfer_export_headline = ("Choose what to export", "Choose what to export");
     plain transfer_export_lede = (
         "Markdown files in one archive. Links stay as [[links]].",
         "Markdown files in one archive. Links stay as [[links]]."

@@ -50,7 +50,7 @@ fn a_file_is_previewed_with_its_merges_then_imported_on_the_tap_and_again_adds_n
         },
     );
     let before = roster_of(&d).people.len();
-    let i = d.push("people", routes::transfer(false, "People"));
+    let i = d.push("people", routes::import("People"));
     assert_eq!(state(d.view(i)).title, "Import people");
     d.effects.clear();
     tap(&mut d, i, "files");
@@ -90,13 +90,37 @@ fn a_file_is_previewed_with_its_merges_then_imported_on_the_tap_and_again_adds_n
     assert_eq!(state(d.view(i)).headline, "Nobody new in that choice");
 }
 
+/// Answer the owner check as a member who passes it, however many effects it raises.
+fn pass_owner_check(d: &mut Driver) {
+    while matches!(
+        d.effects
+            .first()
+            .and_then(|e| e.effect.as_ref())
+            .and_then(|e| e.kind.as_ref()),
+        Some(wire::effect::Kind::OwnerCheck(_))
+    ) {
+        d.answer_effect(wire::effect_result::Outcome::OwnerChecked(
+            wire::OwnerChecked {
+                available: true,
+                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+                ..wire::OwnerChecked::default()
+            },
+        ));
+    }
+}
+
 #[test]
 fn an_export_saves_a_vcf_through_the_os_save_sheet() {
     let mut d = driver();
-    let i = d.push("people", routes::transfer(true, "People"));
+    let entry = centraid_screens::kit::export::entry(
+        centraid_screens::strings::Locale::En,
+        "people.export",
+    );
+    let i = d.push("people", entry.route);
     assert_eq!(state(d.view(i)).rows[0].label, "Everyone");
     d.effects.clear();
     tap(&mut d, i, "all");
+    pass_owner_check(&mut d);
     let Some(wire::effect::Kind::SaveFile(save)) = d
         .effects
         .last()
@@ -112,6 +136,6 @@ fn an_export_saves_a_vcf_through_the_os_save_sheet() {
         state(d.view(i))
             .status
             .as_ref()
-            .is_some_and(|s| s.sentence.starts_with("Exported "))
+            .is_some_and(|s| s.sentence == "Export saved")
     );
 }

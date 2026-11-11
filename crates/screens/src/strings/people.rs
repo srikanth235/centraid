@@ -103,14 +103,10 @@ catalog! {
     counted contacts_followed = ("{n} followed", "{n} followed");
     counted contacts_updated_hours = ("Updated {n} hour ago", "Updated {n} hours ago");
     counted contacts_updated_minutes = ("Updated {n} min ago", "Updated {n} min ago");
-    plain more_export = ("Export", "Export");
     plain more_import = ("Import", "Import");
     plain transfer_choose_again_action = ("Choose again", "Choose again");
     plain transfer_choose_file_action = ("Choose files", "Choose files");
     plain transfer_export_all = ("Everyone", "Everyone");
-    plain transfer_export_done = ("Exported {n} people", "Exported {n} people");
-    plain transfer_export_failed = ("Could not export", "Could not export");
-    plain transfer_export_headline = ("Choose who to export", "Choose who to export");
     plain transfer_export_lede = (
         "vCards in one .vcf file, for any address book.",
         "vCards in one .vcf file, for any address book."

@@ -41,6 +41,7 @@ use crate::kit::read::Reading;
 pub mod contacts;
 pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
 pub mod home;
 pub mod person;
@@ -69,7 +70,7 @@ pub fn registry() -> Registry {
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
         .with(IMPORT, transfer::build_import)
-        .with(EXPORT, transfer::build_export)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with People's screens and one tab, `people`, rooted at its home. The
@@ -194,12 +195,12 @@ pub mod routes {
         )
     }
 
-    /// The kit's transfer screen on People's vCards, either way; `back` names the page it was
-    /// pushed from.
+    /// The kit's transfer screen on People's vCards; `back` names the page it was pushed from.
+    /// The export's entry is the kit's (`kit::export::entry`).
     #[must_use]
-    pub fn transfer(export: bool, back: &str) -> wire::Route {
+    pub fn import(back: &str) -> wire::Route {
         route(
-            if export { super::EXPORT } else { super::IMPORT },
+            super::IMPORT,
             wire::route::Args::Transfer(wire::TransferRoute {
                 back_label: back.to_owned(),
             }),

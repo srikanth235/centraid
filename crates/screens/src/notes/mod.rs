@@ -23,6 +23,7 @@ use crate::kit::read::Reading;
 
 pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fold;
 pub mod home;
 pub(crate) mod rich;
@@ -48,7 +49,7 @@ pub fn registry() -> Registry {
         .with(EARLIER, earlier::build)
         .with(TRASH, trash::build)
         .with(IMPORT, transfer::build_import)
-        .with(EXPORT, transfer::build_export)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Notes' screens and one tab, `notes`, rooted at its home. The
@@ -109,7 +110,7 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, EXPORT, HOME, IMPORT, TRASH, wire};
+    use super::{EDITOR, HOME, IMPORT, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -220,12 +221,12 @@ pub mod routes {
         )
     }
 
-    /// The kit's transfer screen on Notes' Markdown, either way; `back` names the page it was
-    /// pushed from.
+    /// The kit's transfer screen on Notes' Markdown; `back` names the page it was pushed from.
+    /// The export's entry is the kit's (`kit::export::entry`).
     #[must_use]
-    pub fn transfer(export: bool, back: &str) -> wire::Route {
+    pub fn import(back: &str) -> wire::Route {
         route(
-            if export { EXPORT } else { IMPORT },
+            IMPORT,
             wire::route::Args::Transfer(wire::TransferRoute {
                 back_label: back.to_owned(),
             }),

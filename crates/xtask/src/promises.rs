@@ -287,8 +287,16 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/locker/transfer.rs",
     ),
     owed("money", Promise::Export, EXPORT_OWED),
-    owed("notes", Promise::Export, EXPORT_OWED),
-    owed("people", Promise::Export, EXPORT_OWED),
+    kept(
+        "notes",
+        Promise::Export,
+        "crates/screens/src/notes/export.rs",
+    ),
+    kept(
+        "people",
+        Promise::Export,
+        "crates/screens/src/people/export.rs",
+    ),
     owed("photos", Promise::Export, EXPORT_OWED),
     owed("reminders", Promise::Export, EXPORT_OWED),
     owed("calendar", Promise::Share, SHARE_OWED),

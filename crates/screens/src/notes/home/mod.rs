@@ -21,6 +21,7 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, routes};
 use crate::catalog::act;
 use crate::kit::act as kit_act;
+use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read;
 use crate::screen::{Ctx, Screen};
@@ -631,19 +632,20 @@ impl Screen for Home {
                 Vec::new()
             } else {
                 let back = words::title(locale);
+                let export = export::entry(locale, super::EXPORT);
                 vec![
                     wire::NotesMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),
                         icon_key: "Download".to_owned(),
-                        route: Some(routes::transfer(false, &back)),
+                        route: Some(routes::import(&back)),
                         meta: String::new(),
                     },
                     wire::NotesMoreRow {
-                        key: "export".to_owned(),
-                        label: words::more_export(locale),
-                        icon_key: "Upload".to_owned(),
-                        route: Some(routes::transfer(true, &back)),
+                        key: export.key.to_owned(),
+                        label: export.label,
+                        icon_key: export.icon_key.to_owned(),
+                        route: Some(export.route),
                         meta: String::new(),
                     },
                     wire::NotesMoreRow {
