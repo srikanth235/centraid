@@ -7,7 +7,7 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::{Denial, KitResult};
 
 const OWNER: Owner = Owner {
-    kind: "transaction",
+    kind: "txn",
     item: "money.attachments.item",
     edges: "money.attachments.edges",
     far: "money.attachments.far",

@@ -7,7 +7,7 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::{Denial, KitResult};
 
 const OWNER: Owner = Owner {
-    kind: "workout",
+    kind: "activity",
     item: "health.attachments.item",
     edges: "health.attachments.edges",
     far: "health.attachments.far",
