@@ -70,6 +70,8 @@ struct State {
     jobs: BTreeMap<u64, (u64, String)>,
     next_job: u64,
     env: Environment,
+    /// Where the member's units choice is read from before every update (`kit::quantity::stored`).
+    units: Option<crate::custody::secrets::VaultSecrets>,
     started: bool,
     /// The vault the open tabs were made for. A shelf whose foreground is
     /// another is a switch the tabs have not followed yet (see
@@ -127,6 +129,7 @@ impl Runtime {
                 jobs: BTreeMap::new(),
                 next_job: 1,
                 env: Environment::default(),
+                units: None,
                 started: false,
                 foreground: None,
                 switch: None,
@@ -146,6 +149,14 @@ impl Runtime {
     #[must_use]
     pub fn with_services(mut self, services: Vec<wire::Route>) -> Self {
         self.services = services;
+        self
+    }
+
+    /// Read the member's units choice (`kit::quantity::stored`) from `secrets`, the phone's
+    /// store, before every update, so any screen's `Ctx::units` sees the live choice.
+    #[must_use]
+    pub fn with_units(self, secrets: &crate::custody::secrets::VaultSecrets) -> Self {
+        self.lock().units = Some(secrets.clone());
         self
     }
 
@@ -318,7 +329,8 @@ impl Runtime {
         event: wire::ScreenEvent,
         out: &mut wire::ScreenUpdate,
     ) {
-        let env = state.env.clone();
+        let mut env = state.env.clone();
+        env.units = state.units.as_ref().and_then(crate::kit::quantity::stored);
         let follows = state.follows.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
@@ -744,6 +756,7 @@ impl ScreenHost for Runtime {
                     platform: environment.platform.clone(),
                     library_deletes: environment.library_deletes,
                     hour_cycle_12: environment.hour_cycle_12,
+                    units: None,
                 };
                 // The band's words follow the locale.
                 if state.band.is_some() {

@@ -16,27 +16,7 @@ const WEEK_BACK: i64 = 6;
 /// The mark a kind with none of its own takes.
 pub const WORKOUT_ICON: &str = "Gym";
 
-/// Kotlin's `roundToLong`: ties toward positive infinity.
-pub(crate) fn round(value: f64) -> i64 {
-    #[allow(clippy::cast_possible_truncation)]
-    {
-        (value + 0.5).floor() as i64
-    }
-}
-
-/// `8412` as `8,412`.
-#[must_use]
-pub fn grouped(value: i64) -> String {
-    let digits = value.unsigned_abs().to_string();
-    let mut out = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    if value < 0 { format!("−{out}") } else { out }
-}
+pub(crate) use crate::kit::quantity::{grouped, round};
 
 /// A metric's name.
 #[must_use]
@@ -163,17 +143,7 @@ pub fn pace(locale: Locale, seconds: i64, metres: f64, units: Units) -> Option<(
     })
 }
 
-/// One decimal, its zero kept: `71.4`, `5.0`, `1,204.3`.
-#[must_use]
-pub fn tenths(value: f64) -> String {
-    let scaled = round(value.abs() * 10.0);
-    let text = format!("{}.{}", grouped(scaled / 10), scaled % 10);
-    if value < 0.0 && scaled != 0 {
-        format!("−{text}")
-    } else {
-        text
-    }
-}
+pub(crate) use crate::kit::quantity::tenths;
 
 /// THE CORE'S DIFFERENCE OF TWO FIGURES, IN WORDS, and its sign (−1, 0, 1):
 /// `change` in the metric's unit, `pct` as a percentage (`health.proto`; the core

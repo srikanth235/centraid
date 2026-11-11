@@ -59,6 +59,9 @@ pub struct Environment {
     pub library_deletes: bool,
     /// The phone keeps 12-hour time (`Environment.hour_cycle_12`); false is 24-hour.
     pub hour_cycle_12: bool,
+    /// The units the member chose (`kit::quantity::stored`), or `None` to follow the region. The
+    /// runtime fills it from the phone's store before every call; [`Ctx::units`] is the reader.
+    pub units: Option<crate::kit::quantity::UnitsPref>,
 }
 
 impl Default for Environment {
@@ -70,6 +73,7 @@ impl Default for Environment {
             platform: String::new(),
             library_deletes: false,
             hour_cycle_12: false,
+            units: None,
         }
     }
 }
@@ -290,6 +294,13 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn region(&self) -> &str {
         &self.env.region
+    }
+
+    /// THE MEMBER'S UNITS, metric or imperial: what they chose in Settings, else what the region
+    /// measures in. Every measured amount is worded with this (`kit::quantity`).
+    #[must_use]
+    pub fn units(&self) -> crate::kit::quantity::UnitsPref {
+        crate::kit::quantity::effective(self.env.units, &self.env.region)
     }
 
     /// The OS the shell runs on (`ios`, `android`), or empty.

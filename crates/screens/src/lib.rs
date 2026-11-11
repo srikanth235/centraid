@@ -93,6 +93,7 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         ]
         .concat(),
     )
+    .with_units(&secrets)
     .with_band(shell::band::view)
     .with_services(
         [

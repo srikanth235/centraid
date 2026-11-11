@@ -123,30 +123,20 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
     }
 }
 
-/// The measurement system the phone's locale uses: only the regions that
-/// measure in miles and pounds read as imperial (display only: storage is the
-/// metric's own unit).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Units {
-    Metric,
-    Imperial,
-}
+/// The member's units (#1185): `kit::quantity`'s one switch.
+pub use crate::kit::quantity::UnitsPref as Units;
 
 impl Units {
-    /// The units of the device `ctx` describes.
+    /// The units of the device `ctx` describes: the member's choice, else the region's.
     #[must_use]
     pub fn of(ctx: &Ctx) -> Self {
-        Self::in_region(ctx.region())
+        ctx.units()
     }
 
     /// The units a phone in `region` uses.
     #[must_use]
     pub fn in_region(region: &str) -> Self {
-        if matches!(region, "US" | "LR" | "MM") {
-            Self::Imperial
-        } else {
-            Self::Metric
-        }
+        Self::of_region(region)
     }
 }
 
