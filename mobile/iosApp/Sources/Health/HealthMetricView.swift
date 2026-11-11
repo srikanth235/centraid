@@ -65,8 +65,8 @@ struct HealthMetricView: View {
                 .foregroundStyle(Surface.meta)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(metric.average)
-                    .font(.system(size: 36, weight: .bold))
                     .monospacedDigit()
+                    .kitScaledFont(36, weight: .bold)
                     .foregroundStyle(Surface.ink)
                 Text(metric.averageUnit)
                     .kitType(.row)

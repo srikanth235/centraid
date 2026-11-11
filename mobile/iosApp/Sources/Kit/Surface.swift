@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// THE REDESIGN'S SURFACES AND STATE COLOURS (#1173), read from the generated colour sets.
 ///
@@ -16,14 +17,31 @@ enum Surface {
     static let sheet = Color(CentraidAsset.surfaceSheet)
     static let sheetCard = Color(CentraidAsset.surfaceSheetCard)
     static let fill = Color(CentraidAsset.surfaceFill)
-    static let line = Color(CentraidAsset.surfaceLine)
-    static let border = Color(CentraidAsset.surfaceBorder)
+    /// THE HAIRLINES, THE CARD EDGE AND THE SECONDARY TEXT STRENGTHEN UNDER INCREASED CONTRAST (#1185),
+    /// one step along the tokens that exist: a row's rule takes the card edge's colour, an edge
+    /// the meta ink, meta text the body ink. The colour follows the setting by itself, so no view
+    /// reads the environment for it and every screen built from the kit inherits it.
+    static let line = contrasting(CentraidAsset.surfaceLine, increased: CentraidAsset.textMeta)
+    static let border = contrasting(CentraidAsset.surfaceBorder, increased: CentraidAsset.textMeta)
     /// Ink under a white letter or glyph; it keeps its ink in dark.
     static let tile = Color(CentraidAsset.surfaceTile)
 
     static let ink = Color(CentraidAsset.textInk)
     static let body = Color(CentraidAsset.textBody)
-    static let meta = Color(CentraidAsset.textMeta)
+    static let meta = contrasting(CentraidAsset.textMeta, increased: CentraidAsset.textBody)
+
+    /// A colour set, and the one a member who turned on Increase Contrast sees in its place.
+    /// Both resolve against the trait collection they are drawn in, so the appearance in force
+    /// (the member's own override too) still chooses the light or dark half of each set.
+    private static func contrasting(_ normal: String, increased: String) -> Color {
+        Color(UIColor { traits in
+            let name = traits.accessibilityContrast == .high ? increased : normal
+            guard let color = UIColor(named: name, in: nil, compatibleWith: traits) else {
+                preconditionFailure("no colour set named '\(name)' in the asset catalog.")
+            }
+            return color
+        })
+    }
 }
 
 /// A STATE, and only a state: red, amber and green appear in words and badges to say overdue,
@@ -199,5 +217,84 @@ struct KitTile: View {
             .frame(width: size, height: size)
             .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Reduce Motion (#1185)
+
+/// THE ONE WAY THE SHELL MOVES THINGS. A member who turned on Reduce Motion gets the change and
+/// none of the movement: an animation is dropped (the change lands at once) and a transition is
+/// a plain fade. Every animation in the kit and the screens goes through these, so the setting is
+/// honoured by the shell and not screen by screen; the Android twin is `motion(...)` in
+/// `ReducedMotion.kt`.
+extension View {
+    /// `.animation(_:value:)`, dropped under Reduce Motion.
+    func kitAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
+        modifier(KitAnimation(animation: animation, value: value))
+    }
+
+    /// `.transition(_:)`, a plain fade under Reduce Motion.
+    func kitTransition(_ transition: AnyTransition) -> some View {
+        modifier(KitTransition(transition: transition))
+    }
+}
+
+/// `withAnimation`, dropped under Reduce Motion, for a change made outside a view body (an
+/// event handler or a scroll).
+@MainActor
+func kitWithAnimation<Result>(_ animation: Animation? = .default, _ body: () throws -> Result) rethrows -> Result {
+    try withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : animation, body)
+}
+
+private struct KitAnimation<Value: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let animation: Animation?
+    let value: Value
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
+private struct KitTransition: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let transition: AnyTransition
+
+    func body(content: Content) -> some View {
+        content.transition(reduceMotion ? .opacity : transition)
+    }
+}
+
+// MARK: - Text size (#1185)
+
+extension View {
+    /// A system-face size that follows the member's text size, for the text that is not a type
+    /// role (a figure, a chat chip). `.font(.system(size:))` holds its size at every setting; this
+    /// scales from the point size given, along the curve of the system style nearest to it, and
+    /// the app root's cap (`Theme.textSizeCap`) still bounds it.
+    func kitScaledFont(_ size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(KitScaledFont(size: size, weight: weight))
+    }
+}
+
+private struct KitScaledFont: ViewModifier {
+    @ScaledMetric private var scaled: CGFloat
+    let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight) {
+        let style: Font.TextStyle =
+            switch size {
+            case ..<14: .footnote
+            case ..<18.5: .body
+            case ..<25: .title2
+            case ..<32: .title
+            default: .largeTitle
+            }
+        _scaled = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: scaled, weight: weight))
     }
 }

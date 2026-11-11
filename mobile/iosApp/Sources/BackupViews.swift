@@ -73,7 +73,7 @@ struct BackupHomeView: View {
             .defaultScrollAnchor(.top)
             .onAppear { proxy.scrollTo(Self.top, anchor: .top) }
             .onChange(of: shell.backupScrollTop) { _, _ in
-                withAnimation { proxy.scrollTo(Self.top, anchor: .top) }
+                kitWithAnimation { proxy.scrollTo(Self.top, anchor: .top) }
             }
         }
         .background(Surface.page.ignoresSafeArea())
@@ -293,7 +293,7 @@ struct BackupHomeView: View {
     @ViewBuilder
     private func travel(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         // "Back up over": the picked rule's short word, opening the three sentences it can be.
-        Button { withAnimation { ruleOpen.toggle() } } label: {
+        Button { kitWithAnimation { ruleOpen.toggle() } } label: {
             HStack(spacing: 8) {
                 Text(model.overLabel).kitType(.row).foregroundStyle(Surface.ink)
                 Spacer(minLength: 8)

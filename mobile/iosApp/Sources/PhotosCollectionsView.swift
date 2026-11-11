@@ -76,7 +76,7 @@ struct PhotosCollectionsBody: View {
                 // THE ROUND PLATE THE ROOMS USE, its right edge on the page margin: the 36 plate
                 // sits inside a 44 target, so the target hangs 4 past the margin.
                 KitIconKey(iconKey: "ChevronDown", label: section.toggleLabel, framed: true, round: true) {
-                    withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
+                    kitWithAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
                         send(PhotosHomeEvents.make { $0.sectionToggled = section.key })
                     }
                 }

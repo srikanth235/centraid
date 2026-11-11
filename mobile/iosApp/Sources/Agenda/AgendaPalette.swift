@@ -39,13 +39,13 @@ struct AgendaSmartListGrid: View {
                             Spacer(minLength: 0)
                             if !list.count.isEmpty {
                                 Text(list.count)
-                                    .font(.system(size: 28, weight: .bold))
+                                    .kitScaledFont(28, weight: .bold)
                                     .foregroundStyle(.white)
                             }
                         }
                         Spacer(minLength: 0)
                         Text(list.label)
-                            .font(.system(size: 17, weight: .semibold))
+                            .kitScaledFont(17, weight: .semibold)
                             .foregroundStyle(.white)
                     }
                     .padding(14)

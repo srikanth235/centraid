@@ -115,8 +115,8 @@ struct HealthWorkoutView: View {
                     .foregroundStyle(Surface.meta)
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(item.figure.value)
-                        .font(.system(size: 28, weight: .bold))
                         .monospacedDigit()
+                        .kitScaledFont(28, weight: .bold)
                         .foregroundStyle(Surface.ink)
                     Text(item.figure.unit)
                         .kitType(.meta)

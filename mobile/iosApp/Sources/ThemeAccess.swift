@@ -31,8 +31,27 @@ enum Theme {
                     + "`cargo xtask design`."
             )
         }
-        return value
+        // INCREASED CONTRAST (#1185): the hairline and faint-text roles take the next stronger
+        // role that exists, so every kit control inherits the setting. `Surface` does the same
+        // for the redesign's colours.
+        guard let stronger = strongerRole[role], let strong = tokens(scheme).colors[stronger] else {
+            return value
+        }
+        let normal = UIColor(value)
+        let increased = UIColor(strong)
+        return Color(UIColor { $0.accessibilityContrast == .high ? increased : normal })
     }
+
+    /// The role drawn in place of a role while the member has Increase Contrast on. Rules and
+    /// outlines take the faint ink, faint and ghost text the soft ink, soft text the full ink.
+    /// `textDisabled` is absent on purpose: a disabled control is meant to read as quiet.
+    private static let strongerRole: [String: String] = [
+        "line": "textFaint",
+        "lineStrong": "textFaint",
+        "textGhost": "textSoft",
+        "textFaint": "textSoft",
+        "textSoft": "text",
+    ]
 
     /// A type role, WITH ITS OWN LINE HEIGHT.
     ///

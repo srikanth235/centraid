@@ -225,8 +225,8 @@ struct HealthHomeView: View {
                             .foregroundStyle(accent.text)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(row.value)
-                                .font(.system(size: 22, weight: .bold))
                                 .monospacedDigit()
+                                .kitScaledFont(22, weight: .bold)
                                 .foregroundStyle(Surface.ink)
                             Text(row.unit)
                                 .kitType(.meta)

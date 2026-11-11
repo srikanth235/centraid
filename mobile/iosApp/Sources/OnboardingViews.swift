@@ -90,8 +90,8 @@ struct ShellBanner: View {
             }
         }
         // ENTRY AND SETTLE AT 280MS, a change of words at 140 (design/tokens.toml (motion)).
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: line == nil)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: line?.summary ?? "")
+        .kitAnimation(.easeOut(duration: 0.28), value: line == nil)
+        .kitAnimation(.easeOut(duration: 0.14), value: line?.summary ?? "")
     }
 }
 

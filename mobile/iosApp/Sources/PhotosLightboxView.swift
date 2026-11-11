@@ -134,7 +134,7 @@ struct PhotosLightboxView: View {
                                 .padding(.bottom, 16)
                         }
                         .scrollDismissesKeyboard(.interactively)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .kitTransition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     // THE BAR NEVER COVERS THE DETAILS: it is the page's last row, so the photograph and
                     // the cards are laid out above it and the Place card's links are never under it.

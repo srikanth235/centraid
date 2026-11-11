@@ -122,7 +122,7 @@ struct ChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .animation(reduceMotion ? nil : ChatMotion.entry, value: state.drawerOpen)
+        .kitAnimation(ChatMotion.entry, value: state.drawerOpen)
         // THE BAND STEPS ASIDE while the on-screen keyboard is up and while the Chats page is up.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardUp = true
@@ -316,8 +316,8 @@ struct ChatView: View {
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
-        .animation(reduceMotion ? nil : ChatMotion.state, value: state.streaming)
-        .animation(reduceMotion ? nil : ChatMotion.state, value: state.activity)
+        .kitAnimation(ChatMotion.state, value: state.streaming)
+        .kitAnimation(ChatMotion.state, value: state.activity)
     }
 
     private func send(_ text: String) {
@@ -356,7 +356,7 @@ private struct ChatSuggestionChip: View {
     var body: some View {
         Button(action: action) {
             Text(verbatim: text)
-                .font(.system(size: CentraidScale.metaSize))
+                .kitScaledFont(CentraidScale.metaSize)
                 .foregroundStyle(Theme.color("text", scheme))
                 .lineLimit(1)
                 .padding(.horizontal, 12)
@@ -544,7 +544,7 @@ private struct ChatsPage: View {
                     if state.canDeleteAll {
                         Button(action: onDeleteAll) {
                             Text(verbatim: state.deleteAllLabel)
-                                .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                                .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
                                 .foregroundStyle(StateColor.red.text)
                                 .padding(.horizontal, CentraidGeometry.pageMargin)
                                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
@@ -596,7 +596,7 @@ private struct ChatThreadRow: View {
                 .frame(width: 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: row.title)
-                    .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                    .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                     .foregroundStyle(Surface.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -843,7 +843,7 @@ private struct ChatCardRow: View {
                 if card.app == "people" {
                     // A PERSON WEARS INITIALS, as the board's card does, in the app's colour.
                     Text(verbatim: Self.initials(card.title))
-                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
                         .foregroundStyle(AppAccent(card.app).text)
                         .frame(width: 32, height: 32)
                         .background(Circle().fill(AppAccent(card.app).fill.opacity(0.16)))
@@ -856,19 +856,19 @@ private struct ChatCardRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: card.title)
-                        .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                        .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                         .foregroundStyle(Color(CentraidAsset.textInk))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !card.subtitle.isEmpty {
                         Text(verbatim: card.subtitle)
-                            .font(.system(size: CentraidScale.metaSize))
+                            .kitScaledFont(CentraidScale.metaSize)
                             .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
                     if !card.meta.isEmpty {
                         Text(verbatim: card.meta)
-                            .font(.system(size: CentraidScale.metaSize))
+                            .kitScaledFont(CentraidScale.metaSize)
                             .foregroundStyle(Color(CentraidAsset.textMeta))
                             .lineLimit(1)
                     }
@@ -876,7 +876,7 @@ private struct ChatCardRow: View {
                 Spacer(minLength: 8)
                 if !appName.isEmpty {
                     Text(verbatim: appName)
-                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
                         .foregroundStyle(AppAccent(card.app).text)
                         .lineLimit(1)
                 }
@@ -939,7 +939,7 @@ private struct ChatPendingCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(verbatim: pending.title)
-                        .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                        .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
                         .textCase(.uppercase)
                         .tracking(0.4)
                         .foregroundStyle(Color(CentraidAsset.textMeta))
@@ -952,12 +952,12 @@ private struct ChatPendingCard: View {
                             // the core did not name by title keeps its composed sentence.
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(verbatim: step.title.isEmpty ? step.summary : step.title)
-                                    .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                    .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                                     .foregroundStyle(step.destructive ? Color(CentraidAsset.stateRedText) : Color(CentraidAsset.textInk))
                                     .multilineTextAlignment(.leading)
                                 if !step.subtitle.isEmpty {
                                     Text(verbatim: step.subtitle)
-                                        .font(.system(size: CentraidScale.metaSize))
+                                        .kitScaledFont(CentraidScale.metaSize)
                                         .foregroundStyle(Color(CentraidAsset.textMeta))
                                         .multilineTextAlignment(.leading)
                                 }
@@ -966,7 +966,7 @@ private struct ChatPendingCard: View {
                     }
                     if !pending.moreLine.isEmpty {
                         Text(verbatim: pending.moreLine)
-                            .font(.system(size: CentraidScale.metaSize))
+                            .kitScaledFont(CentraidScale.metaSize)
                             .foregroundStyle(Color(CentraidAsset.textMeta))
                     }
                 }
@@ -980,7 +980,7 @@ private struct ChatPendingCard: View {
                     HStack(spacing: 8) {
                         Button(action: onConfirm) {
                             Text(verbatim: pending.confirmLabel)
-                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                                 .foregroundStyle(Color.white)
                                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                                 .background(
@@ -991,7 +991,7 @@ private struct ChatPendingCard: View {
                         .accessibilityIdentifier("chat-pending-confirm")
                         Button(action: onCancel) {
                             Text(verbatim: pending.cancelLabel)
-                                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                                .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                                 .foregroundStyle(Color(CentraidAsset.textInk))
                                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                                 .overlay(Capsule().strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: 1))
@@ -1002,7 +1002,7 @@ private struct ChatPendingCard: View {
                     .disabled(pending.state == .working)
                 } else if !pending.settledLine.isEmpty {
                     Text(verbatim: pending.settledLine)
-                        .font(.system(size: CentraidScale.metaSize))
+                        .kitScaledFont(CentraidScale.metaSize)
                         .foregroundStyle(Color(CentraidAsset.textMeta))
                         .accessibilityIdentifier("chat-pending-settled")
                 }
@@ -1114,8 +1114,8 @@ private struct ChatComposerCard: View {
             solid: "bgElev",
             interactive: false
         ))
-        .animation(reduceMotion ? nil : ChatMotion.state, value: state.pending.count)
-        .animation(reduceMotion ? nil : ChatMotion.state, value: state.hasVisionStep)
+        .kitAnimation(ChatMotion.state, value: state.pending.count)
+        .kitAnimation(ChatMotion.state, value: state.hasVisionStep)
         .sheet(isPresented: Binding(
             get: { state.documentSheet.open },
             set: { if !$0 { chat.closeDocuments() } }
@@ -1185,12 +1185,12 @@ private struct ChatScopePill: View {
                     AppMark(appID: app, size: 20)
                 }
                 Text(name(app))
-                    .font(.system(size: CentraidScale.metaSize, weight: .semibold))
+                    .kitScaledFont(CentraidScale.metaSize, weight: .semibold)
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(1)
             }
             .padding(.horizontal, 10)
-            .frame(height: 32)
+            .frame(minHeight: 32)
             .background(Capsule().fill(Theme.color("bgElev", scheme)))
             .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -1290,7 +1290,7 @@ private struct ChatVisionBanner: View {
             }
             if step.actionLabel.isEmpty, step.statusLine.hasPrefix("Download") {
                 ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
-                    .animation(reduceMotion ? nil : ChatMotion.state, value: step.progress)
+                    .kitAnimation(ChatMotion.state, value: step.progress)
             }
         }
         .padding(.horizontal, 12)
@@ -1378,7 +1378,7 @@ private struct ChatModelStepView: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityIdentifier("chat-model-status")
                 ProgressTrack(fraction: step.progressKnown ? Double(step.progress) : nil)
-                    .animation(reduceMotion ? nil : ChatMotion.state, value: step.progress)
+                    .kitAnimation(ChatMotion.state, value: step.progress)
             case .loading, .unavailable:
                 Text(step.statusLine)
                     .chatType("body")
@@ -1416,7 +1416,7 @@ private struct ChatDownloadButton: View {
     var body: some View {
         Button(action: action) {
             Text(verbatim: label)
-                .font(.system(size: CentraidScale.rowSize, weight: .semibold))
+                .kitScaledFont(CentraidScale.rowSize, weight: .semibold)
                 .foregroundStyle(Color.white)
                 .padding(.horizontal, 20)
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)

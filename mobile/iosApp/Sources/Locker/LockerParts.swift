@@ -289,7 +289,7 @@ struct LockerCountdownRing: View {
                 .trim(from: 0, to: fraction)
                 .stroke(Theme.color(countdown.secondsLeft <= 5 ? "net" : "textSoft", scheme), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: fraction)
+                .kitAnimation(.linear(duration: 1), value: fraction)
         }
         .frame(width: 14, height: 14)
         .accessibilityHidden(true)
