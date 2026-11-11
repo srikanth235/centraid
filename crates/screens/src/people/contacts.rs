@@ -472,6 +472,34 @@ impl ContactsFollow {
         self.import(ctx)
     }
 
+    /// Whether "Stop reading" is offered: this device follows and a pass has said which accounts.
+    #[must_use]
+    pub fn can_stop(&self, ctx: &Ctx) -> bool {
+        (self.followed || self.paused) && !ctx.follows().report(Store::Contacts).origins.is_empty()
+    }
+
+    /// STOP READING: every account the passes followed is retired (`stop-following`, the same door
+    /// chat and Undo use) and this device no longer follows, so the row offers "Turn on" again.
+    /// **Every person stays**, an ordinary one from now on. `None` when the vault refused part of
+    /// it (the rest is done, and stopping again finishes it); the effects forget the habit.
+    pub fn stop(&mut self, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
+        let mut clean = true;
+        for origin in ctx.follows().report(Store::Contacts).origins {
+            let request = act::people::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            return None;
+        }
+        ctx.follows().stopped(Store::Contacts);
+        self.followed = false;
+        self.paused = false;
+        Some(vec![keychain(wire::keychain_op::Op::Delete, Vec::new())])
+    }
+
     /// Whether the row's action is Settings: the phone said no.
     #[must_use]
     pub fn needs_settings(&self, ctx: &Ctx) -> bool {
@@ -640,6 +668,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
     };
     let mut told = false;
     let mut doubted = 0;
+    let mut followed = Vec::new();
     for origin in &batch.origins {
         let records: Vec<&Record> = batch
             .records
@@ -654,6 +683,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
             continue;
         }
         told = true;
+        followed.push(origin.id.clone());
         let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
         outcome.added += count(&output, "added") + count(&output, "matched");
         outcome.refused += count(&output, "refused");
@@ -663,6 +693,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
     }
     ctx.follows()
         .judged(Store::Contacts, doubted, !batch.complete);
+    ctx.follows().followed_origins(Store::Contacts, &followed);
     (outcome, told)
 }
 

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>People stop reading (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="padding: 56px 20px 0;"><h1 style="margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1></div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5);"></div>
+  <div role="alertdialog" aria-label="Stop reading Phone contacts?" style="position: absolute; left: 8px; right: 8px; bottom: 8px; background: #0E0D0C; border-radius: 34px; padding: 10px 20px 24px; box-sizing: border-box;">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #4A4741; margin: 0 auto 14px;"></div>
+    <div style="font-size: 20px; font-weight: 700;">Stop reading Phone contacts?</div>
+    <div style="margin-top: 8px; font-size: 15px; color: #A39E95; line-height: 1.4;">People stops reading Phone contacts on this phone. The people already here stay.</div>
+    <div style="display: flex; gap: 8px; margin-top: 16px;"><button style="flex: 1; min-height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: #1F1E1C; font-size: 16px; font-weight: 600;">Cancel</button><button style="flex: 1; min-height: 44px; border-radius: 22px; border: none; background: #CD483D; color: #FFFFFF; font-size: 16px; font-weight: 600;">Stop reading</button></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

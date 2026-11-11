@@ -581,10 +581,7 @@ impl Home {
         if connected {
             rows.push(wire::HealthMoreRow {
                 key: MORE_STOP.to_owned(),
-                label: fill(
-                    &words::more_stop(locale),
-                    &[("store", &Store::of(ctx).name(locale))],
-                ),
+                label: crate::kit::follow::stop_row(locale, &Store::of(ctx).name(locale)),
                 icon_key: "Stop".to_owned(),
                 tone: wire::status_chip::Tone::Net as i32,
                 route: None,
@@ -952,11 +949,13 @@ impl Screen for Home {
                     },
                     more_rows: self.more_rows(ctx, connected),
                     reads_facts: self.reads_facts(ctx, loaded),
-                    stop: (self.sheet == Sheet::Stop).then(|| wire::Confirm {
-                        title: fill(&words::stop_title(locale), &[("store", &store)]),
-                        body: fill(&words::stop_body(locale), &[("store", &store)]),
-                        confirm_label: words::stop_confirm(locale),
-                        destructive: true,
+                    stop: (self.sheet == Sheet::Stop).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &words::app_title(locale),
+                            &store,
+                            &words::stop_kept(locale),
+                        )
                     }),
                     status: self.status.clone().or_else(|| {
                         ctx.follows()

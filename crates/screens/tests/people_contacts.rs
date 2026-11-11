@@ -248,3 +248,88 @@ fn a_phone_that_refused_the_address_book_says_so_and_the_action_opens_settings()
         Some(F::VaultCommand(_))
     ));
 }
+
+fn stop_row(d: &Driver, i: u64) -> Option<wire::PeopleMoreRow> {
+    home_state(d.view(i))
+        .more_rows
+        .iter()
+        .find(|row| row.key == "stop")
+        .cloned()
+}
+
+#[test]
+fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the_people_stay() {
+    use wire::people_contacts_row::State;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    assert!(stop_row(&d, i).is_none(), "nothing is followed yet");
+
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.answer_effect(snapshot(vec![contact(
+        "Ada Lovelace",
+        "lookup:ada",
+        "555 0100",
+        "",
+    )]));
+    d.effects.clear();
+    // The same words as Health's: "Stop reading {store}", on a row with no route of its own.
+    let stop = stop_row(&d, i).expect("following: the row is there");
+    assert_eq!(
+        (stop.label.as_str(), stop.icon_key.as_str()),
+        ("Stop reading Phone contacts", "Stop")
+    );
+    assert!(stop.route.is_none());
+    assert!(home_state(d.view(i)).stop.is_none());
+
+    // Tapping it asks first, in the shared sheet's words; dismissing keeps following.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    let confirm = home_state(d.view(i)).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Phone contacts?");
+    assert_eq!(
+        confirm.body,
+        "People stops reading Phone contacts on this phone. The people already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    send_home(&mut d, i, H::StopDismissed(ev::StopDismissed {}));
+    assert!(home_state(d.view(i)).stop.is_none());
+    assert_eq!(row_state(&d, i), State::Following as i32);
+    assert!(d.effects.is_empty());
+
+    // Confirming retires the store: this device no longer follows, and the people stay.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert_eq!(kinds(&d), ["keychain:3"], "the habit is forgotten");
+    assert!(home_state(d.view(i)).stop.is_none());
+    assert_eq!(status(&d, i), "People stopped reading your phone contacts.");
+    assert_eq!(row_state(&d, i), State::Off as i32);
+    assert_eq!(row(&d, i).action_label, "Turn on");
+    assert!(stop_row(&d, i).is_none());
+    let names: Vec<String> = roster_of(&d)
+        .people
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    assert_eq!(names, ["Ada Lovelace"]);
+    // A confirm that was never asked stops nothing.
+    d.effects.clear();
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert!(d.effects.is_empty());
+}
+
+fn row_state(d: &Driver, i: u64) -> i32 {
+    row(d, i).state
+}

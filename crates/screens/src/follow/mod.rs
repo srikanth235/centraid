@@ -143,6 +143,9 @@ pub struct Report {
     /// The last read did not cover the whole store (limited access, a file that would not
     /// read): what it did read was merged, and nothing was removed for what it missed.
     pub incomplete: bool,
+    /// The origins the passes over this store followed (contacts: one per account), which the
+    /// member's "Stop reading" retires. Empty until a pass has run.
+    pub origins: Vec<String>,
 }
 
 impl Report {
@@ -244,6 +247,27 @@ impl Follows {
         let report = inner.reports.entry(store).or_default();
         report.doubted = doubted;
         report.incomplete = incomplete;
+    }
+
+    /// A pass over `store` followed `origins`: the ones a stop must retire.
+    pub fn followed_origins(&self, store: Store, origins: &[String]) {
+        let mut inner = self.lock();
+        let held = &mut inner.reports.entry(store).or_default().origins;
+        for origin in origins {
+            if !held.contains(origin) {
+                held.push(origin.clone());
+            }
+        }
+    }
+
+    /// The member stopped reading `store`: no origin is followed any more.
+    pub fn stopped(&self, store: Store) {
+        self.lock()
+            .reports
+            .entry(store)
+            .or_default()
+            .origins
+            .clear();
     }
 
     /// The types the OS refused in the last read of `store`.

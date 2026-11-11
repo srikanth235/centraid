@@ -115,7 +115,6 @@ catalog! {
     plain metric_weight = ("Weight", "Weight");
     plain more_choose = ("Choose what to read", "Choose what to read");
     plain more_reads = ("What Health may read", "What Health may read");
-    plain more_stop = ("Stop reading {store}", "Stop reading {store}");
     plain more_title = ("More", "More");
     plain part_afternoon = ("Afternoon {kind}", "Afternoon {kind}");
     plain part_evening = ("Evening {kind}", "Evening {kind}");
@@ -147,13 +146,8 @@ catalog! {
     plain span_minutes = ("{m} min", "{m} min");
     plain spark_days = ("Last 7 days", "Last 7 days");
     plain spark_nights = ("Last 7 nights", "Last 7 nights");
-    plain stop_body = (
-        "Health stops reading {store} on this phone. The days and workouts already here stay.",
-        "Health stops reading {store} on this phone. The days and workouts already here stay."
-    );
     plain stop_cancel = ("Cancel", "Cancel");
-    plain stop_confirm = ("Stop reading", "Stop reading");
-    plain stop_title = ("Stop reading {store}?", "Stop reading {store}?");
+    plain stop_kept = ("days and workouts", "days and workouts");
     plain store_any = ("this phone’s health app", "this phone’s health app");
     plain store_apple_health = ("Apple Health", "Apple Health");
     plain store_health_connect = ("Health Connect", "Health Connect");

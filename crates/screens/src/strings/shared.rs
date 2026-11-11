@@ -77,6 +77,10 @@ catalog! {
     plain trash_deleted = ("Deleted", "Deleted");
     counted trash_count = ("Trash · 1", "Trash · {n}");
     plain trash_empty_action = ("Empty trash", "Empty trash");
+    plain follow_stop_body = ("{app} stops reading {store} on this phone. The {kept} already here stay.", "{app} stops reading {store} on this phone. The {kept} already here stay.");
+    plain follow_stop_confirm = ("Stop reading", "Stop reading");
+    plain follow_stop_row = ("Stop reading {store}", "Stop reading {store}");
+    plain follow_stop_title = ("Stop reading {store}?", "Stop reading {store}?");
     plain trash_empty_body = ("Everything in trash leaves this vault for good. This cannot be undone.", "Everything in trash leaves this vault for good. This cannot be undone.");
     plain trash_empty_headline = ("Trash is empty.", "Trash is empty.");
     plain trash_empty_state_body = ("Deleted items wait here for 30 days, then they are erased.", "Deleted items wait here for 30 days, then they are erased.");
@@ -90,6 +94,7 @@ catalog! {
     plain trash_noun_document = ("document", "document");
     plain trash_noun_event = ("event", "event");
     plain trash_noun_item = ("item", "item");
+    plain trash_noun_list = ("list", "list");
     plain trash_noun_note = ("note", "note");
     plain trash_noun_person = ("person", "person");
     plain trash_noun_photo = ("photo", "photo");

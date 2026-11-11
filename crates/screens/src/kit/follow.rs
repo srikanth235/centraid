@@ -29,7 +29,7 @@ use crate::catalog::{act, load};
 use crate::kit::act::{self as kit_act, Settled};
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
-use crate::strings::{Locale, fill, follow as words};
+use crate::strings::{Locale, fill, follow as words, shared};
 
 /// One field the member's value differs on.
 #[derive(Clone, Debug, PartialEq)]
@@ -305,4 +305,27 @@ pub fn take(ctx: &Ctx, entity_id: &str, taken: &wire::PhoneSaysTaken) -> Option<
         kit_act::fresh(),
     );
     Some(kit_act::act(ctx, request, &key))
+}
+
+/// THE MORE ROW THAT STOPS READING A FOLLOWED STORE ("Stop reading Apple Health"), the same words
+/// for every store the phone keeps that an app follows (#1185). It opens [`stop_confirm`].
+#[must_use]
+pub fn stop_row(locale: Locale, store: &str) -> String {
+    fill(&shared::follow_stop_row(locale), &[("store", store)])
+}
+
+/// THE STOP SHEET: "Stop reading {store}?", what stays ("The days and workouts already here
+/// stay"), and a destructive "Stop reading". `app` is the app's name and `kept` what it already
+/// holds from the store, which stopping leaves as ordinary rows.
+#[must_use]
+pub fn stop_confirm(locale: Locale, app: &str, store: &str, kept: &str) -> wire::Confirm {
+    wire::Confirm {
+        title: fill(&shared::follow_stop_title(locale), &[("store", store)]),
+        body: fill(
+            &shared::follow_stop_body(locale),
+            &[("app", app), ("store", store), ("kept", kept)],
+        ),
+        confirm_label: shared::follow_stop_confirm(locale),
+        destructive: true,
+    }
 }
