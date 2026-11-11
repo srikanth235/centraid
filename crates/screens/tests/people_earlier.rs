@@ -256,6 +256,7 @@ fn a_change_a_follow_pass_made_reads_as_coming_from_the_phone() {
         records: json!([{ "external_id": "c1", "fields": { "title": title } }]).to_string(),
         complete: Some(true),
         since: None,
+        ..Default::default()
     };
     arrange(&d, statement("Ada Lovelase"));
     let id = roster_of(&d)

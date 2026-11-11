@@ -401,6 +401,7 @@ pub fn follow_reminders(
             records: records.to_string(),
             complete: Some(complete),
             since: None,
+            gone: None,
         },
     )
 }

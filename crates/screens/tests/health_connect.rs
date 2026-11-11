@@ -208,7 +208,7 @@ fn a_tap_asks_the_shell_to_read_the_store_with_exactly_the_chosen_types_then_fol
             assert_eq!(op.op, wire::keychain_op::Op::Set as i32);
             assert_eq!(
                 op.value,
-                b"1|steps,active_energy_kcal,exercise_min,resting_hr_bpm,weight_kg,workouts"
+                b"1|steps,active_energy_kcal,exercise_min,resting_hr_bpm,weight_kg,workouts|phone-a"
             );
         }
         other => panic!("{other:?}"),

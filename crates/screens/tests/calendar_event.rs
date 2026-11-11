@@ -788,6 +788,7 @@ fn followed_guests_are_a_read_only_list_with_the_reply_in_words() {
         .to_string(),
         complete: Some(true),
         since: None,
+        ..Default::default()
     });
     let found = world.window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z");
     let id = found.first().expect("the followed event").event_id.clone();

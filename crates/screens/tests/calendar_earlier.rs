@@ -226,6 +226,7 @@ fn a_change_the_phones_calendar_made_reads_as_coming_from_the_phone() {
             .to_string(),
             complete: Some(true),
             since: None,
+            ..Default::default()
         });
     };
     follow("Design sync");
@@ -314,6 +315,7 @@ fn a_followed_event_says_its_calendar_and_a_typed_one_does_not() {
         .to_string(),
         complete: Some(true),
         since: None,
+        ..Default::default()
     });
     let followed = w
         .window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z")

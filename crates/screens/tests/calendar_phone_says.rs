@@ -38,6 +38,7 @@ fn follow(w: &mut World, fields: Value) -> String {
             .to_string(),
         complete: Some(true),
         since: None,
+        ..Default::default()
     });
     w.window("2099-06-19T00:00:00Z", "2099-06-20T00:00:00Z")
         .first()

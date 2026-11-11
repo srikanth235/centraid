@@ -47,6 +47,7 @@ fn restored(with_follower: bool) -> Driver {
             records: "[]".to_owned(),
             complete: Some(false),
             since: None,
+            ..Default::default()
         },
         "contacts",
     );

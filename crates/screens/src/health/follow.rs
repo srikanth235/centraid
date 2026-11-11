@@ -702,7 +702,12 @@ impl Device {
     }
 
     fn encode(connected: bool, chosen: &[String], install: &str) -> Vec<u8> {
-        format!("{}|{}|{install}", u8::from(connected), chosen.join(",")).into_bytes()
+        let habit = format!("{}|{}", u8::from(connected), chosen.join(","));
+        if install.is_empty() {
+            habit.into_bytes()
+        } else {
+            format!("{habit}|{install}").into_bytes()
+        }
     }
 }
 

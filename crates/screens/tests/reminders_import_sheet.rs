@@ -415,6 +415,7 @@ fn a_cold_start_reads_the_stored_follow_and_stop_works_from_it() {
             .to_string(),
             complete: Some(false),
             since: None,
+            ..Default::default()
         })
         .keyed("arrange:cold-start".to_owned()),
     );

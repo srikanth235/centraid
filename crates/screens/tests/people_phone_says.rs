@@ -38,6 +38,7 @@ fn followed_ada(d: &Driver) -> String {
             .to_string(),
             complete: Some(true),
             since: None,
+            ..Default::default()
         },
     );
     roster_of(d)

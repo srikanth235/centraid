@@ -351,6 +351,7 @@ fn a_cold_start_reads_the_stored_follow_so_the_stop_row_is_there_and_stop_works_
             records: "[]".to_owned(),
             complete: Some(false),
             since: None,
+            ..Default::default()
         })
         .keyed("arrange:cold-start".to_owned()),
     );

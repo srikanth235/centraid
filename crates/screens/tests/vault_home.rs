@@ -461,6 +461,7 @@ fn a_restore_offers_the_reconnect_page_only_when_the_vault_followed_stores() {
             records: "[]".to_owned(),
             complete: Some(false),
             since: None,
+            ..Default::default()
         }
         .request()
         .keyed("arrange:contacts"),
