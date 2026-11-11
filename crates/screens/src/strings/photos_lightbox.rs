@@ -27,8 +27,8 @@ catalog! {
     plain link_removed = ("Link removed", "Link removed");
     plain links_empty = ("Nothing linked yet", "Nothing linked yet");
     plain links_unread = (
-        "Couldn’t read what this photograph is linked to.",
-        "Couldn’t read what this photograph is linked to."
+        "Couldn’t read what this photo is linked to.",
+        "Couldn’t read what this photo is linked to."
     );
     plain person_added = ("Person added", "Person added");
     plain person_removed = ("Person removed", "Person removed");
