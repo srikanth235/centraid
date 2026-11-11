@@ -218,6 +218,10 @@ public fun NotesEditorScreen(
         val options = buildList {
             add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
             add(SheetOption(key = MENU_LINK, label = chrome.link_label))
+            // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
+            state.links_entry?.let { entry ->
+                add(SheetOption(key = MENU_LINKS, label = entry.label, detail = entry.count_label))
+            }
             state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
                 add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
             }
@@ -236,6 +240,7 @@ public fun NotesEditorScreen(
                 when (key) {
                     MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
                     MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                    MENU_LINKS -> onEvent(NotesEditorEvent(links_opened = NotesEditorEvent.LinksOpened()))
                     MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
                     MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
@@ -245,6 +250,26 @@ public fun NotesEditorScreen(
         )
     }
     state.link?.let { sheet -> LinkSheet(sheet, send) }
+    // THE "Linked to" SHEET (#1185): the kit's section and picker; Rust makes every word and row.
+    state.links?.let { section ->
+        val closed = { onEvent(NotesEditorEvent(links_closed = NotesEditorEvent.LinksClosed())) }
+        SheetRoom(title = section.title, onDismiss = closed) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                dev.centraid.android.kit.LinkSectionView(
+                    section,
+                    { link -> onEvent(NotesEditorEvent(link = link)) },
+                    // The sheet gives way to the page it opens.
+                    { route ->
+                        closed()
+                        onOpen(route)
+                    },
+                )
+            }
+        }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(NotesEditorEvent(link = link)) }
+    }
 }
 
 /**
@@ -352,6 +377,7 @@ private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit
 
 private const val MENU_PIN = "pin"
 private const val MENU_LINK = "link"
+private const val MENU_LINKS = "linked-to"
 private const val MENU_EARLIER = "earlier-entry"
 private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"

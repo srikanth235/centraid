@@ -84,6 +84,13 @@ catalog! {
     plain link_kind_photograph = ("Photo", "Photo");
     plain link_kind_task = ("Task", "Task");
     plain keyboard_hide = ("Hide keyboard", "Hide keyboard");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this note is linked to.",
+        "Couldn’t read what this note is linked to."
+    );
     plain link_label = ("Add link", "Add link");
     plain link_create = ("Create note", "Create note");
     plain link_restore = ("Restore", "Restore");

@@ -91,6 +91,13 @@ struct NotesEditorView: View {
                 Menu {
                     Button(chrome.pinLabel) { send(event { $0.pin = .init() }) }
                     Button(chrome.linkLabel) { send(event { $0.linkRequested = .init() }) }
+                    if state.hasLinksEntry {
+                        // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
+                        Button([state.linksEntry.label, state.linksEntry.countLabel].filter { !$0.isEmpty }.joined(separator: "  ")) {
+                            send(event { $0.linksOpened = .init() })
+                        }
+                        .accessibilityIdentifier("note-editor-linked-to")
+                    }
                     if state.hasEarlier, EarlierEntryRow.isDrawn(state.earlier) {
                         Button("\(state.earlier.label)  \(state.earlier.countLabel)") { open(state.earlier.route) }
                             .accessibilityIdentifier(EarlierEntryRow.identifier)
@@ -196,6 +203,24 @@ struct NotesEditorView: View {
             }
         )) {
             NotesLinkSheet(sheet: state.link, send: dispatch)
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasLinks },
+            set: { shown in
+                guard !shown, state.hasLinks else { return }
+                send(event { $0.linksClosed = .init() })
+            }
+        )) {
+            NotesLinkedSheet(
+                section: state.links,
+                picker: state.hasLinkPicker ? state.linkPicker : nil,
+                send: { link in send(event { $0.link = link }) },
+                open: { route in
+                    // The sheet gives way to the page it opens.
+                    send(event { $0.linksClosed = .init() })
+                    open(route)
+                }
+            )
         }
         .appAccent("notes")
     }
@@ -496,5 +521,24 @@ private struct NotesLinkSheet: View {
                 }
             }
         }
+    }
+}
+
+/// THE "Linked to" SHEET (#1185): every item the note is linked to (the `[[title]]` wikilinks among
+/// them), the add row, and the kit's picker over it. Rust makes every word and row; a tap is a
+/// `LinkEvent`.
+private struct NotesLinkedSheet: View {
+    let section: Centraid_Core_V1_LinkSection
+    let picker: Centraid_Core_V1_LinkPicker?
+    let send: (Centraid_Core_V1_LinkEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
+
+    var body: some View {
+        SheetRoom(title: section.title, titleIdentifier: "notes-linked-to") {
+            ScrollView {
+                LinkSectionView(section: section, send: send, open: open, padded: false)
+            }
+        }
+        .linkPickerSheet(picker ?? Centraid_Core_V1_LinkPicker(), send: send)
     }
 }

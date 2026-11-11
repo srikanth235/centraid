@@ -534,7 +534,7 @@ pub const REGISTER: &[Row] = &[
     owed("health", Promise::Link, LINK_OWED),
     owed("locker", Promise::Link, LINK_OWED),
     owed("money", Promise::Link, LINK_OWED),
-    owed("notes", Promise::Link, LINK_OWED),
+    kept("notes", Promise::Link, "crates/screens/src/notes/editor.rs"),
     owed("people", Promise::Link, LINK_OWED),
     owed("photos", Promise::Link, LINK_OWED),
     owed("reminders", Promise::Link, LINK_OWED),

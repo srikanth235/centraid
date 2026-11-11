@@ -478,6 +478,22 @@ message NotesEditorState {
   optional EarlierEntry earlier = 16;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 17;
+  // The menu's "Linked to   3 ›" row (#1185): absent before the note exists, and while what it is
+  // linked to was not read (the status line says so).
+  optional NotesLinksEntry links_entry = 18;
+  // THE "Linked to" SHEET, while the member has it open: every item the note is linked to, from
+  // either end (the `[[title]]` wikilinks among them), with the add row. The kit's shared section.
+  optional LinkSection links = 19;
+  // The picker over that sheet, while it is up.
+  optional LinkPicker link_picker = 20;
+}
+
+// The menu row that opens the "Linked to" sheet.
+message NotesLinksEntry {
+  // "Linked to".
+  string label = 1;
+  // How many items, "3"; empty when none.
+  string count_label = 2;
 }
 
 message NotesEditorTag {
@@ -677,7 +693,17 @@ message NotesEditorEvent {
     StatusActed status_acted = 16;
     // The menu's Share row (#1185): Rust asks the owner check, then hands the note to the OS.
     ShareRequested share_requested = 17;
+    // The menu's "Linked to" row: opens the sheet.
+    LinksOpened links_opened = 18;
+    // The sheet was dismissed.
+    LinksClosed links_closed = 19;
+    // A tap in the sheet or its picker (#1185).
+    LinkEvent link = 20;
   }
+
+  message LinksOpened {}
+
+  message LinksClosed {}
 
   message ShareRequested {}
 

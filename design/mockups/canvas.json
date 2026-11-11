@@ -1345,6 +1345,22 @@
       "x": 2350,
       "y": 15080
     },
+    "NoteLinks.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note, linked to",
+      "w": 390,
+      "x": 4160,
+      "y": 29520
+    },
+    "NoteLinksDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A note, linked to · dark",
+      "w": 390,
+      "x": 4160,
+      "y": 29520
+    },
     "NoteMenu.dc.html": {
       "h": 844,
       "page": "light",
@@ -3028,6 +3044,7 @@
     "VersionsWorkout.dc.html",
     "VersionsLocker.dc.html",
     "NoteMenu.dc.html",
+    "NoteLinks.dc.html",
     "NotesJournal.dc.html",
     "NotesJournalDark.dc.html",
     "MoneyCashflow.dc.html",

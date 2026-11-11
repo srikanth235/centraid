@@ -63,11 +63,12 @@ use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::export::ExportFile;
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, notes as words};
+use crate::strings::{Locale, fill, links as link_words, notes as words};
 use std::collections::{BTreeSet, HashMap};
 
 const BRACKETS: &str = "[[";
@@ -237,6 +238,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         link: None,
         earlier: earlier::Foot::default(),
         share: Share::default(),
+        // A note may link to another note; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL),
+        linked: None,
+        linked_unread: false,
+        links_open: false,
         started: false,
     }))
 }
@@ -308,6 +314,16 @@ struct Editor {
     earlier: earlier::Foot,
     /// The note handed to the OS share sheet as a Markdown file (#1185).
     share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the note can link to, any item but a Locker
+    /// one.
+    links: Links,
+    /// What the note is linked to, either end, the `[[title]]` wikilinks included
+    /// (`links::read_linked`). `None` until read, and while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
+    /// The menu's "Linked to" sheet is up.
+    links_open: bool,
     /// `Appeared` has been seen.
     started: bool,
 }
@@ -346,6 +362,7 @@ impl Editor {
                 self.meta = Self::meta_of(ctx, &note);
                 self.about = fold::about_chips(ctx.locale(), &note.about);
                 self.earlier = earlier::foot(ctx, super::EARLIER, &id, "");
+                self.read_linked(ctx, &id);
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -371,6 +388,66 @@ impl Editor {
                 self.blocked = Some(read::failure(locale));
             }
         }
+    }
+
+    /// What the note is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section.
+    fn read_linked(&mut self, ctx: &Ctx, id: &str) {
+        self.links = self.links.clone().for_entity(id);
+        match links::read_linked(ctx, id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links_open = false;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" sheet or its picker. A link is written through the kit's door
+    /// (Undo when the core can take it back), with no anchor: it is the member's, not the body's.
+    fn link_event(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let Some(id) = self.note_id.clone() else {
+            return;
+        };
+        let linked = self.linked_ids();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::notes::Link {
+                        from: id.clone(),
+                        to,
+                        anchor: None,
+                    }
+                    .into(),
+                    words::link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::notes::Unlink {
+                        from: id.clone(),
+                        to,
+                    }
+                    .into(),
+                    words::link_removed,
+                ),
+            };
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        self.forget_sentence();
+        self.status = None;
+        self.said = false;
+        let settled = self.door.act(ctx, request, &key, said);
+        self.wrote(&settled);
+        self.reload(ctx);
     }
 
     /// THE LINE OVER THE TITLE: the notebook the note is filed in, then when it
@@ -743,6 +820,9 @@ impl Editor {
 
     /// A FAILED READ REPLACES THE EDITOR: there is nothing to edit.
     fn refuse(&mut self, sentence: String) {
+        self.linked = None;
+        self.links_open = false;
+        self.links.close();
         self.auto = Autosave::new();
         self.blocked = Some(wire::Failure {
             sentence,
@@ -991,6 +1071,12 @@ impl Editor {
             }
             Some(N::LinkPicked(picked)) => self.pick_link(ctx, &picked.id),
             Some(N::LinkDismissed(_)) => self.link = None,
+            Some(N::LinksOpened(_)) => self.links_open = self.linked.is_some(),
+            Some(N::LinksClosed(_)) => {
+                self.links_open = false;
+                self.links.close();
+            }
+            Some(N::Link(link)) => self.link_event(ctx, &link),
             Some(N::Refreshed(_)) => {
                 self.own.clear();
                 self.reload_all(ctx);
@@ -1382,6 +1468,7 @@ impl Screen for Editor {
                         .or_else(|| self.share.status().map(|line| line.sentence))
                         .or_else(|| self.door.status().map(|line| line.sentence))
                         .or_else(|| self.earlier.status(locale).map(|unread| unread.sentence))
+                        .or_else(|| self.linked_unread.then(|| words::links_unread(locale)))
                         .unwrap_or(save_status)
                 },
                 // Undo, or a dead link's Create or Restore, is offered while its sentence is the
@@ -1475,6 +1562,29 @@ impl Screen for Editor {
                 ..entry.clone()
             });
         }
+        // THE MENU'S "Linked to" ROW and, once opened, its sheet and picker (#1185).
+        if let (true, Some(linked)) = (exists && self.blocked.is_none(), self.linked.as_ref()) {
+            state.links_entry = Some(wire::NotesLinksEntry {
+                label: link_words::section_linked(locale),
+                count_label: if linked.is_empty() {
+                    String::new()
+                } else {
+                    linked.len().to_string()
+                },
+            });
+            if self.links_open {
+                state.links = Some(Box::new(self.links.section(
+                    locale,
+                    link_words::section_linked(locale),
+                    links::rows(locale, linked),
+                    words::links_empty(locale),
+                )));
+                if self.links.is_open() {
+                    state.link_picker =
+                        Some(Box::new(self.links.picker(locale, &links::ids(linked))));
+                }
+            }
+        }
         // SEND TO REMINDERS: Reminders' quick add, the words waiting in it (the Inbox
         // is where they land). Nothing is written until the member adds them.
         if !reminders_words.trim().is_empty() {
@@ -1496,11 +1606,15 @@ mod tests {
         core: &'a centraid_core::Handle,
         fail_reads: std::cell::Cell<bool>,
         fail_writes: std::cell::Cell<bool>,
+        /// Only the shell's `links` read fails.
+        fail_links: std::cell::Cell<bool>,
         /// `link-targets` and `trash` reads made through this ctx.
         links: std::cell::Cell<usize>,
         trashes: std::cell::Cell<usize>,
         /// The tables the acts made through this ctx wrote, in order.
         written: std::cell::RefCell<Vec<String>>,
+        /// The `app.action` of each act made through this ctx, in order.
+        acted: std::cell::RefCell<Vec<String>>,
     }
 
     impl<'a> Flaky<'a> {
@@ -1509,9 +1623,11 @@ mod tests {
                 core,
                 fail_reads: false.into(),
                 fail_writes: false.into(),
+                fail_links: false.into(),
                 links: 0.into(),
                 trashes: 0.into(),
                 written: Vec::new().into(),
+                acted: Vec::new().into(),
             }
         }
     }
@@ -1523,7 +1639,9 @@ mod tests {
                 "trash" => self.trashes.set(self.trashes.get() + 1),
                 _ => {}
             }
-            if self.fail_reads.get() {
+            if self.fail_reads.get()
+                || (self.fail_links.get() && request.app == "shell" && request.query == "links")
+            {
                 Err(centraid_core::CoreError::Unavailable {
                     reason: "test read failure".into(),
                 })
@@ -1533,6 +1651,9 @@ mod tests {
         }
 
         fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+            self.acted
+                .borrow_mut()
+                .push(format!("{}.{}", request.app, request.action));
             if self.fail_writes.get() {
                 Err(centraid_core::CoreError::Unavailable {
                     reason: "test write failure".into(),
@@ -2126,6 +2247,177 @@ mod tests {
             }
             _ => None,
         })
+    }
+
+    fn link_event(screen: &mut Box<dyn Screen>, ctx: &Ctx, kind: wire::link_event::Kind) {
+        ev(screen, ctx, N::Link(wire::LinkEvent { kind: Some(kind) }));
+    }
+
+    fn linked_rows(screen: &dyn Screen, ctx: &Ctx) -> Vec<(String, String)> {
+        state(screen, ctx)
+            .links
+            .expect("the Linked to sheet")
+            .rows
+            .into_iter()
+            .map(|row| (row.title, row.meta))
+            .collect()
+    }
+
+    #[test]
+    fn the_menu_offers_linked_to_and_the_sheet_lists_wikilinks_among_the_rest() {
+        use wire::link_event::Kind as L;
+        let driver = Driver::with_runtime(super::super::runtime());
+        let other = make(&driver, "Packing list", "socks");
+        let third = make(&driver, "Itinerary", "day one");
+        let id = make(&driver, "Host", "see [[Packing list]]");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        // The wikilink is a link already: the menu's row counts it, the sheet stays shut.
+        let view = state(&*screen, &ctx);
+        let entry = view.links_entry.expect("the menu row");
+        assert_eq!(entry.label, "Linked to");
+        assert_eq!(entry.count_label, "1");
+        assert!(view.links.is_none() && view.link_picker.is_none());
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        assert_eq!(
+            linked_rows(&*screen, &ctx),
+            [("Packing list".to_owned(), "Note".to_owned())]
+        );
+        let section = state(&*screen, &ctx).links.expect("section");
+        assert_eq!(section.title, "Linked to");
+        assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
+        // Add link, then the kind, then the item: it lands through `notes.link`.
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("the kind chooser");
+        assert!(picker.open);
+        assert!(picker.candidates.iter().any(|row| row.id == "note"));
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: "note".into() }),
+        );
+        let picker = state(&*screen, &ctx).link_picker.expect("notes");
+        assert!(picker.candidates.iter().any(|row| row.id == third));
+        assert!(
+            picker.candidates.iter().all(|row| row.id != id),
+            "a note is never offered itself"
+        );
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Pick(wire::link_event::Picked { id: third.clone() }),
+        );
+        assert_eq!(core.acted.borrow().as_slice(), ["notes.link"]);
+        let view = state(&*screen, &ctx);
+        assert!(view.link_picker.is_none_or(|picker| !picker.open));
+        assert_eq!(view.links_entry.expect("row").count_label, "2");
+        let chrome = view.chrome.expect("chrome");
+        assert_eq!(chrome.status, "Linked");
+        assert_eq!(chrome.status_action, "Undo");
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 2);
+        // A hand link carries no anchor: the other note's page lists it as well.
+        let there = Flaky::new(&driver.handle);
+        let (other_screen, other_ctx) = opened(&there, &third);
+        let view = state(&*other_screen, &other_ctx);
+        assert_eq!(view.links_entry.expect("row").count_label, "1");
+        let _ = other;
+    }
+
+    #[test]
+    fn a_tap_on_remove_unlinks_and_undo_links_again() {
+        use wire::link_event::Kind as L;
+        let driver = Driver::with_runtime(super::super::runtime());
+        let other = make(&driver, "Packing list", "socks");
+        let id = make(&driver, "Host", "words");
+        let core = Flaky::new(&driver.handle);
+        let (mut screen, ctx) = opened(&core, &id);
+        assert!(
+            state(&*screen, &ctx)
+                .links_entry
+                .is_some_and(|entry| entry.count_label.is_empty())
+        );
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        let section = state(&*screen, &ctx).links.expect("section");
+        assert!(section.rows.is_empty());
+        assert_eq!(section.empty, "Nothing linked yet");
+        for kind in [
+            L::Add(wire::link_event::AddTapped { key: "link".into() }),
+            L::Pick(wire::link_event::Picked { id: "note".into() }),
+            L::Pick(wire::link_event::Picked { id: other.clone() }),
+        ] {
+            link_event(&mut screen, &ctx, kind);
+        }
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 1);
+        link_event(
+            &mut screen,
+            &ctx,
+            L::Remove(wire::link_event::RemoveTapped { id: other.clone() }),
+        );
+        assert_eq!(
+            core.acted.borrow().as_slice(),
+            ["notes.link", "notes.unlink"]
+        );
+        assert!(linked_rows(&*screen, &ctx).is_empty());
+        let chrome = state(&*screen, &ctx).chrome.expect("chrome");
+        assert_eq!(chrome.status, "Link removed");
+        assert_eq!(chrome.status_action, "Undo");
+        // Undo puts the link back.
+        ev(
+            &mut screen,
+            &ctx,
+            N::StatusActed(wire::notes_editor_event::StatusActed {}),
+        );
+        assert_eq!(linked_rows(&*screen, &ctx).len(), 1);
+        // Closing the sheet takes it and its picker away.
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksClosed(wire::notes_editor_event::LinksClosed {}),
+        );
+        assert!(state(&*screen, &ctx).links.is_none());
+    }
+
+    #[test]
+    fn links_that_could_not_be_read_are_said_not_drawn_as_none() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let id = make(&driver, "Host", "words");
+        let core = Flaky::new(&driver.handle);
+        core.fail_links.set(true);
+        let (mut screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        assert!(view.links_entry.is_none(), "no row for what was not read");
+        assert_eq!(
+            view.chrome.expect("chrome").status,
+            "Couldn’t read what this note is linked to."
+        );
+        // The row is gone, so the event opens nothing.
+        ev(
+            &mut screen,
+            &ctx,
+            N::LinksOpened(wire::notes_editor_event::LinksOpened {}),
+        );
+        assert!(state(&*screen, &ctx).links.is_none());
+        assert!(core.acted.borrow().is_empty());
+        // Read again, the row and the sheet come back.
+        core.fail_links.set(false);
+        ev(
+            &mut screen,
+            &ctx,
+            N::Refreshed(wire::notes_editor_event::Refreshed {}),
+        );
+        assert!(state(&*screen, &ctx).links_entry.is_some());
     }
 
     #[test]

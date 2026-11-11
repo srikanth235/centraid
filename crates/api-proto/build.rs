@@ -141,6 +141,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // does not carry the largest arm's size inline (`large_enum_variant`).
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.core.v1.NotesEditorState.links")
+        .boxed(".centraid.core.v1.NotesEditorState.link_picker")
         .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
         .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
         .boxed(".centraid.core.v1.PhotosEditorState.content.data")
