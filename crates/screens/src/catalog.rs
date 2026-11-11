@@ -3701,6 +3701,28 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Answer every account's transactions, one account's, or one transaction, as a spreadsheet file (.csv) through txn.export_csv. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportCsv {
+            pub account_id: Field<String>,
+            pub transaction_id: Field<String>,
+        }
+        impl ExportCsv {
+            pub const NAME: &str = "export-csv";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                put_field(&mut map, "account_id", self.account_id, |it| text(it));
+                put_field(&mut map, "transaction_id", self.transaction_id, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportCsv> for wire::ActRequest {
+            fn from(value: ExportCsv) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod notes {

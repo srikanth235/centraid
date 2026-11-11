@@ -86,6 +86,7 @@ fn the_header_search_and_recurring_rows_are_routes() {
             "money.rules",
             "money.categories",
             "money.import",
+            "money.export",
             "money.trash"
         ]
     );

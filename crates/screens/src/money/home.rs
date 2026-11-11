@@ -22,7 +22,7 @@ use wire::status_chip::Tone;
 use super::fold::{self, Phase, figure};
 use super::{routes, rows};
 use crate::catalog::load;
-use crate::kit::{menu, read};
+use crate::kit::{export, menu, read};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words, shared};
 
@@ -569,6 +569,7 @@ impl Home {
                 icon_key: icon.to_owned(),
                 route: Some(route),
             };
+        let export = export::entry(locale, super::EXPORT);
         wire::MoneyHomeChrome {
             title: title.clone(),
             add_label: words::import_action(locale),
@@ -598,6 +599,13 @@ impl Home {
                     words::more_import_meta(locale),
                     "Download",
                     routes::import(&title),
+                ),
+                // EXPORT (#1185): the kit's row, the same in every app.
+                more(
+                    export.label,
+                    words::more_export_meta(locale),
+                    export.icon_key,
+                    export.route,
                 ),
                 // THE TRASH (`MoreMoney.dc.html`), with the rule every trash states.
                 more(

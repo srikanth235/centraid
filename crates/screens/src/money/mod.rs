@@ -36,6 +36,7 @@ use crate::Registry;
 pub mod accounts;
 pub mod categories;
 pub mod earlier;
+pub mod export;
 pub mod fold;
 pub mod home;
 pub mod import;
@@ -58,6 +59,8 @@ pub const RULES: &str = "money.rules";
 pub const IMPORT: &str = "money.import";
 /// The transactions in the trash (#1185).
 pub const TRASH: &str = "money.trash";
+/// Money's export of transactions as a spreadsheet file (#1185).
+pub const EXPORT: &str = "money.export";
 /// The earlier versions of a transaction (#1185).
 pub const EARLIER: &str = "money.earlier";
 
@@ -79,6 +82,7 @@ pub fn registry() -> Registry {
         .with(IMPORT, import::build)
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Money's screens and one tab, `money`, rooted at its home.

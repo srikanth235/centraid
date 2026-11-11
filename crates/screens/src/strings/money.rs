@@ -125,6 +125,12 @@ catalog! {
     plain done_rule = ("Rule saved", "Rule saved");
     plain done_rule_deleted = ("Rule deleted", "Rule deleted");
     plain done_unlinked = ("Transfer link removed", "Transfer link removed");
+    plain export_all = ("All accounts", "All accounts");
+    plain export_lede = (
+        "Transactions in one .csv file, for any spreadsheet.",
+        "Transactions in one .csv file, for any spreadsheet."
+    );
+    plain export_title = ("Export transactions", "Export transactions");
     plain fact_account = ("Account", "Account");
     plain fact_bank_type = ("Type", "Type");
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");
@@ -187,6 +193,7 @@ catalog! {
     plain more_accounts_meta = ("Balances and statement checks", "Balances and statement checks");
     plain more_categories = ("Categories", "Categories");
     plain more_categories_meta = ("Groups and categories", "Groups and categories");
+    plain more_export_meta = ("Transactions as a spreadsheet", "Transactions as a spreadsheet");
     plain more_import = ("Import statement", "Import statement");
     plain more_import_meta = ("CSV, OFX or QFX", "CSV, OFX or QFX");
     plain more_rules = ("Rules", "Rules");

@@ -110,6 +110,11 @@
         "verbs": "act"
       },
       {
+        "schema": "txn",
+        "table": "export_csv",
+        "verbs": "act"
+      },
+      {
         "schema": "entity",
         "table": "trash",
         "verbs": "act"
@@ -1794,6 +1799,39 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-csv",
+      "verb": "log",
+      "bulk": true,
+      "kind": "transaction",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "txn.export_csv",
+      "phrasings": [
+        "export my transactions as a spreadsheet",
+        "save one account's transactions as a csv file",
+        "send someone this transaction as a csv file"
+      ],
+      "description": "Answer every account's transactions, one account's, or one transaction, as a spreadsheet file (.csv) through txn.export_csv. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "account_id": { "type": ["string", "null"] },
+          "transaction_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

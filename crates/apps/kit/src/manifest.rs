@@ -1642,7 +1642,7 @@ mod tests {
             ("docs", 23),
             ("health", 16),
             ("locker", 23),
-            ("money", 30),
+            ("money", 31),
             ("notes", 22),
             ("people", 36),
             ("photos", 26),
@@ -1683,7 +1683,7 @@ mod tests {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);
             }
         }
-        assert_eq!(total, 221);
+        assert_eq!(total, 222);
         // the orders are 0..N with no hole, so the generated enum is dense
         let expected: BTreeSet<u32> = (0..u32::try_from(orders.len()).unwrap()).collect();
         assert_eq!(orders, expected);

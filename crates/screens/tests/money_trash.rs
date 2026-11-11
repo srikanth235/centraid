@@ -452,6 +452,7 @@ fn more_holds_the_trash_after_import() {
             "Rules",
             "Categories",
             "Import statement",
+            "Export",
             "Trash"
         ]
     );

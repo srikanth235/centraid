@@ -92,7 +92,7 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 30] = [
+pub const ACTIONS: [ActionRow; 31] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -129,6 +129,9 @@ pub const ACTIONS: [ActionRow; 30] = [
     // verbs, one pair in every app (the Attach promise, #1185).
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    // THE TRANSACTIONS AS A FILE (#1185): the More sheet's Export and a transaction's Share. It
+    // writes nothing (`writes_nothing`).
+    act("export-csv", "txn.export_csv"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per

@@ -41,6 +41,7 @@ follow.calendar
 follow.contacts
 follow.files
 follow.health
+follow.reminders
 follow.statement
 follow.stop
 follow.take_stated
@@ -109,6 +110,7 @@ thread.clear
 thread.save_turn
 thread.settle_proposal
 txn.categorize
+txn.export_csv
 txn.link_transfer
 txn.unlink_transfer
 txn.void

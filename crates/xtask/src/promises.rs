@@ -334,7 +334,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Export,
         "crates/screens/src/locker/transfer.rs",
     ),
-    owed("money", Promise::Export, EXPORT_OWED),
+    kept(
+        "money",
+        Promise::Export,
+        "crates/screens/src/money/export.rs",
+    ),
     kept(
         "notes",
         Promise::Export,
@@ -367,7 +371,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Share,
         "crates/screens/src/locker/item.rs",
     ),
-    owed("money", Promise::Share, SHARE_OWED),
+    kept(
+        "money",
+        Promise::Share,
+        "crates/screens/src/money/transaction.rs",
+    ),
     kept(
         "notes",
         Promise::Share,

@@ -72,6 +72,7 @@ pub mod tag;
 pub mod task;
 pub mod task_portable;
 pub mod thread;
+pub mod txn_portable;
 pub mod vault;
 pub mod workout;
 
@@ -304,7 +305,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 26] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 27] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -329,6 +330,7 @@ impl Registry {
             task::definitions,
             task_portable::definitions,
             thread::definitions,
+            txn_portable::definitions,
             vault::definitions,
             workout::definitions,
         ];

@@ -23,6 +23,7 @@ use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
+use crate::kit::share::{self, Share};
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, links as link_words, money as words, shared};
@@ -32,6 +33,9 @@ const ACTION_NAME: &str = "name";
 const ACTION_UNLINK: &str = "unlink";
 /// Move the line to the trash (#1185).
 const ACTION_TRASH: &str = "trash";
+/// Hand the line to the OS share sheet as a spreadsheet file (#1185): the shells draw every action
+/// row and send its key, so the row needs no shell code of its own.
+const ACTION_SHARE: &str = "share";
 /// The "With" row (#1173): who the line was with, picked by name.
 const ACTION_WITH: &str = "with";
 const OFFER_TRANSFER: &str = "transfer";
@@ -57,6 +61,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
         earlier: earlier::Foot::default(),
+        share: Share::default(),
     }))
 }
 
@@ -91,6 +96,8 @@ struct Transaction {
     links: Links,
     /// The entry to the line's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
+    /// The line handed to the OS share sheet as a spreadsheet file (#1185).
+    share: Share,
 }
 
 impl Transaction {
@@ -561,6 +568,13 @@ impl Transaction {
             ));
         }
         actions.push(action(
+            ACTION_SHARE,
+            share::label(locale),
+            share::ICON,
+            true,
+            false,
+        ));
+        actions.push(action(
             ACTION_TRASH,
             shared::trash_move(locale),
             "Trash",
@@ -635,7 +649,18 @@ impl Screen for Transaction {
             Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
                 kind: Some(wire::money_transaction_event::Kind::Refreshed(_)),
             })) => self.reload(ctx),
+            Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
+                kind: Some(T::Action(picked)),
+            })) if picked.key == ACTION_SHARE => return self.share.tap(ctx.locale()),
             Some(E::MoneyTransaction(t)) => self.event(t, ctx),
+            // THE SHELL'S ANSWER to the owner check or the share sheet.
+            Some(E::EffectResult(result)) => {
+                let id = self.txn_id.clone();
+                return self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+            }
+            Some(E::Left(_)) => return self.share.left(),
             _ => {}
         }
         Vec::new()
@@ -671,7 +696,11 @@ impl Screen for Transaction {
                         words::transaction_title(locale),
                         &self.parent,
                     )),
-                    status: self.status.clone().or_else(|| self.earlier.status(locale)),
+                    status: self
+                        .status
+                        .clone()
+                        .or_else(|| self.share.status())
+                        .or_else(|| self.earlier.status(locale)),
                     earlier: self.earlier.entry.clone(),
                     origin: self.earlier.origin.clone(),
                 },

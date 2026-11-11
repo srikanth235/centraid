@@ -3231,6 +3231,24 @@
         "verb": "detach"
       },
       {
+        "action": "export-csv",
+        "also": [],
+        "app": "money",
+        "bulk": true,
+        "chat": "card",
+        "command": "txn.export_csv",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "export my transactions as a spreadsheet",
+          "save one account's transactions as a csv file",
+          "send someone this transaction as a csv file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "create-note",
         "also": [],
         "app": "notes",

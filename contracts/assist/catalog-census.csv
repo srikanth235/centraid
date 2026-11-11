@@ -111,6 +111,7 @@ money,add-with,link,transaction,card,yes: crates/screens/src/money/transaction.r
 money,remove-with,unlink,transaction,card,yes: crates/screens/src/money/transaction.rs,no
 money,attach,attach,transaction,card,no,no
 money,detach,detach,transaction,card,no,no
+money,export-csv,log,transaction,card,no,no
 notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
 notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
