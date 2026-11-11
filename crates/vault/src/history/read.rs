@@ -452,6 +452,10 @@ fn diff(shape: &Shape, before: &Json, after: &Json) -> Vec<Change> {
             columns(&mut changes, "entity", left, right, None);
             continue;
         }
+        // The two directions of a link are one fact, read below.
+        if LINK_DIRECTIONS.contains(&table.as_str()) {
+            continue;
+        }
         let Some(part) = shape.part(table) else {
             continue;
         };
@@ -461,7 +465,53 @@ fn diff(shape: &Shape, before: &Json, after: &Json) -> Vec<Change> {
             many(&mut changes, part, left, right);
         }
     }
+    links(&mut changes, before, after);
     changes
+}
+
+/// The aliases of a link set by hand, made from either end.
+const LINK_DIRECTIONS: [&str; 2] = ["link_out", "link_in"];
+
+/// The links of a state as the items it joins, by id: the row that holds each (the one made from
+/// this record's end when both ends hold one).
+fn linked(state: &Map<String, Json>) -> BTreeMap<String, Json> {
+    let mut found = BTreeMap::new();
+    for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
+        for row in state
+            .get(alias)
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(other) = row.get(end).and_then(Json::as_str) {
+                found.entry(other.to_owned()).or_insert_with(|| row.clone());
+            }
+        }
+    }
+    found
+}
+
+/// What the links changed, as `link[<other item>]`: a link has no direction a member can see, so a
+/// link made from the other end since is not a change, and neither is the stamp of one.
+fn links(changes: &mut Vec<Change>, before: &Map<String, Json>, after: &Map<String, Json>) {
+    let captured =
+        |state: &Map<String, Json>| LINK_DIRECTIONS.iter().any(|a| state.contains_key(*a));
+    if !captured(before) || !captured(after) {
+        return;
+    }
+    let (was, is) = (linked(before), linked(after));
+    let others: BTreeSet<&String> = was.keys().chain(is.keys()).collect();
+    for other in others {
+        let (left, right) = (was.get(other), is.get(other));
+        if left.is_some() && right.is_some() {
+            continue;
+        }
+        changes.push(Change {
+            field: format!("link[{other}]"),
+            before: left.cloned().unwrap_or(Json::Null),
+            after: right.cloned().unwrap_or(Json::Null),
+        });
+    }
 }
 
 fn columns(
@@ -478,7 +528,9 @@ fn columns(
         let Some(is) = right.get(column) else {
             continue;
         };
-        if only.is_some_and(|part| !part.columns.contains(column)) || same(was, is) {
+        // The stamp of an edge is when it was made, not something a member edits.
+        let stamp = only.is_some_and(|part| part.name == "edge") && column == "created_at";
+        if stamp || only.is_some_and(|part| !part.columns.contains(column)) || same(was, is) {
             continue;
         }
         changes.push(Change {
@@ -542,4 +594,25 @@ fn many(changes: &mut Vec<Change>, part: &Part, left: &Json, right: &Json) {
             }),
         }
     }
+}
+
+/// The titles of the records a version names by id (a list, an album, an item a record was linked
+/// to), in the order of `ids`. One the vault no longer holds is left out, and so is a Locker
+/// item: a title from behind Locker's wall is never carried by another record's history.
+///
+/// # Errors
+/// A database error.
+pub fn titles(connection: &Connection, ids: &[String]) -> Result<Vec<(String, String)>> {
+    let mut statement = connection
+        .prepare_cached("SELECT title FROM entity WHERE id = ?1 AND kind <> 'locker_item'")?;
+    let mut found = Vec::new();
+    for id in ids {
+        if let Some(title) = statement
+            .query_row([id], |row| row.get::<_, String>(0))
+            .optional()?
+        {
+            found.push((id.clone(), title));
+        }
+    }
+    Ok(found)
 }

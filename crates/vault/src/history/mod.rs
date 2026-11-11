@@ -88,7 +88,7 @@ mod write;
 
 pub use read::{
     Change, Earlier, MASK, Version, Who, count, current_state, earlier_versions, head, head_after,
-    offered, version_state,
+    offered, titles, version_state,
 };
 pub use restore::{Restored, Scope, restore_version};
 pub use shape::{

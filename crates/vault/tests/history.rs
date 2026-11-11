@@ -1406,3 +1406,215 @@ fn a_changed_secret_is_a_version_of_its_own_even_among_quiet_saves() {
         "each new password is a version, not a fold"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// What decorates a record: tags, flags, lists, hand-made links
+// ---------------------------------------------------------------------------------------------
+
+/// The rows a state holds under `alias`, as the set of their `key` column.
+fn keys(state: &Value, alias: &str, key: &str) -> Vec<String> {
+    let mut found: Vec<String> = state[alias]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row[key].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    found.sort();
+    found
+}
+
+#[test]
+fn a_tag_and_a_star_are_versions_and_a_restore_puts_them_back() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Buy bulbs" }));
+    w.ok("tag.add", json!({ "id": task, "label": "Errand" }));
+    w.ok("flag.set", json!({ "id": task, "flag": "starred" }));
+    let both = w.state(&task);
+    assert_eq!(keys(&both, "tag", "to_id"), ["tag:errand"]);
+    assert_eq!(keys(&both, "flag", "to_id"), ["flag:starred"]);
+    w.ok("tag.remove", json!({ "id": task, "label": "Errand" }));
+    w.ok("flag.clear", json!({ "id": task, "flag": "starred" }));
+
+    // Four commits since the task was made, each a version: the star and the tag, each added and
+    // each taken off, newest first.
+    let versions = w.versions(&task);
+    assert_eq!(versions.len(), 4, "{versions:?}");
+    let (before, after) = World::change(&versions[0], "flag[flag:starred]");
+    assert_eq!(before["rel"], "tagged");
+    assert_eq!(after, Value::Null);
+    let (before, after) = World::change(&versions[3], "tag[tag:errand]");
+    assert_eq!((before, after.is_object()), (Value::Null, true));
+
+    // Restoring the version made before the star came off brings the star back and, being a
+    // version of its own, leaves the tag as it is.
+    let out = w.ok(
+        "history.restore_version",
+        json!({ "id": task, "seq": versions[0].seq }),
+    );
+    assert_eq!(out["restored"], true);
+    let now = w.state(&task);
+    assert_eq!(keys(&now, "flag", "to_id"), ["flag:starred"]);
+    assert!(keys(&now, "tag", "to_id").is_empty());
+    // The version made before the tag came off brings both.
+    let out = w.ok(
+        "history.restore_version",
+        json!({ "id": task, "seq": versions[1].seq }),
+    );
+    assert_eq!(out["restored"], true);
+    assert_eq!(keys(&w.state(&task), "tag", "to_id"), ["tag:errand"]);
+    // Undo the restore.
+    w.ok("history.undo", json!({ "id": task }));
+    assert!(keys(&w.state(&task), "tag", "to_id").is_empty());
+}
+
+#[test]
+fn a_list_keeps_the_people_it_held_as_the_persons_own_history() {
+    let w = World::new();
+    let ada = w.id("person.add", json!({ "title": "Ada" }));
+    let list = w.id(
+        "container.create",
+        json!({ "kind": "list", "title": "Family" }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": list, "rel": "contains", "to": ada }),
+    );
+    w.ok(
+        "edge.remove",
+        json!({ "from": list, "rel": "contains", "to": ada }),
+    );
+    let versions = w.versions(&ada);
+    assert_eq!(versions.len(), 2, "{versions:?}");
+    let (before, _) = World::change(&versions[0], &format!("membership[{list}]"));
+    assert_eq!(before["rel"], "contains");
+    // The list's own history records nothing for holding or losing a person.
+    assert!(w.versions(&list).is_empty());
+    w.ok(
+        "history.restore_version",
+        json!({ "id": ada, "seq": versions[0].seq }),
+    );
+    assert_eq!(keys(&w.state(&ada), "membership", "from_id"), [list]);
+}
+
+#[test]
+fn a_link_set_by_hand_is_state_at_both_ends_and_one_edge_comes_back_once() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "x" }));
+    let doc = w.id("note.create", json!({ "title": "Other", "body": "y" }));
+    w.ok(
+        "edge.add",
+        json!({ "from": note, "rel": "links", "to": doc }),
+    );
+    assert_eq!(keys(&w.state(&note), "link_out", "to_id"), [doc.as_str()]);
+    assert_eq!(keys(&w.state(&doc), "link_in", "from_id"), [note.as_str()]);
+    w.ok(
+        "edge.remove",
+        json!({ "from": note, "rel": "links", "to": doc }),
+    );
+    // Both records have a version for it.
+    let at_note = w.versions(&note);
+    let at_doc = w.versions(&doc);
+    assert_eq!(at_note.len(), 2, "{at_note:?}");
+    assert_eq!(at_doc.len(), 2, "{at_doc:?}");
+    assert_eq!(
+        World::change(&at_note[0], &format!("link[{doc}]")).0["rel"],
+        "links"
+    );
+    // The link is made again from the other end; restoring the note's version must not add a
+    // second edge in the other direction.
+    w.ok(
+        "edge.add",
+        json!({ "from": doc, "rel": "links", "to": note }),
+    );
+    let held = w.count("SELECT COUNT(*) FROM edge WHERE rel = 'links'");
+    w.ok(
+        "history.restore_version",
+        json!({ "id": note, "seq": at_note[0].seq }),
+    );
+    assert_eq!(
+        w.count("SELECT COUNT(*) FROM edge WHERE rel = 'links'"),
+        held
+    );
+}
+
+#[test]
+fn a_link_that_was_written_in_a_notes_words_is_not_state_the_words_are() {
+    let w = World::new();
+    let target = w.id("note.create", json!({ "title": "Lisbon", "body": "x" }));
+    let note = w.id(
+        "note.create",
+        json!({ "title": "Plan", "body": "see [[Lisbon]]" }),
+    );
+    let _ = target;
+    assert!(
+        keys(&w.state(&note), "link_out", "to_id").is_empty(),
+        "a wikilink carries an anchor and is recompiled from the words"
+    );
+}
+
+#[test]
+fn a_link_from_a_locker_item_is_never_named_in_another_records_history() {
+    let w = World::new();
+    w.scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO locker_key (key_id, created_at) VALUES ('k1', '2026-01-01T00:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("key");
+    let note = w.id("note.create", json!({ "title": "Plan", "body": "x" }));
+    w.ok(
+        "locker.add_item",
+        json!({ "item_id": "lk1", "type": "login", "title": "Bank" }),
+    );
+    w.ok(
+        "edge.add",
+        json!({ "from": "lk1", "rel": "links", "to": note }),
+    );
+    assert!(keys(&w.state(&note), "link_in", "from_id").is_empty());
+    assert!(w.versions(&note).is_empty(), "no version for Locker's link");
+}
+
+#[test]
+fn a_row_whose_far_end_is_gone_stays_gone_and_the_rest_of_the_version_comes_back() {
+    let w = World::new();
+    let task = w.id("task.add", json!({ "title": "Call" }));
+    let ada = w.id("person.add", json!({ "title": "Ada" }));
+    w.ok(
+        "edge.add",
+        json!({ "from": task, "rel": "about", "to": ada }),
+    );
+    w.ok("tag.add", json!({ "id": task, "label": "Phone" }));
+    w.ok(
+        "edge.remove",
+        json!({ "from": task, "rel": "about", "to": ada }),
+    );
+    w.ok("tag.remove", json!({ "id": task, "label": "Phone" }));
+    let versions = w.versions(&task);
+    w.ok("entity.trash", json!({ "id": ada }));
+    w.ok("entity.purge", json!({ "id": ada }));
+    let out = w.ok(
+        "history.restore_version",
+        json!({ "id": task, "seq": versions[0].seq }),
+    );
+    // The version before the tag came off held the tag, and the about it had lost already.
+    assert_eq!(out["restored"], true, "{out}");
+    assert_eq!(keys(&w.state(&task), "tag", "to_id"), ["tag:phone"]);
+    // The version that held both the link and the tag.
+    let out = w.ok(
+        "history.restore_version",
+        json!({ "id": task, "seq": versions[1].seq }),
+    );
+    assert!(
+        out["kept_current"].as_array().is_some_and(|kept| kept
+            .iter()
+            .any(|name| name.as_str().is_some_and(|name| name.starts_with("about[")))),
+        "the person is gone, so the link is named and not made: {out}"
+    );
+}

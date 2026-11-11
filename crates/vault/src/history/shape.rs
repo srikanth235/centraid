@@ -14,6 +14,9 @@ use super::{SEEN, STATE_VIEW};
 use crate::error::Result;
 use crate::model::Kind;
 
+/// The `host` of a child that hangs from every kind's row (a tag, a flag, a link).
+pub const EVERY_KIND: &str = "*";
+
 /// What a table is to the history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -140,6 +143,91 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["to_id"],
         },
     ),
+    // WHAT DECORATES A RECORD IS PART OF ITS STATE (#1185): its tags and flags, the list or album
+    // it is in, and the links a member made by hand. They are `edge` rows of every kind (`host`
+    // `*`), each named by the alias it goes by in a state, so a change to one is an earlier
+    // version like a change to a field, and a restore puts it back.
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "from_id",
+            filter: Some("rel = 'tagged' AND to_id LIKE 'tag:%'"),
+            alias: "tag",
+            key: &["to_id"],
+        },
+    ),
+    // A star, a pin and an archive: the seeded flag entities.
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "from_id",
+            filter: Some("rel = 'tagged' AND to_id LIKE 'flag:%'"),
+            alias: "flag",
+            key: &["to_id"],
+        },
+    ),
+    // A list or an album holds the record: the membership is the RECORD's (the entity is the
+    // edge's `to_id`), never the container's, which holds thousands.
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "to_id",
+            filter: Some("rel = 'contains'"),
+            alias: "membership",
+            key: &["from_id"],
+        },
+    ),
+    // A link set by hand, from either end. A link compiled from a note's words carries an anchor
+    // and is not state: the words are, and a restore recompiles it.
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "from_id",
+            filter: Some("rel = 'links' AND anchor IS NULL"),
+            alias: "link_out",
+            key: &["to_id"],
+        },
+    ),
+    // A link a Locker item started is Locker's alone and never named in another record's history
+    // (owner ruling D11).
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "to_id",
+            filter: Some(
+                "rel = 'links' AND anchor IS NULL AND NOT EXISTS \
+                 (SELECT 1 FROM entity f WHERE f.id = from_id AND f.kind = 'locker_item')",
+            ),
+            alias: "link_in",
+            key: &["from_id"],
+        },
+    ),
+    // What a note, a task or an event is about, and who a photograph shows.
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "from_id",
+            filter: Some("rel = 'about' AND anchor IS NULL"),
+            alias: "about",
+            key: &["to_id"],
+        },
+    ),
+    (
+        "edge",
+        Role::Child {
+            host: "*",
+            via: "from_id",
+            filter: Some("rel = 'depicts'"),
+            alias: "depicts",
+            key: &["to_id"],
+        },
+    ),
     // A custom field's sealed value (a `sealed` or `otp` kind) is kept like any other column, as
     // the ciphertext it is: sealed under the same key and bound to the same field id, so a restore
     // puts back a value the live reveal opens.
@@ -219,22 +307,9 @@ pub const TABLES: &[(&str, Role)] = &[
 /// that is neither.
 pub const RELATIONS_OUTSIDE: &[(&str, &str)] = &[
     (
-        "contains",
-        "membership of a list, album or folder is the container's, with its own verbs; an album holds thousands",
+        "attached",
+        "an attachment is a record of its own, with its own verbs (attach, detach) and its own Undo",
     ),
-    (
-        "tagged",
-        "a tag, star or archive is a flag on the record, with its own verbs",
-    ),
-    (
-        "about",
-        "a link from a note to what it is about, with its own verbs",
-    ),
-    (
-        "links",
-        "compiled from a note's words, which are kept, or set by hand between two items with its own verbs (link, unlink)",
-    ),
-    ("attached", "a file attached, with its own verbs"),
     (
         "with",
         "a Locker item's link; never state, and hidden from every door but Locker's",
@@ -243,7 +318,6 @@ pub const RELATIONS_OUTSIDE: &[(&str, &str)] = &[
         "related",
         "a relationship between two people, with its own verbs",
     ),
-    ("depicts", "what a photograph shows, with its own verbs"),
 ];
 
 /// The columns of the tables above that are not kept, with the reason. Everything else is.
@@ -495,7 +569,7 @@ impl Shape {
     pub fn children_of<'a>(&'a self, host: &'a str) -> impl Iterator<Item = &'a Part> {
         self.parts
             .iter()
-            .filter(move |part| matches!(part.role, Role::Child { host: of, .. } if of == host))
+            .filter(move |part| matches!(part.role, Role::Child { host: of, .. } if of == host || of == EVERY_KIND))
     }
 
     /// The kind rows.

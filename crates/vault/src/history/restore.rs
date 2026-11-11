@@ -97,6 +97,11 @@ pub fn restore_version(
                 continue;
             }
             for child in shape.children_of(host.name) {
+                // A link has no direction a member can see: the two directions are restored as
+                // one set, below.
+                if LINKS.contains(&child.alias) {
+                    continue;
+                }
                 let (Some(wanted_rows), Some(held_rows)) =
                     (wanted.get(child.alias), now.get(child.alias))
                 else {
@@ -105,6 +110,9 @@ pub fn restore_version(
                 writer.child(child, wanted_rows, held_rows)?;
             }
         }
+    }
+    if scope == Scope::All {
+        writer.links(shape, &wanted, &now)?;
     }
     if writer.changed {
         ctx.touch(id)?;
@@ -117,6 +125,27 @@ pub fn restore_version(
         restored: writer.changed,
         kept_current: writer.kept,
     }))
+}
+
+/// The aliases of the two directions of a link set by hand.
+const LINKS: [&str; 2] = ["link_out", "link_in"];
+
+/// The items a state's links join, by id, with the row and the direction that holds each.
+fn linked_ends(state: &Json) -> std::collections::BTreeMap<String, (&Json, &'static str)> {
+    let mut found = std::collections::BTreeMap::new();
+    for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
+        for row in state
+            .get(alias)
+            .and_then(Json::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(other) = row.get(end).and_then(Json::as_str) {
+                found.entry(other.to_owned()).or_insert((row, alias));
+            }
+        }
+    }
+    found
 }
 
 struct Writer<'a, 'tx, 'conn> {
@@ -237,6 +266,36 @@ impl Writer<'_, '_, '_> {
         Ok(())
     }
 
+    /// Put the links back as a set of items joined, whichever end each was made from: a link the
+    /// version did not have is taken off (from whichever end holds it), one it had is made again
+    /// the way it was made. A version from before links were kept has no say.
+    fn links(&mut self, shape: &super::shape::Shape, wanted: &Json, now: &Json) -> Result<()> {
+        if LINKS.iter().all(|alias| wanted.get(alias).is_none()) {
+            return Ok(());
+        }
+        let (wanted_ends, held_ends) = (linked_ends(wanted), linked_ends(now));
+        for other in held_ends
+            .keys()
+            .filter(|other| !wanted_ends.contains_key(*other))
+        {
+            self.ctx.connection().execute(
+                "DELETE FROM edge WHERE rel = 'links' AND anchor IS NULL
+                   AND ((from_id = ?1 AND to_id = ?2) OR (from_id = ?2 AND to_id = ?1))",
+                [self.id, other.as_str()],
+            )?;
+            self.changed = true;
+        }
+        for (other, (row, alias)) in &wanted_ends {
+            if held_ends.contains_key(other) {
+                continue;
+            }
+            if let Some(part) = shape.part(alias) {
+                self.insert(part, row)?;
+            }
+        }
+        Ok(())
+    }
+
     fn child(&mut self, part: &Part, wanted: &Json, held: &Json) -> Result<()> {
         if part.is_one() {
             return self.one(part, wanted, held);
@@ -307,7 +366,39 @@ impl Writer<'_, '_, '_> {
         Ok(())
     }
 
+    /// Whether a link `row` of this entity would be a second edge between the same two items: the
+    /// other direction is held already (`edge.add` never puts both in place, and a restore does
+    /// not either).
+    fn reverse_link_held(&self, part: &Part, row: &Json) -> Result<bool> {
+        if part.name != "edge" || row.get("rel").and_then(Json::as_str) != Some("links") {
+            return Ok(false);
+        }
+        let (other, from_here) = if part.via() == "from_id" {
+            (row.get("to_id"), true)
+        } else {
+            (row.get("from_id"), false)
+        };
+        let Some(other) = other.and_then(Json::as_str) else {
+            return Ok(false);
+        };
+        // The edge this row would be is `id -> other` (from_here) or `other -> id`; the one to
+        // look for is its reverse.
+        let (from, to) = if from_here {
+            (other, self.id)
+        } else {
+            (self.id, other)
+        };
+        Ok(self.ctx.connection().query_row(
+            "SELECT EXISTS (SELECT 1 FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2)",
+            [from, to],
+            |held| held.get(0),
+        )?)
+    }
+
     fn insert(&mut self, part: &Part, row: &Json) -> Result<()> {
+        if self.reverse_link_held(part, row)? {
+            return Ok(());
+        }
         let mut names = vec![crate::log::quoted(part.via())];
         let mut values: Vec<Sql> = vec![Sql::Text(self.id.to_owned())];
         for column in &part.columns {
