@@ -25,6 +25,10 @@ catalog! {
         "Reminders access is off. Turn it on in Settings.",
         "Reminders access is off. Turn it on in Settings."
     );
+    plain reminders_unavailable = (
+        "This phone has no Reminders to import.",
+        "This phone has no Reminders to import."
+    );
     plain reminders_running = ("Importing reminders", "Importing reminders");
     plain follow_failed = ("That folder could not be followed.", "That folder could not be followed.");
 }

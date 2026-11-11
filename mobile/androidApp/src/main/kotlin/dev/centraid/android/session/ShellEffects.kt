@@ -200,12 +200,12 @@ internal class ShellEffects(
                 EffectResult(folder_file_staged = FolderReader.stage(context, core, stage.origin, stage.path, stage.media_type))
             }
             // Android has no system reminders: a made vault never asks (`Made{reminders: false}`).
-            effect.reminders_read != null -> failed("this platform has no reminders")
+            effect.reminders_read != null -> failed("unavailable")
             // ---- the phone's stores ------------------------------------------------------------
             effect.calendar_read != null -> {
                 val read = effect.calendar_read!!
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = "calendar access is off", denied = true))
+                    EffectResult(failed = EffectFailed(reason = "denied", denied = true))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }

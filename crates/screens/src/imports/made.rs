@@ -25,6 +25,9 @@ use crate::screen::{Ctx, Screen};
 use crate::shell::row_routes as rows;
 use crate::strings::{Locale, fill, imports as words};
 
+/// The reason a shell gives when the phone has no Reminders store to read: the fact, never words.
+pub const UNAVAILABLE: &str = "unavailable";
+
 #[must_use]
 pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::Imports(_)) = &route.args else {
@@ -278,6 +281,9 @@ impl Screen for Made {
                     ),
                     Some(O::Failed(failed)) if failed.denied => {
                         words::reminders_denied(ctx.locale())
+                    }
+                    Some(O::Failed(failed)) if failed.reason == UNAVAILABLE => {
+                        words::reminders_unavailable(ctx.locale())
                     }
                     Some(O::Failed(_)) => {
                         crate::strings::task::import_reminders_failed(ctx.locale())

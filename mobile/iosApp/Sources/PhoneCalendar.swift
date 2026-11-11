@@ -31,7 +31,7 @@ enum PhoneCalendar {
 
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
-        failed.reason = "calendar access not given"
+        failed.reason = "denied"
         failed.denied = true
         return failed
     }

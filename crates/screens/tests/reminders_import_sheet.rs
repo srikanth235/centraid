@@ -300,3 +300,20 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
     r.answer(reminders(&[]));
     assert_eq!(r.line().summary, "No open reminders to import");
 }
+
+#[test]
+fn a_shell_answering_unavailable_makes_the_screen_say_the_phone_has_no_reminders() {
+    // The row is offered only where a Reminders store exists, so ask as a phone that offers it and
+    // let the shell answer that the store is not there after all.
+    let mut r = rig("ios");
+    r.tap_row();
+    r.send(H::ImportRemindersSubmitted(
+        wire::agenda_home_event::ImportRemindersSubmitted {},
+    ));
+    // The shell reports the fact only; the sentence is Rust's.
+    r.answer(O::Failed(wire::EffectFailed {
+        reason: imports::made::UNAVAILABLE.to_owned(),
+        ..wire::EffectFailed::default()
+    }));
+    assert_eq!(r.line().summary, "This phone has no Reminders to import");
+}
