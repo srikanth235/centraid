@@ -149,6 +149,21 @@ pub mod routes {
             wire::route::Args::DocsEditor(wire::DocsEditorRoute {
                 document_id: document_id.to_owned(),
                 title: title.to_owned(),
+                folder_id: String::new(),
+            }),
+        )
+    }
+
+    /// A NEW text document's editor: an empty draft that nothing makes until its first autosave,
+    /// which creates the document in `folder_id` ("" is the root) with the title it holds.
+    #[must_use]
+    pub fn new_editor(folder_id: &str, title: &str) -> wire::Route {
+        route(
+            EDITOR,
+            wire::route::Args::DocsEditor(wire::DocsEditorRoute {
+                document_id: String::new(),
+                title: title.to_owned(),
+                folder_id: folder_id.to_owned(),
             }),
         )
     }

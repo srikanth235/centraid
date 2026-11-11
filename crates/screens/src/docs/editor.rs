@@ -25,7 +25,10 @@ use crate::strings::{Locale, docs as words};
 /// The words a member types in the editor: the title and the body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Typed {
-    id: String,
+    /// `None` for a new document nothing has made yet: its first save is a create.
+    id: Option<String>,
+    /// A new document's folder (`None` is the root).
+    folder_id: Option<String>,
     title: String,
     body: String,
     /// The document's revision when it was read, advanced by each save's answer: what a save
@@ -41,7 +44,7 @@ impl Draft for Typed {
     }
 
     fn subject(&self) -> &str {
-        &self.id
+        self.id.as_deref().unwrap_or("new")
     }
 
     /// A document needs a name: an emptied title is kept on screen and not sent.
@@ -55,13 +58,28 @@ impl Draft for Typed {
     /// `edit`: the words go whole in `body_text` (each save is a new version),
     /// and `title` only when it changed.
     fn request(&self, baseline: &Self) -> Option<wire::ActRequest> {
+        let Some(id) = &self.id else {
+            // A NEW DOCUMENT: nothing typed, nothing made. The first words create it.
+            if self.title == baseline.title && self.body == baseline.body {
+                return None;
+            }
+            return Some(
+                act::docs::CreateText {
+                    title: self.title.trim().to_owned(),
+                    body_text: Some(self.body.clone()),
+                    folder_id: self.folder_id.clone(),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        };
         let title = self.title.trim() != baseline.title.trim();
         if !title && self.body == baseline.body {
             return None;
         }
         Some(
             act::docs::Edit {
-                document_id: self.id.clone(),
+                document_id: id.clone(),
                 body_text: Some(self.body.clone()),
                 title: title.then(|| self.title.trim().to_owned()),
                 expected_rev: Some(self.rev),
@@ -71,20 +89,23 @@ impl Draft for Typed {
     }
 
     fn committed(&mut self, output: &[u8]) {
-        if let Some(rev) = serde_json::from_slice::<serde_json::Value>(output)
-            .ok()
-            .and_then(|value| value.get("rev")?.as_i64())
-        {
+        let value = serde_json::from_slice::<serde_json::Value>(output).ok();
+        if self.id.is_none() {
+            // The create answers the new document's id: this is an edit of it from now on.
+            self.id = value
+                .as_ref()
+                .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+        } else if let Some(rev) = value.as_ref().and_then(|value| value.get("rev")?.as_i64()) {
             self.rev = rev;
         }
     }
 
     fn subject_id(&self) -> Option<&str> {
-        Some(&self.id)
+        self.id.as_deref()
     }
 
     fn base_rev(&self) -> Option<i64> {
-        Some(self.rev)
+        self.id.as_ref().map(|_| self.rev)
     }
 
     fn rebased(&mut self, rev: i64) {
@@ -119,11 +140,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::DocsEditor(args)) = &route.args else {
         return None;
     };
-    if args.document_id.is_empty() {
-        return None;
-    }
     Some(Box::new(Editor {
         document_id: args.document_id.clone(),
+        new_folder: Some(args.folder_id.clone()).filter(|_| args.document_id.is_empty()),
         title_hint: args.title.clone(),
         opened: Opened::Loading,
         denied: None,
@@ -136,7 +155,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 }
 
 struct Editor {
+    /// Empty for a new document until its first autosave creates it.
     document_id: String,
+    /// A NEW document's folder ("" the root); `None` for one that exists.
+    new_folder: Option<String>,
     title_hint: String,
     opened: Opened,
     /// The vault would not let Docs read: the page is the gate (it never retries by itself).
@@ -168,7 +190,43 @@ impl Editor {
         }
     }
 
+    /// A NEW DOCUMENT opens on an empty draft (its title as the Add sheet named it) and is not
+    /// read: nothing is in the vault under it yet. The first autosave creates it.
+    fn open_new(&mut self) {
+        if self.autosave.draft().is_some() {
+            return;
+        }
+        let folder = self.new_folder.clone().filter(|id| !id.is_empty());
+        self.opened = Opened::Ready;
+        self.autosave.loaded(Typed {
+            id: None,
+            folder_id: folder,
+            title: self.title_hint.clone(),
+            body: String::new(),
+            rev: 0,
+        });
+    }
+
+    /// The save that created the document named it: the editor is its editor from now on.
+    fn adopt_created(&mut self, ctx: &Ctx) {
+        if !self.document_id.is_empty() {
+            return;
+        }
+        let Some(id) = self.autosave.draft().and_then(|draft| draft.id.clone()) else {
+            return;
+        };
+        self.document_id = id;
+        self.new_folder = None;
+        // The words on screen are the only copy of what is typed since; the read only takes
+        // the vault's revision (and the version label).
+        self.reload(ctx);
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
+        if self.document_id.is_empty() {
+            self.open_new();
+            return;
+        }
         let reading = read::read(
             ctx,
             load::docs::History {
@@ -195,7 +253,8 @@ impl Editor {
                     self.opened = Opened::Ready;
                     // Over unsaved words the law replaces nothing.
                     self.autosave.loaded(Typed {
-                        id: self.document_id.clone(),
+                        id: Some(self.document_id.clone()),
+                        folder_id: None,
                         title: draft.title,
                         body: draft.body,
                         rev: document.rev,
@@ -241,6 +300,7 @@ impl Screen for Editor {
                 if self.autosave.fired(ctx, &fired.timer) {
                     self.reload(ctx);
                 }
+                self.adopt_created(ctx);
             }
             Some(E::StatusActed(_)) => self.reload_after_conflict(ctx),
             // CLOSE = DONE: whatever is typed is saved.

@@ -365,8 +365,12 @@ message DocsDocumentRoute {
 
 // `docs.editor`: a text document's editor.
 message DocsEditorRoute {
+  // Empty: a NEW document. The editor opens on an empty draft and nothing is created until the
+  // first autosave, which is the create (as a note's).
   string document_id = 1;
   string title = 2;
+  // A new document's folder ("" is the drive's root).
+  string folder_id = 3;
 }
 
 // ---------------------------------------------------------------------------

@@ -113,9 +113,15 @@ impl Ingest {
             ..Self::default()
         };
         match kind {
+            // A NEW TEXT DOCUMENT IS NOT MADE HERE: its editor opens on an empty draft and the
+            // first autosave creates it (as a new note), so backing out leaves nothing behind.
             Kind::Text => {
-                self.title = words::ingest_text_title(ctx.locale());
-                self.file_it(ctx)
+                let title = words::ingest_text_title(ctx.locale());
+                let route = routes::new_editor(folder_id, &title);
+                *self = Self::default();
+                vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                    route: Some(route),
+                }))]
             }
             Kind::Upload | Kind::Scan => self.pick(),
         }
@@ -182,7 +188,7 @@ impl Ingest {
             return Vec::new();
         }
         self.staged_bytes = 0;
-        if self.kind == Kind::Text || self.file.is_some() {
+        if self.file.is_some() {
             self.file_it(ctx)
         } else {
             self.pick()
@@ -207,15 +213,6 @@ impl Ingest {
         self.phase = Phase::Filing;
         let folder_id = Some(self.folder_id.clone()).filter(|id| !id.is_empty());
         let (request, subject): (wire::ActRequest, String) = match (&self.file, self.kind) {
-            (_, Kind::Text) => (
-                act::docs::CreateText {
-                    title: self.title.clone(),
-                    folder_id,
-                    ..Default::default()
-                }
-                .into(),
-                self.title.clone(),
-            ),
             (Some(file), _) => (
                 upload_request(ctx.locale(), self.kind, file, &self.title, folder_id).into(),
                 file.blob.clone(),
@@ -247,16 +244,12 @@ impl Ingest {
         let Some(id) = settled.output_text("id") else {
             return Vec::new();
         };
-        let route = if self.kind == Kind::Text {
-            routes::editor(&id, &self.title)
+        let parent = if self.parent.is_empty() {
+            words::app_title(ctx.locale())
         } else {
-            let parent = if self.parent.is_empty() {
-                words::app_title(ctx.locale())
-            } else {
-                self.parent.clone()
-            };
-            routes::document(&id, &self.title, &parent)
+            self.parent.clone()
         };
+        let route = routes::document(&id, &self.title, &parent);
         vec![effect(wire::effect::Kind::OpenRoute(wire::OpenRoute {
             route: Some(route),
         }))]

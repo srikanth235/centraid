@@ -120,22 +120,119 @@ fn upload_picks_then_files_the_staged_bytes_and_opens_the_document() {
     assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);
 }
 
-#[test]
-fn text_files_an_untitled_document_that_opens_its_editor() {
-    let mut d = driver();
-    let i = root(&d);
-    add(&mut d, i, "text");
-    let line = ingest(&d, i);
-    assert_eq!(line.phase, Phase::Filed as i32);
-    assert_eq!(line.status_label, "Untitled document added");
-    let route = opened(&d).expect("the editor opens");
+/// The editor route a text Add asked the shell to open.
+fn new_editor_route(d: &Driver) -> wire::DocsEditorRoute {
+    let route = opened(d).expect("the editor opens");
     assert_eq!(route.screen, docs::EDITOR);
     let Some(wire::route::Args::DocsEditor(args)) = route.args else {
         panic!("an editor route");
     };
-    let made = document(&d, &args.document_id);
-    assert_eq!(made.document.unwrap().title, "Untitled document");
-    assert_eq!(made.body.as_deref(), Some(""));
+    args
+}
+
+/// How many rows the Trash page holds: an empty trash is the page's own empty state.
+fn trashed_rows(d: &mut Driver) -> usize {
+    let page = d.push(docs::TAB, docs::routes::trash());
+    let view = trash_view(d.view(page));
+    match (
+        &view.content,
+        view.page.as_ref().and_then(|p| p.state.as_ref()),
+    ) {
+        (Some(wire::trash_view::Content::Data(data)), _) => data.rows.len(),
+        (None, Some(wire::page_state::State::Empty(_))) => 0,
+        other => panic!("trash content {other:?}"),
+    }
+}
+
+#[test]
+fn text_opens_an_empty_draft_and_makes_nothing_so_backing_out_leaves_nothing() {
+    let mut d = driver();
+    let i = root(&d);
+    let before = titles(d.view(i));
+    add(&mut d, i, "text");
+    // The Add sheet makes no document and says nothing was added.
+    assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);
+    assert_eq!(ingest(&d, i).status_label, "");
+    let args = new_editor_route(&d);
+    assert_eq!(args.document_id, "", "a new document has no id yet");
+    assert_eq!(args.folder_id, "");
+    assert_eq!(args.title, "Untitled document");
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    assert_eq!(
+        titles(d.view(i)),
+        before,
+        "the Add made nothing in the drive"
+    );
+
+    // The editor opens on the empty draft; leaving it untouched makes nothing.
+    let editor = d.push(
+        docs::TAB,
+        docs::routes::new_editor(&args.folder_id, &args.title),
+    );
+    let state = editor_state(d.view(editor));
+    let Some(wire::docs_editor_state::Content::Draft(draft)) = &state.content else {
+        panic!("{:?}", state.content);
+    };
+    assert_eq!(
+        (draft.title.as_str(), draft.body.as_str()),
+        ("Untitled document", "")
+    );
+    d.pop(docs::TAB, editor);
+    d.pump(std::time::Duration::from_millis(1300));
+    drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
+    assert_eq!(
+        titles(d.view(i)),
+        before,
+        "backing out leaves nothing in the drive"
+    );
+    assert_eq!(trashed_rows(&mut d), 0, "and nothing in the trash");
+}
+
+#[test]
+fn the_first_autosave_creates_exactly_one_document_in_the_folder_and_the_second_edits_it() {
+    use std::time::Duration;
+    use wire::docs_editor_event as ee;
+    let mut d = driver();
+    let taxes = folder(&d, "Taxes", None);
+    let editor = d.push(docs::TAB, docs::routes::new_editor(&taxes, "Lease notes"));
+    editor_send(
+        &mut d,
+        editor,
+        ee::Kind::Body(ee::BodyEdited {
+            body: "first".to_owned(),
+        }),
+    );
+    assert_eq!(editor_state(d.view(editor)).status_label, "Edited");
+    d.pump(Duration::from_millis(1300));
+
+    // ONE document, in the folder the route named, with the title and words typed.
+    let page = d.push(docs::TAB, docs::routes::folder(&taxes, "Taxes", "Docs"));
+    assert_eq!(titles(d.view(page)), ["Lease notes"]);
+    let id = row(d.view(page), "Lease notes").document_id.clone();
+    let made = document(&d, &id);
+    assert_eq!(made.document.as_ref().unwrap().folder_id, taxes);
+    assert_eq!(made.body.as_deref(), Some("first"));
+    assert_eq!(made.document.as_ref().unwrap().title, "Lease notes");
+
+    // The second save is an edit of that document, never a second one.
+    editor_send(
+        &mut d,
+        editor,
+        ee::Kind::Body(ee::BodyEdited {
+            body: "first and more".to_owned(),
+        }),
+    );
+    d.pump(Duration::from_millis(1300));
+    drive_send(&mut d, page, D::Refreshed(de::Refreshed {}));
+    assert_eq!(titles(d.view(page)), ["Lease notes"], "still one document");
+    assert_eq!(document(&d, &id).body.as_deref(), Some("first and more"));
+    assert!(
+        !matches!(
+            editor_state(d.view(editor)).autosave.as_ref().map(|a| a.phase),
+            Some(p) if p == wire::autosave::Phase::Conflict as i32
+        ),
+        "the second save was not refused as stale"
+    );
 }
 
 #[test]
@@ -147,14 +244,8 @@ fn an_add_into_a_folder_lands_in_it_and_names_the_folder_as_the_back_word() {
     d.effects.clear();
     let _ = root_i;
     add(&mut d, page, "text");
-    let route = opened(&d).expect("the editor opens");
-    let Some(wire::route::Args::DocsEditor(args)) = route.args else {
-        panic!("an editor route");
-    };
-    assert_eq!(
-        document(&d, &args.document_id).document.unwrap().folder_id,
-        taxes
-    );
+    // A new text document is made by its editor's first save, in the folder the route carries.
+    assert_eq!(new_editor_route(&d).folder_id, taxes);
     // An upload names the page it came from.
     d.effects.clear();
     add(&mut d, page, "upload");
