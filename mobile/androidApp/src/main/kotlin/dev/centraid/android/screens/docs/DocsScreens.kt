@@ -687,7 +687,18 @@ internal fun DocsDocumentScreen(
                         dev.centraid.android.kit.LinkSectionView(about, { link -> onEvent(DocsDocumentEvent(about = link)) }, onOpen)
                     }
                 }
-                // LINKED TO (#1185): the kit's section, after About; Rust makes every word and row.
+                // ATTACHMENTS (#1185): the kit's section, after About; Rust makes every word and row.
+                document.attachments?.let { section ->
+                    item(key = "attachments") {
+                        dev.centraid.android.screens.agenda.AgendaAttachmentsView(
+                            section = section,
+                            prefix = "docs-document",
+                            onEvent = { onEvent(DocsDocumentEvent(attachment = it)) },
+                            onOpen = onOpen,
+                        )
+                    }
+                }
+                // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                 document.links?.let { section ->
                     item(key = "links") {
                         dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(DocsDocumentEvent(link = link)) }, onOpen)

@@ -91,7 +91,17 @@ struct DocsDocumentView: View {
                                     send(Self.event { $0.about = link })
                                 }, open: open)
                             }
-                            // LINKED TO (#1185): the kit's section, after About; Rust makes every word and row.
+                            // ATTACHMENTS (#1185): the kit's section, after About; Rust makes every word and row.
+                            if document.hasAttachments {
+                                AgendaAttachmentsView(
+                                    section: document.attachments,
+                                    idPrefix: "docs-document-attachment",
+                                    headIdentifier: "docs-document-attachments",
+                                    open: open,
+                                    send: { attachment in send(Self.event { $0.attachment = attachment }) }
+                                )
+                            }
+                            // LINKED TO (#1185): the kit's section, after the attachments; Rust makes every word and row.
                             if document.hasLinks {
                                 LinkSectionView(section: document.links, send: { link in
                                     send(Self.event { $0.link = link })

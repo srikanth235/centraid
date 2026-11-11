@@ -27,6 +27,7 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
 
@@ -707,6 +708,10 @@ message DocsDocumentData {
   // The kit's shared section, after About. Absent while what it is linked to was not read, and on
   // a document in the trash. Its events go back as `DocsDocumentEvent.link`.
   optional LinkSection links = 24;
+  // The attachments (#1185): the photos and files on this document, with Add photo and Add file.
+  // The kit's shared section (`AgendaAttachmentsSection`), after About and before "Linked to", on a
+  // live document. Its events go back as `DocsDocumentEvent.attachment`.
+  AgendaAttachmentsSection attachments = 25;
 }
 
 message DocsReader {
@@ -790,6 +795,8 @@ message DocsDocumentEvent {
     LinkEvent about = 13;
     // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
     LinkEvent link = 14;
+    // The attachments section's events (#1185): the kit's `AgendaAttachmentEvent`.
+    AgendaAttachmentEvent attachment = 15;
   }
 
   message Refreshed {}

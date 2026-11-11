@@ -27,6 +27,7 @@ use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::attachments::Attachments;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
@@ -83,6 +84,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         every: Links::new(&Kind::ALL).for_entity(&args.document_id),
         linked: None,
         linked_unread: false,
+        attachments: Attachments::of("docs", &args.document_id),
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
     }))
@@ -117,6 +119,8 @@ struct Document {
     linked: Option<Vec<wire::LinkedItem>>,
     /// The read of `linked` was refused or failed: the status line says so, no empty section.
     linked_unread: bool,
+    /// The photos and files on the document (#1185): the kit's section, read with the page.
+    attachments: Attachments,
     /// Where the followed folder's name for the document differs from the member's (#1183), read
     /// with the page.
     differences: follow::Phone,
@@ -205,6 +209,9 @@ impl Document {
             self.page = Page::Failed;
         }
         self.read_linked(ctx);
+        if self.row().is_some_and(|row| !row.trashed) {
+            self.attachments.reload(ctx);
+        }
     }
 
     /// What the document is linked to, in both directions. A refused or failed read is said on
@@ -594,6 +601,7 @@ impl Document {
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             Some(D::About(link)) => self.about_event(&link, ctx),
             Some(D::Link(link)) => self.link_event(&link, ctx),
+            Some(D::Attachment(attachment)) => return self.attachments.event(ctx, attachment),
             None => {}
         }
         Vec::new()
@@ -750,6 +758,10 @@ impl Screen for Document {
                     }
                     _ => {}
                 }
+                // The shell's answer to a pick: the attachments' (an add under way).
+                if let Some(outcome) = &result.outcome {
+                    return self.attachments.result(ctx, outcome).unwrap_or_default();
+                }
             }
             Some(E::DocsDocument(event)) => return self.event(event, ctx),
             Some(E::PhoneSaysTaken(taken)) => self.take_folder(ctx, &taken),
@@ -787,6 +799,10 @@ impl Screen for Document {
                         links::person_rows(locale, people),
                         String::new(),
                     ));
+                }
+                // THE ATTACHMENTS (#1185): the photos and files on a live document, after About.
+                if data.row.as_ref().is_some_and(|row| !row.trashed) {
+                    data.attachments = Some(self.attachments.view(locale, ctx.units()));
                 }
                 // THE "Linked to" SECTION (#1185): everything the document is linked to, on a live
                 // document, after About.
@@ -906,6 +922,7 @@ mod tests {
             every: Links::new(&Kind::ALL).for_entity("d1"),
             linked: None,
             linked_unread: false,
+            attachments: Attachments::of("docs", "d1"),
             differences: follow::Phone::default(),
             earlier: earlier::Foot::default(),
         }

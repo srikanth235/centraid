@@ -436,6 +436,8 @@ pub fn document(
         about: None,
         // The "Linked to" section is the screen's own read, laid on by the document page.
         links: None,
+        // The attachments are the page's own read, laid on by the document page.
+        attachments: None,
         title_phone_says: None,
         surface: Some(surface),
         facts: facts(locale, units, cycle, found, answer, &view),
