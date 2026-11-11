@@ -55,6 +55,11 @@ impl ScreenCtx for Door<'_> {
         self.core.act(request)
     }
 
+    /// Locker's own session always goes to the core, so its wall opens as it does.
+    fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
+        self.core.locker_session(request)
+    }
+
     fn push(&self, _update: wire::ScreenUpdate) {}
 
     fn wake_after(&self, _after: Duration) {}
@@ -91,7 +96,38 @@ impl<'a> Shell<'a> {
         shell
     }
 
+    /// One call, then the owner check answered (as a phone does) for as long as one is asked.
     fn call(&mut self, kind: wire::screen_request::Kind) -> wire::ScreenUpdate {
+        let mut update = self.raw(kind);
+        let mut asked = update.clone();
+        while let Some(check) = asked.effects.iter().find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+            )
+        }) {
+            let answer = wire::screen_request::Kind::Send(wire::InstanceEvent {
+                instance: check.instance,
+                event: Some(wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                        effect_id: check.effect_id,
+                        outcome: Some(wire::effect_result::Outcome::OwnerChecked(
+                            wire::OwnerChecked {
+                                available: true,
+                                biometry: wire::Biometry::Face as i32,
+                                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+                            },
+                        )),
+                    })),
+                }),
+            });
+            asked = self.raw(answer);
+            update = asked.clone();
+        }
+        update
+    }
+
+    fn raw(&mut self, kind: wire::screen_request::Kind) -> wire::ScreenUpdate {
         let update = self
             .runtime
             .call(&self.door, &wire::ScreenRequest { kind: Some(kind) })
@@ -202,6 +238,9 @@ struct Screen {
     name: &'static str,
     route: wire::Route,
     reads: bool,
+    /// Whether the vault's gate can refuse the read: an app query can; the backup's standing is the
+    /// phone's own reading of its store and has no gate, so a refusal is only a read that failed.
+    gated: bool,
     /// Whether it lists what the vault holds, so an answering vault makes it ready (a screen of one
     /// named thing the vault does not hold stays gone).
     lists: bool,
@@ -220,6 +259,7 @@ fn screen(name: &'static str, route: wire::Route) -> Screen {
         name,
         route,
         reads: true,
+        gated: true,
         lists: false,
     }
 }
@@ -227,8 +267,27 @@ fn screen(name: &'static str, route: wire::Route) -> Screen {
 /// An app's screens: its runtime, its tab and every route that reads.
 struct App {
     runtime: fn() -> centraid_screens::Runtime,
+    /// The core the app's screens open over: Locker's is keyed and its session open.
+    vault: fn() -> Driver,
     tab: &'static str,
     screens: Vec<Screen>,
+}
+
+fn founded() -> Driver {
+    Driver::founded()
+}
+
+/// A keyed core whose Locker session is open, as it is once the owner check has passed.
+fn unlocked() -> Driver {
+    let d = Driver::keyed(centraid_screens::locker::runtime());
+    d.handle
+        .locker_session(&wire::LockerSessionRequest {
+            step: Some(wire::locker_session_request::Step::Unlock(
+                wire::LockerUnlock::default(),
+            )),
+        })
+        .expect("the session answers");
+    d
 }
 
 fn apps() -> Vec<App> {
@@ -236,6 +295,7 @@ fn apps() -> Vec<App> {
     vec![
         App {
             runtime: centraid_screens::money::runtime,
+            vault: founded,
             tab: centraid_screens::money::TAB,
             screens: {
                 use centraid_screens::money::routes as r;
@@ -265,6 +325,7 @@ fn apps() -> Vec<App> {
         },
         App {
             runtime: centraid_screens::notes::runtime,
+            vault: founded,
             tab: centraid_screens::notes::TAB,
             screens: {
                 use centraid_screens::notes::routes as r;
@@ -284,6 +345,7 @@ fn apps() -> Vec<App> {
         },
         App {
             runtime: centraid_screens::docs::runtime,
+            vault: founded,
             tab: centraid_screens::docs::TAB,
             screens: {
                 use centraid_screens::docs::routes as r;
@@ -304,6 +366,7 @@ fn apps() -> Vec<App> {
         },
         App {
             runtime: centraid_screens::people::runtime,
+            vault: founded,
             tab: centraid_screens::people::TAB,
             screens: {
                 use centraid_screens::people::routes as r;
@@ -322,6 +385,7 @@ fn apps() -> Vec<App> {
         },
         App {
             runtime: centraid_screens::health::runtime,
+            vault: founded,
             tab: centraid_screens::health::TAB,
             screens: {
                 use centraid_screens::health::routes as r;
@@ -344,6 +408,7 @@ fn apps() -> Vec<App> {
         },
         App {
             runtime: centraid_screens::photos::runtime,
+            vault: founded,
             tab: centraid_screens::photos::TAB,
             screens: {
                 use centraid_screens::photos::routes as r;
@@ -359,7 +424,51 @@ fn apps() -> Vec<App> {
             },
         },
         App {
+            runtime: centraid_screens::locker::runtime,
+            vault: unlocked,
+            tab: centraid_screens::locker::TAB,
+            screens: {
+                use centraid_screens::locker::routes as r;
+                vec![
+                    list("locker home", r::home(wire::LockerDestination::Unspecified)),
+                    screen("locker item", r::item("x", "Locker", "")),
+                    screen("locker edit", r::edit("x")),
+                    screen("locker export", r::export("Locker")),
+                    screen("locker import", r::import("Locker")),
+                    list("locker trash", r::trash()),
+                    screen(
+                        "locker earlier",
+                        earlier::route(centraid_screens::locker::EARLIER, "x", "Locker"),
+                    ),
+                ]
+            },
+        },
+        App {
+            runtime: centraid_screens::standard,
+            vault: founded,
+            tab: "home",
+            screens: {
+                use centraid_screens::backup::routes as r;
+                vec![
+                    Screen {
+                        gated: false,
+                        ..list("backup home", r::home())
+                    },
+                    // These draw what the phone holds, not a read of the vault.
+                    Screen {
+                        reads: false,
+                        ..screen("backup add destination", r::add_destination())
+                    },
+                    Screen {
+                        reads: false,
+                        ..screen("backup show key", r::show_key())
+                    },
+                ]
+            },
+        },
+        App {
             runtime: centraid_screens::agenda::runtime,
+            vault: founded,
             tab: centraid_screens::agenda::TAB,
             screens: {
                 use centraid_screens::calendar::routes as c;
@@ -385,8 +494,8 @@ fn apps() -> Vec<App> {
 
 #[test]
 fn a_screen_over_a_door_whose_reads_all_fail_is_failed_never_empty_or_ready() {
-    let d = Driver::founded();
     for app in apps() {
+        let d = (app.vault)();
         for screen in app.screens.iter().filter(|screen| screen.reads) {
             let mut shell = Shell::new(&d.handle, (app.runtime)(), app.tab);
             shell.reads(Mode::Fails);
@@ -419,8 +528,8 @@ fn a_screen_over_a_door_whose_reads_all_fail_is_failed_never_empty_or_ready() {
 
 #[test]
 fn a_screen_over_a_door_that_refuses_is_refused_with_a_way_to_say_why() {
-    let d = Driver::founded();
     for app in apps() {
+        let d = (app.vault)();
         for screen in app.screens.iter().filter(|screen| screen.reads) {
             let mut shell = Shell::new(&d.handle, (app.runtime)(), app.tab);
             shell.reads(Mode::Refuses);
@@ -430,6 +539,14 @@ fn a_screen_over_a_door_that_refuses_is_refused_with_a_way_to_say_why() {
             let page = shell
                 .page(i)
                 .unwrap_or_else(|| panic!("{}: the screen carries no page", screen.name));
+            if !screen.gated {
+                assert!(
+                    matches!(page.state.as_ref(), Some(State::Failed(_))),
+                    "{}: an ungated read that is refused is a read that failed: {page:?}",
+                    screen.name
+                );
+                continue;
+            }
             let Some(State::Refused(gate)) = page.state.as_ref() else {
                 panic!(
                     "{}: a refused read is not a refused page: {page:?}",
@@ -447,8 +564,8 @@ fn a_screen_over_a_door_that_refuses_is_refused_with_a_way_to_say_why() {
 
 #[test]
 fn a_failed_page_reads_again_when_the_vault_changes_and_answers() {
-    let d = Driver::founded();
     for app in apps() {
+        let d = (app.vault)();
         // Screens of one thing the vault does not hold ("x") stay failed for good: only the
         // screens that list read their way back.
         for screen in app
