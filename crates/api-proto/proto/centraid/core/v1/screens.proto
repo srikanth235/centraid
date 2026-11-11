@@ -798,8 +798,14 @@ message LibraryDeleteItem {
 message LibraryDeleted {
   // The `content_hash` of every item whose asset the platform deleted.
   repeated string deleted_hashes = 1;
+  // The member said no in the system's dialog, or the platform refused to delete: nothing went.
   bool declined = 2;
-  string error = 3;
+  // 3 was `error`, the platform's own words: they stay in the shell's log, and Rust words the
+  // sentence from `failed` (#1185).
+  reserved 3;
+  reserved "error";
+  // The platform could not delete, for any other reason. Nothing is reported deleted.
+  bool failed = 4;
 }
 
 // WHAT RUST KNOWS ABOUT FREEING SPACE, as `photos::free_up` assembles it from
@@ -824,8 +830,10 @@ message FreeUpFacts {
   Outcome outcome = 9;
   // For `OUTCOME_FREED`: the bytes that went.
   uint64 freed_bytes = 10;
-  // For `OUTCOME_PLATFORM_ERROR`: the platform's own words.
-  string platform_error = 11;
+  // 11 was `platform_error`, the platform's own words: they stay in the shell's log, and the
+  // row says its own sentence for `OUTCOME_PLATFORM_ERROR` (#1185).
+  reserved 11;
+  reserved "platform_error";
 
   enum Outcome {
     OUTCOME_UNSPECIFIED = 0;

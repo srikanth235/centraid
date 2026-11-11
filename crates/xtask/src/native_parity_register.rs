@@ -346,7 +346,6 @@ pub const REGISTER: &[Entry] = &[
     ),
     ("FreeUpFacts.on_phone_bytes", rust_only(FREE_UP)),
     ("FreeUpFacts.on_phone_count", rust_only(FREE_UP)),
-    ("FreeUpFacts.platform_error", rust_only(FREE_UP)),
     ("FreeUpFacts.releasable_bytes", rust_only(FREE_UP)),
     ("FreeUpFacts.releasable_count", rust_only(FREE_UP)),
     (

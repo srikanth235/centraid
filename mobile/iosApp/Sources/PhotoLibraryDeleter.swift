@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(Photos)
 import Photos
 #endif
@@ -34,9 +35,11 @@ import Photos
 //    its own in the vault, so what an edit replaced is not lost either.
 // 3. **WHAT IS REPORTED IS WHAT THIS REQUEST REMOVED.** On a yes every asset
 //    in the request is gone, and the hashes reported are exactly its rows. The
-//    member's no is `declined`; any other failure is `error`, with nothing
-//    reported deleted. An offered asset the library no longer shows — deleted
-//    in Photos meanwhile, or outside a limited selection — is not reported:
+//    member's no, or Photos refusing the library, is `declined`; any other
+//    failure is `failed`, with nothing reported deleted. The platform's own
+//    words go to the log and no further: Rust says the sentence a member
+//    reads. An offered asset the library no longer shows — deleted in Photos
+//    meanwhile, or outside a limited selection — is not reported:
 //    its absence is not proof that this request removed it.
 //
 // Nothing here mirrors a deletion INTO the vault (R-1127-4): the vault is the
@@ -45,6 +48,8 @@ import Photos
 /// The pure half, so a test can show each rule refuse without the library.
 /// Its ref spellings are the walker's (`LibraryRefs`, `PhoneLibrary.swift`).
 enum LibraryDeletion {
+    private static let log = Logger(subsystem: "dev.centraid", category: "library-delete")
+
     /// The suffix a Live Photo's movie row carries.
     static let pairedVideoSuffix = LibraryRefs.pairedVideoSuffix
     /// The camera's own file under an edit.
@@ -86,25 +91,29 @@ enum LibraryDeletion {
     enum Answer: Equatable {
         case deleted
         case declined
-        /// The platform's own words, or nil when it gave none.
-        case failed(String?)
+        /// Any other failure. The platform's words are logged where it is made, never carried.
+        case failed
     }
 
     /// RULE 3. The member's no is PhotoKit's `userCancelled`, or Cocoa's
     /// `NSUserCancelledError` on an older path; both are code 3072.
     static func answer(success: Bool, error: Swift.Error?) -> Answer {
         if success { return .deleted }
-        guard let error else { return .failed(nil) }
+        guard let error else { return .failed }
         let failure = error as NSError
         #if canImport(Photos)
-        if failure.domain == PHPhotosError.errorDomain, failure.code == PHPhotosError.Code.userCancelled.rawValue {
+        if failure.domain == PHPhotosError.errorDomain,
+           [PHPhotosError.Code.userCancelled.rawValue,
+            PHPhotosError.Code.accessUserDenied.rawValue,
+            PHPhotosError.Code.accessRestricted.rawValue].contains(failure.code) {
             return .declined
         }
         #endif
         if failure.domain == NSCocoaErrorDomain, failure.code == NSUserCancelledError {
             return .declined
         }
-        return .failed(failure.localizedDescription)
+        Self.log.error("deleting assets failed: \(failure.localizedDescription, privacy: .public)")
+        return .failed
     }
 }
 
@@ -147,8 +156,8 @@ enum PhotoLibraryDeleter {
                 .map(\.contentHash)
         case .declined:
             deleted.declined = true
-        case let .failed(words):
-            deleted.error = words ?? ""
+        case .failed:
+            deleted.failed = true
         }
         return deleted
     }

@@ -1595,10 +1595,9 @@ fn what_the_last_free_up_came_to_is_one_sentence_on_the_row() {
     }
     let mut platform = facts(1);
     platform.outcome = wire::free_up_facts::Outcome::PlatformError as i32;
-    platform.platform_error = "Photos access is limited.".to_owned();
     assert_eq!(
         FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &platform).notice,
-        "Photos access is limited."
+        "Couldn't free up space. Try again."
     );
     // A row with something to free holds still while the system asks.
     let row = FreeUpRow::from_facts(Locale::En, UnitsPref::Metric, &facts(2));

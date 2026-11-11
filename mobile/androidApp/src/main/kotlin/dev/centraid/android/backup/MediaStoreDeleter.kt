@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Log
 import centraid.core.v1.LibraryDeleteItem
 import centraid.core.v1.LibraryDeleted
 import androidx.activity.ComponentActivity
@@ -43,8 +44,9 @@ import java.util.concurrent.Executors
  * half, unit-tested) and read off the store here: the collection is the item's
  * media type; a row that changed since it was backed up (its `SIZE` is not
  * `LibraryDeleteItem.size`) or that the store no longer has is kept; and what is
- * reported is what the request removed, the member's no being `declined` and
- * anything else `error`.
+ * reported is what the request removed, the member's no (or the store's
+ * refusal) being `declined` and anything else `failed`; the platform's words
+ * stay in the log.
  */
 internal class MediaStoreDeleter(private val activity: ComponentActivity) {
     // READ AT FIRST USE, NOT AT CONSTRUCTION: this is built while its activity
@@ -85,10 +87,10 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
         val request = try {
             MediaStore.createDeleteRequest(resolver, asked.map { it.second })
         } catch (refused: IllegalArgumentException) {
-            done(LibraryDeletion.failed(refused))
+            done(failedWith(refused))
             return
         } catch (refused: SecurityException) {
-            done(LibraryDeletion.failed(refused))
+            done(failedWith(refused))
             return
         }
         main.post {
@@ -96,12 +98,18 @@ internal class MediaStoreDeleter(private val activity: ComponentActivity) {
             try {
                 launcher.launch(IntentSenderRequest.Builder(request.intentSender).build())
             } catch (gone: ActivityNotFoundException) {
-                Waiting.take()?.done?.invoke(LibraryDeletion.failed(gone))
+                Waiting.take()?.done?.invoke(failedWith(gone))
             } catch (gone: IllegalStateException) {
                 // The launcher's activity is gone: nothing was asked.
-                Waiting.take()?.done?.invoke(LibraryDeletion.failed(gone))
+                Waiting.take()?.done?.invoke(failedWith(gone))
             }
         }
+    }
+
+    /** What the platform said goes to the log and no further; the answer carries no words. */
+    private fun failedWith(error: Exception): LibraryDeleted {
+        Log.w("MediaStoreDeleter", "deleting library items failed", error)
+        return LibraryDeletion.failed(error)
     }
 
     /** The dialog answered, on the main thread. */

@@ -37,7 +37,9 @@ internal object LibraryRefs {
  *    original row: size is the one witness, and the core supplies it.)
  * 3. **What is reported is what the request removed** ([answer], [deletedHashes]): on a yes only a
  *    row the store no longer answers for is reported deleted. The member's no is `declined`;
- *    anything else is `error` with nothing reported deleted ([failed]).
+ *    a refusal of the store ([failed]'s `SecurityException`) is `declined` too, and anything else
+ *    is `failed`, with nothing reported deleted. The platform's own words never travel: the
+ *    deleter logs them, and Rust says the sentence a member reads.
  */
 internal object LibraryDeletion {
     /** RULE 1. The row an item's ref names in the collection its media type names; null when it names none, or the other one. */
@@ -60,7 +62,7 @@ internal object LibraryDeletion {
     fun answer(yes: Boolean, removed: () -> List<String>): LibraryDeleted =
         if (yes) LibraryDeleted(deleted_hashes = removed()) else LibraryDeleted(declined = true)
 
-    /** RULE 3, anything else: the platform's own words, or the exception's name when it gave none. */
+    /** RULE 3, anything else: a refusal of the store is a no, any other failure is `failed`. No words travel. */
     fun failed(error: Exception): LibraryDeleted =
-        LibraryDeleted(error = error.message ?: error.javaClass.simpleName)
+        if (error is SecurityException) LibraryDeleted(declined = true) else LibraryDeleted(failed = true)
 }

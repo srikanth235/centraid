@@ -271,7 +271,7 @@ fn notice(locale: Locale, units: UnitsPref, facts: &wire::FreeUpFacts) -> String
         Outcome::NothingRemoved => words::free_up_nothing_removed(locale),
         Outcome::NotRecorded => words::free_up_not_recorded(locale),
         Outcome::NotChecked => words::free_up_not_checked(locale),
-        Outcome::PlatformError => facts.platform_error.clone(),
+        Outcome::PlatformError => words::free_up_failed(locale),
     }
 }
 

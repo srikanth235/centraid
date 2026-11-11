@@ -85,14 +85,19 @@ final class LibraryDeletionTests: XCTestCase {
         XCTAssertEqual(LibraryDeletion.modifiedMillis(nil), 0)
     }
 
-    func testAYesIsDeletedANoIsDeclinedAndAnythingElseFails() {
+    func testAYesIsDeletedANoOrARefusalIsDeclinedAndAnythingElseFails() {
         XCTAssertEqual(LibraryDeletion.answer(success: true, error: nil), .deleted)
         let cancelled = NSError(domain: PHPhotosError.errorDomain, code: PHPhotosError.Code.userCancelled.rawValue)
         XCTAssertEqual(LibraryDeletion.answer(success: false, error: cancelled), .declined)
         let cocoa = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)
         XCTAssertEqual(LibraryDeletion.answer(success: false, error: cocoa), .declined)
-        let denied = NSError(domain: PHPhotosError.errorDomain, code: PHPhotosError.Code.accessUserDenied.rawValue)
-        XCTAssertEqual(LibraryDeletion.answer(success: false, error: denied), .failed(denied.localizedDescription))
-        XCTAssertEqual(LibraryDeletion.answer(success: false, error: nil), .failed(nil))
+        // A REFUSAL OF THE LIBRARY IS A NO, like a cancelled prompt: nothing was removed.
+        for code in [PHPhotosError.Code.accessUserDenied, .accessRestricted] {
+            let refused = NSError(domain: PHPhotosError.errorDomain, code: code.rawValue)
+            XCTAssertEqual(LibraryDeletion.answer(success: false, error: refused), .declined)
+        }
+        let broken = NSError(domain: PHPhotosError.errorDomain, code: PHPhotosError.Code.internalError.rawValue)
+        XCTAssertEqual(LibraryDeletion.answer(success: false, error: broken), .failed)
+        XCTAssertEqual(LibraryDeletion.answer(success: false, error: nil), .failed)
     }
 }
