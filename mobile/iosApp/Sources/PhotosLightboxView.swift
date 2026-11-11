@@ -69,36 +69,38 @@ struct PhotosLightboxView: View {
         ZStack {
             // THE STAGE IS THE DARKEST SURFACE AND IT IS NOT THE PAGE.
             Theme.color("stage", scheme).ignoresSafeArea()
-            switch state.page.state {
-            case .loading?, .empty?:
-                // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
-                // strip frame of the photograph a member swiped to — and a ring
-                // only over a stage with nothing at all.
-                stage(model).ignoresSafeArea()
-                if model.framePath(state.photoID) == nil {
-                    Text(state.words.opening)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("onStageSoft", scheme))
+            // THE SHARED PAGE VIEW, in its stage variant: the gate, the failure and the note are
+            // drawn by it in the dark scheme; the stage draws what it has.
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(.refreshed(.init())) },
+                stage: true,
+                skeleton: {
+                    // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
+                    // strip frame of the photograph a member swiped to — and a ring
+                    // only over a stage with nothing at all.
+                    stage(model).ignoresSafeArea()
+                    if model.framePath(state.photoID) == nil {
+                        Text(state.words.opening)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("onStageSoft", scheme))
+                    }
+                },
+                data: {
+                    let photo = state.photo
+                    stage(model).ignoresSafeArea()
+                    if model.drawablePath == nil {
+                        // NEVER A BROKEN IMAGE. Each of these is a truthful state.
+                        Text(photo.stageLabel)
+                            .centraidType("body")
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .padding(CentraidGeometry.pageMargin)
+                            .allowsHitTesting(false)
+                    }
+                    if chromeVisible { chrome(photo) }
                 }
-            case let .refused(denied)?:
-                DeniedGate(denied)
-            case let .failed(failure)?:
-                ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
-                    .padding(CentraidGeometry.pageMargin)
-            case nil:
-                let photo = state.photo
-                stage(model).ignoresSafeArea()
-                if model.drawablePath == nil {
-                    // NEVER A BROKEN IMAGE. Each of these is a truthful state.
-                    Text(photo.stageLabel)
-                        .centraidType("body")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.color("onStage", scheme))
-                        .padding(CentraidGeometry.pageMargin)
-                        .allowsHitTesting(false)
-                }
-                if chromeVisible { chrome(photo) }
-            }
+            )
         }
     }
 

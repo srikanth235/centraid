@@ -23,8 +23,8 @@ pub const PAGE: u32 = 120;
 
 #[derive(Debug)]
 pub struct Library {
-    /// The read's page; the cells below are its data (an empty library is still ready: the
-    /// grid draws its own empty state).
+    /// The read's page; the cells below are its data. A library that came back with nothing is
+    /// drawn as [`Page::Empty`] by [`Library::drawn`], never as ready data.
     pub page: Page<()>,
     /// Every cell read so far, in the shelf's order, none twice.
     pub cells: Vec<wire::PhotosCell>,
@@ -113,18 +113,26 @@ impl Library {
     }
 
     /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
-    /// them under a note, and over nothing shown is the failure itself.
+    /// them under a note, and over nothing shown (an empty library included) is the failure itself.
     pub fn unread(&mut self, reading: &Reading<wire::PhotosShelf>, locale: Locale) {
-        let held = std::mem::replace(&mut self.page, Page::loading());
+        let mut held = std::mem::replace(&mut self.page, Page::loading());
+        if held.data().is_some() && self.cells.is_empty() && self.next.is_none() {
+            held = Page::Empty;
+        }
         self.page = match reading {
             Reading::Denied(denial) => Page::Refused(denial.clone()),
             _ => held.after(Reading::Failed, locale, |()| false),
         };
     }
 
-    /// The page as drawn: a next page that did not come adds its note over the photographs.
+    /// The page as drawn: both walks ended with no photograph is [`Page::Empty`] (ready means
+    /// there is something to show); a next page that did not come adds its note over the
+    /// photographs.
     #[must_use]
     pub fn drawn(&self, locale: Locale) -> Page<()> {
+        if self.page.data().is_some() && self.complete() && self.cells.is_empty() {
+            return Page::Empty;
+        }
         self.page
             .clone()
             .noted(self.more_failed.then(|| Note::more_failed(locale)))
@@ -220,6 +228,28 @@ mod tests {
         let mut library = Library::default();
         library.unread(&Reading::Failed, EN);
         assert!(!library.loaded());
+        assert!(matches!(wired(&library).state, Some(State::Failed(_))));
+    }
+
+    #[test]
+    fn a_library_that_came_back_with_nothing_is_empty_and_never_ready() {
+        let mut library = Library {
+            page: ready(),
+            ..Library::default()
+        };
+        assert!(matches!(wired(&library).state, Some(State::Empty(_))));
+        // Photographs still to read are not nothing.
+        library.next = Some(wire::PhotosCursor::default());
+        assert!(wired(&library).state.is_none());
+    }
+
+    #[test]
+    fn a_failed_refresh_over_an_empty_library_is_the_failure_and_never_empty() {
+        let mut library = Library {
+            page: ready(),
+            ..Library::default()
+        };
+        library.unread(&Reading::Failed, EN);
         assert!(matches!(wired(&library).state, Some(State::Failed(_))));
     }
 

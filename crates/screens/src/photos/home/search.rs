@@ -140,12 +140,30 @@ impl Search {
             query: self.term.clone(),
             ..wire::PhotosSearchView::default()
         };
-        view.page = Some(self.page.wire(
+        // A search that matched nothing is the page's own Empty state (ready means there is
+        // something to show), with the ask offer still under it.
+        let nothing = self
+            .answer
+            .as_ref()
+            .filter(|found| found.cells.is_empty() && found.top_hits.is_empty())
+            .filter(|_| self.page.data().is_some() && !term.is_empty());
+        let page = if nothing.is_some() {
+            Page::Empty
+        } else {
+            self.page.clone()
+        };
+        view.page = Some(page.wire(
             locale,
             |denial| super::super::denied(locale, denial),
-            wire::EmptyState::default,
+            || no_match(locale, term),
         ));
-        if self.page.data().is_none() {
+        if let Some(found) = nothing {
+            if !found.corrected.is_empty() {
+                view.corrected = ask::corrected(locale, &found.corrected);
+            }
+            view.ask = Some(ask::offer(locale, term, "photos"));
+        }
+        if page.data().is_none() {
             return view;
         }
         view.content = Some(match (&self.content, &self.answer) {
@@ -154,7 +172,7 @@ impl Search {
                     view.corrected = ask::corrected(locale, &found.corrected);
                 }
                 view.ask = Some(ask::offer(locale, term, "photos"));
-                wire::photos_search_view::Content::Hits(Box::new(hits(locale, link, term, found)))
+                wire::photos_search_view::Content::Hits(Box::new(hits(locale, link, found)))
             }
             _ => wire::photos_search_view::Content::Resting(self.resting_view(locale)),
         });
@@ -183,12 +201,20 @@ impl Search {
     }
 }
 
-fn hits(
-    locale: Locale,
-    link: Link,
-    term: &str,
-    found: &wire::PhotosSearch,
-) -> wire::PhotosSearchHits {
+/// NOTHING MATCHED IS NOT NOTHING TYPED: the query quoted back and everywhere search looked.
+fn no_match(locale: Locale, term: &str) -> wire::EmptyState {
+    let sentence = fill(
+        &words::photos_search_no_match_query(locale),
+        &[("query", term)],
+    );
+    wire::EmptyState {
+        headline: words::photos_search_no_results(locale),
+        body: format!("{sentence} {}", words::photos_search_no_match_scope(locale)),
+        ..wire::EmptyState::default()
+    }
+}
+
+fn hits(locale: Locale, link: Link, found: &wire::PhotosSearch) -> wire::PhotosSearchHits {
     let tiles = cells::tiles(&found.cells, link, locale);
     let ids: Vec<String> = tiles.iter().map(|tile| tile.photo_id.clone()).collect();
     let doors: Vec<wire::PhotosSearchDoor> =
@@ -209,23 +235,11 @@ fn hits(
         .map(|hit| hit.label.clone())
         .collect();
     matched.extend(found.labels.iter().map(|label| label.label.clone()));
-    let empty = (found.cells.is_empty() && found.top_hits.is_empty()).then(|| {
-        let sentence = fill(
-            &words::photos_search_no_match_query(locale),
-            &[("query", term)],
-        );
-        wire::EmptyState {
-            headline: words::photos_search_no_results(locale),
-            body: format!("{sentence} {}", words::photos_search_no_match_scope(locale)),
-            ..wire::EmptyState::default()
-        }
-    });
     wire::PhotosSearchHits {
         doors,
         count_label: cells::count_phrase(locale, found.total_hits, found.truncated),
         open: Some(routes::lightbox("", &ids, "")),
         tiles,
-        empty,
         labels_title: sentences::library_search_labels(locale),
         labels,
         matched_label: if matched.is_empty() {

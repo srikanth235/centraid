@@ -50,7 +50,6 @@ import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
@@ -240,29 +239,24 @@ public fun PhotoShelfScreen(
             skeleton = { RowSkeleton() },
         ) {
             if (data != null) {
-                val empty = data.empty
-                if (empty != null) {
-                    ScreenEmpty(sentence = empty.headline, remedy = empty.body)
-                } else {
-                    Column(Modifier.fillMaxSize()) {
-                        PhotoCellsGrid(
-                            cells = data.cells.map { it.tile!! },
-                            modifier = Modifier.weight(1f),
-                            selected = selection?.selected_ids.orEmpty().toSet(),
-                            onTap = { photoId ->
-                                if (selecting) {
-                                    select(PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId)))
-                                } else {
-                                    data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open_?.let(onOpen)
-                                }
-                            },
+                Column(Modifier.fillMaxSize()) {
+                    PhotoCellsGrid(
+                        cells = data.cells.map { it.tile!! },
+                        modifier = Modifier.weight(1f),
+                        selected = selection?.selected_ids.orEmpty().toSet(),
+                        onTap = { photoId ->
+                            if (selecting) {
+                                select(PhotosSelectionEvent(toggled = PhotosSelectionEvent.Toggled(photo_id = photoId)))
+                            } else {
+                                data.cells.firstOrNull { it.tile?.photo_id == photoId }?.open_?.let(onOpen)
+                            }
+                        },
+                    )
+                    if (data.can_show_more) {
+                        KitLink(
+                            label = data.show_more_label,
+                            onClick = { onEvent(PhotosShelfEvent(load_more = PhotosShelfEvent.LoadMore())) },
                         )
-                        if (data.can_show_more) {
-                            KitLink(
-                                label = data.show_more_label,
-                                onClick = { onEvent(PhotosShelfEvent(load_more = PhotosShelfEvent.LoadMore())) },
-                            )
-                        }
                     }
                 }
             }

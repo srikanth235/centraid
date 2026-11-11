@@ -110,7 +110,10 @@ impl Picker {
     /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
     /// them under a note, and over nothing shown is the failure itself.
     fn unread(&mut self, reading: Reading<wire::PhotosShelf>, locale: Locale) {
-        let held = std::mem::replace(&mut self.page, Page::loading());
+        let mut held = std::mem::replace(&mut self.page, Page::loading());
+        if held.data().is_some() && self.nothing_left() {
+            held = Page::Empty;
+        }
         self.page = match reading {
             Reading::Denied(denial) => Page::Refused(denial),
             _ => held.after(Reading::Failed, locale, |()| false),
@@ -270,6 +273,33 @@ impl Picker {
         }
     }
 
+    /// Nothing left to add: every photograph shown is the album's already, and there is no more
+    /// to read.
+    fn nothing_left(&self) -> bool {
+        self.next.is_none()
+            && cells::dedupe_live(&self.cells)
+                .iter()
+                .all(|cell| self.taken.contains(&cell.photo_id))
+    }
+
+    /// The page as drawn: ready means there is something to add, so nothing left is
+    /// [`Page::Empty`]; a next page that did not come adds its note over the photographs.
+    fn drawn(&self, locale: Locale) -> Page<()> {
+        if self.page.data().is_some() && self.nothing_left() {
+            return Page::Empty;
+        }
+        self.page
+            .clone()
+            .noted(self.more_failed.then(|| Note::more_failed(locale)))
+    }
+
+    fn empty(&self, locale: Locale) -> wire::EmptyState {
+        wire::EmptyState {
+            headline: words::photos_picker_nothing_left(locale),
+            ..wire::EmptyState::default()
+        }
+    }
+
     fn data(&self, locale: Locale) -> wire::PhotosPickerData {
         let cells: Vec<wire::PhotosPickerCell> = cells::dedupe_live(&self.cells)
             .into_iter()
@@ -279,17 +309,10 @@ impl Picker {
                 picked: self.picked.contains(&cell.photo_id),
             })
             .collect();
-        // Nothing left to add: every photograph shown is the album's already, and
-        // there is no more to read.
-        let nothing_left = self.next.is_none() && cells.iter().all(|cell| cell.taken);
         wire::PhotosPickerData {
             can_show_more: self.next.is_some(),
             show_more_label: words::photos_show_all(locale),
             taken_label: words::photos_already_in_album(locale),
-            empty: nothing_left.then(|| wire::EmptyState {
-                headline: words::photos_picker_nothing_left(locale),
-                ..wire::EmptyState::default()
-            }),
             cells,
         }
     }
@@ -315,10 +338,7 @@ impl Screen for Picker {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let page = self
-            .page
-            .clone()
-            .noted(self.more_failed.then(|| Note::more_failed(locale)));
+        let page = self.drawn(locale);
         let add_label = if self.attach {
             words::photos_attach(locale)
         } else if self.picked.is_empty() {
@@ -351,7 +371,7 @@ impl Screen for Picker {
                     page: Some(page.wire(
                         locale,
                         |denial| super::denied(locale, denial),
-                        wire::EmptyState::default,
+                        || self.empty(locale),
                     )),
                     data: page.data().map(|()| self.data(locale)),
                     status: self.undo.status(),

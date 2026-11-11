@@ -644,7 +644,7 @@ impl Home {
             page: Some(page.wire(
                 locale,
                 |denial| crate::photos::denied(locale, denial),
-                wire::EmptyState::default,
+                || self.library_empty(locale),
             )),
             skeleton: if loading && self.viewport.0 > 0.0 {
                 layout::skeleton(self.viewport.0, target, self.viewport.1)
@@ -772,21 +772,6 @@ impl Home {
             }
         };
         let complete = self.library.complete();
-        let empty = (self.library.cells.is_empty() && complete).then(|| {
-            if self.filter == Filter::Favorites {
-                wire::EmptyState {
-                    headline: words::photos_grid_no_favorites(locale),
-                    body: words::photos_grid_no_favorites_caption(locale),
-                    ..wire::EmptyState::default()
-                }
-            } else {
-                wire::EmptyState {
-                    headline: words::photos_grid_empty(locale),
-                    body: words::photos_grid_empty_caption(locale),
-                    ..wire::EmptyState::default()
-                }
-            }
-        });
         wire::PhotosLibraryData {
             count_label: cells::count_phrase(
                 locale,
@@ -799,7 +784,6 @@ impl Home {
             rows,
             grain_items,
             complete,
-            empty,
             undated_note: if matches!(self.grain, Grain::Years | Grain::Months) {
                 words::photos_library_undated_note(locale)
             } else {
@@ -836,6 +820,24 @@ impl Home {
                 _ => true,
             });
         bar
+    }
+
+    /// NOTHING TO SHOW, AND WHY: the Favorites filter has its own sentence, never the
+    /// empty-library copy.
+    fn library_empty(&self, locale: Locale) -> wire::EmptyState {
+        if self.filter == Filter::Favorites {
+            wire::EmptyState {
+                headline: words::photos_grid_no_favorites(locale),
+                body: words::photos_grid_no_favorites_caption(locale),
+                ..wire::EmptyState::default()
+            }
+        } else {
+            wire::EmptyState {
+                headline: words::photos_grid_empty(locale),
+                body: words::photos_grid_empty_caption(locale),
+                ..wire::EmptyState::default()
+            }
+        }
     }
 
     fn empty_library(&self) -> bool {

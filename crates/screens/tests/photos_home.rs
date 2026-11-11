@@ -92,6 +92,29 @@ impl Rig {
         }
     }
 
+    /// The library's page must be Empty (never ready data), and this is its sentence.
+    fn library_empty(&self) -> &wire::EmptyState {
+        let library = self.state().library.as_ref().expect("the library");
+        assert!(library.data.is_none(), "an empty library carries no data");
+        match library.page.as_ref().and_then(|page| page.state.as_ref()) {
+            Some(wire::page_state::State::Empty(empty)) => empty,
+            other => panic!("expected the empty state, found {other:?}"),
+        }
+    }
+
+    /// The search page's empty sentence: nothing matched.
+    fn search_empty(&self) -> &wire::EmptyState {
+        let search = self.search();
+        assert!(
+            search.content.is_none(),
+            "an empty search carries no content"
+        );
+        match search.page.as_ref().and_then(|page| page.state.as_ref()) {
+            Some(wire::page_state::State::Empty(empty)) => empty,
+            other => panic!("expected the empty state, found {other:?}"),
+        }
+    }
+
     fn collections(&self) -> &wire::PhotosCollectionsData {
         let collections = self.state().collections.as_ref().expect("collections");
         match &collections.data {
@@ -112,6 +135,16 @@ impl Rig {
     }
 
     fn tile_ids(&self) -> Vec<String> {
+        // An empty library is the page's Empty state, which carries no tiles.
+        let library = self.state().library.as_ref().expect("the library");
+        if library.data.is_none()
+            && matches!(
+                library.page.as_ref().and_then(|page| page.state.as_ref()),
+                Some(wire::page_state::State::Empty(_))
+            )
+        {
+            return Vec::new();
+        }
         self.library()
             .tiles
             .iter()
@@ -677,7 +710,7 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
     let update = r.send(H::ImportNow(wire::PhotosImportNow {}));
     assert!(update.effects.is_empty(), "{:?}", update.effects);
     // The empty library says so, in its own words.
-    let empty = r.library().empty.as_ref().expect("an empty state");
+    let empty = r.library_empty();
     assert_eq!(empty.headline, "No photos on this phone yet.");
 }
 
@@ -1071,7 +1104,7 @@ fn the_favorites_filter_narrows_the_read_not_the_drawing() {
         r.arrange(act::photos::UnflagPhoto { photo_id: id });
     }
     r.d.pump(std::time::Duration::from_millis(300));
-    let empty = r.library().empty.as_ref().expect("empty favorites");
+    let empty = r.library_empty();
     assert_eq!(empty.headline, "No favorites yet");
 }
 
@@ -1887,7 +1920,7 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
             .collect::<Vec<_>>(),
         [a.as_str()]
     );
-    assert!(hits.empty.is_none());
+    assert!(r.search().page.as_ref().unwrap().state.is_none(), "ready");
     let Some(wire::route::Args::PhotosLightbox(args)) = &hits.open.as_ref().unwrap().args else {
         panic!("a lightbox route");
     };
@@ -1904,9 +1937,7 @@ fn nothing_matched_is_data_with_no_cells_never_a_refusal_and_says_everywhere_it_
     let mut r = rig();
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "zzqxnothing");
-    let hits = r.hits();
-    assert!(hits.tiles.is_empty() && hits.doors.is_empty());
-    let empty = hits.empty.as_ref().expect("the no-match state");
+    let empty = r.search_empty();
     assert_eq!(empty.headline, "No results");
     assert_eq!(
         empty.body,
@@ -1987,10 +2018,8 @@ fn a_route_with_words_opens_search_on_them() {
     let r = rig_at(Dest::Library, Some("zzqxroute"));
     assert_eq!(r.state().destination, Dest::Search as i32);
     assert_eq!(r.search().query, "zzqxroute");
-    assert!(matches!(
-        r.search().content,
-        Some(wire::photos_search_view::Content::Hits(_))
-    ));
+    // Nothing matches that word: the search page is Empty, with its sentence.
+    assert_eq!(r.search_empty().headline, "No results");
 }
 
 #[test]

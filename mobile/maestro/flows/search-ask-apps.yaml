@@ -110,7 +110,7 @@ name: search-ask-apps
       id: "chat"
     timeout: 5000
 - assertNotVisible:
-    id: "photos-search-no-match"
+    id: "kit-empty"
 - runFlow:
     when:
       notVisible:

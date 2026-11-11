@@ -27,6 +27,16 @@ fn state(d: &Driver, instance: u64) -> &wire::PhotosPickerState {
     }
 }
 
+/// The picker's page must be Empty (never ready data), and this is its sentence.
+fn empty(d: &Driver, instance: u64) -> &wire::EmptyState {
+    let state = state(d, instance);
+    assert!(state.data.is_none(), "nothing left carries no data");
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("expected the empty state, found {other:?}"),
+    }
+}
+
 fn data(d: &Driver, instance: u64) -> &wire::PhotosPickerData {
     let state = state(d, instance);
     match &state.data {
@@ -191,7 +201,7 @@ fn an_album_that_holds_the_whole_library_says_there_is_nothing_left() {
         pick(&mut d, picker, id);
     }
     send(&mut d, picker, ev::Kind::Confirm(ev::ConfirmRequested {}));
-    let empty = data(&d, picker).empty.as_ref().expect("nothing left");
+    let empty = empty(&d, picker);
     assert_eq!(
         empty.headline,
         "Everything in your library is already in this album."

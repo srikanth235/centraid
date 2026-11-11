@@ -83,9 +83,10 @@ message PhotosShelfData {
   // More of the shelf is unread: `show_more_label` sends `load_more`.
   bool can_show_more = 3;
   string show_more_label = 6;
-  // Present when the shelf holds nothing: this shelf's own sentence.
-  optional EmptyState empty = 4;
+  // 4 was `empty`: a shelf that holds nothing is the page's own Empty state.
   // "Empty trash", on the trash and while it holds something.
+  reserved 4;
+  reserved "empty";
   optional string empty_trash_label = 5;
 }
 
@@ -215,10 +216,11 @@ message PhotosPickerData {
   repeated PhotosPickerCell cells = 1;
   bool can_show_more = 2;
   string show_more_label = 4;
-  // Present when there is nothing left to add: "Everything in your library is
-  // already in this album."
-  optional EmptyState empty = 3;
+  // 3 was `empty`: nothing left to add ("Everything in your library is already in this
+  // album.") is the page's own Empty state.
   // What a taken cell is spoken as: "Already in this album".
+  reserved 3;
+  reserved "empty";
   string taken_label = 5;
 }
 
@@ -294,9 +296,10 @@ message PhotosPlaceRow {
 
 message PhotosPlacesData {
   repeated PhotosPlaceRow places = 1;
-  // Present when there are no places at all.
-  optional EmptyState empty = 2;
+  // 2 was `empty`: no places at all is the page's own Empty state.
   // Present on the map when no place has a location.
+  reserved 2;
+  reserved "empty";
   optional EmptyState map_empty = 3;
   // "3 photos have no place." with `unplaced_open_label` ("Open them.").
   string unplaced_label = 4;

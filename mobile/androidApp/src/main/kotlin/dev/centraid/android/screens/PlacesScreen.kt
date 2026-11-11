@@ -113,11 +113,10 @@ public fun PlacesScreen(
         ) {
             if (data != null) {
                 Column(Modifier.fillMaxSize()) {
-                    val empty = data.empty
+                    // NO PLACES AT ALL is the page's Empty state; the map's "none pinned" is a
+                    // section of a page that still has places, so it stays here.
                     val mapEmpty = data.map_empty
-                    if (empty != null) {
-                        ScreenEmpty(sentence = empty.headline, remedy = empty.body)
-                    } else if (map && mapEmpty != null) {
+                    if (map && mapEmpty != null) {
                         ScreenEmpty(sentence = mapEmpty.headline, remedy = mapEmpty.body)
                     } else if (map) {
                         PlacesPlot(data, onOpen)

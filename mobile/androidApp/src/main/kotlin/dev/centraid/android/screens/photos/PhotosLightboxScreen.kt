@@ -81,7 +81,6 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ReadStateView
-import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StageKey
@@ -112,9 +111,6 @@ public fun PhotosLightboxScreen(
 ) {
     val context = LocalContext.current
     val words = state.words ?: PhotosLightboxWords()
-    val loading = state.page?.loading
-    val failure = state.page?.failed
-    val denied = state.page?.refused
     val photo = state.photo
     val screenReader = rememberScreenReader(context)
     val reduceMotion = rememberReducedMotion()
@@ -143,47 +139,44 @@ public fun PhotosLightboxScreen(
             // both schemes.
             .background(centraidColor("stage")),
     ) {
-        when {
-            // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
-            // strip frame of the photograph a member swiped to — and the
-            // opening words only over a stage with nothing at all (never a ring).
-            loading != null -> {
-                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
-                if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
-                    Text(
-                        text = words.opening,
-                        color = centraidColor("onStageSoft"),
-                        style = centraidType("small"),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+        // THE SHARED PAGE VIEW, in its stage variant: the gate, the failure and the note are drawn
+        // by it in the dark scheme; the stage draws what it has.
+        ReadStateView(
+            page = state.page!!,
+            onRetry = { onEvent(PhotosLightboxEvent(refreshed = PhotosLightboxEvent.Refreshed())) },
+            stage = true,
+            skeleton = {
+                // BEFORE THE READ LANDS THE STAGE STILL DRAWS what it has — the
+                // strip frame of the photograph a member swiped to — and the
+                // opening words only over a stage with nothing at all (never a ring).
+                Box(Modifier.fillMaxSize()) {
+                    LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                    if (state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
+                        Text(
+                            text = words.opening,
+                            color = centraidColor("onStageSoft"),
+                            style = centraidType("small"),
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
                 }
-            }
-
-            failure != null -> ScreenFailure(
-                sentence = failure.sentence,
-                remedy = failure.remedy,
-                modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
-            )
-
-            denied != null -> ScreenFailure(
-                sentence = denied.title,
-                remedy = denied.body,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
-            )
-
-            photo != null -> {
-                LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
-                if (drawnPath(photo) == null) {
-                    // NEVER A BROKEN IMAGE. Each of these is a truthful state.
-                    Text(
-                        text = photo.stage_label,
-                        color = centraidColor("onStage"),
-                        textAlign = TextAlign.Center,
-                        style = centraidType("body"),
-                        modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
-                    )
+            },
+        ) {
+            if (photo != null) {
+                Box(Modifier.fillMaxSize()) {
+                    LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
+                    if (drawnPath(photo) == null) {
+                        // NEVER A BROKEN IMAGE. Each of these is a truthful state.
+                        Text(
+                            text = photo.stage_label,
+                            color = centraidColor("onStage"),
+                            textAlign = TextAlign.Center,
+                            style = centraidType("body"),
+                            modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
+                        )
+                    }
+                    if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
                 }
-                if (chromeVisible) Chrome(state, photo, words, player, live, onEvent, onOpen, onClose)
             }
         }
         Sheets(state, photo, onEvent)

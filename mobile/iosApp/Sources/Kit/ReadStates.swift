@@ -76,6 +76,11 @@ extension ReadStateView where Skeleton == RowSkeleton {
 /// `onRetry` is the screen's own re-read event and answers a note's action unless `onNoteAction`
 /// says otherwise; `onEmptyAction` answers the empty state's one action. Every word is the
 /// state's: the view decides nothing.
+///
+/// `stage` is the full-bleed variant for a page that is a dark stage (the slideshow): the
+/// gate, the failure, the empty state and the note are drawn in the dark scheme and centred
+/// over the caller's own ground, and the note floats over the top of `data` instead of
+/// pushing it down. The Compose twin is `ReadStateView(stage = true)`.
 struct PageReadStateView<Skeleton: View, Content: View>: View {
     let page: Centraid_Core_V1_PageState
     let onRetry: (() -> Void)?
@@ -85,6 +90,8 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
     /// True where the data is rows of a lazy stack the caller owns: the note and the data are
     /// then siblings in it (no wrapping stack), so the rows stay lazy and pinned headers pin.
     var flat: Bool = false
+    /// True where the page is a full-bleed dark stage; see the type's note.
+    var stage: Bool = false
     let skeleton: () -> Skeleton
     let data: () -> Content
 
@@ -95,6 +102,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
         flat: Bool = false,
+        stage: Bool = false,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         @ViewBuilder data: @escaping () -> Content
     ) {
@@ -104,6 +112,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         self.onNoteAction = onNoteAction
         self.retryLabel = retryLabel
         self.flat = flat
+        self.stage = stage
         self.skeleton = skeleton
         self.data = data
     }
@@ -113,13 +122,22 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         case .loading:
             skeleton()
         case let .refused(denied):
-            DeniedGate(denied)
+            staged(DeniedGate(denied))
         case let .failed(failure):
-            FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: onRetry)
+            staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: onRetry))
         case let .empty(empty):
-            EmptyStateView(empty, onAction: onEmptyAction)
+            staged(EmptyStateView(empty, onAction: onEmptyAction))
         case nil:
-            if flat {
+            if stage {
+                ZStack {
+                    data()
+                    if page.hasNote {
+                        PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                            .environment(\.colorScheme, .dark)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                    }
+                }
+            } else if flat {
                 if page.hasNote {
                     PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
                 }
@@ -132,6 +150,19 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
                     data()
                 }
             }
+        }
+    }
+
+    /// A state drawn on the stage reads in the dark scheme, centred, inside the page margin.
+    @ViewBuilder
+    private func staged<V: View>(_ view: V) -> some View {
+        if stage {
+            view
+                .environment(\.colorScheme, .dark)
+                .padding(CentraidGeometry.pageMargin)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            view
         }
     }
 }

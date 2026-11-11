@@ -51,23 +51,19 @@ struct PhotoPickerView: View {
                 PageReadStateView(page: state.page, onRetry: { event { $0.refreshed = .init() } }) {
                     if state.hasData {
                         let data = state.data
-                        if data.hasEmpty {
-                            ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                        } else {
-                            // TAKEN, NOT HIDDEN: a member hunting for the photograph
-                            // they added last week finds it, and finds out why it
-                            // will not tick.
-                            PhotoCellsGrid(
-                                cells: data.cells.map(\.tile),
-                                selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
-                                taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
-                                takenLabel: data.takenLabel,
-                                showsRing: true,
-                                onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
-                            )
-                            if data.canShowMore {
-                                KitLink(label: data.showMoreLabel) { event { $0.loadMore = .init() } }
-                            }
+                        // TAKEN, NOT HIDDEN: a member hunting for the photograph
+                        // they added last week finds it, and finds out why it
+                        // will not tick.
+                        PhotoCellsGrid(
+                            cells: data.cells.map(\.tile),
+                            selected: Set(data.cells.filter(\.picked).map(\.tile.photoID)),
+                            taken: Set(data.cells.filter(\.taken).map(\.tile.photoID)),
+                            takenLabel: data.takenLabel,
+                            showsRing: true,
+                            onTap: { identifier in event { $0.pick = .with { $0.photoID = identifier } } }
+                        )
+                        if data.canShowMore {
+                            KitLink(label: data.showMoreLabel) { event { $0.loadMore = .init() } }
                         }
                     }
                 }

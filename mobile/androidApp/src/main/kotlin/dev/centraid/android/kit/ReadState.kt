@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import dev.centraid.design.CentraidCatalog
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -122,6 +123,11 @@ public fun <V> ReadStateView(
  *
  * [onRetry] is the screen's own re-read event and also answers a note's action; [onEmptyAction]
  * answers the empty state's one action. The shell decides nothing: every word is the state's.
+ *
+ * [stage] is the full-bleed variant for a page that is a dark stage (the slideshow): the gate, the
+ * failure, the empty state and the note are drawn in the dark scheme and centred over the
+ * caller's own ground, and the note floats over the top of [data] instead of pushing it down.
+ * The SwiftUI twin is `PageReadStateView(stage: true)`.
  */
 @Composable
 public fun ReadStateView(
@@ -131,6 +137,7 @@ public fun ReadStateView(
     onEmptyAction: (() -> Unit)? = null,
     onNoteAction: (() -> Unit)? = onRetry,
     retryLabel: String = KitWords.RETRY,
+    stage: Boolean = false,
     skeleton: @Composable () -> Unit = { RowSkeleton() },
     data: @Composable () -> Unit,
 ) {
@@ -138,12 +145,22 @@ public fun ReadStateView(
     val refused = page.refused
     val empty = page.empty
     val note = page.note
-    Box(modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize(), contentAlignment = if (stage) Alignment.Center else Alignment.TopStart) {
         when {
             page.loading != null -> skeleton()
-            refused != null -> DeniedGate(refused)
-            failed != null -> FailureView(failed.sentence, failed.remedy, onRetry, retryLabel = retryLabel)
-            empty != null -> EmptyStateView(empty, onEmptyAction)
+            refused != null -> StageScheme(stage) { DeniedGate(refused) }
+            failed != null -> StageScheme(stage) {
+                FailureView(failed.sentence, failed.remedy, onRetry, retryLabel = retryLabel)
+            }
+            empty != null -> StageScheme(stage) { EmptyStateView(empty, onEmptyAction) }
+            stage -> {
+                data()
+                if (note != null) {
+                    Box(Modifier.fillMaxWidth().align(Alignment.TopCenter)) {
+                        StageScheme(true) { PageNoteBanner(note, onNoteAction) }
+                    }
+                }
+            }
             else -> Column(Modifier.fillMaxSize()) {
                 if (note != null) {
                     PageNoteBanner(note, onNoteAction)
@@ -151,6 +168,16 @@ public fun ReadStateView(
                 Box(Modifier.weight(1f)) { data() }
             }
         }
+    }
+}
+
+/** [content] in the dark scheme when [stage]: a state drawn on the full-bleed dark stage reads dark. */
+@Composable
+private fun StageScheme(stage: Boolean, content: @Composable () -> Unit) {
+    if (stage) {
+        CompositionLocalProvider(LocalCentraidTokens provides CentraidTokens.dark) { content() }
+    } else {
+        content()
     }
 }
 

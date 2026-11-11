@@ -32,7 +32,7 @@ name: search-photos
 - assertVisible:
     id: "photos\\.cell\\..*|.*vault\\.bytes.*"
 - assertNotVisible:
-    id: "photos-search-no-match"
+    id: "kit-empty"
 # An exact word says nothing: no line over a photograph it did not correct.
 - eraseText: 6
 - inputText: "emerald"
@@ -47,7 +47,7 @@ name: search-photos
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
-      id: "photos-search-no-match"
+      id: "kit-empty"
     timeout: 8000
 - assertVisible: "Nothing matches “zzqxv”.*"
 - assertNotVisible:

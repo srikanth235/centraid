@@ -130,25 +130,20 @@ struct PhotoShelfView: View {
                     data: {
                         if state.hasData {
                             let data = state.data
-                            if data.hasEmpty {
-                                ScreenEmptyView(sentence: data.empty.headline, remedy: data.empty.body)
-                                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                            } else {
-                                PhotoCellsGrid(
-                                    cells: data.cells.map(\.tile),
-                                    selected: Set(selection.selectedIds),
-                                    onTap: { identifier in
-                                        if selecting {
-                                            select { $0.toggled = .with { $0.photoID = identifier } }
-                                        } else if let cell = data.cells.first(where: { $0.tile.photoID == identifier }) {
-                                            open(cell.open)
-                                        }
+                            PhotoCellsGrid(
+                                cells: data.cells.map(\.tile),
+                                selected: Set(selection.selectedIds),
+                                onTap: { identifier in
+                                    if selecting {
+                                        select { $0.toggled = .with { $0.photoID = identifier } }
+                                    } else if let cell = data.cells.first(where: { $0.tile.photoID == identifier }) {
+                                        open(cell.open)
                                     }
-                                )
-                                if data.canShowMore {
-                                    KitLink(label: data.showMoreLabel) { shelf { $0.loadMore = .init() } }
-                                        .padding(.horizontal, CentraidGeometry.pageMargin)
                                 }
+                            )
+                            if data.canShowMore {
+                                KitLink(label: data.showMoreLabel) { shelf { $0.loadMore = .init() } }
+                                    .padding(.horizontal, CentraidGeometry.pageMargin)
                             }
                         }
                     }

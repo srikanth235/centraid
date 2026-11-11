@@ -33,6 +33,16 @@ fn data(d: &Driver, instance: u64) -> &wire::PhotosShelfData {
 }
 
 fn shown(d: &Driver, instance: u64) -> Vec<String> {
+    // A shelf that holds nothing is the page's Empty state, which carries no cells.
+    let state = state(d, instance);
+    if state.data.is_none()
+        && matches!(
+            state.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        )
+    {
+        return Vec::new();
+    }
     let mut shown: Vec<String> = data(d, instance)
         .cells
         .iter()
@@ -231,13 +241,18 @@ fn a_trashed_album_can_be_restored_from_its_shelf() {
 
 // -- Titles, empty sentences, the rule ----------------------------------------
 
+/// The shelf's page must be Empty (never ready data), and this is its sentence.
+fn empty(d: &Driver, instance: u64) -> &wire::EmptyState {
+    let state = state(d, instance);
+    assert!(state.data.is_none(), "an empty shelf carries no data");
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("expected the empty state, found {other:?}"),
+    }
+}
+
 fn headline(d: &Driver, instance: u64) -> String {
-    data(d, instance)
-        .empty
-        .as_ref()
-        .expect("an empty shelf")
-        .headline
-        .clone()
+    empty(d, instance).headline.clone()
 }
 
 /// The seeded scenario holds photographs on every shelf: trash them all, then
@@ -312,7 +327,7 @@ fn every_shelf_has_its_own_title_and_its_own_sentence_when_empty() {
     assert_eq!(headline(&d, place), "No photos at Lisbon yet.");
     assert_eq!(headline(&d, shelf), "Nothing in this album yet.");
     assert_eq!(
-        data(&d, shelf).empty.as_ref().expect("empty").body,
+        empty(&d, shelf).body,
         "An album points to a photo where it lives."
     );
 }

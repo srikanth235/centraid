@@ -64,7 +64,6 @@ import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.PhotoGridSkeleton
 import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ReadStateView
-import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
@@ -152,20 +151,10 @@ internal fun PhotosLibraryBody(
                     skeleton = { PhotoGridSkeleton(library.skeleton, state.chrome?.title.orEmpty()) },
                 ) {
                     if (data != null) {
+                        // AN EMPTY LIBRARY, or a filter that emptied the grid, is the page's own
+                        // Empty state (its sentence, never the other's): the data is only ever
+                        // photographs.
                         when {
-                            tiles.isEmpty() -> Column {
-                                top()
-                                // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own
-                                // sentence, never the empty-library copy.
-                                data.empty?.let { empty ->
-                                    ScreenEmpty(
-                                        sentence = empty.headline,
-                                        remedy = empty.body,
-                                        modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                                    )
-                                }
-                            }
-
                             grain == PhotosGrain.PHOTOS_GRAIN_YEARS || grain == PhotosGrain.PHOTOS_GRAIN_MONTHS -> {
                                 LibraryGrains(
                                     items = data.grain_items,

@@ -172,10 +172,10 @@ message PhotosLibraryData {
   bool complete = 5;
   // The photograph count phrase ("1,204 photos"), from the shelf's exact total.
   string count_label = 6;
-  // Set while the library is empty: the sentence for an empty library or for an
-  // empty Favorites.
-  optional EmptyState empty = 7;
+  // 7 was `empty`: an empty library is the page's own Empty state, never ready data.
   // "Photos with no capture date appear only in All." Drawn under Years/Months.
+  reserved 7;
+  reserved "empty";
   string undated_note = 8;
   // 9 was `loading_more`: nothing read it (#1152).
   reserved 9;
@@ -354,8 +354,10 @@ message PhotosSearchHits {
   repeated PhotoTile tiles = 2;
   Route open = 3;
   string count_label = 4;
-  optional EmptyState empty = 5;
+  // 5 was `empty`: a search that matched nothing is the page's own Empty state.
   // Labels the words name: a tap searches for that label.
+  reserved 5;
+  reserved "empty";
   repeated PhotosSearchWord labels = 6;
   string labels_title = 7;
   // 8 was `truncated_label`: nothing read it (#1152).

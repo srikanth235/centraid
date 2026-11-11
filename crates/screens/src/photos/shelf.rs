@@ -123,8 +123,8 @@ struct Shelf {
     kind: wire::PhotosShelfKind,
     id: String,
     route_title: String,
-    /// The read: the photographs below are its data (an empty shelf is still ready, it draws
-    /// its own empty state).
+    /// The read: the photographs below are its data. A shelf that holds nothing is drawn as
+    /// [`Page::Empty`] by [`Shelf::drawn`], never as ready data.
     page: Page<()>,
     /// A next page was asked for and did not come: what loaded stays, with a note.
     more_failed: bool,
@@ -192,7 +192,10 @@ impl Shelf {
     /// A read that did not come: a gate shows the gate; a failure over photographs shown keeps
     /// them under a note, and over nothing shown is the failure itself.
     fn unread(&mut self, reading: Reading<wire::PhotosShelf>, locale: Locale) {
-        let held = std::mem::replace(&mut self.page, Page::loading());
+        let mut held = std::mem::replace(&mut self.page, Page::loading());
+        if held.data().is_some() && self.holds_nothing() {
+            held = Page::Empty;
+        }
         self.page = match reading {
             Reading::Denied(denial) => Page::Refused(denial),
             _ => held.after(Reading::Failed, locale, |()| false),
@@ -629,6 +632,22 @@ impl Shelf {
         }
     }
 
+    /// No photograph to show: what the shelf read came to nothing live.
+    fn holds_nothing(&self) -> bool {
+        cells::dedupe_live(&self.cells).is_empty()
+    }
+
+    /// The page as drawn: ready means there is something to show, so a shelf that holds nothing
+    /// is [`Page::Empty`]; a next page that did not come adds its note over the photographs.
+    fn drawn(&self, locale: Locale) -> Page<()> {
+        if self.page.data().is_some() && self.holds_nothing() {
+            return Page::Empty;
+        }
+        self.page
+            .clone()
+            .noted(self.more_failed.then(|| Note::more_failed(locale)))
+    }
+
     /// NOTHING HERE, AND WHY: one sentence per shelf.
     fn empty(&self, locale: Locale) -> wire::EmptyState {
         let headline = match self.kind {
@@ -677,14 +696,12 @@ impl Shelf {
             .collect();
         let capped = self.next.is_some();
         let count = u32::try_from(tiles.len()).unwrap_or(u32::MAX);
-        let empty = tiles.is_empty().then(|| self.empty(locale));
         wire::PhotosShelfData {
             count_label: cells::count_phrase(locale, count, capped),
             can_show_more: capped,
             show_more_label: words::photos_show_all(locale),
             empty_trash_label: (self.is_trash() && !tiles.is_empty())
                 .then(|| kit_words::trash_empty_action(locale)),
-            empty,
             cells: tiles,
         }
     }
@@ -824,10 +841,7 @@ impl Screen for Shelf {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let page = self
-            .page
-            .clone()
-            .noted(self.more_failed.then(|| Note::more_failed(locale)));
+        let page = self.drawn(locale);
         let prompt = self.prompt;
         let state = wire::PhotosShelfState {
             title: self.title(locale),
@@ -835,7 +849,7 @@ impl Screen for Shelf {
             page: Some(page.wire(
                 locale,
                 |denial| super::denied(locale, denial),
-                wire::EmptyState::default,
+                || self.empty(locale),
             )),
             data: page.data().map(|()| self.data(locale)),
             selection: Some(self.selection.view(locale)),

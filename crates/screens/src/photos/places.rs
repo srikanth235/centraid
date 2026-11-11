@@ -57,8 +57,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Places {
     presentation: Presentation,
-    /// The read: `places` is its data (no places is still ready, the screen draws its own
-    /// empty state).
+    /// The read: `places` is its data. Nothing to show at all is drawn as [`Page::Empty`] by
+    /// [`Places::drawn`], never as ready data.
     page: Page<()>,
     places: Vec<wire::PhotosPlaceCard>,
     unplaced: u32,
@@ -180,13 +180,20 @@ impl Places {
                 self.page = Page::Refused(denial);
             }
             // The places on screen are still true: they stay under a note.
-            Reading::Failed => {
-                let held = std::mem::replace(&mut self.page, Page::loading());
-                self.page = held.after(Reading::Failed, ctx.locale(), |()| false);
-                if self.page.data().is_none() {
-                    self.places.clear();
-                }
-            }
+            Reading::Failed => self.refresh_failed(ctx.locale()),
+        }
+    }
+
+    /// A refresh that did not come: photographs or places shown stay under a note; with nothing
+    /// shown (an empty page included) it is the failure itself.
+    fn refresh_failed(&mut self, locale: Locale) {
+        let mut held = std::mem::replace(&mut self.page, Page::loading());
+        if held.data().is_some() && self.holds_nothing() {
+            held = Page::Empty;
+        }
+        self.page = held.after(Reading::Failed, locale, |()| false);
+        if self.page.data().is_none() {
+            self.places.clear();
         }
     }
 
@@ -270,6 +277,30 @@ impl Places {
         }
     }
 
+    /// Nothing to show: no place, and no photograph without one to open either (a screen that
+    /// still has that door is not empty).
+    fn holds_nothing(&self) -> bool {
+        self.places.is_empty() && self.unplaced == 0
+    }
+
+    /// The page as drawn: ready means there is something to show.
+    fn drawn(&self) -> Page<()> {
+        if self.page.data().is_some() && self.holds_nothing() {
+            Page::Empty
+        } else {
+            self.page.clone()
+        }
+    }
+
+    /// NOTHING HERE, AND WHY: places come from where a photograph was taken.
+    fn empty(locale: Locale) -> wire::EmptyState {
+        wire::EmptyState {
+            headline: words::photos_places_empty(locale),
+            body: words::photos_places_empty_caption(locale),
+            ..wire::EmptyState::default()
+        }
+    }
+
     fn data(&self, locale: Locale) -> wire::PhotosPlacesData {
         let pins = plot(&self.places);
         let rows: Vec<wire::PhotosPlaceRow> = self
@@ -283,11 +314,6 @@ impl Places {
         let photos = cells::count_phrase(locale, self.unplaced, false);
         let map = self.presentation == Presentation::Map;
         wire::PhotosPlacesData {
-            empty: rows.is_empty().then(|| wire::EmptyState {
-                headline: words::photos_places_empty(locale),
-                body: words::photos_places_empty_caption(locale),
-                ..wire::EmptyState::default()
-            }),
             map_empty: (map && !rows.is_empty() && unpinned == rows.len()).then(|| {
                 wire::EmptyState {
                     headline: words::photos_places_map_empty(locale),
@@ -382,6 +408,7 @@ impl Screen for Places {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
+        let page = self.drawn();
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PhotosPlaces(Box::new(
                 wire::PhotosPlacesState {
@@ -389,17 +416,72 @@ impl Screen for Places {
                     presentation: self.presentation as i32,
                     cards_label: words::photos_places_cards(locale),
                     map_label: words::photos_places_map(locale),
-                    page: Some(self.page.wire(
+                    page: Some(page.wire(
                         locale,
                         |denial| super::denied(locale, denial),
-                        wire::EmptyState::default,
+                        || Self::empty(locale),
                     )),
-                    data: self.page.data().map(|()| self.data(locale)),
+                    data: page.data().map(|()| self.data(locale)),
                     status: self.undo.status(),
                     name_sheet: self.sheet(locale),
                 },
             ))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wire::page_state::State;
+
+    const EN: Locale = Locale::En;
+
+    fn ready(places: Vec<wire::PhotosPlaceCard>, unplaced: u32) -> Places {
+        Places {
+            presentation: Presentation::Cards,
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            places,
+            unplaced,
+            naming: None,
+            undo: Undo::default(),
+        }
+    }
+
+    fn wired(places: &Places) -> wire::PageState {
+        places.drawn().wire(
+            EN,
+            |denial| super::super::denied(EN, denial),
+            || Places::empty(EN),
+        )
+    }
+
+    #[test]
+    fn no_places_and_no_photograph_without_one_is_the_empty_state_with_its_sentence() {
+        let places = ready(Vec::new(), 0);
+        match wired(&places).state {
+            Some(State::Empty(empty)) => {
+                assert_eq!(empty.headline, "No places yet.");
+                assert_eq!(empty.body, "Places come from where a photo was taken.");
+            }
+            other => panic!("expected the empty state, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn photographs_with_no_place_keep_their_door_so_the_page_is_not_empty() {
+        let places = ready(Vec::new(), 3);
+        assert!(wired(&places).state.is_none(), "ready draws the door");
+    }
+
+    #[test]
+    fn a_failed_read_over_nothing_is_failed_and_never_empty() {
+        let mut places = ready(Vec::new(), 0);
+        places.refresh_failed(EN);
+        assert!(matches!(wired(&places).state, Some(State::Failed(_))));
     }
 }

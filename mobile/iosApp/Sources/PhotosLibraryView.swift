@@ -153,14 +153,10 @@ struct PhotosLibraryBody: View {
             skeleton: { PhotoGridSkeleton(rows: library.skeleton, label: state.chrome.title) },
             data: {
                 if let data {
-                    if tiles.isEmpty {
-                        // THE FILTER EMPTIED THE GRID, NOT THE LIBRARY — its own sentence,
-                        // never the empty-library copy.
-                        if data.hasEmpty {
-                            EmptyStateView(data.empty)
-                                .padding(.horizontal, CentraidGeometry.pageMargin)
-                        }
-                    } else if library.grain == .years || library.grain == .months {
+                    // AN EMPTY LIBRARY, or a filter that emptied the grid, is the page's own
+                    // Empty state (its sentence, never the other's): the data is only ever
+                    // photographs.
+                    if library.grain == .years || library.grain == .months {
                         LibraryGrainCards(
                             items: data.grainItems,
                             years: library.grain == .years,

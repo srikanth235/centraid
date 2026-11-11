@@ -3,7 +3,6 @@ package dev.centraid.android.screens
 import dev.centraid.android.kit.SearchAskRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -29,7 +27,6 @@ import centraid.core.v1.PhotosSearchView
 import centraid.core.v1.Route
 import dev.centraid.android.kit.BandPolicy
 import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.PhotoCellsGrid
@@ -75,44 +72,35 @@ internal fun PhotosSearchScreen(
             when {
                 resting != null -> RestingPanel(resting, onEvent, onOpen)
 
-                hits != null -> {
-                    val empty = hits.empty
-                    if (empty != null) {
-                        // NOTHING MATCHED IS NOT NOTHING TYPED: the query quoted back and
-                        // everywhere search looked, in the kit's empty state.
-                        Column {
-                            Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
-                                EmptyStateView(empty, onAction = null)
-                            }
-                            SearchAskRow(search.ask, onOpen)
+                // NOTHING MATCHED is the page's Empty state (Rust quotes the query back and says
+                // everywhere search looked); hits are only ever something.
+                hits != null -> PhotoCellsGrid(
+                    cells = hits.tiles,
+                    // `onTap` BY NAME: this composable's last parameter is `header`.
+                    onTap = { photoId ->
+                        val template = hits.open_
+                        val args = template?.photos_lightbox
+                        if (template != null && args != null) {
+                            onOpen(template.copy(photos_lightbox = args.copy(photo_id = photoId)))
                         }
-                    } else {
-                        PhotoCellsGrid(
-                            cells = hits.tiles,
-                            // `onTap` BY NAME: this composable's last parameter is `header`.
-                            onTap = { photoId ->
-                                val template = hits.open_
-                                val args = template?.photos_lightbox
-                                if (template != null && args != null) {
-                                    onOpen(template.copy(photos_lightbox = args.copy(photo_id = photoId)))
-                                }
-                            },
-                            onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
-                            // THE DOORS AND THE REASONS SCROLL WITH THE GRID, in its own
-                            // scroller: a head that stayed put over a grid of hits would
-                            // eat the screen the hits need.
-                            header = {
-                                item(span = { GridItemSpan(maxLineSpan) }) {
-                                    HitsHead(hits.doors, hits.matched_label, onOpen)
-                                }
-                                // THE ASK ROW closes the answer (#1097).
-                                item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
-                            },
-                        )
-                    }
-                }
+                    },
+                    onFetch = { photoId, _ -> onEvent(PhotosHomeEvent(original_requested = photoId)) },
+                    // THE DOORS AND THE REASONS SCROLL WITH THE GRID, in its own
+                    // scroller: a head that stayed put over a grid of hits would
+                    // eat the screen the hits need.
+                    header = {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            HitsHead(hits.doors, hits.matched_label, onOpen)
+                        }
+                        // THE ASK ROW closes the answer (#1097).
+                        item(span = { GridItemSpan(maxLineSpan) }) { SearchAskRow(search.ask, onOpen) }
+                    },
+                )
             }
         }
+        // THE ASK ROW closes an answer that matched nothing too (#1097): with hits it rides at
+        // the foot of the grid above, so only an answer with no hits draws it here.
+        if (hits == null) SearchAskRow(search.ask, onOpen)
     }
 }
 
