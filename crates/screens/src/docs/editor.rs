@@ -191,7 +191,10 @@ impl Editor {
             return;
         }
         let folder = self.new_folder.clone().filter(|id| !id.is_empty());
-        self.opened = Opened::Ready;
+        self.page = Page::Ready {
+            data: (),
+            note: None,
+        };
         self.autosave.loaded(Typed {
             id: None,
             folder_id: folder,
