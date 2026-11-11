@@ -121,24 +121,31 @@ struct LockerHomeView: View {
     /// What an open Locker draws under its header: the tab's list, or the generator.
     @ViewBuilder
     private func unlocked() -> some View {
-        PageReadStateView(
-            page: state.page,
-            onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) },
-            onEmptyAction: { open(state.chrome.addRoute) }
-        ) {
-            if case let .data(home)? = state.content {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        switch state.destination {
-                        case .review: review(home)
-                        case .search: search(home)
-                        case .generate: LockerGeneratorView(generator: home.generator, send: send, open: open)
-                        default: items(home)
+        VStack(spacing: 0) {
+            // A CATEGORY'S HEADER (its chevron back to the landing) stays above the page's state, so
+            // an empty category still has its way out.
+            if case let .data(home)? = state.content, !home.listTitle.isEmpty, drawsItems {
+                categoryHeader(home)
+            }
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) },
+                onEmptyAction: { open(state.chrome.addRoute) }
+            ) {
+                if case let .data(home)? = state.content {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            switch state.destination {
+                            case .review: review(home)
+                            case .search: search(home)
+                            case .generate: LockerGeneratorView(generator: home.generator, send: send, open: open)
+                            default: items(home)
+                            }
                         }
+                        .padding(.bottom, 16)
                     }
-                    .padding(.bottom, 16)
+                    .refreshable { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
                 }
-                .refreshable { send(LockerHomeEvents.make { $0.refreshed = .init() }) }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -147,6 +154,14 @@ struct LockerHomeView: View {
                     .padding(.vertical, 4)
                     .background(Theme.color("bg", scheme))
             }
+        }
+    }
+
+    /// Whether the tab on screen is the Items one (the others draw their own page).
+    private var drawsItems: Bool {
+        switch state.destination {
+        case .review, .search, .generate: return false
+        default: return true
         }
     }
 
@@ -187,9 +202,10 @@ struct LockerHomeView: View {
         }
     }
 
-    /// ONE CATEGORY'S LIST, with the chevron back to the landing (the Items key does the same).
+    /// ONE CATEGORY'S HEADER: the chevron back to the landing (the Items key does the same) and its
+    /// name. It is drawn above the page's state (see `unlocked`), so an empty list keeps it.
     @ViewBuilder
-    private func list(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
+    private func categoryHeader(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         HStack(spacing: 4) {
             Button {
                 send(LockerHomeEvents.make { $0.categoryClosed = .init() })
@@ -205,6 +221,11 @@ struct LockerHomeView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, CentraidGeometry.pageMargin - 6)
+    }
+
+    /// ONE CATEGORY'S LIST, under its header.
+    @ViewBuilder
+    private func list(_ home: Centraid_Core_V1_LockerHomeData) -> some View {
         if !home.rows.isEmpty {
             LockerRowGroup(title: "", rows: home.rows, open: open)
         }

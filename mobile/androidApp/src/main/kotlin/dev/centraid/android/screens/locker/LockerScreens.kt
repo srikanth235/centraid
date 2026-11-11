@@ -341,17 +341,26 @@ internal fun LockerHomeScreen(
                 }
             },
         ) {
+            Column(Modifier.fillMaxSize()) {
+            // A CATEGORY'S HEADER (its chevron back to the landing) and the Back key stay outside the
+            // page's state, so an empty category still has its way out.
+            val categoryOpen = data != null && data.list_title.isNotEmpty() &&
+                state.destination != LockerDestination.LOCKER_DESTINATION_REVIEW &&
+                state.destination != LockerDestination.LOCKER_DESTINATION_SEARCH &&
+                !generating
+            BackHandler(enabled = categoryOpen) {
+                onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
+            }
+            if (categoryOpen && data != null) LockerCategoryHeader(data, onEvent)
             ReadStateView(
                 page = state.page!!,
                 onRetry = { onEvent(LockerHomeEvent(refreshed = LockerHomeEvent.Refreshed())) },
                 onEmptyAction = chrome?.add_route?.let { route -> { onOpen(route) } },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 skeleton = { RowSkeleton() },
+                modifier = Modifier.weight(1f),
             ) {
                 val home = data ?: return@ReadStateView
-                BackHandler(enabled = home.list_title.isNotEmpty()) {
-                    onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
-                }
                 if (generating) {
                     val generator = home.generator
                     if (generator != null) LockerGeneratorBody(generator, onEvent, onOpen)
@@ -364,6 +373,7 @@ internal fun LockerHomeScreen(
                         }
                     }
                 }
+            }
             }
         }
         val close = { onEvent(LockerHomeEvent(sheet_closed = LockerHomeEvent.SheetClosed())) }
@@ -392,7 +402,7 @@ private fun LazyListScope.itemsTab(
     onEvent: (LockerHomeEvent) -> Unit,
 ) {
     if (home.list_title.isNotEmpty()) {
-        listOfCategory(home, onOpen, onEvent)
+        listOfCategory(home, onOpen)
         return
     }
     // THE LANDING: the six category cards, then Starred and Recently used.
@@ -423,28 +433,30 @@ private fun LazyListScope.itemsTab(
 }
 
 /** ONE CATEGORY'S LIST: the chevron back (also the system back) returns to the landing. */
+/** A CATEGORY'S HEADER: the chevron back to the landing and its name, above the page's state. */
+@Composable
+private fun LockerCategoryHeader(home: LockerHomeData, onEvent: (LockerHomeEvent) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
+                .padding(horizontal = 10.dp)
+                .testTag("locker-category-back")
+                .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
+            contentAlignment = Alignment.Center,
+        ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
+        KitText(home.list_title, KitType.Section, Surface.ink)
+    }
+}
+
 private fun LazyListScope.listOfCategory(
     home: LockerHomeData,
     onOpen: (Route) -> Unit,
-    onEvent: (LockerHomeEvent) -> Unit,
 ) {
-    item(key = "list-head") {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable { onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed())) }
-                    .padding(horizontal = 10.dp)
-                    .testTag("locker-category-back")
-                    .clearAndSetSemantics { contentDescription = KitWords.backTo(home.list_back_label) },
-                contentAlignment = Alignment.Center,
-            ) { CentraidIcon(iconKey = "ChevronLeft", tint = Surface.ink, size = 18.dp) }
-            KitText(home.list_title, KitType.Section, Surface.ink)
-        }
-    }
     items(home.rows, key = { "i-" + it.item_id }) { row -> LockerRowView(row) { row.route?.let(onOpen) } }
     if (home.window.isNotEmpty()) item(key = "window") { LockerNote(home.window) }
 }
