@@ -53,6 +53,7 @@ fn retitle(d: &Driver, id: &str, title: &str) {
         act::photos::RetitlePhoto {
             photo_id: id.to_owned(),
             title: title.to_owned(),
+            expected_rev: None,
         }
         .request(),
     );
@@ -200,6 +201,7 @@ fn a_corrected_date_and_a_changed_place_read_as_the_sheet_reads_them() {
             act::photos::NamePlace {
                 place_id: place.clone(),
                 title: title.to_owned(),
+                expected_rev: None,
             }
             .request(),
         );

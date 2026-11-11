@@ -335,6 +335,10 @@
           "title": {
             "type": "string",
             "aliases": ["name"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -770,6 +774,10 @@
             "type": "string",
             "minLength": 1,
             "aliases": ["name"]
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],
@@ -1086,6 +1094,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id", "title"],

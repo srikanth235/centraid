@@ -197,6 +197,49 @@ fn naming_a_place_is_the_vaults_rename_and_a_blank_name_is_not_sent() {
 }
 
 #[test]
+fn naming_a_place_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() {
+    let mut d = driver();
+    let places = d.push(photos::TAB, photos::routes::places());
+    let id = data(&d, places).places[0].place_id.clone();
+    send(
+        &mut d,
+        places,
+        ev::Kind::NameRequested(ev::NameRequested {
+            place_id: id.clone(),
+        }),
+    );
+    arrange(
+        &d,
+        centraid_screens::catalog::act::photos::NamePlace {
+            place_id: id.clone(),
+            title: "Theirs".to_owned(),
+            expected_rev: None,
+        },
+    );
+    send(
+        &mut d,
+        places,
+        ev::Kind::Renamed(ev::Renamed {
+            place_id: id.clone(),
+            name: "Mine".to_owned(),
+        }),
+    );
+    let row = data(&d, places)
+        .places
+        .iter()
+        .find(|r| r.place_id == id)
+        .expect("still listed")
+        .clone();
+    assert_eq!(row.title, "Theirs");
+    let status = state(&d, places).status.clone().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This place changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+}
+
+#[test]
 fn a_refused_rename_says_why_and_keeps_the_list() {
     let mut d = driver();
     let places = d.push(photos::TAB, photos::routes::places());

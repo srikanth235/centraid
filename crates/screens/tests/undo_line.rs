@@ -1144,6 +1144,7 @@ fn photos_a_later_rename_refuses_the_undo_plainly_and_stays() {
         act::photos::RenameAlbum {
             album_id: album,
             title: "Elsewhere".to_owned(),
+            expected_rev: None,
         },
     );
     status_acted(&mut d, page);

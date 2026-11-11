@@ -58,11 +58,13 @@ use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::quantity::{Quantity, UnitsPref};
 use crate::kit::read::{self, Page, Reading};
+use crate::kit::stale;
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, fill, photos as words, photos_lightbox as own, photos_shelf as shelf_words, shared,
+    Locale, chat_confirm, fill, photos as words, photos_lightbox as own,
+    photos_shelf as shelf_words, shared,
 };
 
 /// How far either side of the photograph on screen the strip is read.
@@ -98,6 +100,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         pending: VecDeque::new(),
         links: Links::new(&[Kind::Person]),
         earlier: earlier::Foot::default(),
+        rev: None,
+        stale: None,
     }))
 }
 
@@ -185,6 +189,12 @@ struct Lightbox {
     links: Links,
     /// The entry to the photograph's earlier versions, read with it (#1185).
     earlier: earlier::Foot,
+    /// The photograph's revision when the page was last read: what a caption names as the one it
+    /// replaces (#1185).
+    rev: Option<i64>,
+    /// Why the vault refused the last write, when the photograph had changed (or gone to the
+    /// trash) since it was read.
+    stale: Option<stale::Stale>,
 }
 
 fn effect(kind: wire::effect::Kind) -> wire::Effect {
@@ -208,6 +218,8 @@ impl Lightbox {
     /// Read this photograph. A failed re-read keeps the photograph on screen: only
     /// a first read that failed has nothing else to show.
     fn reload(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        // The revision first: a change between the two reads refuses the next save.
+        self.rev = stale::read_rev(ctx, &self.photo_id);
         match Self::load_cell(ctx, &self.photo_id) {
             Reading::Data(found) => match found.photo {
                 Some(detail) => {
@@ -439,6 +451,7 @@ impl Lightbox {
             Some(said) => self.undo.act(ctx, request, &key, |_| said),
             None => self.undo.act_quietly(ctx, request, &key),
         };
+        self.stale = settled.stale();
         if settled.committed {
             self.reload(ctx);
         }
@@ -1315,16 +1328,31 @@ impl Screen for Lightbox {
                             && caption != detail.cell.title.trim()
                         {
                             let id = self.photo_id.clone();
-                            self.write(
+                            let written = self.write(
                                 ctx,
                                 "retitle-photo",
                                 &[&id, &caption],
                                 act::photos::RetitlePhoto {
                                     photo_id: id.clone(),
                                     title: caption.clone(),
+                                    expected_rev: self.rev,
                                 },
                                 Some(own::caption_changed(ctx.locale())),
                             );
+                            // The photograph changed, or went to the trash, since it was read:
+                            // the caption typed is kept as an earlier version and the page reads
+                            // the photograph as it is now (#1185).
+                            if !written && let Some(stale) = self.stale.take() {
+                                let said = stale::on_button(
+                                    ctx,
+                                    &chat_confirm::noun_photo(ctx.locale()),
+                                    &id,
+                                    stale,
+                                    vec![("entity.title".to_owned(), caption.into())],
+                                );
+                                self.reload(ctx);
+                                self.undo.refuse(said);
+                            }
                         }
                     }
                     K::TagAdded(added) => {

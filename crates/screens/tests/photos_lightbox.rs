@@ -521,6 +521,94 @@ fn the_caption_is_trimmed_and_an_unchanged_one_is_not_a_write() {
     assert_eq!(cell_of(&d, &id).0.title, "");
 }
 
+/// A write another device made after the page read the photograph.
+fn elsewhere(d: &Driver, request: impl Into<wire::ActRequest>) {
+    let response = d.act(request.into().keyed(format!("lb:{}", kit_act::fresh())));
+    assert_eq!(
+        response.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        response.reason
+    );
+}
+
+#[test]
+fn a_caption_over_a_photo_that_changed_elsewhere_is_refused_and_the_typed_words_are_kept() {
+    let mut d = driver();
+    let id = photo(
+        &d,
+        Shot {
+            title: Some("Pier day"),
+            ..Shot::new("lb-stale")
+        },
+    );
+    let at = open(&mut d, &id, &[], "");
+    elsewhere(
+        &d,
+        act::photos::RetitlePhoto {
+            photo_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine".into(),
+        }),
+    );
+    // The photograph is as the vault has it, and the line says what happened and where the words went.
+    assert_eq!(cell_of(&d, &id).0.title, "Theirs");
+    assert_eq!(photo_of(&view(&d, at)).caption, "Theirs");
+    let line = view(&d, at).status.clone().expect("a line");
+    assert_eq!(
+        line.sentence,
+        "This photo changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(line.refused);
+    // The next caption names the revision just read, so it goes through.
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine again".into(),
+        }),
+    );
+    assert_eq!(cell_of(&d, &id).0.title, "Mine again");
+}
+
+#[test]
+fn a_caption_over_a_photo_moved_to_the_trash_elsewhere_says_so_and_keeps_the_words() {
+    let mut d = driver();
+    let id = photo(
+        &d,
+        Shot {
+            title: Some("Pier day"),
+            ..Shot::new("lb-stale-trash")
+        },
+    );
+    let at = open(&mut d, &id, &[], "");
+    elsewhere(
+        &d,
+        act::photos::DeletePhoto {
+            photo_id: id.clone(),
+        },
+    );
+    send(
+        &mut d,
+        at,
+        ev::Kind::Caption(ev::CaptionChanged {
+            caption: "Mine".into(),
+        }),
+    );
+    assert_eq!(cell_of(&d, &id).0.title, "Pier day", "nothing was written");
+    assert_eq!(
+        view(&d, at).status.clone().expect("a line").sentence,
+        "This photo was moved to the trash. Restore it to find your text in Earlier versions."
+    );
+}
+
 #[test]
 fn labels_are_added_by_their_words_and_removed_by_the_chip_that_says_which() {
     let mut d = driver();

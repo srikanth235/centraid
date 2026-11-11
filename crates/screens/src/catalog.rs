@@ -5432,6 +5432,7 @@ pub mod act {
         pub struct RetitlePhoto {
             pub photo_id: String,
             pub title: String,
+            pub expected_rev: Option<i64>,
         }
         impl RetitlePhoto {
             pub const NAME: &str = "retitle-photo";
@@ -5440,6 +5441,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.photo_id));
                 map.insert("title".to_owned(), text(self.title));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -5656,6 +5658,7 @@ pub mod act {
         pub struct RenameAlbum {
             pub album_id: String,
             pub title: String,
+            pub expected_rev: Option<i64>,
         }
         impl RenameAlbum {
             pub const NAME: &str = "rename-album";
@@ -5664,6 +5667,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.album_id));
                 map.insert("title".to_owned(), text(self.title));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -5810,6 +5814,7 @@ pub mod act {
         pub struct NamePlace {
             pub place_id: String,
             pub title: String,
+            pub expected_rev: Option<i64>,
         }
         impl NamePlace {
             pub const NAME: &str = "name-place";
@@ -5818,6 +5823,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.place_id));
                 map.insert("title".to_owned(), text(self.title));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }

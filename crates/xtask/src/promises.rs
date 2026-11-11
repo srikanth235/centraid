@@ -589,7 +589,11 @@ pub const REGISTER: &[Row] = &[
         Promise::StaleSave,
         "crates/screens/src/people/editor.rs",
     ),
-    owed("photos", Promise::StaleSave, STALE_SAVE_OWED),
+    kept(
+        "photos",
+        Promise::StaleSave,
+        "crates/screens/src/photos/lightbox.rs",
+    ),
     kept(
         "reminders",
         Promise::StaleSave,
@@ -603,8 +607,6 @@ pub const REGISTER: &[Row] = &[
 ];
 
 const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";
-
-const STALE_SAVE_OWED: &str = "an editor screen does not send `expected_rev` and handle the vault's stale refusal yet (#1185)";
 
 /// The apps with no editor, with the ruling that says so (the Stale save promise's only
 /// exceptions). Health logs figures and imports workouts; it edits no record a member typed.
@@ -1468,7 +1470,7 @@ pub const STALE_SAVE_EDITORS: &[(&str, &[&str])] = &[
     ("money", &["accounts.rs", "transaction.rs"]),
     ("notes", &["editor.rs"]),
     ("people", &["editor.rs"]),
-    ("photos", &["lightbox.rs"]),
+    ("photos", &["lightbox.rs", "places.rs", "shelf.rs"]),
     ("reminders", &["detail.rs"]),
 ];
 

@@ -1912,6 +1912,7 @@ fn a_caption_is_found_and_the_hits_open_the_lightbox_in_their_own_order() {
     r.arrange(act::photos::RetitlePhoto {
         photo_id: a.clone(),
         title: "Zqharbour at dusk".to_owned(),
+        expected_rev: None,
     });
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "Zqharbour");
@@ -1943,15 +1944,18 @@ fn a_photograph_found_only_by_an_earlier_caption_is_a_row_under_the_grid_that_op
     r.arrange(act::photos::RetitlePhoto {
         photo_id: old.clone(),
         title: "Zqquokka at dusk".to_owned(),
+        expected_rev: None,
     });
     r.arrange(act::photos::RetitlePhoto {
         photo_id: old.clone(),
         title: "Zqtwilight at dusk".to_owned(),
+        expected_rev: None,
     });
     let now = r.photo("search now", Some("2026-02-04T10:00:00Z"), None);
     r.arrange(act::photos::RetitlePhoto {
         photo_id: now.clone(),
         title: "Zqquokka today".to_owned(),
+        expected_rev: None,
     });
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "Zqquokka");
@@ -2019,6 +2023,7 @@ fn a_typo_is_corrected_and_the_line_says_what_was_searched_instead() {
     r.arrange(act::photos::RetitlePhoto {
         photo_id: a.clone(),
         title: "Zqsunscreen on the shelf".to_owned(),
+        expected_rev: None,
     });
     r.send(H::SearchOpened(wire::PhotosSearchOpened {}));
     search_for(&mut r, "Zqsunscren");

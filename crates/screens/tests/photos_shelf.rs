@@ -513,6 +513,43 @@ fn a_refused_write_keeps_the_rows_and_the_pick_and_says_why() {
 // -- An album -----------------------------------------------------------------
 
 #[test]
+fn renaming_an_album_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() {
+    let mut d = driver();
+    let album_id = album(&d, "Trip");
+    let shelf = open(&mut d, wire::PhotosShelfKind::Album, &album_id);
+    send(
+        &mut d,
+        shelf,
+        ev::Kind::PromptOpened(ev::PromptOpened {
+            prompt: Prompt::RenameAlbum as i32,
+        }),
+    );
+    // Another device renames it while the sheet is open.
+    arrange(
+        &d,
+        centraid_screens::catalog::act::photos::RenameAlbum {
+            album_id: album_id.clone(),
+            title: "Theirs".to_owned(),
+            expected_rev: None,
+        },
+    );
+    send(
+        &mut d,
+        shelf,
+        ev::Kind::AlbumRenamed(ev::AlbumRenamed {
+            title: "Mine".to_owned(),
+        }),
+    );
+    assert_eq!(state(&d, shelf).title, "Theirs");
+    let status = state(&d, shelf).status.clone().expect("a line");
+    assert_eq!(
+        status.sentence,
+        "This album changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(status.refused);
+}
+
+#[test]
 fn an_album_renames_covers_removes_and_deletes() {
     let mut d = driver();
     let (a, b) = (photo(&d, "a"), photo(&d, "b"));

@@ -31,9 +31,10 @@ use super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Page, Reading};
+use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, photos as words, photos_shelf as shelf_words};
+use crate::strings::{Locale, chat_confirm, fill, photos as words, photos_shelf as shelf_words};
 
 /// A pin's side in points: the floor for the least photographed place and the
 /// ceiling for the most, growing with the square root of the count.
@@ -51,6 +52,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         places: Vec::new(),
         unplaced: 0,
         naming: None,
+        naming_rev: None,
         undo: Undo::default(),
     }))
 }
@@ -64,6 +66,9 @@ struct Places {
     unplaced: u32,
     /// The place the name sheet is open over.
     naming: Option<String>,
+    /// The place's revision when the name sheet opened: what a rename names as the one it
+    /// replaces (#1185).
+    naming_rev: Option<i64>,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
 }
@@ -205,16 +210,31 @@ impl Places {
             return;
         }
         let key = kit_act::key(&["name-place", place_id, name], kit_act::fresh());
-        self.undo.act(
+        let settled = self.undo.act(
             ctx,
             act::photos::NamePlace {
                 place_id: place_id.to_owned(),
                 title: name.to_owned(),
+                expected_rev: self.naming_rev,
             },
             &key,
             shelf_words::place_named,
         );
+        // The place changed, or went to the trash, since the sheet opened: the name typed is kept
+        // as an earlier version and the page reads the place as it is now (#1185).
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &chat_confirm::noun_place(ctx.locale()),
+                place_id,
+                stale,
+                vec![("entity.title".to_owned(), name.into())],
+            )
+        });
         self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
     }
 
     fn title_of(card: &wire::PhotosPlaceCard, locale: Locale) -> String {
@@ -388,6 +408,7 @@ impl Screen for Places {
                 }
                 Some(E::NameRequested(asked)) => {
                     self.undo.clear();
+                    self.naming_rev = stale::read_rev(ctx, &asked.place_id);
                     self.naming = Some(asked.place_id);
                 }
                 Some(E::NameDismissed(_)) => self.naming = None,
@@ -450,6 +471,7 @@ mod tests {
             places,
             unplaced,
             naming: None,
+            naming_rev: None,
             undo: Undo::default(),
         }
     }

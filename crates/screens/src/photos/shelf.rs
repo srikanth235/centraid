@@ -52,10 +52,11 @@ use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Note, Page, Reading};
+use crate::kit::stale;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, fill, photos as words, photos_home as home_words, photos_shelf as shelf_words,
-    shared as kit_words,
+    Locale, chat_confirm, fill, photos as words, photos_home as home_words,
+    photos_shelf as shelf_words, shared as kit_words,
 };
 
 /// One page of a shelf (the core clamps to 200).
@@ -108,6 +109,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         copying: None,
         gate: OwnerGate::default(),
         sending: None,
+        rename_rev: None,
     }))
 }
 
@@ -120,6 +122,9 @@ struct Keep {
 }
 
 struct Shelf {
+    /// The album's revision when the rename sheet opened: what a rename names as the one it
+    /// replaces (#1185).
+    rename_rev: Option<i64>,
     kind: wire::PhotosShelfKind,
     id: String,
     route_title: String,
@@ -465,16 +470,31 @@ impl Shelf {
         }
         let key = kit_act::key(&["rename-album", &self.id, name], kit_act::fresh());
         self.selection.refuse(None);
-        self.selection.door().act(
+        let settled = self.selection.door().act(
             ctx,
             act::photos::RenameAlbum {
                 album_id: self.id.clone(),
                 title: name.to_owned(),
+                expected_rev: self.rename_rev,
             },
             &key,
             shelf_words::album_renamed,
         );
+        // The album changed, or went to the trash, since the sheet opened: the name typed is
+        // kept as an earlier version and the page reads the album as it is now (#1185).
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &chat_confirm::noun_album(ctx.locale()),
+                &self.id,
+                stale,
+                vec![("entity.title".to_owned(), name.into())],
+            )
+        });
         self.reload(ctx);
+        if let Some(said) = said {
+            self.selection.door().refuse(said);
+        }
     }
 
     /// "Make key photo": the vault refuses a cover that is not a member, so it
@@ -585,6 +605,9 @@ impl Shelf {
             Some(E::AlbumChoice(choice)) => self.album_choice_event(&choice, ctx),
             Some(E::PromptOpened(opened)) => {
                 self.open_prompt(Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified));
+                if self.prompt == Prompt::RenameAlbum {
+                    self.rename_rev = stale::read_rev(ctx, &self.id);
+                }
             }
             Some(E::PromptDismissed(_)) => self.prompt = Prompt::Unspecified,
             Some(E::PromptConfirmed(_)) => self.confirmed(ctx),
