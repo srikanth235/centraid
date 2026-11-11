@@ -455,6 +455,8 @@ message HealthWorkoutState {
   // The read: loading, failed, refused or ready. A workout no longer in the vault is a final
   // failure in its own words, never an empty page (#1185).
   PageState page = 10;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker.
+  optional LinkPicker link_picker = 11;
 }
 
 message HealthWorkoutData {
@@ -484,6 +486,10 @@ message HealthWorkoutData {
   // "Share" (#1185): hands the workout to the OS as a spreadsheet file; empty while the workout
   // is gone.
   string share_label = 10;
+  // "Linked to" (#1185): every item the workout is linked to, from either end, with the add row.
+  // The kit's shared section, after the foot. Absent while what it is linked to was not read (the
+  // status line says so). Its events go back as `HealthWorkoutEvent.link`.
+  optional LinkSection links = 11;
 }
 
 message HealthWorkoutEvent {
@@ -495,6 +501,8 @@ message HealthWorkoutEvent {
     StatusActed status_acted = 3;
     // "Share" was tapped (#1185): Rust asks the owner check, then hands the file to the OS.
     ShareRequested share_requested = 4;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 5;
   }
 
   message Refreshed {}

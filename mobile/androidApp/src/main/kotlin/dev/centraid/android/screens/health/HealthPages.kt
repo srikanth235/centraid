@@ -211,6 +211,12 @@ internal fun HealthWorkoutScreen(
                             }
                         }
                         item(key = "foot") { HealthNote(data.foot) }
+                        // LINKED TO (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        data.links?.let { section ->
+                            item(key = "links") {
+                                dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(HealthWorkoutEvent(link = link)) }, onOpen)
+                            }
+                        }
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above Move to trash.
                         state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
                         item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
@@ -236,6 +242,9 @@ internal fun HealthWorkoutScreen(
                     }
                 }
             }
+        }
+        state.link_picker?.takeIf { it.open_ }?.let { picker ->
+            dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(HealthWorkoutEvent(link = link)) }
         }
     }
 }

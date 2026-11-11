@@ -543,7 +543,11 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/calendar/event.rs",
     ),
     owed("docs", Promise::Link, LINK_OWED),
-    owed("health", Promise::Link, LINK_OWED),
+    kept(
+        "health",
+        Promise::Link,
+        "crates/screens/src/health/workout.rs",
+    ),
     owed("locker", Promise::Link, LINK_OWED),
     owed("money", Promise::Link, LINK_OWED),
     kept("notes", Promise::Link, "crates/screens/src/notes/editor.rs"),

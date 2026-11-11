@@ -51,6 +51,12 @@ struct HealthWorkoutView: View {
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 4)
+                        // LINKED TO (#1185): the kit's section, after the foot; Rust makes every word and row.
+                        if workout.hasLinks {
+                            LinkSectionView(section: workout.links, send: { link in
+                                send(event { $0.link = link })
+                            }, open: open)
+                        }
                         // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row; Move to trash is pinned below.
                         EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                         OriginLineView(line: state.hasOrigin ? state.origin : nil)
@@ -83,6 +89,7 @@ struct HealthWorkoutView: View {
             }
             }
         }
+        .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
         .appAccent("health")
     }
 

@@ -205,6 +205,13 @@ catalog! {
     plain when_today = ("Today", "Today");
     plain workout_foot = ("Read from {store}.", "Read from {store}.");
     plain workout_foot_by = ("Recorded by {recorder}, read from {store}.", "Recorded by {recorder}, read from {store}.");
+    plain workout_link_added = ("Linked", "Linked");
+    plain workout_link_removed = ("Link removed", "Link removed");
+    plain workout_links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain workout_links_unread = (
+        "Couldn’t read what this workout is linked to.",
+        "Couldn’t read what this workout is linked to."
+    );
     plain workout_gone = ("This workout is no longer here.", "This workout is no longer here.");
     plain workout_samples = ("Route and splits stay in {store}.", "Route and splits stay in {store}.");
     plain workout_when = ("{day}, {start} to {end}", "{day}, {start} to {end}");

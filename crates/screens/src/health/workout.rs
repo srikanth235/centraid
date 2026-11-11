@@ -15,13 +15,14 @@ use crate::kit::act as kit_act;
 use crate::kit::civil;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
+use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::quantity::Quantity;
 use crate::kit::read::{self, Page};
 use crate::kit::share::{self, Share};
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, health as words, shared};
+use crate::strings::{Locale, fill, health as words, links as link_label, shared};
 
 /// The kinds a pace means something for.
 const PACED: [&str; 3] = [kinds::RUN, kinds::WALK, kinds::HIKE];
@@ -43,6 +44,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         earlier: earlier::Foot::default(),
         undo: Undo::default(),
         share: Share::default(),
+        // A workout may link to another workout; the picker leaves this one out (`for_entity`).
+        links: Links::new(&Kind::ALL).for_entity(&args.activity_id),
+        linked: None,
+        linked_unread: false,
     }))
 }
 
@@ -61,6 +66,14 @@ struct WorkoutPage {
     undo: Undo,
     /// The workout handed to the OS share sheet as a spreadsheet file (#1185).
     share: Share,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the workout can link to, any item but a
+    /// Locker one.
+    links: Links,
+    /// What the workout is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
 }
 
 /// The measure columns a line can name, in the order the page draws their figures.
@@ -209,6 +222,72 @@ impl WorkoutPage {
             }
             _ => earlier::Foot::default(),
         };
+        self.read_linked(ctx);
+    }
+
+    /// What the workout is linked to, in both directions. A refused or failed read is said on the
+    /// status line and never drawn as an empty section; a workout that is gone has none.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self
+            .page
+            .data()
+            .is_none_or(|answer| answer.workout.is_none())
+        {
+            self.linked = None;
+            self.linked_unread = false;
+            self.links.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.activity_id) {
+            read::Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            read::Reading::Denied(_) | read::Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back); the page is read again.
+    fn link_workout(&mut self, ctx: &Ctx, event: &wire::LinkEvent) {
+        let linked = self.linked_ids();
+        let id = self.activity_id.clone();
+        let (request, said): (wire::ActRequest, fn(Locale) -> String) =
+            match self.links.update(event, &linked, ctx) {
+                Outcome::Moved => return,
+                Outcome::Add { id: to, .. } => (
+                    act::health::Link {
+                        from: id.clone(),
+                        rel: act::health::LinkRel::Links,
+                        to,
+                        ..Default::default()
+                    }
+                    .into(),
+                    words::workout_link_added,
+                ),
+                Outcome::Remove { id: to } => (
+                    act::health::Unlink {
+                        from: id.clone(),
+                        rel: act::health::UnlinkRel::Links,
+                        to,
+                        ..Default::default()
+                    }
+                    .into(),
+                    words::workout_link_removed,
+                ),
+            };
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        self.undo.act(ctx, request, &key, said);
+        self.reload(ctx);
     }
 
     fn data(&self, ctx: &Ctx, answer: &wire::HealthWorkout) -> wire::HealthWorkoutData {
@@ -298,6 +377,14 @@ impl WorkoutPage {
             foot,
             trash_label: shared::trash_move(locale),
             share_label: share::label(locale),
+            links: self.linked.as_ref().map(|linked| {
+                self.links.section(
+                    locale,
+                    link_label::section_linked(locale),
+                    links::rows(locale, linked),
+                    words::workout_links_empty(locale),
+                )
+            }),
             figures_phone_says: phone_says(
                 locale,
                 units,
@@ -323,6 +410,7 @@ impl Screen for WorkoutPage {
                         self.reload(ctx);
                     }
                 }
+                Some(W::Link(link)) => self.link_workout(ctx, &link),
                 Some(W::ShareRequested(_)) => {
                     if self
                         .page
@@ -405,9 +493,18 @@ impl Screen for WorkoutPage {
                                 .status(locale, Source::Store(&Store::of(ctx).name(locale)))
                         })
                         .or_else(|| self.share.status())
-                        .or_else(|| self.earlier.status(locale)),
+                        .or_else(|| self.earlier.status(locale))
+                        .or_else(|| {
+                            self.linked_unread.then(|| wire::StatusLine {
+                                sentence: words::workout_links_unread(locale),
+                                action_label: String::new(),
+                                refused: false,
+                            })
+                        }),
                     earlier: self.earlier.entry.clone(),
                     origin: self.earlier.origin.clone(),
+                    link_picker: (self.linked.is_some() && self.links.is_open())
+                        .then(|| self.links.picker(locale, &self.linked_ids())),
                 },
             )),
             ..wire::ViewState::default()
@@ -485,3 +582,7 @@ mod tests {
         assert_eq!(lines[0].lead, "Health Connect says 3.1 mi");
     }
 }
+
+#[cfg(test)]
+#[path = "workout_link_tests.rs"]
+mod link_tests;
