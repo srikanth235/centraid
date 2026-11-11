@@ -579,4 +579,14 @@ mod tests {
         assert!(!request.input.contains_key("arrived_system"));
         assert!(!request.input.contains_key("arrived_label"));
     }
+
+    #[test]
+    fn an_attachments_size_is_worded_by_the_quantity_kit_whatever_the_switch() {
+        for units in [UnitsPref::Metric, UnitsPref::Imperial] {
+            assert_eq!(
+                Quantity::bytes(1_400_000).words(Locale::En, units),
+                "1.4 MB"
+            );
+        }
+    }
 }
