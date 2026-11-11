@@ -282,3 +282,39 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
         Some(wire::earlier_view::Content::Failure(_))
     ));
 }
+
+fn origin_of(d: &mut Driver, id: &str) -> Option<wire::OriginLine> {
+    let at = d.push("photos", routes::lightbox(id, &[], ""));
+    let state = match &d.view(at).kind {
+        Some(wire::view_state::Kind::PhotosLightbox(state)) => (**state).clone(),
+        other => panic!("not the lightbox: {other:?}"),
+    };
+    let origin = match state.content {
+        Some(wire::photos_lightbox_state::Content::Photo(photo)) => photo.origin,
+        other => panic!("no photograph: {other:?}"),
+    };
+    d.pop("photos", at);
+    origin
+}
+
+#[test]
+fn a_camera_roll_photo_says_so_and_a_typed_one_does_not() {
+    let mut d = driver();
+    let rolled = upload(&d, "rolled", |u| {
+        u.arrived_system = Some(act::photos::UploadArrivedSystem::CameraRoll);
+        u.arrived_label = Some("Camera roll".to_owned());
+    });
+    let picked = upload(&d, "picked", |u| {
+        u.arrived_system = Some(act::photos::UploadArrivedSystem::Picker);
+        u.arrived_label = Some("IMG_0042.jpg".to_owned());
+    });
+    let typed = upload(&d, "typed", |_| {});
+    let line = origin_of(&mut d, &rolled).expect("a line");
+    assert_eq!(line.text, "From Camera roll");
+    assert_eq!(line.accessibility_label, "Came from Camera roll");
+    assert_eq!(
+        origin_of(&mut d, &picked).map(|line| line.text),
+        Some("From IMG_0042.jpg".to_owned())
+    );
+    assert_eq!(origin_of(&mut d, &typed), None);
+}

@@ -981,7 +981,7 @@ impl Lightbox {
             },
             labels,
             earlier: self.earlier.entry.clone(),
-            origin: None,
+            origin: self.earlier.origin.clone(),
             people: Some({
                 let mut section = self.links.section(
                     locale,

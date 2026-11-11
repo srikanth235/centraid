@@ -460,7 +460,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Origin,
         "crates/screens/src/people/earlier.rs",
     ),
-    owed("photos", Promise::Origin, ORIGIN_OWED),
+    kept(
+        "photos",
+        Promise::Origin,
+        "crates/screens/src/photos/earlier.rs",
+    ),
     kept(
         "reminders",
         Promise::Origin,
