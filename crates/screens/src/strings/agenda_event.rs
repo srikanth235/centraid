@@ -16,6 +16,7 @@ catalog! {
     plain add_unavailable_error = ("This phone has no picker for that.", "This phone has no picker for that.");
     plain adding_status = ("Adding {name}", "Adding {name}");
     plain adding_unnamed_status = ("Adding", "Adding");
+    plain attachment_added = ("Attachment added", "Attachment added");
     plain attachment_kind_file = ("File", "File");
     plain attachment_kind_image = ("Image", "Image");
     plain attachment_kind_pdf = ("PDF", "PDF");
@@ -23,6 +24,7 @@ catalog! {
     plain attachment_kind_text = ("Text", "Text");
     plain attachment_meta = ("{kind} · {size}", "{kind} · {size}");
     plain attachment_spoken = ("{name}, {kind}", "{name}, {kind}");
+    plain attachment_removed = ("Attachment removed", "Attachment removed");
     plain attachment_untitled = ("Untitled", "Untitled");
     plain attachments_empty = ("Nothing attached yet.", "Nothing attached yet.");
     plain attachments_heading = ("Attachments", "Attachments");

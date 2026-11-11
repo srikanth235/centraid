@@ -194,10 +194,26 @@ impl Attachments {
             Some(K::RemoveConfirmed(_)) => self.detach(ctx),
             Some(K::RemoveDismissed(_)) => self.removing = None,
             Some(K::ShowMore(_)) => self.more(ctx),
-            Some(K::StatusDismissed(_)) => self.line.clear(),
+            // THE SECTION'S STATUS VERB: "Undo" while an attach or a detach can be taken back (the
+            // section draws its own line, so the verb arrives here, not as the page's kit
+            // `StatusActed`); a refusal has no verb and the tap only clears it.
+            Some(K::StatusDismissed(_)) => {
+                if self.line.can_undo() {
+                    self.undo(ctx);
+                } else {
+                    self.line.clear();
+                }
+            }
             None => {}
         }
         Vec::new()
+    }
+
+    /// Run the stored inverse of the last attach or detach, then read the section again.
+    fn undo(&mut self, ctx: &Ctx) {
+        if self.line.acted(ctx) {
+            self.reload(ctx);
+        }
     }
 
     fn add(&mut self, pick: Pick) -> Vec<wire::Effect> {
@@ -276,7 +292,9 @@ impl Attachments {
         // Every app's `attach` has one shape, so one request serves them all.
         let mut request = act::calendar::Attach { from, to }.request();
         request.app = self.app.to_owned();
-        let attached = self.line.act_quietly(ctx, request, &key);
+        // Attach and detach are each other's inverse (`edge.add` / `edge.remove`): the line says
+        // so and offers Undo, which detaches (#1185).
+        let attached = self.line.act(ctx, request, &key, words::attachment_added);
         if !attached.committed {
             self.refuse(refusal_or(locale, &attached.refusal));
         }
@@ -294,7 +312,7 @@ impl Attachments {
         let (from, to) = (self.item_id.clone(), id);
         let mut request = act::calendar::Detach { from, to }.request();
         request.app = self.app.to_owned();
-        let detached = self.line.act_quietly(ctx, request, &key);
+        let detached = self.line.act(ctx, request, &key, words::attachment_removed);
         if !detached.committed {
             self.refuse(refusal_or(ctx.locale(), &detached.refusal));
         }

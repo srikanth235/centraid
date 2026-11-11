@@ -205,10 +205,12 @@ fn add_photo_asks_the_shell_for_a_photo_then_makes_it_and_attaches_it() {
         .driver
         .answer_effect(picked('a', 4096, "IMG_0042.jpg", "image/jpeg"));
     let section = section(&world, page);
-    assert!(
-        !section.busy && section.status.is_none(),
-        "{:?}",
-        section.status
+    // The attach says so, with Undo (#1185).
+    assert!(!section.busy);
+    let status = section.status.as_ref().expect("a status line");
+    assert_eq!(
+        (status.sentence.as_str(), status.action_label.as_str()),
+        ("Attachment added", "Undo")
     );
     assert_eq!(section.items.len(), 1);
     let tile = &section.items[0];

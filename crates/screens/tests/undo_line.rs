@@ -1154,3 +1154,98 @@ fn photos_a_later_rename_refuses_the_undo_plainly_and_stays() {
     d.send(page, wire::screen_event::Kind::Appeared(wire::Appeared {}));
     assert_eq!(photos_shelf(&d, page).title, "Elsewhere");
 }
+
+// --- Attachments (the kit's section, on the event page) ----------------------------------
+
+fn attachment_status(world: &calendar_support::World, page: u64) -> Option<(String, String)> {
+    let section = world
+        .event_data(page)
+        .attachments
+        .as_ref()
+        .expect("a section");
+    section
+        .status
+        .as_ref()
+        .map(|s| (s.sentence.clone(), s.action_label.clone()))
+}
+
+fn attachment_count(world: &calendar_support::World, page: u64) -> usize {
+    world
+        .event_data(page)
+        .attachments
+        .as_ref()
+        .expect("a section")
+        .items
+        .len()
+}
+
+fn on_attachments(
+    world: &mut calendar_support::World,
+    page: u64,
+    kind: wire::agenda_attachment_event::Kind,
+) {
+    world.send_event(
+        page,
+        wire::agenda_event_event::Kind::Attachment(wire::AgendaAttachmentEvent {
+            kind: Some(kind),
+        }),
+    );
+}
+
+#[test]
+fn attachments_attaching_says_so_and_undo_detaches_and_removing_says_so_and_undo_reattaches() {
+    use wire::agenda_attachment_event::Kind as A;
+    let mut world = calendar_support::World::new();
+    let id = calendar_review(&mut world);
+    let page = world.open_event(&id, &id, None, "2099-06-15");
+
+    on_attachments(&mut world, page, A::AddFile(Default::default()));
+    world
+        .driver
+        .answer_effect(wire::effect_result::Outcome::FilePicked(wire::FilePicked {
+            blob: "d".repeat(64),
+            byte_size: 2048,
+            name: "Menu.pdf".to_owned(),
+            media_type: "application/pdf".to_owned(),
+        }));
+    assert_eq!(attachment_count(&world, page), 1);
+    assert_eq!(
+        attachment_status(&world, page),
+        Some(line("Attachment added", "Undo"))
+    );
+
+    // The section's own verb (it draws its own line) takes the attach back.
+    on_attachments(&mut world, page, A::StatusDismissed(Default::default()));
+    assert_eq!(attachment_count(&world, page), 0);
+    assert_eq!(attachment_status(&world, page), Some(line("Undone", "")));
+
+    // Attach again, then remove it: that says so with Undo, and Undo attaches it back.
+    on_attachments(&mut world, page, A::AddFile(Default::default()));
+    world
+        .driver
+        .answer_effect(wire::effect_result::Outcome::FilePicked(wire::FilePicked {
+            blob: "d".repeat(64),
+            byte_size: 2048,
+            name: "Menu.pdf".to_owned(),
+            media_type: "application/pdf".to_owned(),
+        }));
+    let attached = world.event_data(page).attachments.as_ref().unwrap().items[0]
+        .attachment_id
+        .clone();
+    on_attachments(
+        &mut world,
+        page,
+        A::RemoveAsked(wire::agenda_attachment_event::RemoveAsked {
+            attachment_id: attached,
+        }),
+    );
+    on_attachments(&mut world, page, A::RemoveConfirmed(Default::default()));
+    assert_eq!(attachment_count(&world, page), 0);
+    assert_eq!(
+        attachment_status(&world, page),
+        Some(line("Attachment removed", "Undo"))
+    );
+    on_attachments(&mut world, page, A::StatusDismissed(Default::default()));
+    assert_eq!(attachment_count(&world, page), 1);
+    assert_eq!(attachment_status(&world, page), Some(line("Undone", "")));
+}
