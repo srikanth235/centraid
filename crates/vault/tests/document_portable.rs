@@ -159,6 +159,17 @@ fn the_trash_the_missing_and_the_duplicates() {
 }
 
 #[test]
+fn unsafe_titles_are_made_safe_in_the_archive() {
+    let w = World::new();
+    w.document("a/b: c.pdf", b"one", None);
+    w.document("CON.txt", b"two", None);
+    let (_, entries) = w.zip(json!({}));
+    let mut listed = names(&entries);
+    listed.sort_unstable();
+    assert_eq!(listed, ["CON_.txt", "a-b- c.pdf"]);
+}
+
+#[test]
 fn a_folder_scope_holds_that_folder_and_the_ones_below_it_relative_to_it() {
     let w = World::new();
     let taxes = w.folder("Taxes", None);

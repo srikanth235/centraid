@@ -3,8 +3,11 @@
 //! a file, never built in memory (owner decision D17).
 //!
 //! The archive has the folder structure the member sees: `Taxes/2026/Receipt.pdf`, a document at
-//! the top level at the top of the archive. A name that two documents share gets ` 2`, ` 3` before
-//! its extension, so nothing overwrites anything. Each original is copied from its file in the
+//! the top level at the top of the archive. Every name is made safe first ([`file_name`]: no
+//! separator, control character or reserved device name, short enough for any file system, the
+//! extension kept), and a name that two documents share in one folder (compared without regard to
+//! case) gets ` 2`, ` 3` before its extension, so nothing overwrites anything. A document and a
+//! folder of one name in the same place cannot both be a path, so the folder takes ` folder`. Each original is copied from its file in the
 //! content store through [`crate::portable::zip::ZipWriter`] in fixed-size chunks, so the memory
 //! an export holds does not depend on how large the documents are.
 //!
@@ -23,7 +26,7 @@ use rusqlite::Connection;
 
 use crate::bytes::BlobStore;
 use crate::commands::document::{folder_refusal, no_store};
-use crate::commands::note_portable::file_stem;
+use crate::commands::note_portable::{file_name, file_stem};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::portable::zip::ZipWriter;
@@ -80,7 +83,12 @@ fn path_of(
 /// `path` made unique among `used` (compared without regard to case) by ` 2`, ` 3` before the
 /// extension.
 pub(crate) fn unique(used: &mut BTreeSet<String>, path: String) -> String {
-    if used.insert(path.to_lowercase()) {
+    unique_among(used, &BTreeSet::new(), path)
+}
+
+/// [`unique`], also avoiding a folder (`dirs`, lower-cased paths) of the same name.
+fn unique_among(used: &mut BTreeSet<String>, dirs: &BTreeSet<String>, path: String) -> String {
+    if !dirs.contains(&path.to_lowercase()) && used.insert(path.to_lowercase()) {
         return path;
     }
     let (folder, name) = path
@@ -98,8 +106,26 @@ pub(crate) fn unique(used: &mut BTreeSet<String>, path: String) -> String {
         } else {
             format!("{folder}/{stem} {again}{extension}")
         };
-        if used.insert(candidate.to_lowercase()) {
+        if !dirs.contains(&candidate.to_lowercase()) && used.insert(candidate.to_lowercase()) {
             return candidate;
+        }
+    }
+}
+
+/// Rename a folder in `names` (the folders above a document) that has the path of a file already
+/// in the archive, so a file and a folder never share a path: it takes ` folder`, then
+/// ` folder 2`, and so on.
+fn apart_from_files(used: &BTreeSet<String>, prefix: &str, names: &mut [String]) {
+    for depth in 0..names.len() {
+        let own = names[depth].clone();
+        let mut again = 0;
+        while used.contains(&format!("{prefix}{}", names[..=depth].join("/")).to_lowercase()) {
+            again += 1;
+            names[depth] = if again == 1 {
+                format!("{own} folder")
+            } else {
+                format!("{own} folder {again}")
+            };
         }
     }
 }
@@ -238,6 +264,7 @@ pub(crate) fn add_documents<W: Write + Seek>(
     prefix: &str,
 ) -> Result<(u64, u64)> {
     let mut used: BTreeSet<String> = BTreeSet::new();
+    let mut dirs: BTreeSet<String> = BTreeSet::new();
     let mut added = 0_u64;
     let mut missing = 0_u64;
     for (title, blob, folder) in documents {
@@ -258,8 +285,12 @@ pub(crate) fn add_documents<W: Write + Seek>(
             continue;
         };
         let size = file.metadata()?.len();
-        names.push(file_stem(&title));
-        let name = unique(&mut used, format!("{prefix}{}", names.join("/")));
+        apart_from_files(&used, prefix, &mut names);
+        for depth in 1..=names.len() {
+            dirs.insert(format!("{prefix}{}", names[..depth].join("/")).to_lowercase());
+        }
+        names.push(file_name(&title));
+        let name = unique_among(&mut used, &dirs, format!("{prefix}{}", names.join("/")));
         zip.add(&name, size, file)?;
         added += 1;
     }
@@ -288,4 +319,164 @@ pub fn definitions() -> Vec<CommandDefinition> {
         EXPORT,
         export_zip,
     )]
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::bytes::Result as BlobResult;
+    use crate::portable::zip::stored_entries;
+
+    /// A store whose every blob is one real file.
+    struct Stub {
+        real: PathBuf,
+    }
+
+    impl BlobStore for Stub {
+        fn put(&self, _: &[u8]) -> BlobResult<String> {
+            unimplemented!()
+        }
+        fn get(&self, _: &str) -> BlobResult<Vec<u8>> {
+            unimplemented!()
+        }
+        fn has(&self, _: &str) -> BlobResult<bool> {
+            unimplemented!()
+        }
+        fn ids(&self) -> BlobResult<BTreeSet<String>> {
+            unimplemented!()
+        }
+        fn size(&self, _: &str) -> BlobResult<u64> {
+            unimplemented!()
+        }
+        fn path_of(&self, _: &str) -> BlobResult<Option<PathBuf>> {
+            Ok(Some(self.real.clone()))
+        }
+    }
+
+    fn folders(list: &[(&str, &str, Option<&str>)]) -> BTreeMap<String, Folder> {
+        list.iter()
+            .map(|(id, name, parent)| {
+                (
+                    (*id).to_owned(),
+                    Folder {
+                        name: (*name).to_owned(),
+                        parent: parent.map(str::to_owned),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn run(folders: &BTreeMap<String, Folder>, documents: &[(&str, Option<&str>)]) -> Vec<String> {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("bytes");
+        fs::write(&real, b"original").unwrap();
+        let store = Stub { real };
+        let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+        let rows = documents
+            .iter()
+            .map(|(title, folder)| {
+                (
+                    (*title).to_owned(),
+                    "blob".to_owned(),
+                    folder.map(str::to_owned),
+                )
+            })
+            .collect();
+        add_documents(&mut zip, &store, folders, None, rows, "").unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        stored_entries(&bytes)
+            .unwrap()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect()
+    }
+
+    #[test]
+    fn every_name_in_the_archive_is_safe_and_the_extension_survives() {
+        let long = format!("{}.pdf", "x".repeat(400));
+        let names = run(
+            &BTreeMap::new(),
+            &[
+                ("../../etc/passwd", None),
+                ("tab\there.txt", None),
+                ("CON.txt", None),
+                ("nul", None),
+                ("Trailing dot. ", None),
+                ("..", None),
+                (long.as_str(), None),
+            ],
+        );
+        for name in &names {
+            assert!(
+                name.split('/').all(|part| !matches!(part, "" | "." | "..")),
+                "{name}"
+            );
+            assert!(!name.chars().any(char::is_control), "{name}");
+            assert!(name.len() <= 205, "{name}");
+        }
+        assert!(names.contains(&"tab-here.txt".to_owned()), "{names:?}");
+        assert!(names.contains(&"CON_.txt".to_owned()), "{names:?}");
+        assert!(names.contains(&"nul_".to_owned()), "{names:?}");
+        assert!(names.contains(&"Trailing dot".to_owned()), "{names:?}");
+        assert!(names.contains(&"Untitled".to_owned()), "{names:?}");
+        assert!(
+            names
+                .iter()
+                .any(|name| name.ends_with(".pdf") && name.starts_with("xxx"))
+        );
+    }
+
+    #[test]
+    fn a_folder_name_is_made_safe_too_and_a_slash_in_a_title_is_not_a_folder() {
+        let tree = folders(&[("f", "Bad:name?", None), ("g", "AUX", Some("f"))]);
+        let names = run(&tree, &[("a/b.pdf", Some("g"))]);
+        assert_eq!(names, ["Bad-name-/AUX_/a-b.pdf"]);
+    }
+
+    #[test]
+    fn names_that_collide_in_one_folder_get_a_distinct_suffix_whatever_their_case() {
+        let tree = folders(&[("f", "Taxes", None)]);
+        let names = run(
+            &tree,
+            &[
+                ("A.pdf", Some("f")),
+                ("a.PDF", Some("f")),
+                ("A.pdf", Some("f")),
+                ("A.pdf", None),
+                // Two titles that only collide once they are made safe.
+                ("x/y.txt", None),
+                ("x:y.txt", None),
+            ],
+        );
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(
+            sorted,
+            [
+                "A.pdf",
+                "Taxes/A 3.pdf",
+                "Taxes/A.pdf",
+                "Taxes/a 2.PDF",
+                "x-y 2.txt",
+                "x-y.txt",
+            ]
+        );
+        let lower: BTreeSet<String> = names.iter().map(|name| name.to_lowercase()).collect();
+        assert_eq!(lower.len(), names.len(), "no two paths are one file");
+    }
+
+    #[test]
+    fn a_file_and_a_folder_of_one_name_never_share_a_path() {
+        let tree = folders(&[("f", "Taxes", None)]);
+        // The file first, then a document inside the folder of the same name.
+        let names = run(&tree, &[("Taxes", None), ("In.pdf", Some("f"))]);
+        assert_eq!(names, ["Taxes", "Taxes folder/In.pdf"]);
+        // The folder first, then a file of the folder's name.
+        let names = run(&tree, &[("In.pdf", Some("f")), ("taxes", None)]);
+        assert_eq!(names, ["Taxes/In.pdf", "taxes 2"]);
+    }
 }
