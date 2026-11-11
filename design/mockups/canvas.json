@@ -809,6 +809,14 @@
       "x": 3810,
       "y": 24000
     },
+    "HealthWidgets.dc.html": {
+      "h": 1290,
+      "page": "light",
+      "title": "1 · Health widgets (iPhone and Android)",
+      "w": 880,
+      "x": 1920,
+      "y": 23200
+    },
     "HealthWorkout.dc.html": {
       "h": 844,
       "page": "light",
@@ -1481,14 +1489,6 @@
       "x": 3810,
       "y": 24000
     },
-    "Reconnect.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Reconnect phone data",
-      "w": 390,
-      "x": 5250,
-      "y": 24000
-    },
     "PeopleMoreContacts.dc.html": {
       "h": 844,
       "page": "light",
@@ -1696,6 +1696,14 @@
       "w": 1200,
       "x": 0,
       "y": 0
+    },
+    "Reconnect.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Reconnect phone data",
+      "w": 390,
+      "x": 5250,
+      "y": 24000
     },
     "RecoveryKey.dc.html": {
       "h": 844,
@@ -2886,6 +2894,7 @@
     "AndroidChat.dc.html",
     "AndroidRecoveryKey.dc.html",
     "AgendaWidgets.dc.html",
+    "HealthWidgets.dc.html",
     "AgendaQuickAddChip.dc.html",
     "WelcomeDark.dc.html",
     "HomeWidgetsDark.dc.html",
