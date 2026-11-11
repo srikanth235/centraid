@@ -56,6 +56,40 @@ fn stat_of(stated: &str) -> Option<String> {
     value.get("stat")?.as_str().map(str::to_owned)
 }
 
+/// `shell.followed-stores`: every phone store the vault follows, one row per origin.
+pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
+    let loaded = (|| -> KitResult<(wire::FollowedStores, Option<centraid_apps_kit::Denial>)> {
+        let query = PageQuery::new(
+            "followed.stores",
+            "id, system, ref, label, device_id",
+            "origin",
+            PageOrder::asc("id", "id"),
+        )
+        .filter(
+            "system IN (?, ?, ?, ?)",
+            ["contacts", "calendar", "files", "health"]
+                .map(|system| PageBindValue::Text(system.to_owned()))
+                .to_vec(),
+        );
+        let mut stores: Vec<wire::FollowedStore> = all(door, &query)?
+            .iter()
+            .map(|row| wire::FollowedStore {
+                origin_id: text_of(row, "id").unwrap_or_default(),
+                system: text_of(row, "system").unwrap_or_default(),
+                origin_ref: text_of(row, "ref").unwrap_or_default(),
+                label: text_of(row, "label").unwrap_or_default(),
+                device_id: text_of(row, "device_id").unwrap_or_default(),
+            })
+            .collect();
+        stores.sort_by(|a, b| {
+            (a.system.as_str(), a.label.to_lowercase())
+                .cmp(&(b.system.as_str(), b.label.to_lowercase()))
+        });
+        Ok((wire::FollowedStores { stores }, None))
+    })();
+    settle(door, loaded, Answer::FollowedStores)
+}
+
 /// `shell.files-followed`.
 pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {

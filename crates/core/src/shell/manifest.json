@@ -141,6 +141,17 @@
       }
     },
     {
+      "name": "followed-stores",
+      "kind": "followed_store",
+      "figures": ["stores"],
+      "description": "(following, #1185) The phone stores the vault follows (contacts, calendars, folders, health), one row per origin with its label and the install that last followed it. A restored vault holds these although the new phone follows nothing yet: the Reconnect page lists them. Never reachable by the assistant.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "backup-status",
       "kind": "backup",
       "figures": [

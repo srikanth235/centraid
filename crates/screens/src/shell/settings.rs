@@ -308,6 +308,16 @@ impl Settings {
                             download.pressable = true;
                             download
                         },
+                        // THE STORES THE VAULT FOLLOWED ON ANOTHER PHONE, offered again (#1185).
+                        row(
+                            "reconnect",
+                            words::settings_reconnect(locale),
+                            String::new(),
+                            "Backup",
+                            Some(crate::follow::reconnect::route()),
+                            "neutral",
+                            String::new(),
+                        ),
                     ],
                 },
                 wire::SettingsSection {

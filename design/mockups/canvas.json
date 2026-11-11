@@ -1417,6 +1417,14 @@
       "x": 3330,
       "y": 24000
     },
+    "Reconnect.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Reconnect phone data",
+      "w": 390,
+      "x": 4290,
+      "y": 24000
+    },
     "PeopleMoreContacts.dc.html": {
       "h": 844,
       "page": "light",
@@ -2900,6 +2908,7 @@
     "NotesAboutPage.dc.html",
     "PeopleMoreContacts.dc.html",
     "PeopleImport.dc.html",
+    "Reconnect.dc.html",
     "HealthSearch.dc.html",
     "PersonLinks.dc.html",
     "TrashNotes.dc.html",

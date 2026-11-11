@@ -61,4 +61,19 @@ catalog! {
     plain source_contacts = ("your phone’s contacts", "your phone’s contacts");
     plain source_files = ("the folder", "the folder");
     plain source_health = ("your health store", "your health store");
+
+    plain reconnect_title = ("Reconnect", "Reconnect");
+    plain reconnect_lede = (
+        "Connect each store another phone followed to follow it here.",
+        "Connect each store another phone followed to follow it here."
+    );
+    plain reconnect_none = ("Nothing to reconnect", "Nothing to reconnect");
+    plain reconnect_connect = ("Connect", "Connect");
+    plain reconnect_contacts = ("Phone contacts", "Phone contacts");
+    plain reconnect_calendars = ("Phone calendars", "Phone calendars");
+    plain reconnect_folder = ("{label} folder", "{label} folder");
+    plain reconnect_failed = (
+        "Couldn’t read what the vault followed.",
+        "Couldn’t read what the vault followed."
+    );
 }

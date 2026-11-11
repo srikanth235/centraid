@@ -271,6 +271,9 @@ message AppQueryResponse {
     Holdings holdings = 1540;
     // The shell's own answers (lane I: the followed folders a vault holds).
     ImportsFilesHeld imports_files_held = 1700;
+    // The phone stores the vault was following, with the device that last did (#1185):
+    // `shell.followed-stores`, read by the Reconnect screen.
+    FollowedStores followed_stores = 1705;
     // What the phone says that differs from a followed row (#1183): `shell.phone-differences`.
     FollowDifferences follow_differences = 1702;
     // A record's earlier values, a page (#1185): `shell.earlier-versions`, and how many it
@@ -280,6 +283,24 @@ message AppQueryResponse {
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }
+}
+
+// The phone stores a vault follows, as its `origin` rows hold them: the shell query
+// `followed-stores`. A restored vault holds these although the new phone follows nothing yet.
+message FollowedStores {
+  repeated FollowedStore stores = 1;
+}
+
+message FollowedStore {
+  string origin_id = 1;
+  // `contacts`, `calendar`, `files` or `health`.
+  string system = 2;
+  // The shell's own name for the source (`folder:<uuid>` for a folder).
+  string origin_ref = 3;
+  // An account, a calendar, a folder or a store, as the member knows it.
+  string label = 4;
+  // The install that last followed it.
+  string device_id = 5;
 }
 
 // A CONSENT DENIAL, the shape every app's payload carries.

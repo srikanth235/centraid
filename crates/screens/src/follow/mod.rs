@@ -35,6 +35,7 @@
 
 pub mod coordinator;
 pub mod gate;
+pub mod reconnect;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -53,7 +54,7 @@ pub const NAME: &str = coordinator::NAME;
 /// The registry of the coordinator.
 #[must_use]
 pub fn registry() -> Registry {
-    coordinator::registry()
+    coordinator::registry().merge(reconnect::registry())
 }
 
 /// The services a runtime opens for it: see [`crate::Runtime::with_services`].

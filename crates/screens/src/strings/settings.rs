@@ -14,6 +14,7 @@ catalog! {
     counted settings_vaults_held = ("This phone has one vault.", "This phone has {n} vaults.");
     plain settings_make_vault = ("Make a vault", "Make a vault");
     plain settings_download_settings = ("Download settings", "Download settings");
+    plain settings_reconnect = ("Reconnect phone data", "Reconnect phone data");
     plain settings_backup = ("Backup", "Backup");
     plain settings_recovery_key = ("Recovery key", "Recovery key");
     plain settings_show_recovery_key = ("Show recovery key", "Show recovery key");

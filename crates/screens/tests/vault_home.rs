@@ -414,3 +414,64 @@ fn a_launch_asks_for_the_first_pass_on_the_vaults_it_opened_and_a_restore_for_it
     );
     let _ = restored;
 }
+
+/// A RESTORE OF A VAULT THAT FOLLOWED STORES OFFERS THE RECONNECT PAGE (#1185), and a vault that
+/// followed nothing is not shown an empty one. The offer is a page pushed, never a connect.
+#[test]
+fn a_restore_offers_the_reconnect_page_only_when_the_vault_followed_stores() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let offered = |phone: &Phone| {
+        phone.driver.effects.iter().any(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(wire::effect::Kind::OpenRoute(open))
+                    if open.route.as_ref().is_some_and(|r| r.screen == "follow.reconnect")
+            )
+        })
+    };
+    let dir = scratch();
+    lay_down(&dir, "a", "Alpha");
+    let mut phone = Phone::standard(&dir);
+    launched(&mut phone);
+    let restore = |phone: &mut Phone, name: &str| {
+        lay_down(&dir, name, name);
+        let path = dir.join(name).join("vault.db");
+        phone.driver.effects.clear();
+        let adopted = phone
+            .shelf
+            .adopt_restored(&[centraid_screens::vault::Restored {
+                path: path.to_string_lossy().into_owned(),
+                index: 0,
+                own: None,
+            }]);
+        assert_eq!(adopted.value, 1);
+        phone.driver.pump(Duration::from_millis(800));
+    };
+    restore(&mut phone, "first");
+    assert!(
+        !offered(&phone),
+        "a vault that followed nothing is not offered the page"
+    );
+    let told = phone.driver.act(
+        act::people::FollowContacts {
+            origin: serde_json::json!({"ref": "container:icloud", "label": "iCloud"}).to_string(),
+            records: "[]".to_owned(),
+            complete: Some(false),
+            since: None,
+        }
+        .request()
+        .keyed("arrange:contacts"),
+    );
+    assert_eq!(
+        told.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        told.reason
+    );
+    restore(&mut phone, "second");
+    assert!(
+        offered(&phone),
+        "a vault that followed stores is offered the page"
+    );
+}

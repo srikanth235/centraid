@@ -216,6 +216,13 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     assert!(row(0).route.is_none());
     // Backup and the recovery key open the pages that own them.
     assert_eq!(row(1).route.as_ref().unwrap().screen, "backup.home");
+    // Reconnect phone data opens the page that lists what another phone followed (#1185).
+    let reconnect = data.sections[1]
+        .rows
+        .iter()
+        .find(|row| row.id == "reconnect")
+        .expect("a Reconnect row");
+    assert_eq!(reconnect.route.as_ref().unwrap().screen, "follow.reconnect");
     assert_eq!(row(2).title, "Show recovery key");
     assert_eq!(row(2).route.as_ref().unwrap().screen, "words.show");
     // Until the platform says, the key's sentence is the cautious one.

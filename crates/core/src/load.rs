@@ -609,6 +609,8 @@ fn read(
         // ---- the shell's own catalogue (`shell/manifest.json`) ----
         // imports (lane I): the folders the vault follows, with each file's last stat
         ("shell", "files-followed") => app_query::imports::files_followed(door)?,
+        // reconnect (#1185): the phone stores the vault was following, on whichever phone
+        ("shell", "followed-stores") => app_query::imports::followed_stores(door)?,
         // following (#1183): what the phone says that differs from one followed row
         ("shell", "phone-differences") => {
             app_query::follow::differences(vault, &p.text("entity_id")?)?

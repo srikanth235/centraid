@@ -489,7 +489,6 @@ fn a_read_that_lost_most_of_what_is_followed_is_doubted_and_says_so_without_remo
     rig.containers = vec![wire::PhoneContactContainer {
         key: "icloud".to_owned(),
         name: "iCloud".to_owned(),
-        ..wire::PhoneContactContainer::default()
     }];
     followed_pass(&mut rig);
     assert_eq!(status_of(&mut rig), None);

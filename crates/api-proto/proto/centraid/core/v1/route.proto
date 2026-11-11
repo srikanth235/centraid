@@ -105,6 +105,7 @@ message Route {
     HomeSearchRoute home_search = 1001;
     ShellAskRoute ask = 1002;
     SettingsRoute settings = 1010;
+    ReconnectRoute reconnect = 1011;
   }
 }
 
@@ -626,6 +627,10 @@ message HomeSearchRoute {}
 
 // Settings takes no arguments.
 message SettingsRoute {}
+
+// The Reconnect page (#1185): the phone stores a vault followed on another phone, offered one
+// by one. It takes no arguments.
+message ReconnectRoute {}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the

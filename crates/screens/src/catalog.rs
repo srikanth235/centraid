@@ -8223,6 +8223,24 @@ pub mod load {
             }
         }
 
+        /// (following, #1185) The phone stores the vault follows (contacts, calendars, folders, health), one row per origin with its label and the install that last followed it. A restored vault holds these although the new phone follows nothing yet: the Reconnect page lists them. Never reachable by the assistant.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowedStores {
+        }
+        impl FollowedStores {
+            pub const NAME: &str = "followed-stores";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<FollowedStores> for wire::LoadRequest {
+            fn from(value: FollowedStores) -> Self {
+                value.request()
+            }
+        }
+
         /// (backup, lane H2) Where this vault's backup stands, read from the phone's own ledger without dialling anyone: the gateways it is paired with, when one last acknowledged the head (the gateway's clock), how many photos and files are confirmed of how many the vault knows, what waits and why, and this phone's clock for wording. Re-read whenever a pass, a pairing or a forget moves the ledger, or the vault's files change.
         #[derive(Clone, Debug, Default)]
         pub struct BackupStatus {
