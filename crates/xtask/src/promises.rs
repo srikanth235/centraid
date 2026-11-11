@@ -442,7 +442,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Origin,
         "crates/screens/src/calendar/earlier.rs",
     ),
-    owed("docs", Promise::Origin, ORIGIN_OWED),
+    kept(
+        "docs",
+        Promise::Origin,
+        "crates/screens/src/docs/earlier.rs",
+    ),
     kept(
         "health",
         Promise::Origin,

@@ -271,3 +271,49 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
         Some(wire::earlier_view::Content::Failure(_))
     ));
 }
+
+#[test]
+fn a_scanned_or_uploaded_document_says_so_and_a_typed_one_does_not() {
+    let mut d = driver();
+    let upload = |d: &Driver, seed: char, title: &str, system, label: &str| {
+        id_of(&arrange(
+            d,
+            act::docs::Upload {
+                blob: seed.to_string().repeat(64),
+                media_type: "application/pdf".to_owned(),
+                title: title.to_owned(),
+                size: Some(2048),
+                arrived_system: Some(system),
+                arrived_label: Some(label.to_owned()),
+                ..Default::default()
+            },
+        ))
+    };
+    let scan = upload(
+        &d,
+        'a',
+        "Receipt",
+        act::docs::UploadArrivedSystem::Scan,
+        "Scanned document",
+    );
+    let file = upload(
+        &d,
+        'b',
+        "Lease",
+        act::docs::UploadArrivedSystem::Upload,
+        "Lease.pdf",
+    );
+    let typed = text(&d, "Letter", "first");
+    let origin = |d: &mut Driver, id: &str, title: &str| {
+        let i = d.push(docs::TAB, routes::document(id, title, "Docs"));
+        document_data(d.view(i)).origin.clone()
+    };
+    let line = origin(&mut d, &scan, "Receipt").expect("a line");
+    assert_eq!(line.text, "From Scanned document");
+    assert_eq!(line.accessibility_label, "Came from Scanned document");
+    assert_eq!(
+        origin(&mut d, &file, "Lease").map(|line| line.text),
+        Some("From Lease.pdf".to_owned())
+    );
+    assert_eq!(origin(&mut d, &typed, "Letter"), None);
+}

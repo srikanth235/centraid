@@ -644,6 +644,7 @@ impl Screen for Document {
                 // THE FOOT'S "Earlier versions" ROW (#1185): the kit's entry, its route naming the
                 // page the member comes from by the title drawn.
                 let drawn = data.row.as_ref().map(|row| row.title.clone());
+                data.origin = self.earlier.origin.clone();
                 data.earlier = self.earlier.entry.as_ref().map(|entry| wire::EarlierEntry {
                     route: Some(earlier::route(
                         super::EARLIER,
