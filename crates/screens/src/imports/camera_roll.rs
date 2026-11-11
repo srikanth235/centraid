@@ -506,6 +506,7 @@ impl Roll {
             device_id: self.device_id.clone(),
             cursor: cursor.to_owned(),
         };
+        // undo-exempt: this moves the pass's own bookmark in the roll and changes no record the member can see, so there is nothing to take back; the photographs a pass brings in are taken out with Move to trash.
         let _ = ctx.act(&wire::ActRequest::from(request).keyed(key));
     }
 
