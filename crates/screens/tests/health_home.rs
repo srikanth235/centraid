@@ -41,7 +41,7 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
         empty.headline,
         "Bring in your steps, sleep and workouts from Apple Health."
     );
-    assert_eq!(empty.action_label, "Connect Apple Health");
+    assert_eq!(empty.action_label, "Connect to Apple Health");
     assert!(state.content.is_none());
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
@@ -68,7 +68,7 @@ fn the_phones_store_is_its_os_health_connect_on_android() {
         empty.headline,
         "Bring in your steps, sleep and workouts from Health Connect."
     );
-    assert_eq!(empty.action_label, "Connect Health Connect");
+    assert_eq!(empty.action_label, "Connect to Health Connect");
 }
 
 #[test]

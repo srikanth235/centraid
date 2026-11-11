@@ -525,7 +525,7 @@ message HealthConnectState {
   repeated HealthChoice choices = 5;
   // What happens next, in one line.
   string note = 6;
-  // "Connect Apple Health", the one Ink button; disabled while nothing is
+  // "Connect to Apple Health", the one Ink button; disabled while nothing is
   // chosen or while the OS is asking.
   string connect_label = 7;
   bool can_connect = 8;

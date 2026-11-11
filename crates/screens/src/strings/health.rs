@@ -42,7 +42,7 @@ catalog! {
     plain choice_workouts = ("Workouts", "Workouts");
     plain choice_workouts_detail = ("Each one: kind, time, distance", "Each one: kind, time, distance");
     plain close = ("Close", "Close");
-    plain connect_action = ("Connect {store}", "Connect {store}");
+    plain connect_action = ("Connect to {store}", "Connect to {store}");
     plain connect_body = (
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back.",
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back."

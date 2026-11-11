@@ -107,7 +107,7 @@ fn connect_starts_with_every_type_on_the_first_time_and_energy_is_two_types() {
         ]
     );
     assert!(state.choices.iter().all(|choice| choice.on));
-    assert_eq!(state.connect_label, "Connect Apple Health");
+    assert_eq!(state.connect_label, "Connect to Apple Health");
     assert!(state.can_connect);
     assert!(state.lede.contains("Nothing is written back."));
     assert_eq!(state.chrome.as_ref().unwrap().back_label, "Health");
@@ -282,7 +282,7 @@ fn health_connect_missing_from_the_phone_says_where_to_get_it() {
         state.status,
         "Get Health Connect from Google Play, then connect again."
     );
-    assert_eq!(state.connect_label, "Connect Health Connect");
+    assert_eq!(state.connect_label, "Connect to Health Connect");
     assert!(!is_connected(&d));
     // And where Play cannot bring it, it is not available.
     tap(&mut d, i);

@@ -244,7 +244,7 @@ fn nothing_connected_is_the_empty_state_with_connect_and_never_ready_data() {
         empty.headline,
         "Bring in your steps, sleep and workouts from Apple Health."
     );
-    assert_eq!(empty.action_label, "Connect Apple Health");
+    assert_eq!(empty.action_label, "Connect to Apple Health");
     assert!(state.content.is_none());
     assert_eq!(
         state.connect.as_ref().map(|route| route.screen.as_str()),

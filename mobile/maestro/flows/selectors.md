@@ -202,7 +202,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `health-metric-chart`, `health-metric-versus` | a metric | the bar chart (a finger on it scrubs) and the line against the typical |
 | `health-action-trash`, `health-status-action` | a workout | "Move to trash" under the figures (`HealthWorkoutData.trash_label`; no confirm), and the status line's Undo after it (`HealthWorkoutEvent.status_acted`); the page stays on the gone card (#1185) |
 | `money-action-trash`, `money-status-action` | a transaction | the action row "Move to trash" (`MoneyTransactionEvent.action`, key `trash`; no confirm; it replaced `void`), and the status line's Undo after it (`MoneyTransactionEvent.status_acted`); the page stays on the gone card (#1185) |
-| `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect Apple Health"), the status line |
+| `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect to Apple Health"), the status line |
 | `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
 
