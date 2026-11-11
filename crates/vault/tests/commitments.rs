@@ -1522,6 +1522,11 @@ enum Reach {
 /// reach. Every other `TEXT` column of the file is structural (an id, an enum, a
 /// date, a hash, JSON, a Locker cell) and the test below recognises it by its
 /// declaration, so adding a text column fails here until it is placed.
+///
+/// `edge.anchor` has no row: it is JSON, so the declaration marks it structural.
+/// It is only ever a note's `{"wikilink": title}`, the words of a `[[title]]`
+/// that sit in `note.body`, which is `Own`; `a_note_is_found_by_the_words_of_its_link`
+/// holds that.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
     (
@@ -1555,17 +1560,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("event", "description", Reach::Own),
     ("event", "zone", Reach::Not("a time zone name, not prose")),
     ("event", "rule", Reach::Not("an RFC 5545 rule")),
-    ("event", "url", Reach::Not("a link, not prose")),
+    ("event", "url", Reach::Own),
     (
         "occurrence",
         "zone",
         Reach::Not("a time zone name, not prose"),
     ),
-    ("occurrence", "url", Reach::Not("a link, not prose")),
+    ("occurrence", "url", Reach::Own),
     ("occurrence", "title", Reach::Own),
     ("occurrence", "description", Reach::Own),
     ("task", "description", Reach::Own),
-    ("task", "url", Reach::Not("a link, not prose")),
+    ("task", "url", Reach::Own),
     ("task", "rule", Reach::Not("an RFC 5545 rule")),
     ("task", "zone", Reach::Not("a time zone name, not prose")),
     ("note", "body", Reach::Own),
@@ -1589,7 +1594,9 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     (
         "revision",
         "body",
-        Reach::Not("history: the note's current body is indexed, not its past"),
+        Reach::Not(
+            "history: search finds what an item says now; its past is reached through Earlier versions, and a hit that opens an item not containing the term would be a lie",
+        ),
     ),
     (
         "revision",
@@ -1733,17 +1740,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     (
         "locker_item_field",
         "section",
-        Reach::Not("a custom field's group name; an owner question whether it is searched"),
+        Reach::Not("a custom field's group name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "label",
-        Reach::Not("a custom field's name; an owner question whether it is searched"),
+        Reach::Not("a custom field's name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "value_text",
-        Reach::Not("a custom field's plain value; an owner question whether it is searched"),
+        Reach::Not("a custom field's plain value; out of search by owner decision D11"),
     ),
     (
         "locker_item_passkey",
@@ -2161,6 +2168,86 @@ fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
         Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
     });
     is_found(vault, &call, "call", "an activity's kind");
+}
+
+/// A link a member pasted is found by its words, and editing it re-indexes.
+#[test]
+fn a_link_on_an_event_an_occurrence_or_a_task_finds_it() {
+    let scratch = founded("c10url");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+
+    go(
+        "event.propose",
+        json!({"id": "ev", "title": "Sync", "starts": "2026-03-10T09:00",
+        "rule": "FREQ=DAILY;COUNT=5", "url": "https://zoom.us/j/123"}),
+    );
+    is_found(vault, "ev", "zoom", "an event's link");
+    go(
+        "event.edit",
+        json!({"id": "ev", "url": "https://meet.example/room"}),
+    );
+    is_found(vault, "ev", "meet", "an event's link edited");
+    is_not_found(vault, "ev", "zoom", "an event's link edited");
+
+    go(
+        "event.propose",
+        json!({"id": "ev2", "title": "Weekly", "starts": "2026-03-10T09:00",
+        "rule": "FREQ=DAILY;COUNT=5"}),
+    );
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "override", "url": "https://webex.example/call"}),
+    );
+    is_found(vault, "ev2", "webex", "an occurrence's link");
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev2", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "override", "url": "https://teams.example/call"}),
+    );
+    is_found(vault, "ev2", "teams", "an occurrence's link edited");
+    is_not_found(vault, "ev2", "webex", "an occurrence's link edited");
+
+    go(
+        "task.add",
+        json!({"id": "tk", "title": "Read", "url": "https://articles.example/long-read"}),
+    );
+    is_found(vault, "tk", "articles", "a task's link");
+    go(
+        "task.edit",
+        json!({"id": "tk", "url": "https://papers.example/short"}),
+    );
+    is_found(vault, "tk", "papers", "a task's link edited");
+    is_not_found(vault, "tk", "articles", "a task's link edited");
+}
+
+/// The words of a note's `[[link]]` are in its body, which is indexed; the
+/// anchor on the edge adds nothing to search.
+#[test]
+fn a_note_is_found_by_the_words_of_its_link() {
+    let scratch = founded("c10link");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+    go(
+        "note.create",
+        json!({"id": "target", "title": "Harbour", "body": "x"}),
+    );
+    go(
+        "note.create",
+        json!({"id": "src", "title": "Trip", "body": "see [[Harbour]] soon"}),
+    );
+    let anchors: i64 = read(vault, |c| {
+        Ok(c.query_row(
+            "SELECT count(*) FROM edge WHERE from_id = 'src' AND rel = 'links' AND anchor IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )?)
+    });
+    assert_eq!(anchors, 1, "the link compiled to an edge with an anchor");
+    is_found(vault, "src", "harbour", "a note's link words");
 }
 
 #[test]

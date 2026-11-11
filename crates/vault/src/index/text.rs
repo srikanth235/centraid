@@ -15,6 +15,13 @@
 //! `every_text_column_is_findable_folded_into_what_it_labels_or_argued_out` in
 //! `crates/vault/tests/commitments.rs`, which also holds the table.
 //!
+//! A link a member pasted on an event, an occurrence or a task is findable by
+//! its words (`zoom` finds `https://zoom.us/j/123`), like a Locker item's.
+//! What a note's links say (`edge.anchor`, `{"wikilink": title}`) is a copy of
+//! words in `note.body`, which is indexed, so the anchor adds nothing. Earlier
+//! versions (`revision.body`) are not searched: search finds what an item says
+//! now, and its past is reached through Earlier versions.
+//!
 //! A renamed or removed labelling entity re-indexes what it labelled:
 //! [`crate::index::reindex`] asks the question in the other direction.
 
@@ -80,6 +87,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         Kind::Event => joined(
             connection,
             "SELECT description FROM event WHERE id = ?1
+             UNION ALL SELECT url FROM event WHERE id = ?1
              UNION ALL SELECT p.title FROM event v JOIN entity p ON p.id = v.place_id AND p.deleted_at IS NULL WHERE v.id = ?1
              UNION ALL SELECT pl.address FROM event v JOIN place pl ON pl.id = v.place_id
                JOIN entity pe ON pe.id = pl.id AND pe.deleted_at IS NULL WHERE v.id = ?1
@@ -89,12 +97,16 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
                   ORDER BY original_start, scope)
              UNION ALL SELECT description FROM (
                  SELECT description FROM occurrence WHERE series_id = ?1 AND description IS NOT NULL
+                  ORDER BY original_start, scope)
+             UNION ALL SELECT url FROM (
+                 SELECT url FROM occurrence WHERE series_id = ?1 AND url IS NOT NULL
                   ORDER BY original_start, scope)",
             id,
         )?,
         Kind::Task => joined(
             connection,
             "SELECT description FROM task WHERE id = ?1
+             UNION ALL SELECT url FROM task WHERE id = ?1
              UNION ALL SELECT p.title FROM task t JOIN entity p ON p.id = t.project_id AND p.deleted_at IS NULL WHERE t.id = ?1
              UNION ALL SELECT s.title FROM task t JOIN entity s ON s.id = t.section_id AND s.deleted_at IS NULL WHERE t.id = ?1",
             id,
