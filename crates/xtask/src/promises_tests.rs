@@ -2159,3 +2159,24 @@ fn an_import_service_that_writes_is_read_by_rule_c_and_a_new_one_cannot_slip_pas
     );
     assert!(unowned_import_writes(&root).is_empty());
 }
+
+#[test]
+fn the_kits_restore_doors_answer_to_rule_c_once_for_every_app() {
+    let root = undo_tree("undo-kit-doors", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/kit/trash.rs",
+        "fn restore() { kit_act::act(ctx, request, &key); }\n",
+    );
+    let gaps = kit_door_direct_writes(&root).join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/kit/trash.rs: (C)"),
+        "{gaps}"
+    );
+    write(
+        &root,
+        "crates/screens/src/kit/trash.rs",
+        "fn restore() { self.undo.act(ctx, request, &key, said); }\n",
+    );
+    assert!(kit_door_direct_writes(&root).is_empty());
+}

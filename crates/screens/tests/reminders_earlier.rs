@@ -169,7 +169,7 @@ fn restore_asks_nothing_says_so_with_undo_and_undo_puts_it_back() {
             .clone()
             .expect("a status")
             .sentence,
-        "Restore undone"
+        "Undone"
     );
 }
 

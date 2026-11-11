@@ -29,5 +29,4 @@ catalog! {
     plain restored = ("Earlier version restored", "Earlier version restored");
     plain restored_already = ("Already how it is now", "Already how it is now");
     plain title = ("Earlier versions", "Earlier versions");
-    plain undone = ("Restore undone", "Restore undone");
 }

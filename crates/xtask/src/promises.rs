@@ -707,8 +707,10 @@ pub(crate) fn check(root: &Path, register: &[Row]) -> RuleReport {
         }
     }
 
-    // Rule C's guard: an import service that writes is an app's, so it is read.
+    // Rule C's guard: an import service that writes is an app's, so it is read; and the kit's own
+    // restore doors answer for every app.
     findings.extend(unowned_import_writes(root));
+    findings.extend(kit_door_direct_writes(root));
 
     let mut kept_count = 0;
     let mut owed_count = 0;
@@ -1245,43 +1247,62 @@ const UNDO_EXEMPT: &str = "undo-exempt:";
 /// Rule C: the calls an app's screen files make straight to the write door, each as
 /// `<file>: (C) line N ...`. Test modules and `tests.rs` files are not screens.
 fn direct_writes(root: &Path, app: &str) -> Vec<String> {
-    let mut gaps = Vec::new();
+    let mut files = Vec::new();
     for folder in undo_folders(app) {
         let dir = root.join(format!("crates/screens/src/{folder}"));
         // An entry is a folder, or one file (an import service).
-        let files = if folder.ends_with(".rs") {
-            vec![dir]
+        if folder.ends_with(".rs") {
+            files.push(dir);
         } else {
-            source_files(&dir, "rs")
+            files.extend(source_files(&dir, "rs"));
+        }
+    }
+    direct_writes_in(root, &files)
+}
+
+/// The kit's own doors that restore or write for every app: the shared Trash and Earlier versions
+/// screens. They answer to rule C like an app's screens, once for everyone.
+pub const KIT_UNDO_DOORS: &[&str] = &["kit/trash.rs", "kit/earlier.rs"];
+
+/// Rule C over [`KIT_UNDO_DOORS`].
+fn kit_door_direct_writes(root: &Path) -> Vec<String> {
+    let files: Vec<std::path::PathBuf> = KIT_UNDO_DOORS
+        .iter()
+        .map(|door| root.join(format!("crates/screens/src/{door}")))
+        .collect();
+    direct_writes_in(root, &files)
+}
+
+/// The direct writes in `files` not marked `// undo-exempt: <why>`.
+fn direct_writes_in(root: &Path, files: &[std::path::PathBuf]) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for file in files {
+        if file.file_name().is_some_and(|name| name == "tests.rs")
+            || file.components().any(|part| part.as_os_str() == "tests")
+        {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(file) else {
+            continue;
         };
-        for file in files {
-            if file.file_name().is_some_and(|name| name == "tests.rs")
-                || file.components().any(|part| part.as_os_str() == "tests")
+        let live = text.split("#[cfg(test)]").next().unwrap_or_default();
+        let lines: Vec<&str> = live.lines().collect();
+        for (at, line) in lines.iter().enumerate() {
+            if line.trim_start().starts_with("//")
+                || !DIRECT_WRITES.iter().any(|call| line.contains(call))
             {
                 continue;
             }
-            let Ok(text) = fs::read_to_string(&file) else {
-                continue;
-            };
-            let live = text.split("#[cfg(test)]").next().unwrap_or_default();
-            let lines: Vec<&str> = live.lines().collect();
-            for (at, line) in lines.iter().enumerate() {
-                if line.trim_start().starts_with("//")
-                    || !DIRECT_WRITES.iter().any(|call| line.contains(call))
-                {
-                    continue;
-                }
-                let exempt = lines[at.saturating_sub(3)..=at].iter().any(|near| {
-                    near.split_once(UNDO_EXEMPT)
-                        .is_some_and(|(_, why)| !why.trim().is_empty())
-                });
-                if !exempt {
-                    gaps.push(format!(
-                        "{}: (C) line {} writes straight to the door; go through `kit::undo` (`Undo::act`), or mark the call `// {UNDO_EXEMPT} <why its Undo is offered elsewhere>`",
-                        relative(root, &file),
-                        at + 1
-                    ));
-                }
+            let exempt = lines[at.saturating_sub(3)..=at].iter().any(|near| {
+                near.split_once(UNDO_EXEMPT)
+                    .is_some_and(|(_, why)| !why.trim().is_empty())
+            });
+            if !exempt {
+                gaps.push(format!(
+                    "{}: (C) line {} writes straight to the door; go through `kit::undo` (`Undo::act`), or mark the call `// {UNDO_EXEMPT} <why its Undo is offered elsewhere>`",
+                    relative(root, file),
+                    at + 1
+                ));
             }
         }
     }

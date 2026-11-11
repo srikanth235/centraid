@@ -20,6 +20,7 @@ use wire::trash_event::Kind as T;
 use super::act as kit_act;
 use super::civil;
 use super::read::{Page, Reading};
+use super::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, shared};
 
@@ -142,8 +143,7 @@ pub fn build(spec: &'static TrashSpec) -> Option<Box<dyn Screen>> {
     Some(Box::new(Trash {
         spec,
         page: Page::loading(),
-        status: None,
-        undo: None,
+        undo: Undo::default(),
         asking: Asking::Nothing,
     }))
 }
@@ -157,11 +157,9 @@ enum Asking {
 struct Trash {
     spec: &'static TrashSpec,
     page: Page<Vec<TrashItem>>,
-    /// A refusal's sentence, or "{title} restored" with Undo, until the next
-    /// attempt.
-    status: Option<wire::StatusLine>,
-    /// The row a restore just brought back, and the write that puts it back in the trash (Undo).
-    undo: Option<(String, String, wire::ActRequest)>,
+    /// The status line and what its Undo reverses (the kit's one door): a refusal's sentence, or
+    /// "{title} restored" with Undo, until the next attempt.
+    undo: Undo,
     asking: Asking,
 }
 
@@ -214,17 +212,12 @@ impl Trash {
             .and_then(|item| item.noun)
     }
 
-    /// One write under a key of its own; a refusal is the status line, and
-    /// either way the list is read again. Answers whether it committed.
+    /// One write that was asked first (a purge, an empty), under a key of its own: a refusal is the
+    /// status line, success clears it, and either way the list is read again. Answers whether it
+    /// committed.
     fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str) -> bool {
         let key = kit_act::key(&[&request.action, subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal,
-            action_label: String::new(),
-            refused: true,
-        });
-        self.undo = None;
+        let settled = self.undo.act_quietly(ctx, request, &key);
         self.reload(ctx);
         settled.committed
     }
@@ -243,33 +236,21 @@ impl Trash {
         }
     }
 
-    /// A restore says what it did, with Undo.
+    /// A restore says what it did, with Undo: the row goes back in the trash (the spec's own move,
+    /// or the row's, as `of_row` has it).
     fn restore(&mut self, ctx: &Ctx, id: &str) {
-        let locale = ctx.locale();
-        let name = self.name_of(locale, id);
+        let name = self.name_of(ctx.locale(), id);
         let (restore, trash) = self.writes_for(id);
-        if self.write(ctx, restore, id) {
-            self.status = Some(wire::StatusLine {
-                sentence: restored(locale, &name),
-                action_label: shared::trash_undo(locale),
-                refused: false,
-            });
-            self.undo = Some((id.to_owned(), name, trash));
-        }
+        let key = kit_act::key(&[&restore.action, id], kit_act::fresh());
+        self.undo
+            .act_reverting(ctx, restore, trash, &key, |locale| restored(locale, &name));
+        self.reload(ctx);
     }
 
-    /// Undo of a restore: the row goes back in the trash.
+    /// The status line's Undo: the row goes back in the trash.
     fn undone(&mut self, ctx: &Ctx) {
-        let Some((id, name, trash)) = self.undo.take() else {
-            return;
-        };
-        let locale = ctx.locale();
-        if self.write(ctx, trash, &id) {
-            self.status = Some(wire::StatusLine {
-                sentence: moved_to_trash(locale, &name),
-                action_label: String::new(),
-                refused: false,
-            });
+        if self.undo.acted(ctx) {
+            self.reload(ctx);
         }
     }
 
@@ -346,6 +327,8 @@ impl Screen for Trash {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::StatusActed(_)) => self.undone(ctx),
+            // A page that is left does not keep its line.
+            Some(E::Left(_)) => self.undo.clear(),
             Some(E::Trash(trash)) => self.event(trash, ctx),
             _ => {}
         }
@@ -380,7 +363,7 @@ impl Screen for Trash {
                 content,
                 page: Some(page),
                 confirm: self.confirm(locale),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

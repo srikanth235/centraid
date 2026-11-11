@@ -194,7 +194,7 @@ fn restore_asks_nothing_says_so_with_undo_and_undo_puts_it_back() {
     );
     assert_eq!(note_of(&d, &id).body, "third words");
     let status = earlier_view(d.view(i)).status.clone().expect("a status");
-    assert_eq!(status.sentence, "Restore undone");
+    assert_eq!(status.sentence, "Undone");
     assert!(status.action_label.is_empty());
 }
 

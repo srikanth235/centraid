@@ -106,11 +106,11 @@ fn restore_asks_nothing_and_brings_the_task_back() {
     assert_eq!(status.action_label, "Undo");
     assert!(!status.refused);
     assert_eq!(task_of(&d, &id).title, "Rent");
-    // Undo puts it back in the trash, and says so.
+    // Undo puts it back in the trash, and says "Undone" (the kit door's one word).
     send_trash(&mut d, i, T::StatusActed(te::StatusActed {}));
     assert_eq!(ids(d.view(i)), [id]);
     let status = trash(d.view(i)).status.clone().expect("a status line");
-    assert_eq!(status.sentence, "Rent moved to trash");
+    assert_eq!(status.sentence, "Undone");
     assert_eq!(status.action_label, "");
 }
 

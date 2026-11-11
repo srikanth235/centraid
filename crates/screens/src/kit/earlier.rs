@@ -38,6 +38,7 @@ use super::civil::{self, HourCycle};
 use super::quantity::UnitsPref;
 use super::read::{self, Note, Page, Reading};
 use super::secret::Secrets;
+use super::undo::Undo;
 use crate::catalog::{act, load};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, history as words, shared};
@@ -140,8 +141,7 @@ pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn 
         entity_id: args.entity_id.clone(),
         back_label: args.back_label.clone(),
         listing: Page::loading(),
-        status: None,
-        undo: false,
+        undo: Undo::default(),
         names: Names::new(),
         secrets: Secrets::default(),
         effects: Vec::new(),
@@ -271,10 +271,9 @@ struct Earlier {
     entity_id: String,
     back_label: String,
     listing: Page<Listing>,
-    /// A refusal's sentence, or "Earlier version restored" with Undo, until the next attempt.
-    status: Option<wire::StatusLine>,
-    /// Whether the status line's Undo is a restore's.
-    undo: bool,
+    /// The status line and what its Undo reverses (the kit's one door): a refusal's sentence, or
+    /// "Earlier version restored" with Undo, until the next attempt.
+    undo: Undo,
     /// What the spec's `know` hook read with the list.
     names: Names,
     /// The sealed values on screen, keyed `<seq>:<key>`.
@@ -381,20 +380,14 @@ impl Earlier {
         }
         match (wall.open)(ctx, &self.entity_id, seq, key) {
             Ok((value, life)) => {
-                self.status = None;
+                self.undo.clear();
                 self.effects.extend(self.secrets.hide_all(ctx));
                 self.effects
                     .extend(self.secrets.show(ctx, &token(seq, key), &value, life));
             }
             // The wall shut under the ask: the screen draws its gate and holds nothing.
             Err(None) => self.reload(ctx),
-            Err(Some(sentence)) => {
-                self.status = Some(wire::StatusLine {
-                    sentence,
-                    action_label: String::new(),
-                    refused: true,
-                });
-            }
+            Err(Some(sentence)) => self.undo.refuse(sentence),
         }
     }
 
@@ -410,8 +403,7 @@ impl Earlier {
         // A shut wall is a wipe: nothing read before it stays, and nothing is read behind it.
         if let Some(denial) = self.walled(ctx) {
             self.names = Names::new();
-            self.status = None;
-            self.undo = false;
+            self.undo.clear();
             self.listing = Page::Refused(denial);
             return;
         }
@@ -464,22 +456,9 @@ impl Earlier {
             .is_some_and(|listing| listing.versions.iter().any(|version| version.seq == seq))
     }
 
-    /// One write under a key of its own; either way the list is read again. Answers the settled
-    /// verdict.
-    fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str) -> kit_act::Settled {
-        let key = kit_act::key(&[&request.action, subject], kit_act::fresh());
-        let settled = kit_act::act(ctx, request, &key);
-        self.status = (!settled.committed).then(|| wire::StatusLine {
-            sentence: settled.refusal.clone(),
-            action_label: String::new(),
-            refused: true,
-        });
-        self.undo = false;
-        self.reload(ctx);
-        settled
-    }
-
-    /// A restore asks nothing, and says what it did with Undo.
+    /// A restore asks nothing, and says what it did with Undo: `undo-change` on the record (the
+    /// vault refuses it when the record changed again, and the line says so). Restoring what the
+    /// record already holds writes nothing, so there is nothing to undo and the line says so.
     fn restore(&mut self, ctx: &Ctx, seq: i64) {
         if self.walled(ctx).is_some() {
             self.reload(ctx);
@@ -488,64 +467,40 @@ impl Earlier {
         if !self.shown(seq) || seq <= 0 {
             return;
         }
-        let locale = ctx.locale();
-        let settled = self.write(
-            ctx,
-            act::shell::RestoreVersion {
-                earlier_version_id: self.entity_id.clone(),
-                seq,
-            }
-            .into(),
-            &seq.to_string(),
-        );
-        if !settled.committed {
-            return;
+        let request: wire::ActRequest = act::shell::RestoreVersion {
+            earlier_version_id: self.entity_id.clone(),
+            seq,
         }
-        // Restoring what the record already holds writes nothing, so there is nothing to undo.
-        let wrote = serde_json::from_slice::<Value>(&settled.output)
-            .ok()
-            .and_then(|out| out.get("restored").and_then(Value::as_bool))
-            .unwrap_or(true);
-        self.undo = wrote;
-        self.status = Some(if wrote {
-            wire::StatusLine {
-                sentence: words::restored(locale),
-                action_label: shared::trash_undo(locale),
-                refused: false,
+        .into();
+        let revert: wire::ActRequest = act::shell::UndoChange {
+            earlier_version_id: self.entity_id.clone(),
+            seq: None,
+        }
+        .into();
+        let key = kit_act::key(&[&request.action, &seq.to_string()], kit_act::fresh());
+        let settled = self
+            .undo
+            .act_reverting(ctx, request, revert, &key, words::restored);
+        if settled.committed {
+            let wrote = serde_json::from_slice::<Value>(&settled.output)
+                .ok()
+                .and_then(|out| out.get("restored").and_then(Value::as_bool))
+                .unwrap_or(true);
+            if !wrote {
+                self.undo.say(words::restored_already(ctx.locale()));
             }
-        } else {
-            wire::StatusLine {
-                sentence: words::restored_already(locale),
-                action_label: String::new(),
-                refused: false,
-            }
-        });
+        }
+        self.reload(ctx);
     }
 
-    /// Undo of a restore: the record goes back to what the restore replaced.
+    /// The status line's Undo: the record goes back to what the restore replaced.
     fn undone(&mut self, ctx: &Ctx) {
         if self.walled(ctx).is_some() {
             self.reload(ctx);
             return;
         }
-        if !std::mem::take(&mut self.undo) {
-            return;
-        }
-        let settled = self.write(
-            ctx,
-            act::shell::UndoChange {
-                earlier_version_id: self.entity_id.clone(),
-                seq: None,
-            }
-            .into(),
-            "undo",
-        );
-        if settled.committed {
-            self.status = Some(wire::StatusLine {
-                sentence: words::undone(ctx.locale()),
-                action_label: String::new(),
-                refused: false,
-            });
+        if self.undo.acted(ctx) {
+            self.reload(ctx);
         }
     }
 
@@ -665,7 +620,11 @@ impl Screen for Earlier {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             // Nothing revealed outlives the screen: its effects are dropped with it.
-            Some(E::Left(_)) => self.secrets.conceal(),
+            // A page that is left conceals what it revealed and does not keep its line.
+            Some(E::Left(_)) => {
+                self.secrets.conceal();
+                self.undo.clear();
+            }
             Some(E::TimerFired(fired)) => {
                 let effects = self.secrets.fired(&fired.timer);
                 self.effects.extend(effects);
@@ -732,7 +691,7 @@ impl Screen for Earlier {
                 back_label: self.back_label.clone(),
                 content,
                 page: Some(page),
-                status: self.status.clone(),
+                status: self.undo.status(),
             })),
             ..wire::ViewState::default()
         }

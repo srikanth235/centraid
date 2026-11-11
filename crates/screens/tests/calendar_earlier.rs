@@ -206,7 +206,7 @@ fn restore_asks_nothing_says_so_with_undo_and_undo_puts_it_back() {
         .status
         .clone()
         .expect("a status");
-    assert_eq!(status.sentence, "Restore undone");
+    assert_eq!(status.sentence, "Undone");
 }
 
 #[test]
