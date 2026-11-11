@@ -326,7 +326,11 @@ const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx",
 /// list of its words: derived rows the writer keeps and a rebuild rewrites,
 /// not rows a member made.
 pub(crate) fn is_index(table: &str) -> bool {
-    table == "search" || table == "search_word" || table == "search_owed" || is_fts_shadow(table)
+    table == "search"
+        || table == "search_past"
+        || table == "search_word"
+        || table == "search_owed"
+        || is_fts_shadow(table)
 }
 
 /// Whether a table is one of FTS5's shadows of the `search` index.
@@ -532,6 +536,11 @@ mod tests {
             "search_config",
             "search_word",
             "search_owed",
+            "search_past",
+            "search_past_data",
+            "search_past_docsize",
+            "search_past_idx",
+            "search_past_config",
             "action_key",
             "sqlite_sequence",
         ] {

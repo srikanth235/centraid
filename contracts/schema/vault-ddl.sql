@@ -680,6 +680,26 @@ CREATE TABLE search_owed (
   after TEXT NOT NULL
 ) STRICT;
 
+-- table search_past on search_past
+CREATE VIRTUAL TABLE search_past USING fts5(
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
+  tokenize = "unicode61 remove_diacritics 2");
+
+-- table search_past_config on search_past_config
+CREATE TABLE 'search_past_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table search_past_data on search_past_data
+CREATE TABLE 'search_past_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table search_past_docsize on search_past_docsize
+CREATE TABLE 'search_past_docsize'(id INTEGER PRIMARY KEY, sz BLOB, origin INTEGER);
+
+-- table search_past_idx on search_past_idx
+CREATE TABLE 'search_past_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table search_past_vocab on search_past_vocab
+CREATE VIRTUAL TABLE search_past_vocab USING fts5vocab(search_past, row);
+
 -- table search_vocab on search_vocab
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 

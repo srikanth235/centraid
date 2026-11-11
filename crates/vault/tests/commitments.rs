@@ -75,6 +75,11 @@ fn is_search_shadow(name: &str) -> bool {
         "search_content",
         "search_docsize",
         "search_config",
+        "search_past_data",
+        "search_past_idx",
+        "search_past_content",
+        "search_past_docsize",
+        "search_past_config",
     ]
     .contains(&name)
 }
@@ -788,11 +793,19 @@ fn index_dump(vault: &Vault) -> BTreeSet<(String, i64, String, i64)> {
         .commit(|tx| {
             let c = tx.connection();
             c.execute_batch("CREATE VIRTUAL TABLE temp.search_instances USING fts5vocab(main, search, instance)")?;
-            let rows = c
+            // What items said before is part of the index: a row of `search_past` is dumped
+            // under its column's name prefixed `past:`, so a stale or missing one is a diff.
+            c.execute_batch("CREATE VIRTUAL TABLE temp.search_past_instances USING fts5vocab(main, search_past, instance)")?;
+            let mut rows = c
                 .prepare("SELECT term, doc, col, \"offset\" FROM temp.search_instances")?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
                 .collect::<rusqlite::Result<BTreeSet<_>>>()?;
-            c.execute_batch("DROP TABLE temp.search_instances")?;
+            rows.extend(
+                c.prepare("SELECT term, doc, 'past:' || col, \"offset\" FROM temp.search_past_instances")?
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+                    .collect::<rusqlite::Result<BTreeSet<_>>>()?,
+            );
+            c.execute_batch("DROP TABLE temp.search_instances; DROP TABLE temp.search_past_instances")?;
             Ok(rows)
         })
         .expect("dumps")
@@ -1171,6 +1184,33 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
     script_every_search_relevant_command(&scratch, &registry);
     let incremental = index_dump(&scratch.vault);
     assert!(!incremental.is_empty(), "the script left something to find");
+    // What items said before is part of the index the comparison covers: the script's edits
+    // left earlier versions of several kinds in it, and not one of a Locker item (its history
+    // is sealed).
+    let past_docs: BTreeSet<i64> = incremental
+        .iter()
+        .filter(|(_, _, column, _)| column.starts_with("past:"))
+        .map(|(_, doc, _, _)| *doc >> 24)
+        .collect();
+    let past_kinds: BTreeSet<String> = read(&scratch.vault, |connection| {
+        let mut kinds = BTreeSet::new();
+        for n in &past_docs {
+            kinds.insert(connection.query_row(
+                "SELECT kind FROM entity WHERE n = ?1",
+                [n],
+                |row| row.get::<_, String>(0),
+            )?);
+        }
+        Ok(kinds)
+    });
+    assert!(
+        past_kinds.len() >= 3 && past_kinds.contains("note"),
+        "the script left the past of too few kinds to compare: {past_kinds:?}"
+    );
+    assert!(
+        !past_kinds.contains("locker_item"),
+        "a Locker item's earlier versions are in the index"
+    );
     // The positive control: a Locker item's plain text IS findable, so the
     // equality below compares an index that holds it.
     let held = vocabulary(&scratch.vault);
@@ -1222,7 +1262,7 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
 fn vocabulary(vault: &Vault) -> BTreeSet<String> {
     read(vault, |connection| {
         Ok(connection
-            .prepare("SELECT term FROM search_vocab")?
+            .prepare("SELECT term FROM search_vocab UNION SELECT term FROM search_past_vocab")?
             .query_map([], |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?)
     })
@@ -1264,8 +1304,20 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     // An edit that drops a word leaves it in the list: it still costs nothing to
     // offer a word the index no longer holds, and finding out is not free.
     go("note.edit", json!({"id": "a", "body": "au lait"}));
-    assert!(!vocabulary(vault).contains("cafe"));
-    assert!(has("cafe"), "an edit leaves the dropped word in the list");
+    let now = |word: &str| {
+        read(vault, |connection| {
+            Ok(connection.query_row(
+                "SELECT EXISTS (SELECT 1 FROM search_vocab WHERE term = ?1)",
+                [word],
+                |row| row.get::<_, bool>(0),
+            )?)
+        })
+    };
+    assert!(!now("cafe"), "the live index no longer holds it");
+    assert!(
+        vocabulary(vault).contains("cafe") && has("cafe"),
+        "what the note said before is findable, so the word stays"
+    );
 
     // A purge takes the words the entity holds that no other row holds, and keeps
     // those another row does. It cannot name a word an edit dropped earlier.
@@ -1274,15 +1326,16 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     assert!(!has("zeppelin"), "its own title goes");
     assert!(has("au") && has("lait"), "a word another note holds stays");
     assert!(
-        has("cafe"),
-        "a word an edit dropped is not the purge's to name"
+        !has("cafe") && !has("o") && !has("brien"),
+        "a purge names the words of the earlier versions too: their rows go with it"
     );
 
-    // Only a rebuild rewrites the list from the rows.
+    // A rebuild rewrites the list from the rows, earlier versions' included.
     go("note.edit", json!({"id": "b", "body": "au only"}));
     assert!(has("lait"));
     rebuilt(vault);
-    assert!(!has("lait") && !has("cafe"));
+    assert!(has("lait"), "b said `lait` before, which is still findable");
+    assert!(!has("cafe"));
     assert_eq!(word_list(vault), vocabulary(vault));
 }
 
@@ -1380,6 +1433,8 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "action_key",
         "search",
         "search_vocab",
+        "search_past",
+        "search_past_vocab",
         "search_word",
         "search_owed",
         // the kinds' own rows and their children
@@ -1620,7 +1675,7 @@ fn no_column_stores_a_rollup_except_the_stated_figures_the_spec_names() {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Reach {
     /// In the text of its own entity (`text_of`: its row and its children), or
-    /// its title. A title also folds into the text of what it labels, and a
+    /// its title, or (`revision.body`) in the earlier text of its entity. A title also folds into the text of what it labels, and a
     /// note's body into what it is about; section 10 asks those.
     Own,
     /// Not indexed, and why.
@@ -1700,13 +1755,10 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a MIME type, not prose"),
     ),
     ("derivative", "text", Reach::Own),
-    (
-        "revision",
-        "body",
-        Reach::Not(
-            "history: search finds what an item says now; its past is reached through Earlier versions, and a hit that opens an item not containing the term would be a lie",
-        ),
-    ),
+    // An earlier version's words are in the entity's `search_past` rows (#1185): the hit is
+    // the live item, said to match "in an earlier version", and it opens that item's Earlier
+    // versions, which contain the term. A Locker item's history is sealed and has no row.
+    ("revision", "body", Reach::Own),
     (
         "revision",
         "media_type",
@@ -1980,6 +2032,21 @@ fn every_text_column_is_findable_folded_into_what_it_labels_or_argued_out() {
         );
         Ok(())
     });
+}
+
+#[test]
+fn every_column_the_past_index_reads_is_a_column_the_census_reaches() {
+    // The earlier versions' text and the live text are one list of what a member typed.
+    for (table, columns) in centraid_vault::index::EARLIER_COLUMNS {
+        for column in *columns {
+            assert!(
+                CENSUS
+                    .iter()
+                    .any(|(t, c, reach)| t == table && c == column && matches!(reach, Reach::Own)),
+                "{table}.{column} is read for earlier versions and is not `Own` in CENSUS"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

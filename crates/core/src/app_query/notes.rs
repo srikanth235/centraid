@@ -532,6 +532,7 @@ fn hit_to_wire(hit: SearchRow, zone: Option<&FireZone>) -> wire::NotesSearchHit 
             .map(attachment_to_wire)
             .collect(),
         snippet: hit.snippet,
+        in_earlier_version: hit.in_earlier_version,
     }
 }
 
@@ -852,6 +853,42 @@ mod tests {
         assert!(exact.corrected.is_empty());
         let nothing = search("zeppelin");
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
+    }
+
+    /// NOTES' SEARCH SAYS WHEN THE WORDS ARE ONLY IN AN EARLIER VERSION (#1185): the row is
+    /// the live note, once, and the flag is set only when nothing matches now.
+    #[test]
+    fn a_note_found_only_by_an_earlier_version_says_so() {
+        let scratch = Scratch::founded();
+        let note = scratch.run(
+            "note.create",
+            serde_json::json!({ "title": "Plan", "body": "alpha shared" }),
+        )["id"]
+            .as_str()
+            .expect("a note id")
+            .to_owned();
+        scratch.run(
+            "note.edit",
+            serde_json::json!({ "id": note, "body": "beta shared" }),
+        );
+        let search = |term: &str| {
+            let Ok(Answer::NotesSearch(found)) =
+                scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                    term: term.to_owned(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("search answers");
+            };
+            found
+                .hits
+                .into_iter()
+                .map(|hit| (hit.note_id, hit.in_earlier_version))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(search("alpha"), [(note.clone(), true)]);
+        assert_eq!(search("beta"), [(note.clone(), false)]);
+        assert_eq!(search("shared"), [(note, false)]);
     }
 
     /// A TYPO THAT IS IN THE VAULT TOO: one note says `budegt` and five say

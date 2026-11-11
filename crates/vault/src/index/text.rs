@@ -18,9 +18,16 @@
 //! A link a member pasted on an event, an occurrence or a task is findable by
 //! its words (`zoom` finds `https://zoom.us/j/123`), like a Locker item's.
 //! What a note's links say (`edge.anchor`, `{"wikilink": title}`) is a copy of
-//! words in `note.body`, which is indexed, so the anchor adds nothing. Earlier
-//! versions (`revision.body`) are not searched: search finds what an item says
-//! now, and its past is reached through Earlier versions.
+//! words in `note.body`, which is indexed, so the anchor adds nothing.
+//!
+//! **Earlier versions are searched too** (#1185: every field a member typed is
+//! findable, and note history has no exemption). The words of a kept version
+//! (`revision.body` for a note, and the typed columns of the saved state,
+//! [`crate::index::EARLIER_COLUMNS`]) are not in this text: they are rows of the
+//! separate `search_past` index (`crate::index::past`), keyed to the live item, so
+//! a search that reads what an item says now never reads them, and the door
+//! answers the item once, flagged when only an earlier version matched. A Locker
+//! item's history is sealed and is not indexed.
 //!
 //! A renamed or removed labelling entity re-indexes what it labelled:
 //! [`crate::index::reindex`] asks the question in the other direction.

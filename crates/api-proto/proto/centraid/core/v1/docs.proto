@@ -263,6 +263,9 @@ message DocsDocumentRow {
   // bytes of an image or a PDF: an absolute path inside the app's store. EMPTY
   // for every other kind, a trashed row, or bytes that are not here.
   string thumbnail_path = 23;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 24;
 }
 
 // One version, newest first. A→B→A is THREE versions: each is an occurrence,

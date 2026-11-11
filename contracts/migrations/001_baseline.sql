@@ -280,6 +280,17 @@ CREATE VIRTUAL TABLE search USING fts5(
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
+-- What a live item said in an EARLIER VERSION (#1185): one row per kept `revision` whose typed
+-- text is not empty, keyed `entity.n << 24 | revision.seq` so the row names its entity and its
+-- version and a purge or a trash finds every row of an entity by one rowid range. It is a table
+-- of its own so a search of what an item says now never reads these rows, and the ranking of the
+-- live index is not changed by them. A trashed entity has no row here, and a Locker item never
+-- has one (its history is sealed). A reader asks it only for an item that does not match now.
+CREATE VIRTUAL TABLE search_past USING fts5(
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
+  tokenize = "unicode61 remove_diacritics 2");
+CREATE VIRTUAL TABLE search_past_vocab USING fts5vocab(search_past, row);
+
 -- The words the index holds, in the order they first arrived: a list a correction reads whole
 -- and keeps in memory, where `search_vocab` can only be scanned a prefix at a time. The writer
 -- adds a word when it indexes a text and removes the words of a purged entity that no other text

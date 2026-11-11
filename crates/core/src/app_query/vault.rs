@@ -151,6 +151,7 @@ pub(crate) fn search(
                         subtitle: target.subtitle,
                         snippet: target.snippet,
                         open_id,
+                        in_earlier_version: target.in_earlier_version,
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
@@ -162,6 +163,8 @@ pub(crate) fn search(
                     subtitle: container.subtitle,
                     snippet: container.snippet,
                     open_id: String::new(),
+                    // A container keeps no Earlier versions page, so none is found by its past.
+                    in_earlier_version: false,
                 }))
                 .collect(),
         })
@@ -733,5 +736,38 @@ mod tests {
         // containers do not make the answer "empty" either.
         let exact = scratch.search("marmoset");
         assert!(exact.corrected.is_empty() && exact.hits.len() == 1);
+    }
+
+    /// WHAT AN ITEM SAID BEFORE IS FOUND, AS THE ITEM, ONCE (#1185): a note edited from
+    /// `alpha` to `beta` answers `alpha` as the live note flagged `in_earlier_version`, answers
+    /// `beta` and a word it says both times unflagged, and a task found by what its notes
+    /// once said is flagged the same way. A trashed note answers neither word.
+    #[test]
+    fn a_hit_on_an_earlier_version_is_the_live_item_once_and_says_so() {
+        let scratch = Scratch::founded();
+        let note = scratch.run(
+            "note.create",
+            serde_json::json!({ "title": "Cabin packing", "body": "alpha shared" }),
+        )["id"]
+            .as_str()
+            .expect("a note id")
+            .to_owned();
+        scratch.run(
+            "note.edit",
+            serde_json::json!({ "id": note, "body": "beta shared" }),
+        );
+        let flags = |term: &str| -> Vec<(String, bool)> {
+            scratch
+                .search(term)
+                .hits
+                .into_iter()
+                .map(|hit| (hit.id, hit.in_earlier_version))
+                .collect()
+        };
+        assert_eq!(flags("alpha"), [(note.clone(), true)]);
+        assert_eq!(flags("beta"), [(note.clone(), false)]);
+        assert_eq!(flags("shared"), [(note.clone(), false)]);
+        scratch.run("entity.trash", serde_json::json!({ "id": note }));
+        assert!(flags("alpha").is_empty() && flags("beta").is_empty());
     }
 }

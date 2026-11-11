@@ -13,6 +13,9 @@
 //!
 //! * a photograph is a hit when it is **live** (`Standing::is_live`): the archive is
 //!   not searched, and an edit's original is not offered beside the edit;
+//! * a photograph found only by what it was once captioned (#1185) is Home's row, not a
+//!   tile: the grid has no line to say "In an earlier version", so it keeps to what the
+//!   photographs say now;
 //! * a place's, an album's and the no-location bucket's count is the shelf it opens:
 //!   a place's live photographs, an album's members that are not in the trash;
 //! * of the places a word names, three stand above the grid, then the no-location

@@ -111,6 +111,9 @@ message MoneyActivityRow {
   optional string category_id = 8;
   optional string category_label = 9;
   repeated MoneyFlag flags = 10;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 11;
 }
 
 // A count and the sum of what it counts, in one currency.

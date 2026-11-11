@@ -175,14 +175,17 @@ pub(crate) fn keep(
         }
     }
     let text = |index: usize| cells[index].as_ref().and_then(Json::as_str);
+    let seq: i64 = connection
+        .prepare_cached("SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1")?
+        .query_row([id], |row| row.get(0))?;
     connection
         .prepare_cached(
             "INSERT INTO revision (entity_id, seq, at, cause, state, body, blob, media_type)
-             VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1),
-                     ?2, ?3, ?4, ?5, ?6, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )?
         .execute(rusqlite::params![
             id,
+            seq,
             now,
             cause,
             canonical_json(&parsed)?,
@@ -190,5 +193,7 @@ pub(crate) fn keep(
             text(1),
             text(2),
         ])?;
+    // The words this version replaced are findable, in the same commit that replaced them.
+    crate::index::version_kept(connection, id, seq, &parsed, text(0))?;
     Ok(())
 }

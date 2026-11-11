@@ -322,6 +322,7 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         .map(|id| SearchHit {
             party_id: id.clone(),
             snippet: Some(format!("about {id}")),
+            in_earlier_version: false,
         })
         .collect();
     let (found, _) = w.read(|door| load_search(door, &hits).expect("reads"));

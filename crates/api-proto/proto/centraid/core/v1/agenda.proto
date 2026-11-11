@@ -222,6 +222,9 @@ message AgendaEvent {
   bool busy = 37;
   // Minutes of travel the member allows before it starts. Absent for none.
   optional int64 travel_min = 38;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 39;
 }
 
 // One reminder: how long before the start it fires.
@@ -706,6 +709,9 @@ message AgendaTask {
   bool flagged = 40;
   // The task's address, as stored (#1173). Absent for none.
   optional string url = 41;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 42;
 }
 
 message AgendaTaskTag {

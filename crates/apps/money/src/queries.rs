@@ -1141,6 +1141,8 @@ pub const TXN_KIND: &str = "txn";
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchData {
     pub rows: Vec<TxnRow>,
+    /// The lines among `rows` whose words matched only in an earlier version (#1185).
+    pub earlier: std::collections::BTreeSet<String>,
 }
 
 /// The lines among a set of ids.
@@ -1170,7 +1172,10 @@ pub fn load_search(door: &dyn PageDoor, ids: &[String]) -> KitResult<SearchData>
     }
     let mut rows: Vec<TxnRow> = ids.iter().filter_map(|id| found.remove(id)).collect();
     decorate(door, &mut rows)?;
-    Ok(SearchData { rows })
+    Ok(SearchData {
+        rows,
+        earlier: std::collections::BTreeSet::new(),
+    })
 }
 
 /// Search the ledger from a term: the full-text index over every transaction
@@ -1219,9 +1224,15 @@ pub fn load_search_term(
             ));
         }
     };
+    let earlier: std::collections::BTreeSet<String> = page
+        .rows
+        .iter()
+        .filter(|target| target.in_earlier_version)
+        .map(|target| target.id.clone())
+        .collect();
     let ids: Vec<String> = page.rows.into_iter().map(|target| target.id).collect();
     match load_search(door, &ids) {
-        Ok(data) => Ok((data, None)),
+        Ok(data) => Ok((SearchData { earlier, ..data }, None)),
         Err(KitError::Door(message)) => Ok((
             SearchData::default(),
             Some(Denial {

@@ -56,6 +56,7 @@ fn row(id: &str, created: &str, trashed: bool) -> DocumentRow {
         purge_at: None,
         tags: Vec::new(),
         snippet: None,
+        in_earlier_version: false,
     }
 }
 

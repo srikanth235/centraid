@@ -313,6 +313,7 @@ pub(crate) fn search(
                         .map(|target| SearchHit {
                             party_id: target.id,
                             snippet: Some(target.snippet),
+                            in_earlier_version: target.in_earlier_version,
                         })
                         .collect::<Vec<_>>(),
                     Ok(centraid_search::Answer::Denied(denial)) => {
@@ -433,6 +434,7 @@ fn row_to_wire_with(
         days_since_contact: cadence.days_since_contact,
         reminders: reminders.to_vec(),
         snippet: row.snippet,
+        in_earlier_version: row.in_earlier_version,
     }
 }
 

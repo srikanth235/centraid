@@ -436,6 +436,7 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
         trashed_at,
         purge_at,
         snippet: row.snippet.unwrap_or_default(),
+        in_earlier_version: row.in_earlier_version,
         thumbnail_path: String::new(),
     }
 }

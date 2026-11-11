@@ -183,6 +183,8 @@ pub struct SearchRow {
     pub notebook_names: Vec<String>,
     pub attachments: Vec<Attachment>,
     pub snippet: String,
+    /// The words matched only in an earlier version of the note (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// What `search` answers.
@@ -891,12 +893,18 @@ fn search_body(
         return Ok(SearchData::default());
     }
     // VAULT ORDER IS RANK ORDER (best match first) — keep it.
-    let ranked: Vec<(String, String)> = page
+    let ranked: Vec<(String, String, bool)> = page
         .rows
         .iter()
-        .map(|target| (target.id.clone(), target.snippet.clone()))
+        .map(|target| {
+            (
+                target.id.clone(),
+                target.snippet.clone(),
+                target.in_earlier_version,
+            )
+        })
         .collect();
-    let hit_ids: Vec<String> = ranked.iter().map(|(id, _)| id.clone()).collect();
+    let hit_ids: Vec<String> = ranked.iter().map(|(id, _, _)| id.clone()).collect();
     let notes = note_rows(door, &hit_ids)?;
     let pinned = pinned_ids(door)?;
     let books = notebooks(door)?;
@@ -904,7 +912,7 @@ fn search_body(
     Ok(SearchData {
         notes: ranked
             .into_iter()
-            .filter_map(|(id, snippet)| {
+            .filter_map(|(id, snippet, in_earlier_version)| {
                 let note = notes.get(&id)?;
                 let (notebook_ids, notebook_names) = notebook_names(&books, note);
                 Some(SearchRow {
@@ -919,6 +927,7 @@ fn search_body(
                     notebook_names,
                     attachments: attachments.remove(&id).unwrap_or_default(),
                     snippet,
+                    in_earlier_version,
                     note_id: id,
                 })
             })
@@ -1253,7 +1262,10 @@ pub fn load_link_targets(
             request = request.excluding(memos.clone());
         }
         if let Ok(Answer::Data { page, .. }) = search.query(principal, &request) {
-            targets.extend(page.rows);
+            // A link is made to a thing by what it is called now: a sheet of targets has no
+            // line to say "in an earlier version", so what only an earlier version matched is
+            // left to the searches (#1185).
+            targets.extend(page.rows.into_iter().filter(|row| !row.in_earlier_version));
         }
     }
     Ok((LinkTargetsData { targets }, None))

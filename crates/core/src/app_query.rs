@@ -890,6 +890,7 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         original_start_local: event.original_start_local,
         recurrence_overlap: event.recurrence_overlap,
         snippet: event.snippet,
+        in_earlier_version: event.in_earlier_version,
         busy: event.busy,
         travel_min: event.travel_min,
         // `search` only, and filled there (`search_to_wire`).

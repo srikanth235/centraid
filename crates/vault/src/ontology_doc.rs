@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 42] = [
+pub const TABLES: [(&str, &str, &str); 44] = [
     (
         "kernel",
         "entity",
@@ -99,6 +99,16 @@ pub const TABLES: [(&str, &str, &str); 42] = [
         "kernel",
         "search_vocab",
         "The index's own vocabulary, which serves fuzzy correction of a typed word.",
+    ),
+    (
+        "kernel",
+        "search_past",
+        "What a live item said in an earlier version: one contentless row per kept version with typed text, keyed by the entity's `n` and the version's number, so a search finds the item by words it has since replaced. A trashed or purged entity has none, and a Locker item never does.",
+    ),
+    (
+        "kernel",
+        "search_past_vocab",
+        "The earlier versions' own vocabulary.",
     ),
     (
         "kernel",
@@ -275,6 +285,10 @@ fn is_shadow(name: &str) -> bool {
         "search_data",
         "search_docsize",
         "search_idx",
+        "search_past_config",
+        "search_past_data",
+        "search_past_docsize",
+        "search_past_idx",
     ]
     .contains(&name)
 }

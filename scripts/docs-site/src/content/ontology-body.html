@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">42</b>tables</div>
+      <div><b data-count="tables">44</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -178,6 +178,19 @@
 <div class="colrow"><span class="cn">rank</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kernel" data-table="search_vocab"><header><h4>search_vocab</h4><p class="tp">The index's own vocabulary, which serves fuzzy correction of a typed word.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">term</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">doc</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">cnt</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_past"><header><h4>search_past</h4><p class="tp">What a live item said in an earlier version: one contentless row per kept version with typed text, keyed by the entity's `n` and the version's number, so a search finds the item by words it has since replaced. A trashed or purged entity has none, and a Locker item never does.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">title</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">body</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">search_past</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">rank</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kernel" data-table="search_past_vocab"><header><h4>search_past_vocab</h4><p class="tp">The earlier versions' own vocabulary.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">term</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">doc</span><span class="ct"></span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -564,7 +577,7 @@
 <div class="colrow"><span class="cn">failed_unlocks</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">failed_unlock_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="42" data-columns="320">42 tables and 320 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="44" data-columns="327">44 tables and 327 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
@@ -602,7 +615,7 @@
       <article class="rule rv"><h3>A hash is a foreign key into <span class="k">blob</span></h3><p>Every column holding one is declared, so the byte plane finds every reference from <span class="k">foreign_key_list</span> alone.</p></article>
       <article class="rule rv"><h3>Delete rules are chosen, not defaulted</h3><p>Kind rows, child rows, edges, revisions and a category's budgets and rules cascade; only <span class="k">source.entity_id</span> and <span class="k">message_attachment.entity_id</span> null; every other pointer has no action.</p></article>
       <article class="rule rv"><h3>An edge joins only what <span class="k">edge_shape</span> allows</h3><p>Checked exhaustively over relation × kind × kind, and the relation list equals the <span class="k">CHECK</span>.</p></article>
-      <article class="rule rv"><h3>The incremental index equals a rebuild</h3><p>After every search-relevant command, the one <span class="k">search</span> table is what a rebuild would write. A seeded red proves the comparison can see an untouched edit.</p></article>
+      <article class="rule rv"><h3>The incremental index equals a rebuild</h3><p>After every search-relevant command, the <span class="k">search</span> table and <span class="k">search_past</span> (what items said in earlier versions) are what a rebuild would write. A seeded red proves the comparison can see an untouched edit.</p></article>
       <article class="rule rv"><h3>Concept and container lists equal the code's</h3><p>The <span class="k">CHECK</span> lists are <span class="k">Kind::CONCEPTS</span> and <span class="k">Kind::CONTAINERS</span>, and seed keys are folded.</p></article>
       <article class="rule rv"><h3>No table outside the spec is founded</h3><p>The set of tables of a new vault is a list a test holds, and so is the set of tables on this page.</p></article>
     </div>

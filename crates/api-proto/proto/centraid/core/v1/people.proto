@@ -150,6 +150,9 @@ message PeopleRosterRow {
   // `today` and never a UTC slice. EMPTY when the instant is absent.
   string last_contacted_local_day = 14;
   string created_local_day = 15;
+  // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
+  // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
+  bool in_earlier_version = 16;
 }
 
 // ---------------------------------------------------------------------------

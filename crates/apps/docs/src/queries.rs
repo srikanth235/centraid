@@ -219,6 +219,8 @@ pub struct DocumentRow {
     pub tags: Vec<LabelEntry>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
+    /// On a `search` row: the words matched only in an earlier version (#1185).
+    pub in_earlier_version: bool,
 }
 
 /// What `drive` answers.
@@ -442,6 +444,7 @@ fn fold(
                 trashed: text_of(entity, "deleted_at").is_some(),
                 tags: tags.remove(&id).unwrap_or_default(),
                 snippet: snippets.get(&id).cloned(),
+                in_earlier_version: false,
                 title: text_of(entity, "title"),
                 created_at: text_of(entity, "created_at"),
                 updated_at: text_of(entity, "updated_at"),
@@ -684,6 +687,12 @@ pub fn load_search_term(
         .iter()
         .map(|target| (target.id.clone(), target.snippet.clone()))
         .collect();
+    let earlier: std::collections::BTreeSet<String> = page
+        .rows
+        .iter()
+        .filter(|target| target.in_earlier_version)
+        .map(|target| target.id.clone())
+        .collect();
     guarded(|| {
         let mut entities: BTreeMap<String, Row> = read_of(
             door,
@@ -705,6 +714,7 @@ pub fn load_search_term(
                 // v0 ships "" rather than null for a hit with no snippet.
                 .map(|mut row| {
                     row.snippet = Some(row.snippet.unwrap_or_default());
+                    row.in_earlier_version = earlier.contains(&row.document_id);
                     row
                 })
                 .collect(),

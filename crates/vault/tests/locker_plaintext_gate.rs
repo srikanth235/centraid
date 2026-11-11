@@ -438,7 +438,8 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             .read(|connection| {
                 let words: Vec<String> = connection
                     .prepare(
-                        "SELECT term FROM search_vocab UNION ALL SELECT word FROM search_word",
+                        "SELECT term FROM search_vocab UNION ALL SELECT term FROM search_past_vocab
+                         UNION ALL SELECT word FROM search_word",
                     )?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -453,6 +454,10 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                     ("search_docsize", "sz"),
                     ("search_idx", "term"),
                     ("search_config", "v"),
+                    ("search_past_data", "block"),
+                    ("search_past_docsize", "sz"),
+                    ("search_past_idx", "term"),
+                    ("search_past_config", "v"),
                 ] {
                     for cell in connection
                         .prepare(&format!("SELECT {column} FROM {table}"))?

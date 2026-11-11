@@ -169,9 +169,13 @@ pub fn load_search_term(
     };
     Ok((
         SearchData {
+            // Photos' search draws a grid of tiles, which has no line to say "in an earlier
+            // version": a photograph found only by what it was once captioned is Home's hit
+            // (a row), and the grid keeps to what the photographs say now (#1185).
             photo_ids: page
                 .rows
                 .into_iter()
+                .filter(|target| !target.in_earlier_version)
                 .map(|target| target.id)
                 .filter(|id| standing.is_live(id))
                 .collect(),
