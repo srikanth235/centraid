@@ -14,7 +14,8 @@
 //! control that lies.
 //!
 //! The Ask row under an answer hands the term to the assistant by a route, scoped
-//! to every app (Home's search asks across all of them).
+//! to every app (Home's search asks across all of them). An app's own search that runs on this
+//! screen (Health's) asks in its own scope, as every other app's search does (#1185).
 //!
 //! ## Recent
 //!
@@ -206,6 +207,18 @@ impl Search {
         self.term.trim()
     }
 
+    /// The answer as the page draws it. The Ask is scoped to the app whose search this is; Home's
+    /// stays unscoped.
+    fn folded(&self, locale: Locale, found: &wire::VaultSearch) -> wire::HomeSearchData {
+        let mut data = fold(locale, self.asked(), found);
+        if let Some(scope) = self.scope {
+            let offer = ask::offer(locale, self.asked(), scope);
+            data.ask_route = Some(routes::ask(&offer.question, &offer.scope));
+            data.ask = Some(offer);
+        }
+        data
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         if self.asked().is_empty() {
             self.rest();
@@ -321,13 +334,13 @@ impl Screen for Search {
         } else {
             self.page
                 .data()
-                .map(|found| Content::Data(Box::new(fold(locale, self.asked(), found))))
+                .map(|found| Content::Data(Box::new(self.folded(locale, found))))
         };
         let nothing = !self.resting
             && self
                 .page
                 .data()
-                .is_some_and(|found| fold(locale, self.asked(), found).groups.is_empty());
+                .is_some_and(|found| self.folded(locale, found).groups.is_empty());
         let page = if self.resting {
             Page::<()>::Ready {
                 data: (),

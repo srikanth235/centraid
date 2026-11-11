@@ -65,6 +65,13 @@ fn health_search_finds_a_metric_by_its_name_a_workout_by_its_kind_and_nothing_el
     let found = data(&d, i);
     assert_eq!(found.groups.len(), 1);
     assert_eq!(found.groups[0].app_id, "health");
+    // THE ASK is Health's own: the assistant is asked in Health's scope, not across the vault.
+    let ask = found.ask.clone().expect("an ask");
+    assert_eq!(ask.scope, "health");
+    assert_eq!(
+        found.ask_route.as_ref().map(|route| route.screen.as_str()),
+        ask.route.as_ref().map(|route| route.screen.as_str())
+    );
     let metric = &found.groups[0].rows[0];
     assert_eq!(metric.kind_label, "Metric");
     assert_eq!(metric.route.as_ref().unwrap().screen, "health.metric");
