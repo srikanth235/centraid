@@ -67,6 +67,7 @@ pub mod note_portable;
 pub mod person;
 pub mod person_portable;
 pub mod photo;
+pub mod photo_portable;
 pub mod place;
 pub mod rule;
 pub mod sealed;
@@ -307,7 +308,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 28] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 29] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -334,6 +335,7 @@ impl Registry {
             txn_portable::definitions,
             health_portable::definitions,
             document_portable::definitions,
+            photo_portable::definitions,
             vault::definitions,
             workout::definitions,
         ];

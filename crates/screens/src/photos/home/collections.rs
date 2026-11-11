@@ -7,7 +7,7 @@
 //! Four sections, each foldable, with the rows sorted the way the system sorts
 //! them: Pinned holds what a member reaches for (Favorites, Videos, and Places in
 //! the slot the system gives its Map); Albums the member's own; Utilities the
-//! housekeeping (Archive, Trash); Recently deleted the albums in the
+//! housekeeping (Archive, Trash, Export); Recently deleted the albums in the
 //! trash, each with its Restore. A tap on a card is the route in the card.
 
 use centraid_api_proto::core_v1 as wire;
@@ -18,6 +18,7 @@ use super::super::cells::{self, Link};
 use super::super::routes;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
+use crate::kit::export;
 use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::{Locale, fill, photos as words, photos_home as sentences};
@@ -301,6 +302,19 @@ impl Collections {
                     .unwrap_or(&wire::PhotosShelfTile::default()),
                 "trash",
             ),
+            // EXPORT (#1185): the kit's row, beside Trash, a route the shell pushes.
+            {
+                let entry = export::entry(locale, crate::photos::EXPORT);
+                wire::PhotosCollectionCard {
+                    kind: Kind::Shelf as i32,
+                    id: entry.key.to_owned(),
+                    accessibility_label: entry.label.clone(),
+                    title: entry.label,
+                    route: Some(entry.route),
+                    icon_key: entry.icon_key.to_owned(),
+                    ..wire::PhotosCollectionCard::default()
+                }
+            },
         ];
 
         let album_cards: Vec<wire::PhotosCollectionCard> = albums

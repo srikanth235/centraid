@@ -84,6 +84,16 @@ catalog! {
     plain photos_download_original = ("Download original", "Download original");
     plain photos_edit = ("Edit", "Edit");
     plain photos_editor_title = ("Crop and rotate", "Crop and rotate");
+    plain photos_export_all = ("All photos and videos", "All photos and videos");
+    plain photos_export_lede = (
+        "Your original photos and videos in one .zip archive, named by when they were taken.",
+        "Your original photos and videos in one .zip archive, named by when they were taken."
+    );
+    plain photos_export_nothing = (
+        "There are no photos or videos on this phone to export.",
+        "There are no photos or videos on this phone to export."
+    );
+    plain photos_export_title = ("Export photos", "Export photos");
     plain photos_edit_cannot_draw = ("Centraid could not draw the edit.", "Centraid could not draw the edit.");
     plain photos_edit_cannot_open = ("Centraid could not open the original.", "Centraid could not open the original.");
     plain photos_edit_crop = ("Crop", "Crop");

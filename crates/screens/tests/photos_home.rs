@@ -1637,7 +1637,7 @@ fn collections_are_pinned_albums_and_utilities_with_the_rows_the_system_sorts() 
     };
     // PLACES AFTER THE SECOND STANDING SHELF, where the system puts Map.
     assert_eq!(titles("pinned"), ["Favorites", "Videos", "Places"]);
-    assert_eq!(titles("utilities"), ["Archive", "Trash"]);
+    assert_eq!(titles("utilities"), ["Archive", "Trash", "Export"]);
     let album = r
         .section("albums")
         .cards

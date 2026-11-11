@@ -90,6 +90,7 @@ person.remove_contact_point
 person.save_contact_point
 photo.add
 photo.edit
+photo.export_zip
 photo.set_place
 place.add
 place.locate

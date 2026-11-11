@@ -4783,6 +4783,24 @@
         "verb": "detach"
       },
       {
+        "action": "export-zip",
+        "also": [],
+        "app": "photos",
+        "bulk": true,
+        "chat": "card",
+        "command": "photo.export_zip",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "export all my photos as one archive",
+          "save my photos and videos as a zip file",
+          "back up one album as a zip"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "link",
         "also": [],
         "app": "reminders",

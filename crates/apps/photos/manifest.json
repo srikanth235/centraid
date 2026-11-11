@@ -115,6 +115,11 @@
         "verbs": "act"
       },
       {
+        "schema": "photo",
+        "table": "export_zip",
+        "verbs": "act"
+      },
+      {
         "schema": "tag",
         "table": "add",
         "verbs": "act"
@@ -1380,6 +1385,38 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-zip",
+      "verb": "log",
+      "bulk": true,
+      "kind": "photo",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "photo.export_zip",
+      "phrasings": [
+        "export all my photos as one archive",
+        "save my photos and videos as a zip file",
+        "back up one album as a zip"
+      ],
+      "description": "Write every photograph and video that is not in the trash (all of them, or one album's) as one zip archive of the original files, named by when each was taken, through photo.export_zip. Answers the staged file's path, name and counts. Writes nothing to the vault.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

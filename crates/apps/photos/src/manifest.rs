@@ -51,7 +51,7 @@ mod tests {
         // sweep and the enricher (R-1135-5); then the screens' reads: one shelf, one
         // photograph, the collections and the places.
         assert_eq!(manifest.queries.len(), 6);
-        assert_eq!(manifest.actions.len(), 26);
+        assert_eq!(manifest.actions.len(), 27);
         for name in ["search", "shelf", "photo", "albums", "places"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -175,7 +175,7 @@ mod tests {
             .vault
             .as_ref()
             .expect("Photos declares its vault reach");
-        assert_eq!(vault.scopes.len(), 24);
+        assert_eq!(vault.scopes.len(), 25);
         let mut reads: Vec<&str> = vault
             .scopes
             .iter()
@@ -215,7 +215,7 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, crate::commands::act_scope_tables());
-        assert_eq!(declared.len(), 16);
+        assert_eq!(declared.len(), 17);
         assert!(
             manifest.ext_tables.is_empty(),
             "Photos is a projection over the vault's own tables"

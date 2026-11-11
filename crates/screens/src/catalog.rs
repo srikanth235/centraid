@@ -5976,6 +5976,26 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Write every photograph and video that is not in the trash (all of them, or one album's) as one zip archive of the original files, named by when each was taken, through photo.export_zip. Answers the staged file's path, name and counts. Writes nothing to the vault.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportZip {
+            pub album_id: Field<String>,
+        }
+        impl ExportZip {
+            pub const NAME: &str = "export-zip";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                put_field(&mut map, "album_id", self.album_id, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportZip> for wire::ActRequest {
+            fn from(value: ExportZip) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod reminders {

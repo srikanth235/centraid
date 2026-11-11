@@ -361,7 +361,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Export,
         "crates/screens/src/people/export.rs",
     ),
-    owed("photos", Promise::Export, EXPORT_OWED),
+    kept(
+        "photos",
+        Promise::Export,
+        "crates/screens/src/photos/export.rs",
+    ),
     kept(
         "reminders",
         Promise::Export,
@@ -535,8 +539,6 @@ pub const REGISTER: &[Row] = &[
     owed("photos", Promise::Link, LINK_OWED),
     owed("reminders", Promise::Link, LINK_OWED),
 ];
-
-const EXPORT_OWED: &str = "no export screen on the kit's ExportSpec (#1185)";
 
 const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";
 

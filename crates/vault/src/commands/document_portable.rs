@@ -77,7 +77,7 @@ fn path_of(
 
 /// `path` made unique among `used` (compared without regard to case) by ` 2`, ` 3` before the
 /// extension.
-fn unique(used: &mut BTreeSet<String>, path: String) -> String {
+pub(crate) fn unique(used: &mut BTreeSet<String>, path: String) -> String {
     if used.insert(path.to_lowercase()) {
         return path;
     }
@@ -103,7 +103,7 @@ fn unique(used: &mut BTreeSet<String>, path: String) -> String {
 }
 
 /// Empty the staging folder: a file an earlier export left is plaintext that must not linger.
-fn clear(dir: &Path) -> Result<()> {
+pub(crate) fn clear(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();

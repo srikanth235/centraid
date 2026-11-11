@@ -106,8 +106,8 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// THE TABLE. Twenty-four actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 26] = [
+/// THE TABLE. Twenty-seven actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 27] = [
     act("upload", "photo.add"),
     act("edit-photo", "photo.edit"),
     act("retitle-photo", "entity.retitle"),
@@ -139,6 +139,9 @@ pub const ACTIONS: [ActionRow; 26] = [
     // verbs, one pair in every app (the Attach promise, #1185).
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    // THE ORIGINALS AS ONE ARCHIVE (#1185): Export beside Trash. A streamed file the shell saves;
+    // it writes nothing to the vault (`writes_nothing`).
+    act("export-zip", "photo.export_zip"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -182,7 +185,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
-        assert_eq!(ACTIONS.len(), 26);
+        assert_eq!(ACTIONS.len(), 27);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -194,7 +197,8 @@ mod tests {
                 "photo.add",
                 "photo.edit",
                 "album.set_cover",
-                "photo.set_place"
+                "photo.set_place",
+                "photo.export_zip"
             ],
             "what only a photograph or an album has; everything else is a shared verb"
         );
@@ -263,7 +267,7 @@ mod tests {
     /// family. Widening it would hand Photos every `entity.*` verb it never sends.
     #[test]
     fn the_act_scopes_are_one_per_distinct_command() {
-        assert_eq!(act_scope_tables().len(), 16);
+        assert_eq!(act_scope_tables().len(), 17);
         assert!(act_scope_tables().contains(&("photo", "add")));
         assert!(
             !act_scope_tables()

@@ -197,6 +197,7 @@ photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,attach,attach,photo,card,no,no
 photos,detach,detach,photo,card,no,no
+photos,export-zip,log,photo,card,no,no
 reminders,link,link,task,card,no,no
 reminders,unlink,unlink,task,card,no,no
 reminders,add-task,create,task,direct,yes: crates/screens/src/reminders/ops.rs,yes

@@ -10,6 +10,7 @@
 //! | Places | [`PLACES`] | [`places`] |
 //! | One photograph | [`LIGHTBOX`] | [`lightbox`] |
 //! | Crop, rotate, straighten | [`EDITOR`] | [`editor`] |
+//! | The originals as one archive | [`EXPORT`] | [`export`] |
 //!
 //! ## What the screens share
 //!
@@ -37,6 +38,7 @@ pub mod album_choice;
 pub mod cells;
 pub mod earlier;
 pub mod editor;
+pub mod export;
 pub mod fetch;
 pub mod free_up;
 pub mod home;
@@ -56,6 +58,8 @@ pub const LIGHTBOX: &str = "photos.lightbox";
 pub const EDITOR: &str = "photos.editor";
 /// The earlier versions of a photograph (#1185).
 pub const EARLIER: &str = "photos.earlier";
+/// Photos' export of its originals as one streamed archive (#1185).
+pub const EXPORT: &str = "photos.export";
 
 /// A copy of the originals `photo_ids` for the platform (`ExportOriginals`),
 /// with the words the shell names it by: the share sheet's title and the stems
@@ -92,6 +96,7 @@ pub fn registry() -> Registry {
         .with(LIGHTBOX, lightbox::build)
         .with(EDITOR, editor::build)
         .with(EARLIER, earlier::build)
+        .with(EXPORT, export::build)
 }
 
 /// A runtime with Photos' screens and one tab, `photos`, rooted at its home. The

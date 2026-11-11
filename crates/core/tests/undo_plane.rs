@@ -403,6 +403,7 @@ const WRITES_NOTHING: &[(&str, &str, &str)] = &[
     ("reminders", "export-ics", "{}"),
     ("money", "export-csv", "{}"),
     ("docs", "export-zip", "{}"),
+    ("photos", "export-zip", "{}"),
     ("health", "export-csv", r#"{"what":"workouts"}"#),
 ];
 
