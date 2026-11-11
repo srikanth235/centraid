@@ -121,21 +121,21 @@ fn an_edit_keeps_the_words_it_replaced_and_a_no_op_keeps_nothing() {
         json!({ "id": id, "title": "Plan B", "format": "plain" }),
     );
     w.ok("note.edit", json!({ "id": id, "body": "third" }));
-    let kept: Vec<String> = w
+    let kept: Vec<Option<String>> = w
         .scratch
         .vault
         .read(|c| {
             Ok(
                 c.prepare("SELECT body FROM revision WHERE entity_id = ?1 ORDER BY seq")?
-                    .query_map([&id], |r| r.get::<_, String>(0))?
+                    .query_map([&id], |r| r.get::<_, Option<String>>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?,
             )
         })
         .expect("revisions");
     assert_eq!(
         kept,
-        ["first", "second", "second"],
-        "the replaced words, oldest first; a repeat keeps none, a title edit keeps the note as it was"
+        [Some("first".to_owned()), None, Some("second".to_owned())],
+        "the replaced words, oldest first; a repeat keeps none, a title edit keeps no copy of them"
     );
     assert_eq!(
         w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
@@ -289,4 +289,71 @@ fn a_memo_a_trashed_note_and_the_note_itself_are_not_wikilink_targets() {
     w.ok("entity.trash", json!({ "id": gone }));
     let id = w.note("Self", "[[Plan]] [[Gone]] [[Self]]");
     assert!(w.links(&id).is_empty());
+}
+
+#[test]
+fn a_title_only_edit_keeps_no_copy_of_the_body_and_its_version_restores_the_title_alone() {
+    let w = World::new();
+    let id = w.note("Plan", "the words");
+    w.ok("note.edit", json!({ "id": id, "title": "Plan B" }));
+    // No body bytes in that history row; the version is still there, for the title.
+    let (rows, with_body): (i64, i64) = (
+        w.query("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[&id]),
+        w.query(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND body IS NOT NULL",
+            &[&id],
+        ),
+    );
+    assert_eq!((rows, with_body), (1, 0));
+    assert_eq!(
+        w.query::<i64>(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND state LIKE '%the words%'",
+            &[&id]
+        ),
+        0
+    );
+    // The page shows one correct row: the title, and not the words.
+    let page = w
+        .scratch
+        .vault
+        .read(|c| centraid_vault::history::earlier_versions(c, &id, None, 10))
+        .expect("page");
+    assert_eq!(page.versions.len(), 1);
+    let fields: Vec<&str> = page.versions[0]
+        .changes
+        .iter()
+        .map(|change| change.field.as_str())
+        .collect();
+    assert_eq!(fields, ["entity.title"]);
+    assert_eq!(page.versions[0].changes[0].before, json!("Plan"));
+    // Restoring it brings the old title back and writes the words nowhere: the note's words are
+    // as they were, and the restore's own version keeps no copy of them either.
+    w.ok("history.restore_version", json!({ "id": id, "seq": 1 }));
+    assert_eq!(
+        w.query::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Plan"
+    );
+    assert_eq!(
+        w.query::<String>("SELECT body FROM note WHERE id = ?1", &[&id]),
+        "the words"
+    );
+    assert_eq!(
+        w.query::<i64>(
+            "SELECT COUNT(*) FROM revision WHERE entity_id = ?1 AND body IS NOT NULL",
+            &[&id]
+        ),
+        0
+    );
+    // A later change of the words does not rewrite what the title's version held.
+    w.ok("note.edit", json!({ "id": id, "body": "newer words" }));
+    let state = w
+        .scratch
+        .vault
+        .read(|c| centraid_vault::history::version_state(c, &id, 1))
+        .expect("state")
+        .expect("version");
+    assert_eq!(
+        state["note"]["body"], "the words",
+        "a version that kept no words reads with the ones the note held then"
+    );
 }

@@ -966,15 +966,19 @@ fn history_body(door: &dyn PageDoor, note_id: &str) -> KitResult<HistoryData> {
         .collect();
     // A revision is also kept when only the title, the notebook or the pin
     // moved (the one history at the commit door, #1185); this screen lists the
-    // WORDS, so a revision whose words match the version newer than it adds
-    // nothing. The newest of a run of equal words stays, dated by the run's
+    // WORDS, so a revision whose words match the version newer than it (or that
+    // kept none, because they did not change) adds nothing. The newest of a run of equal words stays, dated by the run's
     // oldest member (the stamp says when those words became the note's).
     let mut newer = note.body.clone();
     let words_changed: Vec<bool> = page
         .rows
         .iter()
         .map(|row| {
-            let body = text_of(row, "body").unwrap_or_default();
+            // A revision that kept no words (the commit left them as they were) held the
+            // words of the version newer than it.
+            let Some(body) = text_of(row, "body") else {
+                return false;
+            };
             let changed = body != newer;
             newer = body;
             changed

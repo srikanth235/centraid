@@ -42,7 +42,9 @@
 //! live in `revision.body` / `revision.blob` / `revision.media_type`, because a blob reference
 //! must be a real foreign key for the garbage collector to see it and a note's words are the one
 //! value large enough to deserve a cell of their own. [`version_state`] puts them back, so
-//! there is one state and one place each fact is kept.
+//! there is one state and one place each fact is kept. A commit that leaves a note's words as they
+//! were (a title or notebook edit) copies none: that version carries no `note.body`, and a reader
+//! takes the words from the next newer version that holds them, else from the note itself.
 //!
 //! A trashed record offers no "Earlier versions" entry ([`offered`]); its versions are kept and the
 //! entry returns with the record.
@@ -126,19 +128,39 @@ pub(crate) fn settle(connection: &Connection, now: &str, cause: &str) -> Result<
         if before == after {
             continue;
         }
-        keep(connection, &id, &before, now, cause)?;
+        keep(connection, &id, &before, &after, now, cause)?;
         written += 1;
     }
     Ok(written)
 }
 
-/// Write one version: `state` is the entity's state as the view spells it.
-fn keep(connection: &Connection, id: &str, state: &str, now: &str, cause: &str) -> Result<()> {
-    let mut parsed: Json =
-        serde_json::from_str(state).map_err(|source| crate::error::VaultError::Json {
+/// Write one version: `state` is the entity's state as the view spells it, `after` what the
+/// commit left. A note's words the commit did not change are not copied (a title-only edit keeps
+/// no body): the version carries no `note.body`, and a reader takes the words from the next newer
+/// version that holds them, else from the note as it is ([`read::fill_body`]).
+fn keep(
+    connection: &Connection,
+    id: &str,
+    state: &str,
+    after: &str,
+    now: &str,
+    cause: &str,
+) -> Result<()> {
+    let parse = |text: &str| -> Result<Json> {
+        serde_json::from_str(text).map_err(|source| crate::error::VaultError::Json {
             context: "an entity's state as the history captured it".to_owned(),
             source,
-        })?;
+        })
+    };
+    let mut parsed = parse(state)?;
+    let words_unchanged = {
+        let words = |state: &Json| state.pointer("/note/body").cloned();
+        let now_words = words(&parse(after)?);
+        now_words.is_some() && words(&parsed) == now_words
+    };
+    if words_unchanged && let Some(row) = parsed.get_mut("note").and_then(Json::as_object_mut) {
+        row.remove("body");
+    }
     // Content comes out of the JSON and into its own cells.
     let mut cells: [Option<Json>; 3] = [None, None, None];
     for (table, column, cell) in CONTENT.iter() {

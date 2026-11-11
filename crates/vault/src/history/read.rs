@@ -189,7 +189,41 @@ pub fn version_state(connection: &Connection, id: &str, seq: i64) -> Result<Opti
             row_of,
         )
         .optional()?;
-    row.as_ref().map(assemble).transpose()
+    let Some(mut state) = row.as_ref().map(assemble).transpose()? else {
+        return Ok(None);
+    };
+    fill_body(connection, id, seq, &mut state)?;
+    Ok(Some(state))
+}
+
+/// A note version that kept no words (its commit left them as they were) held the words the next
+/// newer version that kept some holds, else the note's own: put them back, so one state is one
+/// state whether or not the words were copied.
+fn fill_body(connection: &Connection, id: &str, seq: i64, state: &mut Json) -> Result<()> {
+    let elided = state
+        .get("note")
+        .and_then(Json::as_object)
+        .is_some_and(|note| !note.contains_key("body"));
+    if !elided {
+        return Ok(());
+    }
+    let newer: Option<String> = connection
+        .query_row(
+            "SELECT body FROM revision WHERE entity_id = ?1 AND seq > ?2 AND body IS NOT NULL
+              ORDER BY seq LIMIT 1",
+            rusqlite::params![id, seq],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let words = match newer {
+        Some(words) => Some(Json::String(words)),
+        None => current_state(connection, id)?.and_then(|now| now.pointer("/note/body").cloned()),
+    };
+    if let (Some(words), Some(note)) = (words, state.get_mut("note").and_then(Json::as_object_mut))
+    {
+        note.insert("body".to_owned(), words);
+    }
+    Ok(())
 }
 
 /// How many earlier versions an entity holds: what a detail screen's "Earlier versions" entry
@@ -282,7 +316,8 @@ pub fn earlier_versions(
     };
     let mut versions = Vec::with_capacity(shown.len());
     for (index, row) in shown.iter().enumerate() {
-        let state = assemble(row)?;
+        let mut state = assemble(row)?;
+        fill_body(connection, id, row.seq, &mut state)?;
         let mut changes = replacement
             .as_ref()
             .map_or_else(Vec::new, |after| diff(shape, &state, after));
