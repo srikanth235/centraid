@@ -20,8 +20,17 @@ fn trash_of(v: &wire::ViewState) -> &wire::TrashView {
 }
 
 fn rows(v: &wire::ViewState) -> Vec<wire::TrashRow> {
-    match &trash_of(v).content {
+    let view = trash_of(v);
+    match &view.content {
         Some(wire::trash_view::Content::Data(data)) => data.rows.clone(),
+        // A trash with nothing in it is the empty page and carries no rows.
+        None if matches!(
+            view.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
+        }
         other => panic!("not the trash's data: {other:?}"),
     }
 }

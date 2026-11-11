@@ -303,9 +303,20 @@ pub fn trash(v: &wire::ViewState) -> &wire::TrashView {
 }
 
 pub fn trash_data(v: &wire::ViewState) -> &wire::TrashData {
+    static NOTHING: std::sync::OnceLock<wire::TrashData> = std::sync::OnceLock::new();
     match &trash(v).content {
         Some(wire::trash_view::Content::Data(data)) => data,
+        // A trash with nothing in it is the page's own empty state and carries no data.
+        None if trash_empty_state(v).is_some() => NOTHING.get_or_init(wire::TrashData::default),
         other => panic!("the trash has no data: {other:?}"),
+    }
+}
+
+/// The empty state of a trash page, when the page is empty.
+pub fn trash_empty_state(v: &wire::ViewState) -> Option<&wire::EmptyState> {
+    match trash(v).page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => Some(empty),
+        _ => None,
     }
 }
 

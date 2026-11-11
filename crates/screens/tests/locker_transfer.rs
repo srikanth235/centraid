@@ -253,8 +253,8 @@ fn the_trash_lists_what_went_and_is_behind_the_lock() {
         other => panic!("{other:?}"),
     };
     assert!(matches!(
-        view.content,
-        Some(wire::trash_view::Content::Denied(ref denied)) if denied.title == "Locker is locked."
+        view.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Refused(denied)) if denied.title == "Locker is locked."
     ));
 }
 

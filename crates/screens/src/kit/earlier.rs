@@ -36,7 +36,7 @@ use wire::screen_event::Kind as E;
 use super::act as kit_act;
 use super::civil::{self, HourCycle};
 use super::quantity::UnitsPref;
-use super::read::{self, Reading};
+use super::read::{self, Note, Page, Reading};
 use super::secret::Secrets;
 use crate::catalog::{act, load};
 use crate::screen::{Ctx, Screen};
@@ -139,7 +139,7 @@ pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn 
         spec,
         entity_id: args.entity_id.clone(),
         back_label: args.back_label.clone(),
-        phase: Phase::Loading,
+        listing: Page::loading(),
         status: None,
         undo: false,
         names: Names::new(),
@@ -260,21 +260,17 @@ struct Version {
     after: Vec<Field>,
 }
 
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready {
-        versions: Vec<Version>,
-        next: Option<i64>,
-    },
+/// The versions listed so far, and the cursor of the page below them.
+struct Listing {
+    versions: Vec<Version>,
+    next: Option<i64>,
 }
 
 struct Earlier {
     spec: &'static EarlierSpec,
     entity_id: String,
     back_label: String,
-    phase: Phase,
+    listing: Page<Listing>,
     /// A refusal's sentence, or "Earlier version restored" with Undo, until the next attempt.
     status: Option<wire::StatusLine>,
     /// Whether the status line's Undo is a restore's.
@@ -361,7 +357,7 @@ impl Earlier {
             self.reload(ctx);
             return;
         }
-        let Phase::Ready { versions, .. } = &self.phase else {
+        let Some(Listing { versions, .. }) = self.listing.data() else {
             return;
         };
         let look = Look {
@@ -416,24 +412,28 @@ impl Earlier {
             self.names = Names::new();
             self.status = None;
             self.undo = false;
-            self.phase = Phase::Denied(denial);
+            self.listing = Page::Refused(denial);
             return;
         }
         if let Some(know) = self.spec.know {
             self.names = know(ctx, &self.entity_id);
         }
-        self.phase = match self.page(ctx, None) {
-            Reading::Data((versions, next)) => Phase::Ready { versions, next },
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+        let reading = match self.page(ctx, None) {
+            Reading::Data((versions, next)) => Reading::Data(Listing { versions, next }),
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        let kept = std::mem::replace(&mut self.listing, Page::loading());
+        self.listing = kept
+            .refreshing()
+            .after(reading, ctx.locale(), |listing| listing.versions.is_empty());
     }
 
     /// The next page, under the rows shown; a read that does not land keeps them and says so.
     fn more(&mut self, ctx: &Ctx) {
-        let Phase::Ready {
+        let Some(Listing {
             next: Some(next), ..
-        } = &self.phase
+        }) = self.listing.data()
         else {
             return;
         };
@@ -444,23 +444,24 @@ impl Earlier {
         }
         match self.page(ctx, Some(next)) {
             Reading::Data((more, after)) => {
-                if let Phase::Ready { versions, next } = &mut self.phase {
-                    versions.extend(more);
-                    *next = after;
+                if let Page::Ready { data, note } = &mut self.listing {
+                    data.versions.extend(more);
+                    data.next = after;
+                    *note = None;
                 }
             }
+            // What loaded stays, under the one sentence.
             _ => {
-                self.status = Some(wire::StatusLine {
-                    sentence: shared::read_failed(ctx.locale()),
-                    action_label: String::new(),
-                    refused: true,
-                });
+                let kept = std::mem::replace(&mut self.listing, Page::loading());
+                self.listing = kept.noted(Some(Note::more_failed(ctx.locale())));
             }
         }
     }
 
     fn shown(&self, seq: i64) -> bool {
-        matches!(&self.phase, Phase::Ready { versions, .. } if versions.iter().any(|version| version.seq == seq))
+        self.listing
+            .data()
+            .is_some_and(|listing| listing.versions.iter().any(|version| version.seq == seq))
     }
 
     /// One write under a key of its own; either way the list is read again. Answers the settled
@@ -691,11 +692,9 @@ impl Screen for Earlier {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::earlier_view::Content as C;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => C::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => C::Failure(read::failure(locale)),
-            Phase::Denied(denial) => C::Denied((self.spec.denied)(locale, denial)),
-            Phase::Ready { versions, next } => C::Data(wire::EarlierData {
+        // THE READ (#1185): a record with no earlier version is the page's own empty state.
+        let content = self.listing.data().map(|listing| {
+            C::Data(wire::EarlierData {
                 rows: self.rows(
                     &Look {
                         locale,
@@ -704,30 +703,35 @@ impl Screen for Earlier {
                         units: ctx.units(),
                         names: &self.names,
                     },
-                    versions,
+                    &listing.versions,
                 ),
-                empty: Some(wire::EmptyState {
-                    headline: words::empty_headline(locale),
-                    body: fill(
-                        &words::empty_body(locale),
-                        &[("noun", &(self.spec.noun)(locale))],
-                    ),
-                    icon_key: "Clock".to_owned(),
-                    ..wire::EmptyState::default()
-                }),
-                more_label: if next.is_some() {
+                more_label: if listing.next.is_some() {
                     shared::kit_show_more(locale)
                 } else {
                     String::new()
                 },
-            }),
-        };
+            })
+        });
+        let page = self.listing.wire(
+            locale,
+            |denial| (self.spec.denied)(locale, denial),
+            || wire::EmptyState {
+                headline: words::empty_headline(locale),
+                body: fill(
+                    &words::empty_body(locale),
+                    &[("noun", &(self.spec.noun)(locale))],
+                ),
+                icon_key: "Clock".to_owned(),
+                ..wire::EmptyState::default()
+            },
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Earlier(wire::EarlierView {
                 app_id: self.spec.app.to_owned(),
                 title: words::title(locale),
                 back_label: self.back_label.clone(),
-                content: Some(content),
+                content,
+                page: Some(page),
                 status: self.status.clone(),
             })),
             ..wire::ViewState::default()

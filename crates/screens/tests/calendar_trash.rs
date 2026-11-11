@@ -98,8 +98,17 @@ fn trash_view(world: &World, page: u64) -> &wire::TrashView {
 }
 
 fn rows(world: &World, page: u64) -> Vec<wire::TrashRow> {
-    match &trash_view(world, page).content {
+    let view = trash_view(world, page);
+    match &view.content {
         Some(wire::trash_view::Content::Data(data)) => data.rows.clone(),
+        // A trash with nothing in it is the empty page and carries no rows.
+        None if matches!(
+            view.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
+        }
         other => panic!("the trash has no data: {other:?}"),
     }
 }
@@ -319,13 +328,17 @@ fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
     send_trash(&mut world, trash, T::Confirmed(te::Confirmed {}));
     assert!(rows(&world, trash).is_empty());
     assert!(world.event_row(&second).is_none());
+    // A trash with nothing in it is the page's own empty state.
     let view = trash_view(&world, trash);
-    let Some(wire::trash_view::Content::Data(data)) = &view.content else {
-        panic!("no data");
+    assert!(view.content.is_none());
+    let Some(wire::page_state::State::Empty(empty)) =
+        view.page.as_ref().and_then(|page| page.state.as_ref())
+    else {
+        panic!("an empty trash is an empty page");
     };
-    assert_eq!(data.empty.as_ref().unwrap().headline, "Trash is empty.");
+    assert_eq!(empty.headline, "Trash is empty.");
     assert_eq!(
-        data.empty.as_ref().unwrap().body,
+        empty.body,
         "Deleted items wait here for 30 days, then they are erased."
     );
 }

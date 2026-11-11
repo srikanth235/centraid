@@ -53,13 +53,10 @@ public fun EarlierScreen(
         },
     ) {
         ReadStateView(
-            content = screenContentOf(view.loading, view.failure, view.data_, view.denied),
+            page = view.page!!,
             onRetry = { onEvent(EarlierEvent(refreshed = EarlierEvent.Refreshed())) },
-        ) { earlier ->
-            val empty = earlier.empty
-            if (earlier.rows.isEmpty() && empty != null) {
-                EmptyStateView(empty, onAction = null)
-            } else {
+        ) {
+            val earlier = view.data_ ?: return@ReadStateView
                 LazyColumn(Modifier.padding(horizontal = KitGeometry.GUTTER)) {
                     item(key = "rows") {
                         Column(Modifier.padding(top = 4.dp).kitCard()) {
@@ -82,7 +79,6 @@ public fun EarlierScreen(
                         }
                     }
                 }
-            }
         }
     }
 }

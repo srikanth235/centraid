@@ -108,8 +108,17 @@ fn trash_view(d: &Driver, page: u64) -> &wire::TrashView {
 }
 
 fn rows(d: &Driver, page: u64) -> Vec<wire::TrashRow> {
-    match &trash_view(d, page).content {
+    let view = trash_view(d, page);
+    match &view.content {
         Some(wire::trash_view::Content::Data(data)) => data.rows.clone(),
+        // A trash with nothing in it is the empty page and carries no rows.
+        None if matches!(
+            view.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
+        }
         other => panic!("the trash has no data: {other:?}"),
     }
 }

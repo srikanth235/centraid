@@ -268,8 +268,11 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
     let route = earlier::route(money::EARLIER, "some-id", "Money");
     let i = push(&mut d, route);
     assert!(matches!(
-        earlier_view(d.view(i)).content,
-        Some(wire::earlier_view::Content::Failure(_))
+        earlier_view(d.view(i))
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Failed(_))
     ));
 }
 

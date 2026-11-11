@@ -140,12 +140,10 @@ fn delete_forever_asks_in_full_sentences_and_destroys_only_when_confirmed() {
     let trash_gone = trash_data(d.view(i));
     // A trash of no rows names no scope: the count line is empty, never "Trash · 0".
     assert_eq!(trash_gone.count_label, "");
+    let said = trash_empty_state(d.view(i)).expect("an empty trash is an empty page");
+    assert_eq!(said.headline, "Trash is empty.");
     assert_eq!(
-        trash_gone.empty.as_ref().unwrap().headline,
-        "Trash is empty."
-    );
-    assert_eq!(
-        trash_gone.empty.as_ref().unwrap().body,
+        said.body,
         "Deleted items wait here for 30 days, then they are erased."
     );
     // It is gone for good: a restore of it is refused by there being nothing to restore.
@@ -468,9 +466,10 @@ mod kit {
         );
         let (d2, j) = driver_of(nothing);
         let data = trash_data(d2.view(j));
-        assert_eq!(data.empty.as_ref().unwrap().headline, "Trash is empty.");
+        let said = trash_empty_state(d2.view(j)).expect("an empty trash is an empty page");
+        assert_eq!(said.headline, "Trash is empty.");
         assert_eq!(
-            data.empty.as_ref().unwrap().body,
+            said.body,
             "Deleted items wait here for 30 days, then they are erased."
         );
         assert_eq!(data.empty_label, "", "nothing to empty");
@@ -519,16 +518,24 @@ mod kit {
             trash::build(&GATED)
         }
         let (d, i) = driver_of(fails);
-        match &trash(d.view(i)).content {
-            Some(wire::trash_view::Content::Failure(failure)) => {
+        match trash(d.view(i))
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref())
+        {
+            Some(wire::page_state::State::Failed(failure)) => {
                 assert_eq!(failure.remedy, "Try again");
                 assert!(!failure.sentence.is_empty());
             }
             other => panic!("expected a failure, got {other:?}"),
         }
         let (d, i) = driver_of(gate);
-        match &trash(d.view(i)).content {
-            Some(wire::trash_view::Content::Denied(denied)) => {
+        match trash(d.view(i))
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref())
+        {
+            Some(wire::page_state::State::Refused(denied)) => {
                 assert_eq!(
                     (denied.title.as_str(), denied.receipt.as_str()),
                     ("No", "no_grant")

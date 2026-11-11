@@ -362,8 +362,11 @@ fn a_shut_wall_reveals_nothing_and_a_relock_wipes_what_was_shown() {
     }));
     d.send(at, E::DataChanged(wire::DataChanged::default()));
     assert!(matches!(
-        earlier_view(d.view(at)).content,
-        Some(wire::earlier_view::Content::Denied(_))
+        earlier_view(d.view(at))
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Refused(_))
     ));
     let everything = format!("{:?}", d.view(at));
     for secret in SECRETS {
@@ -429,8 +432,12 @@ fn locked_there_is_no_entry_and_the_route_refuses_to_read_or_restore() {
         item(&d, id).content.is_none(),
         "the item page is blank behind its wall"
     );
-    match &earlier_view(d.view(at)).content {
-        Some(wire::earlier_view::Content::Denied(gate)) => {
+    match earlier_view(d.view(at))
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    {
+        Some(wire::page_state::State::Refused(gate)) => {
             assert_eq!(gate.title, "Locker is locked.");
         }
         other => panic!("a shut wall draws the gate: {other:?}"),
@@ -444,8 +451,11 @@ fn locked_there_is_no_entry_and_the_route_refuses_to_read_or_restore() {
     // A fresh push of the route is the same gate.
     let again = d.push(locker::TAB, route);
     assert!(matches!(
-        earlier_view(d.view(again)).content,
-        Some(wire::earlier_view::Content::Denied(_))
+        earlier_view(d.view(again))
+            .page
+            .as_ref()
+            .and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Refused(_))
     ));
     unlock_core(&d);
     assert_eq!(

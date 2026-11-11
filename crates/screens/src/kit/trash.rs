@@ -19,7 +19,7 @@ use wire::trash_event::Kind as T;
 
 use super::act as kit_act;
 use super::civil;
-use super::read::{self, Reading};
+use super::read::{Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, shared};
 
@@ -141,18 +141,11 @@ pub struct TrashSpec {
 pub fn build(spec: &'static TrashSpec) -> Option<Box<dyn Screen>> {
     Some(Box::new(Trash {
         spec,
-        phase: Phase::Loading,
+        page: Page::loading(),
         status: None,
         undo: None,
         asking: Asking::Nothing,
     }))
-}
-
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(Vec<TrashItem>),
 }
 
 enum Asking {
@@ -163,7 +156,7 @@ enum Asking {
 
 struct Trash {
     spec: &'static TrashSpec,
-    phase: Phase,
+    page: Page<Vec<TrashItem>>,
     /// A refusal's sentence, or "{title} restored" with Undo, until the next
     /// attempt.
     status: Option<wire::StatusLine>,
@@ -174,15 +167,16 @@ struct Trash {
 
 impl Trash {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = match (self.spec.load)(ctx) {
-            Reading::Data(items) => Phase::Ready(items),
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
-        };
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept
+            .refreshing()
+            .after((self.spec.load)(ctx), ctx.locale(), Vec::is_empty);
     }
 
     fn shown(&self, id: &str) -> bool {
-        matches!(&self.phase, Phase::Ready(items) if items.iter().any(|item| item.id == id))
+        self.page
+            .data()
+            .is_some_and(|items| items.iter().any(|item| item.id == id))
     }
 
     /// The writes for `id`'s row: the restore, and the move back to the trash. A row of another
@@ -200,15 +194,12 @@ impl Trash {
 
     /// What a row is called on screen: its title, or the kit's "Untitled".
     fn name_of(&self, locale: Locale, id: &str) -> String {
-        match &self.phase {
-            Phase::Ready(items) => items
-                .iter()
-                .find(|item| item.id == id)
-                .map(|item| item.title.trim())
-                .filter(|title| !title.is_empty())
-                .map_or_else(|| shared::trash_untitled(locale), str::to_owned),
-            _ => shared::trash_untitled(locale),
-        }
+        self.page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .map(|item| item.title.trim())
+            .filter(|title| !title.is_empty())
+            .map_or_else(|| shared::trash_untitled(locale), str::to_owned)
     }
 
     /// What a row is called in "Delete this {noun} forever?": its own word when it has one, else
@@ -219,13 +210,10 @@ impl Trash {
 
     /// The noun a row carries itself, when it is not what the app's spec says.
     fn own_noun(&self, id: &str) -> Option<Words> {
-        match &self.phase {
-            Phase::Ready(items) => items
-                .iter()
-                .find(|item| item.id == id)
-                .and_then(|item| item.noun),
-            _ => None,
-        }
+        self.page
+            .data()
+            .and_then(|items| items.iter().find(|item| item.id == id))
+            .and_then(|item| item.noun)
     }
 
     /// One write under a key of its own; a refusal is the status line, and
@@ -305,7 +293,7 @@ impl Trash {
     }
 
     fn has_rows(&self) -> bool {
-        matches!(&self.phase, Phase::Ready(items) if !items.is_empty())
+        self.page.data().is_some_and(|items| !items.is_empty())
     }
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
@@ -368,40 +356,31 @@ impl Screen for Trash {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::trash_view::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => wire::trash_view::Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => {
-                wire::trash_view::Content::Denied((self.spec.denied)(locale, denial))
-            }
-            Phase::Ready(items) => wire::trash_view::Content::Data(wire::TrashData {
+        // THE READ (#1185): a trash with nothing in it is the page's own empty state.
+        let content = self.page.data().map(|items| {
+            wire::trash_view::Content::Data(wire::TrashData {
                 rows: items.iter().map(|item| self.row(locale, item)).collect(),
-                empty: Some(wire::EmptyState {
-                    headline: shared::trash_empty_headline(locale),
-                    body: shared::trash_empty_state_body(locale),
-                    icon_key: "Trash".to_owned(),
-                    ..wire::EmptyState::default()
-                }),
-                empty_label: if items.is_empty() {
-                    String::new()
-                } else {
-                    shared::trash_empty_action(locale)
-                },
-                count_label: if items.is_empty() {
-                    String::new()
-                } else {
-                    shared::trash_count(locale, items.len() as u64)
-                },
-            }),
-        };
+                empty_label: shared::trash_empty_action(locale),
+                count_label: shared::trash_count(locale, items.len() as u64),
+            })
+        });
+        let page = self.page.wire(
+            locale,
+            |denial| (self.spec.denied)(locale, denial),
+            || wire::EmptyState {
+                headline: shared::trash_empty_headline(locale),
+                body: shared::trash_empty_state_body(locale),
+                icon_key: "Trash".to_owned(),
+                ..wire::EmptyState::default()
+            },
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Trash(wire::TrashView {
                 app_id: self.spec.app.to_owned(),
                 title: shared::trash_title(locale),
                 back_label: (self.spec.back_label)(locale),
-                content: Some(content),
+                content,
+                page: Some(page),
                 confirm: self.confirm(locale),
                 status: self.status.clone(),
             })),

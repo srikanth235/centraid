@@ -326,7 +326,9 @@ message TrashRow {
 
 message TrashData {
   repeated TrashRow rows = 1;
-  EmptyState empty = 2;
+  // 2 was `empty`: a trash with nothing in it is the page's own empty state (#1185).
+  reserved 2;
+  reserved "empty";
   // "Empty trash"; empty when the app cannot empty its trash, or has nothing in it.
   string empty_label = 3;
   // The scope line under the title ("Trash · 3"); empty when there is nothing in it.
@@ -449,8 +451,9 @@ message EarlierSecret {
 
 message EarlierData {
   repeated EarlierRow rows = 1;
-  // Drawn when the record holds no earlier version.
-  EmptyState empty = 2;
+  // 2 was `empty`: a record with no earlier version is the page's own empty state (#1185).
+  reserved 2;
+  reserved "empty";
   // "Show more" when a page below this one exists; empty otherwise.
   string more_label = 3;
 }
@@ -461,14 +464,17 @@ message EarlierView {
   // "Earlier versions", and the back control's words: the page it was pushed from.
   string title = 3;
   string back_label = 4;
+  // 5, 6 and 7 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 5, 6, 7;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 5;
-    Failure failure = 6;
-    Denied denied = 7;
     EarlierData data = 8;
   }
   // "Earlier version restored" with "Undo", or a refusal's sentence; the list stays.
   StatusLine status = 9;
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 10;
 }
 
 message EarlierEvent {
@@ -554,10 +560,11 @@ message TrashView {
   // ("Agenda"), because the page was pushed from it.
   string title = 2;
   string back_label = 3;
+  // 4, 5 and 6 were `loading`, `failure` and `denied`: the read is `page` (#1185).
+  reserved 4, 5, 6;
+  reserved "loading", "failure", "denied";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 4;
-    Failure failure = 5;
-    Denied denied = 6;
     TrashData data = 7;
   }
   // The confirm on screen: a purge of one row, or the emptying of the shelf.
@@ -567,6 +574,8 @@ message TrashView {
   // 10 was `purge_window_days`: nothing read it (#1152).
   reserved 10;
   reserved "purge_window_days";
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  PageState page = 11;
 }
 
 message TrashEvent {

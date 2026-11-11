@@ -419,9 +419,18 @@ fn trash_send(d: &mut Driver, i: u64, kind: T) {
 }
 
 fn trash_ids(v: &wire::ViewState) -> Vec<String> {
-    match &trash_view(v).content {
+    let view = trash_view(v);
+    match &view.content {
         Some(wire::trash_view::Content::Data(data)) => {
             data.rows.iter().map(|row| row.id.clone()).collect()
+        }
+        // A trash with nothing in it is the empty page and carries no rows.
+        None if matches!(
+            view.page.as_ref().and_then(|page| page.state.as_ref()),
+            Some(wire::page_state::State::Empty(_))
+        ) =>
+        {
+            Vec::new()
         }
         other => panic!("{other:?}"),
     }
@@ -476,11 +485,15 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     trash_send(&mut d, i, T::Confirmed(te::Confirmed {}));
     assert!(trash_ids(d.view(i)).is_empty());
     assert!(document(&d, &b).document.is_none());
-    let Some(wire::trash_view::Content::Data(data)) = &trash_view(d.view(i)).content else {
-        panic!();
+    let Some(wire::page_state::State::Empty(empty)) = trash_view(d.view(i))
+        .page
+        .as_ref()
+        .and_then(|page| page.state.as_ref())
+    else {
+        panic!("an empty trash is an empty page");
     };
     assert_eq!(
-        data.empty.as_ref().unwrap().body,
+        empty.body,
         "Deleted items wait here for 30 days, then they are erased."
     );
 }

@@ -19,16 +19,6 @@ struct CoreEarlierView: View {
         send(event)
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_EarlierData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         PushedPage(
             title: state.title,
@@ -38,13 +28,11 @@ struct CoreEarlierView: View {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     onRetry: { event { $0.kind = .refreshed(.init()) } }
-                ) { data in
-                    if data.rows.isEmpty {
-                        EmptyStateView(data.empty)
-                    } else {
+                ) {
+                    if case let .data(data)? = state.content {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 12) {
                                 LazyVStack(spacing: 0) {
