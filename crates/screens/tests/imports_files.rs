@@ -53,13 +53,39 @@ fn held(shell: &Shell) -> wire::ImportsFilesHeld {
 }
 
 fn follow(shell: &mut Shell, origin: &str, name: &str) {
+    follow_replacing(shell, origin, name, None);
+}
+
+/// A folder picked again after the vault's earlier origin of it lost the phone (`replaces`).
+fn follow_replacing(shell: &mut Shell, origin: &str, name: &str, replaces: Option<&str>) {
     send(
         shell,
         files::Kind::FolderFollowed(files::FolderFollowed {
             origin: origin.to_owned(),
             name: name.to_owned(),
+            replaces: replaces.map(str::to_owned),
         }),
     );
+}
+
+/// The drive as Docs reads it: its folders and its live documents.
+fn drive(shell: &Shell) -> wire::DocsDrive {
+    shell.d.with_ctx(|ctx| {
+        match read::read(
+            ctx,
+            load::docs::Drive {
+                limit: 200,
+                ..load::docs::Drive::default()
+            },
+            |answer| match answer {
+                Answer::DocsDrive(drive) => Some(drive),
+                _ => None,
+            },
+        ) {
+            read::Reading::Data(drive) => drive,
+            _ => panic!("the drive reads"),
+        }
+    })
 }
 
 fn file(path: &str, size: u64, modified_ms: i64) -> wire::FolderFile {
@@ -190,6 +216,88 @@ fn following_a_folder_already_followed_makes_no_second_docs_folder() {
     follow(&mut shell, "folder:abc", "Taxes");
     assert_eq!(docs_folders(&shell), before + 1);
     assert_eq!(held(&shell).folders.len(), 1);
+}
+
+#[test]
+fn a_folder_reconnected_fills_the_docs_folder_its_earlier_origin_filled_and_makes_no_second() {
+    let mut shell = followed_with_a_file();
+    let before = drive(&shell);
+    let filled = held(&shell).folders[0].docs_folder.clone();
+    assert!(!filled.is_empty(), "the origin fills its Docs folder");
+
+    // The phone picks the same folder again under a new origin, with a name that is not "Taxes".
+    follow_replacing(&mut shell, "folder:new", "Tax papers", Some("folder:abc"));
+    let after = held(&shell);
+    assert_eq!(after.folders.len(), 1, "the earlier origin is retired");
+    assert_eq!(after.folders[0].origin_ref, "folder:new");
+    assert_eq!(
+        after.folders[0].docs_folder, filled,
+        "found by the origin, not the name"
+    );
+    assert_eq!(
+        drive(&shell).folders.len(),
+        before.folders.len(),
+        "no second Docs folder"
+    );
+
+    // The next pass matches the document already there instead of making another.
+    settle(&mut shell);
+    answer_listing(
+        &mut shell,
+        listing("folder:new", vec![file("2026/report.pdf", 12, 100)], true),
+    );
+    stage_pending(&mut shell, b"report bytes");
+    assert_eq!(held(&shell).folders[0].documents, 1);
+    let ids = |drive: &wire::DocsDrive| {
+        let mut ids: Vec<String> = drive
+            .documents
+            .iter()
+            .map(|row| row.document_id.clone())
+            .collect();
+        ids.sort();
+        ids
+    };
+    assert_eq!(
+        ids(&drive(&shell)),
+        ids(&before),
+        "the document is matched, not made twice"
+    );
+}
+
+#[test]
+fn a_reconnect_whose_docs_folder_was_deleted_gets_a_folder_of_its_own() {
+    use centraid_screens::field::Keyed;
+    let mut shell = followed_with_a_file();
+    let filled = held(&shell).folders[0].docs_folder.clone();
+    let deleted = shell.d.act(
+        centraid_screens::catalog::act::docs::DeleteFolder {
+            folder_id: filled.clone(),
+        }
+        .request()
+        .keyed("arrange:delete-folder".to_owned()),
+    );
+    assert_eq!(
+        deleted.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        deleted.reason
+    );
+    follow_replacing(&mut shell, "folder:new", "Taxes", Some("folder:abc"));
+    let after = held(&shell);
+    assert_eq!(after.folders.len(), 1, "the earlier origin is retired");
+    assert_eq!(after.folders[0].origin_ref, "folder:new");
+    assert!(!after.folders[0].docs_folder.is_empty());
+    assert_ne!(after.folders[0].docs_folder, filled);
+}
+
+#[test]
+fn a_folder_picked_under_an_origin_the_vault_never_held_gets_its_own_docs_folder() {
+    let mut shell = followed_with_a_file();
+    let before = drive(&shell).folders.len();
+    // Naming an earlier origin the vault does not hold is a first pick.
+    follow_replacing(&mut shell, "folder:other", "Taxes", Some("folder:nobody"));
+    assert_eq!(drive(&shell).folders.len(), before + 1);
+    assert_eq!(held(&shell).folders.len(), 2);
 }
 
 #[test]

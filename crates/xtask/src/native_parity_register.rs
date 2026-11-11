@@ -403,6 +403,12 @@ pub const REGISTER: &[Entry] = &[
             "the Docs drive tells the folder follower by name (docs/drive/mod.rs to imports/files.rs); no shell sends it",
         ),
     ),
+    (
+        "ImportsFilesEvent.FolderFollowed.replaces",
+        rust_only(
+            "the reconnect page tells the folder follower by name (follow/reconnect.rs to imports/files.rs); no shell sends it",
+        ),
+    ),
     ("FollowDifference.held_json", rust_only(PHONE_DIFFERENCES)),
     ("FollowDifference.stated_json", rust_only(PHONE_DIFFERENCES)),
     (
@@ -433,6 +439,7 @@ pub const REGISTER: &[Entry] = &[
     ("EarlierChange.after_json", rust_only(EARLIER_VERSIONS)),
     ("ImportsHeldFile.stat", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.documents", rust_only(FILES_FOLLOWED)),
+    ("ImportsHeldFolder.docs_folder", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.origin_id", rust_only(FILES_FOLLOWED)),
     ("ImportsHeldFolder.origin_ref", rust_only(FILES_FOLLOWED)),
     (

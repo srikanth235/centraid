@@ -109,6 +109,11 @@ message ImportsFilesEvent {
   message FolderFollowed {
     string origin = 1;
     string name = 2;
+    // The earlier origin of this same folder (a reconnect after a restore, or after the phone
+    // lost its access): the vault's Docs folder that origin filled is filled by the new one, so
+    // the documents already there are matched and not made twice, and the earlier origin is
+    // retired. Absent for a folder picked for the first time.
+    optional string replaces = 3;
   }
 
   message FolderStopped {
@@ -142,6 +147,8 @@ message ImportsHeldFolder {
   uint32 documents = 4;
   // Each followed file's last stated stat (`<size>:<modified ms>`), by path.
   repeated ImportsHeldFile files = 5;
+  // The Docs folder this origin fills, or empty when it fills none.
+  string docs_folder = 6;
 }
 
 message ImportsHeldFile {

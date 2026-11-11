@@ -37,7 +37,9 @@
 //!
 //! The Docs drive owns the picker effects (`FollowFolder`, `StopFollowing`) and posts what they
 //! came to here ([`wire::imports_files_event`]); the drive reads the folders the vault follows
-//! itself (`shell.files-followed`).
+//! itself (`shell.files-followed`). The Reconnect page ([`crate::follow::reconnect`]) posts the
+//! same pick with the earlier origin of the folder (`replaces`): the new origin fills the Docs
+//! folder that one filled, and that one is retired.
 
 use std::collections::{BTreeSet, VecDeque};
 use std::time::Duration;
@@ -138,6 +140,8 @@ pub struct Outcome {
 struct Held {
     phone_origin: String,
     label: String,
+    /// The Docs folder the origin fills.
+    fills: Option<String>,
     stats: Vec<(String, String)>,
 }
 
@@ -185,6 +189,7 @@ fn read_held(ctx: &Ctx) -> Reading<Vec<Held>> {
                 .map(|folder| Held {
                     phone_origin: folder.origin_ref,
                     label: folder.label,
+                    fills: Some(folder.docs_folder).filter(|folder| !folder.is_empty()),
                     stats: folder
                         .files
                         .into_iter()
@@ -399,7 +404,13 @@ impl Files {
 
     /// The member picked a folder: its Docs folder (made here, named as the phone names the folder)
     /// and its origin, so the next pass reads it. A folder already followed keeps its Docs folder.
-    fn follow(&mut self, ctx: &Ctx, origin: &str, name: &str) {
+    ///
+    /// `replaces` names the earlier origin of the same folder (a reconnect): the Docs folder THAT
+    /// origin filled is the new one's too, found by the origin and never by the folder's name, so
+    /// the documents already there are matched by the next pass and not made twice; the earlier
+    /// origin is retired once the new one stands. An earlier origin that filled nothing, or whose
+    /// folder is gone, leaves the new origin a Docs folder of its own.
+    fn follow(&mut self, ctx: &Ctx, origin: &str, name: &str, replaces: Option<&str>) {
         self.refusal.clear();
         if !self.reload(ctx) {
             self.refusal = words::follow_failed(ctx.locale());
@@ -409,37 +420,65 @@ impl Files {
             label if label.is_empty() => origin.to_owned(),
             label => label,
         };
-        let fills = if self.held.iter().any(|held| held.phone_origin == origin) {
-            None
-        } else {
-            let made = kit_act::act(
+        let earlier = replaces
+            .filter(|earlier| *earlier != origin)
+            .and_then(|earlier| self.held.iter().find(|held| held.phone_origin == earlier))
+            // A Docs folder the member deleted is not filled again.
+            .map(|held| {
+                let live = held
+                    .fills
+                    .as_deref()
+                    .filter(|fills| docs_folder_is_live(ctx, fills));
+                (held.phone_origin.clone(), live.map(str::to_owned))
+            });
+        let known = self.held.iter().any(|held| held.phone_origin == origin);
+        let tell = |fills: Option<&str>| {
+            kit_act::act(
                 ctx,
-                act::docs::CreateFolder {
-                    title: label.clone(),
-                    ..act::docs::CreateFolder::default()
+                act::shell::FollowFiles {
+                    origin: json!({ "ref": origin, "label": label, "fills": fills }).to_string(),
+                    records: "[]".to_owned(),
+                    complete: Some(false),
                 },
-                &kit_act::key(&["follow-folder-made", origin], kit_act::fresh()),
-            );
-            match made.output_text("id") {
-                Some(id) if made.committed => Some(id),
-                _ => {
-                    self.refusal = words::follow_failed(ctx.locale());
-                    return;
-                }
+                &kit_act::key(&["follow-folder", origin], kit_act::fresh()),
+            )
+        };
+        let mut told = None;
+        if !known && let Some(fills) = earlier.as_ref().and_then(|(_, fills)| fills.as_deref()) {
+            // A folder the vault refuses is made anew.
+            told = Some(tell(Some(fills))).filter(|told| told.committed);
+        }
+        let told = match told {
+            Some(told) => told,
+            None => {
+                let fills = if known {
+                    None
+                } else {
+                    let made = kit_act::act(
+                        ctx,
+                        act::docs::CreateFolder {
+                            title: label.clone(),
+                            ..act::docs::CreateFolder::default()
+                        },
+                        &kit_act::key(&["follow-folder-made", origin], kit_act::fresh()),
+                    );
+                    match made.output_text("id") {
+                        Some(id) if made.committed => Some(id),
+                        _ => {
+                            self.refusal = words::follow_failed(ctx.locale());
+                            return;
+                        }
+                    }
+                };
+                tell(fills.as_deref())
             }
         };
-        let told = kit_act::act(
-            ctx,
-            act::shell::FollowFiles {
-                origin: json!({ "ref": origin, "label": label, "fills": fills }).to_string(),
-                records: "[]".to_owned(),
-                complete: Some(false),
-            },
-            &kit_act::key(&["follow-folder", origin], kit_act::fresh()),
-        );
         if !told.committed {
             self.refusal = words::follow_failed(ctx.locale());
             return;
+        }
+        if let Some((earlier, _)) = earlier {
+            self.stop(ctx, &earlier);
         }
         self.reload(ctx);
         self.request(ctx);
@@ -460,6 +499,24 @@ impl Files {
         }
         self.reload(ctx);
     }
+}
+
+/// Whether `id` is a Docs folder that is not in the trash.
+fn docs_folder_is_live(ctx: &Ctx, id: &str) -> bool {
+    matches!(
+        read::read(
+            ctx,
+            load::docs::Drive {
+                limit: 1,
+                ..load::docs::Drive::default()
+            },
+            |answer| match answer {
+                Answer::DocsDrive(drive) => Some(drive.folders),
+                _ => None,
+            },
+        ),
+        Reading::Data(folders) if folders.iter().any(|folder| folder.folder_id == id)
+    )
 }
 
 fn name_of(path: &str) -> String {
@@ -518,7 +575,12 @@ impl Screen for Files {
                 match files.kind {
                     Some(F::Requested(_)) => self.request(ctx),
                     Some(F::FolderFollowed(followed)) => {
-                        self.follow(ctx, &followed.origin, &followed.name);
+                        self.follow(
+                            ctx,
+                            &followed.origin,
+                            &followed.name,
+                            followed.replaces.as_deref(),
+                        );
                     }
                     Some(F::FolderStopped(stopped)) => self.stop(ctx, &stopped.origin),
                     None => {}

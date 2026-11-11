@@ -95,7 +95,7 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
     let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {
         let origins = all(
             door,
-            &files_only("files.origins", "id, ref, label", "origin"),
+            &files_only("files.origins", "id, ref, label, fills", "origin"),
         )?;
         let sources = all(
             door,
@@ -116,6 +116,7 @@ pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
                     label: text_of(row, "label").unwrap_or_default(),
                     documents: 0,
                     files: Vec::new(),
+                    docs_folder: text_of(row, "fills").unwrap_or_default(),
                 },
             );
         }

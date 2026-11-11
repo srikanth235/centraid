@@ -13,15 +13,17 @@ use wire::effect_result::Outcome as O;
 
 const SEEDED_AT: i64 = 1_760_000_000_000;
 
-fn rig() -> Driver {
+fn rig(with_follower: bool) -> Driver {
     let secrets = centraid_screens::custody::secrets::VaultSecrets::new();
     let registry = Registry::default()
         .merge(imports::registry(&secrets))
         .merge(follow::registry());
-    let runtime = Runtime::new(
-        registry,
-        vec![("reconnect".to_owned(), follow::reconnect::route())],
-    );
+    // The folder follower is a service beside the page: the page tells it which folder was picked.
+    let mut tabs = vec![("reconnect".to_owned(), follow::reconnect::route())];
+    if with_follower {
+        tabs.extend(imports::roots());
+    }
+    let runtime = Runtime::new(registry, tabs);
     Driver::with_runtime_at(runtime, SEEDED_AT)
 }
 
@@ -36,8 +38,8 @@ fn arrange(d: &Driver, request: impl Into<wire::ActRequest>, key: &str) {
 }
 
 /// A vault another phone followed: an address book account and a folder.
-fn restored() -> Driver {
-    let mut d = rig();
+fn restored(with_follower: bool) -> Driver {
+    let mut d = rig(with_follower);
     arrange(
         &d,
         act::people::FollowContacts {
@@ -48,10 +50,29 @@ fn restored() -> Driver {
         },
         "contacts",
     );
+    let made = d.act(
+        act::docs::CreateFolder {
+            title: "Taxes".to_owned(),
+            ..Default::default()
+        }
+        .request()
+        .keyed("arrange:docs-folder".to_owned()),
+    );
+    assert_eq!(
+        made.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        made.reason
+    );
+    let folder = serde_json::from_slice::<serde_json::Value>(&made.output).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     arrange(
         &d,
         act::shell::FollowFiles {
-            origin: serde_json::json!({"ref": "folder:abc", "label": "Taxes"}).to_string(),
+            origin: serde_json::json!({"ref": "folder:abc", "label": "Taxes", "fills": folder})
+                .to_string(),
             records: "[]".to_owned(),
             complete: Some(false),
         },
@@ -102,13 +123,19 @@ fn no_habit(effect: &F) -> O {
             device_id: "new-phone".to_owned(),
             folders: Vec::new(),
         }),
+        // The camera roll service opens beside the folder follower and asks its own question.
+        F::LibraryPermission(_) => O::Done(wire::EffectDone {}),
         other => panic!("not a check: {other:?}"),
     }
 }
 
 /// The checks the page asks on opening, answered as a phone that follows nothing would.
 fn opened_on_a_new_phone() -> Driver {
-    let mut d = restored();
+    opened(false)
+}
+
+fn opened(with_follower: bool) -> Driver {
+    let mut d = restored(with_follower);
     while !d.effects.is_empty() {
         answer(&mut d, no_habit);
     }
@@ -138,7 +165,7 @@ fn the_page_offers_each_store_the_vault_followed_and_connects_none() {
 
 #[test]
 fn a_store_this_phone_already_follows_or_paused_is_not_offered() {
-    let mut d = restored();
+    let mut d = restored(false);
     // The contacts habit exists (followed or paused: the phone's own word); the folder is reachable.
     answer(&mut d, |_| {
         O::Keychain(wire::KeychainValue {
@@ -164,7 +191,7 @@ fn a_store_this_phone_already_follows_or_paused_is_not_offered() {
 
 #[test]
 fn a_vault_that_followed_nothing_has_nothing_to_reconnect() {
-    let mut d = rig();
+    let mut d = rig(false);
     d.start();
     assert!(d.effects.is_empty());
     let view = page(&d);
@@ -215,7 +242,25 @@ fn connecting_contacts_is_the_import_that_asks_the_phone_and_then_the_row_goes()
 
 #[test]
 fn connecting_a_folder_opens_the_picker_and_retires_the_old_origin_of_that_folder() {
-    let mut d = opened_on_a_new_phone();
+    let mut d = opened(true);
+    let docs_folders = |d: &Driver| {
+        d.with_ctx(|ctx| {
+            match centraid_screens::kit::read::read(
+                ctx,
+                centraid_screens::catalog::load::shell::FilesFollowed::default(),
+                |answer| match answer {
+                    wire::app_query_response::Answer::ImportsFilesHeld(held) => Some(held.folders),
+                    _ => None,
+                },
+            ) {
+                centraid_screens::kit::read::Reading::Data(folders) => folders,
+                other => panic!("unreadable: {other:?}"),
+            }
+        })
+    };
+    let earlier = docs_folders(&d);
+    assert_eq!(earlier.len(), 1);
+    assert!(!earlier[0].docs_folder.is_empty());
     let instance = root(&d);
     let folder_key = keys(&page(&d))
         .into_iter()
@@ -256,4 +301,9 @@ fn connecting_a_folder_opens_the_picker_and_retires_the_old_origin_of_that_folde
         }
     });
     assert!(listed.iter().all(|store| store.origin_ref != "folder:abc"));
+    // The new origin fills the Docs folder the old one filled: no second folder is made.
+    let now = docs_folders(&d);
+    assert_eq!(now.len(), 1);
+    assert_eq!(now[0].origin_ref, "folder:new");
+    assert_eq!(now[0].docs_folder, earlier[0].docs_folder);
 }

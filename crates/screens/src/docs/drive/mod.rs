@@ -853,6 +853,7 @@ impl Drive {
                         wire::imports_files_event::FolderFollowed {
                             origin: followed.origin.clone(),
                             name: followed.name.clone(),
+                            replaces: None,
                         },
                     ),
                 );

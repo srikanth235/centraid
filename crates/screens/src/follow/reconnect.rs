@@ -10,7 +10,7 @@
 //! | Phone contacts | the People import ([`ContactsFollow::import`]) |
 //! | Phone calendars | the Calendar import ([`CalendarFollow::import`]) |
 //! | Health | opens Health's connect page, where the types are chosen |
-//! | A folder | the folder picker (`FollowFolder`); the vault's old origin of that folder is retired |
+//! | A folder | the folder picker (`FollowFolder`); the new origin fills the Docs folder the old one filled, and the old origin is retired |
 //!
 //! The page is the kit's transfer view, so both shells draw it as they draw every import page.
 //! Whether this phone follows a store is asked of the same keychain habit the coordinator reads
@@ -25,9 +25,8 @@ use wire::effect_result::Outcome as O;
 use wire::screen_event::Kind as E;
 
 use crate::calendar::follow::{self as calendar, CalendarFollow};
-use crate::catalog::{act, load};
+use crate::catalog::load;
 use crate::health;
-use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
 use crate::kit::transfer;
 use crate::people::contacts::{self, ContactsFollow};
@@ -289,13 +288,18 @@ impl Reconnect {
         }
     }
 
-    /// The shell followed a folder: `imports.files` follows it from now on, and the vault's
-    /// old origin of the folder is retired (every document stays, and the new origin re-finds
-    /// them by name).
+    /// The shell followed a folder: `imports.files` follows it from now on, in the Docs folder the
+    /// vault's old origin of the folder filled, and retires that origin (every document stays,
+    /// and the new origin re-finds them by name).
     fn folder_followed(&mut self, ctx: &Ctx, followed: &wire::FolderFollowed) {
         let Some((origin_id, _)) = self.picking.take() else {
             return;
         };
+        let replaces = self
+            .stores
+            .iter()
+            .find(|store| store.origin_id == origin_id)
+            .map(|old| old.origin_ref.clone());
         ctx.post(
             crate::imports::FILES,
             wire::ScreenEvent {
@@ -304,25 +308,12 @@ impl Reconnect {
                         wire::imports_files_event::FolderFollowed {
                             origin: followed.origin.clone(),
                             name: followed.name.clone(),
+                            replaces,
                         },
                     )),
                 })),
             },
         );
-        if let Some(old) = self
-            .stores
-            .iter()
-            .find(|store| store.origin_id == origin_id)
-        {
-            let key = kit_act::key(&["reconnect-retire", &old.origin_id], kit_act::fresh());
-            kit_act::act(
-                ctx,
-                act::shell::StopFollowingFiles {
-                    r#ref: old.origin_ref.clone(),
-                },
-                &key,
-            );
-        }
         self.open.remove(&format!("{FOLDER}{origin_id}"));
     }
 
