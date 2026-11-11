@@ -166,6 +166,7 @@ pub(crate) fn task(
                 .map(|parent| task_to_wire(&views::place(parent, &zone, &today))),
             project: project.map(|project| project_to_wire(project, &family)),
             section: section.map(|section| section_to_wire(section, &family)),
+            rev: detail.rev,
         }))
     })
 }

@@ -1007,6 +1007,7 @@ fn people_a_later_cadence_refuses_the_undo_plainly_and_stays() {
         act::people::SetCadence {
             person_id: id.clone(),
             cadence_days: 7,
+            expected_rev: None,
         },
     );
     status_acted(&mut d, page);

@@ -534,6 +534,7 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
             })
             .collect(),
         is_me: person.is_me,
+        rev: person.rev,
         touches: person
             .touches
             .into_iter()

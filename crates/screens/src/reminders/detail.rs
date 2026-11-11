@@ -24,7 +24,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::attachments::Attachments;
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
 use crate::kit::follow;
@@ -37,6 +37,7 @@ use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
 use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::rule_words;
 use crate::kit::share::{self, Share};
+use crate::kit::stale;
 use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -89,6 +90,9 @@ struct Typed {
     id: String,
     title: String,
     notes: String,
+    /// The task's revision when it was read, advanced by each save's answer: what an edit names as
+    /// the one it replaces (#1185).
+    rev: i64,
 }
 
 impl Draft for Typed {
@@ -126,10 +130,45 @@ impl Draft for Typed {
                     (true, true) => Field::Clear,
                     (true, false) => Field::Is(self.notes.clone()),
                 },
+                expected_rev: Some(self.rev),
                 ..Default::default()
             }
             .into(),
         )
+    }
+
+    fn committed(&mut self, output: &[u8]) {
+        if let Some(rev) = serde_json::from_slice::<serde_json::Value>(output)
+            .ok()
+            .and_then(|value| value.get("rev")?.as_i64())
+        {
+            self.rev = rev;
+        }
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        Some(&self.id)
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        Some(self.rev)
+    }
+
+    fn rebased(&mut self, rev: i64) {
+        self.rev = rev;
+    }
+
+    /// The words the task does not hold, by the vault's names for them.
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut kept = Vec::new();
+        if self.title.trim() != baseline.title.trim() {
+            kept.push(("entity.title".to_owned(), self.title.trim().into()));
+        }
+        if self.notes != baseline.notes {
+            let notes = Some(self.notes.as_str()).filter(|notes| !notes.trim().is_empty());
+            kept.push(("task.description".to_owned(), notes.into()));
+        }
+        kept
     }
 }
 
@@ -246,6 +285,15 @@ impl Detail {
         if let Reading::Data(projects) = &projects {
             self.projects = Some(projects.clone());
         }
+        // Words not yet saved are the only copy: a task trashed elsewhere does not replace the page
+        // under them. The save is refused as stale and Reload keeps them (#1185).
+        if let Reading::Data(detail) = &detail
+            && detail.task.is_none()
+            && self.autosave.unsaved()
+        {
+            self.autosave.vault_moved();
+            return;
+        }
         self.phase = match (detail, projects) {
             (Reading::Data(detail), _) => Phase::Ready(Answered {
                 detail: *detail,
@@ -281,6 +329,7 @@ impl Detail {
             id: task.task_id.clone(),
             title: task.title.clone(),
             notes: task.description.clone().unwrap_or_default(),
+            rev: answer.detail.rev,
         });
         self.read_linked(ctx);
     }
@@ -355,10 +404,55 @@ impl Detail {
         parts: &[&str],
         said: impl FnOnce(Locale) -> String,
     ) -> bool {
+        // Words not yet saved go first: this is a write of the same task, and it names the
+        // revision they just left (#1185). A delete takes the words with the task.
+        let request = request.into();
+        if request.action != act::reminders::DeleteTask::NAME {
+            let _ = self.autosave.flush(ctx);
+        }
+        let request = stale::guarded(
+            request,
+            &[
+                act::reminders::EditTask::NAME,
+                act::reminders::OrganizeTask::NAME,
+            ],
+            self.autosave.draft().and_then(Draft::base_rev),
+        );
         let key = kit_act::key(parts, kit_act::fresh());
         let settled = self.ops.line.act(ctx, request, &key, said);
+        let locale = ctx.locale();
+        if let Some(stale) = settled.stale() {
+            if self.autosave.unsaved() {
+                self.autosave.conflicted(locale, stale);
+            } else {
+                // Nothing typed to keep: the page reads the task again at once, and says why.
+                self.ops.line.refuse(stale::sentence(
+                    locale,
+                    &<Typed as Draft>::noun(locale),
+                    stale,
+                ));
+            }
+        }
         self.reload(ctx);
         settled.committed
+    }
+
+    /// RELOAD after a save the vault refused as stale (#1185): the words typed are kept as an
+    /// earlier version of the task, then the vault's task is read and shown.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let Resolved::Reloaded { kept, .. } = self.autosave.resolve(ctx) else {
+            return;
+        };
+        self.ops.clear();
+        self.reload(ctx);
+        if kept {
+            self.ops.line.say(if self.task().is_none() {
+                stale::kept_in_trash(locale)
+            } else {
+                stale::kept(locale)
+            });
+        }
     }
 
     fn edit(
@@ -790,8 +884,12 @@ impl Detail {
                 }
             }
             Some(D::StatusActed(_)) => {
-                self.ops.undo(ctx);
-                self.reload(ctx);
+                if self.autosave.conflict().is_some() {
+                    self.reload_after_conflict(ctx);
+                } else {
+                    self.ops.undo(ctx);
+                    self.reload(ctx);
+                }
             }
             Some(D::SubtaskAdded(added)) => {
                 let title = added.title.trim().to_owned();
@@ -1003,8 +1101,12 @@ impl Screen for Detail {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::StatusActed(_)) => {
-                self.ops.undo(ctx);
-                self.reload(ctx);
+                if self.autosave.conflict().is_some() {
+                    self.reload_after_conflict(ctx);
+                } else {
+                    self.ops.undo(ctx);
+                    self.reload(ctx);
+                }
             }
             Some(E::TimerFired(fired)) => {
                 if self.autosave.fired(ctx, &fired.timer) {
@@ -1076,8 +1178,9 @@ impl Screen for Detail {
                 open_field: self.open_field.clone(),
                 chrome: Some(rows::chrome(locale)),
                 status: self
-                    .ops
-                    .status()
+                    .autosave
+                    .conflict_line(locale)
+                    .or_else(|| self.ops.status())
                     .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.share.status())
                     .or_else(|| self.earlier.status(locale))

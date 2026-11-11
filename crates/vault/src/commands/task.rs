@@ -30,7 +30,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
-use crate::commands::entity::{find, lookup_live};
+use crate::commands::entity::{self, find, lookup_live};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
@@ -457,7 +457,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(json!({ "id": id }))
+    entity::with_rev(ctx, id, json!({ "id": id }))
 }
 
 /// File a task: its project, section and place, and how its repeat is measured.
@@ -478,7 +478,7 @@ fn organize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         ],
     )?;
     ctx.touch(id)?;
-    Ok(json!({ "id": id }))
+    entity::with_rev(ctx, id, json!({ "id": id }))
 }
 
 /// What closing a task as done did.
@@ -668,7 +668,8 @@ const EDIT_SCHEMA: &str = r#"{
     "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "remind_before_min": { "type": ["integer", "null"], "minimum": 0 },
     "rule": { "type": ["string", "null"] },
-    "url": { "type": ["string", "null"], "maxLength": 2048 }
+    "url": { "type": ["string", "null"], "maxLength": 2048 },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -680,7 +681,8 @@ const ORGANIZE_SCHEMA: &str = r#"{
     "section_id": { "type": ["string", "null"] },
     "position": { "type": "number" },
     "anchor": { "type": "string", "enum": ["scheduled", "completion"] },
-    "zone": { "type": ["string", "null"] }
+    "zone": { "type": ["string", "null"] },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -693,10 +695,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "task_has_a_title_and_a_model_that_holds",
         check: pre_add,
     }];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "task_is_live_and_a_model_that_holds",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        entity::STALE_GUARD[0],
+        entity::STALE_GUARD[1],
+        CommandCondition {
+            predicate: "task_is_live_and_a_model_that_holds",
+            check: pre_edit,
+        },
+    ];
     const LIVE: &[CommandCondition] = &[CommandCondition {
         predicate: "task_is_live",
         check: pre_live,

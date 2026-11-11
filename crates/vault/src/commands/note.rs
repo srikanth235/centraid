@@ -37,7 +37,7 @@ use rusqlite::OptionalExtension;
 
 use crate::commands::tag::{ensure_concept, next_color, set_tagged};
 
-use crate::commands::entity::{STALE_GUARD, lookup_live, rev_after};
+use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
 use crate::error::Result;
 use crate::model::Kind;
@@ -221,11 +221,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?;
     }
     ctx.touch(id)?;
-    let mut answer = serde_json::json!({ "id": id });
-    if let Some(rev) = rev_after(ctx, id)? {
-        answer["rev"] = rev.into();
-    }
-    Ok(answer)
+    with_rev(ctx, id, serde_json::json!({ "id": id }))
 }
 
 fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {

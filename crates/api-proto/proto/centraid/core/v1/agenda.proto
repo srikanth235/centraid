@@ -871,6 +871,9 @@ message AgendaTaskDetail {
   // The task's project and section, when it is filed in a live one.
   optional AgendaTaskProject project = 5;
   optional AgendaTaskSection section = 6;
+  // The task's revision: the newest version its history holds (0 when none). An edit names it as
+  // `expected_rev`; the vault refuses one made from a revision that is no longer the task's (#1185).
+  int64 rev = 7;
 }
 
 message AgendaTaskProjects {

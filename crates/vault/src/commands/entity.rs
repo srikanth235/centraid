@@ -158,6 +158,18 @@ pub(crate) fn rev_after(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64
     Ok(Some(crate::history::head_after(ctx.connection(), id)?))
 }
 
+/// A guarded save's answer: `answer` with `rev` added when the save named an `expected_rev`.
+pub(crate) fn with_rev(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    mut answer: serde_json::Value,
+) -> Result<serde_json::Value> {
+    if let Some(rev) = rev_after(ctx, id)? {
+        answer["rev"] = rev.into();
+    }
+    Ok(answer)
+}
+
 /// A handler's view of the same: the entity must be there, because the
 /// precondition said so.
 pub(crate) fn require(connection: &Connection, id: &str) -> Result<Found> {

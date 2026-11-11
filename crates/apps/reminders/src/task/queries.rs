@@ -1322,6 +1322,9 @@ pub fn load_search(
 pub struct TaskDetailData {
     pub task: Option<TaskRow>,
     pub parent: Option<TaskRow>,
+    /// The task's revision (its history's newest version, 0 when none), read before the task:
+    /// what an edit names as `expected_rev` (#1185).
+    pub rev: i64,
 }
 
 /// What one task's read gathers: the task, its family, its parent and what hangs
@@ -1351,6 +1354,14 @@ pub fn load_task(
         return Ok((TaskDetailData::default(), None));
     }
     let ids = [task_id.to_owned()];
+    // The revision first: a change between the two reads refuses the edit, never lets it through.
+    let rev = match centraid_apps_kit::revision::head(door, task_id) {
+        Ok(rev) => rev,
+        Err(KitError::Door(message)) => {
+            return Ok((TaskDetailData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
     let read = || -> KitResult<Option<Whole>> {
         let Some(task) = live_tasks(door, "reminders.task.by-id", "id", &ids)?
             .into_iter()
@@ -1403,6 +1414,7 @@ pub fn load_task(
         TaskDetailData {
             task: Some(task),
             parent: parent.map(|parent| decorate(&parent, &decorations, now, zone)),
+            rev,
         },
         None,
     ))

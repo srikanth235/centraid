@@ -21,6 +21,7 @@ pub mod schedule;
 pub mod search;
 pub mod secret;
 pub mod share;
+pub mod stale;
 pub mod transfer;
 pub mod trash;
 pub mod undo;

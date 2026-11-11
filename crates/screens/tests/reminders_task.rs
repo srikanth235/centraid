@@ -453,11 +453,16 @@ fn a_save_the_core_refuses_keeps_the_words_and_says_its_sentence() {
         },
     );
     d.pump(DEBOUNCED);
+    // The vault refused the save as the task being in the trash: a conflict, the words stay.
     let a = autosave(d.view(i));
-    assert_eq!(Phase::try_from(a.phase).unwrap(), Phase::Refused);
+    assert_eq!(Phase::try_from(a.phase).unwrap(), Phase::Conflict);
     assert!(a.refused);
-    assert!(!a.label.is_empty() && a.label != "Saved", "{}", a.label);
+    assert_eq!(a.label, "This reminder was moved to the trash.");
     assert_eq!(a.label, a.failure.as_ref().unwrap().sentence);
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, June"
+    );
 }
 
 #[test]
@@ -488,11 +493,13 @@ fn a_vault_change_never_overwrites_typing_and_the_fields_refresh_around_the_word
         "the fields are the vault's"
     );
     assert!(autosave(v).remote_changed);
-    // Saved, the page reads what the vault moved to, and the flag is spent.
+    // The save names the revision the page was read at, and the vault has moved on: refused, the
+    // words stay and Reload offered; the other surface's priority stands.
     d.pump(DEBOUNCED);
     let v = d.view(i);
-    assert!(!autosave(v).remote_changed);
-    assert_eq!(task_of(&d, &id).title, "Rent!");
+    assert_eq!(Phase::try_from(autosave(v).phase).unwrap(), Phase::Conflict);
+    assert_eq!(task_of(&d, &id).title, "Rent");
+    assert_eq!(detail_data(v).draft.as_ref().unwrap().title, "Rent!");
 }
 
 #[test]
@@ -1143,5 +1150,81 @@ fn a_repeated_task_page_row_is_priority_and_check_words_from_the_row_law() {
     assert_eq!(
         detail_data(d.view(i)).check_label,
         rows::check_label(Locale::En, "Rent", true)
+    );
+}
+
+#[test]
+fn a_save_over_a_task_that_changed_elsewhere_is_refused_and_reload_keeps_the_words() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    typed_title(&mut d, i, "Rent, June");
+    arrange(
+        &d,
+        act::reminders::EditTask {
+            task_id: id.clone(),
+            title: Some("Rent, elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, elsewhere");
+    assert_eq!(phase(d.view(i)), Phase::Conflict);
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, June"
+    );
+    let status = detail(d.view(i)).status.clone().expect("the sentence");
+    assert_eq!(status.sentence, "This reminder changed somewhere else.");
+    assert_eq!(status.action_label, "Reload");
+    send_detail(&mut d, i, de::Kind::StatusActed(de::StatusActed {}));
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, elsewhere"
+    );
+    let status = detail(d.view(i)).status.clone().expect("a line");
+    assert_eq!(status.sentence, "Your text is in Earlier versions.");
+    // The next save is fresh.
+    typed_title(&mut d, i, "Rent, July");
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, July");
+}
+
+#[test]
+fn a_tap_on_a_field_after_typing_saves_the_words_first_and_is_not_a_conflict() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    typed_title(&mut d, i, "Rent, June");
+    choose(&mut d, i, "priority", "3");
+    let task = task_of(&d, &id);
+    assert_eq!(task.title, "Rent, June");
+    assert_ne!(phase(d.view(i)), Phase::Conflict);
+    typed_title(&mut d, i, "Rent, July");
+    d.pump(DEBOUNCED);
+    assert_eq!(task_of(&d, &id).title, "Rent, July");
+}
+
+#[test]
+fn a_tap_on_a_task_that_changed_elsewhere_says_so_and_reads_it_again() {
+    let mut d = driver();
+    let id = rent(&d);
+    let i = open(&mut d, &id);
+    arrange(
+        &d,
+        act::reminders::EditTask {
+            task_id: id.clone(),
+            title: Some("Rent, elsewhere".into()),
+            ..Default::default()
+        },
+    );
+    choose(&mut d, i, "priority", "3");
+    assert_eq!(
+        detail(d.view(i)).status.clone().unwrap().sentence,
+        "This reminder changed somewhere else."
+    );
+    assert_eq!(
+        detail_data(d.view(i)).draft.as_ref().unwrap().title,
+        "Rent, elsewhere"
     );
 }

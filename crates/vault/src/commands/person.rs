@@ -36,7 +36,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
 use crate::commands::edge::{self, Extras};
-use crate::commands::entity::{find, lookup_live, purge_one};
+use crate::commands::entity::{self, find, lookup_live, purge_one};
 use crate::commands::event::{self, NewEvent};
 use crate::commands::note;
 use crate::commands::tag::{ensure_concept, set_tagged};
@@ -366,7 +366,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?;
     }
     ctx.touch(id)?;
-    Ok(json!({ "id": id }))
+    entity::with_rev(ctx, id, json!({ "id": id }))
 }
 
 // ---------------------------------------------------------------------------
@@ -753,7 +753,8 @@ const EDIT: &str = r#"{
     "role": { "type": ["string", "null"] },
     "met": { "type": ["string", "null"] },
     "birthday": { "type": ["string", "null"] },
-    "cadence_days": { "type": ["integer", "null"], "minimum": 0 }
+    "cadence_days": { "type": ["integer", "null"], "minimum": 0 },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1263,10 +1264,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             "person",
             EDIT,
             Idempotency::Idempotent,
-            &[CommandCondition {
-                predicate: "person_can_be_edited",
-                check: pre_edit,
-            }],
+            &[
+                entity::STALE_GUARD[0],
+                entity::STALE_GUARD[1],
+                CommandCondition {
+                    predicate: "person_can_be_edited",
+                    check: pre_edit,
+                },
+            ],
             edit,
         ),
         CommandDefinition::plain(

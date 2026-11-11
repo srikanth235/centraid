@@ -35,10 +35,10 @@ use centraid_api_proto::core_v1 as wire;
 use wire::autosave::Phase;
 
 use super::act as kit_act;
-pub use super::act::Stale;
-use crate::catalog::act as catalog_act;
+use super::stale;
+pub use super::stale::Stale;
 use crate::screen::Ctx;
-use crate::strings::{Locale, fill, shared};
+use crate::strings::{Locale, shared};
 
 /// How long typing pauses before the words are saved.
 pub const DEBOUNCE: Duration = Duration::from_millis(900);
@@ -67,6 +67,9 @@ pub trait Draft: Clone + PartialEq {
     /// save answered `rev` takes it as its base.
     fn committed(&mut self, _output: &[u8]) {}
 
+    /// The record is at `rev` now, after a write of this editor that was not its save: the new base.
+    fn rebased(&mut self, _rev: i64) {}
+
     /// The id of the record the draft is of, once there is one (a new draft has none).
     fn subject_id(&self) -> Option<&str> {
         None
@@ -87,15 +90,6 @@ pub trait Draft: Clone + PartialEq {
     fn kept_fields(&self, _baseline: &Self) -> Vec<(String, serde_json::Value)> {
         Vec::new()
     }
-}
-
-/// The shell's action that keeps a draft's words as an earlier version of its record.
-fn keep_request(id: &str, fields: Vec<(String, serde_json::Value)>) -> wire::ActRequest {
-    catalog_act::shell::KeepVersion {
-        earlier_version_id: id.to_owned(),
-        fields: serde_json::Value::Object(fields.into_iter().collect()).to_string(),
-    }
-    .into()
 }
 
 /// One autosaving editor's phase, seqs, draft and baseline.
@@ -276,7 +270,7 @@ impl<D: Draft> Autosave<D> {
             if let Some(stale) = settled.stale() {
                 self.phase = Phase::Conflict;
                 self.conflict = Some(stale);
-                self.failure = Some(stale_sentence::<D>(ctx.locale(), stale));
+                self.failure = Some(stale::sentence(ctx.locale(), &D::noun(ctx.locale()), stale));
                 return false;
             }
             self.phase = Phase::Refused;
@@ -341,15 +335,6 @@ impl<D: Draft> Autosave<D> {
     }
 }
 
-/// The sentence over the words of a save the vault refused as stale: the noun is the draft's.
-fn stale_sentence<D: Draft>(locale: Locale, stale: Stale) -> String {
-    let noun = D::noun(locale);
-    match stale {
-        Stale::Changed => fill(&shared::stale_changed_note(locale), &[("noun", &noun)]),
-        Stale::Trashed => fill(&shared::stale_trashed_note(locale), &[("noun", &noun)]),
-    }
-}
-
 /// What Reload came to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resolved {
@@ -363,6 +348,37 @@ pub enum Resolved {
 }
 
 impl<D: Draft> Autosave<D> {
+    /// A write of the same record that is not this editor's save (a tap on a field) was refused as
+    /// stale: the editor rests in conflict, whatever it held, and Reload reads the record again.
+    pub fn conflicted(&mut self, locale: Locale, stale: Stale) {
+        if self.draft.is_none() {
+            return;
+        }
+        self.phase = Phase::Conflict;
+        self.conflict = Some(stale);
+        self.failure = Some(stale::sentence(locale, &D::noun(locale), stale));
+    }
+
+    /// The editor's own write of another field committed and left the record at `rev`: the draft
+    /// and its baseline are of that revision from now on, so the next save is not refused for
+    /// a change the member made themselves.
+    pub fn rebase(&mut self, rev: i64) {
+        for draft in [self.draft.as_mut(), self.baseline.as_mut()]
+            .into_iter()
+            .flatten()
+        {
+            draft.rebased(rev);
+        }
+    }
+
+    /// The status line of a conflict, for a screen that draws a [`wire::StatusLine`]: the sentence
+    /// and Reload.
+    #[must_use]
+    pub fn conflict_line(&self, locale: Locale) -> Option<wire::StatusLine> {
+        let stale = self.conflict()?;
+        Some(stale::line(locale, &D::noun(locale), stale))
+    }
+
     /// Why the save was refused, while the editor rests in conflict.
     #[must_use]
     pub fn conflict(&self) -> Option<Stale> {
@@ -383,14 +399,16 @@ impl<D: Draft> Autosave<D> {
         let fields = draft.kept_fields(baseline);
         let mut kept = false;
         if let (false, Some(id)) = (fields.is_empty(), draft.subject_id()) {
-            let key = kit_act::key(&["keep-version", id], kit_act::fresh());
-            let settled = kit_act::act(ctx, keep_request(id, fields), &key);
-            if !settled.committed {
-                self.failure = Some(settled.refusal);
-                return Resolved::Failed;
+            match stale::keep(ctx, id, fields) {
+                Ok(done) => {
+                    self.written.extend(done.tables);
+                    kept = done.written;
+                }
+                Err(sentence) => {
+                    self.failure = Some(sentence);
+                    return Resolved::Failed;
+                }
             }
-            self.written.extend(settled.tables.iter().cloned());
-            kept = settled.output_flag("kept").unwrap_or(true);
         }
         self.draft = None;
         self.baseline = None;

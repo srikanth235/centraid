@@ -4493,6 +4493,7 @@ pub mod act {
             pub person_id: String,
             pub birthday: Option<String>,
             pub cadence_days: Option<i64>,
+            pub expected_rev: Option<i64>,
             pub met: Option<String>,
             pub nickname: Option<String>,
             pub role: Option<String>,
@@ -4507,6 +4508,7 @@ pub mod act {
                 map.insert("id".to_owned(), text(self.person_id));
                 if let Some(it) = self.birthday { map.insert("birthday".to_owned(), text(it)); }
                 if let Some(it) = self.cadence_days { map.insert("cadence_days".to_owned(), whole(it)); }
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.met { map.insert("met".to_owned(), text(it)); }
                 if let Some(it) = self.nickname { map.insert("nickname".to_owned(), text(it)); }
                 if let Some(it) = self.role { map.insert("role".to_owned(), text(it)); }
@@ -4526,6 +4528,7 @@ pub mod act {
         pub struct SetCadence {
             pub cadence_days: i64,
             pub person_id: String,
+            pub expected_rev: Option<i64>,
         }
         impl SetCadence {
             pub const NAME: &str = "set-cadence";
@@ -4534,6 +4537,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("cadence_days".to_owned(), whole(self.cadence_days));
                 map.insert("id".to_owned(), text(self.person_id));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -6122,6 +6126,7 @@ pub mod act {
             pub description: Field<String>,
             pub due: Field<String>,
             pub effort_min: Field<i64>,
+            pub expected_rev: Option<i64>,
             pub priority: Option<i64>,
             pub remind_before_min: Field<i64>,
             pub rule: Field<String>,
@@ -6137,6 +6142,7 @@ pub mod act {
                 put_field(&mut map, "description", self.description, |it| text(it));
                 put_field(&mut map, "due", self.due, |it| text(it));
                 put_field(&mut map, "effort_min", self.effort_min, |it| whole(it));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.priority { map.insert("priority".to_owned(), whole(it)); }
                 put_field(&mut map, "remind_before_min", self.remind_before_min, |it| whole(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
@@ -6231,6 +6237,7 @@ pub mod act {
         pub struct OrganizeTask {
             pub task_id: String,
             pub anchor: Option<OrganizeTaskAnchor>,
+            pub expected_rev: Option<i64>,
             pub position: Option<f64>,
             pub project_id: Field<String>,
             pub section_id: Field<String>,
@@ -6243,6 +6250,7 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.task_id));
                 if let Some(it) = self.anchor { map.insert("anchor".to_owned(), text(it.wire())); }
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.position { map.insert("position".to_owned(), real(it)); }
                 put_field(&mut map, "project_id", self.project_id, |it| text(it));
                 put_field(&mut map, "section_id", self.section_id, |it| text(it));

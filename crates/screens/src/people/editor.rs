@@ -23,8 +23,9 @@ use wire::screen_event::Kind as E;
 use super::{Phase, denied, fold};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
-use crate::kit::autosave::{Autosave, Draft};
+use crate::kit::autosave::{Autosave, Draft, Resolved};
 use crate::kit::read::{self, Reading};
+use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, people as words};
@@ -40,6 +41,9 @@ struct Profile {
     met: String,
     /// Rides `add-person` only: a person that exists has its cadence set on the tap.
     cadence_days: i64,
+    /// The person's revision when it was read, advanced by each write's answer: what a save names
+    /// as the one it replaces (#1185). 0 for a person not yet added.
+    rev: i64,
 }
 
 impl Draft for Profile {
@@ -85,6 +89,7 @@ impl Draft for Profile {
             role: changed(&self.role, &baseline.role),
             nickname: changed(&self.nickname, &baseline.nickname),
             met: changed(&self.met, &baseline.met),
+            expected_rev: Some(self.rev),
             ..Default::default()
         };
         let moved = edit.title.is_some()
@@ -95,12 +100,41 @@ impl Draft for Profile {
     }
 
     fn committed(&mut self, output: &[u8]) {
-        if self.id.is_some() {
-            return;
+        let value = serde_json::from_slice::<serde_json::Value>(output).ok();
+        if self.id.is_none() {
+            self.id = value
+                .as_ref()
+                .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+        } else if let Some(rev) = value.as_ref().and_then(|value| value.get("rev")?.as_i64()) {
+            self.rev = rev;
         }
-        self.id = serde_json::from_slice::<serde_json::Value>(output)
-            .ok()
-            .and_then(|value| value.get("id")?.as_str().map(str::to_owned));
+    }
+
+    fn subject_id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    fn base_rev(&self) -> Option<i64> {
+        self.id.as_ref().map(|_| self.rev)
+    }
+
+    fn rebased(&mut self, rev: i64) {
+        self.rev = rev;
+    }
+
+    /// The words the person does not hold, by the vault's names for them.
+    fn kept_fields(&self, baseline: &Self) -> Vec<(String, serde_json::Value)> {
+        let mut kept = Vec::new();
+        let mut keep = |name: &str, now: &str, then: &str| {
+            if now != then {
+                kept.push((name.to_owned(), serde_json::Value::from(now)));
+            }
+        };
+        keep("entity.title", self.name.trim(), baseline.name.trim());
+        keep("person.role", &self.role, &baseline.role);
+        keep("person.nickname", &self.nickname, &baseline.nickname);
+        keep("person.met", &self.met, &baseline.met);
+        kept
     }
 }
 
@@ -123,6 +157,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
             nickname: String::new(),
             met: String::new(),
             cadence_days: 0,
+            rev: 0,
         });
         Phase::Ready(true)
     } else {
@@ -178,6 +213,9 @@ impl Editor {
         );
         match reading {
             Reading::Data(person) => match person.sheet {
+                // Words not yet saved are the only copy: a person trashed elsewhere does not
+                // replace the editor under them. The save is refused as stale and Reload keeps them.
+                None if self.autosave.unsaved() => self.autosave.vault_moved(),
                 None => self.phase = Phase::Ready(false),
                 Some(sheet) => {
                     let row = sheet.person.unwrap_or_default();
@@ -190,6 +228,7 @@ impl Editor {
                         nickname: sheet.nickname,
                         met: sheet.met,
                         cadence_days: row.cadence_days,
+                        rev: sheet.rev,
                     };
                     // Over words being typed a change from the vault replaces NOTHING.
                     self.autosave.loaded(fresh);
@@ -227,9 +266,16 @@ impl Editor {
         if days == self.cadence {
             return;
         }
+        // Words not yet saved go first: this tap is a write of the same person, and it names the
+        // revision the words just left (#1185).
+        let _ = self.autosave.flush(ctx);
+        let Some(draft) = self.autosave.draft() else {
+            return;
+        };
         let request: wire::ActRequest = act::people::SetCadence {
             person_id: draft.id.clone().unwrap_or_default(),
             cadence_days: days,
+            expected_rev: draft.base_rev(),
         }
         .into();
         let key = kit_act::key(&["set-cadence", &self.party_id], kit_act::fresh());
@@ -239,8 +285,38 @@ impl Editor {
         self.touched = true;
         if settled.committed {
             self.cadence = days;
+        } else if let Some(stale) = settled.stale() {
+            let locale = ctx.locale();
+            if self.autosave.unsaved() {
+                self.autosave.conflicted(locale, stale);
+            } else {
+                // Nothing typed to keep: the page reads the person again at once, and says why.
+                self.undo.refuse(stale::sentence(
+                    locale,
+                    &<Profile as Draft>::noun(locale),
+                    stale,
+                ));
+            }
         }
         self.reload(ctx);
+    }
+
+    /// RELOAD after a write the vault refused as stale (#1185): the words typed are kept as an
+    /// earlier version of the person, then the vault's row is read and shown.
+    fn reload_after_conflict(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let Resolved::Reloaded { kept, .. } = self.autosave.resolve(ctx) else {
+            return;
+        };
+        self.undo.clear();
+        self.reload(ctx);
+        if kept {
+            self.undo.say(if matches!(self.phase, Phase::Ready(false)) {
+                stale::kept_in_trash(locale)
+            } else {
+                stale::kept(locale)
+            });
+        }
     }
 
     /// A save may have added the person: from then on there is a row to read, and the screen
@@ -342,7 +418,9 @@ impl Screen for Editor {
             }
             // CLOSE = DONE: the words typed are saved on the way out.
             Some(E::StatusActed(_)) => {
-                if self.undo.acted(ctx) {
+                if self.autosave.conflict().is_some() {
+                    self.reload_after_conflict(ctx);
+                } else if self.undo.acted(ctx) {
                     self.reload(ctx);
                 }
             }
@@ -382,7 +460,10 @@ impl Screen for Editor {
             } else {
                 Vec::new()
             },
-            status: self.undo.status(),
+            status: self
+                .autosave
+                .conflict_line(locale)
+                .or_else(|| self.undo.status()),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::PeopleEditor(Box::new(state))),
