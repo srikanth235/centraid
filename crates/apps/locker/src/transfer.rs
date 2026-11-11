@@ -280,6 +280,9 @@ fn push_row(out: &mut String, cells: impl IntoIterator<Item = String>) {
     out.push_str("\r\n");
 }
 
+// Deliberately NOT guarded against spreadsheet formulas: this CSV is for a password manager's
+// import, sits behind its own confirm and owner check, and a leading apostrophe would corrupt
+// real secrets.
 fn quoted(cell: &str) -> String {
     if cell.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", cell.replace('"', "\"\""))
