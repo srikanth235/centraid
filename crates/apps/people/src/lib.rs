@@ -16,8 +16,8 @@
 //! - **A TOUCH IN THE TRASH IS NO TOUCH**: the log, last contacted and the cadence count only live
 //!   activities (#1146 M21). **A RELATIONSHIP SHOWS ON BOTH SHEETS**: the `related` edge is read from
 //!   the person it starts at and the person it ends at, each with the label as that side reads it
-//!   ([`person::RelationDirection`]). **A BIRTHDAY'S REMINDER IS ALWAYS ON**
-//!   (legacy switch values are ignored).
+//!   ([`person::RelationDirection`]). **A BIRTHDAY HAS NO REMINDER**
+//!   (it is the person's own column, shown on its day and on the Upcoming rail, and notifies nobody).
 //! - **THE CIRCLE IS THE PEOPLE YOU KEEP**: every live person but the owner and
 //!   a pet. A relative named in a relationship is a person you have written
 //!   about, so they are in it.

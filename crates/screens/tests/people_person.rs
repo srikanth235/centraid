@@ -615,7 +615,7 @@ fn a_relationship_is_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_stays_on_and_has_no_off_control() {
+fn a_birthday_says_no_reminder_and_has_no_switch() {
     let mut d = clean();
     let id = id_of(&arrange(
         &d,
@@ -635,7 +635,9 @@ fn a_birthday_reminder_stays_on_and_has_no_off_control() {
             .clone()
     };
     let before = birthday(&d, i);
-    assert!(before.reminder_on && !before.toggleable, "{before:?}");
+    assert!(!before.toggleable, "{before:?}");
+    // A birthday is shown on its day and notifies nobody: its row carries no reminder wording.
+    assert_eq!(before.reminder_label, "");
     send_person(
         &mut d,
         i,
@@ -644,8 +646,8 @@ fn a_birthday_reminder_stays_on_and_has_no_off_control() {
         }),
     );
     let after = birthday(&d, i);
-    assert!(after.reminder_on && !after.toggleable, "{after:?}");
-    assert_eq!(after.reminder_label, "Reminder on");
+    assert!(!after.toggleable, "{after:?}");
+    assert_eq!(after.reminder_label, "");
 }
 
 fn hero_keys(d: &Driver, i: u64) -> Vec<String> {

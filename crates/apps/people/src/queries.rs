@@ -62,8 +62,7 @@ pub const BIRTHDAY_LABEL: &str = "Birthday";
 
 const STARRED: &str = "flag:starred";
 const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
-const PERSON_COLUMNS: &str =
-    "id, form, nickname, role, met, birthday, birthday_reminder, cadence_days";
+const PERSON_COLUMNS: &str = "id, form, nickname, role, met, birthday, cadence_days";
 
 fn text(word: &str) -> PageBindValue {
     PageBindValue::Text(word.to_owned())
@@ -108,8 +107,6 @@ pub struct PersonRow {
     pub nickname: String,
     pub met: String,
     pub birthday: Option<String>,
-    /// A birthday always has its reminder; legacy switch values are ignored.
-    pub birthday_reminder: bool,
     /// 0 is no cadence.
     pub cadence_days: i64,
     pub created_at: String,
@@ -208,8 +205,6 @@ fn members(door: &dyn PageDoor, entities: &[Row], with_owner: bool) -> KitResult
                 nickname: text_of(kind, "nickname").unwrap_or_default(),
                 met: text_of(kind, "met").unwrap_or_default(),
                 birthday: text_of(kind, "birthday"),
-                // Birthdays always remind, including profiles whose legacy switch was off.
-                birthday_reminder: true,
                 cadence_days: kind
                     .get("cadence_days")
                     .and_then(Cell::integer)
@@ -1175,7 +1170,8 @@ fn attached_documents(
 }
 
 /// The important dates of these people: the birthday column, and the yearly
-/// all-day events `about` them. **A birthday always has its reminder**; any other date has one when its event does.
+/// all-day events `about` them. **A birthday is on the Upcoming rail** (`reminder_on`) and notifies
+/// nobody: it is shown on its day; any other date has a reminder when its event does.
 pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec<DateRow>> {
     let mut found: Vec<DateRow> = people
         .iter()
@@ -1186,7 +1182,7 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
                 date_id: format!("birthday:{}", person.id),
                 label: BIRTHDAY_LABEL.to_owned(),
                 month_day: birthday.get(birthday.len().checked_sub(5)?..)?.to_owned(),
-                reminder_on: person.birthday_reminder,
+                reminder_on: true,
             })
         })
         .collect();

@@ -324,7 +324,11 @@ pub fn person(
                     .map(|days| fold::in_days(locale, days))
                     .unwrap_or_default(),
                 reminder_on: date.reminder_on,
-                reminder_label: if date.reminder_on {
+                // A BIRTHDAY HAS NO REMINDER: it is shown on its day and notifies nobody, so its row
+                // carries no reminder wording at all.
+                reminder_label: if date.date_id.starts_with(BIRTHDAY_PREFIX) {
+                    String::new()
+                } else if date.reminder_on {
                     words::reminder_on(locale)
                 } else {
                     words::reminder_off(locale)

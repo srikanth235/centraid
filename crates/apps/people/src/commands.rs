@@ -13,7 +13,7 @@
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
-//! event's). A birthday's reminder is always on and has no action.
+//! event's). A birthday has no reminder: it is shown on its day and notifies nobody.
 //!
 //! **An action says the state it wants.** The v0 actions `toggle-gift` and
 //! `toggle-reminder` flipped a state the caller had not read; a gift is a task,

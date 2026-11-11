@@ -4,7 +4,7 @@
 //! (their `contact_point` rows). The line a version reads as is those it held, as the page words
 //! them: the name, the role, the nickname, the birthday as "12 September", how you met, and each
 //! number, email, address or handle. Fields the page does not show (the sort name, the avatar, the
-//! touch cadence, the birthday reminder) have no words and no line; a version that changed only
+//! touch cadence) have no words and no line; a version that changed only
 //! those reads "Other details".
 
 use serde_json::Value;

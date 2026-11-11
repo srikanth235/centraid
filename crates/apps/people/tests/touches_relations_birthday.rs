@@ -204,7 +204,7 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_is_on_by_default() {
+fn a_birthday_is_on_the_upcoming_rail_with_nothing_to_switch() {
     let w = World::new();
     let ada = w.person("Ada", json!({ "birthday": "01-20" }));
     let reminder = |w: &World| {
@@ -231,8 +231,8 @@ fn a_birthday_reminder_is_on_by_default() {
     assert_eq!(
         reminder(&w),
         (Some(true), true, 1),
-        "a birthday has its reminder by default"
+        "a birthday is on the Upcoming rail (it is shown on its day; it notifies nobody)"
     );
-    // No command turns it off, and one with no birthday has no reminder.
+    // No command takes it off the rail: the birthday is the person's own column.
     assert_eq!(reminder(&w).0, Some(true));
 }
