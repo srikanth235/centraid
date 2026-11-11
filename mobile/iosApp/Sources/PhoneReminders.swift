@@ -35,7 +35,7 @@ enum PhoneReminders {
 
     /// EVERY FIELD A REMINDER CARRIES, read as the OS holds it. Rust maps priority, folds a
     /// duplicate and words nothing; `priority` is EventKit's raw 0..9. EventKit has no public
-    /// flag, so `flagged` stays false. A subtask's parent is not exposed either: `parent_id`
+    /// flag, so `flagged` is left unset (the core then states nothing of the star, rather than "not flagged"). A subtask's parent is not exposed either: `parent_id`
     /// stays empty.
     private static func phone(_ reminder: EKReminder) -> Centraid_Core_V1_PhoneReminder {
         var phone = Centraid_Core_V1_PhoneReminder()

@@ -183,4 +183,7 @@ catalog! {
     plain says_noun_priority = ("priority", "priority");
     plain says_noun_link = ("link", "link");
     plain says_priority_none = ("no priority", "no priority");
+    plain says_noun_flag = ("flag", "flag");
+    plain says_flagged = ("flagged", "flagged");
+    plain says_not_flagged = ("not flagged", "not flagged");
 }

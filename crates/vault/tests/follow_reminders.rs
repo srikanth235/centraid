@@ -145,3 +145,99 @@ fn a_reminder_gone_from_a_complete_read_goes_to_the_trash_and_an_older_arrival_i
     );
     assert_eq!(out["matched"], 1);
 }
+
+fn starred(w: &World, id: &str) -> bool {
+    w.one::<i64>(
+        "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'flag:starred'",
+        &[id],
+    ) == 1
+}
+
+fn differences(w: &World, id: &str) -> Vec<(String, Value, Value)> {
+    w.scratch
+        .vault
+        .read(|c| centraid_vault::commands::follow::differences(c, id))
+        .expect("differences")
+        .into_iter()
+        .map(|d| (d.field, d.stated, d.held))
+        .collect()
+}
+
+#[test]
+fn a_flag_follows_the_phone_until_the_member_changes_the_star() {
+    let w = World::new();
+    let flagged = |on: bool| json!([rec("r1", "Milk", json!({ "starred": on }))]);
+    // Flagged on the phone: the task arrives starred.
+    assert_eq!(follow(&w, flagged(true), true)["added"], 1);
+    let id: String = w.one("SELECT entity_id FROM source WHERE external_id = 'r1'", &[]);
+    assert!(starred(&w, &id));
+    // Unflagged on the phone, the member never touched the star: it follows.
+    follow(&w, flagged(false), true);
+    assert!(!starred(&w, &id));
+    follow(&w, flagged(true), true);
+    assert!(starred(&w, &id));
+    // The member un-stars it: their word stands against the phone's, and the page can say what
+    // the phone says.
+    w.ok("flag.clear", json!({ "id": id, "flag": "starred" }));
+    follow(
+        &w,
+        json!([rec("r1", "Milk", json!({ "starred": true }))]),
+        true,
+    );
+    assert!(!starred(&w, &id), "the member's star stands");
+    assert_eq!(
+        differences(&w, &id),
+        vec![("starred".to_owned(), json!(true), json!(false))]
+    );
+    // Taking the phone's value back stars it again, and the line goes.
+    w.ok(
+        "follow.take_stated",
+        json!({ "entity": id, "field": "starred" }),
+    );
+    assert!(starred(&w, &id));
+    assert!(differences(&w, &id).is_empty());
+}
+
+#[test]
+fn a_reminder_that_says_nothing_of_its_flag_leaves_the_members_star_alone() {
+    let w = World::new();
+    follow(&w, json!([rec("r1", "Milk", json!({}))]), true);
+    let id: String = w.one("SELECT entity_id FROM source WHERE external_id = 'r1'", &[]);
+    w.ok("flag.set", json!({ "id": id, "flag": "starred" }));
+    follow(
+        &w,
+        json!([rec("r1", "Milk", json!({ "url": "https://example.com" }))]),
+        true,
+    );
+    assert!(starred(&w, &id));
+    assert_eq!(
+        differences(&w, &id),
+        vec![],
+        "nothing was stated, so nothing differs"
+    );
+}
+
+#[test]
+fn a_matched_task_keeps_its_own_star_and_takes_the_phones_over_a_blank() {
+    let w = World::new();
+    let mine = w.ok("task.add", json!({ "title": "Bread" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let plain = w.ok("task.add", json!({ "title": "Eggs" }))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    w.ok("flag.set", json!({ "id": mine, "flag": "starred" }));
+    let out = follow(
+        &w,
+        json!([
+            rec("r1", "Bread", json!({ "starred": false })),
+            rec("r2", "Eggs", json!({ "starred": true }))
+        ]),
+        true,
+    );
+    assert_eq!(out["matched"], 2);
+    assert!(starred(&w, &mine), "the member's star over the phone's no");
+    assert!(starred(&w, &plain), "the phone's flag over a blank");
+}
