@@ -77,8 +77,11 @@ message SettingsData {
 message SettingsState {
   string title = 1;
   string back_label = 2;
+  // 3 was `loading`: the read is `page` (#1185).
+  reserved 3;
+  reserved "loading";
+  // Set when the page is ready.
   oneof content {
-    Loading loading = 3;
     SettingsData data = 4;
   }
   // The page handed its job to Home (the vault switcher is Home's sheet): the shell pops it.
@@ -90,6 +93,8 @@ message SettingsState {
   // A write the page made was refused: one sentence ("Couldn't save your units. Try again."),
   // `refused` set, drawn as the kit's status line. Absent when there is nothing to say.
   optional StatusLine status = 7;
+  // THE READ: loading until the phone's own settings have been read, then ready.
+  PageState page = 8;
 }
 
 message SettingsEvent {

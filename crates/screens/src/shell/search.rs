@@ -30,7 +30,7 @@ use super::policy;
 use super::routes;
 use super::row_routes::{self, RowRef};
 use crate::catalog::load;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, shared};
@@ -38,18 +38,16 @@ use crate::strings::{Locale, fill, home as words, shared};
 /// How many recent terms are kept.
 pub const RECENT_MAX: usize = 4;
 
-enum Phase {
-    /// No term: the resting page.
-    Resting,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready(wire::VaultSearch),
-}
-
 struct Search {
     term: String,
     recent: Vec<String>,
-    phase: Phase,
+    /// No term: the resting page, which reads nothing.
+    resting: bool,
+    /// The read of the term asked.
+    page: Page<wire::VaultSearch>,
+    /// The term `page` answers: another term is another question, so the last term's hits are
+    /// never shown for it.
+    answered: String,
     /// The one app this search answers for (`health.search`), or none for Home's.
     scope: Option<&'static str>,
 }
@@ -197,7 +195,9 @@ impl Search {
         Self {
             term: String::new(),
             recent: Vec::new(),
-            phase: Phase::Resting,
+            resting: true,
+            page: Page::loading(),
+            answered: String::new(),
             scope,
         }
     }
@@ -208,10 +208,15 @@ impl Search {
 
     fn reload(&mut self, ctx: &Ctx) {
         if self.asked().is_empty() {
-            self.phase = Phase::Resting;
+            self.rest();
             return;
         }
-        self.phase = match read::read(
+        self.resting = false;
+        if self.answered != self.asked() {
+            self.page = Page::loading();
+            self.answered = self.asked().to_owned();
+        }
+        let reading = match read::read(
             ctx,
             load::shell::Search {
                 term: self.asked().to_owned(),
@@ -238,15 +243,24 @@ impl Search {
                 if let Some(scope) = self.scope {
                     found.hits.retain(|hit| hit.app_id == scope);
                 }
-                Phase::Ready(found)
+                Reading::Data(found)
             }
-            Reading::Denied(denial) => Phase::Denied(denial),
-            Reading::Failed => Phase::Failed,
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
         };
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept.refreshing().after(reading, ctx.locale(), |_| false);
+    }
+
+    /// Back to the resting page: nothing asked, nothing held.
+    fn rest(&mut self) {
+        self.resting = true;
+        self.page = Page::loading();
+        self.answered.clear();
     }
 
     fn set_term(&mut self, term: String, ctx: &Ctx) {
-        if self.term == term && !matches!(self.phase, Phase::Resting) {
+        if self.term == term && !self.resting {
             return;
         }
         self.term = term;
@@ -270,7 +284,7 @@ impl Search {
 impl Screen for Search {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(E::Appeared(_)) => self.phase = Phase::Resting,
+            Some(E::Appeared(_)) => self.rest(),
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             Some(E::HomeSearch(search)) => match search.kind {
                 Some(S::Term(typed)) => self.set_term(typed.term, ctx),
@@ -278,7 +292,7 @@ impl Screen for Search {
                 Some(S::Committed(_)) => self.commit(),
                 Some(S::Cleared(_)) => {
                     self.term.clear();
-                    self.phase = Phase::Resting;
+                    self.rest();
                 }
                 Some(S::Refreshed(_)) => self.reload(ctx),
                 None => {}
@@ -291,8 +305,11 @@ impl Screen for Search {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::home_search_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Resting => Content::Resting(wire::HomeSearchResting {
+        // THE RESTING PAGE reads nothing, so it is ready: its note and the recent terms are content.
+        // A term that matched nothing is the page's own empty state, with the answer kept for the
+        // Ask row under it.
+        let content = if self.resting {
+            Some(Content::Resting(wire::HomeSearchResting {
                 note: words::home_search_note(locale),
                 suggestions_label: if self.recent.is_empty() {
                     String::new()
@@ -300,17 +317,42 @@ impl Screen for Search {
                     words::home_search_recent_label(locale)
                 },
                 suggestions: self.recent.clone(),
-            }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(denied(locale, denial)),
-            Phase::Ready(found) => Content::Data(Box::new(fold(locale, self.asked(), found))),
+            }))
+        } else {
+            self.page
+                .data()
+                .map(|found| Content::Data(Box::new(fold(locale, self.asked(), found))))
+        };
+        let nothing = !self.resting
+            && self
+                .page
+                .data()
+                .is_some_and(|found| fold(locale, self.asked(), found).groups.is_empty());
+        let page = if self.resting {
+            Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            )
+        } else {
+            self.page.wire_keeping(
+                locale,
+                |denial| denied(locale, denial),
+                nothing,
+                || no_match(locale, self.asked()),
+            )
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HomeSearch(Box::new(
                 wire::HomeSearchState {
                     chrome: Some(chrome(locale, self.scope)),
                     term: self.term.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     recent: self.recent.clone(),
                 },
             ))),
@@ -514,15 +556,9 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
             })
         })
         .collect();
-    let empty = groups.is_empty().then(|| wire::EmptyState {
-        headline: words::home_search_no_match_headline(locale),
-        body: fill(&words::home_search_no_match_body(locale), &[("term", term)]),
-        ..Default::default()
-    });
     let offer = ask::offer(locale, term, "");
     wire::HomeSearchData {
         groups,
-        empty,
         corrected: if found.corrected.is_empty() {
             String::new()
         } else {
@@ -530,6 +566,15 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
         },
         ask_route: Some(routes::ask(&offer.question, &offer.scope)),
         ask: Some(offer),
+    }
+}
+
+/// What a term that matched nothing says: the page's own empty state.
+fn no_match(locale: Locale, term: &str) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::home_search_no_match_headline(locale),
+        body: fill(&words::home_search_no_match_body(locale), &[("term", term)]),
+        ..Default::default()
     }
 }
 
@@ -708,7 +753,7 @@ mod tests {
         assert_eq!(answer.groups[0].app_id, "notes");
         let only = data(vec![hit("thing", "c1", "Cabin planning", "nowhere")]);
         assert!(only.groups.is_empty());
-        assert_eq!(only.empty.unwrap().headline, "No matches");
+        assert_eq!(no_match(Locale::En, "cabin").headline, "No matches");
     }
 
     #[test]
@@ -759,7 +804,7 @@ mod tests {
         assert_eq!(ask.question, "Find cabin");
         assert_eq!(answer.ask_route, Some(super::routes::ask("Find cabin", "")));
         assert_eq!(
-            answer.empty.expect("an empty state").body,
+            no_match(Locale::En, "cabin").body,
             "Nothing in this vault matches “cabin”."
         );
     }

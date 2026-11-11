@@ -56,7 +56,6 @@ import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.rememberLargestText
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidDark
 
 /**
@@ -81,9 +80,9 @@ internal fun SettingsScreen(
         statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
-            content = screenContentOf(state.loading, null, state.data_),
+            page = state.page!!,
             onRetry = null,
-        ) { data -> SettingsBody(data, onEvent, onOpen) }
+        ) { state.data_?.let { data -> SettingsBody(data, onEvent, onOpen) } }
     }
     // DOWNLOAD SETTINGS is a sheet of its own (Rust's `transfer_sheet`): the member's one transfer
     // rule, the same three choices Home's gear draws.

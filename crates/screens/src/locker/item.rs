@@ -1742,7 +1742,7 @@ impl Screen for Item {
                 let step = self.wall.appeared(ctx, false);
                 let mut effects = self.walled(ctx, step);
                 // The session may be open already: read what it opens.
-                if self.wall.is_open() && matches!(self.loaded, Page::Loading { .. }) {
+                if self.wall.is_open() && matches!(self.loaded, Page::Loading) {
                     effects.extend(self.reload(ctx));
                     effects.extend(self.followed(ctx));
                 }

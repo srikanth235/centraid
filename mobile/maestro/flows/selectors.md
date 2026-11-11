@@ -8,7 +8,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-status` | Home | the health ribbon |
 | `home-day-one` | Home | the first-run page |
 | `home-first-moves` | Home | the first-moves band |
-| `home-failure` | Home | the failed-read sentence (no grid) |
+| `kit-failure` (on Home) | Home | the failed-read sentence (no grid), the kit's shared failure view with no Retry |
 | `home-tile-<appId>` | Home | one springboard widget, keyed on the widget id (the app id, except Agenda's second, `reminders`) — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |

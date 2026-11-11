@@ -36,8 +36,8 @@ use crate::catalog::load::calendar as query_cal;
 use crate::kit::civil;
 use crate::kit::read::read;
 use crate::kit::read::{Page, Reading};
-use crate::kit::schedule::phase::{Stop, get};
 use crate::kit::schedule::rows;
+use crate::kit::schedule::stop::{Stop, get};
 use crate::screen::Ctx;
 
 /// Schedule's and Waiting's reach from the anchor, in days.

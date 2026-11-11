@@ -474,6 +474,7 @@ impl Screen for Host {
                     .map(|s| s.sentence.clone())
                     .unwrap_or_default(),
                 content: None,
+                ..Default::default()
             })),
             ..wire::ViewState::default()
         }

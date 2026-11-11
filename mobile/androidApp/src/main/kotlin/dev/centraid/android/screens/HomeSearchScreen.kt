@@ -53,7 +53,6 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.RoomTitle
 import dev.centraid.android.kit.Surface
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.ReadStateView
@@ -61,7 +60,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SearchAskRow
 import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
@@ -104,7 +102,6 @@ internal fun HomeSearchScreen(
             if (!chrome?.scope_label.isNullOrEmpty()) KitText(chrome?.scope_label.orEmpty(), KitType.Meta, Surface.meta)
         }
         val resting = state.resting
-        val content = screenContentOf(state.loading, state.failure, resting ?: state.data_, state.denied)
         // THE CORRECTION IS RUST'S SENTENCE ("Including results for ..."), under the field.
         val corrected = state.data_?.corrected.orEmpty()
         if (corrected.isNotEmpty()) {
@@ -118,27 +115,21 @@ internal fun HomeSearchScreen(
                     .testTag("search-corrected"),
             )
         }
+        // NOTHING MATCHED is the page's empty state; its one action asks the assistant about the term.
         ReadStateView(
-            content = content,
+            page = state.page!!,
             onRetry = { onEvent(HomeSearchEvent(refreshed = HomeSearchEvent.Refreshed())) },
+            onEmptyAction = state.data_?.ask_route?.let { route -> { onOpen(route) } },
             retryLabel = chrome?.retry.orEmpty(),
             modifier = Modifier.weight(1f).nestedScroll(dismiss),
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
-        ) { found ->
-            when (found) {
-                is HomeSearchResting -> Resting(found) { term ->
+        ) {
+            if (resting != null) {
+                Resting(resting) { term ->
                     onEvent(HomeSearchEvent(suggestion = HomeSearchEvent.SuggestionPicked(term = term)))
                 }
-                is HomeSearchData -> {
-                    val empty = found.empty
-                    // NOTHING MATCHED: the empty state's one action asks the assistant about the term.
-                    val ask = found.ask_route
-                    if (empty != null) {
-                        EmptyStateView(empty, onAction = ask?.let { route -> { onOpen(route) } })
-                    } else {
-                        Groups(found, onEvent, onOpen)
-                    }
-                }
+            } else {
+                state.data_?.let { found -> Groups(found, onEvent, onOpen) }
             }
         }
         // THE FIELD IS AT THE FOOT, the glass pill and its close key; the close key clears the

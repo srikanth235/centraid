@@ -306,7 +306,7 @@ impl Screen for Export {
             Some(E::Appeared(_)) => {
                 let step = self.wall.appeared(ctx, false);
                 let effects = self.walled(ctx, step);
-                if self.wall.is_open() && matches!(self.count, Page::Loading { .. }) {
+                if self.wall.is_open() && matches!(self.count, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects
@@ -765,7 +765,7 @@ impl Screen for Import {
             Some(E::Appeared(_)) => {
                 let step = self.wall.appeared(ctx, false);
                 let effects = self.walled(ctx, step);
-                if self.wall.is_open() && matches!(self.count, Page::Loading { .. }) {
+                if self.wall.is_open() && matches!(self.count, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects

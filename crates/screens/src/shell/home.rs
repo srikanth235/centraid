@@ -657,16 +657,35 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::home_state::Content;
         let locale = ctx.locale();
-        let content = if self.none {
-            Content::Failure(wire::Failure {
-                sentence: words::home_no_vault(locale),
-                remedy: String::new(),
-                permanent: false,
-            })
+        // THE READ (#1185): a phone that holds no vault has nothing to read, which is a final failure in
+        // its own sentence (the first-launch gate is its way on, so no Retry); until the shelf has
+        // spoken Home is loading.
+        let content = (!self.none && self.read).then(|| Content::Data(Box::new(self.data(locale))));
+        let page = if self.none {
+            wire::PageState {
+                state: Some(wire::page_state::State::Failed(wire::Failure {
+                    sentence: words::home_no_vault(locale),
+                    remedy: String::new(),
+                    permanent: true,
+                })),
+                note: None,
+            }
         } else if self.read {
-            Content::Data(Box::new(self.data(locale)))
+            crate::kit::read::Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            )
         } else {
-            Content::Loading(wire::Loading { first_load: true })
+            crate::kit::read::Page::<()>::loading().wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            )
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Home(Box::new(wire::HomeState {
@@ -680,7 +699,8 @@ impl Screen for Home {
                         .join(". ");
                     status
                 }),
-                content: Some(content),
+                content,
+                page: Some(page),
                 sheet: self.sheet(locale),
                 scheme: match self.appearance {
                     Appearance::System => wire::HomeScheme::System,

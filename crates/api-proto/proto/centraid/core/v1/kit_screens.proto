@@ -27,10 +27,10 @@ message Failure {
 // it as a present value and a decode of an unset oneof stays distinguishable
 // from "loading" — the same reason `centraid.core.v1.NullValue` is a message.
 message Loading {
-  // True on the FIRST load of this screen, false on a refresh over rows the
-  // screen is already showing. A spinner over an empty frame and a spinner over
-  // last night's rows are different screens.
-  bool first_load = 1;
+  // 1 was `first_load`: a refresh never shows the skeleton over what is on screen, so a loading
+  // state is always the first one (#1185).
+  reserved 1;
+  reserved "first_load";
 }
 
 // THE VAULT WOULD NOT LET THIS APP READ — a state, not an error (law 1's

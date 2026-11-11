@@ -25,22 +25,6 @@ struct ShellSearchView: View {
         return event
     }
 
-    private enum Found {
-        case resting(Centraid_Core_V1_HomeSearchResting)
-        case results(Centraid_Core_V1_HomeSearchData)
-    }
-
-    private var content: ScreenContent<Found> {
-        switch state.content {
-        case let .resting(resting)?: return .data(.resting(resting))
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(.results(data))
-        case nil: return .loading(true)
-        }
-    }
-
     /// The field as Rust holds it: open at once, with the term typed so far.
     private var field: KitSearchField {
         var field = KitSearchField()
@@ -66,25 +50,26 @@ struct ShellSearchView: View {
                     .padding(.bottom, 4)
                     .accessibilityIdentifier("search-corrected")
             }
-            ReadStateView(
-                content: content,
+            // NOTHING MATCHED is the page's empty state; the Ask row stays under its sentence.
+            PageReadStateView(
+                page: state.page,
                 loadingLabel: state.chrome.loading,
                 onRetry: { send(event { $0.refreshed = .init() }) },
-                retryLabel: state.chrome.retry
-            ) { found in
-                switch found {
-                case let .resting(resting):
+                retryLabel: state.chrome.retry,
+                emptyExtra: {
+                    if case let .data(results)? = state.content { return AnyView(askRow(results)) }
+                    return AnyView(EmptyView())
+                }
+            ) {
+                switch state.content {
+                case let .resting(resting)?:
                     RestingView(resting: resting) { term in
                         send(event { $0.suggestion = .with { $0.term = term } })
                     }
-                case let .results(results):
-                    if results.hasEmpty {
-                        // NOTHING MATCHED: the sentence, and the Ask row under it.
-                        EmptyStateView(results.empty)
-                        askRow(results)
-                    } else {
-                        groups(results)
-                    }
+                case let .data(results)?:
+                    groups(results)
+                case nil:
+                    EmptyView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

@@ -11,8 +11,8 @@ use wire::app_query_response::Answer;
 use super::{Home, search};
 use crate::catalog::load::reminders as query_rem;
 use crate::kit::read::{Note, Page, Reading, read};
-use crate::kit::schedule::phase::{Stop, get};
 use crate::kit::schedule::rows;
+use crate::kit::schedule::stop::{Stop, get};
 use crate::screen::Ctx;
 
 /// `search`'s own ceiling.

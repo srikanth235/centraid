@@ -172,23 +172,23 @@ private struct HomeRoot: View {
         if home.hasStatus {
             StatusRibbon(status: home.status, store: store)
         }
-        // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
-        // sentence; it does NOT render an empty springboard.
-        switch home.content {
-        case .loading, .none:
-            Springboard(data: Centraid_Core_V1_HomeData(), shell: shell, header: scrolling)
-        case let .failure(failure):
+        // THE READ IS THE KIT'S PAGE STATE (#1185). A Home that could not load (no vault) renders its
+        // sentence and no grid, with no Retry (the first-launch gate is the way on); it does NOT render
+        // an empty springboard.
+        VStack(alignment: .leading, spacing: 0) {
             // A HOME THAT FAILED STILL NAMES ITS VAULT, scrolled or pinned.
-            VStack(alignment: .leading, spacing: 0) {
-                scrolling
-                FailureBody(failure: failure)
-            }
-        case let .data(data):
-            VStack(alignment: .leading, spacing: 0) {
-                if data.springboard == .firstRun {
-                    DayOne(data: data, shell: shell, header: scrolling)
-                } else {
-                    Springboard(data: data, shell: shell, header: scrolling)
+            if case .failed? = home.page.state { scrolling }
+            PageReadStateView(
+                page: home.page,
+                onRetry: nil,
+                skeleton: { Springboard(data: Centraid_Core_V1_HomeData(), shell: shell, header: scrolling) }
+            ) {
+                if case let .data(data)? = home.content {
+                    if data.springboard == .firstRun {
+                        DayOne(data: data, shell: shell, header: scrolling)
+                    } else {
+                        Springboard(data: data, shell: shell, header: scrolling)
+                    }
                 }
             }
         }
@@ -265,31 +265,6 @@ private struct StatusRibbon: View {
         .accessibilityLabel(
             hasDoor ? status.copy : status.accessibilityLabel
         )
-    }
-}
-
-/// A Home that could not load at all (no vault, or the read failed).
-///
-/// This Home has no grid, because inventing eight empty apps out of one failure
-/// is the defect the read law forbids.
-private struct FailureBody: View {
-    let failure: Centraid_Core_V1_Failure
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(failure.sentence)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("text", scheme))
-            // Present only when there is something a member can do.
-            if !failure.remedy.isEmpty {
-                Text(failure.remedy)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-            }
-        }
-        .padding(pageMargin)
-        .accessibilityIdentifier("home-failure")
     }
 }
 

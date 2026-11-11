@@ -620,17 +620,29 @@ impl Screen for Settings {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match self.appearance {
-            None => wire::settings_state::Content::Loading(wire::Loading { first_load: true }),
-            Some(appearance) => {
-                wire::settings_state::Content::Data(Box::new(self.data(ctx, appearance)))
+        // THE READ (#1185): the page is loading until the Keychain has answered, then ready.
+        let content = self.appearance.map(|appearance| {
+            wire::settings_state::Content::Data(Box::new(self.data(ctx, appearance)))
+        });
+        let page = if self.appearance.is_some() {
+            crate::kit::read::Page::<()>::Ready {
+                data: (),
+                note: None,
             }
-        };
+        } else {
+            crate::kit::read::Page::<()>::loading()
+        }
+        .wire(
+            locale,
+            |_| wire::Denied::default(),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Settings(wire::SettingsState {
                 title: words::settings_title(locale),
                 back_label: home_words::band_home(locale),
-                content: Some(content),
+                content,
+                page: Some(page),
                 finished: self.finished,
                 transfer_sheet: self.transfer_sheet(locale),
                 status: self.refused.clone().map(|sentence| wire::StatusLine {

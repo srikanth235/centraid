@@ -10,6 +10,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;
 
 use crate::catalog::load;
+use crate::kit::read::{Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings;
 
@@ -19,12 +20,6 @@ pub const NAME: &str = "proof.counter";
 /// How long a copied count stays on the clipboard.
 const CLEAR_AFTER: Duration = Duration::from_secs(30);
 const CLEAR_TIMER: &str = "clipboard-clear";
-
-enum Phase {
-    Loading,
-    Failed,
-    Ready(u64),
-}
 
 /// The route that opens this screen.
 #[must_use]
@@ -48,7 +43,7 @@ pub fn build_with(
 ) -> impl Fn(&wire::Route) -> Option<Box<dyn Screen>> + Send + Sync + 'static {
     move |_| {
         Some(Box::new(Counter {
-            phase: Phase::Loading,
+            page: Page::loading(),
             copied: None,
             clear_after,
         }))
@@ -56,7 +51,7 @@ pub fn build_with(
 }
 
 struct Counter {
-    phase: Phase,
+    page: Page<u64>,
     /// The text this screen put on the clipboard, until it is cleared.
     copied: Option<String>,
     clear_after: Duration,
@@ -65,15 +60,17 @@ struct Counter {
 impl Counter {
     fn reload(&mut self, ctx: &Ctx) {
         let request = load::calendar::Upcoming::default().into();
-        self.phase = match ctx.load(request) {
+        let reading = match ctx.load(request) {
             Ok(loaded) => match loaded.answer.and_then(|answer| answer.answer) {
                 Some(wire::app_query_response::Answer::AgendaUpcoming(upcoming)) => {
-                    Phase::Ready(upcoming.events.len() as u64)
+                    Reading::Data(upcoming.events.len() as u64)
                 }
-                _ => Phase::Failed,
+                _ => Reading::Failed,
             },
-            Err(_) => Phase::Failed,
+            Err(_) => Reading::Failed,
         };
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        self.page = kept.refreshing().after(reading, ctx.locale(), |_| false);
     }
 }
 
@@ -90,7 +87,7 @@ impl Screen for Counter {
                     Vec::new()
                 }
                 Some(wire::counter_event::Kind::CopyTapped(_)) => {
-                    let Phase::Ready(count) = self.phase else {
+                    let Some(&count) = self.page.data() else {
                         return Vec::new();
                     };
                     let text = count.to_string();
@@ -141,16 +138,8 @@ impl Screen for Counter {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => wire::counter_view::Content::Loading(wire::CounterLoading {
-                label: strings::counter_loading(locale),
-            }),
-            Phase::Failed => wire::counter_view::Content::Failed(wire::Failure {
-                sentence: strings::counter_failed(locale),
-                remedy: strings::counter_retry(locale),
-                permanent: false,
-            }),
-            Phase::Ready(count) => wire::counter_view::Content::Data(wire::CounterData {
+        let content = self.page.data().map(|count| {
+            wire::counter_view::Content::Data(wire::CounterData {
                 count_label: strings::counter_count(locale, *count),
                 copy_label: strings::counter_copy(locale),
                 notice: if self.copied.is_some() {
@@ -158,12 +147,19 @@ impl Screen for Counter {
                 } else {
                     String::new()
                 },
-            }),
-        };
+            })
+        });
+        let page = self.page.wire(
+            locale,
+            |_| wire::Denied::default(),
+            wire::EmptyState::default,
+        );
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: strings::counter_title(locale),
-                content: Some(content),
+                content,
+                page: Some(page),
+                loading_label: strings::counter_loading(locale),
             })),
             ..wire::ViewState::default()
         }

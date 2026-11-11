@@ -1319,15 +1319,17 @@ message CounterRetryTapped {}
 
 message CounterView {
   string title = 1;
+  // 2 and 3 were `loading` and `failed`: the read is `page` (#1185).
+  reserved 2, 3;
+  reserved "loading", "failed";
+  // Set when the page is ready.
   oneof content {
-    CounterLoading loading = 2;
-    Failure failed = 3;
     CounterData data = 4;
   }
-}
-
-message CounterLoading {
-  string label = 1;
+  // THE READ: loading, failed, or ready.
+  PageState page = 5;
+  // "Loading…", said under the skeleton while the first read is out.
+  string loading_label = 6;
 }
 
 message CounterData {

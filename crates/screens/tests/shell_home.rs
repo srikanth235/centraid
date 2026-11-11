@@ -243,9 +243,16 @@ fn a_phone_with_no_vault_is_a_failed_home_with_no_empty_tiles() {
         }),
     );
     let home = state(&d, i);
-    let Some(wire::home_state::Content::Failure(failure)) = home.content else {
+    let Some(wire::page_state::State::Failed(failure)) =
+        home.page.clone().and_then(|page| page.state)
+    else {
         panic!("expected a failure: {home:?}");
     };
+    assert!(home.content.is_none());
+    assert!(
+        failure.permanent,
+        "the first-launch gate is the way on, not Retry"
+    );
     assert_eq!(failure.sentence, "No vault is open.");
     // The lockup still says which vault failed: none.
     assert_eq!(home.bar.unwrap().vault.unwrap().name, "No vault yet");
@@ -706,15 +713,15 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
         }),
     );
     assert!(matches!(
-        state(&d, i).content,
-        Some(wire::home_state::Content::Failure(_))
+        state(&d, i).page.and_then(|page| page.state),
+        Some(wire::page_state::State::Failed(_))
     ));
     // A pull or a foreground while there is no vault stays failed.
     d.send(i, E::Appeared(wire::Appeared {}));
     tell(&mut d, i, H::Shown(wire::home_event::Shown {}));
     assert!(matches!(
-        state(&d, i).content,
-        Some(wire::home_state::Content::Failure(_))
+        state(&d, i).page.and_then(|page| page.state),
+        Some(wire::page_state::State::Failed(_))
     ));
     let founded = vault("v1", "Personal");
     tell(&mut d, i, told(&founded, std::slice::from_ref(&founded)));

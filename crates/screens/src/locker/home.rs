@@ -963,7 +963,7 @@ impl Screen for Home {
                 let step = self.wall.appeared(ctx, true);
                 let effects = self.walled(ctx, step);
                 // A home that finds the session already open still reads.
-                if self.wall.is_open() && matches!(self.items, Page::Loading { .. }) {
+                if self.wall.is_open() && matches!(self.items, Page::Loading) {
                     self.reload(ctx);
                 }
                 effects

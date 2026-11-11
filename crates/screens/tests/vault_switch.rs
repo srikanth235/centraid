@@ -106,6 +106,7 @@ impl Screen for Switcher {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: self.shown.clone(),
                 content: None,
+                ..Default::default()
             })),
             ..Default::default()
         }

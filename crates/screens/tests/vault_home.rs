@@ -76,29 +76,31 @@ fn home_is_told_the_vault_in_front_and_the_roster_by_the_shelf() {
     );
 }
 
+/// Home's page is the failed state (no vault to read).
+fn failed(phone: &Phone) -> bool {
+    matches!(
+        state(phone).page.and_then(|page| page.state),
+        Some(wire::page_state::State::Failed(_))
+    )
+}
+
 #[test]
 fn a_phone_with_no_vault_settles_on_the_failed_branch_not_loading() {
     let dir = scratch();
     let mut phone = Phone::standard(&dir);
     // Not read yet: Home is not told a thing it does not know.
     phone.driver.start();
-    assert!(
-        !matches!(
-            state(&phone).content,
-            Some(wire::home_state::Content::Failure(_))
-        ),
-        "the shelf has not read its directory yet"
-    );
+    assert!(!failed(&phone), "the shelf has not read its directory yet");
     phone.driver.serve(&mut phone.shell);
     phone.driver.pump(Duration::from_millis(800));
-    assert!(
-        matches!(
-            state(&phone).content,
-            Some(wire::home_state::Content::Failure(_))
-        ),
-        "{:?}",
-        state(&phone).content
-    );
+    assert!(failed(&phone), "{:?}", state(&phone).page);
+    // No vault is a final failure: the first-launch gate is the way on, so there is no Retry.
+    let Some(wire::page_state::State::Failed(failure)) =
+        state(&phone).page.and_then(|page| page.state)
+    else {
+        unreachable!("checked above");
+    };
+    assert!(failure.permanent);
 }
 
 #[test]

@@ -189,8 +189,6 @@ catalog! {
         "Copied. The clipboard clears in 30 seconds.",
         "Copied. The clipboard clears in 30 seconds."
     );
-    plain counter_failed = ("Couldn't read your events.", "Couldn't read your events.");
-    plain counter_retry = ("Try again", "Try again");
 }
 
 #[cfg(test)]

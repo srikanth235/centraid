@@ -1,71 +1,11 @@
 import SwiftUI
 
-// THE FOUR READ SHAPES, DRAWN ONCE (K5; product-intuition/references/design-behaviour.md § Rooms).
+// THE READ SHAPES, DRAWN ONCE (#1185; product-intuition/references/design-behaviour.md § Rooms).
 //
-// The room owns the empty, loading and error states; the app supplies the
+// The room owns the empty, loading, failure and gate states; the app supplies the
 // words. A screen that draws its own spinner, its own failure lines or its own
-// "nothing here" is a finding, so every list screen switches on its content
-// through `ReadStateView` and nowhere else.
-
-/// The one switch over a screen's `ScreenContent`.
-///
-/// Loading draws the skeleton the caller names (rows at row geometry by
-/// default, never a spinner); a failure draws its sentence, its remedy and a
-/// member-initiated Retry — the machines never retry on their own; a denial
-/// draws the gate with its receipt; data draws the caller's content.
-struct ReadStateView<Value, Skeleton: View, Content: View>: View {
-    let content: ScreenContent<Value>
-    let skeleton: () -> Skeleton
-    let onRetry: (() -> Void)?
-    let retryLabel: String
-    let data: (Value) -> Content
-
-    init(
-        content: ScreenContent<Value>,
-        @ViewBuilder skeleton: @escaping () -> Skeleton,
-        onRetry: (() -> Void)?,
-        retryLabel: String = KitWords.RETRY,
-        @ViewBuilder data: @escaping (Value) -> Content
-    ) {
-        self.content = content
-        self.skeleton = skeleton
-        self.onRetry = onRetry
-        self.retryLabel = retryLabel
-        self.data = data
-    }
-
-    var body: some View {
-        switch content {
-        case .loading:
-            skeleton()
-        case let .failure(sentence, remedy):
-            FailureView(sentence: sentence, remedy: remedy, retryLabel: retryLabel, onRetry: onRetry)
-        case let .denied(denied):
-            DeniedGate(denied)
-        case let .data(value):
-            data(value)
-        }
-    }
-}
-
-extension ReadStateView where Skeleton == RowSkeleton {
-    /// The common case: a list, so its skeleton is rows.
-    init(
-        content: ScreenContent<Value>,
-        loadingLabel: String = KitWords.OPENING,
-        onRetry: (() -> Void)?,
-        retryLabel: String = KitWords.RETRY,
-        @ViewBuilder data: @escaping (Value) -> Content
-    ) {
-        self.init(
-            content: content,
-            skeleton: { RowSkeleton(label: loadingLabel) },
-            onRetry: onRetry,
-            retryLabel: retryLabel,
-            data: data
-        )
-    }
-}
+// "nothing here" is a finding, so every screen that reads draws it through
+// `PageReadStateView` and nowhere else.
 
 /// THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's `PageState`, which the
 /// screen's Rust builds from `Page::wire`. A first load draws the skeleton; a gate draws

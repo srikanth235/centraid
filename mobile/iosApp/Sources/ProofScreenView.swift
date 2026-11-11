@@ -50,30 +50,27 @@ struct ProofScreenView: View {
 
     @ViewBuilder
     private func content(_ view: Centraid_Core_V1_CounterView) -> some View {
-        switch view.content {
-        case .loading(let loading)?:
-            Text(loading.label)
-        case .failed(let failure)?:
-            VStack {
-                Text(failure.sentence)
-                Button(failure.remedy) {
-                    var tap = Centraid_Core_V1_CounterEvent()
-                    tap.kind = .retryTapped(Centraid_Core_V1_CounterRetryTapped())
-                    store.send(instance, .counter(tap))
+        // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, or the count.
+        PageReadStateView(
+            page: view.page,
+            loadingLabel: view.loadingLabel,
+            onRetry: {
+                var tap = Centraid_Core_V1_CounterEvent()
+                tap.kind = .retryTapped(Centraid_Core_V1_CounterRetryTapped())
+                store.send(instance, .counter(tap))
+            }
+        ) {
+            if case .data(let data)? = view.content {
+                VStack {
+                    Text(data.countLabel).font(.largeTitle)
+                    Button(data.copyLabel) {
+                        var tap = Centraid_Core_V1_CounterEvent()
+                        tap.kind = .copyTapped(Centraid_Core_V1_CounterCopyTapped())
+                        store.send(instance, .counter(tap))
+                    }
+                    if !data.notice.isEmpty { Text(data.notice).font(.footnote) }
                 }
             }
-        case .data(let data)?:
-            VStack {
-                Text(data.countLabel).font(.largeTitle)
-                Button(data.copyLabel) {
-                    var tap = Centraid_Core_V1_CounterEvent()
-                    tap.kind = .copyTapped(Centraid_Core_V1_CounterCopyTapped())
-                    store.send(instance, .counter(tap))
-                }
-                if !data.notice.isEmpty { Text(data.notice).font(.footnote) }
-            }
-        case nil:
-            EmptyView()
         }
     }
 }

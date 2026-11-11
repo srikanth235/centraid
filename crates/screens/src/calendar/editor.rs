@@ -92,8 +92,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Editor {
         mode: if create { Mode::Create } else { Mode::Edit },
         route: args,
-        phase: Phase::Loading,
-        read_failed: false,
+        page: Page::loading(),
         loaded: None,
         baseline: None,
         draft: None,
@@ -109,13 +108,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         undo: Undo::default(),
         dismissed: false,
     }))
-}
-
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready,
 }
 
 /// What the three reads answered.
@@ -135,9 +127,8 @@ struct Editor {
     rev: Option<i64>,
     route: wire::AgendaEditorRoute,
     mode: Mode,
-    phase: Phase,
-    /// A re-read failed over the draft on screen: a note over the words.
-    read_failed: bool,
+    /// The read of the three answers; ready with no draft is an event that is no longer there.
+    page: Page<()>,
     loaded: Option<Loaded>,
     /// The values as loaded: what "changed" is measured against.
     baseline: Option<Draft>,
@@ -204,7 +195,7 @@ impl Editor {
         .flatten()
         .next();
         if let Some(denial) = denial {
-            self.phase = Phase::Denied(denial);
+            self.page = Page::Refused(denial);
             return;
         }
         let answered = match (upcoming, parties, detail) {
@@ -220,9 +211,10 @@ impl Editor {
             // A re-read that failed keeps the draft under a note; only a first read has nothing
             // else to show.
             if self.draft.is_none() {
-                self.phase = Phase::Failed;
+                self.page = Page::Failed;
             } else {
-                self.read_failed = true;
+                let kept = std::mem::replace(&mut self.page, Page::loading());
+                self.page = kept.noted(Some(Note::refresh_failed(ctx.locale())));
             }
             return;
         };
@@ -233,8 +225,10 @@ impl Editor {
             detail,
             places,
         });
-        self.phase = Phase::Ready;
-        self.read_failed = false;
+        self.page = Page::Ready {
+            data: (),
+            note: None,
+        };
         if self.draft.is_none() {
             self.baseline = match self.mode {
                 Mode::Edit => self.event().map(draft::draft_of),
@@ -805,16 +799,11 @@ impl Screen for Editor {
         let locale = ctx.locale();
         // Ready with no draft is an event that is no longer there: a failed page with its own
         // words and no Retry, never a blank.
-        let gone = matches!(self.phase, Phase::Ready) && self.draft.is_none();
-        let page: Page<()> = match &self.phase {
-            Phase::Loading => Page::loading(),
-            Phase::Failed => Page::Failed,
-            Phase::Denied(denial) => Page::Refused(denial.clone()),
-            Phase::Ready if gone => Page::Failed,
-            Phase::Ready => Page::Ready {
-                data: (),
-                note: self.read_failed.then(|| Note::refresh_failed(locale)),
-            },
+        let gone = matches!(self.page, Page::Ready { .. }) && self.draft.is_none();
+        let page: Page<()> = if gone {
+            Page::Failed
+        } else {
+            self.page.clone()
         };
         let mut wired = page.wire(
             locale,
@@ -832,8 +821,8 @@ impl Screen for Editor {
                 kit_read::incomplete(locale)
             }));
         }
-        let content = match (&self.phase, &self.draft) {
-            (Phase::Ready, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
+        let content = match (&self.page, &self.draft) {
+            (Page::Ready { .. }, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
                 Box::new(self.data(locale, ctx.hour_cycle(), ctx.zone(), draft)),
             )),
             _ => None,

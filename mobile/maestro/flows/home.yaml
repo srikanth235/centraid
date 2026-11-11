@@ -50,7 +50,7 @@ name: home
 - runFlow:
     when:
       visible:
-        id: "home-failure"
+        id: "kit-failure"
     commands:
       - assertNotVisible:
           id: "home-grid"

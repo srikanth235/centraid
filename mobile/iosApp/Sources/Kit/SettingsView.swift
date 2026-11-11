@@ -9,80 +9,74 @@ struct SettingsView: View {
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var content: ScreenContent<Centraid_Core_V1_SettingsData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
-            ReadStateView(content: content, onRetry: nil) { data in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if data.hasAppearance {
-                            GroupHead(title: data.appearance.title)
-                            SettingsSegmented(choices: data.appearance.choices) { id in
-                                var event = Centraid_Core_V1_SettingsEvent()
-                                event.kind = .appearancePicked(.with { $0.id = id })
-                                send(event)
+            PageReadStateView(page: state.page, onRetry: nil) {
+                if case let .data(data)? = state.content {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if data.hasAppearance {
+                                GroupHead(title: data.appearance.title)
+                                SettingsSegmented(choices: data.appearance.choices) { id in
+                                    var event = Centraid_Core_V1_SettingsEvent()
+                                    event.kind = .appearancePicked(.with { $0.id = id })
+                                    send(event)
+                                }
+                                Text(data.appearance.note)
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 8)
+                                    .accessibilityIdentifier("settings-appearance-note")
                             }
-                            Text(data.appearance.note)
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 8)
-                                .accessibilityIdentifier("settings-appearance-note")
-                        }
-                        if data.hasUnits {
-                            GroupHead(title: data.units.title)
-                            SettingsSegmented(choices: data.units.choices, identifier: "settings-units") { id in
-                                var event = Centraid_Core_V1_SettingsEvent()
-                                event.kind = .unitsPicked(.with { $0.id = id })
-                                send(event)
+                            if data.hasUnits {
+                                GroupHead(title: data.units.title)
+                                SettingsSegmented(choices: data.units.choices, identifier: "settings-units") { id in
+                                    var event = Centraid_Core_V1_SettingsEvent()
+                                    event.kind = .unitsPicked(.with { $0.id = id })
+                                    send(event)
+                                }
+                                Text(data.units.note)
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 8)
+                                    .accessibilityIdentifier("settings-units-note")
                             }
-                            Text(data.units.note)
-                                .kitType(.meta)
-                                .foregroundStyle(Surface.meta)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 8)
-                                .accessibilityIdentifier("settings-units-note")
-                        }
-                        ForEach(data.sections, id: \.key) { section in
-                            GroupHead(title: section.title)
-                            // THE ROWS ARE ONE CARD; the last hairline falls outside the clip.
-                            VStack(spacing: 0) {
-                                ForEach(section.rows, id: \.id) { row in
-                                    SettingsRowView(row: row, open: open) {
-                                        var event = Centraid_Core_V1_SettingsEvent()
-                                        event.kind = .rowPressed(.with { $0.id = row.id })
-                                        send(event)
+                            ForEach(data.sections, id: \.key) { section in
+                                GroupHead(title: section.title)
+                                // THE ROWS ARE ONE CARD; the last hairline falls outside the clip.
+                                VStack(spacing: 0) {
+                                    ForEach(section.rows, id: \.id) { row in
+                                        SettingsRowView(row: row, open: open) {
+                                            var event = Centraid_Core_V1_SettingsEvent()
+                                            event.kind = .rowPressed(.with { $0.id = row.id })
+                                            send(event)
+                                        }
                                     }
                                 }
+                                .padding(.bottom, -1)
+                                .kitCard()
+                                .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                                .accessibilityIdentifier("settings-section-\(section.key)")
                             }
-                            .padding(.bottom, -1)
+                            GroupHead(title: data.aboutTitle)
+                            HStack {
+                                Text(data.versionTitle).kitType(.row).foregroundStyle(Surface.ink)
+                                Spacer(minLength: 8)
+                                Text(data.version).kitType(.row).foregroundStyle(Surface.meta)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity, minHeight: 52)
                             .kitCard()
-                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-                            .accessibilityIdentifier("settings-section-\(section.key)")
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("settings-version")
                         }
-                        GroupHead(title: data.aboutTitle)
-                        HStack {
-                            Text(data.versionTitle).kitType(.row).foregroundStyle(Surface.ink)
-                            Spacer(minLength: 8)
-                            Text(data.version).kitType(.row).foregroundStyle(Surface.meta)
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .kitCard()
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("settings-version")
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.bottom, 24)
                     }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.bottom, 24)
                 }
             }
             // A REFUSED WRITE (units) is Rust's one sentence in the kit's status line, docked at the foot.

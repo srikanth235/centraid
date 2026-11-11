@@ -44,6 +44,7 @@ impl Screen for Probe {
             kind: Some(wire::view_state::Kind::Counter(wire::CounterView {
                 title: if backing_up { "backing up" } else { "idle" }.to_owned(),
                 content: None,
+                ..Default::default()
             })),
             ..Default::default()
         }

@@ -46,73 +46,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.Denied
 import centraid.core.v1.EmptyState
-import centraid.core.v1.Loading
 import centraid.core.v1.PageNote
 import centraid.core.v1.PageState
-import centraid.core.v1.Failure as ReadFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.CentraidTokens
 import dev.centraid.android.theme.centraidType
-
-/**
- * THE READ LAW'S FOUR ARMS, AS A VIEW SEES THEM (K5, #1029).
- *
- * `screen.proto` law 1: loading, failure and data are three arms, never two —
- * and the kit adds the fourth, [Denied], which has no band and no retry. A
- * screen builds one of these from its own `content` oneof with [screenContentOf]
- * and hands it to [ReadStateView], which is the only place a list screen
- * switches on content.
- */
-public sealed interface ScreenContent<out V> {
-    public data class Loading(val firstLoad: Boolean) : ScreenContent<Nothing>
-    public data class Failure(val sentence: String, val remedy: String) : ScreenContent<Nothing>
-    public data class Gate(val denied: Denied) : ScreenContent<Nothing>
-    public data class Data<V>(val value: V) : ScreenContent<V>
-}
-
-/**
- * One screen's `content` oneof, as [ScreenContent]. At most one argument is set
- * (Wire enforces the oneof); none set is the seeded first load.
- */
-public fun <V : Any> screenContentOf(
-    loading: Loading?,
-    failure: ReadFailure?,
-    data: V?,
-    denied: Denied? = null,
-): ScreenContent<V> = when {
-    denied != null -> ScreenContent.Gate(denied)
-    failure != null -> ScreenContent.Failure(failure.sentence, failure.remedy)
-    data != null -> ScreenContent.Data(data)
-    else -> ScreenContent.Loading(loading?.first_load ?: true)
-}
-
-/**
- * THE ONE SWITCH ON CONTENT. Loading draws [skeleton] (row geometry, never a
- * spinner), failure draws [FailureView] with a member-sent retry, denied draws
- * [DeniedGate], and data draws [data].
- *
- * [onRetry] is the screen's `Refreshed` event. Null only for a screen whose
- * machine has no member-initiated re-read; a refusal NEVER retries itself.
- */
-@Composable
-public fun <V> ReadStateView(
-    content: ScreenContent<V>,
-    onRetry: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-    retryLabel: String = KitWords.RETRY,
-    skeleton: @Composable () -> Unit = { RowSkeleton() },
-    data: @Composable (V) -> Unit,
-) {
-    Box(modifier.fillMaxSize()) {
-        when (content) {
-            is ScreenContent.Loading -> skeleton()
-            is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry, retryLabel = retryLabel)
-            is ScreenContent.Gate -> DeniedGate(content.denied)
-            is ScreenContent.Data -> data(content.value)
-        }
-    }
-}
 
 /**
  * THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's [PageState], which the

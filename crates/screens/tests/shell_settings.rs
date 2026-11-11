@@ -91,9 +91,10 @@ fn selected(data: &wire::SettingsData) -> Vec<String> {
 fn settings_is_loading_until_the_keychain_has_said_what_was_chosen() {
     let (mut d, _home, i) = started();
     assert!(matches!(
-        state(&d, i).content,
-        Some(wire::settings_state::Content::Loading(_))
+        state(&d, i).page.and_then(|page| page.state),
+        Some(wire::page_state::State::Loading(_))
     ));
+    assert!(state(&d, i).content.is_none());
     assert_eq!(state(&d, i).title, "Settings");
     assert_eq!(state(&d, i).back_label, "Home");
     answer(&mut d, i, keychain_get, stored("dark"));

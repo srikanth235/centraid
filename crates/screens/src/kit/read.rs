@@ -175,7 +175,7 @@ impl Note {
 /// reaches. A refresh never blanks data on screen.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Page<T> {
-    Loading { first: bool },
+    Loading,
     Failed,
     Refused(wire::AppQueryDenial),
     Empty,
@@ -186,7 +186,7 @@ impl<T> Page<T> {
     /// The seeded first load.
     #[must_use]
     pub fn loading() -> Self {
-        Self::Loading { first: true }
+        Self::Loading
     }
 
     /// A reading as a page; `is_empty` says whether data that arrived holds nothing.
@@ -295,10 +295,7 @@ impl<T> Page<T> {
     ) -> wire::PageState {
         use wire::page_state::State;
         let (state, note) = match self {
-            Self::Loading { first } => (
-                Some(State::Loading(wire::Loading { first_load: *first })),
-                None,
-            ),
+            Self::Loading => (Some(State::Loading(wire::Loading {})), None),
             Self::Failed => (Some(State::Failed(failure(locale))), None),
             Self::Refused(denial) => (Some(State::Refused(denied(denial))), None),
             Self::Empty => (Some(State::Empty(empty())), None),
@@ -342,10 +339,7 @@ mod tests {
     #[test]
     fn a_first_read_is_loading_until_it_lands() {
         let wired = state(&Page::loading());
-        assert_eq!(
-            wired.state,
-            Some(State::Loading(wire::Loading { first_load: true }))
-        );
+        assert_eq!(wired.state, Some(State::Loading(wire::Loading {})));
         assert!(wired.note.is_none());
     }
 

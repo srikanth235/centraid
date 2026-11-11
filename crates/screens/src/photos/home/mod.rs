@@ -632,7 +632,7 @@ impl Home {
     fn library_view(&self, locale: Locale) -> wire::PhotosLibrary {
         let rung = self.rung;
         let target = f64::from(layout::RUNG_HEIGHTS[layout::clamp_rung(rung) as usize]);
-        let loading = matches!(self.library.page, Page::Loading { .. });
+        let loading = matches!(self.library.page, Page::Loading);
         let page = self.library.drawn(locale);
         wire::PhotosLibrary {
             page: Some(page.wire(
