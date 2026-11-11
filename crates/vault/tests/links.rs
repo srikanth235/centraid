@@ -243,3 +243,50 @@ fn the_picker_lists_one_kind_by_typed_term_bounded_and_never_a_locker_item() {
     let people = pick("person", "", 10);
     assert!(people[0].is_owner, "{people:?}");
 }
+
+#[test]
+fn a_link_written_in_a_notes_text_reads_in_text_from_both_ends_and_a_picked_link_does_not() {
+    let world = World::new();
+    let id = |output: serde_json::Value| output["id"].as_str().expect("an id").to_owned();
+    let target = id(world
+        .run(
+            "note.create",
+            json!({"title": "Packing list", "body": "socks"}),
+        )
+        .output);
+    let host = id(world
+        .run(
+            "note.create",
+            json!({"title": "Host", "body": "see [[Packing list]]"}),
+        )
+        .output);
+    let picked = id(world
+        .run(
+            "note.create",
+            json!({"title": "Itinerary", "body": "day one"}),
+        )
+        .output);
+    assert_eq!(
+        world.link(&host, &picked).status,
+        CommandStatus::Executed,
+        "a picked link"
+    );
+    let on_host = world.linked(&host);
+    let in_text = |rows: &[links::Linked], other: &str| {
+        rows.iter()
+            .find(|row| row.id == other)
+            .map(|row| row.in_text)
+    };
+    assert_eq!(
+        in_text(&on_host, &target),
+        Some(true),
+        "the note's own page"
+    );
+    assert_eq!(in_text(&on_host, &picked), Some(false), "a picked link");
+    let on_target = world.linked(&target);
+    assert_eq!(
+        in_text(&on_target, &host),
+        Some(true),
+        "the linked item's page"
+    );
+}

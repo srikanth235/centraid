@@ -78,6 +78,11 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
             id,
             title,
         )),
+        ("photos", "place") => Some(photos::routes::shelf(
+            wire::PhotosShelfKind::Place,
+            id,
+            title,
+        )),
         ("photos", "photo") => {
             let mut neighbours: Vec<String> = among
                 .iter()
@@ -93,6 +98,8 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
         ("docs", "document") => Some(docs::routes::document(id, title, parent)),
         ("people", "person") => Some(people::routes::person(id, title, false)),
         ("money", "transaction") => Some(money::routes::transaction(id, parent)),
+        // Money has one page for its accounts, a list; an account's own row is opened there.
+        ("money", "account") => Some(money::routes::accounts(parent)),
         ("health", "workout") => Some(health::routes::workout(id, parent)),
         ("health", "metric") => Some(health::routes::metric(id, parent)),
         ("locker", "locker_item") => Some(locker_item(row, parent)),
@@ -182,6 +189,8 @@ mod tests {
         assert_eq!(open("photos", "photo"), photos::LIGHTBOX);
         assert_eq!(open("money", "transaction"), money::TRANSACTION);
         assert_eq!(open("health", "workout"), health::WORKOUT);
+        assert_eq!(open("money", "account"), money::ACCOUNTS);
+        assert_eq!(open("photos", "place"), photos::SHELF);
         // A kind with no page of its own opens the app.
         assert_eq!(open("calendar", "nonsense"), crate::calendar::HOME);
         assert_eq!(open("chat", "thread"), crate::chat::THREAD);

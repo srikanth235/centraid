@@ -2285,10 +2285,14 @@ mod tests {
         );
         assert_eq!(
             linked_rows(&*screen, &ctx),
-            [("Packing list".to_owned(), "Note".to_owned())]
+            [("Packing list".to_owned(), "In the text".to_owned())]
         );
         let section = state(&*screen, &ctx).links.expect("section");
         assert_eq!(section.title, "Linked to");
+        assert!(
+            section.rows.iter().all(|row| row.remove_label.is_empty()),
+            "a link written in the text offers no Remove"
+        );
         assert_eq!(section.adds.len(), 1, "one Add link row for many kinds");
         // Add link, then the kind, then the item: it lands through `notes.link`.
         link_event(

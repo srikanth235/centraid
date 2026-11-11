@@ -79,6 +79,10 @@ pub struct Linked {
     pub key: &'static str,
     pub title: String,
     pub is_owner: bool,
+    /// The link is written as `[[title]]` in a note's text (its edge carries a `wikilink`
+    /// anchor), in either direction: the note's next save recompiles it, so it is taken off by
+    /// editing that text.
+    pub in_text: bool,
 }
 
 /// What a candidate's key means to the vault: the kind, and whether it must be a workout.
@@ -200,7 +204,8 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
     let mut found: Vec<Linked> = Vec::new();
     for (statement, locker_ok) in [
         (
-            "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault)
+            "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault),
+                    json_extract(g.anchor, '$.wikilink') IS NOT NULL
                FROM edge g
                JOIN entity e ON e.id = g.to_id
                LEFT JOIN workout w ON w.id = e.id
@@ -209,7 +214,8 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
             true,
         ),
         (
-            "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault)
+            "SELECT e.id, e.kind, e.title, w.id IS NOT NULL, e.id = (SELECT self_id FROM vault),
+                    json_extract(g.anchor, '$.wikilink') IS NOT NULL
                FROM edge g
                JOIN entity e ON e.id = g.from_id
                LEFT JOIN workout w ON w.id = e.id
@@ -227,10 +233,11 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
                 row.get::<_, String>(2)?,
                 row.get::<_, bool>(3)?,
                 row.get::<_, bool>(4)?,
+                row.get::<_, bool>(5)?,
             ))
         })?;
         for row in rows {
-            let (other, kind, title, workout, owner) = row?;
+            let (other, kind, title, workout, owner, in_text) = row?;
             let Some(kind) = Kind::parse(&kind) else {
                 continue;
             };
@@ -241,7 +248,9 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
             if key == "locker_item" && !locker_ok {
                 continue;
             }
-            if found.iter().any(|seen| seen.id == other) {
+            if let Some(seen) = found.iter_mut().find(|seen| seen.id == other) {
+                // Written in a note's text in either direction is written in the text.
+                seen.in_text |= in_text;
                 continue;
             }
             found.push(Linked {
@@ -249,6 +258,7 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
                 key,
                 title,
                 is_owner: owner,
+                in_text,
             });
         }
     }

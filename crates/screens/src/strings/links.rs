@@ -13,6 +13,7 @@ catalog! {
     plain add_task = ("Add task", "Add task");
     plain add_transaction = ("Add transaction", "Add transaction");
     plain add_workout = ("Add workout", "Add workout");
+    plain in_text = ("In the text", "In the text");
     plain kind_account = ("Account", "Account");
     plain kind_document = ("Document", "Document");
     plain kind_event = ("Event", "Event");

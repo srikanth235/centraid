@@ -12,7 +12,8 @@
 //!    `Reading<Vec<wire::LinkedItem>>`; keep the `Data` and fold a `Denied` or `Failed` into the
 //!    page's status line, never an empty section.
 //! 3. Section: `Links::section(locale, ..)` with `links::rows(locale, &linked)` (each row routes to
-//!    the linked item's own page); the add row is `Links::adds(locale)` and the sheet is
+//!    the linked item's own page; a link written as `[[title]]` in a note's text says "In the text"
+//!    and offers no Remove, since editing the text takes it off); the add row is `Links::adds(locale)` and the sheet is
 //!    `Links::picker(locale, &links::ids(&linked))`.
 //! 4. Update: send each `wire::LinkEvent` to `Links::update(&event, &links::ids(&linked), ctx)`.
 //!    On [`Outcome::Add`] call the app's link action with `{ from: id, to: picked, rel: "links" }`
@@ -202,7 +203,7 @@ impl Kind {
 }
 
 /// The app and entity a linked row of this `shell.links` kind opens (`shell::row_routes`); `None`
-/// for a kind with no page of its own (an account, a place).
+/// for a kind with no page, whose row is then drawn without a tap.
 fn opens(key: &str) -> Option<(&'static str, &'static str)> {
     Some(match key {
         "person" => ("people", "person"),
@@ -213,6 +214,8 @@ fn opens(key: &str) -> Option<(&'static str, &'static str)> {
         "photo" => ("photos", "photo"),
         "transaction" => ("money", "transaction"),
         "workout" => ("health", "workout"),
+        "account" => ("money", "account"),
+        "place" => ("photos", "place"),
         "locker_item" => ("locker", "locker_item"),
         _ => return None,
     })
@@ -608,7 +611,9 @@ pub fn rows(locale: Locale, linked: &[wire::LinkedItem]) -> Vec<wire::LinkRow> {
             wire::LinkRow {
                 id: item.id.clone(),
                 title: item.title.clone(),
-                meta: if item.is_owner {
+                meta: if item.in_text {
+                    words::in_text(locale)
+                } else if item.is_owner {
                     words::you(locale)
                 } else {
                     Kind::parse(&item.kind)
@@ -616,7 +621,12 @@ pub fn rows(locale: Locale, linked: &[wire::LinkedItem]) -> Vec<wire::LinkRow> {
                         .unwrap_or_default()
                 },
                 route,
-                remove_label: fill(&words::remove(locale), &[("name", item.title.as_str())]),
+                // A link written in a note's text has no Remove: the text is edited instead.
+                remove_label: if item.in_text {
+                    String::new()
+                } else {
+                    fill(&words::remove(locale), &[("name", item.title.as_str())])
+                },
                 selected: false,
             }
         })
@@ -792,6 +802,53 @@ mod tests {
     }
 
     #[test]
+    fn a_link_written_in_a_notes_text_says_so_and_offers_no_remove() {
+        let item = |id: &str, in_text: bool| wire::LinkedItem {
+            id: id.to_owned(),
+            kind: "note".to_owned(),
+            title: format!("Note {id}"),
+            is_owner: false,
+            in_text,
+        };
+        let rows = rows(Locale::En, &[item("a", true), item("b", false)]);
+        assert_eq!(
+            (rows[0].meta.as_str(), rows[0].remove_label.as_str()),
+            ("In the text", "")
+        );
+        assert_eq!(
+            (rows[1].meta.as_str(), rows[1].remove_label.as_str()),
+            ("Note", "Remove Note b")
+        );
+    }
+
+    #[test]
+    fn every_kind_with_a_page_routes_and_a_kind_without_one_does_not() {
+        let row = |kind: &str| wire::LinkedItem {
+            id: "x".to_owned(),
+            kind: kind.to_owned(),
+            title: "T".to_owned(),
+            is_owner: false,
+            in_text: false,
+        };
+        for kind in Kind::ALL {
+            let rows = rows(Locale::En, &[row(kind.key())]);
+            assert!(rows[0].route.is_some(), "{} has a page", kind.key());
+        }
+        let account = rows(Locale::En, &[row("account")]);
+        assert_eq!(
+            account[0].route.as_ref().map(|r| r.screen.as_str()),
+            Some("money.accounts")
+        );
+        let place = rows(Locale::En, &[row("place")]);
+        assert_eq!(
+            place[0].route.as_ref().map(|r| r.screen.as_str()),
+            Some("photos.shelf")
+        );
+        let none = rows(Locale::En, &[row("mystery")]);
+        assert!(none[0].route.is_none(), "no page: not tappable");
+    }
+
+    #[test]
     fn a_payee_that_says_a_whole_name_proposes_that_person() {
         let people = [person("a", "Priya Rao", false), person("b", "Maya", false)];
         let found = propose(&["UPI PRIYA RAO 4412"], &people, &[]);
@@ -852,6 +909,7 @@ mod tests {
             kind: kind.to_owned(),
             title: title.to_owned(),
             is_owner,
+            in_text: false,
         }
     }
 
@@ -902,8 +960,9 @@ mod tests {
             ("transaction", Some("money.transaction")),
             ("workout", Some("health.workout")),
             ("locker_item", Some("locker.item")),
-            ("account", None),
-            ("place", None),
+            ("account", Some("money.accounts")),
+            ("place", Some("photos.shelf")),
+            ("mystery", None),
         ];
         for (kind, screen) in cases {
             let made = rows(Locale::En, &[linked(id, kind, "T", false)]);

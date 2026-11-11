@@ -23,6 +23,7 @@ pub(crate) fn linked(vault: &Vault, entity_id: &str) -> Result<Answer> {
                 kind: row.key.to_owned(),
                 title: row.title,
                 is_owner: row.is_owner,
+                in_text: row.in_text,
             })
             .collect(),
     }))

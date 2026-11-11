@@ -727,6 +727,9 @@ message LinkedItem {
   string title = 3;
   // The member's own person: "You".
   bool is_owner = 4;
+  // The link is written as [[title]] in a note's text, in either direction; it is taken off by
+  // editing that text, not here.
+  bool in_text = 5;
 }
 
 // `shell.link-candidates`: the items of one kind the picker offers for a typed term, at most 50,

@@ -419,6 +419,7 @@ pub const REGISTER: &[Entry] = &[
     ),
     ("EarlierVersions.versions", rust_only(EARLIER_VERSIONS)),
     ("LinkedItem.is_owner", rust_only(LINK_READS)),
+    ("LinkedItem.in_text", rust_only(LINK_READS)),
     ("LinkCandidate.is_owner", rust_only(LINK_READS)),
     ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
