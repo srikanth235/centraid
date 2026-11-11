@@ -258,45 +258,45 @@ fn a_scan_or_an_upload_records_its_origin() {
 }
 
 #[test]
-fn a_reminders_import_records_its_origin_and_a_typed_task_none() {
+fn a_task_no_longer_takes_an_arrival_because_the_phones_reminders_are_followed() {
     let w = World::new();
-    let arrived = ("phone_reminders", "Reminders on this phone");
-    for title in ["Call the plumber", "Renew passport"] {
-        w.ok(
-            "task.add",
-            json!({ "title": title, "arrived_system": arrived.0, "arrived_label": arrived.1 }),
-        );
-    }
-    assert_eq!(w.tally("phone_reminders"), (1, 2));
-    w.ok("task.add", json!({ "title": "Typed" }));
-    assert_eq!(w.tally("phone_reminders"), (1, 2));
-    assert_eq!(w.count("SELECT COUNT(*) FROM task", &[]), 3);
+    // The phone's Reminders arrive by following (`follow.reminders`), so `task.add` names no arrival.
+    w.refused(
+        "task.add",
+        json!({ "title": "x", "arrived_system": "phone_reminders", "arrived_label": "Reminders" }),
+    );
+    assert_eq!(w.count("SELECT COUNT(*) FROM task", &[]), 0);
+    assert_eq!(w.count("SELECT COUNT(*) FROM origin", &[]), 0);
 }
 
 #[test]
 fn a_system_that_does_not_bring_in_the_kind_is_refused_and_writes_nothing() {
     let w = World::new();
     let sentence = w.refused(
-        "task.add",
-        json!({ "title": "x", "arrived_system": "vcard", "arrived_label": "a.vcf" }),
+        "note.import",
+        json!({ "files": json!([{ "path": "x.md", "text": "# X\nx" }]).to_string(),
+                "arrived_system": "vcard", "arrived_label": "a.vcf" }),
     );
     assert!(sentence.contains("does not bring in"), "{sentence}");
-    assert_eq!(w.count("SELECT COUNT(*) FROM task", &[]), 0);
+    assert_eq!(w.count("SELECT COUNT(*) FROM note", &[]), 0);
     assert_eq!(w.count("SELECT COUNT(*) FROM origin", &[]), 0);
     // A label with no system, and a system with no label, are half an arrival.
-    w.refused(
-        "task.add",
-        json!({ "title": "x", "arrived_label": "a.vcf" }),
-    );
-    w.refused(
-        "task.add",
-        json!({ "title": "x", "arrived_system": "phone_reminders" }),
-    );
-    assert_eq!(w.count("SELECT COUNT(*) FROM task", &[]), 0);
+    let one = |extra: Value| {
+        let mut input =
+            json!({ "files": json!([{ "path": "x.md", "text": "# X\nx" }]).to_string() });
+        input
+            .as_object_mut()
+            .expect("an object")
+            .extend(extra.as_object().expect("an object").clone());
+        input
+    };
+    w.refused("note.import", one(json!({ "arrived_label": "a.md" })));
+    w.refused("note.import", one(json!({ "arrived_system": "markdown" })));
+    assert_eq!(w.count("SELECT COUNT(*) FROM note", &[]), 0);
     // A closed set: a made-up system never reaches the vault.
     w.refused(
-        "task.add",
-        json!({ "title": "x", "arrived_system": "telepathy", "arrived_label": "a" }),
+        "note.import",
+        one(json!({ "arrived_system": "telepathy", "arrived_label": "a" })),
     );
 }
 
@@ -367,10 +367,22 @@ fn where_an_item_came_from_reads_back_for_every_system_and_is_none_for_typed() {
                 "arrived_system": "scan", "arrived_label": "Scanned document" }),
     ));
     assert_eq!(read(&doc).map(|found| found.0), Some("scan".to_owned()));
-    let task = id(&w.ok(
-        "task.add",
-        json!({ "title": "x", "arrived_system": "phone_reminders", "arrived_label": "Groceries" }),
-    ));
+    w.ok(
+        "follow.reminders",
+        json!({ "origin": { "ref": "list:1", "label": "Groceries" },
+                "records": [{ "external_id": "r1", "fields": { "title": "x", "status": "open", "done_at": null } }] }),
+    );
+    let task: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT entity_id FROM source WHERE external_id = 'r1'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("a source");
     assert_eq!(
         read(&task),
         Some(("phone_reminders".into(), "Groceries".into()))

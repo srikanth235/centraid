@@ -188,15 +188,13 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
 #[test]
 fn an_imported_reminder_says_its_phone_list_and_a_typed_task_does_not() {
     let mut d = seeded();
-    let imported = add(
+    follow_reminders(
         &d,
-        act::reminders::AddTask {
-            title: "Call the plumber".to_owned(),
-            arrived_system: Some(act::reminders::AddTaskArrivedSystem::PhoneReminders),
-            arrived_label: Some("Groceries".to_owned()),
-            ..Default::default()
-        },
+        ("list:1", "Groceries"),
+        serde_json::json!([{ "external_id": "r1", "fields": reminder_fields("Call the plumber", serde_json::json!({})) }]),
+        false,
     );
+    let imported = id_by_title(&d, "Call the plumber");
     let typed = task(&d, "Pay rent");
     let page = d.push(agenda::TAB, routes::task(&imported));
     let line = detail(d.view(page)).origin.clone().expect("a line");

@@ -331,3 +331,43 @@ pub fn choose(d: &mut Driver, i: u64, field: &str, key: &str) {
         }),
     );
 }
+
+/// The phone's Reminders follow a list of records (`follow-reminders`), as the follower would.
+pub fn follow_reminders(
+    d: &Driver,
+    list: (&str, &str),
+    records: serde_json::Value,
+    complete: bool,
+) -> wire::ActResponse {
+    arrange(
+        d,
+        act::reminders::FollowReminders {
+            origin: serde_json::json!({ "ref": list.0, "label": list.1 }).to_string(),
+            records: records.to_string(),
+            complete: Some(complete),
+            since: None,
+        },
+    )
+}
+
+/// One followed reminder's fields: open, with the extras.
+pub fn reminder_fields(title: &str, extra: serde_json::Value) -> serde_json::Value {
+    let mut fields = serde_json::json!({ "title": title, "status": "open", "done_at": null });
+    fields
+        .as_object_mut()
+        .expect("an object")
+        .extend(extra.as_object().expect("an object").clone());
+    fields
+}
+
+/// The id of the open task titled `title`, from the "All" board.
+pub fn id_by_title(d: &Driver, title: &str) -> String {
+    let board = load_board(d, load::reminders::BoardView::All, None);
+    board
+        .groups
+        .iter()
+        .flat_map(|group| group.tasks.iter())
+        .find(|task| task.title == title)
+        .map(|task| task.task_id.clone())
+        .unwrap_or_else(|| panic!("no task titled {title}"))
+}

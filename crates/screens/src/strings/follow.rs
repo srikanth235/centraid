@@ -60,6 +60,7 @@ catalog! {
     plain source_calendar = ("your phone’s calendars", "your phone’s calendars");
     plain source_contacts = ("your phone’s contacts", "your phone’s contacts");
     plain source_files = ("the folder", "the folder");
+    plain source_reminders = ("your phone’s reminders", "your phone’s reminders");
     plain source_health = ("your health store", "your health store");
 
     plain reconnect_title = ("Reconnect", "Reconnect");

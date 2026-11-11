@@ -222,6 +222,8 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Ios, REMINDERS),
     ),
     ("PhoneReminder.due", platform(Shell::Ios, REMINDERS)),
+    ("PhoneReminder.list_id", gap("F", Missing::Both)),
+    ("TodoDetailState.phone_says", gap("F", Missing::Both)),
     ("PhoneReminder.due_time", platform(Shell::Ios, REMINDERS)),
     ("PhoneReminder.list_color", platform(Shell::Ios, REMINDERS)),
     (

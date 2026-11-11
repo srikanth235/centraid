@@ -54,6 +54,7 @@ use super::Store;
 use super::gate::{FollowGate, Step};
 use crate::calendar::follow as calendar;
 use crate::health::follow as health;
+use crate::imports::reminders;
 use crate::people::contacts;
 use crate::screen::{Ctx, Screen};
 
@@ -96,6 +97,7 @@ enum Stage {
 enum Read {
     Contacts,
     Calendar,
+    Reminders,
     Health {
         window: health::Window,
         chosen: Vec<String>,
@@ -187,7 +189,11 @@ impl Coordinator {
         ctx.follows().listen();
         // The OS announces changes of these two while the app runs. Watching asks for no
         // permission; whether a change is followed is the habit's word at the pass.
-        for source in [wire::ImportSource::Contacts, wire::ImportSource::Calendar] {
+        for source in [
+            wire::ImportSource::Contacts,
+            wire::ImportSource::Calendar,
+            wire::ImportSource::Reminders,
+        ] {
             out.push(wire::Effect {
                 kind: Some(wire::effect::Kind::PhoneWatch(wire::PhoneWatch {
                     source: source as i32,
@@ -255,6 +261,7 @@ impl Coordinator {
             Store::Contacts => contacts::habit_read(),
             Store::Calendar => calendar::habit_read(),
             Store::Health => health::habit_read(),
+            Store::Reminders => reminders::habit_read(),
             Store::Files => {
                 // The folder follower is a screen of its own: wake it by name. It checks the
                 // vault for a followed folder, and tells the coordinator when it ended.
@@ -287,6 +294,9 @@ impl Coordinator {
             }
             Store::Calendar if calendar::followed_in(value) => {
                 (Read::Calendar, calendar::read_effect(false))
+            }
+            Store::Reminders if reminders::followed_in(value) => {
+                (Read::Reminders, reminders::read_effect())
             }
             Store::Health => {
                 let device = health::device_of(value);
@@ -326,6 +336,10 @@ impl Coordinator {
                 let _ = calendar::run(ctx, &snapshot);
                 follows.denied(Store::Calendar, false);
             }
+            (Read::Reminders, O::RemindersSnapshot(snapshot)) => {
+                let outcome = reminders::run(ctx, &snapshot.reminders, true);
+                follows.read(Store::Reminders, outcome.read);
+            }
             (Read::Health { window, chosen }, O::Health(snapshot)) => {
                 follows.refused(Store::Health, &snapshot.refused);
                 let _ = health::run(ctx, &snapshot, &window, &chosen, &snapshot.device_id);
@@ -356,6 +370,7 @@ impl Coordinator {
             match wire::ImportSource::try_from(changed.source) {
                 Ok(wire::ImportSource::Contacts) => self.request(ctx, Store::Contacts),
                 Ok(wire::ImportSource::Calendar) => self.request(ctx, Store::Calendar),
+                Ok(wire::ImportSource::Reminders) => self.request(ctx, Store::Reminders),
                 _ => {}
             }
             return;
@@ -377,7 +392,11 @@ impl Coordinator {
             (Stage::Habit, O::Failed(_)) => self.end_taken(ctx, store),
             (
                 Stage::Read(read),
-                outcome @ (O::Contacts(_) | O::Calendar(_) | O::Health(_) | O::Failed(_)),
+                outcome @ (O::Contacts(_)
+                | O::Calendar(_)
+                | O::Health(_)
+                | O::RemindersSnapshot(_)
+                | O::Failed(_)),
             ) => {
                 self.read(ctx, store, read, outcome);
             }

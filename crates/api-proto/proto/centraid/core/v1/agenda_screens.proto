@@ -2559,6 +2559,9 @@ message TodoDetailState {
   optional EarlierEntry earlier = 18;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 19;
+  // What the phone's Reminders say that differs from this task, each with one tap to take it
+  // (#1185); empty when the task is not followed or agrees.
+  repeated PhoneSays phone_says = 20;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;

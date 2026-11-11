@@ -5001,6 +5001,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "log"
+      },
+      {
+        "action": "follow-reminders",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.reminders",
+        "inverse": "stop-following",
+        "kind": "task",
+        "phrasings": [
+          "import my phone's reminders",
+          "sync reminders from this phone",
+          "pull in my reminders"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "stop-following",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "stop reading the phone's reminders",
+          "disconnect reminders on this phone",
+          "stop following phone reminders"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
       }
     ],
     "queries": [

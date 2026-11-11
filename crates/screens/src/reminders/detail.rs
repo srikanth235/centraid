@@ -27,6 +27,7 @@ use crate::kit::attachments::Attachments;
 use crate::kit::autosave::{Autosave, Draft};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::earlier;
+use crate::kit::follow;
 use crate::kit::read::{self, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
@@ -174,6 +175,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attachments: Attachments::of("reminders", &args.task_id),
         custom: None,
         earlier: earlier::Foot::default(),
+        differences: follow::Phone::default(),
     }))
 }
 
@@ -195,6 +197,8 @@ struct Detail {
     custom: Option<Custom>,
     /// The entry to the task's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
+    /// Where the phone's Reminders differ from the task, read with the page.
+    differences: follow::Phone,
 }
 
 impl Detail {
@@ -235,6 +239,7 @@ impl Detail {
             return;
         };
         self.attachments.reload(ctx);
+        self.differences = follow::read(ctx, &self.task_id);
         let title = if task.title.trim().is_empty() {
             words::untitled(ctx.locale())
         } else {
@@ -922,6 +927,16 @@ impl Screen for Detail {
             Some(E::Left(_)) => {
                 let _ = self.autosave.flush(ctx);
             }
+            Some(E::PhoneSaysTaken(taken)) => {
+                if let Some(settled) = follow::take(ctx, &self.task_id, &taken) {
+                    self.ops.status = (!settled.committed).then(|| wire::StatusLine {
+                        sentence: settled.refusal,
+                        action_label: String::new(),
+                        refused: true,
+                    });
+                    self.reload(ctx);
+                }
+            }
             Some(E::TodoDetail(detail)) => return self.event(detail, ctx),
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
@@ -964,10 +979,12 @@ impl Screen for Detail {
                     .ops
                     .status
                     .clone()
+                    .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.earlier.status(locale)),
                 finished: self.finished,
                 earlier: self.earlier.entry.clone(),
                 origin: self.earlier.origin.clone(),
+                phone_says: phone_says(locale, &self.differences),
             })),
             ..wire::ViewState::default()
         }
@@ -1433,4 +1450,38 @@ fn place_choices(
         }));
     }
     out
+}
+
+/// The lines "Phone says …" under the task: one per field the member's value differs on.
+fn phone_says(locale: Locale, differences: &follow::Phone) -> Vec<wire::PhoneSays> {
+    let line = |field: &str, noun: String, show: &dyn Fn(&str) -> String| {
+        let difference = follow::of(differences, field)?;
+        let stated = follow::text(&difference.stated)
+            .or_else(|| difference.stated.as_i64().map(|number| number.to_string()))?;
+        Some(follow::says(
+            locale,
+            follow::Source::Phone,
+            &show(&stated),
+            &noun,
+            field,
+            None,
+        ))
+    };
+    let same = |text: &str| text.to_owned();
+    let bangs = |level: &str| match level {
+        "3" => "!!!".to_owned(),
+        "2" => "!!".to_owned(),
+        "1" => "!".to_owned(),
+        _ => words::says_priority_none(locale),
+    };
+    [
+        line("title", words::says_noun_title(locale), &same),
+        line("description", words::says_noun_notes(locale), &same),
+        line("due", words::says_noun_due(locale), &same),
+        line("priority", words::says_noun_priority(locale), &bangs),
+        line("url", words::says_noun_link(locale), &same),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }

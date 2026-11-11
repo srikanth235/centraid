@@ -159,4 +159,10 @@ catalog! {
     plain window = ("more not shown", "more not shown");
     plain wont_do = ("Won't do", "Won't do");
     plain write_refused = ("Couldn't save that change.", "Couldn't save that change.");
+    plain says_noun_title = ("title", "title");
+    plain says_noun_notes = ("notes", "notes");
+    plain says_noun_due = ("due day", "due day");
+    plain says_noun_priority = ("priority", "priority");
+    plain says_noun_link = ("link", "link");
+    plain says_priority_none = ("no priority", "no priority");
 }

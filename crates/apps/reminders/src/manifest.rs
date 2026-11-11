@@ -44,10 +44,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_ten_queries_and_nineteen_actions() {
+    fn it_declares_ten_queries_and_twenty_three_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 10);
-        assert_eq!(manifest.actions.len(), 21);
+        assert_eq!(manifest.actions.len(), 23);
         for name in [
             "board",
             "task",
@@ -123,7 +123,8 @@ mod tests {
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            let expected = if matches!(row.action, "purge-task" | "empty-trash") {
+            let expected = if matches!(row.action, "purge-task" | "empty-trash" | "stop-following")
+            {
                 (Confirmation::Required, Confirm::Required)
             } else {
                 (Confirmation::None, Confirm::None)

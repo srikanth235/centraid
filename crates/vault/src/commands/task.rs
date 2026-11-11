@@ -31,7 +31,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
 use crate::commands::entity::{find, lookup_live};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, arrival};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
 use crate::time::recurrence::{NextOccurrenceInput, RecurrenceAnchor, next_occurrence};
@@ -408,7 +408,6 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             done_at: ctx.optional_str("done_at"),
         },
     )?;
-    arrival::record(ctx, &id, Kind::Task)?;
     Ok(json!({ "id": id }))
 }
 
@@ -636,8 +635,7 @@ fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 // The catalogue
 // ---------------------------------------------------------------------------
 
-const ADD_SCHEMA: &str = concat!(
-    r#"{
+const ADD_SCHEMA: &str = r#"{
   "type": "object", "required": ["title"], "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
@@ -655,13 +653,9 @@ const ADD_SCHEMA: &str = concat!(
     "section_id": { "type": ["string", "null"] },
     "position": { "type": "number" },
     "url": { "type": ["string", "null"], "maxLength": 2048, "description": "A link the task points at." },
-    "done_at": { "type": ["string", "null"], "description": "Founds the task already done, at this instant (an import of a completed item)." },
-    "#,
-    arrival::arrived_property!(),
-    r#"
+    "done_at": { "type": ["string", "null"], "description": "Founds the task already done, at this instant (an import of a completed item)." }
   }
-}"#
-);
+}"#;
 
 const EDIT_SCHEMA: &str = r#"{
   "type": "object", "required": ["id"], "additionalProperties": false,

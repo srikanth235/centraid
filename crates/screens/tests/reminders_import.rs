@@ -8,7 +8,6 @@ mod imports_support;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::load;
-use centraid_screens::field::Field;
 use centraid_screens::imports::reminders;
 use centraid_screens::kit::read::{self, Reading};
 use imports_support::{Shell, shell};
@@ -50,16 +49,15 @@ fn a_dated_reminder_carries_its_time_zone_priority_alarm_link_and_notes() {
         url: "https://example.com/appointment".into(),
         ..wire::PhoneReminder::default()
     };
-    let (add, dropped) = reminders::request(&r, Some("project-1"));
+    let (add, dropped) = reminders::fields(&r);
     assert!(!dropped);
-    assert_eq!(add.title, "Dentist");
-    assert_eq!(add.description, Field::Is("bring the form".into()));
-    assert_eq!(add.due, Field::Is("2026-12-01T09:30".into()));
-    assert_eq!(add.zone, Field::Is("Europe/Paris".into()));
-    assert_eq!(add.priority, Some(2));
-    assert_eq!(add.remind_before_min, Field::Is(30));
-    assert_eq!(add.url, Field::Is("https://example.com/appointment".into()));
-    assert_eq!(add.project_id, Field::Is("project-1".into()));
+    assert_eq!(add["title"], "Dentist");
+    assert_eq!(add["description"], "bring the form");
+    assert_eq!(add["due"], "2026-12-01T09:30");
+    assert_eq!(add["zone"], "Europe/Paris");
+    assert_eq!(add["priority"], 2);
+    assert_eq!(add["remind_before_min"], 30);
+    assert_eq!(add["url"], "https://example.com/appointment");
 }
 
 #[test]
@@ -68,16 +66,16 @@ fn a_date_only_reminder_stays_a_day_and_a_floating_time_has_no_zone() {
         due: "2026-12-01".into(),
         ..reminder("Day")
     };
-    let (add, _) = reminders::request(&day, None);
-    assert_eq!(add.due, Field::Is("2026-12-01".into()));
-    assert_eq!(add.zone, Field::Keep);
+    let (add, _) = reminders::fields(&day);
+    assert_eq!(add["due"], "2026-12-01");
+    assert_eq!(add["zone"], serde_json::Value::Null);
     let floating = wire::PhoneReminder {
         due_time: "18:00".into(),
         ..day
     };
-    let (add, _) = reminders::request(&floating, None);
-    assert_eq!(add.due, Field::Is("2026-12-01T18:00".into()));
-    assert_eq!(add.zone, Field::Keep);
+    let (add, _) = reminders::fields(&floating);
+    assert_eq!(add["due"], "2026-12-01T18:00");
+    assert_eq!(add["zone"], serde_json::Value::Null);
 }
 
 #[test]
@@ -86,8 +84,8 @@ fn an_alarm_with_no_due_is_dropped_because_it_has_nothing_to_count_back_from() {
         alarm_minutes_before: Some(10),
         ..reminder("No due")
     };
-    let (add, _) = reminders::request(&r, None);
-    assert_eq!(add.remind_before_min, Field::Keep);
+    let (add, _) = reminders::fields(&r);
+    assert_eq!(add["remind_before_min"], serde_json::Value::Null);
 }
 
 #[test]
@@ -97,19 +95,19 @@ fn a_supported_rule_is_kept_and_an_unsupported_one_is_dropped_and_counted() {
         rrule: rrule.into(),
         ..reminder("Repeats")
     };
-    let (add, dropped) = reminders::request(&dated("RRULE:FREQ=WEEKLY;BYDAY=MO,WE"), None);
+    let (add, dropped) = reminders::fields(&dated("RRULE:FREQ=WEEKLY;BYDAY=MO,WE"));
     assert!(!dropped);
-    assert_eq!(add.rule, Field::Is("FREQ=WEEKLY;BYDAY=MO,WE".into()));
+    assert_eq!(add["rule"], "FREQ=WEEKLY;BYDAY=MO,WE");
     // An hourly rule is below the engine's day.
-    let (add, dropped) = reminders::request(&dated("FREQ=HOURLY;INTERVAL=2"), None);
+    let (add, dropped) = reminders::fields(&dated("FREQ=HOURLY;INTERVAL=2"));
     assert!(dropped);
-    assert_eq!(add.rule, Field::Keep);
+    assert_eq!(add["rule"], serde_json::Value::Null);
     // A rule with nothing to repeat from cannot be kept either.
     let undated = wire::PhoneReminder {
         rrule: "FREQ=DAILY".into(),
         ..reminder("Undated")
     };
-    let (_, dropped) = reminders::request(&undated, None);
+    let (_, dropped) = reminders::fields(&undated);
     assert!(dropped);
 }
 
@@ -145,10 +143,10 @@ fn a_completed_reminder_is_kept_only_when_the_member_asked_for_them() {
     let both = [open.clone(), done.clone()];
     assert_eq!(reminders::tasks(&both, false).len(), 1);
     assert_eq!(reminders::tasks(&both, true).len(), 2);
-    let (add, _) = reminders::request(&done, None);
-    assert_eq!(add.done_at, Field::Is("2026-11-01T08:00:00Z".into()));
-    let (add, _) = reminders::request(&open, None);
-    assert_eq!(add.done_at, Field::Keep);
+    let (add, _) = reminders::fields(&done);
+    assert_eq!(add["done_at"], "2026-11-01T08:00:00Z");
+    let (add, _) = reminders::fields(&open);
+    assert_eq!(add["done_at"], serde_json::Value::Null);
 }
 
 #[test]
@@ -161,6 +159,7 @@ fn the_status_line_says_what_was_refused_dropped_and_made() {
             refused: 1,
             rules_dropped: 2,
             lists_created: 1,
+            ..reminders::Outcome::default()
         },
     );
     assert_eq!(
@@ -319,7 +318,7 @@ fn the_tap_asks_the_os_and_the_completed_option_is_asked_only_when_on() {
 }
 
 #[test]
-fn every_field_lands_on_the_task_and_the_flag_priority_and_rule_are_the_vaults() {
+fn every_field_lands_on_the_task_and_the_priority_and_rule_are_the_vaults() {
     let mut shell = fresh_shell();
     tap(&mut shell, false);
     answer(
@@ -341,7 +340,6 @@ fn every_field_lands_on_the_task_and_the_flag_priority_and_rule_are_the_vaults()
     let all = tasks(&shell);
     let rent = find(&all, "Pay rent");
     assert_eq!(rent.priority, 3);
-    assert!(rent.flagged);
     assert_eq!(rent.description.as_deref(), Some("transfer"));
     assert_eq!(rent.remind_before_min, Some(60));
     assert_eq!(rent.tz.as_deref(), Some("Europe/Paris"));

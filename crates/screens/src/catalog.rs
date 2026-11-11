@@ -5584,26 +5584,11 @@ pub mod act {
             }
         }
 
-        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-        pub enum AddTaskArrivedSystem {
-            #[default]
-            PhoneReminders,
-        }
-        impl AddTaskArrivedSystem {
-            fn wire(self) -> &'static str {
-                match self {
-                    Self::PhoneReminders => "phone_reminders",
-                }
-            }
-        }
-
         /// Add a task through task.add: dated, prioritized, estimated, repeating, reminded, linked, filed in a project and section, or as a subtask of an open top-level task; or founded already done (`done_at`), which is how a completed imported item lands.
         #[derive(Clone, Debug, Default)]
         pub struct AddTask {
             pub title: String,
             pub anchor: Option<AddTaskAnchor>,
-            pub arrived_label: Option<String>,
-            pub arrived_system: Option<AddTaskArrivedSystem>,
             pub description: Field<String>,
             pub done_at: Field<String>,
             pub due: Field<String>,
@@ -5626,8 +5611,6 @@ pub mod act {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("title".to_owned(), text(self.title));
                 if let Some(it) = self.anchor { map.insert("anchor".to_owned(), text(it.wire())); }
-                if let Some(it) = self.arrived_label { map.insert("arrived_label".to_owned(), text(it)); }
-                if let Some(it) = self.arrived_system { map.insert("arrived_system".to_owned(), text(it.wire())); }
                 put_field(&mut map, "description", self.description, |it| text(it));
                 put_field(&mut map, "done_at", self.done_at, |it| text(it));
                 put_field(&mut map, "due", self.due, |it| text(it));
@@ -6184,6 +6167,53 @@ pub mod act {
         }
         impl From<ExportIcs> for wire::ActRequest {
             fn from(value: ExportIcs) -> Self {
+                value.request()
+            }
+        }
+
+        /// Follow the phone's Reminders through follow.reminders, one list at a time: a field the member never changed follows the phone, one they changed stands, a reminder the vault does not know is matched by title to a task of the member's own before one is added, one the phone completes completes the task, and one gone from a complete read goes to the trash if the member never edited it.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowReminders {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+            pub since: Option<String>,
+        }
+        impl FollowReminders {
+            pub const NAME: &str = "follow-reminders";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowReminders> for wire::ActRequest {
+            fn from(value: FollowReminders) -> Self {
+                value.request()
+            }
+        }
+
+        /// Stop following one of the phone's Reminders lists through follow.stop: its origin is retired and its tasks forget their source. Every task stays, an ordinary one from now on. It is the Undo of follow-reminders, and it asks first because following again needs the phone's own read.
+        #[derive(Clone, Debug, Default)]
+        pub struct StopFollowing {
+            pub r#ref: String,
+        }
+        impl StopFollowing {
+            pub const NAME: &str = "stop-following";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("ref".to_owned(), text(self.r#ref));
+                map.insert("system".to_owned(), text("phone_reminders"));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<StopFollowing> for wire::ActRequest {
+            fn from(value: StopFollowing) -> Self {
                 value.request()
             }
         }

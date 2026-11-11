@@ -27,6 +27,7 @@ const SEEDED_AT: i64 = 1_760_000_000_000;
 const CONTACTS_KEY: &str = "people_contacts_imported";
 const CALENDAR_KEY: &str = "agenda_calendar_imported";
 const HEALTH_KEY: &str = "health_device";
+const REMINDERS_KEY: &str = "agenda_reminders_followed";
 
 /// What the shell was asked to read, and whether any ask carried a permission prompt.
 #[derive(Default, Debug, PartialEq, Eq)]
@@ -34,6 +35,7 @@ struct Reads {
     contacts: u32,
     calendar: u32,
     health: u32,
+    reminders: u32,
     folders: u32,
     permission_asked: u32,
 }
@@ -179,6 +181,7 @@ impl Rig {
                 F::ContactsRead(_) => Some("contacts-read".to_owned()),
                 F::CalendarRead(_) => Some("calendar-read".to_owned()),
                 F::HealthRead(_) => Some("health-read".to_owned()),
+                F::RemindersRead(_) => Some("reminders-read".to_owned()),
                 F::FoldersRead(_) => Some("folders-read".to_owned()),
                 _ => None,
             })
@@ -223,6 +226,15 @@ impl Rig {
                     ..wire::HealthSnapshot::default()
                 })
             }
+            Some(F::RemindersRead(read)) => {
+                self.reads.reminders += 1;
+                self.reads.permission_asked += u32::from(read.ask_permission);
+                assert!(
+                    read.include_completed,
+                    "a completed reminder is not a deleted one"
+                );
+                O::RemindersSnapshot(wire::RemindersSnapshot::default())
+            }
             Some(F::FoldersRead(_)) => {
                 self.reads.folders += 1;
                 O::FoldersListing(wire::FoldersListing {
@@ -259,7 +271,7 @@ fn ana() -> wire::PhoneContact {
 }
 
 #[test]
-fn the_session_watches_contacts_and_calendar_and_nothing_else() {
+fn the_session_watches_contacts_calendar_and_reminders_and_nothing_else() {
     let rig = Rig::new();
     let mut sources: Vec<i32> = rig.watches.iter().map(|(_, _, source)| *source).collect();
     sources.sort_unstable();
@@ -267,7 +279,8 @@ fn the_session_watches_contacts_and_calendar_and_nothing_else() {
         sources,
         [
             wire::ImportSource::Contacts as i32,
-            wire::ImportSource::Calendar as i32
+            wire::ImportSource::Calendar as i32,
+            wire::ImportSource::Reminders as i32
         ]
     );
 }
@@ -292,9 +305,28 @@ fn the_foreground_follows_every_connected_store_and_no_unconnected_one() {
             contacts: 1,
             calendar: 0,
             health: 1,
+            reminders: 0,
             folders: 1,
             permission_asked: 0,
         }
+    );
+}
+
+#[test]
+fn the_phones_reminders_are_read_only_where_this_device_follows_them_and_never_ask_a_permission() {
+    let mut rig = Rig::new().connected(REMINDERS_KEY, b"1");
+    rig.changed(wire::ImportSource::Reminders);
+    rig.settle();
+    rig.serve();
+    assert_eq!(rig.reads.reminders, 1);
+    assert_eq!(rig.reads.permission_asked, 0);
+    let mut rig = Rig::new();
+    rig.changed(wire::ImportSource::Reminders);
+    rig.settle();
+    rig.serve();
+    assert_eq!(
+        rig.reads.reminders, 0,
+        "a restored vault follows nothing until a Connect"
     );
 }
 

@@ -98,7 +98,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The twenty-one, in the manifest's own order.
+/// The twenty-three, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("add-task", "task.add"),
     act("edit-task", "task.edit"),
@@ -135,6 +135,9 @@ pub const ACTIONS: &[ActionRow] = &[
     // THE REMINDERS AS A FILE (#1185): the More sheet's Export and a reminder's Share. It writes
     // nothing (`writes_nothing`).
     act("export-ics", "task.export_ics"),
+    // THE PHONE'S REMINDERS, FOLLOWED (#1185), and its Undo: disconnecting (it asks first).
+    act("follow-reminders", "follow.reminders"),
+    confirmed("stop-following", "follow.stop"),
 ];
 
 /// The row for an action, by name.
@@ -166,7 +169,7 @@ mod tests {
 
     #[test]
     fn the_tasks_own_are_the_verbs_the_rest_are_shared_and_no_event_is_touched() {
-        assert_eq!(ACTIONS.len(), 21);
+        assert_eq!(ACTIONS.len(), 23);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("event.")),
             "Reminders never writes an event"
@@ -198,7 +201,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 20);
+        assert_eq!(act_scope_tables().len(), 22);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

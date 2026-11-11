@@ -1,7 +1,7 @@
 //! How an item **arrived**: the one mechanism for "this did not come from typing".
 //!
 //! A command that can bring an item in from outside (a photo from the camera roll or the
-//! picker, a vCard, a Markdown file, a Locker CSV, a scan or an upload, a phone's Reminders)
+//! picker, a vCard, a Markdown file, a Locker CSV, a scan or an upload)
 //! takes two optional inputs, `arrived_system` (`"vcard"`) and `arrived_label` (`"contacts.vcf"`). The
 //! command calls [`record`] for each item it adds, and this module writes:
 //!
@@ -34,7 +34,6 @@ pub const SYSTEMS: &[(&str, Kind)] = &[
     ("csv", Kind::LockerItem),
     ("scan", Kind::Document),
     ("upload", Kind::Document),
-    ("phone_reminders", Kind::Task),
 ];
 
 /// The longest label kept, in characters.
@@ -53,7 +52,7 @@ macro_rules! arrived_property {
     () => {
         r#""arrived_system": {
           "type": "string",
-          "enum": ["camera_roll", "picker", "vcard", "markdown", "csv", "scan", "upload", "phone_reminders"],
+          "enum": ["camera_roll", "picker", "vcard", "markdown", "csv", "scan", "upload"],
           "description": "How the item came in when the member did not type it. Omit it for a typed item."
         },
         "arrived_label": {

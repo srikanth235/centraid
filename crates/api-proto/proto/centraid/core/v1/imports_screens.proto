@@ -460,6 +460,10 @@ message PhoneReminder {
   reserved 12, 13;
   reserved "external_id", "parent_id";
   string url = 14;
+  // 17 and 18 let the vault FOLLOW the Reminders store: the reminder's durable id on the phone
+  // (EventKit's external identifier, else its item identifier), and its list's identifier.
+  string phone_id = 17;
+  string list_id = 18;
   bool completed = 15;
   // When it was completed, `YYYY-MM-DDTHH:MM:SSZ` (UTC), or empty.
   string completed_at = 16;

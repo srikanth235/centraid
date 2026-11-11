@@ -61,8 +61,8 @@ mod origin_tests {
         }
     }
 
-    /// `shell.origin-of`: a typed item answers nothing, a one-shot arrival says its file (the
-    /// followed stores' rows are read in the vault's own test).
+    /// `shell.origin-of`: a typed item answers nothing, the followed stores' and arrivals'
+    /// rows are read in the vault's and the screens' tests.
     #[test]
     fn the_read_names_an_arrival_and_a_followed_store_and_is_empty_for_a_typed_item() {
         let dir = centraid_ontology::scratch::scratch_dir();
@@ -83,19 +83,10 @@ mod origin_tests {
             outcome.output
         };
         let typed = run("task.add", serde_json::json!({ "title": "typed" }));
-        let arrived = run(
-            "task.add",
-            serde_json::json!({ "title": "a", "arrived_system": "phone_reminders",
-                                "arrived_label": "Groceries" }),
-        );
         handle
             .with_vault(|vault| {
                 let id_of = |output: &serde_json::Value| output["id"].as_str().unwrap().to_owned();
                 assert_eq!(say(vault, &id_of(&typed)), (String::new(), String::new()));
-                assert_eq!(
-                    say(vault, &id_of(&arrived)),
-                    ("phone_reminders".to_owned(), "Groceries".to_owned())
-                );
                 Ok(())
             })
             .expect("a vault");

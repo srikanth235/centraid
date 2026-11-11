@@ -158,6 +158,16 @@
         "schema": "task",
         "table": "reopen",
         "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "reminders",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "stop",
+        "verbs": "act"
       }
     ]
   },
@@ -247,16 +257,6 @@
           "done_at": {
             "type": ["string", "null"],
             "description": "Founds the task already done, at this instant: an import of a completed item."
-          },
-          "arrived_system": {
-            "type": "string",
-            "enum": ["phone_reminders"],
-            "description": "How the item came in when the member did not type it. Omit it for a typed item."
-          },
-          "arrived_label": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "The file or device it came from: a name, never content. Required with arrived_system."
           }
         },
         "required": ["title"],
@@ -1213,17 +1213,169 @@
       "input": {
         "type": "object",
         "properties": {
-          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] },
-          "task_id": { "type": "string", "minLength": 1, "aliases": ["task"] }
+          "list_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["list"]
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["task"]
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "follow-reminders",
+      "verb": "import",
+      "kind": "task",
+      "inverse": "stop-following",
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.reminders",
+      "phrasings": [
+        "import my phone's reminders",
+        "sync reminders from this phone",
+        "pull in my reminders"
+      ],
+      "description": "Follow the phone's Reminders through follow.reminders, one list at a time: a field the member never changed follows the phone, one they changed stands, a reminder the vault does not know is matched by title to a task of the member's own before one is added, one the phone completes completes the task, and one gone from a complete read goes to the trash if the member never edited it.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "The colour the phone paints the store with, as the design wheel names it.",
+                "maxLength": 64,
+                "type": ["string", "null"]
+              },
+              "config": {
+                "type": ["object", "null"]
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                },
+                "size": {
+                  "description": "How large the bytes a record names are, counted by the phone; the command claims them.",
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "stop-following",
+      "verb": "detach",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "command": "follow.stop",
+      "phrasings": [
+        "stop reading the phone's reminders",
+        "disconnect reminders on this phone",
+        "stop following phone reminders"
+      ],
+      "description": "Stop following one of the phone's Reminders lists through follow.stop: its origin is retired and its tasks forget their source. Every task stays, an ordinary one from now on. It is the Undo of follow-reminders, and it asks first because following again needs the phone's own read.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["phone_reminders"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     }

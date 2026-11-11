@@ -25,6 +25,16 @@ use crate::screen::{Ctx, Screen};
 use crate::shell::row_routes as rows;
 use crate::strings::{Locale, fill, imports as words};
 
+/// THIS DEVICE FOLLOWS ITS REMINDERS from now on, once the vault took a list: the habit is written
+/// and the coordinator told.
+fn followed(ctx: &Ctx, outcome: &reminders::Outcome) -> Vec<wire::Effect> {
+    if !outcome.told {
+        return Vec::new();
+    }
+    ctx.follows().changed(ctx, crate::follow::Store::Reminders);
+    vec![reminders::habit_set()]
+}
+
 /// The reason a shell gives when the phone has no Reminders store to read: the fact, never words.
 pub const UNAVAILABLE: &str = "unavailable";
 
@@ -274,11 +284,14 @@ impl Screen for Made {
                 }
             }
             (E::EffectResult(result), Step::Reminders) if self.standalone => {
+                let mut effects = Vec::new();
                 let sentence = match &result.outcome {
-                    Some(O::RemindersSnapshot(snapshot)) => reminders::status_line(
-                        ctx.locale(),
-                        reminders::run(ctx, &snapshot.reminders, self.include_completed),
-                    ),
+                    Some(O::RemindersSnapshot(snapshot)) => {
+                        let outcome =
+                            reminders::run(ctx, &snapshot.reminders, self.include_completed);
+                        effects = followed(ctx, &outcome);
+                        reminders::status_line(ctx.locale(), outcome)
+                    }
                     Some(O::Failed(failed)) if failed.denied => {
                         words::reminders_denied(ctx.locale())
                     }
@@ -295,18 +308,20 @@ impl Screen for Made {
                     sentence,
                 }];
                 self.step = Step::Done;
-                Vec::new()
+                effects
             }
             (E::EffectResult(result), Step::Reminders) => match &result.outcome {
                 Some(O::RemindersSnapshot(snapshot)) => {
                     let outcome = reminders::run(ctx, &snapshot.reminders, self.include_completed);
+                    let mut effects = followed(ctx, &outcome);
                     if outcome.added > 0 {
                         self.came.push(Came {
                             app: "reminders",
                             sentence: reminders::sentence(ctx.locale(), outcome),
                         });
                     }
-                    self.next(ctx)
+                    effects.extend(self.next(ctx));
+                    effects
                 }
                 // Refused or unavailable: it says nothing.
                 Some(O::Failed(_)) => self.next(ctx),

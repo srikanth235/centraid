@@ -1357,12 +1357,6 @@ pub const ARRIVAL_SITES: &[ArrivalSite] = &[
         call: "act::photos::Upload",
         path: "a photo picked to attach",
     },
-    ArrivalSite {
-        app: "reminders",
-        file: "crates/screens/src/imports/reminders.rs",
-        call: "act::reminders::AddTask",
-        path: "the phone's Reminders import",
-    },
 ];
 
 /// The catalog structs of the app's actions whose input takes `arrived` (the manifest says which

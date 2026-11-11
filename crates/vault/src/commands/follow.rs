@@ -303,6 +303,18 @@ fn calendar_defaults(
     )])
 }
 
+fn project_defaults(
+    _: &Connection,
+    origin: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    Ok(origin
+        .fills
+        .clone()
+        .map(|project| ("project_id", project.into()))
+        .into_iter()
+        .collect())
+}
+
 fn folder_defaults(
     _: &Connection,
     origin: &OriginRow,
@@ -394,7 +406,7 @@ const LINE: Child = Child {
     stamp: None,
 };
 
-/// The five systems the vault follows.
+/// The six systems the vault follows.
 pub const SYSTEMS: &[SystemMap] = &[
     SystemMap {
         system: "contacts",
@@ -489,6 +501,39 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Trash,
         window: None,
         defaults: folder_defaults,
+        founds: None,
+        shape: as_stated,
+        settle: nothing_to_settle,
+        named: nothing_to_settle,
+    },
+    // A reminder of the phone's Reminders app (iOS): a task in the list it sat in. The
+    // member's own edit of a field stands; a reminder the phone completes completes the task
+    // (the status and its date are two fields written as one, so the table's own CHECK holds),
+    // and one deleted on the phone goes to the trash if the member never touched the task.
+    SystemMap {
+        system: "phone_reminders",
+        command: "follow.reminders",
+        kind: Kind::Task,
+        fills: Some(Kind::Project),
+        origin: OriginOf::Phone,
+        claims: None,
+        fields: &[
+            "description",
+            "due",
+            "zone",
+            "priority",
+            "rule",
+            "remind_before_min",
+            "url",
+            "status",
+            "done_at",
+        ],
+        fixed: &[],
+        children: &[],
+        match_on: &[Match::Title],
+        gone: Gone::Trash,
+        window: None,
+        defaults: project_defaults,
         founds: None,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -872,6 +917,10 @@ fn write_fields(
         return Ok(());
     }
     let connection = ctx.connection();
+    // The kind's own columns go in ONE statement: a table's CHECKs judge the row after the
+    // statement, so fields that only hold together (a task's status and the date it was done,
+    // its rule and its due) are never seen half-written.
+    let mut columns: Vec<(&str, rusqlite::types::Value)> = Vec::new();
     for (name, value) in fields {
         if *name == "title" {
             connection.execute(
@@ -879,15 +928,25 @@ fn write_fields(
                 rusqlite::params![id, value.as_str().unwrap_or_default()],
             )?;
         } else {
-            connection.execute(
-                &format!(
-                    "UPDATE {} SET {} = ?2 WHERE id = ?1",
-                    crate::log::quoted(map.kind.host()),
-                    crate::log::quoted(name)
-                ),
-                rusqlite::params![id, to_sql(value)],
-            )?;
+            columns.push((name, to_sql(value)));
         }
+    }
+    if !columns.is_empty() {
+        let sets = columns
+            .iter()
+            .enumerate()
+            .map(|(index, (name, _))| format!("{} = ?{}", crate::log::quoted(name), index + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut values: Vec<rusqlite::types::Value> = vec![id.to_owned().into()];
+        values.extend(columns.into_iter().map(|(_, value)| value));
+        connection.execute(
+            &format!(
+                "UPDATE {} SET {sets} WHERE id = ?1",
+                crate::log::quoted(map.kind.host())
+            ),
+            rusqlite::params_from_iter(values),
+        )?;
     }
     (map.settle)(ctx, id)?;
     ctx.touch(id)
@@ -1090,6 +1149,7 @@ fn match_existing(
           WHERE e.kind = ?1 AND e.deleted_at IS NULL
             AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
                               AND s.system NOT IN ({})
+                              AND s.stated <> '{{}}'
                               AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id",
@@ -1775,7 +1835,7 @@ const STOP_SCHEMA: &str = r#"{
   "required": ["system", "ref"],
   "additionalProperties": false,
   "properties": {
-    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement"] },
+    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement", "phone_reminders"] },
     "ref": { "type": "string", "minLength": 1 }
   }
 }"#;

@@ -70,15 +70,17 @@ pub enum Store {
     Calendar,
     Files,
     Health,
+    Reminders,
 }
 
 impl Store {
     /// Every store, in the order a window follows them.
-    pub const ALL: [Store; 4] = [
+    pub const ALL: [Store; 5] = [
         Store::Contacts,
         Store::Calendar,
         Store::Files,
         Store::Health,
+        Store::Reminders,
     ];
 
     /// The home screen that draws what a pass over this store found (contacts' row, health's
@@ -90,6 +92,7 @@ impl Store {
             Store::Health => Some(crate::health::HOME),
             Store::Calendar => Some(crate::calendar::HOME),
             Store::Files => Some(crate::docs::DRIVE),
+            Store::Reminders => None,
         }
     }
 
@@ -102,6 +105,7 @@ impl Store {
             Store::Calendar => words::source_calendar(locale),
             Store::Files => words::source_files(locale),
             Store::Health => words::source_health(locale),
+            Store::Reminders => words::source_reminders(locale),
         }
     }
 
@@ -113,6 +117,7 @@ impl Store {
             Store::Calendar => "calendar",
             Store::Files => "files",
             Store::Health => "health",
+            Store::Reminders => "reminders",
         }
     }
 

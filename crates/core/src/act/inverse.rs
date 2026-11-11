@@ -125,7 +125,9 @@ const CALENDAR: &[Row] = &[
     ("follow-calendar", "stop-following", Input::Stops("calendar")),
 ];
 
+#[rustfmt::skip]
 const REMINDERS: &[Row] = &[
+    ("follow-reminders", "stop-following", Input::Stops("phone_reminders")),
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
     ("add-task", "delete-task", Input::Created),
