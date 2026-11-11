@@ -93,6 +93,10 @@ struct Home {
     contacts: ContactsFollow,
     /// The member tapped "Stop reading Phone contacts" and has not answered the confirm.
     asking_stop: bool,
+    /// The accounts the vault follows from the phone's Contacts (their origin refs), as it stores
+    /// them: what the More sheet's stop row says, right after a cold start too. `None` until the
+    /// read has landed.
+    stored: Option<Vec<String>>,
     /// The contacts flow has asked the shell whether this device follows.
     attached: bool,
 }
@@ -111,11 +115,25 @@ impl Home {
             undo: Undo::default(),
             contacts: ContactsFollow::new(),
             asking_stop: false,
+            stored: None,
             attached: false,
         }
     }
 
+    /// Read what the vault stores of the phone's contacts (the stop row's truth).
+    fn read_stored(&mut self, ctx: &Ctx) {
+        self.stored = crate::follow::stored_origins(ctx, "contacts");
+    }
+
+    /// Whether the More sheet offers "Stop reading": the vault follows accounts from the phone.
+    fn can_stop(&self) -> bool {
+        self.stored
+            .as_ref()
+            .is_some_and(|stored| !stored.is_empty())
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
+        self.read_stored(ctx);
         let locale = ctx.locale();
         if self.search.active() {
             // A refresh of the same term keeps the rows shown under a note.
@@ -308,7 +326,10 @@ impl Home {
         if !std::mem::take(&mut self.asking_stop) {
             return Vec::new();
         }
-        let effects = match self.contacts.stop(ctx) {
+        let effects = match self
+            .contacts
+            .stop(ctx, &self.stored.clone().unwrap_or_default())
+        {
             Some(effects) => {
                 self.undo.say(words::contacts_stopped(locale));
                 effects
@@ -368,7 +389,7 @@ impl Home {
             H::SheetClosed(_) => self.sheet = wire::people_home_state::Sheet::Unspecified,
             // THE ONE MORE ROW WITH NO ROUTE: it asks before it stops.
             H::MoreRow(picked) => {
-                if picked.key == MORE_STOP && self.contacts.can_stop(ctx) {
+                if picked.key == MORE_STOP && self.can_stop() {
                     self.asking_stop = true;
                     self.sheet = wire::people_home_state::Sheet::Unspecified;
                 }
@@ -520,6 +541,8 @@ impl Screen for Home {
         };
         // The contacts flow's own events first: the answers to the effects it asked.
         if let Some(effects) = self.contacts.on_event(&kind, ctx) {
+            // An import that followed accounts changed what the vault stores.
+            self.read_stored(ctx);
             return effects;
         }
         match kind {
@@ -618,7 +641,7 @@ impl Screen for Home {
                 ]
                 .into_iter()
                 // THE STOP ROW, last (as Health's): the same words for every followed store.
-                .chain(self.contacts.can_stop(ctx).then(|| wire::PeopleMoreRow {
+                .chain(self.can_stop().then(|| wire::PeopleMoreRow {
                     key: MORE_STOP.to_owned(),
                     label: crate::kit::follow::stop_row(locale, &words::contacts_title(locale)),
                     icon_key: "Stop".to_owned(),

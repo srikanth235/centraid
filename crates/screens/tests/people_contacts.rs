@@ -333,3 +333,49 @@ fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the
 fn row_state(d: &Driver, i: u64) -> i32 {
     row(d, i).state
 }
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_so_the_stop_row_is_there_and_stop_works_from_it() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let mut d = clean();
+    let i = begin(&mut d);
+    not_following(&mut d);
+    assert!(stop_row(&d, i).is_none(), "nothing is stored yet");
+    // The vault follows an account of the phone's contacts (a pass in an earlier launch stored
+    // it); THIS runtime has run no pass and holds nothing in memory about one.
+    let followed = d.act(
+        wire::ActRequest::from(act::people::FollowContacts {
+            origin: serde_json::json!({ "ref": "acct-1", "label": "iCloud", "device_id": "phone" })
+                .to_string(),
+            records: "[]".to_owned(),
+            complete: Some(false),
+            since: None,
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    d.send(i, wire::screen_event::Kind::Appeared(wire::Appeared {}));
+    d.effects.clear();
+
+    // THE ROW SAYS WHAT IS STORED.
+    let stop = stop_row(&d, i).expect("the vault follows: the row is there");
+    assert_eq!(stop.label, "Stop reading Phone contacts");
+    // And Stop works from that state: it retires the stored account.
+    send_home(
+        &mut d,
+        i,
+        H::MoreRow(ev::MoreRowPicked {
+            key: "stop".to_owned(),
+        }),
+    );
+    assert!(home_state(d.view(i)).stop.is_some());
+    send_home(&mut d, i, H::StopConfirmed(ev::StopConfirmed {}));
+    assert_eq!(status(&d, i), "People stopped reading your phone contacts.");
+    assert!(stop_row(&d, i).is_none(), "the stored origin is gone");
+}

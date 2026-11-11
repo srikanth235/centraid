@@ -44,6 +44,8 @@ use std::time::Instant;
 use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
+use crate::catalog::load;
+use crate::kit::read::{self, Reading};
 use crate::screen::Ctx;
 use crate::strings::Locale;
 use crate::strings::follow as words;
@@ -146,9 +148,6 @@ pub struct Report {
     /// The last read did not cover the whole store (limited access, a file that would not
     /// read): what it did read was merged, and nothing was removed for what it missed.
     pub incomplete: bool,
-    /// The origins the passes over this store followed (contacts: one per account), which the
-    /// member's "Stop reading" retires. Empty until a pass has run.
-    pub origins: Vec<String>,
 }
 
 impl Report {
@@ -264,27 +263,6 @@ impl Follows {
         report.incomplete = incomplete;
     }
 
-    /// A pass over `store` followed `origins`: the ones a stop must retire.
-    pub fn followed_origins(&self, store: Store, origins: &[String]) {
-        let mut inner = self.lock();
-        let held = &mut inner.reports.entry(store).or_default().origins;
-        for origin in origins {
-            if !held.contains(origin) {
-                held.push(origin.clone());
-            }
-        }
-    }
-
-    /// The member stopped reading `store`: no origin is followed any more.
-    pub fn stopped(&self, store: Store) {
-        self.lock()
-            .reports
-            .entry(store)
-            .or_default()
-            .origins
-            .clear();
-    }
-
     /// The types the OS refused in the last read of `store`.
     pub fn refused(&self, store: Store, refused: &[String]) {
         refused.clone_into(&mut self.lock().reports.entry(store).or_default().refused);
@@ -357,5 +335,32 @@ impl Follows {
 
     pub(crate) fn take_released(&self) -> Vec<String> {
         std::mem::take(&mut self.lock().released)
+    }
+}
+
+/// THE ORIGINS THE VAULT FOLLOWS for `system` (`contacts`, `calendar`, `phone_reminders`), by
+/// their refs, as it STORES them (`shell.followed-stores`): what a More sheet's stop or turn-on
+/// row says, and what a stop retires. It never comes from what a pass has done since launch, so
+/// a cold start says the right thing. A stopped follow deletes its origin, so none stored is none
+/// followed. `None` when the read did not land: the caller says nothing, never a wrong thing.
+#[must_use]
+pub(crate) fn stored_origins(ctx: &Ctx, system: &str) -> Option<Vec<String>> {
+    use wire::app_query_response::Answer;
+    match read::read(
+        ctx,
+        load::shell::FollowedStores::default(),
+        |answer| match answer {
+            Answer::FollowedStores(held) => Some(held.stores),
+            _ => None,
+        },
+    ) {
+        Reading::Data(stores) => Some(
+            stores
+                .into_iter()
+                .filter(|store| store.system == system)
+                .map(|store| store.origin_ref)
+                .collect(),
+        ),
+        _ => None,
     }
 }

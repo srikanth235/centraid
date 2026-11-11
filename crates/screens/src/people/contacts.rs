@@ -472,23 +472,17 @@ impl ContactsFollow {
         self.import(ctx)
     }
 
-    /// Whether "Stop reading" is offered: this device follows and a pass has said which accounts.
-    #[must_use]
-    pub fn can_stop(&self, ctx: &Ctx) -> bool {
-        (self.followed || self.paused) && !ctx.follows().report(Store::Contacts).origins.is_empty()
-    }
-
     /// STOP READING: every account the passes followed is retired (`stop-following`, the same door
     /// chat and Undo use) and this device no longer follows, so the row offers "Turn on" again.
     /// **Every person stays**, an ordinary one from now on. `None` when the vault refused part of
     /// it (the rest is done, and stopping again finishes it); the effects forget the habit.
-    pub fn stop(&mut self, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
+    pub fn stop(&mut self, ctx: &Ctx, stored: &[String]) -> Option<Vec<wire::Effect>> {
         let mut clean = true;
-        for origin in ctx.follows().report(Store::Contacts).origins {
+        for origin in stored {
             let request = act::people::StopFollowing {
                 r#ref: origin.clone(),
             };
-            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            let key = kit_act::key(&["stop-following", origin], kit_act::fresh());
             // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the row
             // offers "Turn on" again, so no line of its own takes it back.
             clean = kit_act::act(ctx, request, &key).committed && clean;
@@ -496,7 +490,6 @@ impl ContactsFollow {
         if !clean {
             return None;
         }
-        ctx.follows().stopped(Store::Contacts);
         self.followed = false;
         self.paused = false;
         Some(vec![keychain(wire::keychain_op::Op::Delete, Vec::new())])
@@ -697,7 +690,6 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
     }
     ctx.follows()
         .judged(Store::Contacts, doubted, !batch.complete);
-    ctx.follows().followed_origins(Store::Contacts, &followed);
     (outcome, told)
 }
 

@@ -784,31 +784,17 @@ impl CalendarFollow {
         self.followed
     }
 
-    /// Whether "Stop reading" is offered: this device follows and a pass has said which calendars
-    /// (People's rule).
-    #[must_use]
-    pub fn can_stop(&self, ctx: &Ctx) -> bool {
-        self.followed && !ctx.follows().report(Store::Calendar).origins.is_empty()
-    }
-
-    /// Whether "Turn on" is offered in the stop row's place: this device does not follow, and
-    /// nothing is being asked of the phone or the keychain right now.
-    #[must_use]
-    pub fn can_turn_on(&self) -> bool {
-        !self.followed && self.waiting == Waiting::Nothing
-    }
-
     /// STOP READING: every calendar the passes followed is retired (`stop-following`, the same door
     /// chat and Undo use) and this device no longer follows. **Every event stays**, an ordinary one
     /// from now on. `None` when the vault refused part of it (the rest is done, and stopping again
     /// finishes it); the effects forget the habit.
-    pub fn stop(&mut self, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
+    pub fn stop(&mut self, ctx: &Ctx, stored: &[String]) -> Option<Vec<wire::Effect>> {
         let mut clean = true;
-        for origin in ctx.follows().report(Store::Calendar).origins {
+        for origin in stored {
             let request = act::calendar::StopFollowing {
                 r#ref: origin.clone(),
             };
-            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            let key = kit_act::key(&["stop-following", origin], kit_act::fresh());
             // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the empty
             // state offers Import again, so no line of its own takes it back.
             clean = kit_act::act(ctx, request, &key).committed && clean;
@@ -816,7 +802,6 @@ impl CalendarFollow {
         if !clean {
             return None;
         }
-        ctx.follows().stopped(Store::Calendar);
         self.followed = false;
         self.status = None;
         self.outcome = None;
@@ -944,8 +929,6 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
     }
     ctx.follows()
         .judged(Store::Calendar, doubted, !batch.complete);
-    // THE ORIGINS A STOP MUST RETIRE (#1185).
-    ctx.follows().followed_origins(Store::Calendar, &followed);
     (outcome, told)
 }
 

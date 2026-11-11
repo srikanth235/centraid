@@ -367,7 +367,9 @@ fn the_bands_more_sheet_holds_the_trash_and_the_calendars_sheet_keeps_its_calend
     let state = home_state(&world, home);
     assert_eq!(state.sheet, wire::agenda_home_state::Sheet::More as i32);
     assert_eq!(state.chrome.as_ref().unwrap().more_title, "Calendar");
-    assert_eq!(state.more_rows.len(), 2);
+    // Export, Trash, and the stop slot offering Turn on (the vault follows nothing).
+    assert_eq!(state.more_rows.len(), 3);
+    assert_eq!(state.more_rows[2].key, "turn-on");
     assert_eq!(
         (
             state.more_rows[0].label.as_str(),

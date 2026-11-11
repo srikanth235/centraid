@@ -76,6 +76,10 @@ pub(super) struct Home {
     calendar: CalendarFollow,
     /// The stop-reading confirm is up (#1185).
     asking_stop: bool,
+    /// The calendars the vault follows from the phone (their origin refs), as it stores them:
+    /// what the menu's stop and turn-on row say, right after a cold start too. `None` until the
+    /// read has landed.
+    stored: Option<Vec<String>>,
 }
 
 /// The registry factory for Calendar's home.
@@ -120,6 +124,7 @@ impl Home {
             held: Held::default(),
             calendar: CalendarFollow::new(),
             asking_stop: false,
+            stored: None,
         }
     }
 
@@ -135,7 +140,25 @@ impl Home {
 
     /// A pull, or a row moved: the held answers are stale whatever search is
     /// doing, so the next read asks again.
+    /// Read what the vault stores of the phone's calendars (the stop slot's truth).
+    fn read_stored(&mut self, ctx: &Ctx) {
+        self.stored = crate::follow::stored_origins(ctx, "calendar");
+    }
+
+    /// Whether the menu offers "Stop reading": the vault follows calendars from the phone.
+    fn can_stop(&self) -> bool {
+        self.stored
+            .as_ref()
+            .is_some_and(|stored| !stored.is_empty())
+    }
+
+    /// Whether the menu offers "Turn on" in its place: the vault follows none (known, not guessed).
+    fn can_turn_on(&self) -> bool {
+        self.stored.as_ref().is_some_and(Vec::is_empty)
+    }
+
     fn refresh(&mut self, ctx: &Ctx) {
+        self.read_stored(ctx);
         let before = std::mem::take(&mut self.held);
         // A refresh that failed keeps what was shown, under its note.
         if !self.read(ctx) {
@@ -355,7 +378,10 @@ impl Home {
         if !std::mem::take(&mut self.asking_stop) {
             return Vec::new();
         }
-        let effects = match self.calendar.stop(ctx) {
+        let effects = match self
+            .calendar
+            .stop(ctx, &self.stored.clone().unwrap_or_default())
+        {
             Some(effects) => {
                 self.ops.say(calendar_words::calendars_stopped(locale));
                 effects
@@ -374,7 +400,7 @@ impl Home {
     fn more_row(&mut self, key: &str, ctx: &Ctx) {
         // THE ONE MENU ROW WITH NO ROUTE: it asks before it stops.
         if self.menu && key == chrome::MORE_STOP {
-            if self.calendar.can_stop(ctx) {
+            if self.can_stop() {
                 self.asking_stop = true;
                 self.sheet = Sheet::None;
                 self.menu = false;
@@ -486,11 +512,7 @@ impl Home {
             return Vec::new();
         }
         if self.menu {
-            return chrome::menu_rows(
-                ctx.locale(),
-                self.calendar.can_stop(ctx),
-                self.calendar.can_turn_on(),
-            );
+            return chrome::menu_rows(ctx.locale(), self.can_stop(), self.can_turn_on());
         }
         let calendars = self
             .data(ctx)
@@ -525,9 +547,7 @@ impl Screen for Home {
                 // THE TURN-ON ROW (the stop row's slot after a stop): the sheet is done and the
                 // phone is asked for the permission now, as the empty state's Import does.
                 Some(H::MoreRow(picked))
-                    if self.menu
-                        && picked.key == chrome::MORE_TURN_ON
-                        && self.calendar.can_turn_on() =>
+                    if self.menu && picked.key == chrome::MORE_TURN_ON && self.can_turn_on() =>
                 {
                     self.sheet = Sheet::None;
                     self.menu = false;
@@ -551,10 +571,13 @@ impl Screen for Home {
                 None => {}
             },
             Some(E::EffectResult(result)) => {
-                return self
+                let effects = self
                     .calendar
                     .on_event(&E::EffectResult(result), ctx)
                     .unwrap_or_default();
+                // An import that followed calendars changed what the vault stores.
+                self.read_stored(ctx);
+                return effects;
             }
             Some(other) => {
                 if let Some(effects) = self.calendar.on_event(&other, ctx) {
@@ -682,11 +705,7 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else if menu_up {
-                        chrome::menu_rows(
-                            locale,
-                            self.calendar.can_stop(ctx),
-                            self.calendar.can_turn_on(),
-                        )
+                        chrome::menu_rows(locale, self.can_stop(), self.can_turn_on())
                     } else {
                         chrome::more_rows(
                             locale,

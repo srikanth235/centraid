@@ -61,28 +61,11 @@ fn habit(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
 /// The vault's name for the phone's Reminders as a followed system (`origin.system`).
 pub(crate) const SYSTEM: &str = "phone_reminders";
 
-/// THE LISTS THE VAULT FOLLOWS from the phone's Reminders, by their origin refs, read from what is
-/// stored (a stopped follow deletes its origin), never from what a pass has done since launch.
-/// `None` when the read did not land: the caller says nothing about it, rather than a wrong thing.
+/// THE LISTS THE VAULT FOLLOWS from the phone's Reminders, by their origin refs, as it stores them
+/// (the shared read, [`crate::follow::stored_origins`]). `None` when the read did not land.
 #[must_use]
 pub(crate) fn followed_lists(ctx: &Ctx) -> Option<Vec<String>> {
-    match read::read(
-        ctx,
-        load::shell::FollowedStores::default(),
-        |answer| match answer {
-            Answer::FollowedStores(held) => Some(held.stores),
-            _ => None,
-        },
-    ) {
-        Reading::Data(stores) => Some(
-            stores
-                .into_iter()
-                .filter(|store| store.system == SYSTEM)
-                .map(|store| store.origin_ref)
-                .collect(),
-        ),
-        _ => None,
-    }
+    crate::follow::stored_origins(ctx, SYSTEM)
 }
 
 /// This device no longer follows its Reminders.

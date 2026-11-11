@@ -1431,3 +1431,46 @@ fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the
     send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
     assert!(world.driver.effects.is_empty());
 }
+
+#[test]
+fn a_cold_start_reads_the_stored_follow_so_the_stop_row_is_there_and_stop_works_from_it() {
+    use centraid_screens::field::Keyed;
+    use wire::agenda_home_event::{Kind as H, StopConfirmed};
+    let mut world = stop_world();
+    let home = world
+        .driver
+        .push(centraid_screens::agenda::TAB, agenda_home_route());
+    habit(&mut world, false);
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+
+    // The vault follows a calendar of the phone's (a pass in an earlier launch stored it); THIS
+    // runtime has run no pass and holds nothing in memory about one.
+    let followed = world.driver.act(
+        wire::ActRequest::from(act::calendar::FollowCalendar {
+            origin: serde_json::json!({ "ref": "cal-1", "label": "Work", "device_id": "phone" })
+                .to_string(),
+            records: "[]".to_owned(),
+            complete: Some(false),
+            since: None,
+        })
+        .keyed("arrange:cold-start".to_owned()),
+    );
+    assert_eq!(
+        followed.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        followed.reason
+    );
+    world.driver.send(home, E::Appeared(wire::Appeared {}));
+    open_menu(&mut world, home);
+    // THE SLOT SAYS WHAT IS STORED: Stop, never Turn on while the vault follows.
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+
+    // And Stop works from that state.
+    tap_stop(&mut world, home);
+    assert!(home_state(&world, home).stop.is_some());
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+}
