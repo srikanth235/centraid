@@ -442,6 +442,75 @@ impl crate::file::Vault {
         self.field_cell(item_id, field_id, "otp")
     }
 
+    /// One sealed cell of a LIVE item as an EARLIER version held it, for a reveal of a changed
+    /// secret: the item's own cell (`column`, one of the sealed item cells) or, when `field_id`
+    /// is stated, that custom field's `sealed`-kind value. `None` when the item is not live, the
+    /// version is not in its history, or the cell is not one a reveal may open (a one-time-code
+    /// seed is `SEED_NOT_SHOWN` for the item and for a field, as it is live). The ciphertext is
+    /// as the version kept it, bound to the same row id and key generation it was sealed with, so
+    /// the core opens it with the same key and the same AAD as the live cell.
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_sealed_earlier_cell(
+        &self,
+        item_id: &str,
+        seq: i64,
+        column: &str,
+        field_id: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
+        let by_field = !field_id.is_empty();
+        if by_field && column != "value_sealed"
+            || !by_field && !crate::commands::locker::SEALED_ITEM_CELLS.contains(&column)
+        {
+            return Ok(None);
+        }
+        self.read(|connection| {
+            let live: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                  WHERE i.id = ?1 AND e.deleted_at IS NULL",
+                [item_id],
+                |row| row.get(0),
+            )?;
+            if live != 1 {
+                return Ok(None);
+            }
+            let Some(state) = crate::history::version_state(connection, item_id, seq)? else {
+                return Ok(None);
+            };
+            let text = |row: &serde_json::Value, name: &str| {
+                row.get(name)
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+            };
+            let (row, bound) = if by_field {
+                let field = state
+                    .get("locker_item_field")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .find(|row| text(row, "field_id").as_deref() == Some(field_id));
+                match field {
+                    Some(field) if text(field, "kind").as_deref() == Some("sealed") => {
+                        (field.clone(), "value_sealed")
+                    }
+                    _ => return Ok(None),
+                }
+            } else {
+                match state.get("locker_item").filter(|row| row.is_object()) {
+                    Some(item) => (item.clone(), column),
+                    None => return Ok(None),
+                }
+            };
+            let ciphertext = text(&row, bound);
+            Ok(Some(SealedItemCell {
+                key_id: ciphertext.as_ref().and_then(|_| text(&row, "key_id")),
+                ciphertext,
+            }))
+        })
+    }
+
     fn field_cell(
         &self,
         item_id: &str,

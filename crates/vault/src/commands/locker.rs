@@ -109,7 +109,7 @@
 //!   kind (`Risk::Medium`, `confirm`).
 //! - **No entity-wide reader carries a sealed cell**: no command's input is
 //!   stored, and a message scrubs the five cells (and a duplicate's `fields[].value`) out; a Locker item's
-//!   history keeps its plain fields and never a sealed cell (`crate::history`), `text_of` indexes the plain fields only, a page over `entity`
+//!   history keeps a sealed cell only as the `lk1:` ciphertext it is, masked on read (`crate::history`), `text_of` indexes the plain fields only, a page over `entity`
 //!   or `edge` serves the item's plain rows and no sealed column. The chat's
 //!   assistant is the member's principal and meets the same wall: a sealed
 //!   value is a channel its door and runtime keep closed, not an authority

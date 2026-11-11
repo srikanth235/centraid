@@ -140,15 +140,15 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["to_id"],
         },
     ),
-    // A sealed custom field is its sealed value and nothing else worth keeping: it is not state.
-    // An `otp` field is a one-time-code seed, sealed like the rest (the schema forbids its plain
-    // column), so it is not state either.
+    // A custom field's sealed value (a `sealed` or `otp` kind) is kept like any other column, as
+    // the ciphertext it is: sealed under the same key and bound to the same field id, so a restore
+    // puts back a value the live reveal opens.
     (
         "locker_item_field",
         Role::Child {
             host: "locker_item",
             via: "item_id",
-            filter: Some("kind NOT IN ('sealed', 'otp')"),
+            filter: None,
             alias: "locker_item_field",
             key: &[],
         },
@@ -267,21 +267,10 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("txn", "currency", "bank-stated, never edited"),
     ("txn", "posted_on", "bank-stated, never edited"),
     ("txn", "amount_minor", "bank-stated, never edited"),
-    // Locker: the five sealed cells are never kept, and what is derived from or about them is not.
-    ("locker_item", "password", "sealed"),
-    ("locker_item", "otp_seed", "sealed"),
-    ("locker_item", "card_number", "sealed"),
-    ("locker_item", "cvv", "sealed"),
-    ("locker_item", "content", "sealed"),
-    (
-        "locker_item",
-        "password_set_at",
-        "stamped by a change to a sealed cell",
-    ),
-    ("locker_item", "key_id", "custody's, not the member's"),
+    // Locker: the five sealed cells, the stamp of the last change to one and the key generation
+    // they were sealed under are all kept (the ciphertext, never a plaintext), so a changed
+    // password comes back with its age. What is only a use of the item is not.
     ("locker_item", "last_used_at", "a use is not an edit"),
-    ("locker_item_field", "value_sealed", "sealed"),
-    ("locker_item_field", "key_id", "custody's, not the member's"),
     (
         "locker_item_field",
         "updated_at",
@@ -293,6 +282,16 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
         "the table's recursion guard",
     ),
 ];
+
+/// Whether `table.column` holds ciphertext under the Locker key (`lk1:`): kept in a state exactly
+/// as sealed, and shown nowhere but masked ([`crate::history::MASK`]). One list with the custody
+/// module's, so a sealed column added there is masked here without a second edit.
+#[must_use]
+pub fn is_sealed(table: &str, column: &str) -> bool {
+    crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS
+        .iter()
+        .any(|(name, _, columns)| *name == table && columns.contains(&column))
+}
 
 /// The values kept in a cell of their own on `revision`, not inline in `state`.
 pub const CONTENT: &[(&str, &str, Cell)] = &[

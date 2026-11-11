@@ -499,7 +499,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                     assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
                 }
                 // The action keys hold a caller's id and a digest, and a Locker item's history
-                // keeps its plain fields only: no revision carries a sealed cell.
+                // keeps its sealed cells only as the ciphertext they are: no revision carries a plaintext.
                 let keys: String = connection
                     .prepare("SELECT key || ' ' || asked FROM action_key")?
                     .query_map([], |row| row.get::<_, String>(0))?
@@ -808,11 +808,11 @@ fn an_otp_custom_field_is_sealed_and_never_plain_in_a_row_a_revision_or_the_inde
             );
             for state in &revisions {
                 assert!(!state.contains(SEED), "history copied an otp field's seed");
+                // The field and its sealed seed are state, as the ciphertext the live cell holds.
                 assert!(
-                    !state.contains("Backup code"),
-                    "history holds the otp field at all"
+                    state.contains("lk1:") || !state.contains("Backup code"),
+                    "history holds the otp field with no sealed value"
                 );
-                assert!(!state.contains("lk1:"), "history holds a sealed cell");
             }
             // And the search index holds no word of it.
             let text = centraid_vault::index::text_of(connection, "item-1", Kind::LockerItem)?

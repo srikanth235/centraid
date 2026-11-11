@@ -243,7 +243,8 @@ fn every_table_every_kind_and_every_relation_is_classified() {
                 let part = shape.part(table).expect("content lives on a kind row");
                 assert!(part.columns.iter().any(|name| name == column));
             }
-            // Every sealed column is omitted or outside, and no state mentions one.
+            // Every sealed column is KEPT (as ciphertext) and is the history's own mask list, so a
+            // sealed column added to custody is masked on read without a second edit.
             for (table, column) in [
                 ("locker_item", "password"),
                 ("locker_item", "otp_seed"),
@@ -253,7 +254,8 @@ fn every_table_every_kind_and_every_relation_is_classified() {
                 ("locker_item_field", "value_sealed"),
             ] {
                 let part = shape.part(table).expect("classified");
-                assert!(!part.columns.iter().any(|name| name == column), "{table}.{column}");
+                assert!(part.columns.iter().any(|name| name == column), "{table}.{column}");
+                assert!(history::is_sealed(table, column), "{table}.{column}");
             }
             assert!(
                 history::TABLES
@@ -570,23 +572,44 @@ fn a_note_and_a_document_keep_their_words_and_bytes_on_the_one_mechanism() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Locker: sealed cells are never kept
+// Locker: sealed cells are kept SEALED, masked on read, and restored with the rest
 // ---------------------------------------------------------------------------------------------
 
-fn lk(seed: &str) -> String {
-    use base64::Engine as _;
-    let mut raw = vec![0_u8; 36];
-    for (index, byte) in seed.bytes().enumerate() {
-        raw[index % 36] ^= byte;
-    }
-    format!(
-        "lk1:{}",
-        base64::engine::general_purpose::STANDARD.encode(raw)
-    )
+/// A `K` that is written NOWHERE: the test is the core, which seals; the vault never sees it.
+fn locker_key() -> Vec<u8> {
+    vec![0x3c_u8; 32]
 }
 
+/// What the core hands the vault for `plaintext` sealed into row `row_id` under key `k1`.
+fn sealed(row_id: &str, plaintext: &str) -> String {
+    centraid_vault::custody::locker_key::encrypt_under_locker_key(
+        &locker_key(),
+        "k1",
+        row_id,
+        plaintext,
+    )
+    .expect("the core seals")
+}
+
+fn opened(row_id: &str, ciphertext: &str) -> String {
+    centraid_vault::custody::locker_key::decrypt_under_locker_key(
+        &locker_key(),
+        "k1",
+        row_id,
+        ciphertext,
+    )
+    .expect("the key opens it")
+}
+
+const FIRST: &str = "PLANTED-FIRST-PASSWORD-q8w3e-not-in-any-payload";
+const SECOND: &str = "PLANTED-SECOND-PASSWORD-r5t6y-not-in-any-payload";
+const THIRD: &str = "PLANTED-THIRD-PASSWORD-u1i2o-not-in-any-payload";
+const PIN_ONE: &str = "PLANTED-PIN-ONE-a7s8d-not-in-any-payload";
+const PIN_TWO: &str = "PLANTED-PIN-TWO-f3g4h-not-in-any-payload";
+const SEED: &str = "PLANTED-OTP-SEED-j9k0l-not-in-any-payload";
+
 #[test]
-fn a_locker_item_keeps_its_plain_fields_and_never_a_sealed_cell() {
+fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item() {
     let w = World::new();
     w.scratch
         .vault
@@ -598,50 +621,36 @@ fn a_locker_item_keeps_its_plain_fields_and_never_a_sealed_cell() {
             Ok(())
         })
         .expect("the key plane");
-    let first_secret = lk("first-secret");
+    let id = "item-1";
+    let first = sealed(id, FIRST);
     w.ok(
         "locker.add_item",
-        json!({ "item_id": "item-1", "type": "login", "title": "The bank", "username": "ada@example.com",
-                "url": "https://bank.example", "password": first_secret, "password_rotated": true,
+        json!({ "item_id": id, "type": "login", "title": "The bank", "username": "ada@example.com",
+                "url": "https://bank.example", "password": first, "password_rotated": true,
                 "key_id": "k1" }),
     );
-    let id = "item-1";
-    let first = w.state(id);
-    assert_eq!(w.revisions(), 0);
-    let edit = |username: &str, url: &str, secret: &str| {
+    let edit = |username: &str, password: &str| {
         w.ok(
             "locker.edit_item",
             json!({ "item_id": id, "title": "The bank", "username": username,
-                    "url": url, "password": secret, "password_rotated": true, "key_id": "k1" }),
+                    "url": "https://bank.example", "password": password, "password_rotated": true,
+                    "key_id": "k1" }),
         );
     };
-    edit(
-        "ada@example.com",
-        "https://bank.example",
-        &lk("second-secret"),
-    );
-    assert_eq!(
-        w.revisions(),
-        0,
-        "a changed sealed cell alone changes nothing a history keeps"
-    );
-    edit(
-        "ada@work.example",
-        "https://bank.example",
-        &lk("second-secret"),
-    );
-    edit(
-        "ada@work.example",
-        "https://bank.example/login",
-        &lk("third-secret"),
-    );
+    let at_first = w.state(id);
+    assert_eq!(w.revisions(), 0, "a creation has no earlier state");
+
+    // A password change ALONE is a version (it was not before the ruling).
+    edit("ada@example.com", &sealed(id, SECOND));
+    assert_eq!(w.revisions(), 1, "a changed sealed cell is history");
+    // And a change that moves a plain field and the password is one version.
+    edit("ada@work.example", &sealed(id, THIRD));
     let versions = w.versions(id);
     assert_eq!(versions.len(), 2);
-    assert_eq!(
-        World::change(&versions[1], "locker_item.username"),
-        (json!("ada@example.com"), json!("ada@work.example"))
-    );
-    // Not a byte of a sealed cell is in the history, as ciphertext or otherwise.
+
+    // (i) THE HISTORY HOLDS CIPHERTEXT ONLY. It names the cell and holds exactly the sealed
+    // value the live cell held, and not a byte of any plaintext, in a revision row, a plain
+    // column, or the vault file with its sidecars.
     let all: String = w
         .scratch
         .vault
@@ -653,43 +662,144 @@ fn a_locker_item_keeps_its_plain_fields_and_never_a_sealed_cell() {
             )?)
         })
         .expect("history");
-    for secret in ["first-secret", "second-secret", "third-secret"] {
-        assert!(
-            !all.contains(&lk(secret)) && !all.contains("lk1:"),
-            "{secret} reached the history"
-        );
+    assert!(all.contains("\"password\":\"lk1:"), "the cell is kept, as ciphertext");
+    assert!(all.contains(&first), "the version holds the ciphertext the live cell held");
+    for secret in [FIRST, SECOND, THIRD] {
+        assert!(!all.contains(secret), "{secret} reached the history in the clear");
     }
-    assert!(!all.contains("\"password\""), "the cell is not even named");
-    // A restore puts back the plain fields and leaves the sealed cell as it is.
-    let sealed_now: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
-    w.ok(
+    let scan = |name: &str| {
+        if let Ok(bytes) = std::fs::read(w.scratch.dir().join(name)) {
+            for secret in [FIRST, SECOND, THIRD] {
+                assert!(
+                    !bytes.windows(secret.len()).any(|window| window == secret.as_bytes()),
+                    "{secret} is in {name}"
+                );
+            }
+        }
+    };
+    for name in ["vault.db", "vault.db-wal", "vault.db-shm"] {
+        scan(name);
+    }
+
+    // (ii) READ: a changed secret is seen to have changed and is shown as nothing else.
+    let (was, now) = World::change(&versions[1], "locker_item.password");
+    assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
+    let read = serde_json::to_string(&versions.iter().map(|v| v.changes.clone().into_iter().map(|c| (c.field, c.before, c.after)).collect::<Vec<_>>()).collect::<Vec<_>>()).expect("json");
+    assert!(!read.contains("lk1:"), "a version's diff shows no ciphertext");
+    assert_eq!(
+        World::change(&versions[0], "locker_item.username"),
+        (json!("ada@example.com"), json!("ada@work.example"))
+    );
+
+    // The version's own cell opens with K as the password it held, and not as another's.
+    let cell = w
+        .scratch
+        .vault
+        .locker_sealed_earlier_cell(id, versions[1].seq, "password", "")
+        .expect("reads")
+        .expect("the version held a password");
+    assert_eq!(cell.key_id.as_deref(), Some("k1"));
+    assert_eq!(opened(id, &cell.ciphertext.expect("sealed")), FIRST);
+    assert!(
+        w.scratch
+            .vault
+            .locker_sealed_earlier_cell(id, versions[1].seq, "username", "")
+            .expect("reads")
+            .is_none(),
+        "a plain column is not a sealed cell"
+    );
+
+    // (iii) RESTORE brings the old password back with the plain fields: the live cell is the
+    // ciphertext the version held, and the live reveal's own path opens it.
+    let out = w.ok(
         "history.restore_version",
         json!({ "id": id, "seq": versions[1].seq }),
     );
-    assert_eq!(w.state(id), first);
-    assert_eq!(
-        w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'"),
-        sealed_now
-    );
-    // A sealed custom field is outside the history; a plain one is state.
+    assert_eq!(out["restored"], true);
+    let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
+    assert_eq!(opened(id, &live), FIRST, "the old password is the live one again");
+    assert_eq!(w.state(id), at_first, "the whole state is the first state again");
+    // Undo the restore: the password it replaced comes back.
+    w.ok("history.undo", json!({ "id": id }));
+    let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
+    assert_eq!(opened(id, &live), THIRD);
+    for name in ["vault.db", "vault.db-wal", "vault.db-shm"] {
+        scan(name);
+    }
+
+    // A sealed custom field is state too: restored with the item, masked on read.
     w.ok(
         "locker.set_field",
         json!({ "item_id": id, "label": "Branch", "kind": "text", "value": "Main", "field_id": "f1" }),
     );
     w.ok(
         "locker.set_field",
-        json!({ "item_id": id, "label": "PIN", "kind": "sealed", "value": lk("pin"), "field_id": "f2", "key_id": "k1" }),
+        json!({ "item_id": id, "label": "PIN", "kind": "sealed", "value": sealed("f2", PIN_ONE), "field_id": "f2", "key_id": "k1" }),
     );
     let before = w.versions(id).len();
     w.ok(
         "locker.set_field",
-        json!({ "item_id": id, "label": "PIN", "kind": "sealed", "value": lk("pin-2"), "field_id": "f2", "key_id": "k1" }),
+        json!({ "item_id": id, "label": "PIN", "kind": "sealed", "value": sealed("f2", PIN_TWO), "field_id": "f2", "key_id": "k1" }),
     );
-    assert_eq!(
-        w.versions(id).len(),
-        before,
-        "a sealed field's value is not history"
+    let versions = w.versions(id);
+    assert_eq!(versions.len(), before + 1, "a changed sealed field is a version");
+    let (was, now) = World::change(&versions[0], "locker_item_field[f2].value_sealed");
+    assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
+    let field = w
+        .scratch
+        .vault
+        .locker_sealed_earlier_cell(id, versions[0].seq, "value_sealed", "f2")
+        .expect("reads")
+        .expect("the version held the field");
+    assert_eq!(opened("f2", &field.ciphertext.expect("sealed")), PIN_ONE);
+    w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
+    let live: String =
+        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f2'");
+    assert_eq!(opened("f2", &live), PIN_ONE, "the old PIN is the live one again");
+
+    // A removed sealed field comes back whole, and a whole-row change is masked too.
+    w.ok("locker.remove_field", json!({ "item_id": id, "field_id": "f2" }));
+    let versions = w.versions(id);
+    let (was, now) = World::change(&versions[0], "locker_item_field[f2]");
+    assert_eq!(was["value_sealed"], json!(history::MASK));
+    assert!(now.is_null());
+    w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
+    let live: String =
+        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f2'");
+    assert_eq!(opened("f2", &live), PIN_ONE);
+
+    // A one-time-code field's seed is kept sealed too, and is never an openable cell.
+    w.ok(
+        "locker.set_field",
+        json!({ "item_id": id, "label": "Backup", "kind": "otp", "value": sealed("f3", SEED), "field_id": "f3", "key_id": "k1" }),
     );
+    w.ok(
+        "locker.set_field",
+        json!({ "item_id": id, "label": "Backup", "kind": "otp", "value": sealed("f3", "PLANTED-OTP-SEED-2-z1x2c-not-in-any-payload"), "field_id": "f3", "key_id": "k1" }),
+    );
+    let versions = w.versions(id);
+    assert!(
+        w.scratch
+            .vault
+            .locker_sealed_earlier_cell(id, versions[0].seq, "value_sealed", "f3")
+            .expect("reads")
+            .is_none(),
+        "a seed is never opened, live or earlier"
+    );
+    w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
+    let live: String =
+        w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f3'");
+    assert_eq!(opened("f3", &live), SEED, "an undone seed is the one it replaced");
+    for name in ["vault.db", "vault.db-wal", "vault.db-shm"] {
+        scan(name);
+    }
+    let seed_scan = std::fs::read(w.scratch.dir().join("vault.db")).expect("file");
+    assert!(
+        !seed_scan.windows(SEED.len()).any(|window| window == SEED.as_bytes()),
+        "a seed is in the file in the clear"
+    );
+
+    // A passkey's key stays outside the history.
     w.purge_takes_history(id);
 }
 

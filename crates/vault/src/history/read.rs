@@ -265,9 +265,12 @@ pub fn earlier_versions(
     let mut versions = Vec::with_capacity(shown.len());
     for (index, row) in shown.iter().enumerate() {
         let state = assemble(row)?;
-        let changes = replacement
+        let mut changes = replacement
             .as_ref()
             .map_or_else(Vec::new, |after| diff(shape, &state, after));
+        // The diff is read on the ciphertexts (two seals of one value differ, which is how a
+        // changed secret is seen); what leaves this function never carries one.
+        changes.iter_mut().for_each(|change| mask(shape, change));
         versions.push(Version {
             seq: row.seq,
             at: row.at.clone(),
@@ -287,6 +290,54 @@ pub fn earlier_versions(
         next: more.then(|| shown.last().map(|row| row.seq)).flatten(),
         versions,
     })
+}
+
+/// What a sealed cell reads as in a [`Change`]: the vault's own placeholder, so a change to a
+/// secret is shown as a change and its value (or its ciphertext) is shown to no one. A cell that
+/// held nothing stays `null`, which is how a reader tells "set" from "changed".
+pub const MASK: &str = crate::commands::locker::SEALED_PLACEHOLDER;
+
+fn masked_cell(value: &Json) -> Json {
+    if value.is_null() {
+        Json::Null
+    } else {
+        Json::String(MASK.to_owned())
+    }
+}
+
+/// Mask the sealed cells of one side of a change: the whole value of a sealed column, or the
+/// sealed columns inside a whole row.
+fn mask_side(shape: &Shape, table: &str, column: Option<&str>, value: &mut Json) {
+    let Some(part) = shape.part(table) else {
+        return;
+    };
+    match (column, value) {
+        (Some(column), value) if super::shape::is_sealed(part.name, column) => {
+            *value = masked_cell(value);
+        }
+        (None, Json::Object(row)) => {
+            for (column, cell) in row.iter_mut() {
+                if super::shape::is_sealed(part.name, column) {
+                    *cell = masked_cell(cell);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn mask(shape: &Shape, change: &mut Change) {
+    // `locker_item.password`, `locker_item_field[<id>].value_sealed`, `locker_item_field[<id>]`.
+    let (head, column) = match change.field.split_once("].") {
+        Some((head, column)) => (head, Some(column)),
+        None => match change.field.split_once('.') {
+            Some((head, column)) => (head, Some(column)),
+            None => (change.field.trim_end_matches(']'), None),
+        },
+    };
+    let table = head.split('[').next().unwrap_or(head);
+    mask_side(shape, table, column, &mut change.before);
+    mask_side(shape, table, column, &mut change.after);
 }
 
 fn same(left: &Json, right: &Json) -> bool {

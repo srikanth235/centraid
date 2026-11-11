@@ -46,10 +46,17 @@
 //!
 //! ## Secrets, and bytes
 //!
-//! Sealed cells are not kept ([`OMITTED`]): not as ciphertext, not at all. A retired password is
-//! what a member replaced precisely so it would stop existing; the Locker's ruling is that its
-//! items have no revision of a secret. A sealed custom field's row is outside the history
-//! ([`TABLES`]'s `filter`), and a passkey (whose key is its whole value) is outside it.
+//! **A Locker item's sealed cells are kept SEALED** (owner ruling, #1185): a changed password,
+//! card number, CVV, note content, one-time-code seed or sealed custom field comes back with a
+//! restore like any other column. What is stored is the `lk1:` ciphertext exactly as the live
+//! cell holds it (sealed by the core under the member's key, bound to the row's id and the key
+//! generation, both of which are kept beside it), copied inside the commit and never opened here:
+//! this crate holds no key, so no plaintext of a secret exists in a `revision` row or anywhere
+//! else unsealed. Nothing that reads history shows one either: [`earlier_versions`] answers a
+//! changed sealed cell as [`MASK`] (a changed secret is seen to have changed, and that is all), and
+//! the only door to a value is the core's Locker session, which opens a version's cell with the
+//! key behind the member's unlock ([`crate::Vault::locker_sealed_earlier_cell`]). A passkey
+//! (whose key is its whole value) stays outside the history.
 //!
 //! A version names a blob by hash and copies no bytes. A document's replaced bytes are kept by
 //! the `revision.blob` foreign key for as long as the document lives, as they always were; any
@@ -62,10 +69,12 @@ mod restore;
 mod shape;
 
 pub use read::{
-    Change, Earlier, Version, Who, count, current_state, earlier_versions, version_state,
+    Change, Earlier, MASK, Version, Who, count, current_state, earlier_versions, version_state,
 };
 pub use restore::{Restored, Scope, restore_version};
-pub use shape::{CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, shape};
+pub use shape::{
+    CONTENT, Cell, OMITTED, Part, RELATIONS_OUTSIDE, Role, Shape, TABLES, is_sealed, shape,
+};
 
 use rusqlite::Connection;
 use serde_json::Value as Json;

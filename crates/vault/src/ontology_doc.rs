@@ -88,7 +88,7 @@ pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "revision",
-        "Every record's earlier values: the state an entity had before a commit changed it, numbered from one per entity, with a note's words and a document's bytes in cells of their own. Written at the commit door for every kind; a creation writes none, a purge takes them with the record, and sealed cells are never kept.",
+        "Every record's earlier values: the state an entity had before a commit changed it, numbered from one per entity, with a note's words and a document's bytes in cells of their own. Written at the commit door for every kind; a creation writes none, a purge takes them with the record, and a Locker item's sealed cells are kept only as the ciphertext they are, masked on read.",
     ),
     (
         "kernel",
