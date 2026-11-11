@@ -146,3 +146,23 @@ pub fn record(ctx: &CommandCtx<'_, '_>, id: &str, kind: Kind) -> Result<()> {
     )?;
     Ok(())
 }
+
+/// Where one entity came from: the system and label of its origin, whether a store the engine
+/// follows or a one-shot arrival. `None` for an item typed by the member (it has no source).
+///
+/// # Errors
+///
+/// A read the file refuses.
+pub fn origin_of(
+    connection: &rusqlite::Connection,
+    entity_id: &str,
+) -> Result<Option<(String, String)>> {
+    Ok(connection
+        .query_row(
+            "SELECT o.system, o.label FROM source s JOIN origin o ON o.id = s.origin_id
+              WHERE s.entity_id = ?1",
+            [entity_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?)
+}

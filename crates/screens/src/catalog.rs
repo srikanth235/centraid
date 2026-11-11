@@ -8185,6 +8185,26 @@ pub mod load {
             }
         }
 
+        /// (arrival, #1185) Where one record came from: its origin's system (a followed store: contacts, calendar, files, health, statement; or a one-shot arrival: camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) and its name (a store, a file, a device). Both empty for an item the member typed. A Locker item's name is the CSV file's name and nothing of what is in it. A detail screen's "From ..." line.
+        #[derive(Clone, Debug, Default)]
+        pub struct OriginOf {
+            pub entity_id: String,
+        }
+        impl OriginOf {
+            pub const NAME: &str = "origin-of";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<OriginOf> for wire::LoadRequest {
+            fn from(value: OriginOf) -> Self {
+                value.request()
+            }
+        }
+
         /// (history, #1185) How many earlier versions one record holds, not counting the current one: the number on a detail screen's Earlier versions entry.
         #[derive(Clone, Debug, Default)]
         pub struct EarlierCount {

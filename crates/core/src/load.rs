@@ -621,6 +621,8 @@ fn read(
             let limit = p.limit(app_query::history::PAGE as u32);
             app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
         }
+        // arrival (#1185): where one record came from, a followed store or a one-shot arrival
+        ("shell", "origin-of") => app_query::follow::origin_of(vault, &p.text("entity_id")?)?,
         ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(

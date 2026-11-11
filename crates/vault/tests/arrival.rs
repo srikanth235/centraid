@@ -337,3 +337,72 @@ fn a_followed_store_that_finds_an_arrived_person_takes_the_row_over() {
         1
     );
 }
+
+#[test]
+fn where_an_item_came_from_reads_back_for_every_system_and_is_none_for_typed() {
+    let w = World::new();
+    let read = |id: &str| {
+        w.scratch
+            .vault
+            .read(|c| centraid_vault::commands::arrival::origin_of(c, id))
+            .expect("a read")
+    };
+    let photo = |seed: &str, system: &str, label: &str| {
+        id(&w.ok(
+            "photo.add",
+            json!({ "blob": w.bytes(seed), "media_type": "image/jpeg",
+                    "arrived_system": system, "arrived_label": label }),
+        ))
+    };
+    let roll = photo("a", "camera_roll", "Camera roll");
+    let picked = photo("b", "picker", "IMG_1.jpg");
+    assert_eq!(
+        read(&roll),
+        Some(("camera_roll".into(), "Camera roll".into()))
+    );
+    assert_eq!(read(&picked), Some(("picker".into(), "IMG_1.jpg".into())));
+    let doc = id(&w.ok(
+        "document.add",
+        json!({ "title": "t", "blob": w.bytes("d"), "media_type": "application/pdf",
+                "arrived_system": "scan", "arrived_label": "Scanned document" }),
+    ));
+    assert_eq!(read(&doc).map(|found| found.0), Some("scan".to_owned()));
+    let task = id(&w.ok(
+        "task.add",
+        json!({ "title": "x", "arrived_system": "phone_reminders", "arrived_label": "Groceries" }),
+    ));
+    assert_eq!(
+        read(&task),
+        Some(("phone_reminders".into(), "Groceries".into()))
+    );
+    let note = w.ok(
+        "note.import",
+        json!({ "files": json!([{ "path": "a.md", "text": "# A\nx" }]).to_string(),
+                "arrived_system": "markdown", "arrived_label": "Vault" }),
+    );
+    assert_eq!(
+        read(note["ids"][0].as_str().expect("an id")).map(|found| found.1),
+        Some("Vault".to_owned())
+    );
+    // A followed store's row says its store, the same way.
+    w.ok(
+        "follow.contacts",
+        json!({ "origin": { "ref": "phone", "label": "iCloud" }, "complete": true,
+                "records": [{ "external_id": "c1", "fields": { "title": "Maya Rao" } }] }),
+    );
+    let followed: String = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(
+                c.query_row("SELECT id FROM entity WHERE title = 'Maya Rao'", [], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .expect("a row");
+    assert_eq!(read(&followed), Some(("contacts".into(), "iCloud".into())));
+    // Typed: nothing.
+    let typed = id(&w.ok("task.add", json!({ "title": "typed" })));
+    assert_eq!(read(&typed), None);
+}

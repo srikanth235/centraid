@@ -113,6 +113,23 @@
       }
     },
     {
+      "name": "origin-of",
+      "kind": "followed_row",
+      "figures": ["system"],
+      "description": "(arrival, #1185) Where one record came from: its origin's system (a followed store: contacts, calendar, files, health, statement; or a one-shot arrival: camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) and its name (a store, a file, a device). Both empty for an item the member typed. A Locker item's name is the CSV file's name and nothing of what is in it. A detail screen's \"From ...\" line.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "earlier-count",
       "kind": "earlier_version",
       "figures": ["count"],

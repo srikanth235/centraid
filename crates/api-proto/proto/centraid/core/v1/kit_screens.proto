@@ -336,6 +336,16 @@ message EarlierEntry {
   string accessibility_label = 4;
 }
 
+// `shell.origin-of`: where one record came from (#1185). `system` is the origin's system (a followed
+// store: `contacts`, `calendar`, `files`, `health`, `statement`; or an arrival: `camera_roll`,
+// `picker`, `vcard`, `markdown`, `csv`, `scan`, `upload`, `phone_reminders`) and `label` its name
+// (a store, a file, a device). Both empty for an item the member typed. A Locker label is a file
+// name and nothing of what is in it.
+message OriginOf {
+  string system = 1;
+  string label = 2;
+}
+
 // `shell.earlier-count`: how many earlier versions one record holds.
 message EarlierCount {
   uint32 count = 1;

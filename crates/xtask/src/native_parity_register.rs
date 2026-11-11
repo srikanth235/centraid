@@ -53,6 +53,9 @@ const VAULT_TELLS_HOME: &str = "the vault service tells Home by name (`Ctx::post
 const PASS_TELLS_ROLL: &str = "the pass service tells the camera roll by name (passes/service.rs to imports/camera_roll.rs); no shell sends it";
 
 /// One reason, several rows.
+const ORIGIN_OF_NAMED: &str = "`shell.origin-of` is read by Rust only (core/app_query/follow.rs builds it, kit/origin.rs reads it); `system` and `label` are common names the shells spell for unrelated symbols";
+
+/// One reason, several rows.
 const FILES_FOLLOWED: &str = "`shell.files-followed` is read by Rust only: core/app_query/imports.rs builds the answer, imports/files.rs and docs/drive/mod.rs read it";
 
 /// One reason, several rows.
@@ -393,6 +396,10 @@ pub const REGISTER: &[Entry] = &[
     (
         "FollowItemDifference.stated_json",
         rust_only(PHONE_DIFFERENCES),
+    ),
+    (
+        "OriginOf.system",
+        rust_only_named(ORIGIN_OF_NAMED, Missing::Android),
     ),
     ("EarlierVersions.versions", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),

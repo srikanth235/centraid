@@ -280,6 +280,8 @@ message AppQueryResponse {
     // holds, `shell.earlier-count`.
     EarlierVersions earlier_versions = 1703;
     EarlierCount earlier_count = 1704;
+    // Where one record came from (#1185): `shell.origin-of`.
+    OriginOf origin_of = 1706;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }
