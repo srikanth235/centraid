@@ -35,8 +35,50 @@ fn code(phone: &mut Phone, text: &str) {
     }));
 }
 
+/// The primary control. A restore asks the owner check first; the member passes it.
 fn primary(phone: &mut Phone) {
     phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    if phone
+        .pending()
+        .iter()
+        .any(|k| matches!(k, wire::effect::Kind::OwnerCheck(c) if c.ask))
+    {
+        phone
+            .driver
+            .answer_effect(owner_checked(wire::owner_checked::Outcome::Succeeded));
+        phone.serve();
+    }
+}
+
+#[test]
+fn a_restore_asks_the_owner_check_before_it_starts_and_only_a_pass_starts_it() {
+    use wire::owner_checked::Outcome as C;
+    let mut phone = filled(routes::restore(), Some(CODE));
+    // The tap raises the check and nothing else: no restore has started.
+    phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    assert!(matches!(
+        phone.pending().as_slice(),
+        [wire::effect::Kind::OwnerCheck(c)] if c.ask
+    ));
+    assert_eq!(phone.enter().phase, Phase::Entering as i32);
+    // Dismissed: nothing starts, nothing is said, the words stay.
+    phone.driver.answer_effect(owner_checked(C::Cancelled));
+    phone.serve();
+    assert_eq!(phone.enter().phase, Phase::Entering as i32);
+    assert!(phone.enter().notice.is_empty());
+    assert_eq!(phone.enter().cells[0].typed, "abandon");
+    // Not recognised: a sentence, nothing starts.
+    phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    phone.driver.answer_effect(owner_checked(C::Failed));
+    phone.serve();
+    assert_eq!(phone.enter().phase, Phase::Entering as i32);
+    assert!(!phone.enter().notice.is_empty());
+    // No passcode on a new phone: the restore goes ahead, with the warning shown.
+    phone.send_enter(K::Primary(wire::WordsPrimary {}));
+    phone.driver.answer_effect(owner_checked(C::Unavailable));
+    phone.serve();
+    assert_eq!(phone.enter().phase, Phase::Working as i32);
+    assert!(phone.enter().notice.contains("no passcode"));
 }
 
 fn valid_words() -> String {

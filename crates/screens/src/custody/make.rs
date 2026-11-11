@@ -29,6 +29,7 @@ use wire::words_make_state::Phase;
 use super::enrollment::{Assessed, Env, Job, Out, Progress, Refusal, Runner, Standing};
 use super::keeper::{Absent, Found, FoundRefusal, Keeper, KeeperSlot};
 use super::secrets::{VaultSecrets, WORDS};
+use crate::kit::owner::{Answer, Leaving, NoPasscode, OwnerGate};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, custody as words, fill};
 
@@ -73,6 +74,9 @@ pub struct Make {
     /// The entry this vault's own seed was kept under, once kept.
     own_id: Option<String>,
     made_line: String,
+    /// The owner check "Save a copy" asks first (the words leave the phone in
+    /// the clear); no passcode warns and goes ahead.
+    gate: OwnerGate,
 }
 
 impl std::fmt::Debug for Make {
@@ -86,6 +90,30 @@ fn effect(kind: wire::effect::Kind) -> wire::Effect {
 }
 
 impl Make {
+    /// The owner check's answer for "Save a copy": the words go to the share sheet.
+    fn copy_checked(&mut self, checked: &wire::OwnerChecked, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        let share = |words: &[String]| {
+            vec![effect(wire::effect::Kind::Share(wire::Share {
+                text: words.join(" "),
+                url: String::new(),
+                subject: words::save_subject(locale),
+            }))]
+        };
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Answer::Passed) => share(&self.phrase),
+            Some(Answer::PassedUnprotected(warning)) => {
+                self.notice = warning;
+                share(&self.phrase)
+            }
+            Some(Answer::Refused(sentence)) => {
+                self.notice = sentence;
+                Vec::new()
+            }
+            Some(Answer::Cancelled) | None => Vec::new(),
+        }
+    }
+
     fn new(secrets: VaultSecrets, keeper: KeeperSlot) -> Self {
         Self {
             secrets,
@@ -103,6 +131,7 @@ impl Make {
             name: String::new(),
             own_id: None,
             made_line: String::new(),
+            gate: OwnerGate::default(),
         }
     }
 
@@ -420,12 +449,9 @@ impl Make {
                 effects
             }
             // "SAVE A COPY": the words, as one line, to the platform's share sheet.
-            Some(K::SaveCopy(_)) if self.phase == Phase::Show => {
-                vec![effect(wire::effect::Kind::Share(wire::Share {
-                    text: self.phrase.join(" "),
-                    url: String::new(),
-                    subject: words::save_subject(ctx.locale()),
-                }))]
+            Some(K::SaveCopy(_)) if self.phase == Phase::Show && !self.gate.asking() => {
+                self.notice.clear();
+                self.gate.begin(ctx.locale(), Leaving::Share)
             }
             _ => Vec::new(),
         }
@@ -443,7 +469,25 @@ impl Screen for Make {
                 self.phase = Phase::Checking;
                 self.begin(Job::assess(), ctx)
             }
-            Some(E::EffectResult(result)) => self.answered(&result, ctx),
+            Some(E::EffectResult(result)) => {
+                use wire::effect_result::Outcome as O;
+                if self.gate.asking() {
+                    let checked = match &result.outcome {
+                        Some(O::OwnerChecked(checked)) => Some(*checked),
+                        // The prompt itself errored: the same as not recognised.
+                        Some(O::Failed(_)) => Some(wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        }),
+                        _ => None,
+                    };
+                    if let Some(checked) = checked {
+                        return self.copy_checked(&checked, ctx);
+                    }
+                }
+                self.answered(&result, ctx)
+            }
+            Some(E::Left(_)) => self.gate.cancel(),
             Some(E::WordsMake(event)) => self.event(event, ctx),
             _ => Vec::new(),
         }
