@@ -236,21 +236,28 @@ impl Ops {
             .committed
     }
 
-    /// DRAG TO REORDER (#1173): put `task_id` at `position`. Only the position
-    /// changes: the project and the section stay as stored.
-    pub fn reposition(&mut self, ctx: &Ctx, task_id: &str, position: f64) -> bool {
-        let key = kit_act::key(&["organize-task", task_id, "position"], self.next_seq());
-        self.line
-            .act_quietly(
-                ctx,
-                act::reminders::OrganizeTask {
-                    task_id: task_id.to_owned(),
-                    position: Some(position),
-                    ..Default::default()
-                },
-                &key,
-            )
-            .committed
+    /// DRAG TO REORDER (#1173): put each task of `plan` at its position. Only positions change:
+    /// the project and the section stay as stored. ONE status line says "Reordered" and ONE Undo
+    /// puts every task back; the vault refuses it for a task that changed again since, and the
+    /// line then says so.
+    pub fn reorder(&mut self, ctx: &Ctx, plan: &[(String, f64)]) -> bool {
+        let requests = plan
+            .iter()
+            .map(|(id, position)| {
+                let key = kit_act::key(&["organize-task", id, "position"], self.next_seq());
+                (
+                    act::reminders::OrganizeTask {
+                        task_id: id.clone(),
+                        position: Some(*position),
+                        ..Default::default()
+                    }
+                    .into(),
+                    key,
+                )
+            })
+            .collect::<Vec<(wire::ActRequest, String)>>();
+        let answers = self.line.act_all(ctx, requests, reminders::reordered);
+        answers.len() == plan.len() && answers.iter().all(|settled| settled.committed)
     }
 
     /// "Clear": the completed tasks of a list go to the trash (30 days, the

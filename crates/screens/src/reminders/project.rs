@@ -236,10 +236,9 @@ impl Project {
             .iter()
             .map(|task| (task.task_id.clone(), task.sort_order))
             .collect();
-        for (id, position) in order::plan(&ids, task_id, before_id) {
-            if !self.ops.reposition(ctx, &id, position) {
-                break;
-            }
+        let plan = order::plan(&ids, task_id, before_id);
+        if !plan.is_empty() {
+            self.ops.reorder(ctx, &plan);
         }
         self.reload(ctx);
     }

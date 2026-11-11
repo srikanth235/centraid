@@ -218,7 +218,7 @@ impl Undo {
         settled
     }
 
-    /// A write with no sentence of its own (a drag to reorder): success clears the line, a refusal
+    /// A write with no sentence of its own (a step inside a gesture whose own line says it): success clears the line, a refusal
     /// says it.
     pub fn act_quietly(
         &mut self,

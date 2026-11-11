@@ -28,6 +28,7 @@ catalog! {
     plain sort_manual = ("Manual", "Manual");
     plain sort_priority = ("Priority", "Priority");
     plain sort_title = ("Title", "Title");
+    plain reordered = ("Reordered", "Reordered");
     plain quick_chip_day_time = ("{day}, {time}", "{day}, {time}");
     plain quick_chip_every_day = ("Every day", "Every day");
     plain quick_chip_every_month = ("Every month", "Every month");
