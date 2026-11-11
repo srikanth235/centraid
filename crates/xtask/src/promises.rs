@@ -211,14 +211,16 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/trash.rs",
     ),
     // Undo (#1185, Phase 1): the checker's gaps are the adopters' work list.
-    kept("calendar", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("health", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("locker", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("money", Promise::Undo, "crates/core/src/act/inverse.rs"),
+    // Rule C (every write goes through `kit::undo`) is the adopters' work list: Notes and
+    // Reminders are the reference adoptions; the rest are owed until they adopt the door.
+    owed("calendar", Promise::Undo, UNDO_DOOR_OWED),
+    owed("docs", Promise::Undo, UNDO_DOOR_OWED),
+    owed("health", Promise::Undo, UNDO_DOOR_OWED),
+    owed("locker", Promise::Undo, UNDO_DOOR_OWED),
+    owed("money", Promise::Undo, UNDO_DOOR_OWED),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    kept("photos", Promise::Undo, "crates/core/src/act/inverse.rs"),
+    owed("people", Promise::Undo, UNDO_DOOR_OWED),
+    owed("photos", Promise::Undo, UNDO_DOOR_OWED),
     kept("reminders", Promise::Undo, "crates/core/src/act/inverse.rs"),
     // History (#1185, Phase 1): People is the reference adoption; the checker's gaps are the
     // others' work list.
@@ -521,6 +523,8 @@ const fn exempt(app: &'static str, promise: Promise, ruling: &'static str) -> Ro
 /// only exceptions). A Locker item is sealed: a photo or file beside it would sit outside the seal.
 pub const ATTACH_EXEMPT: &[(&str, &str)] =
     &[("locker", "D11: a Locker item cannot hold attachments")];
+
+const UNDO_DOOR_OWED: &str = "screens still write straight to `kit::act::act`; rule C wants every write through `kit::undo` so each undoable action offers Undo (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {
@@ -1005,7 +1009,74 @@ fn core_inverses(root: &Path, app: &str) -> Option<BTreeMap<String, String>> {
     )
 }
 
-/// Undo is kept when, for `app`, both hold (each gap is `<action>: (A|B) what is missing`):
+/// The folders under `crates/screens/src` whose files are `app`'s screens (rule C reads them).
+/// Reminders and Calendar share the agenda's notification service and the schedule kit, so each
+/// answers for them; the kit's own doors (`kit/undo.rs`, `kit/act.rs`) are not an app's.
+fn undo_folders(app: &str) -> Vec<&'static str> {
+    match app {
+        "calendar" => vec!["calendar", "agenda", "kit/schedule"],
+        "reminders" => vec!["reminders", "agenda", "kit/schedule"],
+        "docs" => vec!["docs"],
+        "health" => vec!["health"],
+        "locker" => vec!["locker"],
+        "money" => vec!["money"],
+        "notes" => vec!["notes"],
+        "people" => vec!["people"],
+        "photos" => vec!["photos"],
+        _ => Vec::new(),
+    }
+}
+
+/// What a direct write looks like: `kit_act::act(`, `kit::act::act(`, `act::act(` and the
+/// context's own `ctx.act(`.
+const DIRECT_WRITES: [&str; 2] = ["act::act(", "ctx.act("];
+
+/// The marker that exempts one call: `// undo-exempt: <why its Undo is offered elsewhere>`, on the
+/// call's line or one of the three above it. A marker with no reason exempts nothing.
+const UNDO_EXEMPT: &str = "undo-exempt:";
+
+/// Rule C: the calls an app's screen files make straight to the write door, each as
+/// `<file>: (C) line N ...`. Test modules and `tests.rs` files are not screens.
+fn direct_writes(root: &Path, app: &str) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for folder in undo_folders(app) {
+        let dir = root.join(format!("crates/screens/src/{folder}"));
+        for file in source_files(&dir, "rs") {
+            if file.file_name().is_some_and(|name| name == "tests.rs")
+                || file.components().any(|part| part.as_os_str() == "tests")
+            {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(&file) else {
+                continue;
+            };
+            let live = text.split("#[cfg(test)]").next().unwrap_or_default();
+            let lines: Vec<&str> = live.lines().collect();
+            for (at, line) in lines.iter().enumerate() {
+                if line.trim_start().starts_with("//")
+                    || !DIRECT_WRITES.iter().any(|call| line.contains(call))
+                {
+                    continue;
+                }
+                let exempt = lines[at.saturating_sub(3)..=at].iter().any(|near| {
+                    near.split_once(UNDO_EXEMPT)
+                        .is_some_and(|(_, why)| !why.trim().is_empty())
+                });
+                if !exempt {
+                    gaps.push(format!(
+                        "{}: (C) line {} writes straight to the door; go through `kit::undo` (`Undo::act`), or mark the call `// {UNDO_EXEMPT} <why its Undo is offered elsewhere>`",
+                        relative(root, &file),
+                        at + 1
+                    ));
+                }
+            }
+        }
+    }
+    gaps
+}
+
+/// Undo is kept when, for `app`, all three hold (each gap is `<action>: (A|B) what is missing`, or
+/// `<file>: (C) ...`):
 ///
 /// A. every manifest action is classified: it has a row in the core's inverse table
 ///    ([`INVERSE_TABLE`]), or it is `confirmed` in the manifest (irreversible, asked first), or it
@@ -1014,10 +1085,17 @@ fn core_inverses(root: &Path, app: &str) -> Option<BTreeMap<String, String>> {
 /// B. the manifest and the table are one list: every inverse the manifest declares is the row the
 ///    table holds for that action, and every row of the table is the inverse its manifest names.
 ///
-/// Not checked, and why: which screens offer the status-line Undo after an inverse-able action.
-/// A screen sets the line far from the call (a kit helper, a `StatusActed` event, a closure in a
-/// `TrashSpec`, `settled.inverse` shared between Reminders and Calendar), so a static scan would
-/// guess; nothing is printed rather than a guess.
+/// C. no file of the app's screen folders ([`undo_folders`]) calls the write door directly
+///    (`kit::act::act`, `ctx.act`): every write goes through `kit::undo`'s door (`Undo::act`),
+///    which says what happened with "Undo" exactly when the core answered with an inverse, and
+///    whose `acted` runs it. This is true by construction, not a guess about where a status line
+///    is set: a screen that cannot write except through the door cannot forget the Undo. A call
+///    whose Undo is offered elsewhere (a notification's receipt, the kit trash's restore) says so
+///    on a `// undo-exempt: <why>` comment, which this reads.
+///
+/// Not checked, and why: that a screen DRAWS the door's line (`status: self.undo.status()`) and
+/// takes the kit's `StatusActed`. The shells' parity rule and the `undo_line` tests hold those;
+/// a text scan of the view would be a guess.
 fn undo_missing(root: &Path, app: &str) -> Vec<String> {
     let actions = undo_actions(root, app);
     if actions.is_empty() {
@@ -1059,17 +1137,20 @@ fn undo_missing(root: &Path, app: &str) -> Vec<String> {
             ));
         }
     }
-    if unclassified.is_empty() && mismatched.is_empty() {
+    let direct = direct_writes(root, app);
+    if unclassified.is_empty() && mismatched.is_empty() && direct.is_empty() {
         return Vec::new();
     }
     let mut gaps = vec![format!(
-        "summary: {} of {} actions unclassified (A), {} list mismatches (B)",
+        "summary: {} of {} actions unclassified (A), {} list mismatches (B), {} direct writes (C)",
         unclassified.len(),
         actions.len(),
-        mismatched.len()
+        mismatched.len(),
+        direct.len()
     )];
     gaps.extend(unclassified);
     gaps.extend(mismatched);
+    gaps.extend(direct);
     gaps
 }
 

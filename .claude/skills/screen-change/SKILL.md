@@ -117,3 +117,17 @@ The vault keeps every record's earlier values at its commit door (#1185); `kit/e
 2. **The detail screen** of the primary record holds a `Share`: its menu row (`share::label(locale)`, icon `share::ICON`) sends a `ShareRequested` event (add it to the screen's event proto, and the label to its chrome) whose handler returns `self.share.tap(locale)`; the `EffectResult` arm returns `self.share.result(ctx, &result, |ctx| Ok(file))`; `Left` returns `self.share.left()`; `status` ORs in `self.share.status()`.
 3. **Shells**: add the row beside the menu's others in Compose and SwiftUI (`chrome.share_label` / `chrome.shareLabel`, the event). The effect's performers exist in both.
 4. **Register**: flip the app's `Promise::Share` row to `kept(.., "<the detail screen>")`. Docs (`ShareFile`) and Photos (`ExportOriginals`) are named in `OWN_SHARE`; Locker has no share by decision (`NO_SHARE`, D11).
+
+## 11. Offering Undo
+
+Every undoable action says what happened with "Undo" on the status line, through ONE kit door: `crates/screens/src/kit/undo.rs`.
+
+1. Hold `undo: Undo` (`Undo::default()`; Reminders' `Ops` already holds one as `ops.line`).
+2. Write only through it: `self.undo.act(ctx, request, &key, |locale| words::note_pinned(locale))` (`act_reverting` for a write whose inverse the core does not know, `act_quietly` for a write that says nothing, `act_also` for a write that follows one already said). It says the sentence with "Undo" exactly when the core answered with an inverse, and a refusal as a refused line. Never call `kit::act::act` or `ctx.act` from an app's folder.
+3. Take the kit's one event, on any screen, with no per-screen arm: `Some(E::StatusActed(_)) => { if self.undo.acted(ctx) { self.reload(ctx) } }`. `acted` runs the stored inverse under a fresh key, says "Undone" (or the refusal: the core's plain sentence, else "This changed again, so it was not undone") and offers nothing more.
+4. Draw it: `status: self.undo.status()`.
+5. On `Left`, or when a newer non-undoable line replaces it, `self.undo.clear()` / `say(..)`.
+
+**The checker.** The `promises` rule's Undo row has a third rule, C: no file under the app's screen folders (`undo_folders` in `crates/xtask/src/promises.rs`; Reminders and Calendar also answer for `agenda/` and `kit/schedule/`) may call `kit::act::act` or `ctx.act` directly. A call whose Undo is offered elsewhere (a notification receipt) carries `// undo-exempt: <why>` on its line or the three above; a marker with no reason exempts nothing. An app that has not adopted is `owed` with `UNDO_DOOR_OWED`; flip it to `kept` when the rule is clean.
+
+**The test model** is `crates/screens/tests/undo_line.rs`: an undoable act shows the sentence and "Undo"; the kit `StatusActed` reverses it and the line says "Undone" with no verb; an act the core cannot take back shows no verb; a change made again between the act and the tap is refused plainly and the later change stays. Shells: the status line's verb sends `ScreenEvent.status_acted` (the kit arm) for any screen that has no event of its own.

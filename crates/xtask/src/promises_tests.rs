@@ -502,6 +502,134 @@ fn a_table_row_with_no_action_is_named() {
     assert!(gaps.contains("delete-note: (B) a row of the table, but no such action"));
 }
 
+// Rule C: every write goes through `kit::undo`.
+
+const UNDO_APPS: [(&str, Option<&str>, bool); 3] = [
+    ("flag-note", Some("unflag-note"), false),
+    ("unflag-note", Some("flag-note"), false),
+    ("delete-note", Some("restore-note"), false),
+];
+
+fn undo_rows(status: Status) -> Vec<Row> {
+    APPS.iter()
+        .map(|app| Row {
+            app,
+            promise: Promise::Undo,
+            status,
+        })
+        .collect()
+}
+
+#[test]
+fn a_screen_that_writes_straight_to_the_door_is_named_with_its_file() {
+    let root = undo_tree("undo-direct", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn pin() {\n    let settled = kit_act::act(ctx, request, &key);\n}\n",
+    );
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(
+        gaps.contains("0 list mismatches (B), 1 direct writes (C)"),
+        "{gaps}"
+    );
+    assert!(
+        gaps.contains("crates/screens/src/notes/home.rs: (C) line 2"),
+        "{gaps}"
+    );
+}
+
+#[test]
+fn a_write_through_the_door_a_test_module_and_a_reasoned_exemption_are_clean() {
+    let root = undo_tree("undo-door", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn pin() {\n    let settled = self.undo.act(ctx, request, &key, said);\n}\n\
+         fn receipt() {\n    // undo-exempt: a receipt offers the Undo\n    kit_act::act(ctx, request, &key);\n}\n\
+         #[cfg(test)]\nmod tests {\n    fn t() { kit_act::act(ctx, request, &key); }\n}\n",
+    );
+    assert_eq!(undo_missing(&root, "notes").join("\n"), "");
+}
+
+#[test]
+fn an_exemption_with_no_reason_or_far_from_the_call_exempts_nothing() {
+    let root = undo_tree("undo-bad-exempt", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn a() {\n    // undo-exempt:\n    kit_act::act(ctx, request, &key);\n}\n\
+         // undo-exempt: too far above\n\n\n\nfn b() {\n    ctx.act(&request);\n}\n",
+    );
+    let gaps = undo_missing(&root, "notes").join("\n");
+    assert!(gaps.contains("2 direct writes (C)"), "{gaps}");
+}
+
+#[test]
+fn reminders_answer_for_the_agenda_and_the_schedule_kit() {
+    let root = undo_tree("undo-folders", &UNDO_APPS);
+    write(
+        &root,
+        "crates/apps/reminders/manifest.json",
+        &undo_manifest(&[]),
+    );
+    write(
+        &root,
+        "crates/screens/src/kit/schedule/ops.rs",
+        "fn go() { kit_act::act(ctx, request, &key); }\n",
+    );
+    write(
+        &root,
+        "crates/screens/src/agenda/notify/answer.rs",
+        "fn go() { kit_act::act(ctx, request, &key); }\n",
+    );
+    let folders = undo_folders("reminders");
+    assert_eq!(folders, ["reminders", "agenda", "kit/schedule"]);
+    let gaps = direct_writes(&root, "reminders").join("\n");
+    assert!(
+        gaps.contains("crates/screens/src/kit/schedule/ops.rs: (C)"),
+        "{gaps}"
+    );
+    assert!(
+        gaps.contains("crates/screens/src/agenda/notify/answer.rs: (C)"),
+        "{gaps}"
+    );
+    // Notes is not answerable for either.
+    assert!(direct_writes(&root, "notes").is_empty());
+}
+
+#[test]
+fn a_kept_undo_claim_with_a_direct_write_fails() {
+    let root = undo_tree("undo-false-kept", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn pin() { kit_act::act(ctx, request, &key); }\n",
+    );
+    let mut table = undo_rows(Status::Owed("#1185"));
+    let notes = APPS.iter().position(|app| *app == "notes").expect("notes");
+    table[notes].status = Status::Kept("crates/core/src/act/inverse.rs");
+    let found = check(&root, &table).findings.join("\n");
+    assert!(found.contains("notes / Undo: claimed Kept, but"), "{found}");
+    assert!(found.contains("(C)"), "{found}");
+}
+
+#[test]
+fn an_owed_undo_entry_whose_writes_all_go_through_the_door_fails() {
+    let root = undo_tree("undo-paid", &UNDO_APPS);
+    write(
+        &root,
+        "crates/screens/src/notes/home.rs",
+        "fn pin() { self.undo.act(ctx, request, &key, said); }\n",
+    );
+    let mut table = undo_rows(Status::Owed("#1185"));
+    let notes = APPS.iter().position(|app| *app == "notes").expect("notes");
+    table[notes].status = Status::Owed("#1185: rule C");
+    let found = check(&root, &table).findings.join("\n");
+    assert!(found.contains("notes / Undo: listed Owed"), "{found}");
+    assert!(found.contains("make it Kept"), "{found}");
+}
+
 // ---------------------------------------------------------------------------
 // History
 // ---------------------------------------------------------------------------

@@ -55,6 +55,8 @@ Calendar follows Apple's: a dated reminder is a row of its day, and the day is w
 
 State is reported on **one status line** and never a toast. It is a single persistent line docked at the foot of the place directly above its band, or at the foot of a pushed page, sheet or editor, which draw no band. It is a sentence in the small style (the refusal tone when refused), updated in place: no stacking, no overlay, no auto-dismiss animation, no dot, at most one inline text action. The shell's import line takes the same seat: progress, then outcome, one action, and a close key once the work is done. No badge counts, red dots, bounces or parallax.
 
+**Every undoable action says what happened, with Undo.** After a write the core can take back, the line is one fragment of what happened ("Note pinned", "Tag added", "{title} moved to trash") with the verb "Undo"; tapping it runs the core's inverse and the line says "Undone" with nothing more to tap. A write the core cannot take back (it asked first, or it writes nothing) says its fragment with no verb. An Undo whose record changed again is refused in the core's plain sentence ("This can no longer be undone: it has changed since."), and the later change stays. One kit door does all of this (`kit::undo`, see the screen-change skill §11); the verb is the kit's one `StatusActed` event on every screen.
+
 A screen's load is a skeleton (`ReadStateView`). A spinner (`KitSpinner`, `StageSpinner`) exists only for work with no shape to draw (a save in flight, a transfer starting). Work whose count is known gets a determinate bar and exact counts: a local-first product always knows how long.
 
 ## Trash
