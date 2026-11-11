@@ -10,7 +10,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use super::routes;
-use crate::kit::civil;
+use crate::kit::{civil, search};
 use crate::strings::{Locale, fill, notes as words};
 
 /// The characters a title derived from a body's first line may hold.
@@ -84,6 +84,9 @@ struct Parts<'a> {
     check_done: u32,
     runs: Vec<wire::NotesTextRun>,
     about: Vec<wire::NotesAboutChip>,
+    /// The words matched only in an earlier version (#1185): the row says so and opens the
+    /// note's Earlier versions.
+    earlier: bool,
 }
 
 fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
@@ -106,6 +109,11 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" · ");
+    let meta = if parts.earlier {
+        search::earlier_meta(locale, &meta)
+    } else {
+        meta
+    };
     let check = check_label(locale, parts.check_done, parts.check_total);
     let spoken = [
         title.clone(),
@@ -136,7 +144,11 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
         check_label: check,
         accessibility_label: spoken,
         notebook_id: parts.notebook_ids.first().cloned().unwrap_or_default(),
-        route: Some(routes::editor(parts.note_id)),
+        route: Some(if parts.earlier {
+            search::earlier_route(locale, super::EARLIER, parts.note_id)
+        } else {
+            routes::editor(parts.note_id)
+        }),
         about: parts.about,
     }
 }
@@ -193,6 +205,7 @@ pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
             check_done: row.check_done,
             runs: Vec::new(),
             about: about_chips(locale, &row.about),
+            earlier: false,
         },
     )
 }
@@ -219,6 +232,7 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
             check_done: hit.check_done,
             runs: runs_of(&hit.snippet),
             about: Vec::new(),
+            earlier: hit.in_earlier_version,
         },
     )
 }
@@ -550,6 +564,41 @@ pub fn link_domains(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A NOTE FOUND ONLY BY AN EARLIER VERSION says so and opens its Earlier versions (#1185).
+    #[test]
+    fn a_hit_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let found = |earlier: bool| wire::NotesSearchHit {
+            note_id: "n1".to_owned(),
+            title: Some("Plan".to_owned()),
+            snippet: "the ⟦alpha⟧ draft".to_owned(),
+            updated_local_day: "2026-03-04".to_owned(),
+            in_earlier_version: earlier,
+            ..wire::NotesSearchHit::default()
+        };
+        let now = hit(Locale::En, &found(false));
+        assert_eq!(now.meta, "Edited Wed 4 March");
+        assert_eq!(
+            now.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::notes::EDITOR)
+        );
+        let before = hit(Locale::En, &found(true));
+        assert_eq!(before.meta, "In an earlier version · Edited Wed 4 March");
+        assert!(before.accessibility_label.contains("In an earlier version"));
+        let route = before.route.as_ref().expect("a route");
+        assert_eq!(route.screen, crate::notes::EARLIER);
+        assert!(matches!(
+            &route.args,
+            Some(wire::route::Args::Earlier(args)) if args.entity_id == "n1"
+        ));
+        // The earlier words are what the row quotes.
+        assert!(
+            before
+                .snippet_runs
+                .iter()
+                .any(|run| run.highlighted && run.text == "alpha")
+        );
+    }
 
     #[test]
     fn a_first_line_skips_blanks_and_caps_at_eighty() {

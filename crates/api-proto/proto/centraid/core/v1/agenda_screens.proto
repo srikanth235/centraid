@@ -715,8 +715,12 @@ message AgendaEventRow {
   string accessibility_label = 11;
   // Ended before now: drawn dimmed.
   bool is_past = 12;
-  // WHERE A TAP GOES: this occurrence's page, drawn under the section's day.
+  // WHERE A TAP GOES: this occurrence's page, drawn under the section's day. A search hit found
+  // only by an earlier version goes to the event's Earlier versions instead.
   Route route = 13;
+  // "In an earlier version" on a search hit whose words the event said only before (#1185),
+  // drawn as a line under the title; empty for every other row.
+  string earlier_label = 14;
 }
 
 enum AgendaRowStatus {

@@ -32,6 +32,32 @@ pub fn offer(locale: Locale, term: &str, scope: &str) -> wire::SearchAsk {
     }
 }
 
+/// "In an earlier version": the short line on a search row whose words the item said
+/// only before, never now (#1185). The same words in every app's search and Home's.
+#[must_use]
+pub fn in_earlier_version(locale: Locale) -> String {
+    shared::search_in_earlier_version(locale)
+}
+
+/// A search row's meta line when the words matched only an earlier version: "In an earlier
+/// version", then whatever the row said of itself (`meta`, empty for none).
+#[must_use]
+pub fn earlier_meta(locale: Locale, meta: &str) -> String {
+    let line = in_earlier_version(locale);
+    if meta.trim().is_empty() {
+        line
+    } else {
+        format!("{line} · {meta}")
+    }
+}
+
+/// Where a row found only in an earlier version goes: that item's Earlier versions (`screen`
+/// is the app's `<app>.earlier`), backing out to Search.
+#[must_use]
+pub fn earlier_route(locale: Locale, screen: &str, entity_id: &str) -> wire::Route {
+    super::earlier::route(screen, entity_id, &shared::kit_search(locale))
+}
+
 /// "Including results for “x”", the line under a field when the core corrected
 /// a typo.
 #[must_use]

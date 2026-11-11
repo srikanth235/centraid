@@ -37,6 +37,10 @@ message HomeSearchRow {
   string accessibility_label = 6;
   // WHERE A TAP GOES. Absent for a row whose app the shell has no page for.
   optional Route route = 7;
+  // "In an earlier version" when the words the member typed were said only by an earlier version
+  // of the item (#1185): the row's second line reads the kind and this, and `route` is that
+  // item's Earlier versions. Empty for a row that matched what the item says now.
+  string earlier_label = 8;
 }
 
 message HomeSearchGroup {

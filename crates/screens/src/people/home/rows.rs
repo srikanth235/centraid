@@ -4,6 +4,7 @@
 use centraid_api_proto::core_v1 as wire;
 
 use crate::kit::menu;
+use crate::kit::search as kit_search;
 use crate::people::{fold, routes, sections};
 use crate::strings::{Locale, fill, people as words};
 
@@ -167,18 +168,29 @@ pub fn row(locale: Locale, person: &wire::PeopleRosterRow, today: &str) -> wire:
         (false, true) => words::row_a11y_due(locale),
         (false, false) => words::row_a11y(locale),
     };
+    let touch = fold::last_touch(
+        locale,
+        person.last_contacted_at.is_some(),
+        &person.last_contacted_local_day,
+        today,
+        person.days_since_contact,
+    );
+    // Words only an earlier version of the person held (#1185): the row says so, and opens
+    // their Earlier versions.
+    let (meta, route) = if person.in_earlier_version {
+        (
+            kit_search::earlier_meta(locale, &touch),
+            kit_search::earlier_route(locale, super::super::EARLIER, &person.party_id),
+        )
+    } else {
+        (touch, routes::person(&person.party_id, &person.name, false))
+    };
     wire::PeopleRow {
         party_id: person.party_id.clone(),
         name: person.name.clone(),
         avatar: Some(fold::avatar(&person.party_id, &person.name)),
         role: person.role.clone(),
-        meta: fold::last_touch(
-            locale,
-            person.last_contacted_at.is_some(),
-            &person.last_contacted_local_day,
-            today,
-            person.days_since_contact,
-        ),
+        meta,
         chips,
         starred: person.starred,
         star_label: fill(
@@ -189,8 +201,16 @@ pub fn row(locale: Locale, person: &wire::PeopleRosterRow, today: &str) -> wire:
             },
             &[("name", &person.name)],
         ),
-        accessibility_label: fill(&accessibility, &[("name", &person.name)]),
-        route: Some(routes::person(&person.party_id, &person.name, false)),
+        accessibility_label: if person.in_earlier_version {
+            format!(
+                "{}, {}",
+                fill(&accessibility, &[("name", &person.name)]),
+                kit_search::in_earlier_version(locale)
+            )
+        } else {
+            fill(&accessibility, &[("name", &person.name)])
+        },
+        route: Some(route),
     }
 }
 
@@ -509,6 +529,31 @@ mod tests {
     use wire::PeopleChipKey as K;
 
     const EN: Locale = Locale::En;
+
+    #[test]
+    fn a_person_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let mut found = person("p1", "Ada", 0, 3, false);
+        found.in_earlier_version = true;
+        let row = row(EN, &found, "");
+        assert!(
+            row.meta.starts_with("In an earlier version"),
+            "{}",
+            row.meta
+        );
+        assert!(row.accessibility_label.ends_with("In an earlier version"));
+        let route = row.route.as_ref().expect("a route");
+        assert_eq!(route.screen, crate::people::EARLIER);
+        assert!(matches!(
+            &route.args,
+            Some(wire::route::Args::Earlier(args)) if args.entity_id == "p1"
+        ));
+        let now = super::row(EN, &person("p2", "Bob", 0, 3, false), "");
+        assert!(!now.meta.contains("earlier version"));
+        assert_eq!(
+            now.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::people::PERSON)
+        );
+    }
 
     fn person(id: &str, name: &str, cadence: i64, since: i64, due: bool) -> wire::PeopleRosterRow {
         wire::PeopleRosterRow {

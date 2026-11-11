@@ -458,11 +458,24 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
                     continue;
                 }
                 let kind = kind_label(locale, &hit.entity);
-                let route = row_routes::route(
-                    &RowRef::new(app, &hit.entity, opens(hit), &hit.title),
-                    "",
-                    &photos_among,
-                );
+                // WORDS ONLY AN EARLIER VERSION HELD: the row says so and opens that item's
+                // Earlier versions, which is where the words can be read (#1185).
+                let earlier = hit
+                    .in_earlier_version
+                    .then(|| row_routes::earlier(locale, app, &hit.entity, opens(hit)))
+                    .flatten();
+                let earlier_label = if earlier.is_some() {
+                    ask::in_earlier_version(locale)
+                } else {
+                    String::new()
+                };
+                let route = earlier.or_else(|| {
+                    row_routes::route(
+                        &RowRef::new(app, &hit.entity, opens(hit), &hit.title),
+                        "",
+                        &photos_among,
+                    )
+                });
                 // A row with no page to open is not offered.
                 if route.is_none() {
                     continue;
@@ -471,10 +484,11 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
                     entity: hit.entity.clone(),
                     id: hit.id.clone(),
                     app_id: app.to_owned(),
-                    accessibility_label: spoken(&[&kind, &hit.title]),
+                    accessibility_label: spoken(&[&kind, &hit.title, &earlier_label]),
                     kind_label: kind,
                     title: hit.title.clone(),
                     route,
+                    earlier_label,
                 });
             }
             let count = containers.len() + rows.len();
@@ -589,6 +603,62 @@ mod tests {
             reminders.rows[0].accessibility_label,
             "Task, Book the cabin"
         );
+    }
+
+    /// A HIT ON WORDS ONLY AN EARLIER VERSION HELD says so in the row's own line and opens that
+    /// item's Earlier versions, in every app that has such a page (#1185); a hit on what the
+    /// item says now is the ordinary row.
+    #[test]
+    fn a_hit_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let earlier = |entity: &str, id: &str, app: &str| wire::VaultSearchHit {
+            in_earlier_version: true,
+            ..hit(entity, id, "Old", app)
+        };
+        let answer = data(vec![
+            earlier("note", "n1", "notes"),
+            earlier("task", "t1", "reminders"),
+            earlier("event", "e1", "calendar"),
+            earlier("person", "p1", "people"),
+            earlier("document", "d1", "docs"),
+            earlier("transaction", "x1", "money"),
+            earlier("photo", "ph1", "photos"),
+            hit("note", "n2", "Now", "notes"),
+        ]);
+        let screen_of = |app: &str, id: &str| {
+            let group = answer
+                .groups
+                .iter()
+                .find(|group| group.app_id == app)
+                .expect("the group");
+            let row = group.rows.iter().find(|row| row.id == id).expect("the row");
+            (
+                row.earlier_label.clone(),
+                row.route.as_ref().map(|route| route.screen.clone()),
+                row.route.as_ref().and_then(|route| match &route.args {
+                    Some(wire::route::Args::Earlier(args)) => Some(args.entity_id.clone()),
+                    _ => None,
+                }),
+                row.accessibility_label.clone(),
+            )
+        };
+        for (app, id, screen) in [
+            ("notes", "n1", crate::notes::EARLIER),
+            ("reminders", "t1", crate::reminders::EARLIER),
+            ("calendar", "e1", crate::calendar::EARLIER),
+            ("people", "p1", crate::people::EARLIER),
+            ("docs", "d1", crate::docs::EARLIER),
+            ("money", "x1", crate::money::EARLIER),
+            ("photos", "ph1", crate::photos::EARLIER),
+        ] {
+            let (label, route, entity, spoken) = screen_of(app, id);
+            assert_eq!(label, "In an earlier version", "{app}");
+            assert_eq!(route.as_deref(), Some(screen), "{app}");
+            assert_eq!(entity.as_deref(), Some(id), "{app}");
+            assert!(spoken.ends_with("In an earlier version"), "{spoken}");
+        }
+        let (label, route, _, _) = screen_of("notes", "n2");
+        assert!(label.is_empty());
+        assert_eq!(route.as_deref(), Some(crate::notes::EDITOR));
     }
 
     #[test]

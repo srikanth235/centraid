@@ -45,6 +45,7 @@ use crate::kit::civil::{self, HourCycle};
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words;
 use crate::kit::schedule::style;
+use crate::kit::search as kit_search;
 use crate::strings::{Locale, agenda as words, agenda_home as sentences};
 
 const CANCELLED: &str = "cancelled";
@@ -635,10 +636,17 @@ fn event_row(
     } else {
         (wire::AgendaRowStatus::None, String::new())
     };
+    // A search hit found only by an earlier version says so and opens Earlier versions (#1185).
+    let earlier_label = if event.in_earlier_version {
+        kit_search::in_earlier_version(locale)
+    } else {
+        String::new()
+    };
     let accessibility_label = [title.clone(), spoken]
         .into_iter()
         .chain(meta.iter().cloned())
         .chain(std::iter::once(status_label.clone()))
+        .chain(std::iter::once(earlier_label.clone()))
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(", ");
@@ -653,12 +661,17 @@ fn event_row(
         status_label,
         accessibility_label,
         is_past: day < today || ended(event, today, now),
-        route: Some(routes::event(
-            &event.event_id,
-            &event.instance_key,
-            event.original_start_local.as_deref(),
-            day,
-        )),
+        route: Some(if event.in_earlier_version {
+            kit_search::earlier_route(locale, super::super::EARLIER, &event.event_id)
+        } else {
+            routes::event(
+                &event.event_id,
+                &event.instance_key,
+                event.original_start_local.as_deref(),
+                day,
+            )
+        }),
+        earlier_label,
     }
 }
 
@@ -782,6 +795,50 @@ mod tests {
 
     const TODAY: &str = "2026-06-15";
     const NOW: &str = "2026-06-15T09:42";
+
+    #[test]
+    fn an_event_found_only_in_an_earlier_version_says_so_and_opens_earlier_versions() {
+        let hues = Hues::of(&[]);
+        let mut found = timed(
+            "e1",
+            "Offsite",
+            "2026-06-16T10:00",
+            Some("2026-06-16T11:00"),
+        );
+        found.in_earlier_version = true;
+        let row = event_row(
+            Locale::En,
+            HourCycle::H24,
+            "2026-06-16",
+            &found,
+            TODAY,
+            NOW,
+            &hues,
+        );
+        assert_eq!(row.earlier_label, "In an earlier version");
+        assert!(row.accessibility_label.ends_with("In an earlier version"));
+        let route = row.route.as_ref().expect("a route");
+        assert_eq!(route.screen, crate::calendar::EARLIER);
+        assert!(matches!(
+            &route.args,
+            Some(wire::route::Args::Earlier(args)) if args.entity_id == "e1"
+        ));
+        found.in_earlier_version = false;
+        let now = event_row(
+            Locale::En,
+            HourCycle::H24,
+            "2026-06-16",
+            &found,
+            TODAY,
+            NOW,
+            &hues,
+        );
+        assert!(now.earlier_label.is_empty());
+        assert_eq!(
+            now.route.as_ref().map(|route| route.screen.as_str()),
+            Some(crate::calendar::EVENT)
+        );
+    }
 
     fn timed(id: &str, summary: &str, start: &str, end: Option<&str>) -> wire::AgendaEvent {
         let first = start[..10].to_owned();

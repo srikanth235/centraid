@@ -231,7 +231,9 @@ private struct HitRow: View {
                         .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Text(row.kindLabel)
+                    // The kind, then "In an earlier version" when only an earlier version of
+                    // the item held the words (#1185); the row then opens Earlier versions.
+                    Text([row.kindLabel, row.earlierLabel].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
                         .lineLimit(1)

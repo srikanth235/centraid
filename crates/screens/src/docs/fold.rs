@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use super::{folders, routes};
 use crate::kit::civil::{self, HourCycle};
 use crate::kit::quantity::{Quantity, UnitsPref};
+use crate::kit::search as kit_search;
 use crate::strings::{Locale, docs as words, shared};
 
 /// The `design/icons.toml` key of a trash glyph.
@@ -107,6 +108,13 @@ pub fn row(
     .filter(|part| !part.is_empty())
     .collect::<Vec<_>>()
     .join(" · ");
+    // Words only an earlier version of the document held (#1185): the row says so, and opens
+    // its Earlier versions.
+    let meta = if row.in_earlier_version {
+        kit_search::earlier_meta(locale, &meta)
+    } else {
+        meta
+    };
     let accessibility_label = [
         Some(title.clone()),
         Some(meta.replace(" · ", ", ")).filter(|meta| !meta.is_empty()),
@@ -119,7 +127,11 @@ pub fn row(
     wire::DocsRowView {
         document_id: row.document_id.clone(),
         content_id: row.content_id.clone(),
-        route: Some(routes::document(&row.document_id, &title, parent)),
+        route: Some(if row.in_earlier_version {
+            kit_search::earlier_route(locale, super::EARLIER, &row.document_id)
+        } else {
+            routes::document(&row.document_id, &title, parent)
+        }),
         title,
         kind_icon_key: icon_of(row.kind()).to_owned(),
         kind_label: row.kind_name.clone(),

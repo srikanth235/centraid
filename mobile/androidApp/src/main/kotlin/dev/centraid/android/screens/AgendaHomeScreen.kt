@@ -700,14 +700,25 @@ private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
             maxLines = 2,
             modifier = Modifier.width(60.dp).padding(start = 8.dp),
         )
-        Text(
-            row.title,
-            style = centraidType("body"),
-            color = titleInk,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 8.dp),
-        )
+        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            Text(
+                row.title,
+                style = centraidType("body"),
+                color = titleInk,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // A search hit whose words only an earlier version of the event held (#1185): the
+            // row says so and opens Earlier versions.
+            if (row.earlier_label.isNotEmpty()) {
+                Text(
+                    row.earlier_label,
+                    style = centraidType("annotLabel"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                )
+            }
+        }
         StatusChip(row)
     }
 }

@@ -112,6 +112,30 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
     }
 }
 
+/// The page a row found only in an earlier version opens (#1185): that item's Earlier
+/// versions, backing out to Search. `None` for a kind with no such page, which is then
+/// opened as any row is.
+#[must_use]
+pub fn earlier(
+    locale: crate::strings::Locale,
+    app: &str,
+    entity: &str,
+    id: &str,
+) -> Option<wire::Route> {
+    let app = centraid_vault::roster::legacy(app, entity);
+    let screen = match (app, entity) {
+        ("notes", "note") => notes::EARLIER,
+        ("calendar", "event") => crate::calendar::EARLIER,
+        ("reminders", "task") => crate::reminders::EARLIER,
+        ("people", "person") => people::EARLIER,
+        ("docs", "document") => docs::EARLIER,
+        ("money", "transaction") => money::EARLIER,
+        ("photos", "photo") => photos::EARLIER,
+        _ => return None,
+    };
+    Some(crate::kit::search::earlier_route(locale, screen, id))
+}
+
 /// A Locker item, or the member action a chat card asks of it
 /// (`reveal:password`, `code:totp`, `edit_secret:password`, `export:`).
 fn locker_item(row: &RowRef, parent: &str) -> wire::Route {

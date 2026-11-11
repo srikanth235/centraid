@@ -267,14 +267,25 @@ private fun HitRow(row: HomeSearchRow, onTap: () -> Unit) {
                 maxLines = 1,
                 modifier = Modifier.width(KIND_COLUMN),
             )
-            Text(
-                row.title,
-                style = centraidType("body"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 8.dp),
-            )
+            Column(Modifier.padding(start = 8.dp)) {
+                Text(
+                    row.title,
+                    style = centraidType("body"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // The words only an earlier version of the item held (#1185): the row says so
+                // and opens that item's Earlier versions.
+                if (row.earlier_label.isNotEmpty()) {
+                    Text(
+                        row.earlier_label,
+                        style = centraidType("small"),
+                        color = centraidColor("textSoft"),
+                        maxLines = 1,
+                    )
+                }
+            }
         }
         Box(
             Modifier

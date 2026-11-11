@@ -71,6 +71,7 @@ catalog! {
     plain short_date = ("{day} {month}", "{day} {month}");
     plain search_ask_about = ("Ask about “{term}”", "Ask about “{term}”");
     plain search_ask_question = ("Find {term}", "Find {term}");
+    plain search_in_earlier_version = ("In an earlier version", "In an earlier version");
     plain search_corrected = ("Including results for “{corrected}”", "Including results for “{corrected}”");
     plain search_kind_album = ("Album", "Album");
     plain search_kind_folder = ("Folder", "Folder");

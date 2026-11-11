@@ -66,7 +66,21 @@ impl Search {
         let lines: Vec<wire::MoneyRow> = answer
             .rows
             .iter()
-            .map(|row| rows::row(locale, row, "", true, true, &parent))
+            .map(|row| {
+                let mut line = rows::row(locale, row, "", true, true, &parent);
+                // Words only an earlier version of the line held (#1185): the row says so, and
+                // opens its Earlier versions.
+                if row.in_earlier_version {
+                    line.meta = search::earlier_meta(locale, &line.meta);
+                    line.accessibility_label = format!(
+                        "{}, {}",
+                        line.accessibility_label,
+                        search::in_earlier_version(locale)
+                    );
+                    line.route = Some(search::earlier_route(locale, super::EARLIER, &row.txn_id));
+                }
+                line
+            })
             .collect();
         let total = answer.total_matches as usize;
         wire::MoneySearchData {

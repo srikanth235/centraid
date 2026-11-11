@@ -902,11 +902,21 @@ private struct AgendaEventRowView: View {
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "textSoft", scheme))
                     .frame(width: 52, alignment: .leading)
-                Text(row.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(row.title)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
+                        .lineLimit(2)
+                    // A search hit whose words only an earlier version of the event held
+                    // (#1185): the row says so and opens Earlier versions.
+                    if !row.earlierLabel.isEmpty {
+                        Text(row.earlierLabel)
+                            .centraidType("annotLabel")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !row.statusLabel.isEmpty {
                     let tone = "textSoft"
                     Text(row.statusLabel)
