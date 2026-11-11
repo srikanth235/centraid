@@ -38,6 +38,20 @@ struct SettingsView: View {
                                 .padding(.vertical, 8)
                                 .accessibilityIdentifier("settings-appearance-note")
                         }
+                        if data.hasUnits {
+                            GroupHead(title: data.units.title)
+                            SettingsSegmented(choices: data.units.choices, identifier: "settings-units") { id in
+                                var event = Centraid_Core_V1_SettingsEvent()
+                                event.kind = .unitsPicked(.with { $0.id = id })
+                                send(event)
+                            }
+                            Text(data.units.note)
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 8)
+                                .accessibilityIdentifier("settings-units-note")
+                        }
                         ForEach(data.sections, id: \.key) { section in
                             GroupHead(title: section.title)
                             // THE ROWS ARE ONE CARD; the last hairline falls outside the clip.
@@ -120,13 +134,14 @@ private struct GroupHead: View {
 /// SYSTEM · LIGHT · DARK, on the kit's one segmented track.
 private struct SettingsSegmented: View {
     let choices: [Centraid_Core_V1_SettingsChoice]
+    var identifier: String = "settings-appearance"
     let onPick: (String) -> Void
 
     var body: some View {
         KitSegmented(
             options: choices.map { (key: $0.id, label: $0.label) },
             selected: choices.first(where: { $0.selected })?.id ?? "",
-            identifier: "settings-appearance",
+            identifier: identifier,
             fills: true,
             segmentID: { key, _ in key },
             onSelect: onPick

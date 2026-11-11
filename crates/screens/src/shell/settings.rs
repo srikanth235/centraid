@@ -4,6 +4,7 @@
 //! | Section | What it holds |
 //! |---|---|
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
+//! | Units | Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); the region's until chosen |
 //! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
 //! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
@@ -24,6 +25,7 @@ use wire::settings_event::Kind as S;
 use crate::backup::{self, key::KeyCustody, line, reading};
 use crate::catalog::load;
 use crate::custody::secrets::{self as secrets, VaultSecrets};
+use crate::kit::quantity::{self, UnitsPref};
 use crate::kit::read::Reading;
 use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
@@ -85,6 +87,15 @@ impl Appearance {
     }
 }
 
+/// What a write to the device store was for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kept {
+    /// The transfer rule: the pass service is told when it stuck.
+    Rule,
+    /// The units: every other open screen draws again when it stuck.
+    Units,
+}
+
 struct Settings {
     secrets: VaultSecrets,
     /// `None` until the Keychain has answered: the page is loading, never a guess.
@@ -97,8 +108,9 @@ struct Settings {
     finished: bool,
     /// THE DOWNLOAD SETTINGS SHEET is open.
     transfer_open: bool,
-    /// The rule's write is out: its answer is what tells the pass service.
-    keeping: Option<Vec<wire::SecretOp>>,
+    /// The writes to the device store that are out, oldest first: the answers come back in the
+    /// same order, and each says what to do when it lands.
+    keeping: std::collections::VecDeque<(Kept, Vec<wire::SecretOp>)>,
 }
 
 impl Settings {
@@ -111,7 +123,7 @@ impl Settings {
             vault_name: None,
             finished: false,
             transfer_open: false,
-            keeping: None,
+            keeping: std::collections::VecDeque::new(),
         }
     }
 
@@ -135,15 +147,40 @@ impl Settings {
     /// The device store answered the rule's write. THE PASS SERVICE READS THE SAME CACHE, so the
     /// answer is folded in before it is told: a rule that stuck is a new constraint on every window
     /// the OS holds (Home's gear and the Backup page do the same).
-    fn rule_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
-        let Some(ops) = self.keeping.take() else {
+    fn write_kept(&mut self, batched: &wire::SecretBatched, ctx: &Ctx) {
+        let Some((kept, ops)) = self.keeping.pop_front() else {
             return;
         };
         self.secrets.absorb(&ops, &batched.answers);
+        // A write the platform refused changed nothing in the cache, so the page keeps showing
+        // what is stored.
         if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
-            self.secrets
-                .conductor()
-                .ask(ctx, wire::pass_asked::Ask::RuleChanged);
+            match kept {
+                Kept::Rule => self
+                    .secrets
+                    .conductor()
+                    .ask(ctx, wire::pass_asked::Ask::RuleChanged),
+                Kept::Units => ctx.redraw_all(),
+            }
+        }
+    }
+
+    /// The units row: the member's choice, else the region's, the same reading every screen's
+    /// `Ctx::units` makes.
+    fn units(&self, ctx: &Ctx, locale: crate::strings::Locale) -> wire::SettingsUnits {
+        let shown = quantity::effective(quantity::stored(&self.secrets), ctx.region());
+        let choice = |each: UnitsPref, label: String| wire::SettingsChoice {
+            id: each.stored().to_owned(),
+            label,
+            selected: each == shown,
+        };
+        wire::SettingsUnits {
+            title: words::settings_units(locale),
+            choices: vec![
+                choice(UnitsPref::Metric, words::settings_units_metric(locale)),
+                choice(UnitsPref::Imperial, words::settings_units_imperial(locale)),
+            ],
+            note: words::settings_units_note(locale),
         }
     }
 
@@ -231,6 +268,7 @@ impl Settings {
                     .collect(),
                 note: words::settings_appearance_note(locale),
             }),
+            units: Some(self.units(ctx, locale)),
             sections: vec![
                 wire::SettingsSection {
                     key: "vault".to_owned(),
@@ -375,7 +413,7 @@ impl Screen for Settings {
                     self.synced = Some(status);
                 }
                 Some(wire::effect_result::Outcome::Secrets(batched)) => {
-                    self.rule_kept(&batched, ctx);
+                    self.write_kept(&batched, ctx);
                 }
                 _ => {}
             },
@@ -413,7 +451,17 @@ impl Screen for Settings {
                         // service (`rule_kept`).
                         self.transfer_open = false;
                         let ops = vec![Rules::write_rule(TransferRule::of(Some(&chosen.stored)))];
-                        self.keeping = Some(ops.clone());
+                        self.keeping.push_back((Kept::Rule, ops.clone()));
+                        return vec![secrets::effect(ops)];
+                    }
+                    Some(S::UnitsPicked(picked)) => {
+                        // ONE SWITCH, written to the phone's device store; the answer is folded in
+                        // (`write_kept`) and only then do the other screens draw again.
+                        let Some(chosen) = UnitsPref::of_stored(&picked.id) else {
+                            return Vec::new();
+                        };
+                        let ops = vec![quantity::set_op(Some(chosen))];
+                        self.keeping.push_back((Kept::Units, ops.clone()));
                         return vec![secrets::effect(ops)];
                     }
                     _ => {}
@@ -448,7 +496,9 @@ impl Screen for Settings {
         let locale = ctx.locale();
         let content = match self.appearance {
             None => wire::settings_state::Content::Loading(wire::Loading { first_load: true }),
-            Some(appearance) => wire::settings_state::Content::Data(self.data(ctx, appearance)),
+            Some(appearance) => {
+                wire::settings_state::Content::Data(Box::new(self.data(ctx, appearance)))
+            }
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::Settings(wire::SettingsState {

@@ -23,7 +23,7 @@ fn state(d: &Driver, i: u64) -> wire::SettingsState {
 
 fn data(d: &Driver, i: u64) -> wire::SettingsData {
     match state(d, i).content {
-        Some(wire::settings_state::Content::Data(data)) => data,
+        Some(wire::settings_state::Content::Data(data)) => *data,
         other => panic!("not data: {other:?}"),
     }
 }
@@ -429,5 +429,116 @@ fn a_platform_sync_capability_does_not_claim_an_unknown_key_is_saved() {
     assert_eq!(
         key,
         "Can't tell whether your recovery key is saved elsewhere. Save a copy."
+    );
+}
+
+fn units_environment(d: &mut Driver, locale: &str) {
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: locale.to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
+}
+
+fn units_choices(data: &wire::SettingsData) -> Vec<(String, bool)> {
+    data.units
+        .as_ref()
+        .expect("the units row")
+        .choices
+        .iter()
+        .map(|choice| (choice.id.clone(), choice.selected))
+        .collect()
+}
+
+fn units_write(kind: &wire::effect::Kind) -> bool {
+    matches!(kind, wire::effect::Kind::Secrets(batch) if batch.ops.iter().any(|op| op.key == "units"))
+}
+
+fn units_answer(ok: bool) -> wire::effect_result::Outcome {
+    wire::effect_result::Outcome::Secrets(wire::SecretBatched {
+        answers: vec![wire::SecretAnswer {
+            ok,
+            ..Default::default()
+        }],
+    })
+}
+
+#[test]
+fn the_units_row_shows_the_regions_system_until_the_member_chooses() {
+    for (locale, shown) in [("en-US", "imperial"), ("de-DE", "metric")] {
+        let (mut d, _home, i) = started();
+        units_environment(&mut d, locale);
+        answer(&mut d, i, keychain_get, stored(""));
+        let data = data(&d, i);
+        let units = data.units.as_ref().expect("the units row");
+        assert_eq!(units.title, "Units");
+        assert_eq!(
+            units
+                .choices
+                .iter()
+                .map(|choice| choice.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Metric", "Imperial"]
+        );
+        assert!(units.note.contains("temperatures in every app"));
+        assert_eq!(
+            units_choices(&data)
+                .into_iter()
+                .filter(|(_, picked)| *picked)
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            [shown],
+            "{locale}"
+        );
+    }
+}
+
+#[test]
+fn choosing_units_writes_the_device_store_and_the_row_reads_it_back() {
+    use wire::settings_event::{Kind as S, UnitsPicked};
+    let (mut d, _home, i) = started();
+    units_environment(&mut d, "de-DE");
+    answer(&mut d, i, keychain_get, stored(""));
+    let before = d.effects.len();
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "imperial".into(),
+        }),
+    );
+    assert!(
+        d.effects[before..].iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Secrets(batch)) if batch.ops.iter().any(|op| op.key == "units" && op.value == b"imperial")
+        )),
+        "the choice is one write to the device store"
+    );
+    answer(&mut d, i, units_write, units_answer(true));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [("metric".to_owned(), false), ("imperial".to_owned(), true)]
+    );
+}
+
+#[test]
+fn a_refused_units_write_keeps_the_old_choice() {
+    use wire::settings_event::{Kind as S, UnitsPicked};
+    let (mut d, _home, i) = started();
+    units_environment(&mut d, "en-US");
+    answer(&mut d, i, keychain_get, stored(""));
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "metric".into(),
+        }),
+    );
+    answer(&mut d, i, units_write, units_answer(false));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [("metric".to_owned(), false), ("imperial".to_owned(), true)],
+        "the region's system stays"
     );
 }

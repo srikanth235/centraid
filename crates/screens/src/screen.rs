@@ -95,6 +95,8 @@ pub(crate) struct Done {
     pub switch: Option<String>,
     /// Events for other open screens, by registered name (`Ctx::post`).
     pub posts: Vec<(String, wire::ScreenEvent)>,
+    /// Every other open screen must draw again, see [`Ctx::redraw_all`].
+    pub redraw_all: bool,
 }
 
 /// A screen's door to the core, the catalog and the clock.
@@ -274,6 +276,12 @@ impl<'a> Ctx<'a> {
             .borrow_mut()
             .posts
             .push((screen.to_owned(), event));
+    }
+
+    /// A SETTING EVERY SCREEN READS CHANGED (the units): every other open screen hears
+    /// `EnvironmentChanged` after this update, in the same re-render, and draws again.
+    pub fn redraw_all(&self) {
+        self.done.borrow_mut().redraw_all = true;
     }
 
     /// The locale every string is made in.

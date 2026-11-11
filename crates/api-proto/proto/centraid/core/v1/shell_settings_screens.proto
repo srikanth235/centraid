@@ -25,6 +25,16 @@ message SettingsAppearance {
   string note = 3;
 }
 
+// THE UNITS ROW: one switch, metric or imperial, for every app (never one per measure). The
+// choice shown is the effective one: the member's own, else what the phone's region measures in.
+message SettingsUnits {
+  string title = 1;
+  // "metric" or "imperial", each `SettingsChoice.id`.
+  repeated SettingsChoice choices = 2;
+  // What the switch changes, in plain words.
+  string note = 3;
+}
+
 // One row of a section. A row with a route opens a page; one without is read.
 message SettingsRow {
   string id = 1;
@@ -61,6 +71,7 @@ message SettingsData {
   string version_title = 3;
   string version = 4;
   string about_title = 5;
+  SettingsUnits units = 6;
 }
 
 message SettingsState {
@@ -85,6 +96,12 @@ message SettingsEvent {
     // A choice in the sheet (`BackupRuleChoice.stored`): kept, the pass service told, the sheet closes.
     TransferRuleChosen transfer_rule_chosen = 3;
     TransferRulesClosed transfer_rules_closed = 4;
+    UnitsPicked units_picked = 5;
+  }
+
+  message UnitsPicked {
+    // A `SettingsChoice.id` of the units row.
+    string id = 1;
   }
 
   message TransferRuleChosen {

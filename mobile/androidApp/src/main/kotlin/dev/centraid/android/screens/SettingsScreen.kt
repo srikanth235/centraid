@@ -119,6 +119,26 @@ private fun SettingsBody(data: SettingsData, onEvent: (SettingsEvent) -> Unit, o
                 }
             }
         }
+        val units = data.units
+        if (units != null) {
+            item(key = "units") {
+                Column {
+                    GroupHead(units.title)
+                    KitSegmented(
+                        units.choices.map { KitSegment(it.id, it.label, it.selected) },
+                        testTag = "settings-units",
+                    ) { id ->
+                        onEvent(SettingsEvent(units_picked = SettingsEvent.UnitsPicked(id = id)))
+                    }
+                    KitText(
+                        units.note,
+                        KitType.Meta,
+                        Surface.meta,
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp).testTag("settings-units-note"),
+                    )
+                }
+            }
+        }
         data.sections.forEach { section ->
             item(key = "section-${section.key}") {
                 Column {

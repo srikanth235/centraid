@@ -9,6 +9,10 @@ catalog! {
     plain settings_appearance_light = ("Light", "Light");
     plain settings_appearance_dark = ("Dark", "Dark");
     plain settings_appearance_note = ("System follows your phone. Text follows your phone's text size.", "System follows your phone. Text follows your phone's text size.");
+    plain settings_units = ("Units", "Units");
+    plain settings_units_metric = ("Metric", "Metric");
+    plain settings_units_imperial = ("Imperial", "Imperial");
+    plain settings_units_note = ("Distances, weights and temperatures in every app. Starts as your region's.", "Distances, weights and temperatures in every app. Starts as your region's.");
     plain settings_vault = ("Vault", "Vault");
     plain settings_vaults_row = ("Vaults", "Vaults");
     counted settings_vaults_held = ("This phone has one vault.", "This phone has {n} vaults.");

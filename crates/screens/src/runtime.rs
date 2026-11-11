@@ -410,6 +410,27 @@ impl Runtime {
                 Self::dispatch(state, core, target, post.clone(), out);
             }
         }
+        if done.redraw_all {
+            let targets: Vec<u64> = state
+                .instances
+                .keys()
+                .copied()
+                .filter(|other| *other != id)
+                .collect();
+            for target in targets {
+                Self::dispatch(
+                    state,
+                    core,
+                    target,
+                    wire::ScreenEvent {
+                        kind: Some(wire::screen_event::Kind::EnvironmentChanged(
+                            wire::EnvironmentChanged {},
+                        )),
+                    },
+                    out,
+                );
+            }
+        }
         for (tag, work) in done.jobs {
             let job = state.next_job;
             state.next_job += 1;
