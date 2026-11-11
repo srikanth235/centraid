@@ -416,3 +416,26 @@ fn a_copy_that_is_not_confirmed_shares_nothing_and_no_passcode_warns() {
     ));
     assert!(phone.make().notice.contains("no passcode"));
 }
+
+#[test]
+fn a_phone_with_no_passcode_still_makes_the_key_and_saving_a_copy_goes_ahead_with_a_warning() {
+    use wire::owner_checked::Outcome as C;
+    // Making the key asks nothing of the phone: the words show whatever its lock is.
+    let mut phone = shown();
+    let state = phone.make();
+    assert_eq!(state.phase, Phase::Show as i32);
+    assert_eq!(state.words.len(), 24);
+    // Saving a copy on a phone with no passcode is not refused: it shares the words and warns.
+    phone.send_make(K::SaveCopy(wire::WordsSaveCopy {}));
+    phone.driver.answer_effect(owner_checked(C::Unavailable));
+    phone.serve();
+    let pending = phone.pending();
+    let [wire::effect::Kind::Share(share)] = pending.as_slice() else {
+        panic!("save a copy shares: {pending:?}");
+    };
+    assert_eq!(share.text.split(' ').count(), 24);
+    let state = phone.make();
+    assert_eq!(state.phase, Phase::Show as i32, "the words stay up");
+    assert_eq!(state.words.len(), 24);
+    assert!(state.notice.contains("no passcode"), "{}", state.notice);
+}

@@ -198,7 +198,10 @@ fn a_phone_with_no_passcode_does_not_show_the_recovery_key() {
     let state = phone.show();
     assert_eq!(state.phase, Phase::Ask as i32);
     assert!(state.words.is_empty() && !state.finished);
-    assert!(!state.notice.is_empty());
+    assert_eq!(
+        state.notice,
+        "Set a passcode on this phone to see your recovery key."
+    );
 }
 
 #[test]

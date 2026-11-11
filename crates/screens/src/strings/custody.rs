@@ -65,6 +65,7 @@ catalog! {
     plain show_a11y = ("Your recovery key, 24 words. Save it or write it down.", "Your recovery key, 24 words. Save it or write it down.");
     plain show_again_ask_body = ("Your phone checks it's you before it shows your recovery key. Make sure nobody can see your screen.", "Your phone checks it's you before it shows your recovery key. Make sure nobody can see your screen.");
     plain show_again_body = ("Save it in a password manager or write it down. Anyone with it can open your vaults.", "Save it in a password manager or write it down. Anyone with it can open your vaults.");
+    plain show_again_no_passcode = ("Set a passcode on this phone to see your recovery key.", "Set a passcode on this phone to see your recovery key.");
     plain show_again_none = ("This phone has no recovery key yet. Make a vault or restore one first.", "This phone has no recovery key yet. Make a vault or restore one first.");
     plain show_again_none_synced = ("Your keychain gave this phone the key without its words. They're on the phone that made it, or wherever you saved them.", "Your keychain gave this phone the key without its words. They're on the phone that made it, or wherever you saved them.");
     plain show_again_none_title = ("No recovery key on this phone", "No recovery key on this phone");

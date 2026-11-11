@@ -54,6 +54,8 @@ pub struct Show {
     own_name: Option<String>,
     /// A check failed: ASK is drawn with why, and a primary to try again.
     failed: bool,
+    /// The failed check was a phone with no passcode: ASK says how to unblock it.
+    no_passcode: bool,
 }
 
 impl fmt::Debug for Show {
@@ -81,6 +83,7 @@ impl Show {
             seed_held: false,
             own_name: None,
             failed: false,
+            no_passcode: false,
         }
     }
 
@@ -93,6 +96,7 @@ impl Show {
     /// The owner check, raised at once: "Show recovery key" was already the ask.
     fn ask(&mut self, locale: Locale) -> Vec<wire::Effect> {
         self.failed = false;
+        self.no_passcode = false;
         self.gate.begin(locale, Leaving::Reveal)
     }
 
@@ -169,6 +173,7 @@ impl Show {
             },
             _ => return Vec::new(),
         };
+        let unavailable = checked.outcome == wire::owner_checked::Outcome::Unavailable as i32;
         match self.gate.answer(ctx.locale(), NoPasscode::Refuse, &checked) {
             // THE WORDS ARE READ ONLY AFTER THE PHONE SAID IT IS ITS OWNER.
             Some(Answer::Passed | Answer::PassedUnprotected(_)) => {
@@ -184,6 +189,7 @@ impl Show {
             // Any other failure draws ASK with why, and a primary to try again.
             Some(Answer::Refused(_)) => {
                 self.failed = true;
+                self.no_passcode = unavailable;
                 Vec::new()
             }
             None => Vec::new(),
@@ -264,7 +270,11 @@ impl Show {
             _ => String::new(),
         };
         let notice = if self.failed && phase == Phase::Ask {
-            words::show_again_verify_failed(locale)
+            if self.no_passcode {
+                words::show_again_no_passcode(locale)
+            } else {
+                words::show_again_verify_failed(locale)
+            }
         } else {
             String::new()
         };
