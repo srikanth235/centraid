@@ -1198,10 +1198,10 @@ impl Screen for Detail {
         );
         // A task that is gone (never made, deleted, or in the trash) says so in its own words.
         if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
-            wired.state = Some(wire::page_state::State::Failed(wire::Failure {
-                sentence: words::task_gone(locale),
-                remedy: String::new(),
-            }));
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                words::task_gone(locale),
+                String::new(),
+            )));
         }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoDetail(wire::TodoDetailState {

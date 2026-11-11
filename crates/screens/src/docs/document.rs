@@ -71,6 +71,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         title_hint: args.title.clone(),
         parent: args.parent.clone(),
         page: Page::loading(),
+        gone: false,
         undo: Undo::default(),
         gate: OwnerGate::default(),
         asking: Asking::None,
@@ -89,8 +90,10 @@ struct Document {
     title_hint: String,
     /// The page it was pushed from, by its title: what the back control says.
     parent: String,
-    /// The read. A document that is gone is [`Page::Empty`], not ready data.
+    /// The read. A document that is gone is [`Page::Failed`] with `gone` set, never ready data and
+    /// never empty: the page says so in its own words and offers no Retry.
     page: Page<Answered>,
+    gone: bool,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
     /// The owner check a share asks first; a phone with no passcode warns and goes ahead.
@@ -110,6 +113,23 @@ struct Document {
 }
 
 impl Document {
+    /// The page as the wire carries it. A document that is gone says so in its own words and
+    /// offers no Retry (reading it again cannot bring it back).
+    fn wired(&self, page: &Page<Answered>, locale: Locale) -> wire::PageState {
+        let mut wired = page.wire(
+            locale,
+            |denial| denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                words::gone(locale),
+                String::new(),
+            )));
+        }
+        wired
+    }
+
     fn reload(&mut self, ctx: &Ctx) {
         let document = read::read(
             ctx,
@@ -166,6 +186,12 @@ impl Document {
         self.page = held.after(reading, ctx.locale(), |answered| {
             answered.document.document.is_none()
         });
+        // A read that succeeded and found no document: it is gone, which is a failure, not an
+        // empty place.
+        self.gone = matches!(self.page, Page::Empty);
+        if self.gone {
+            self.page = Page::Failed;
+        }
     }
 
     /// The ids of the people the document is about now.
@@ -729,14 +755,7 @@ impl Screen for Document {
                     document_id: self.document_id.clone(),
                     title_hint: self.title_hint.clone(),
                     content,
-                    page: Some(page.wire(
-                        locale,
-                        |denial| denied(locale, denial),
-                        || wire::EmptyState {
-                            headline: words::gone(locale),
-                            ..wire::EmptyState::default()
-                        },
-                    )),
+                    page: Some(self.wired(&page, locale)),
                     status: self.undo.status().or_else(|| self.earlier.status(locale)),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
@@ -761,6 +780,7 @@ mod tests {
             document_id: "d1".to_owned(),
             title_hint: String::new(),
             parent: String::new(),
+            gone: false,
             page: Page::Ready {
                 data: Answered {
                     document: wire::DocsDocument {

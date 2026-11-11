@@ -199,6 +199,7 @@ impl Sheet {
             failure: self.failure.as_ref().map(|sentence| wire::Failure {
                 sentence: sentence.clone(),
                 remedy: String::new(),
+                permanent: false,
             }),
         }
     }

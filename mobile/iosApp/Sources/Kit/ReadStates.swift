@@ -124,7 +124,8 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         case let .refused(denied):
             staged(DeniedGate(denied))
         case let .failed(failure):
-            staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: onRetry))
+            // A gone item offers no Retry: reading it again cannot bring it back.
+            staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: failure.permanent ? nil : onRetry))
         case let .empty(empty):
             staged(EmptyStateView(empty, onAction: onEmptyAction))
         case nil:

@@ -273,10 +273,10 @@ impl Screen for Editor {
         if let (Opened::Refused(sentence), Some(wire::page_state::State::Failed(_))) =
             (&self.opened, &wired.state)
         {
-            wired.state = Some(wire::page_state::State::Failed(wire::Failure {
-                sentence: sentence.clone(),
-                remedy: self.remedy.clone(),
-            }));
+            wired.state = Some(wire::page_state::State::Failed(read::gone(
+                sentence.clone(),
+                self.remedy.clone(),
+            )));
         }
         let content = self.autosave.draft().filter(|_| ready).map(|draft| {
             Content::Draft(wire::DocsEditorDraft {

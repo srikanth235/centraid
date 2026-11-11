@@ -891,10 +891,8 @@ impl Editor {
         self.links.close();
         self.auto = Autosave::new();
         self.denied = None;
-        self.blocked = Some(wire::Failure {
-            sentence,
-            remedy: String::new(),
-        });
+        // The note is gone or in the trash: trying again cannot help, so no Retry.
+        self.blocked = Some(read::gone(sentence, String::new()));
     }
 
     /// The note was created by a save: it has an id now, and a pin chosen

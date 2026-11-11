@@ -55,6 +55,18 @@ pub fn failure(locale: Locale) -> wire::Failure {
     wire::Failure {
         sentence: shared::read_failed(locale),
         remedy: shared::kit_retry(locale),
+        permanent: false,
+    }
+}
+
+/// The failure for an item that is GONE (deleted, in the trash, or not openable here): its own
+/// sentence, an optional remedy, and no Retry, because reading it again cannot bring it back.
+#[must_use]
+pub fn gone(sentence: String, remedy: String) -> wire::Failure {
+    wire::Failure {
+        sentence,
+        remedy,
+        permanent: true,
     }
 }
 
@@ -65,6 +77,7 @@ pub fn incomplete(locale: Locale) -> wire::Failure {
     wire::Failure {
         sentence: shared::read_incomplete(locale),
         remedy: shared::kit_retry(locale),
+        permanent: false,
     }
 }
 
@@ -149,6 +162,12 @@ impl Note {
 }
 
 /// WHAT A PAGE SHOWS FOR ITS READ, once for every app.
+///
+/// A GONE ITEM (a document, note, task or project that was deleted, is in the trash, or cannot be
+/// opened here) is [`Page::Failed`], never [`Page::Empty`]: Empty means "nothing here yet", and a
+/// member who opened an item that has since gone was not shown an empty place. The screen
+/// overwrites the wired failure with [`gone`], its own sentence and no Retry; the way back is the
+/// page's back control.
 ///
 /// Precedence: first-load [`Page::Loading`] > [`Page::Refused`] (a gate, never retried by
 /// itself) > [`Page::Failed`] (nothing to show) > [`Page::Ready`] (with at most one [`Note`],
@@ -414,6 +433,14 @@ mod tests {
                 wire::page_note::Kind::Unspecified as i32
             );
         }
+    }
+
+    #[test]
+    fn a_gone_item_is_a_permanent_failure_and_an_ordinary_one_is_not() {
+        let gone = gone("This task is gone.".to_owned(), String::new());
+        assert!(gone.permanent && gone.remedy.is_empty());
+        assert!(!failure(EN).permanent);
+        assert!(!incomplete(EN).permanent);
     }
 
     #[test]

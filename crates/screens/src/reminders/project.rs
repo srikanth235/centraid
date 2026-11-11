@@ -639,10 +639,10 @@ impl Screen for Project {
         );
         // A project that is gone says so in its own words, not the generic failure.
         if self.gone && matches!(page.state, Some(wire::page_state::State::Failed(_))) {
-            page.state = Some(wire::page_state::State::Failed(wire::Failure {
-                sentence: words::project_gone(locale),
-                remedy: String::new(),
-            }));
+            page.state = Some(wire::page_state::State::Failed(read::gone(
+                words::project_gone(locale),
+                String::new(),
+            )));
         }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoProject(

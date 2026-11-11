@@ -632,6 +632,7 @@ impl Editor {
             } else {
                 why.to_owned()
             },
+            permanent: false,
         });
     }
 }

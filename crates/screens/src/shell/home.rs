@@ -661,6 +661,7 @@ impl Screen for Home {
             Content::Failure(wire::Failure {
                 sentence: words::home_no_vault(locale),
                 remedy: String::new(),
+                permanent: false,
             })
         } else if self.read {
             Content::Data(Box::new(self.data(locale)))

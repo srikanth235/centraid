@@ -327,6 +327,7 @@ impl<D: Draft> Autosave<D> {
             failure: self.failure.as_ref().map(|sentence| wire::Failure {
                 sentence: sentence.clone(),
                 remedy: String::new(),
+                permanent: false,
             }),
             remote_changed: self.remote_changed,
             label: self.label(locale),

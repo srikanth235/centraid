@@ -148,6 +148,7 @@ impl Screen for Counter {
             Phase::Failed => wire::counter_view::Content::Failed(wire::Failure {
                 sentence: strings::counter_failed(locale),
                 remedy: strings::counter_retry(locale),
+                permanent: false,
             }),
             Phase::Ready(count) => wire::counter_view::Content::Data(wire::CounterData {
                 count_label: strings::counter_count(locale, *count),

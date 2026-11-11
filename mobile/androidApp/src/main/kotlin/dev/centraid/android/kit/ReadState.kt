@@ -151,7 +151,8 @@ public fun ReadStateView(
             page.loading != null -> skeleton()
             refused != null -> StageScheme(stage) { DeniedGate(refused) }
             failed != null -> StageScheme(stage) {
-                FailureView(failed.sentence, failed.remedy, onRetry, retryLabel = retryLabel)
+                // A gone item offers no Retry: reading it again cannot bring it back.
+                FailureView(failed.sentence, failed.remedy, onRetry.takeUnless { failed.permanent }, retryLabel = retryLabel)
             }
             empty != null -> StageScheme(stage) { EmptyStateView(empty, onEmptyAction) }
             stage -> {

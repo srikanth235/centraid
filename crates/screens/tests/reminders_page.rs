@@ -283,6 +283,14 @@ fn failed_sentence(page: &Option<wire::PageState>) -> &str {
     &failure.sentence
 }
 
+/// Whether a failed page offers no Retry (the item is gone).
+fn failed_permanent(page: &Option<wire::PageState>) -> bool {
+    let Some(State::Failed(failure)) = state_of(page) else {
+        panic!("not failed: {page:?}");
+    };
+    failure.permanent
+}
+
 /// Ready, with the note it carries.
 fn ready_note(page: &Option<wire::PageState>) -> Option<&wire::PageNote> {
     let page = page.as_ref().expect("a page");
@@ -567,6 +575,7 @@ fn a_failed_refresh_keeps_the_projects_rows_and_a_project_that_is_gone_says_so()
         failed_sentence(&shell.project(ghost).page),
         "This project is gone."
     );
+    assert!(failed_permanent(&shell.project(ghost).page));
     assert!(shell.project(ghost).head.is_none());
 }
 
@@ -602,6 +611,7 @@ fn a_task_that_cannot_be_read_is_failed_or_refused_and_a_gone_one_says_so() {
         failed_sentence(&shell.task(gone).page),
         "This task is gone."
     );
+    assert!(failed_permanent(&shell.task(gone).page));
     assert!(shell.task(gone).content.is_none());
 }
 

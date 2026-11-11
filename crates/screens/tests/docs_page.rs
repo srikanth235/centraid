@@ -457,15 +457,22 @@ fn a_document_that_cannot_be_read_is_failed_refused_or_gone_but_never_the_wrong_
     ready(&shell.document(i).page);
     assert!(shell.document(i).content.is_some());
 
-    // A document nothing holds is the empty state in its own words, not a failure.
+    // A document nothing holds is GONE: a failure in its own words with no Retry (reading it
+    // again cannot bring it back), never the empty state.
     let gone = shell.push(routes::document("nope", "", ""));
-    let empty = empty_of(&shell.document(gone).page);
-    assert_eq!(empty.headline, "This document is no longer here.");
+    let Some(State::Failed(failure)) = state_of(&shell.document(gone).page) else {
+        panic!("gone is a failure: {:?}", shell.document(gone).page);
+    };
+    assert_eq!(failure.sentence, "This document is no longer here.");
+    assert!(failure.permanent);
     assert!(shell.document(gone).content.is_none());
-    // Failing to read it again is the failure, never the empty state.
+    // Failing to read it again is an ordinary failure, with Retry.
     shell.reads(Mode::Fails);
     shell.retry_document(gone);
-    assert!(failed(&shell.document(gone).page));
+    let Some(State::Failed(failure)) = state_of(&shell.document(gone).page) else {
+        panic!("a failed read is a failure");
+    };
+    assert!(!failure.permanent);
 }
 
 #[test]

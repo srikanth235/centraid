@@ -18,6 +18,9 @@ message Failure {
   string sentence = 1;
   // Something the member can do about it; empty when nothing.
   string remedy = 2;
+  // Trying again cannot help (the item is gone, or cannot be opened here): the shared view
+  // draws no Retry. False for an ordinary failed read.
+  bool permanent = 3;
 }
 
 // The loading state. A message rather than a bare `bool`, so the oneof can hold

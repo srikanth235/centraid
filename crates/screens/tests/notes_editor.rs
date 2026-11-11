@@ -391,6 +391,7 @@ fn a_note_moved_to_the_trash_elsewhere_refuses_the_save_and_reload_keeps_the_wor
     match page_of(editor_state(d.view(i)).page.as_ref()) {
         Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note is in the trash.");
+            assert!(failure.permanent, "a gone note offers no Retry");
             assert_eq!(
                 failure.remedy,
                 "Restore it to find your text in Earlier versions."
@@ -506,6 +507,7 @@ fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor(
     match page_of(editor_state(d.view(gone)).page.as_ref()) {
         Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note isn't on this phone.");
+            assert!(failure.permanent, "a gone note offers no Retry");
         }
         other => panic!("not a failure: {other:?}"),
     }
@@ -520,6 +522,7 @@ fn a_note_that_is_not_here_or_is_in_the_trash_is_a_sentence_not_an_empty_editor(
     match page_of(editor_state(d.view(trashed)).page.as_ref()) {
         Some(wire::page_state::State::Failed(failure)) => {
             assert_eq!(failure.sentence, "This note is in the trash.");
+            assert!(failure.permanent, "a gone note offers no Retry");
         }
         other => panic!("not a failure: {other:?}"),
     }

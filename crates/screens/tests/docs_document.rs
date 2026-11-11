@@ -124,7 +124,7 @@ fn a_document_over_bytes_this_device_does_not_hold_says_why() {
 }
 
 #[test]
-fn a_document_that_is_gone_is_a_state_not_a_failure() {
+fn a_document_that_is_gone_is_a_final_failure_never_an_empty_page() {
     let mut d = driver();
     let i = open(&mut d, "nope", "", "");
     let state = document_state(d.view(i));
@@ -132,12 +132,13 @@ fn a_document_that_is_gone_is_a_state_not_a_failure() {
         state.content.is_none(),
         "nothing is drawn for a gone document"
     );
-    let Some(wire::page_state::State::Empty(empty)) =
+    let Some(wire::page_state::State::Failed(failure)) =
         state.page.as_ref().and_then(|page| page.state.as_ref())
     else {
-        panic!("gone is the page's empty state: {:?}", state.page);
+        panic!("gone is a failure: {:?}", state.page);
     };
-    assert_eq!(empty.headline, "This document is no longer here.");
+    assert_eq!(failure.sentence, "This document is no longer here.");
+    assert!(failure.permanent, "trying again cannot bring it back");
 }
 
 #[test]
