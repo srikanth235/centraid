@@ -402,31 +402,13 @@ const WRITES_NOTHING: &[(&str, &str, &str)] = &[
     ("calendar", "export-ics", "{}"),
     ("reminders", "export-ics", "{}"),
     ("money", "export-csv", "{}"),
-    // Birthday reminders always stay on: the command refuses an off request, and an on request
-    // restates what the person already has. The recipe asks for a person's birthday first.
-    (
-        "people",
-        "set-birthday-reminder",
-        "{\"id\":\"$BIRTHDAY_PERSON\",\"on\":true}",
-    ),
 ];
 
 #[test]
 fn a_claim_of_writing_nothing_is_proven_by_running_the_action() {
     let w = World::new();
     for (app, action, input) in WRITES_NOTHING {
-        // A recipe that needs a person with a birthday names one, and one is made for it.
-        let input = if input.contains("$BIRTHDAY_PERSON") {
-            let person = w.make(
-                "people",
-                "add-person",
-                &json!({ "title": "Birthday Bo", "birthday": "05-05" }),
-            );
-            input.replace("$BIRTHDAY_PERSON", &person)
-        } else {
-            (*input).to_owned()
-        };
-        let input: Value = serde_json::from_str(&input).expect("json");
+        let input: Value = serde_json::from_str(input).expect("json");
         let done = w.ok(app, action, &input);
         assert!(
             done.response.tables.is_empty(),

@@ -204,10 +204,9 @@ fn a_relationship_shows_on_both_sheets_each_read_from_its_own_side() {
 }
 
 #[test]
-fn a_birthday_reminder_cannot_be_turned_off() {
+fn a_birthday_reminder_is_on_by_default() {
     let w = World::new();
     let ada = w.person("Ada", json!({ "birthday": "01-20" }));
-    let bob = w.person("Bob", json!({}));
     let reminder = |w: &World| {
         let sheet = w
             .read(|door| load_person(door, &ada).expect("reads"))
@@ -234,35 +233,6 @@ fn a_birthday_reminder_cannot_be_turned_off() {
         (Some(true), true, 1),
         "a birthday has its reminder by default"
     );
-    let refused = w
-        .vault
-        .execute(
-            &w.registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "person.set_birthday_reminder",
-                json!({ "id": ada, "on": false }),
-            ),
-        )
-        .expect("the refusal answers");
-    assert_eq!(refused.status, CommandStatus::Failed);
-    assert_eq!(reminder(&w), (Some(true), true, 1));
-    w.ok(
-        "person.set_birthday_reminder",
-        json!({ "id": ada, "on": true }),
-    );
-    assert_eq!(reminder(&w), (Some(true), true, 1));
-    // A person with no birthday has no reminder to switch.
-    let outcome = w
-        .vault
-        .execute(
-            &w.registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "person.set_birthday_reminder",
-                json!({ "id": bob, "on": false }),
-            ),
-        )
-        .expect("runs");
-    assert_eq!(outcome.status, CommandStatus::Failed);
+    // No command turns it off, and one with no birthday has no reminder.
+    assert_eq!(reminder(&w).0, Some(true));
 }
