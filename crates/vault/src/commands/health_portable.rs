@@ -55,22 +55,33 @@ fn optional<T>(value: Option<T>, spell: impl Fn(T) -> String) -> String {
 }
 
 fn measurements(connection: &Connection, only: Option<&str>) -> Result<(String, i64)> {
+    // One person at a time, by the table's primary key (person, day, metric): a read of every
+    // measurement in one statement is a scan of the biggest table a vault holds.
+    let people = connection
+        .prepare_cached(
+            "SELECT id FROM entity WHERE kind = 'person' AND deleted_at IS NULL ORDER BY id",
+        )?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut statement = connection.prepare_cached(
-        "SELECT m.day, m.metric, m.value
-           FROM measurement m
-           JOIN entity p ON p.id = m.person_id
-          WHERE p.deleted_at IS NULL AND (?1 IS NULL OR m.metric = ?1)
-          ORDER BY m.day, m.metric, m.person_id",
+        "SELECT day, metric, value FROM measurement
+          WHERE person_id = ?1 AND (?2 IS NULL OR metric = ?2)",
     )?;
-    let rows = statement
-        .query_map([only], |row| {
+    let mut rows = Vec::new();
+    for person in &people {
+        for found in statement.query_map(rusqlite::params![person, only], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, f64>(2)?,
             ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+        })? {
+            rows.push((person.as_str(), found?));
+        }
+    }
+    // The file reads by day, then metric, then person.
+    rows.sort_by(|a, b| (&a.1.0, &a.1.1, a.0).cmp(&(&b.1.0, &b.1.1, b.0)));
+    let rows: Vec<(String, String, f64)> = rows.into_iter().map(|(_, found)| found).collect();
     let mut text = row(&MEASUREMENT_HEADER);
     for (day, key, value) in &rows {
         text.push_str(&row(&[day, key, &number(*value), metric(key).1]));
