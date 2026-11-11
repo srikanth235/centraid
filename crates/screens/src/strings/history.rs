@@ -22,6 +22,10 @@ catalog! {
     plain from_phone = ("From your phone", "From your phone");
     plain from_statement = ("From a statement", "From a statement");
     plain other_details = ("Other details", "Other details");
+    plain reveal = ("Reveal", "Reveal");
+    plain conceal = ("Conceal", "Conceal");
+    plain secret_hidden = ("{label}, hidden", "{label}, hidden");
+    plain secret_revealed = ("{label}, revealed", "{label}, revealed");
     plain restored = ("Earlier version restored", "Earlier version restored");
     plain restored_already = ("Already how it is now", "Already how it is now");
     plain title = ("Earlier versions", "Earlier versions");

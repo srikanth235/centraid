@@ -2333,7 +2333,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.duplicate_item",
-        "inverse": null,
+        "inverse": "undo-create",
         "kind": "locker_item",
         "phrasings": [
           "clone my Netflix login for my sister's account",
@@ -2351,7 +2351,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_field",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_field",
         "phrasings": [
           "add a security question field to my bank login",
@@ -2371,7 +2371,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.remove_field",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_field",
         "phrasings": [
           "remove the security question from my bank login",
@@ -2389,7 +2389,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_addresses",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_item",
         "phrasings": [
           "add a second website to my Google login",
@@ -2407,7 +2407,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_passkey",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_passkey",
         "phrasings": [
           "save a passkey on my GitHub login",
@@ -2427,7 +2427,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.clear_passkey",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_passkey",
         "phrasings": [
           "remove the passkey from my GitHub login",
@@ -2445,7 +2445,7 @@
         "bulk": false,
         "chat": "card",
         "command": "locker.set_memo",
-        "inverse": null,
+        "inverse": "undo-change",
         "kind": "locker_item",
         "phrasings": [
           "write a memo on my bank login",

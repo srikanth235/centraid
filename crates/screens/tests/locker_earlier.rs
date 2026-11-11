@@ -1,7 +1,7 @@
-//! EARLIER VERSIONS of a Locker item (#1185), for what the vault keeps: the plain fields. The
-//! vault keeps NO history of a sealed value (password, seed, card number, CVV, content, a sealed
-//! custom field, a passkey), so a change to one alone makes no version and no line, and nothing
-//! sealed is ever worded. The entry and the screen are behind the Locker's wall. Every test goes
+//! EARLIER VERSIONS of a Locker item (#1185): the plain fields, and a changed secret kept SEALED.
+//! A version that held a password is drawn as dots with a Reveal behind the unlocked session; the
+//! value is never in a line, label or spoken name; a relock wipes it; a restore brings the old
+//! sealed value back. The entry and the screen are behind the Locker's wall. Every test goes
 //! through `Driver`.
 
 mod locker_support;
@@ -197,38 +197,218 @@ fn restore_works_for_a_plain_field_asks_nothing_and_undo_puts_it_back() {
     assert_eq!(username_now(&d), "maya@home.example");
 }
 
-#[test]
-fn a_password_change_makes_no_version_and_no_line() {
-    let (mut d, id) = opened();
+/// The password moved twice, in the clear as a member types it (the core seals it).
+fn rotated(d: &Driver) -> Draft {
     let mut draft = Draft::new();
     draft.password = "battery staple".to_owned();
-    draft.save(&d);
+    draft.save(d);
     draft.password = "tr0ub4dor three".to_owned();
-    draft.save(&d);
-    d.send(id, E::DataChanged(wire::DataChanged::default()));
+    draft.save(d);
+    draft
+}
+
+const SECRETS: [&str; 3] = ["correct horse", "battery staple", "tr0ub4dor three"];
+
+fn tap(d: &mut Driver, at: u64, seq: i64, key: &str, reveal: bool) {
+    let tapped = wire::earlier_event::SecretTapped {
+        seq,
+        key: key.to_owned(),
+    };
+    send(
+        d,
+        at,
+        if reveal {
+            wire::earlier_event::Kind::Reveal(tapped)
+        } else {
+            wire::earlier_event::Kind::Conceal(tapped)
+        },
+    );
+}
+
+fn live_password(d: &Driver) -> String {
+    unlock_core(d);
+    session(
+        d,
+        wire::locker_session_request::Step::Reveal(wire::LockerReveal {
+            item_id: "i1".to_owned(),
+            column: "password".to_owned(),
+            ..Default::default()
+        }),
+    )
+    .revealed
+    .expect("the live password")
+    .value
+}
+
+#[test]
+fn a_password_change_is_a_version_drawn_as_dots_and_no_value_reaches_the_screen() {
+    let (mut d, id) = opened();
+    rotated(&d);
+    let at = open_earlier(&mut d, id);
+    // Three rows: now, the one before, the original. Each earlier one held a password.
+    assert_eq!(
+        lines(&d, at),
+        ["Password changed", "Password changed", "Password changed"]
+    );
+    let shown = rows(d.view(at));
     assert!(
-        entry(&d, id).is_none(),
-        "the vault keeps no history of a sealed value: nothing to enter"
+        shown[0].secrets.is_empty(),
+        "the current row opens the live item"
+    );
+    for row in &shown[1..] {
+        assert_eq!(row.secrets.len(), 1);
+        let secret = &row.secrets[0];
+        assert_eq!(
+            (
+                secret.key.as_str(),
+                secret.label.as_str(),
+                secret.masked.as_str()
+            ),
+            ("password", "Password", "••••••••")
+        );
+        assert!(!secret.revealed && secret.value.is_empty());
+        assert_eq!(secret.reveal_label, "Reveal");
+        assert_eq!(secret.conceal_label, "Conceal");
+        assert_eq!(secret.accessibility_label, "Password, hidden");
+    }
+    let everything = format!("{:?}", d.view(at));
+    for secret in SECRETS {
+        assert!(!everything.contains(secret), "{secret} reached the screen");
+    }
+    assert!(
+        !everything.contains("lk1:"),
+        "ciphertext reached the screen"
     );
 
-    // A change to a plain field and the password together is a version of the plain field only,
-    // and no sealed value reaches any line, label or spoken name.
+    // A plain field and the password moved together read both.
+    let mut draft = Draft::new();
     draft.username = "maya@work.example".to_owned();
     draft.password = "a fourth secret".to_owned();
     draft.save(&d);
-    let at = open_earlier(&mut d, id);
-    let everything = format!("{:?}", d.view(at));
-    for secret in [
-        "correct horse",
-        "battery staple",
-        "tr0ub4dor three",
-        "a fourth secret",
-    ] {
-        assert!(!everything.contains(secret), "{secret} reached the screen");
-    }
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::Refreshed(wire::earlier_event::Refreshed {}),
+    );
     assert_eq!(
-        lines(&d, at),
-        ["Username: maya@work.example", "Username: maya@example.com"]
+        lines(&d, at)[1],
+        "Username: maya@example.com · Password changed"
+    );
+}
+
+#[test]
+fn reveal_opens_that_versions_password_behind_the_unlock_and_conceal_hides_it() {
+    let (mut d, id) = opened();
+    rotated(&d);
+    let at = open_earlier(&mut d, id);
+    let shown = rows(d.view(at)).to_vec();
+    let (middle, oldest) = (shown[1].seq, shown[2].seq);
+    let before = d.effects.len();
+
+    tap(&mut d, at, oldest, "password", true);
+    let after = rows(d.view(at));
+    let secret = &after[2].secrets[0];
+    assert!(secret.revealed, "{secret:?}");
+    assert_eq!(secret.value, "correct horse", "the version's own password");
+    assert_eq!(secret.accessibility_label, "Password, revealed");
+    assert!(
+        after[1].secrets[0].value.is_empty(),
+        "only the one asked for is shown"
+    );
+    assert!(
+        effects_of(&d, before).iter().any(|effect| matches!(
+            effect,
+            wire::effect::Kind::ScreenshotShield(shield) if shield.on
+        )),
+        "a shown secret raises the screenshot shield"
+    );
+
+    // Another reveal replaces it: one at a time.
+    tap(&mut d, at, middle, "password", true);
+    let after = rows(d.view(at));
+    assert_eq!(after[1].secrets[0].value, "battery staple");
+    assert!(!after[2].secrets[0].revealed);
+
+    tap(&mut d, at, middle, "password", false);
+    let after = rows(d.view(at));
+    assert!(after[1].secrets[0].value.is_empty() && !after[1].secrets[0].revealed);
+    assert!(effects_of(&d, before).iter().any(|effect| matches!(
+        effect,
+        wire::effect::Kind::ScreenshotShield(shield) if !shield.on
+    )));
+
+    // A key the version did not hold, and the current row, open nothing.
+    tap(&mut d, at, oldest, "cvv", true);
+    tap(&mut d, at, 0, "password", true);
+    assert!(
+        rows(d.view(at))
+            .iter()
+            .all(|row| row.secrets.iter().all(|secret| !secret.revealed))
+    );
+}
+
+#[test]
+fn a_shut_wall_reveals_nothing_and_a_relock_wipes_what_was_shown() {
+    let (mut d, id) = opened();
+    rotated(&d);
+    let at = open_earlier(&mut d, id);
+    let oldest = rows(d.view(at)).last().expect("a row").seq;
+    tap(&mut d, at, oldest, "password", true);
+    assert!(rows(d.view(at)).last().unwrap().secrets[0].revealed);
+
+    // The phone leaves the foreground: the revealed value goes with the wall.
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    d.send(at, E::DataChanged(wire::DataChanged::default()));
+    assert!(matches!(
+        earlier_view(d.view(at)).content,
+        Some(wire::earlier_view::Content::Denied(_))
+    ));
+    let everything = format!("{:?}", d.view(at));
+    for secret in SECRETS {
+        assert!(!everything.contains(secret), "{secret} outlived the relock");
+    }
+    // A reveal asked of the shut screen opens nothing.
+    tap(&mut d, at, oldest, "password", true);
+    let everything = format!("{:?}", d.view(at));
+    assert!(!everything.contains("correct horse"));
+}
+
+#[test]
+fn restore_brings_back_the_old_sealed_password_and_undo_puts_back_the_new_one() {
+    let (mut d, id) = opened();
+    rotated(&d);
+    assert_eq!(live_password(&d), "tr0ub4dor three");
+    let at = open_earlier(&mut d, id);
+    let oldest = rows(d.view(at)).last().expect("a row").seq;
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::Restore(wire::earlier_event::RestoreTapped { seq: oldest }),
+    );
+    assert_eq!(
+        live_password(&d),
+        "correct horse",
+        "the first password is live again"
+    );
+    assert_eq!(
+        earlier_view(d.view(at))
+            .status
+            .clone()
+            .expect("a status")
+            .sentence,
+        "Earlier version restored"
+    );
+    send(
+        &mut d,
+        at,
+        wire::earlier_event::Kind::StatusActed(wire::earlier_event::StatusActed {}),
+    );
+    assert_eq!(
+        live_password(&d),
+        "tr0ub4dor three",
+        "undo restores the replaced one"
     );
 }
 

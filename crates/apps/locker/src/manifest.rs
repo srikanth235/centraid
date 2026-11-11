@@ -156,7 +156,7 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-item", "empty-trash", "export"]);
+        assert_eq!(required, ["purge-item", "empty-trash", "export", "reveal"]);
     }
 
     /// THE ONLY THREE `reveal` SCOPES IN THE PRODUCT, and they survive the

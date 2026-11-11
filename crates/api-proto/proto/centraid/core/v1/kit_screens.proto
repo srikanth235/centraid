@@ -387,6 +387,32 @@ message EarlierRow {
   // "Restore"; empty on the current row.
   string restore_label = 6;
   string accessibility_label = 7;
+  // A sealed value the version held, one per changed secret (Locker's password, card number, ...).
+  // Never the value: `masked` is dots, and the value arrives in `EarlierSecret.value` only after
+  // a Reveal, behind the owner check, for a short life. Empty for every other app.
+  repeated EarlierSecret secrets = 8;
+}
+
+// ONE SEALED VALUE OF AN EARLIER VERSION (Locker, #1185). Shown as `label` and `masked` with the
+// `reveal_label` control. A Reveal tap sends `EarlierEvent.reveal` with the row's `seq` and this
+// `key`; the core opens the cell, and the screen answers `revealed` with `value` for its life,
+// then conceals it again. A shell draws only what is here and keeps no copy; the screen raises
+// the screenshot shield itself.
+message EarlierSecret {
+  // What to send back: the cell's name (`password`, `field:<id>`).
+  string key = 1;
+  // "Password".
+  string label = 2;
+  // Always dots, the same for every value: neither the value nor its length.
+  string masked = 3;
+  // The revealed value while `revealed`; empty otherwise.
+  string value = 4;
+  bool revealed = 5;
+  // "Reveal"; empty for a secret that is never shown (a one-time-code seed).
+  string reveal_label = 6;
+  // "Conceal"; empty when `reveal_label` is.
+  string conceal_label = 7;
+  string accessibility_label = 8;
 }
 
 message EarlierData {
@@ -422,6 +448,15 @@ message EarlierEvent {
     MoreTapped more = 3;
     // "Undo" on the status line after a restore.
     StatusActed status_acted = 4;
+    // Reveal a sealed value of one version (Locker): `EarlierSecret.reveal_label`.
+    SecretTapped reveal = 5;
+    // Conceal it again: `EarlierSecret.conceal_label`.
+    SecretTapped conceal = 6;
+  }
+
+  message SecretTapped {
+    int64 seq = 1;
+    string key = 2;
   }
 
   message Refreshed {}

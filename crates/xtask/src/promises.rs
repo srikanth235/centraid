@@ -152,7 +152,7 @@ pub const REGISTER: &[Row] = &[
     kept("calendar", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("docs", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("health", Promise::Undo, "crates/core/src/act/inverse.rs"),
-    owed("locker", Promise::Undo, UNDO_OWED),
+    kept("locker", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("money", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("notes", Promise::Undo, "crates/core/src/act/inverse.rs"),
     kept("people", Promise::Undo, "crates/core/src/act/inverse.rs"),
@@ -207,8 +207,6 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/earlier.rs",
     ),
 ];
-
-const UNDO_OWED: &str = "actions neither in the core's inverse table nor confirmed, or the manifest and the table disagree (#1185)";
 
 /// `promises`: the table is complete, and every row is true.
 pub fn promises(root: &Path) -> RuleReport {

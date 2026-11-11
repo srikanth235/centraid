@@ -17,11 +17,16 @@
 //! - **Who made a change** reads in the member's words: a change a phone's store made says "From
 //!   your phone", "From the folder", "From Apple Health" or "From a statement"; the member's own
 //!   say nothing.
+//! - **A secret a version held** (Locker's replaced password; only an app with a [`Wall`]) is
+//!   drawn as dots with a Reveal on its row ([`wire::EarlierSecret`]), never worded in the line. A
+//!   Reveal asks the wall's owner check ([`Wall::open`]), shows the value for its life, and a
+//!   Conceal, the timer, leaving and a relock take it away again.
 //! - **A failed read** is the shared failed state, never an empty list. A data change reloads the
 //!   first page; pages the member had opened are not kept.
 
 use centraid_api_proto::core_v1 as wire;
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use serde_json::Value;
 use wire::app_query_response::Answer;
@@ -31,6 +36,7 @@ use wire::screen_event::Kind as E;
 use super::act as kit_act;
 use super::civil::{self, HourCycle};
 use super::read::{self, Reading};
+use super::secret::Secrets;
 use crate::catalog::{act, load};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, history as words, shared};
@@ -78,11 +84,42 @@ pub struct EarlierSpec {
     /// Reads the names a line needs for the ids a record's versions hold (a guest's, a category's)
     /// as the record's page names them; `None` where the fields carry their own words.
     pub know: Option<fn(&Ctx, &str) -> Names>,
-    /// A wall the app's records sit behind (Locker's lock): `Some(denial)` while it is shut. The
-    /// screen then reads nothing, draws the app's `denied` gate and restores nothing; `None` where
-    /// the app has no wall.
-    pub gate: Option<fn(&Ctx) -> Option<wire::AppQueryDenial>>,
+    /// A wall the app's records sit behind (Locker's lock) and the sealed values it keeps: while
+    /// it is shut the screen reads nothing, draws the app's `denied` gate and restores nothing;
+    /// `None` where the app has no wall.
+    pub gate: Option<&'static Wall>,
 }
+
+/// A wall the app's records sit behind, and the secrets of its versions.
+///
+/// A version of a record behind a wall may hold SEALED values (Locker's password): the vault
+/// keeps them as ciphertext and the list shows each as dots. A tap on Reveal opens that version's
+/// cell through the wall's own owner check ([`Wall::open`]), for a short life, and the value
+/// is gone again on Conceal, on the timer, on leaving and on a relock.
+pub struct Wall {
+    /// `Some(denial)` while the wall is shut.
+    pub closed: fn(&Ctx) -> Option<wire::AppQueryDenial>,
+    /// The sealed values among the fields a version held, one per secret.
+    pub secrets: fn(&Look, &[Field]) -> Vec<Secret>,
+    /// Open one of a version's secrets (`entity_id`, `seq`, the secret's `key`): its plaintext
+    /// and how long it may stay on screen, `Err(None)` when the wall shut under the ask, or
+    /// `Err(Some(sentence))` for any other refusal, in the member's words.
+    pub open: fn(&Ctx, &str, i64, &str) -> Result<(String, Duration), Option<String>>,
+}
+
+/// One sealed value a version held, as the app names it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Secret {
+    /// What a Reveal sends back to name it.
+    pub key: String,
+    /// "Password".
+    pub label: String,
+    /// Whether it can be shown at all: a one-time-code seed never is.
+    pub revealable: bool,
+}
+
+/// What a sealed value is drawn as, for every value and length alike.
+pub const MASKED: &str = "••••••••";
 
 /// The registry factory for `spec`'s screen.
 #[must_use]
@@ -102,6 +139,8 @@ pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn 
         status: None,
         undo: false,
         names: Names::new(),
+        secrets: Secrets::default(),
+        effects: Vec::new(),
     }))
 }
 
@@ -232,6 +271,15 @@ struct Earlier {
     undo: bool,
     /// What the spec's `know` hook read with the list.
     names: Names,
+    /// The sealed values on screen, keyed `<seq>:<key>`.
+    secrets: Secrets,
+    /// Effects a change of state owes the shell (a shield that falls) until the event ends.
+    effects: Vec<wire::Effect>,
+}
+
+/// The name a shown secret goes by in [`Secrets`]: the version's, and the secret's.
+fn token(seq: i64, key: &str) -> String {
+    format!("{seq}:{key}")
 }
 
 fn json(text: &str) -> Value {
@@ -285,10 +333,74 @@ impl Earlier {
 
     /// The wall's refusal while the app's records are behind one that is shut.
     fn walled(&self, ctx: &Ctx) -> Option<wire::AppQueryDenial> {
-        self.spec.gate.and_then(|gate| gate(ctx))
+        self.spec.gate.and_then(|wall| (wall.closed)(ctx))
+    }
+
+    /// The secrets a version held, as the app's wall names them.
+    fn secrets_of(&self, look: &Look, version: &Version) -> Vec<Secret> {
+        self.spec
+            .gate
+            .map_or_else(Vec::new, |wall| (wall.secrets)(look, &version.before))
+    }
+
+    /// Reveal one secret of a version: asked of the core, which opens the cell behind the owner
+    /// check. A wall that shut is a wipe; a refusal is its sentence over the list.
+    fn reveal(&mut self, ctx: &Ctx, seq: i64, key: &str) {
+        let Some(wall) = self.spec.gate else { return };
+        if self.walled(ctx).is_some() {
+            self.reload(ctx);
+            return;
+        }
+        let Phase::Ready { versions, .. } = &self.phase else {
+            return;
+        };
+        let look = Look {
+            locale: ctx.locale(),
+            cycle: ctx.hour_cycle(),
+            zone: ctx.zone(),
+            region: ctx.region(),
+            names: &self.names,
+        };
+        // Only a secret this version held, and one that can be shown at all.
+        let offered = versions
+            .iter()
+            .find(|version| version.seq == seq && seq > 0)
+            .is_some_and(|version| {
+                (wall.secrets)(&look, &version.before)
+                    .iter()
+                    .any(|secret| secret.key == key && secret.revealable)
+            });
+        if !offered {
+            return;
+        }
+        match (wall.open)(ctx, &self.entity_id, seq, key) {
+            Ok((value, life)) => {
+                self.status = None;
+                self.effects.extend(self.secrets.hide_all(ctx));
+                self.effects
+                    .extend(self.secrets.show(ctx, &token(seq, key), &value, life));
+            }
+            // The wall shut under the ask: the screen draws its gate and holds nothing.
+            Err(None) => self.reload(ctx),
+            Err(Some(sentence)) => {
+                self.status = Some(wire::StatusLine {
+                    sentence,
+                    action_label: String::new(),
+                    refused: true,
+                });
+            }
+        }
+    }
+
+    fn conceal(&mut self, ctx: &Ctx, seq: i64, key: &str) {
+        let effects = self.secrets.hide(ctx, &token(seq, key));
+        self.effects.extend(effects);
     }
 
     fn reload(&mut self, ctx: &Ctx) {
+        // Nothing revealed outlives a change of what is listed or a shut wall.
+        let hidden = self.secrets.hide_all(ctx);
+        self.effects.extend(hidden);
         // A shut wall is a wipe: nothing read before it stays, and nothing is read behind it.
         if let Some(denial) = self.walled(ctx) {
             self.names = Names::new();
@@ -442,6 +554,7 @@ impl Earlier {
         fields: &[Field],
         seq: i64,
         current: bool,
+        secrets: Vec<wire::EarlierSecret>,
     ) -> wire::EarlierRow {
         let locale = look.locale;
         let line = (self.spec.line)(look, fields);
@@ -471,7 +584,42 @@ impl Earlier {
             } else {
                 shared::trash_restore(locale)
             },
+            secrets,
         }
+    }
+
+    /// The sealed values a version held, drawn as dots until one is revealed.
+    fn secret_rows(&self, look: &Look, version: &Version) -> Vec<wire::EarlierSecret> {
+        let locale = look.locale;
+        self.secrets_of(look, version)
+            .into_iter()
+            .map(|secret| {
+                let shown = self.secrets.value(&token(version.seq, &secret.key));
+                let spoken = if shown.is_some() {
+                    fill(&words::secret_revealed(locale), &[("label", &secret.label)])
+                } else {
+                    fill(&words::secret_hidden(locale), &[("label", &secret.label)])
+                };
+                wire::EarlierSecret {
+                    key: secret.key,
+                    masked: MASKED.to_owned(),
+                    value: shown.unwrap_or_default().to_owned(),
+                    revealed: shown.is_some(),
+                    reveal_label: if secret.revealable {
+                        words::reveal(locale)
+                    } else {
+                        String::new()
+                    },
+                    conceal_label: if secret.revealable {
+                        words::conceal(locale)
+                    } else {
+                        String::new()
+                    },
+                    accessibility_label: spoken,
+                    label: secret.label,
+                }
+            })
+            .collect()
     }
 
     fn rows(&self, look: &Look, versions: &[Version]) -> Vec<wire::EarlierRow> {
@@ -485,6 +633,7 @@ impl Earlier {
                 &newest.after,
                 0,
                 true,
+                Vec::new(),
             ));
         }
         for version in versions {
@@ -494,6 +643,7 @@ impl Earlier {
                 &version.before,
                 version.seq,
                 false,
+                self.secret_rows(look, version),
             ));
         }
         rows
@@ -503,6 +653,13 @@ impl Earlier {
 impl Screen for Earlier {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
+            // Nothing revealed outlives the screen: its effects are dropped with it.
+            Some(E::Left(_)) => self.secrets.conceal(),
+            Some(E::TimerFired(fired)) => {
+                let effects = self.secrets.fired(&fired.timer);
+                self.effects.extend(effects);
+            }
+            Some(E::EffectResult(result)) => self.secrets.answered(ctx, &result),
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
             }
@@ -512,11 +669,13 @@ impl Screen for Earlier {
                 Some(K::Restore(tapped)) => self.restore(ctx, tapped.seq),
                 Some(K::More(_)) => self.more(ctx),
                 Some(K::StatusActed(_)) => self.undone(ctx),
+                Some(K::Reveal(tapped)) => self.reveal(ctx, tapped.seq, &tapped.key),
+                Some(K::Conceal(tapped)) => self.conceal(ctx, tapped.seq, &tapped.key),
                 None => {}
             },
             _ => {}
         }
-        Vec::new()
+        std::mem::take(&mut self.effects)
     }
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {

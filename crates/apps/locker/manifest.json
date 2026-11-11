@@ -842,7 +842,7 @@
       "name": "duplicate-item",
       "verb": "duplicate",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-create",
       "sealed": [],
       "command": "locker.duplicate_item",
       "phrasings": [
@@ -882,7 +882,7 @@
       "name": "set-field",
       "verb": "edit",
       "kind": "locker_field",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": ["value"],
       "command": "locker.set_field",
       "phrasings": [
@@ -944,7 +944,7 @@
       "name": "remove-field",
       "verb": "delete",
       "kind": "locker_field",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.remove_field",
       "phrasings": [
@@ -988,7 +988,7 @@
       "name": "set-addresses",
       "verb": "edit",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.set_addresses",
       "phrasings": [
@@ -1042,7 +1042,7 @@
       "name": "set-passkey",
       "verb": "edit",
       "kind": "locker_passkey",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": ["private_key"],
       "command": "locker.set_passkey",
       "phrasings": [
@@ -1101,7 +1101,7 @@
       "name": "clear-passkey",
       "verb": "delete",
       "kind": "locker_passkey",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.clear_passkey",
       "phrasings": [
@@ -1141,7 +1141,7 @@
       "name": "set-memo",
       "verb": "edit",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "undo-change",
       "sealed": [],
       "command": "locker.set_memo",
       "phrasings": [
@@ -1239,7 +1239,7 @@
         "reveal the wifi password"
       ],
       "description": "Stamp the item as used, through locker.mark_used, before the phone core reveals ONE sealed field of it. It never carries the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only moves the stamp, so it is its own inverse.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {

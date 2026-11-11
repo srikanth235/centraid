@@ -403,12 +403,34 @@ fn reveal(
             return Ok(refused(wire::LockerRevealRefusal::SeedNotShown));
         }
         (
-            vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?,
+            // AN EARLIER VERSION'S VALUE (Earlier versions, #1185) is the ciphertext the live
+            // cell held, kept by the history bound to the same id and key generation: it opens
+            // with the same key behind the same unlock and stamps the item the same way. A
+            // field's kind never changes, so the live row's refusal of a seed covers a version.
+            if asked.earlier_seq > 0 {
+                vault.locker_sealed_earlier_cell(
+                    &asked.item_id,
+                    asked.earlier_seq,
+                    &asked.column,
+                    &asked.field_id,
+                )?
+            } else {
+                vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?
+            },
             asked.field_id.as_str(),
         )
     } else {
         (
-            vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?,
+            if asked.earlier_seq > 0 {
+                vault.locker_sealed_earlier_cell(
+                    &asked.item_id,
+                    asked.earlier_seq,
+                    &asked.column,
+                    "",
+                )?
+            } else {
+                vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?
+            },
             asked.item_id.as_str(),
         )
     };

@@ -24,8 +24,8 @@
 //!
 //! [`Confirm`] here is the **manifest's** `confirmation`, which the dispatching
 //! surface reads. The command definition's own `confirm` parks a **non-owner**
-//! invocation regardless of risk. Locker's two manifest-confirmed actions are
-//! `purge-item` and `export`; the `locker.*` catalogue's two command-level
+//! invocation regardless of risk. Locker's manifest-confirmed actions are
+//! `purge-item`, `empty-trash`, `export` and `reveal` (the owner check is its ask); the `locker.*` catalogue's two command-level
 //! gates are on `locker.purge_item` and `locker.export`. Same count, different
 //! gates, and collapsing them loses the non-owner park (census §A0).
 
@@ -57,7 +57,9 @@ pub const ACTIONS: [ActionRow; 23] = [
     act("clear-passkey", "locker.clear_passkey"),
     act("set-memo", "locker.set_memo"),
     confirmed("export", "locker.export"),
-    act("reveal", "locker.mark_used"),
+    // A reveal is the member opening a secret behind the owner check, which is the ask: it is
+    // `confirmed` for the register, and there is nothing to take back (a stamp of use).
+    confirmed("reveal", "locker.mark_used"),
     // A link set by hand (#1173): one edge, shaped by the vault.
     act("add-link", "edge.add"),
     act("remove-link", "edge.remove"),

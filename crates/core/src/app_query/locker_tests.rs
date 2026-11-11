@@ -1038,6 +1038,7 @@ fn a_custom_one_time_code_field_is_sealed_makes_codes_and_never_shows_its_seed()
         column: "value_sealed".to_owned(),
         field_id: "field-otp".to_owned(),
         copy: false,
+        earlier_seq: 0,
     });
     assert_eq!(
         asked.refusal,
@@ -1192,6 +1193,7 @@ fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
             column: "value_sealed".to_owned(),
             field_id: "field-rc".to_owned(),
             copy: true,
+            earlier_seq: 0,
         })
         .revealed
         .expect("the field reveals");
@@ -1207,6 +1209,7 @@ fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
                     column: "value_sealed".to_owned(),
                     field_id: field_id.to_owned(),
                     copy: false,
+                    earlier_seq: 0,
                 })
                 .refusal,
             wire::LockerRevealRefusal::NotSealed as i32
@@ -1224,6 +1227,7 @@ fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
             column: "value_sealed".to_owned(),
             field_id: "field-rc".to_owned(),
             copy: false,
+            earlier_seq: 0,
         })
         .revealed
         .expect("kept");
@@ -1630,6 +1634,7 @@ fn a_json_export_imports_back_whole() {
             column: "value_sealed".to_owned(),
             field_id: field.field_id.clone(),
             copy: false,
+            earlier_seq: 0,
         })
         .revealed
         .expect("it reveals")

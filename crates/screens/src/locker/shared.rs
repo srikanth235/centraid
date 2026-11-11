@@ -153,13 +153,16 @@ fn refusal_of(locale: Locale, answer: &wire::LockerSessionResponse) -> Refused {
 
 /// Reveal one sealed cell (`column`), or a custom field's value (`field_id`
 /// set, the column `value_sealed`). The core stamps the item as used before the
-/// value exists. `copy` sends the value to the clipboard; the value is the same.
+/// value exists. `copy` sends the value to the clipboard; the value is the same. `earlier_seq` > 0
+/// opens the cell as that earlier version of the item held it (Earlier versions); 0 is the live
+/// cell.
 pub(super) fn reveal(
     ctx: &Ctx,
     item_id: &str,
     column: &str,
     field_id: &str,
     copy: bool,
+    earlier_seq: i64,
 ) -> Result<Opened, Refused> {
     let locale = ctx.locale();
     let answer = ctx
@@ -174,6 +177,7 @@ pub(super) fn reveal(
                     },
                     field_id: field_id.to_owned(),
                     copy,
+                    earlier_seq,
                 },
             )),
         })

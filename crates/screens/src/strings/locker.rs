@@ -135,6 +135,7 @@ catalog! {
     plain field_username = ("Username", "Username");
     plain earlier_field = ("{label}: {value}", "{label}: {value}");
     plain earlier_cleared = ("{label}: none", "{label}: none");
+    plain earlier_secret_changed = ("{label} changed", "{label} changed");
     plain field_value = ("Value", "Value");
     plain filter_all = ("All", "All");
     plain filter_archived = ("Archived", "Archived");

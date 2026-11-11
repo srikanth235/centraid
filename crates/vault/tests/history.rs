@@ -659,16 +659,27 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
             )?)
         })
         .expect("history");
-    assert!(all.contains("\"password\":\"lk1:"), "the cell is kept, as ciphertext");
-    assert!(all.contains(&first), "the version holds the ciphertext the live cell held");
+    assert!(
+        all.contains("\"password\":\"lk1:"),
+        "the cell is kept, as ciphertext"
+    );
+    assert!(
+        all.contains(&first),
+        "the version holds the ciphertext the live cell held"
+    );
     for secret in [FIRST, SECOND, THIRD] {
-        assert!(!all.contains(secret), "{secret} reached the history in the clear");
+        assert!(
+            !all.contains(secret),
+            "{secret} reached the history in the clear"
+        );
     }
     let scan = |name: &str| {
         if let Ok(bytes) = std::fs::read(w.scratch.dir().join(name)) {
             for secret in [FIRST, SECOND, THIRD] {
                 assert!(
-                    !bytes.windows(secret.len()).any(|window| window == secret.as_bytes()),
+                    !bytes
+                        .windows(secret.len())
+                        .any(|window| window == secret.as_bytes()),
                     "{secret} is in {name}"
                 );
             }
@@ -681,8 +692,23 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     // (ii) READ: a changed secret is seen to have changed and is shown as nothing else.
     let (was, now) = World::change(&versions[1], "locker_item.password");
     assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
-    let read = serde_json::to_string(&versions.iter().map(|v| v.changes.clone().into_iter().map(|c| (c.field, c.before, c.after)).collect::<Vec<_>>()).collect::<Vec<_>>()).expect("json");
-    assert!(!read.contains("lk1:"), "a version's diff shows no ciphertext");
+    let read = serde_json::to_string(
+        &versions
+            .iter()
+            .map(|v| {
+                v.changes
+                    .clone()
+                    .into_iter()
+                    .map(|c| (c.field, c.before, c.after))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>(),
+    )
+    .expect("json");
+    assert!(
+        !read.contains("lk1:"),
+        "a version's diff shows no ciphertext"
+    );
     assert_eq!(
         World::change(&versions[0], "locker_item.username"),
         (json!("ada@example.com"), json!("ada@work.example"))
@@ -714,8 +740,16 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     );
     assert_eq!(out["restored"], true);
     let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
-    assert_eq!(opened(id, &live), FIRST, "the old password is the live one again");
-    assert_eq!(w.state(id), at_first, "the whole state is the first state again");
+    assert_eq!(
+        opened(id, &live),
+        FIRST,
+        "the old password is the live one again"
+    );
+    assert_eq!(
+        w.state(id),
+        at_first,
+        "the whole state is the first state again"
+    );
     // Undo the restore: the password it replaced comes back.
     w.ok("history.undo", json!({ "id": id }));
     let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
@@ -739,7 +773,11 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         json!({ "item_id": id, "label": "PIN", "kind": "sealed", "value": sealed("f2", PIN_TWO), "field_id": "f2", "key_id": "k1" }),
     );
     let versions = w.versions(id);
-    assert_eq!(versions.len(), before + 1, "a changed sealed field is a version");
+    assert_eq!(
+        versions.len(),
+        before + 1,
+        "a changed sealed field is a version"
+    );
     let (was, now) = World::change(&versions[0], "locker_item_field[f2].value_sealed");
     assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
     let field = w
@@ -752,10 +790,17 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
     let live: String =
         w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f2'");
-    assert_eq!(opened("f2", &live), PIN_ONE, "the old PIN is the live one again");
+    assert_eq!(
+        opened("f2", &live),
+        PIN_ONE,
+        "the old PIN is the live one again"
+    );
 
     // A removed sealed field comes back whole, and a whole-row change is masked too.
-    w.ok("locker.remove_field", json!({ "item_id": id, "field_id": "f2" }));
+    w.ok(
+        "locker.remove_field",
+        json!({ "item_id": id, "field_id": "f2" }),
+    );
     let versions = w.versions(id);
     let (was, now) = World::change(&versions[0], "locker_item_field[f2]");
     assert_eq!(was["value_sealed"], json!(history::MASK));
@@ -786,13 +831,19 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
     let live: String =
         w.count_text("SELECT value_sealed FROM locker_item_field WHERE field_id = 'f3'");
-    assert_eq!(opened("f3", &live), SEED, "an undone seed is the one it replaced");
+    assert_eq!(
+        opened("f3", &live),
+        SEED,
+        "an undone seed is the one it replaced"
+    );
     for name in ["vault.db", "vault.db-wal", "vault.db-shm"] {
         scan(name);
     }
     let seed_scan = std::fs::read(w.scratch.dir().join("vault.db")).expect("file");
     assert!(
-        !seed_scan.windows(SEED.len()).any(|window| window == SEED.as_bytes()),
+        !seed_scan
+            .windows(SEED.len())
+            .any(|window| window == SEED.as_bytes()),
         "a seed is in the file in the clear"
     );
 
@@ -811,16 +862,32 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     let (was, now) = World::change(&versions[0], "locker_item_passkey.private_key");
     assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
-    let live: String = w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
-    assert_eq!(opened(id, &live), "PLANTED-KEY-ONE-m4n5b-not-in-any-payload");
+    let live: String =
+        w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
+    assert_eq!(
+        opened(id, &live),
+        "PLANTED-KEY-ONE-m4n5b-not-in-any-payload"
+    );
     w.ok("locker.clear_passkey", json!({ "item_id": id }));
     let versions = w.versions(id);
     w.ok("history.undo", json!({ "id": id, "seq": versions[0].seq }));
-    let live: String = w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
-    assert_eq!(opened(id, &live), "PLANTED-KEY-ONE-m4n5b-not-in-any-payload");
+    let live: String =
+        w.count_text("SELECT private_key FROM locker_item_passkey WHERE item_id = 'item-1'");
+    assert_eq!(
+        opened(id, &live),
+        "PLANTED-KEY-ONE-m4n5b-not-in-any-payload"
+    );
     let file = std::fs::read(w.scratch.dir().join("vault.db")).expect("file");
-    for key in ["PLANTED-KEY-ONE-m4n5b-not-in-any-payload", "PLANTED-KEY-TWO-v6c7x-not-in-any-payload"] {
-        assert!(!file.windows(key.len()).any(|window| window == key.as_bytes()), "{key} in the file");
+    for key in [
+        "PLANTED-KEY-ONE-m4n5b-not-in-any-payload",
+        "PLANTED-KEY-TWO-v6c7x-not-in-any-payload",
+    ] {
+        assert!(
+            !file
+                .windows(key.len())
+                .any(|window| window == key.as_bytes()),
+            "{key} in the file"
+        );
     }
     w.purge_takes_history(id);
 }

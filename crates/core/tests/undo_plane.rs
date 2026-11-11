@@ -12,7 +12,7 @@ mod common;
 use std::collections::HashMap;
 
 use centraid_api_proto::core_v1 as wire;
-use common::chat::{Sample, sample};
+use common::chat::Sample;
 use serde_json::{Value, json};
 
 /// A seeded vault and the calls a shell makes.
@@ -94,8 +94,17 @@ impl Default for World {
 
 impl World {
     pub fn new() -> Self {
+        // A core opened with the member's seed, so Locker can be unlocked and seals what it is
+        // given: the same world serves every app.
+        let seed = centraid_identity::RecoveryPhrase::parse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+             abandon abandon abandon art",
+        )
+        .expect("the words parse")
+        .seed();
         Self {
-            sample: sample(),
+            sample: common::chat::sample_with_seed(seed),
             next: std::cell::Cell::new(0),
             proven: std::cell::RefCell::default(),
         }
@@ -661,6 +670,126 @@ fn money(w: &World) {
     );
 }
 
+/// What the Locker session reveals of `column` of `item`, live.
+fn reveal(w: &World, item: &str, column: &str) -> Option<String> {
+    let answer = w
+        .sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
+                step: Some(wire::locker_session_request::Step::Reveal(
+                    wire::LockerReveal {
+                        item_id: item.to_owned(),
+                        column: column.to_owned(),
+                        ..wire::LockerReveal::default()
+                    },
+                )),
+            })),
+        })
+        .expect("the session answers");
+    let Some(wire::response::Kind::Locker(answer)) = answer.kind else {
+        panic!("a locker answer");
+    };
+    answer.revealed.map(|shown| shown.value)
+}
+
+/// Locker: every edit is taken back by the version it made, a changed secret included, and the
+/// SEALED old value is what comes back (the round trip compares the whole state, ciphertext and
+/// all; the reveal at the end opens it).
+fn locker(w: &World) {
+    let answer = w
+        .sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
+                step: Some(wire::locker_session_request::Step::Unlock(
+                    wire::LockerUnlock::default(),
+                )),
+            })),
+        })
+        .expect("the session answers");
+    let Some(wire::response::Kind::Locker(answer)) = answer.kind else {
+        panic!("a locker answer");
+    };
+    assert_eq!(answer.state, wire::LockerSessionState::Unlocked as i32);
+
+    let item = w.make(
+        "locker",
+        "add-item",
+        &json!({ "type": "login", "title": "Bank", "username": "ada@example.com",
+                 "url": "https://bank.example", "password": "first password" }),
+    );
+    w.round_trip(
+        "locker",
+        "edit-item",
+        &item,
+        &json!({ "item_id": item, "title": "Bank", "username": "ada@example.com",
+                 "url": "https://bank.example", "password": "second password" }),
+    );
+    assert_eq!(
+        reveal(w, &item, "password").as_deref(),
+        Some("first password"),
+        "the undo of a password change puts the old sealed password back"
+    );
+    w.round_trip(
+        "locker",
+        "set-memo",
+        &item,
+        &json!({ "item_id": item, "note": "Ask for Priya" }),
+    );
+    w.round_trip(
+        "locker",
+        "set-addresses",
+        &item,
+        &json!({ "item_id": item, "addresses": "[{\"url\":\"https://bank.example/login\"}]" }),
+    );
+    w.ok(
+        "locker",
+        "set-field",
+        &json!({ "item_id": item, "field_id": "f-plain", "label": "Branch", "kind": "text", "value": "Main" }),
+    );
+    w.round_trip(
+        "locker",
+        "set-field",
+        &item,
+        &json!({ "item_id": item, "field_id": "f-pin", "label": "PIN", "kind": "sealed", "value": "1234" }),
+    );
+    w.ok(
+        "locker",
+        "set-field",
+        &json!({ "item_id": item, "field_id": "f-pin", "label": "PIN", "kind": "sealed", "value": "1234" }),
+    );
+    w.round_trip(
+        "locker",
+        "set-field",
+        &item,
+        &json!({ "item_id": item, "field_id": "f-pin", "label": "PIN", "kind": "sealed", "value": "5678" }),
+    );
+    w.round_trip(
+        "locker",
+        "remove-field",
+        &item,
+        &json!({ "item_id": item, "field_id": "f-pin" }),
+    );
+    w.ok(
+        "locker",
+        "set-passkey",
+        &json!({ "item_id": item, "rp_id": "bank.example", "display_name": "Laptop" }),
+    );
+    w.round_trip(
+        "locker",
+        "set-passkey",
+        &item,
+        &json!({ "item_id": item, "rp_id": "bank.example", "display_name": "Phone" }),
+    );
+    w.round_trip(
+        "locker",
+        "clear-passkey",
+        &item,
+        &json!({ "item_id": item }),
+    );
+}
+
 fn people(w: &World) {
     let person = w.make("people", "add-person", &json!({ "title": "Una Undo" }));
     let list = w.make(
@@ -923,6 +1052,7 @@ fn every_earlier_row_round_trips_and_nothing_else_is_claimed() {
     docs(&w);
     health(&w);
     money(&w);
+    locker(&w);
     notes(&w);
     people(&w);
     photos(&w);

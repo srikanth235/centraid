@@ -68,6 +68,11 @@ pub(crate) enum Input {
     /// is an event made about them): the created one by the trash, the edited one by the version
     /// it made.
     CreatedElseEarlier(&'static str),
+    /// A use of a secret (Locker's `reveal`): the owner check is the ask, the action stamps the
+    /// item as used and changes nothing a version holds, so nothing is offered to take back.
+    /// The manifest names the action as its own inverse only so chat runs it as a direct action
+    /// (an action with no inverse is a card), which is what the row records.
+    Asks,
     /// The same action again with each value the command says it replaced under `replaced`,
     /// `null` included: a person who was in no list is moved back out of the one they were filed
     /// in by a move to `null`.
@@ -163,7 +168,7 @@ const DOCS: &[Row] = &[
 ];
 const LOCKER: &[Row] = &[
     ("add-item", "trash-item", Input::Created),
-    ("duplicate-item", "trash-item", Input::Created),
+    ("duplicate-item", "undo-create", Input::CreatedAs("item_id")),
     ("trash-item", "restore-item", Input::Id),
     ("restore-item", "trash-item", Input::Id),
     ("star-item", "unstar-item", Input::Same),
@@ -174,6 +179,19 @@ const LOCKER: &[Row] = &[
     ("remove-tag", "add-tag", Input::Same),
     ("add-link", "remove-link", Input::Same),
     ("remove-link", "add-link", Input::Same),
+    // A reveal changes nothing a version holds and asks first: see [`Input::Asks`].
+    ("reveal", "reveal", Input::Asks),
+    // Every edit of the item, secrets included, is taken back by the version it made: the vault
+    // keeps a changed password, card number, CVV, note, seed, sealed field and passkey key as the
+    // ciphertext they were, so the Undo of a password change puts the old SEALED value back
+    // (#1185). A reveal or a copy is not in this table: it asks first (the owner check).
+    ("edit-item", "edit-item", Input::Earlier),
+    ("set-field", "undo-change", Input::Earlier),
+    ("remove-field", "undo-change", Input::Earlier),
+    ("set-addresses", "undo-change", Input::Earlier),
+    ("set-memo", "undo-change", Input::Earlier),
+    ("set-passkey", "undo-change", Input::Earlier),
+    ("clear-passkey", "undo-change", Input::Earlier),
 ];
 const HEALTH: &[Row] = &[
     // The follow pass writes the store's day totals and its workouts, and is taken back by
@@ -322,7 +340,7 @@ pub(crate) fn of(
     let mut inverse = *inverse;
     let built = match from {
         Input::Same => input.clone(),
-        Input::Earlier => return None,
+        Input::Earlier | Input::Asks => return None,
         Input::CreatedElseEarlier(key) | Input::CreatedAs(key) => {
             id_only(output.get(*key).filter(|id| id.is_string())?)?
         }
@@ -529,6 +547,11 @@ mod tests {
                         app.id
                     ),
                     Input::Cleared => assert_eq!(*inverse, "log-figure"),
+                    Input::Asks => assert_eq!(
+                        action, inverse,
+                        "{}.{action}: a use names itself so chat runs it directly",
+                        app.id
+                    ),
                     Input::CreatedAs(_) | Input::CreatedElseEarlier(_) => {
                         unreachable!("{}.{action}: these are the shell's undo-create", app.id)
                     }
@@ -594,7 +617,7 @@ mod tests {
     /// The apps whose Undo row of the promise register (`cargo xtask rules`) is still Owed: the
     /// two checks below hold for every other app, and an app leaves this list in the change that
     /// takes its row to Kept.
-    const OWED: &[&str] = &["locker"];
+    const OWED: &[&str] = &[];
 
     /// Single actions still owed in an app whose other actions are held to the check below.
     const OWED_ACTIONS: &[(&str, &str)] = &[];

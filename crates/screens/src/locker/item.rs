@@ -363,7 +363,7 @@ impl Item {
     ) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         let field_id = key.strip_prefix(FIELD).unwrap_or("");
-        match shared::reveal(ctx, &item.item_id, key, field_id, copy) {
+        match shared::reveal(ctx, &item.item_id, key, field_id, copy, 0) {
             Err(Refused::Locked) => self.locked(ctx),
             Err(Refused::Said(sentence)) => {
                 self.status = shared::refused(sentence);

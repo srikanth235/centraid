@@ -347,6 +347,11 @@ message LockerReveal {
   // The value goes to the clipboard, not the screen; the value answered is the
   // same.
   bool copy = 4;
+  // Reveal the cell as the item's version `earlier_seq` held it (Earlier versions, #1185): the
+  // sealed value a change replaced, opened with the same key, behind the same unlock, and
+  // stamping the item as used the same way. 0 (absent): the live cell. `otp_seed` and a
+  // one-time-code field are refused here as they are live.
+  int64 earlier_seq = 5;
 }
 
 message LockerTotpAsk {
