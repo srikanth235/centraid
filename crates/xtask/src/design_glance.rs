@@ -1,4 +1,4 @@
-//! AGENDA'S STATIC WORDS FOR THE PLATFORM, LOWERED NATIVELY (#1173, wave 3).
+//! AGENDA'S AND HEALTH'S STATIC WORDS FOR THE PLATFORM, LOWERED NATIVELY (#1173, wave 3; #1185).
 //!
 //! A widget's gallery name, an App Intent's title, a Siri phrase and an Android
 //! shortcut's label are read by the operating system before any code runs, so
@@ -7,11 +7,12 @@
 //! `catalog!` block with the same strictness as the kit's words
 //! ([`crate::design_words`]) and writes:
 //!
-//! - `mobile/iosApp/Design/GlanceWords.swift`: `GlanceWords`, the static words;
+//! - `mobile/iosApp/Design/GlanceWords.swift`: `GlanceWords`, the static words
+//!   (Health's widget names from `strings/health_glance.rs` join it as `WIDGET_HEALTH_*`);
 //! - `mobile/iosApp/Design/AgendaShortcuts.swift`: the `AppShortcutsProvider`,
 //!   generated because a Siri phrase must be a string literal;
 //! - `mobile/androidApp/src/main/res/values/glance_strings.xml`: the same words
-//!   as string resources, for the manifest, the appwidget-provider XML and
+//!   as string resources (Health's included), for the manifest, the appwidget-provider XML and
 //!   `shortcuts.xml`.
 //!
 //! The per-snapshot words (the labels inside the widgets' document) are not
@@ -25,6 +26,17 @@ use crate::design_words::{lookup, quote, read_catalog, slotted};
 
 /// The Rust catalogue the words are read from.
 pub const GLANCE_SOURCE: &str = "crates/screens/src/strings/agenda_glance.rs";
+
+/// Health's catalogue (#1185).
+pub const HEALTH_SOURCE: &str = "crates/screens/src/strings/health_glance.rs";
+
+/// Member name to the Rust key in [`HEALTH_SOURCE`]: what a platform names for the Health widget.
+const HEALTH_CONSTANTS: [(&str, &str); 3] = [
+    ("WIDGET_HEALTH_DESCRIPTION", "widget_description"),
+    ("WIDGET_HEALTH_NAME", "widget_name"),
+    // The snapshot's own sentence for "nothing to read yet", exactly as Agenda's.
+    ("WIDGET_HEALTH_UNAVAILABLE", "unavailable"),
+];
 
 /// Member name to the Rust key, for every static word that is not a Siri
 /// phrase. Exactly what a platform file names; a word nothing names stays
@@ -97,6 +109,17 @@ pub fn resolve(source: &str) -> Result<GlanceWords> {
             NEXT_PHRASE,
         )?,
     })
+}
+
+/// Add Health's widget names, resolved from [`HEALTH_SOURCE`]'s text, to the words.
+pub fn add_health(words: &mut GlanceWords, source: &str) -> Result<()> {
+    let catalogue: BTreeMap<String, String> = read_catalog(source, true)?;
+    for (name, key) in HEALTH_CONSTANTS {
+        words
+            .constants
+            .push((name.to_owned(), lookup(&catalogue, key, HEALTH_SOURCE)?));
+    }
+    Ok(())
 }
 
 fn header(comment: &str, lines: &[&str]) -> Vec<String> {
@@ -263,6 +286,23 @@ mod tests {
     fn a_word_the_catalogue_lacks_is_named() {
         let error = resolve("catalog! {\n}\n").expect_err("refused");
         assert!(error.to_string().contains("`intent_add_title`"), "{error}");
+    }
+
+    #[test]
+    fn healths_widget_names_join_the_words() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut words = resolve(&source()).expect("resolves");
+        add_health(
+            &mut words,
+            &std::fs::read_to_string(root.join(HEALTH_SOURCE)).expect("reads"),
+        )
+        .expect("resolves");
+        assert_eq!(
+            words.constants.len(),
+            CONSTANTS.len() + HEALTH_CONSTANTS.len()
+        );
+        assert_eq!(words.constant("WIDGET_HEALTH_NAME"), "Health");
+        assert!(add_health(&mut words, "catalog! {\n}\n").is_err());
     }
 
     #[test]

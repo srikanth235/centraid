@@ -1,0 +1,32 @@
+// HEALTH OUTSIDE THE APP (#1185): the home-screen widget's snapshot and what a
+// widget tap asks of Health. Rust decides every word and figure of the snapshot
+// (`crates/screens/src/health/glance`); a shell keeps the file and reloads the
+// widgets, and reports the tap. The widget never opens the vault. Arms: Effect
+// 350, ShellFact 331.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// Rust asks the shell to keep the Health widget's snapshot: write `document`
+// atomically to the shared container (iOS App Group, Android app files) as the
+// file `file`, then ask the platform to reload the Health widgets. Answered
+// EffectDone or EffectFailed.
+message HealthGlance {
+  // The JSON snapshot, UTF-8.
+  bytes document = 1;
+  // The document's schema version (1).
+  uint32 version = 2;
+  // The file's name in the shared container, chosen by Rust (one name for the
+  // writer and the readers).
+  string file = 3;
+}
+
+// The shell heard the platform ask Health for something outside the app (a
+// widget tap). Reported as a ShellFact; the health glance service answers.
+message HealthIntent {
+  // The opaque `open` string of the snapshot (its `open`), handed back
+  // untouched. The core chooses the page: a key it did not offer opens
+  // Health's home all the same.
+  string key = 1;
+}

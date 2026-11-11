@@ -22,4 +22,7 @@ public enum GlanceWords {
     public static let WIDGET_UP_NEXT_DESCRIPTION = "What's next today, from your Calendar."
     public static let WIDGET_UP_NEXT_NAME = "Up next"
     public static let WIDGET_UNAVAILABLE = "Open Centraid to see your day"
+    public static let WIDGET_HEALTH_DESCRIPTION = "Today's steps, sleep and activity."
+    public static let WIDGET_HEALTH_NAME = "Health"
+    public static let WIDGET_HEALTH_UNAVAILABLE = "Open Centraid to see Health"
 }

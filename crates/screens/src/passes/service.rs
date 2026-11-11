@@ -372,8 +372,9 @@ impl Service {
                 Vec::new()
             }
             // A button pressed on a notification is the notify service's (`agenda.notify`),
-            // and an Agenda intent is the glance service's (`agenda::glance`).
-            Some(Fact::NotificationAnswered(_) | Fact::AgendaIntent(_)) | None => Vec::new(),
+            // and an Agenda or Health intent is the glance service's (`agenda::glance`, `health::glance`).
+            Some(Fact::NotificationAnswered(_) | Fact::AgendaIntent(_) | Fact::HealthIntent(_))
+            | None => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 52] = [
+const PROTOS: [&str; 53] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -92,6 +92,7 @@ const PROTOS: [&str; 52] = [
     "proto/centraid/core/v1/locker_screens.proto",
     "proto/centraid/core/v1/money_screens.proto",
     "proto/centraid/core/v1/docs_screens.proto",
+    "proto/centraid/core/v1/health_glance_screens.proto",
     "proto/centraid/core/v1/health_screens.proto",
     "proto/centraid/core/v1/notes_screens.proto",
     "proto/centraid/core/v1/people_screens.proto",

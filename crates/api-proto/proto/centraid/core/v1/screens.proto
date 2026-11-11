@@ -36,6 +36,7 @@ import "centraid/core/v1/pair_screens.proto";
 import "centraid/core/v1/passes_screens.proto";
 import "centraid/core/v1/plumbing_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
+import "centraid/core/v1/health_glance_screens.proto";
 import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
@@ -526,6 +527,9 @@ message Effect {
     // then reload the widgets (`agenda_glance_screens.proto`). 150 stays clear
     // of a parallel notifications branch.
     AgendaGlance agenda_glance = 150;
+    // ---- health (300-399): outside the app ----
+    // Keep the Health widget's snapshot (`health_glance_screens.proto`).
+    HealthGlance health_glance = 350;
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;

@@ -143,6 +143,7 @@ pub mod custody;
 pub mod docs;
 pub mod follow;
 pub mod health;
+pub mod health_glance;
 pub mod history;
 pub mod home;
 pub mod imports;

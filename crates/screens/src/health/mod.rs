@@ -42,6 +42,7 @@ pub mod earlier;
 pub mod export;
 pub mod figures;
 pub mod follow;
+pub mod glance;
 pub mod highlights;
 pub mod home;
 pub mod kinds;
@@ -76,6 +77,7 @@ pub fn registry() -> Registry {
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
         .with(SEARCH, crate::shell::search::build_health)
+        .merge(glance::registry())
 }
 
 /// A runtime with Health's screens and one tab, `health`, rooted at Today. The
