@@ -30,6 +30,7 @@ use crate::kit::act as kit_act;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, docs as words, links as link_words, shared};
@@ -69,6 +70,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         parent: args.parent.clone(),
         phase: Phase::Loading,
         status: None,
+        gate: OwnerGate::default(),
         asking: Asking::None,
         sheet: Sheet::None,
         rename: None,
@@ -87,6 +89,8 @@ struct Document {
     parent: String,
     phase: Phase<Answered>,
     status: Option<wire::StatusLine>,
+    /// The owner check a share asks first; a phone with no passcode warns and goes ahead.
+    gate: OwnerGate,
     asking: Asking,
     sheet: Sheet,
     rename: Option<Rename>,
@@ -220,21 +224,55 @@ impl Document {
         self.reload(ctx);
     }
 
-    /// Hand the document's file to the platform's share sheet: the bytes are a
-    /// file in the store, so nothing is read here. A document whose bytes are
-    /// not on this phone says so on the status line.
-    fn share(&mut self, ctx: &Ctx, row: &wire::DocsDocumentRow) -> Vec<wire::Effect> {
+    /// Share the document's file: the owner check first, since the bytes leave
+    /// the phone in the clear. A document whose bytes are not on this phone
+    /// says so on the status line and asks nothing.
+    fn share(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        let path = self
-            .phase
-            .data()
-            .map(|answered| answered.document.bytes_path.clone())
-            .unwrap_or_default();
-        if path.is_empty() {
+        if self.shared_path().is_empty() {
             self.status = Some(refusal(words::share_missing(locale)));
             return Vec::new();
         }
         self.status = None;
+        self.gate.begin(locale, Leaving::Share)
+    }
+
+    fn shared_path(&self) -> String {
+        self.phase
+            .data()
+            .map(|answered| answered.document.bytes_path.clone())
+            .unwrap_or_default()
+    }
+
+    /// The owner check's answer: hand the document's file to the platform's
+    /// share sheet (the bytes are a file in the store, so nothing is read here).
+    fn checked(&mut self, locale: Locale, checked: &wire::OwnerChecked) -> Vec<wire::Effect> {
+        match self.gate.answer(locale, NoPasscode::Warn, checked) {
+            Some(Owner::Passed) => self.send(locale),
+            Some(Owner::PassedUnprotected(warning)) => {
+                let effects = self.send(locale);
+                if !effects.is_empty() {
+                    self.status = Some(wire::StatusLine {
+                        sentence: warning,
+                        action_label: String::new(),
+                        refused: false,
+                    });
+                }
+                effects
+            }
+            Some(Owner::Refused(sentence)) => {
+                self.status = Some(refusal(sentence));
+                Vec::new()
+            }
+            Some(Owner::Cancelled) | None => Vec::new(),
+        }
+    }
+
+    fn send(&mut self, locale: Locale) -> Vec<wire::Effect> {
+        let path = self.shared_path();
+        let Some(row) = self.row().cloned().filter(|_| !path.is_empty()) else {
+            return Vec::new();
+        };
         vec![wire::Effect {
             kind: Some(wire::effect::Kind::ShareFile(wire::ShareFile {
                 path,
@@ -260,7 +298,7 @@ impl Document {
         }
         let id = row.document_id.clone();
         match key {
-            KEY_SHARE => return self.share(ctx, &row),
+            KEY_SHARE => return self.share(ctx),
             KEY_STAR => {
                 self.write(ctx, act::docs::Star { document_id: id });
             }
@@ -538,6 +576,23 @@ impl Screen for Document {
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
                 }
+                return self.gate.cancel();
+            }
+            Some(E::EffectResult(result)) => {
+                match &result.outcome {
+                    Some(wire::effect_result::Outcome::OwnerChecked(checked)) => {
+                        return self.checked(ctx.locale(), checked);
+                    }
+                    // The prompt itself errored: the same as not recognised.
+                    Some(wire::effect_result::Outcome::Failed(_)) if self.gate.asking() => {
+                        let failed = wire::OwnerChecked {
+                            outcome: wire::owner_checked::Outcome::Failed as i32,
+                            ..Default::default()
+                        };
+                        return self.checked(ctx.locale(), &failed);
+                    }
+                    _ => {}
+                }
             }
             Some(E::DocsDocument(event)) => return self.event(event, ctx),
             Some(E::PhoneSaysTaken(taken)) => self.take_folder(ctx, &taken),
@@ -630,5 +685,86 @@ impl Screen for Document {
             )),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wire::owner_checked::Outcome as O;
+
+    fn holding() -> Document {
+        Document {
+            document_id: "d1".to_owned(),
+            title_hint: String::new(),
+            parent: String::new(),
+            phase: Phase::Ready(Answered {
+                document: wire::DocsDocument {
+                    document: Some(wire::DocsDocumentRow {
+                        title: "Lease.pdf".to_owned(),
+                        ..Default::default()
+                    }),
+                    bytes_path: "/store/lease".to_owned(),
+                    ..Default::default()
+                },
+                drive: None,
+                about: None,
+            }),
+            status: None,
+            gate: OwnerGate::default(),
+            asking: Asking::None,
+            sheet: Sheet::None,
+            rename: None,
+            dismissed: false,
+            links: Links::new(&[Kind::Person]),
+            differences: follow::Phone::default(),
+            earlier: earlier::Foot::default(),
+        }
+    }
+
+    fn asked(outcome: O) -> (Vec<wire::Effect>, Document) {
+        let mut doc = holding();
+        let up = doc.gate.begin(Locale::En, Leaving::Share);
+        assert!(matches!(
+            up[0].kind,
+            Some(wire::effect::Kind::OwnerCheck(ref c)) if c.ask
+        ));
+        let effects = doc.checked(
+            Locale::En,
+            &wire::OwnerChecked {
+                outcome: outcome as i32,
+                ..Default::default()
+            },
+        );
+        (effects, doc)
+    }
+
+    fn is_share(effects: &[wire::Effect]) -> bool {
+        matches!(
+            effects,
+            [wire::Effect {
+                kind: Some(wire::effect::Kind::ShareFile(_))
+            }]
+        )
+    }
+
+    #[test]
+    fn a_passed_check_shares_and_a_phone_with_no_passcode_shares_with_a_warning() {
+        let (effects, doc) = asked(O::Succeeded);
+        assert!(is_share(&effects) && doc.status.is_none());
+        let (effects, doc) = asked(O::Unavailable);
+        assert!(is_share(&effects));
+        assert!(
+            doc.status
+                .is_some_and(|s| !s.refused && !s.sentence.is_empty())
+        );
+    }
+
+    #[test]
+    fn a_dismissed_or_failed_check_shares_nothing() {
+        let (effects, doc) = asked(O::Cancelled);
+        assert!(effects.is_empty() && doc.status.is_none());
+        let (effects, doc) = asked(O::Failed);
+        assert!(effects.is_empty() && doc.status.is_some_and(|s| s.refused));
     }
 }

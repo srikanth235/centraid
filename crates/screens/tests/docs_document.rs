@@ -548,6 +548,12 @@ fn share_hands_the_file_to_the_platform_or_says_it_is_not_here() {
         document_state(d.view(i)).status.as_ref().unwrap().sentence,
         "This document isn't on this phone yet."
     );
+    // And no owner check was raised for a share that cannot happen.
+    assert!(
+        waiting(&d)
+            .iter()
+            .all(|effect| !matches!(effect.kind, Some(wire::effect::Kind::OwnerCheck(_))))
+    );
 }
 
 #[test]
