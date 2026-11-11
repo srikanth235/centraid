@@ -32,6 +32,7 @@ entity.trash
 event.cancel
 event.edit
 event.edit_occurrence
+event.export_ics
 event.propose
 event.respond
 flag.clear
@@ -101,6 +102,7 @@ task.add
 task.cancel
 task.complete
 task.edit
+task.export_ics
 task.organize
 task.reopen
 thread.clear

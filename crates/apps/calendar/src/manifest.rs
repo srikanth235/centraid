@@ -47,7 +47,7 @@ mod tests {
     fn it_declares_seven_queries_and_fourteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 8);
-        assert_eq!(manifest.actions.len(), 17);
+        assert_eq!(manifest.actions.len(), 18);
         for name in [
             "upcoming",
             "search",

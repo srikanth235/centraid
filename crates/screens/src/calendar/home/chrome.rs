@@ -8,6 +8,7 @@ use wire::AgendaDestination as Dest;
 use super::grid;
 use crate::calendar::routes;
 use crate::kit::civil;
+use crate::kit::export;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::rule_words::long_day;
 use crate::strings::{
@@ -267,15 +268,26 @@ pub fn more_rows(
 pub fn menu_rows(locale: Locale) -> Vec<wire::AgendaMoreRow> {
     let label = shared::trash_entry(locale);
     let meta = shared::trash_entry_meta(locale);
-    vec![wire::AgendaMoreRow {
-        key: MORE_TRASH.to_owned(),
-        spoken: format!("{label}, {meta}"),
-        label,
-        meta,
-        icon_key: "Trash".to_owned(),
-        route: Some(routes::trash()),
-        ..wire::AgendaMoreRow::default()
-    }]
+    let export = export::entry(locale, super::super::EXPORT);
+    vec![
+        wire::AgendaMoreRow {
+            key: export.key.to_owned(),
+            spoken: export.label.clone(),
+            label: export.label,
+            icon_key: export.icon_key.to_owned(),
+            route: Some(export.route),
+            ..wire::AgendaMoreRow::default()
+        },
+        wire::AgendaMoreRow {
+            key: MORE_TRASH.to_owned(),
+            spoken: format!("{label}, {meta}"),
+            label,
+            meta,
+            icon_key: "Trash".to_owned(),
+            route: Some(routes::trash()),
+            ..wire::AgendaMoreRow::default()
+        },
+    ]
 }
 
 /// The screen's fixed words, so a view carries no copy of its own.

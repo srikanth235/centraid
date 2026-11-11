@@ -98,7 +98,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The nineteen, in the manifest's own order.
+/// The twenty-one, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("add-task", "task.add"),
     act("edit-task", "task.edit"),
@@ -132,6 +132,9 @@ pub const ACTIONS: &[ActionRow] = &[
     // An attachment is an `attached` edge from the task: the shared verbs.
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    // THE REMINDERS AS A FILE (#1185): the More sheet's Export and a reminder's Share. It writes
+    // nothing (`writes_nothing`).
+    act("export-ics", "task.export_ics"),
 ];
 
 /// The row for an action, by name.
@@ -163,7 +166,7 @@ mod tests {
 
     #[test]
     fn the_tasks_own_are_the_verbs_the_rest_are_shared_and_no_event_is_touched() {
-        assert_eq!(ACTIONS.len(), 20);
+        assert_eq!(ACTIONS.len(), 21);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("event.")),
             "Reminders never writes an event"
@@ -183,7 +186,8 @@ mod tests {
                 "task.complete",
                 "task.reopen",
                 "task.cancel",
-                "task.organize"
+                "task.organize",
+                "task.export_ics"
             ]
         );
         // The shared verbs serve several actions without a wrapper: a project and a section are
@@ -194,7 +198,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 19);
+        assert_eq!(act_scope_tables().len(), 20);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

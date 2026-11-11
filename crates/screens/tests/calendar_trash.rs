@@ -126,6 +126,7 @@ fn the_event_page_offers_move_to_trash_and_it_asks_nothing() {
         keys,
         [
             ("edit", "Edit", false),
+            ("share", "Share", false),
             ("cancel", "Cancel…", true),
             ("trash", "Move to trash", true)
         ]
@@ -360,8 +361,19 @@ fn the_bands_more_sheet_holds_the_trash_and_the_calendars_sheet_keeps_its_calend
     let state = home_state(&world, home);
     assert_eq!(state.sheet, wire::agenda_home_state::Sheet::More as i32);
     assert_eq!(state.chrome.as_ref().unwrap().more_title, "Calendar");
-    assert_eq!(state.more_rows.len(), 1);
-    let row = &state.more_rows[0];
+    assert_eq!(state.more_rows.len(), 2);
+    assert_eq!(
+        (
+            state.more_rows[0].label.as_str(),
+            state.more_rows[0].icon_key.as_str()
+        ),
+        ("Export", "Upload")
+    );
+    assert_eq!(
+        state.more_rows[0].route.as_ref().unwrap().screen,
+        "calendar.export"
+    );
+    let row = &state.more_rows[1];
     assert_eq!(
         (
             row.key.as_str(),

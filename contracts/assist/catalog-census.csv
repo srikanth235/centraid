@@ -16,6 +16,7 @@ calendar,create-calendar,create:kind,list,card,no,no
 calendar,rename-calendar,edit,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no
 calendar,style-calendar,edit:color,calendar,direct,yes: crates/screens/src/kit/schedule/style.rs,no
 calendar,add-place,create,event,card,yes: crates/screens/src/calendar/editor.rs,no
+calendar,export-ics,log,event,card,no,no
 docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
 docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
 docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
@@ -207,3 +208,4 @@ reminders,unstar-task,unstar,task,direct,yes: crates/screens/src/reminders/ops.r
 reminders,style-container,edit:color,list,direct,no,no
 reminders,attach,attach,task,card,no,no
 reminders,detach,detach,task,card,no,no
+reminders,export-ics,log,task,card,no,no

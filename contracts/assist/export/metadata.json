@@ -1503,6 +1503,24 @@
         "verb": "create"
       },
       {
+        "action": "export-ics",
+        "also": [],
+        "app": "calendar",
+        "bulk": true,
+        "chat": "card",
+        "command": "event.export_ics",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "export my calendar as ics",
+          "save a calendar as a calendar file",
+          "send someone this event as an ics file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "docs",
@@ -4965,6 +4983,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "export-ics",
+        "also": [],
+        "app": "reminders",
+        "bulk": true,
+        "chat": "card",
+        "command": "task.export_ics",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "export my reminders as ics",
+          "save a list as a calendar file",
+          "send someone this reminder as an ics file"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "log"
       }
     ],
     "queries": [

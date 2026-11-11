@@ -151,6 +151,7 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
         actions,
         [
             ("edit", "Edit"),
+            ("share", "Share"),
             ("cancel", "Cancel…"),
             ("trash", "Move to trash")
         ]
@@ -839,7 +840,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["open_map", "edit", "cancel", "trash"]);
+    assert_eq!(keys, ["open_map", "edit", "share", "cancel", "trash"]);
     let map = world.event_data(page).actions[0].clone();
     assert_eq!(map.label, "Open in Maps");
     assert!(map.route.is_none() && map.enabled && !map.destructive);
@@ -863,7 +864,7 @@ fn an_event_with_a_location_offers_it_to_the_maps_app_and_one_without_does_not()
         .iter()
         .map(|a| a.key.as_str())
         .collect();
-    assert_eq!(keys, ["edit", "cancel", "trash"]);
+    assert_eq!(keys, ["edit", "share", "cancel", "trash"]);
     // Asked anyway, a page with no location opens nothing.
     let update = world.driver.send(
         page,

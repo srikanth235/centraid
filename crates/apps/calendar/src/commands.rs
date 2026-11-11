@@ -114,7 +114,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The seventeen, in the manifest's own order.
+/// The eighteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
@@ -142,6 +142,9 @@ pub const ACTIONS: &[ActionRow] = &[
     act("style-calendar", "container.style"),
     // A PLACE THE MEMBER TYPED (#1173): an event's location that is not one the vault holds.
     act("add-place", "place.add"),
+    // THE CALENDAR AS A FILE (#1185): the More sheet's Export and an event's Share. It writes
+    // nothing (`writes_nothing`).
+    act("export-ics", "event.export_ics"),
 ];
 
 /// The row for an action, by name.
@@ -173,7 +176,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 17);
+        assert_eq!(ACTIONS.len(), 18);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"
@@ -192,7 +195,8 @@ mod tests {
                 "event.respond",
                 "event.edit",
                 "event.edit_occurrence",
-                "event.cancel"
+                "event.cancel",
+                "event.export_ics"
             ]
         );
         // The shared verbs serve several actions without a wrapper.
@@ -202,7 +206,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-calendar"]);
-        assert_eq!(act_scope_tables().len(), 17);
+        assert_eq!(act_scope_tables().len(), 18);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. **A button

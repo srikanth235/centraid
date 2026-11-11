@@ -676,6 +676,28 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Answer every calendar's events, one calendar's, or one event, as a calendar file (.ics) through event.export_ics. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportIcs {
+            pub calendar_id: Option<String>,
+            pub event_id: Option<String>,
+        }
+        impl ExportIcs {
+            pub const NAME: &str = "export-ics";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.calendar_id { map.insert("calendar_id".to_owned(), text(it)); }
+                if let Some(it) = self.event_id { map.insert("event_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportIcs> for wire::ActRequest {
+            fn from(value: ExportIcs) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {
@@ -6140,6 +6162,28 @@ pub mod act {
         }
         impl From<Detach> for wire::ActRequest {
             fn from(value: Detach) -> Self {
+                value.request()
+            }
+        }
+
+        /// Answer every list's reminders, one list's, or one reminder, as a calendar file (.ics) of to-dos through task.export_ics. Writes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct ExportIcs {
+            pub list_id: Option<String>,
+            pub task_id: Option<String>,
+        }
+        impl ExportIcs {
+            pub const NAME: &str = "export-ics";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.list_id { map.insert("list_id".to_owned(), text(it)); }
+                if let Some(it) = self.task_id { map.insert("task_id".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<ExportIcs> for wire::ActRequest {
+            fn from(value: ExportIcs) -> Self {
                 value.request()
             }
         }

@@ -131,6 +131,11 @@
       },
       {
         "schema": "event",
+        "table": "export_ics",
+        "verbs": "act"
+      },
+      {
+        "schema": "event",
         "table": "propose",
         "verbs": "act"
       },
@@ -1165,6 +1170,43 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-ics",
+      "verb": "log",
+      "bulk": true,
+      "kind": "event",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "event.export_ics",
+      "phrasings": [
+        "export my calendar as ics",
+        "save a calendar as a calendar file",
+        "send someone this event as an ics file"
+      ],
+      "description": "Answer every calendar's events, one calendar's, or one event, as a calendar file (.ics) through event.export_ics. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "calendar_id": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["calendar"]
+          },
+          "event_id": { "type": "string", "minLength": 1, "aliases": ["event"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

@@ -319,7 +319,11 @@ pub const REGISTER: &[Row] = &[
     ),
     // Export and Share (#1185, take out): the kit's `ExportSpec` screen and share helper; the
     // checkers' gaps are the adopters' work list.
-    owed("calendar", Promise::Export, EXPORT_OWED),
+    kept(
+        "calendar",
+        Promise::Export,
+        "crates/screens/src/calendar/export.rs",
+    ),
     owed("docs", Promise::Export, EXPORT_OWED),
     owed("health", Promise::Export, EXPORT_OWED),
     // Locker's export keeps its own machine ([`OWN_EXPORT`]).
@@ -341,7 +345,11 @@ pub const REGISTER: &[Row] = &[
     ),
     owed("photos", Promise::Export, EXPORT_OWED),
     owed("reminders", Promise::Export, EXPORT_OWED),
-    owed("calendar", Promise::Share, SHARE_OWED),
+    kept(
+        "calendar",
+        Promise::Share,
+        "crates/screens/src/calendar/event.rs",
+    ),
     kept(
         "docs",
         Promise::Share,

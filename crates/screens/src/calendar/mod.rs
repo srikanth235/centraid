@@ -15,6 +15,7 @@ pub mod earlier;
 pub mod editor;
 pub mod event;
 pub mod event_phone;
+pub mod export;
 pub mod follow;
 pub mod home;
 pub mod hues;
@@ -31,6 +32,8 @@ pub const EDITOR: &str = "calendar.editor";
 pub const EARLIER: &str = "calendar.earlier";
 /// The events in the trash (#1185).
 pub const TRASH: &str = "calendar.trash";
+/// Calendar's export of events as a calendar file (#1185).
+pub const EXPORT: &str = "calendar.export";
 
 /// Calendar's screens, registered under their route names.
 #[must_use]
@@ -41,4 +44,5 @@ pub fn registry() -> Registry {
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
+        .with(EXPORT, export::build)
 }

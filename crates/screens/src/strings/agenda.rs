@@ -31,6 +31,12 @@ catalog! {
     plain confirm_skip_body = ("The rest of the series stays on your calendar.", "The rest of the series stays on your calendar.");
     plain confirm_skip_title = ("Skip this occurrence?", "Skip this occurrence?");
     plain continues = ("Continues", "Continues");
+    plain export_all = ("All calendars", "All calendars");
+    plain export_lede = (
+        "Events in one .ics file, for any calendar app.",
+        "Events in one .ics file, for any calendar app."
+    );
+    plain export_title = ("Export calendar", "Export calendar");
     plain denied_body = ("Ask the owner of this vault for access.", "Ask the owner of this vault for access.");
     plain denied_title = ("Calendar cannot read this vault", "Calendar cannot read this vault");
     plain done = ("Done", "Done");

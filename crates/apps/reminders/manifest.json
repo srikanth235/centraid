@@ -146,6 +146,11 @@
       },
       {
         "schema": "task",
+        "table": "export_ics",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
         "table": "organize",
         "verbs": "act"
       },
@@ -1186,6 +1191,39 @@
           "reason": {
             "type": "string"
           }
+        }
+      }
+    },
+    {
+      "name": "export-ics",
+      "verb": "log",
+      "bulk": true,
+      "kind": "task",
+      "inverse": null,
+      "writes_nothing": true,
+      "sealed": [],
+      "command": "task.export_ics",
+      "phrasings": [
+        "export my reminders as ics",
+        "save a list as a calendar file",
+        "send someone this reminder as an ics file"
+      ],
+      "description": "Answer every list's reminders, one list's, or one reminder, as a calendar file (.ics) of to-dos through task.export_ics. Writes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "list_id": { "type": "string", "minLength": 1, "aliases": ["list"] },
+          "task_id": { "type": "string", "minLength": 1, "aliases": ["task"] }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       }
     }

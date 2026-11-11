@@ -399,6 +399,8 @@ fn reminders(w: &World) {
 const WRITES_NOTHING: &[(&str, &str, &str)] = &[
     ("notes", "export-notes", "{}"),
     ("people", "export-vcf", "{}"),
+    ("calendar", "export-ics", "{}"),
+    ("reminders", "export-ics", "{}"),
     // Birthday reminders always stay on: the command refuses an off request, and an on request
     // restates what the person already has. The recipe asks for a person's birthday first.
     (

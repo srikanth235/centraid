@@ -53,6 +53,7 @@ use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::read::{self as kit_read, Reading};
 use crate::kit::schedule::rows::hue_role;
+use crate::kit::share::{self, Share};
 use crate::kit::trash;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -66,6 +67,9 @@ pub const ACTION_CANCEL: &str = "cancel";
 pub const ACTION_TRASH: &str = "trash";
 /// Open the event's location in the phone's maps app (an `OpenMap` effect).
 pub const ACTION_OPEN_MAP: &str = "open_map";
+/// Hand the event to the OS share sheet as a calendar file (#1185): the shells draw every action
+/// row and send its key, so the row needs no shell code of its own.
+pub const ACTION_SHARE: &str = "share";
 
 pub const ACCEPTED: &str = "accepted";
 pub const TENTATIVE: &str = "tentative";
@@ -98,6 +102,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attachments,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
+        share: Share::default(),
     }))
 }
 
@@ -135,6 +140,8 @@ struct EventPage {
     differences: follow::Phone,
     /// The entry to the event's earlier versions, read with the page (#1185).
     earlier: earlier::Foot,
+    /// The event handed to the OS share sheet as a calendar file (#1185).
+    share: Share,
 }
 
 impl EventPage {
@@ -435,16 +442,27 @@ impl Screen for EventPage {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
+                let id = self.route.event_id.clone();
+                let shared = self.share.result(ctx, &result, |ctx| {
+                    super::export::file(ctx, None, Some(&id))
+                });
+                if !shared.is_empty() || self.share.status().is_some() {
+                    return shared;
+                }
                 if let Some(outcome) = &result.outcome {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
             }
+            Some(E::Left(_)) => return self.share.left(),
             Some(E::PhoneSaysTaken(taken)) => self.take_phone(ctx, &taken),
             Some(E::AgendaEvent(event)) => match event.kind {
                 Some(K::Refreshed(_)) => self.reload(ctx),
                 Some(K::Rsvp(picked)) => self.rsvp(ctx, &picked.partstat),
                 Some(K::Action(picked)) if picked.key == ACTION_CANCEL => self.ask_cancel(),
                 Some(K::Action(picked)) if picked.key == ACTION_TRASH => self.trash_event(ctx),
+                Some(K::Action(picked)) if picked.key == ACTION_SHARE => {
+                    return self.share.tap(ctx.locale());
+                }
                 Some(K::StatusActed(_)) => self.undone(ctx),
                 Some(K::Action(picked)) if picked.key == ACTION_OPEN_MAP => {
                     return self.open_map();
@@ -514,6 +532,7 @@ impl Screen for EventPage {
             status: self
                 .status
                 .clone()
+                .or_else(|| self.share.status())
                 .or_else(|| self.differences.status(locale, follow::Source::Phone))
                 .or_else(|| self.earlier.status(locale)),
             earlier: self.earlier.entry.clone(),
@@ -765,6 +784,14 @@ impl EventPage {
                             self.route.original_start_local.as_deref(),
                             &self.route.day,
                         )),
+                    },
+                    wire::AgendaAction {
+                        key: ACTION_SHARE.to_owned(),
+                        label: share::label(locale),
+                        enabled: true,
+                        destructive: false,
+                        accessibility_label: share::label(locale),
+                        route: None,
                     },
                     wire::AgendaAction {
                         key: ACTION_CANCEL.to_owned(),
