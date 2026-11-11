@@ -542,7 +542,7 @@ pub const REGISTER: &[Row] = &[
         Promise::Link,
         "crates/screens/src/calendar/event.rs",
     ),
-    owed("docs", Promise::Link, LINK_OWED),
+    kept("docs", Promise::Link, "crates/screens/src/docs/document.rs"),
     kept(
         "health",
         Promise::Link,

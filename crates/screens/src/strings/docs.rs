@@ -12,6 +12,13 @@ catalog! {
     plain action_move = ("Move", "Move");
     plain about_added = ("Person added", "Person added");
     plain about_removed = ("Person removed", "Person removed");
+    plain link_added = ("Linked", "Linked");
+    plain link_removed = ("Link removed", "Link removed");
+    plain links_empty = ("Nothing linked yet", "Nothing linked yet");
+    plain links_unread = (
+        "Couldn’t read what this document is linked to.",
+        "Couldn’t read what this document is linked to."
+    );
     plain folder_created_said = ("Folder created", "Folder created");
     plain label_added_said = ("Label added", "Label added");
     plain label_removed_said = ("Label removed", "Label removed");

@@ -687,6 +687,12 @@ internal fun DocsDocumentScreen(
                         dev.centraid.android.kit.LinkSectionView(about, { link -> onEvent(DocsDocumentEvent(about = link)) }, onOpen)
                     }
                 }
+                // LINKED TO (#1185): the kit's section, after About; Rust makes every word and row.
+                document.links?.let { section ->
+                    item(key = "links") {
+                        dev.centraid.android.kit.LinkSectionView(section, { link -> onEvent(DocsDocumentEvent(link = link)) }, onOpen)
+                    }
+                }
                 if (document.facts.isNotEmpty()) {
                     item(key = "facts-head") { Heading(chrome?.facts_heading.orEmpty()) }
                     items(document.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
@@ -707,6 +713,9 @@ internal fun DocsDocumentScreen(
     }
     state.about_picker?.takeIf { it.open_ }?.let { picker ->
         dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(DocsDocumentEvent(about = link)) }
+    }
+    state.link_picker?.takeIf { it.open_ }?.let { picker ->
+        dev.centraid.android.kit.LinkPickerSheet(picker) { link -> onEvent(DocsDocumentEvent(link = link)) }
     }
     DocsSheetView(
         state.sheet,

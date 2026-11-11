@@ -91,6 +91,12 @@ struct DocsDocumentView: View {
                                     send(Self.event { $0.about = link })
                                 }, open: open)
                             }
+                            // LINKED TO (#1185): the kit's section, after About; Rust makes every word and row.
+                            if document.hasLinks {
+                                LinkSectionView(section: document.links, send: { link in
+                                    send(Self.event { $0.link = link })
+                                }, open: open)
+                            }
                             if !document.facts.isEmpty {
                                 SectionHeader(title: state.chrome.factsHeading)
                                 // Ids prefixed per list, so a second list added here never collides
@@ -124,6 +130,7 @@ struct DocsDocumentView: View {
             DocsSheetView(sheet: state.sheet, actions: sheetActions())
         }
         .linkPickerSheet(state.aboutPicker) { link in send(Self.event { $0.about = link }) }
+        .linkPickerSheet(state.linkPicker) { link in send(Self.event { $0.link = link }) }
         .background {
             Color.clear.sheet(isPresented: Binding(
                 get: { state.hasConfirm },

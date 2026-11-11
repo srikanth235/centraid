@@ -620,6 +620,9 @@ message DocsDocumentState {
   LinkPicker about_picker = 15;
   // WHAT THE READ SHOWS (#1185): see `DocsDriveState.page`.
   PageState page = 16;
+  // The picker over the "Linked to" section, while it is up (#1185). The kit's generic picker,
+  // over every kind (the About picker above is people only).
+  optional LinkPicker link_picker = 17;
 
   enum Asking {
     ASKING_UNSPECIFIED = 0;
@@ -700,6 +703,10 @@ message DocsDocumentData {
   optional EarlierEntry earlier = 22;
   // Where it came from, under the Earlier versions entry (#1185). Absent for a typed item.
   optional OriginLine origin = 23;
+  // "Linked to" (#1185): every item the document is linked to, from either end, with the add row.
+  // The kit's shared section, after About. Absent while what it is linked to was not read, and on
+  // a document in the trash. Its events go back as `DocsDocumentEvent.link`.
+  optional LinkSection links = 24;
 }
 
 message DocsReader {
@@ -781,6 +788,8 @@ message DocsDocumentEvent {
     Dismissed dismissed = 12;
     // The About section's and picker's events (#1173).
     LinkEvent about = 13;
+    // The "Linked to" section and its picker (#1185): the kit's `LinkEvent`.
+    LinkEvent link = 14;
   }
 
   message Refreshed {}

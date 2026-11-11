@@ -434,6 +434,8 @@ pub fn document(
         .unwrap_or_default();
     wire::DocsDocumentData {
         about: None,
+        // The "Linked to" section is the screen's own read, laid on by the document page.
+        links: None,
         title_phone_says: None,
         surface: Some(surface),
         facts: facts(locale, units, cycle, found, answer, &view),

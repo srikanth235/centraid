@@ -79,6 +79,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         rename: None,
         dismissed: false,
         links: Links::new(&[Kind::Person]),
+        // A document may link to another document; the picker leaves this one out.
+        every: Links::new(&Kind::ALL).for_entity(&args.document_id),
+        linked: None,
+        linked_unread: false,
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
     }))
@@ -105,6 +109,14 @@ struct Document {
     dismissed: bool,
     /// The About section's picker (#1173).
     links: Links,
+    /// THE "Linked to" SECTION'S PICKER (#1185): what the document can link to, any item but a
+    /// Locker one (About, above, is people only and says who the document is about).
+    every: Links,
+    /// What the document is linked to, either end (`links::read_linked`). `None` until read, and
+    /// while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so, no empty section.
+    linked_unread: bool,
     /// Where the followed folder's name for the document differs from the member's (#1183), read
     /// with the page.
     differences: follow::Phone,
@@ -191,6 +203,68 @@ impl Document {
         self.gone = matches!(self.page, Page::Empty);
         if self.gone {
             self.page = Page::Failed;
+        }
+        self.read_linked(ctx);
+    }
+
+    /// What the document is linked to, in both directions. A refused or failed read is said on
+    /// the status line and never drawn as an empty section; a document that is gone or in the
+    /// trash has none (the About section is the same).
+    fn read_linked(&mut self, ctx: &Ctx) {
+        if self.row().is_none_or(|row| row.trashed) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.every.close();
+            return;
+        }
+        match links::read_linked(ctx, &self.document_id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.every.close();
+            }
+        }
+        self.every.reload(ctx);
+    }
+
+    fn linked_ids(&self) -> Vec<String> {
+        self.linked.as_deref().map(links::ids).unwrap_or_default()
+    }
+
+    /// One tap in the "Linked to" section or its picker, written through the kit's door (Undo
+    /// when the core can take it back). `add-about` and `remove-about` carry rel `links` for
+    /// every kind but a person said to be what the document is about.
+    fn link_event(&mut self, event: &wire::LinkEvent, ctx: &Ctx) {
+        let linked = self.linked_ids();
+        let id = self.document_id.clone();
+        match self.every.update(event, &linked, ctx) {
+            Outcome::Add { id: to, .. } => {
+                self.write(
+                    ctx,
+                    act::docs::AddAbout {
+                        from: id,
+                        rel: act::docs::AddAboutRel::Links,
+                        to,
+                    },
+                    words::link_added,
+                );
+            }
+            Outcome::Remove { id: to } => {
+                self.write(
+                    ctx,
+                    act::docs::RemoveAbout {
+                        from: id,
+                        rel: act::docs::RemoveAboutRel::Links,
+                        to,
+                    },
+                    words::link_removed,
+                );
+            }
+            Outcome::Moved => {}
         }
     }
 
@@ -519,6 +593,7 @@ impl Document {
             Some(D::Confirmed(_)) => self.confirmed(ctx),
             Some(D::Dismissed(_)) => self.asking = Asking::None,
             Some(D::About(link)) => self.about_event(&link, ctx),
+            Some(D::Link(link)) => self.link_event(&link, ctx),
             None => {}
         }
         Vec::new()
@@ -713,6 +788,16 @@ impl Screen for Document {
                         String::new(),
                     ));
                 }
+                // THE "Linked to" SECTION (#1185): everything the document is linked to, on a live
+                // document, after About.
+                data.links = self.linked.as_ref().map(|linked| {
+                    self.every.section(
+                        locale,
+                        link_words::section_linked(locale),
+                        links::rows(locale, linked),
+                        words::links_empty(locale),
+                    )
+                });
                 // THE FOLDER'S NAME, under the title, where the member renamed it (#1183). `blob`
                 // and `media_type` are the file's own bytes and kind, which the page never offers
                 // to edit, so only the title has a line.
@@ -759,13 +844,25 @@ impl Screen for Document {
                     title_hint: self.title_hint.clone(),
                     content,
                     page: Some(self.wired(&page, locale)),
-                    status: self.undo.status().or_else(|| self.earlier.status(locale)),
+                    status: self
+                        .undo
+                        .status()
+                        .or_else(|| self.earlier.status(locale))
+                        .or_else(|| {
+                            self.linked_unread.then(|| wire::StatusLine {
+                                sentence: words::links_unread(locale),
+                                action_label: String::new(),
+                                refused: false,
+                            })
+                        }),
                     confirm: self.confirm(locale),
                     rename: self.rename.as_ref().map(|rename| rename.view(locale)),
                     sheet,
                     chrome: Some(self.chrome(locale)),
                     dismissed: self.dismissed,
                     about_picker: Some(self.links.picker(locale, &self.about_ids())),
+                    link_picker: (self.linked.is_some() && self.every.is_open())
+                        .then(|| self.every.picker(locale, &self.linked_ids())),
                 },
             )),
             ..wire::ViewState::default()
@@ -806,6 +903,9 @@ mod tests {
             rename: None,
             dismissed: false,
             links: Links::new(&[Kind::Person]),
+            every: Links::new(&Kind::ALL).for_entity("d1"),
+            linked: None,
+            linked_unread: false,
             differences: follow::Phone::default(),
             earlier: earlier::Foot::default(),
         }
@@ -858,3 +958,7 @@ mod tests {
         assert!(effects.is_empty() && doc.undo.status().is_some_and(|s| s.refused));
     }
 }
+
+#[cfg(test)]
+#[path = "document_link_tests.rs"]
+mod link_tests;
