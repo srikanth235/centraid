@@ -144,7 +144,8 @@ public fun ReadStateView(
     val failed = page.failed
     val refused = page.refused
     val empty = page.empty
-    val note = page.note
+    // A note whose kind is unset is not a note: it is never drawn.
+    val note = page.note?.takeIf { it.kind != PageNote.Kind.KIND_UNSPECIFIED }
     Box(modifier.fillMaxSize(), contentAlignment = if (stage) Alignment.Center else Alignment.TopStart) {
         when {
             page.loading != null -> skeleton()
@@ -202,7 +203,7 @@ public fun PageNoteBanner(
             .border(KitGeometry.HAIRLINE, Surface.border, shape)
             .heightIn(min = KitGeometry.ROW_MIN)
             .padding(horizontal = 14.dp, vertical = 6.dp)
-            .testTag(if (note.kind == PageNote.Kind.NOT_CHECKED) "kit-note-unchecked" else "kit-note-partial")
+            .testTag(if (note.kind == PageNote.Kind.KIND_NOT_CHECKED) "kit-note-unchecked" else "kit-note-partial")
             .semantics {
                 contentDescription = note.sentence
                 liveRegion = LiveRegionMode.Polite

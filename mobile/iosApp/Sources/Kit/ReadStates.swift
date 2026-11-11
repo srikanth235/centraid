@@ -131,20 +131,20 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
             if stage {
                 ZStack {
                     data()
-                    if page.hasNote {
+                    if hasDrawableNote {
                         PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
                             .environment(\.colorScheme, .dark)
                             .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
             } else if flat {
-                if page.hasNote {
+                if hasDrawableNote {
                     PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
                 }
                 data()
             } else {
                 VStack(spacing: 0) {
-                    if page.hasNote {
+                    if hasDrawableNote {
                         PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
                     }
                     data()
@@ -152,6 +152,9 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
             }
         }
     }
+
+    /// A note whose kind is unset is not a note: it is never drawn.
+    private var hasDrawableNote: Bool { page.hasNote && page.note.kind != .unspecified }
 
     /// A state drawn on the stage reads in the dark scheme, centred, inside the page margin.
     @ViewBuilder

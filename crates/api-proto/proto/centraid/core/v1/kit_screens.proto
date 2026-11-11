@@ -773,10 +773,12 @@ message PageState {
 // action.
 message PageNote {
   enum Kind {
+    // Never sent: a note whose kind is unset is not drawn.
+    KIND_UNSPECIFIED = 0;
     // What is shown is some of it: a refresh that failed, or a follow that read part.
-    PARTIAL = 0;
+    KIND_PARTIAL = 1;
     // Something beside the data was not checked (what the phone says).
-    NOT_CHECKED = 1;
+    KIND_NOT_CHECKED = 2;
   }
   Kind kind = 1;
   string sentence = 2;

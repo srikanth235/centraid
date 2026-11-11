@@ -401,6 +401,22 @@ mod tests {
     }
 
     #[test]
+    fn a_note_on_the_wire_always_names_its_kind() {
+        // An unset kind is never drawn by either shell, so no note may leave the core without one.
+        for kind in [NoteKind::Partial, NoteKind::NotChecked] {
+            let note = Note {
+                kind,
+                sentence: "Some of it.".to_owned(),
+                retry: false,
+            };
+            assert_ne!(
+                note.wire(EN).kind,
+                wire::page_note::Kind::Unspecified as i32
+            );
+        }
+    }
+
+    #[test]
     fn not_checked_carries_no_action() {
         let wired = not_checked().expect("a note").wire(EN);
         assert_eq!(wired.kind, wire::page_note::Kind::NotChecked as i32);
