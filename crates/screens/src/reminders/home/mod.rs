@@ -23,6 +23,8 @@ use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
 use self::held::Held;
+use crate::catalog::act;
+use crate::kit::act as kit_act;
 use crate::kit::read::Page;
 use crate::kit::schedule::natural::{Chipper, Fields};
 use crate::kit::schedule::ops::Ops;
@@ -33,7 +35,7 @@ use crate::reminders::quick::Quick;
 use crate::reminders::view::Prefs;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, task,
+    agenda as words, agenda_home as sentences, agenda_reminders as reminders, fill, shared, task,
 };
 
 /// The quick-add bar: a bare title that lands in the Inbox.
@@ -62,6 +64,8 @@ pub(super) struct Home {
     search_open: bool,
     search_term: String,
     sheet: Sheet,
+    /// The stop confirm is up.
+    asking_stop: bool,
     /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
     import_completed: bool,
     filing_task_id: String,
@@ -98,6 +102,7 @@ impl Home {
             search_open: false,
             search_term: String::new(),
             sheet: Sheet::None,
+            asking_stop: false,
             import_completed: false,
             filing_task_id: String::new(),
             style: None,
@@ -289,9 +294,14 @@ impl Home {
         };
         if row.key == chrome::MORE_READS {
             self.sheet = Sheet::Reads;
-        } else if row.key == chrome::MORE_IMPORT_REMINDERS {
+        } else if row.key == chrome::MORE_TURN_ON {
+            // The sheet's verb asks the phone for the permission, so the ask comes at that moment.
             self.import_completed = false;
             self.sheet = Sheet::ImportReminders;
+        } else if row.key == chrome::MORE_STOP {
+            // The one row with no route: it asks before it stops.
+            self.asking_stop = true;
+            self.sheet = Sheet::None;
         } else if chrome::TASK_PLACES.contains(&row.key.as_str()) {
             // A PLACE IS A PAGE: the sheet closes, and the shell pushes the row's route.
             self.sheet = Sheet::None;
@@ -439,7 +449,47 @@ impl Home {
         if self.denied() {
             return Vec::new();
         }
-        chrome::more_rows(ctx.locale(), ctx.reminders_source())
+        chrome::more_rows(ctx.locale(), ctx.reminders_source(), self.following(ctx))
+    }
+
+    /// Whether Reminders reads the phone's: a pass has said which lists it follows.
+    fn following(&self, ctx: &Ctx) -> bool {
+        !ctx.follows()
+            .report(crate::follow::Store::Reminders)
+            .origins
+            .is_empty()
+    }
+
+    /// STOP READING, once the member said so: every list the passes followed is retired
+    /// (`stop-following`, the same door chat uses), the habit is forgotten and the status line says
+    /// what happened. **Every task stays**, an ordinary one from now on.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let locale = ctx.locale();
+        if !std::mem::take(&mut self.asking_stop) {
+            return Vec::new();
+        }
+        let mut clean = true;
+        for origin in ctx
+            .follows()
+            .report(crate::follow::Store::Reminders)
+            .origins
+        {
+            let request = act::reminders::StopFollowing {
+                r#ref: origin.clone(),
+            };
+            let key = kit_act::key(&["stop-following", &origin], kit_act::fresh());
+            // undo-exempt: Stop reading asks first and is itself the Undo of a follow; the row
+            // offers "Turn on" again, so no line of its own takes it back.
+            clean = kit_act::act(ctx, request, &key).committed && clean;
+        }
+        if !clean {
+            self.ops.line.refuse(shared::write_refused(locale));
+            return Vec::new();
+        }
+        ctx.follows().stopped(crate::follow::Store::Reminders);
+        self.ops.say(reminders::reminders_stopped(locale));
+        self.refresh(ctx);
+        vec![crate::imports::reminders::habit_clear()]
     }
 
     /// Whether the Filter and sort menu is on the page: with its list showing.
@@ -482,6 +532,8 @@ impl Screen for Home {
                     }
                 }
                 Some(H::FilterMenuPicked(_) | H::FilterMenuCleared(_)) => {}
+                Some(H::StopConfirmed(_)) => return self.stop(ctx),
+                Some(H::StopDismissed(_)) => self.asking_stop = false,
                 Some(kind) => self.on_event(kind, ctx),
                 None => {}
             },
@@ -567,7 +619,7 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else {
-                        chrome::more_rows(locale, ctx.reminders_source())
+                        chrome::more_rows(locale, ctx.reminders_source(), self.following(ctx))
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.
@@ -623,8 +675,15 @@ impl Screen for Home {
                     add_label: task::add_task(locale),
                     add_opens_quick_add: true,
                     new_event: None,
-                    // Stopping the phone's calendars is Calendar's.
-                    stop: None,
+                    // THE STOP CONFIRM (#1185): the kit's sheet, in the shared words.
+                    stop: (self.asking_stop && !denied && ctx.reminders_source()).then(|| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &reminders::reminders_title(locale),
+                            &reminders::phone_reminders(locale),
+                            &reminders::reminders_kept(locale),
+                        )
+                    }),
                     content,
                     page: Some(page),
                     import_label: String::new(),

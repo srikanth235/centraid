@@ -58,6 +58,12 @@ fn habit(op: wire::keychain_op::Op, value: Vec<u8>) -> wire::Effect {
     }
 }
 
+/// This device no longer follows its Reminders.
+#[must_use]
+pub(crate) fn habit_clear() -> wire::Effect {
+    habit(wire::keychain_op::Op::Delete, Vec::new())
+}
+
 /// Whether the keychain's answer says this device follows its Reminders.
 #[must_use]
 pub(crate) fn followed_in(value: &wire::KeychainValue) -> bool {
@@ -344,6 +350,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         }
     }
     outcome.read = u32::try_from(made.len()).unwrap_or(u32::MAX);
+    let mut followed = Vec::new();
     for (reference, group) in by_list {
         let first = group[0];
         let project = list_for(ctx, first, &mut held, &mut outcome);
@@ -369,6 +376,7 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
             continue;
         }
         outcome.told = true;
+        followed.push(reference.clone());
         let output: Value = serde_json::from_slice(&settled.output).unwrap_or(Value::Null);
         let count = |name: &str| {
             output
@@ -380,6 +388,11 @@ pub fn run(ctx: &Ctx, reminders: &[wire::PhoneReminder], include_completed: bool
         outcome.added += count("added") + count("matched");
         outcome.refused += count("refused");
         outcome.doubted += count("doubted");
+    }
+    // WHICH LISTS ARE FOLLOWED, so the More sheet can stop them (`stop-following` names each).
+    if !followed.is_empty() {
+        ctx.follows()
+            .followed_origins(crate::follow::Store::Reminders, &followed);
     }
     ctx.follows().judged(
         crate::follow::Store::Reminders,
