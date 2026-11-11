@@ -573,9 +573,14 @@ fn links_of(
             .cloned()
             .unwrap_or_else(|| RefCard::missing(id))
     };
+    // A Locker item is seen only inside Locker (owner ruling D11): it starts links to notes, and
+    // is never named here, in either direction.
+    let locker = |id: &str| card(id).kind == "locker_item";
     let mut references: BTreeMap<String, Vec<ReferenceEntry>> = BTreeMap::new();
     for row in &out {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id")) {
+        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id"))
+            && !locker(&to)
+        {
             references.entry(from).or_default().push(ReferenceEntry {
                 // An unreadable anchor is just an unanchored reference.
                 selector: text_of(row, "anchor").and_then(|json| serde_json::from_str(&json).ok()),
@@ -585,7 +590,9 @@ fn links_of(
     }
     let mut backlinks: BTreeMap<String, Vec<BacklinkEntry>> = BTreeMap::new();
     for row in &back {
-        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id")) {
+        if let (Some(from), Some(to)) = (text_of(row, "from_id"), text_of(row, "to_id"))
+            && !locker(&from)
+        {
             backlinks
                 .entry(to)
                 .or_default()
