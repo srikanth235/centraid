@@ -53,6 +53,7 @@ const BAND_MORE: &str = "more";
 const MORE_READS: &str = "reads";
 const MORE_CHOOSE: &str = "choose";
 const MORE_STOP: &str = "stop";
+const MORE_TURN_ON: &str = "turn-on";
 /// The row to the trash (#1185): a route the shell pushes.
 const MORE_EXPORT: &str = "export";
 const MORE_TRASH: &str = "trash";
@@ -603,14 +604,6 @@ impl Home {
                 route: None,
                 meta: String::new(),
             },
-            wire::HealthMoreRow {
-                key: MORE_CHOOSE.to_owned(),
-                label: words::more_choose(locale),
-                icon_key: "Sliders".to_owned(),
-                tone: neutral,
-                route: Some(routes::connect(&words::app_title(locale))),
-                meta: String::new(),
-            },
             // EXPORT (#1185): the kit's row, the same in every app.
             wire::HealthMoreRow {
                 key: MORE_EXPORT.to_owned(),
@@ -631,12 +624,35 @@ impl Home {
             },
         ];
         if connected {
+            // WHAT HEALTH MAY READ is changed from here once connected (it is the Connect page).
+            rows.insert(
+                1,
+                wire::HealthMoreRow {
+                    key: MORE_CHOOSE.to_owned(),
+                    label: words::more_choose(locale),
+                    icon_key: "Sliders".to_owned(),
+                    tone: neutral,
+                    route: Some(routes::connect(&words::app_title(locale))),
+                    meta: String::new(),
+                },
+            );
             rows.push(wire::HealthMoreRow {
                 key: MORE_STOP.to_owned(),
                 label: crate::kit::follow::stop_row(locale, &Store::of(ctx).name(locale)),
                 icon_key: "Stop".to_owned(),
                 tone: wire::status_chip::Tone::Net as i32,
                 route: None,
+                meta: String::new(),
+            });
+        } else {
+            // THE TURN-ON ROW takes the stop row's slot while Health reads nothing, so the slot
+            // is never empty: it opens Connect, where the phone is asked for the permission.
+            rows.push(wire::HealthMoreRow {
+                key: MORE_TURN_ON.to_owned(),
+                label: crate::kit::follow::turn_on_row(locale, &Store::of(ctx).name(locale)),
+                icon_key: "Power".to_owned(),
+                tone: wire::status_chip::Tone::Neutral as i32,
+                route: Some(routes::connect(&words::app_title(locale))),
                 meta: String::new(),
             });
         }

@@ -46,11 +46,13 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
-    assert_eq!(more, ["reads", "choose", "export", "trash"]);
-    // The row that opens Connect carries the route, and the empty state's
-    // action does too: no shell names a destination.
+    // THE STOP SLOT IS NEVER EMPTY: reading nothing, it offers "Turn on" in the same words as
+    // every app's, and the row opens Connect (the route is carried, no shell names it).
+    assert_eq!(more, ["reads", "export", "trash", "turn-on"]);
+    let turn_on = &state.more_rows[3];
+    assert_eq!(turn_on.label, "Turn on Apple Health");
     assert_eq!(
-        state.more_rows[1].route.as_ref().map(|r| r.screen.as_str()),
+        turn_on.route.as_ref().map(|r| r.screen.as_str()),
         Some("health.connect")
     );
     assert_eq!(
@@ -330,6 +332,9 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     let after = home_state(d.view(i));
     assert_eq!(after.sheet, Sheet::None as i32);
     assert!(empty_state_of(home_state(d.view(i))).is_some());
+    // THE SLOT SWAPS: the stop row is gone and "Turn on" is in its place, never neither.
+    let keys: Vec<&str> = after.more_rows.iter().map(|row| row.key.as_str()).collect();
+    assert_eq!(keys, ["reads", "export", "trash", "turn-on"]);
     match pending(&d) {
         wire::effect::Kind::Keychain(op) => {
             assert_eq!(op.op, wire::keychain_op::Op::Set as i32);

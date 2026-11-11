@@ -320,6 +320,14 @@ pub fn stop_row(locale: Locale, store: &str) -> String {
     fill(&shared::follow_stop_row(locale), &[("store", store)])
 }
 
+/// THE TURN-ON ROW: what the stop row's slot says once the app does not follow the store, "Turn on
+/// Phone calendars". Its tap asks the phone for the permission at that moment. Every app that
+/// follows a store shows the stop row or this one, never neither (#1185).
+#[must_use]
+pub fn turn_on_row(locale: Locale, store: &str) -> String {
+    fill(&shared::follow_turn_on_row(locale), &[("store", store)])
+}
+
 /// THE STOP SHEET: "Stop reading {store}?", what stays ("The days and workouts already here
 /// stay"), and a destructive "Stop reading". `app` is the app's name and `kept` what it already
 /// holds from the store, which stopping leaves as ordinary rows.

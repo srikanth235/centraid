@@ -85,6 +85,7 @@ catalog! {
     plain trash_empty_action = ("Empty trash", "Empty trash");
     plain follow_stop_body = ("{app} stops reading {store} on this phone. The {kept} already here stay.", "{app} stops reading {store} on this phone. The {kept} already here stay.");
     plain follow_stop_confirm = ("Stop reading", "Stop reading");
+    plain follow_turn_on_row = ("Turn on {store}", "Turn on {store}");
     plain follow_stop_row = ("Stop reading {store}", "Stop reading {store}");
     plain follow_stop_title = ("Stop reading {store}?", "Stop reading {store}?");
     plain trash_empty_body = ("Everything in trash leaves this vault for good. This cannot be undone.", "Everything in trash leaves this vault for good. This cannot be undone.");

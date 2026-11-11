@@ -486,7 +486,11 @@ impl Home {
             return Vec::new();
         }
         if self.menu {
-            return chrome::menu_rows(ctx.locale(), self.calendar.can_stop(ctx));
+            return chrome::menu_rows(
+                ctx.locale(),
+                self.calendar.can_stop(ctx),
+                self.calendar.can_turn_on(),
+            );
         }
         let calendars = self
             .data(ctx)
@@ -518,6 +522,17 @@ impl Screen for Home {
             }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                // THE TURN-ON ROW (the stop row's slot after a stop): the sheet is done and the
+                // phone is asked for the permission now, as the empty state's Import does.
+                Some(H::MoreRow(picked))
+                    if self.menu
+                        && picked.key == chrome::MORE_TURN_ON
+                        && self.calendar.can_turn_on() =>
+                {
+                    self.sheet = Sheet::None;
+                    self.menu = false;
+                    return self.calendar.import(ctx);
+                }
                 Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 // A LONG PRESS ON AN EMPTY SLOT writes nothing: it opens the add
                 // sheet at the snapped time.
@@ -667,7 +682,11 @@ impl Screen for Home {
                     more_rows: if denied {
                         Vec::new()
                     } else if menu_up {
-                        chrome::menu_rows(locale, self.calendar.can_stop(ctx))
+                        chrome::menu_rows(
+                            locale,
+                            self.calendar.can_stop(ctx),
+                            self.calendar.can_turn_on(),
+                        )
                     } else {
                         chrome::more_rows(
                             locale,

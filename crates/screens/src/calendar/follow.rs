@@ -791,6 +791,13 @@ impl CalendarFollow {
         self.followed && !ctx.follows().report(Store::Calendar).origins.is_empty()
     }
 
+    /// Whether "Turn on" is offered in the stop row's place: this device does not follow, and
+    /// nothing is being asked of the phone or the keychain right now.
+    #[must_use]
+    pub fn can_turn_on(&self) -> bool {
+        !self.followed && self.waiting == Waiting::Nothing
+    }
+
     /// STOP READING: every calendar the passes followed is retired (`stop-following`, the same door
     /// chat and Undo use) and this device no longer follows. **Every event stays**, an ordinary one
     /// from now on. `None` when the vault refused part of it (the rest is done, and stopping again

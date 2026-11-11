@@ -500,9 +500,17 @@
     "CalendarStopPhone.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "11 · Stop reading the phone's calendars",
-      "w": 804,
+      "title": "11 · Stop reading the phone's calendars, and turning it on",
+      "w": 1230,
       "x": 3780,
+      "y": 28360
+    },
+    "HealthTurnOn.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Health More before it reads, with Turn on",
+      "w": 390,
+      "x": 5080,
       "y": 28360
     },
     "CalendarStyle.dc.html": {

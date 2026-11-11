@@ -1308,9 +1308,16 @@ fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the
         .push(centraid_screens::agenda::TAB, agenda_home_route());
     habit(&mut world, false);
 
-    // Nothing is followed yet: the menu holds Export and Trash only.
+    // Nothing is followed yet: the menu holds Export and Trash, and the stop row's slot offers
+    // "Turn on", so the slot is never empty.
     open_menu(&mut world, home);
-    assert_eq!(menu_keys(&world, home), ["export", "trash"]);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
+    let turn_on = home_state(&world, home).more_rows[2].clone();
+    assert_eq!(
+        (turn_on.label.as_str(), turn_on.icon_key.as_str()),
+        ("Turn on Phone calendars", "Power")
+    );
+    assert!(turn_on.route.is_none());
     // A tap on a row that is not there asks nothing.
     send_home(
         &mut world,
@@ -1380,8 +1387,43 @@ fn stop_reading_is_offered_only_while_following_asks_in_the_shared_words_and_the
         Some("Calendar stopped reading your phone calendars.")
     );
     open_menu(&mut world, home);
-    assert_eq!(menu_keys(&world, home), ["export", "trash"]);
+    // THE SLOT SWAPS: Stop is gone and "Turn on" is in its place.
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "turn-on"]);
     assert_eq!(in_window(&world, "Offsite").len(), 1);
+
+    // Tapping it asks the phone for the permission now (the calendar read), and the answer
+    // brings the Stop row back in the slot.
+    world.driver.effects.clear();
+    send_home(
+        &mut world,
+        home,
+        H::MoreRow(wire::agenda_home_event::MoreRowPicked {
+            key: "turn-on".to_owned(),
+        }),
+    );
+    assert!(
+        world
+            .driver
+            .effects
+            .iter()
+            .filter_map(|request| request.effect.as_ref()?.kind.as_ref())
+            .any(is_read),
+        "the phone is asked at that moment"
+    );
+    answer(
+        &mut world,
+        is_read,
+        wire::effect_result::Outcome::Calendar(snapshot(vec![future(
+            "Offsite",
+            "2099-03-10",
+            "uid:offsite@google",
+        )])),
+    );
+    open_menu(&mut world, home);
+    assert_eq!(menu_keys(&world, home), ["export", "trash", "stop"]);
+    // Stopping once more, for the rest of the test.
+    tap_stop(&mut world, home);
+    send_home(&mut world, home, H::StopConfirmed(StopConfirmed {}));
 
     // A confirm that was never asked stops nothing.
     world.driver.effects.clear();

@@ -32,6 +32,8 @@ pub const MORE_NEW_CALENDAR: &str = "new-calendar";
 pub const MORE_TRASH: &str = "trash";
 /// The menu sheet's row that stops reading the phone's calendars (#1185); it opens a confirm.
 pub const MORE_STOP: &str = "stop";
+/// The stop row's slot once Calendar does not read the phone: its tap asks for the permission.
+pub const MORE_TURN_ON: &str = "turn-on";
 
 /// The band (places only, R-CHROME-5): Calendar, Calendars (the sheet of calendars to show or hide,
 /// Apple's middle key) and Invites (Apple's Inbox; the old Waiting). Calendar holds Day, Week, Month,
@@ -267,7 +269,7 @@ pub fn more_rows(
 /// CALENDAR'S MENU SHEET (`MoreCalendar.dc.html`): the places that are not a view of the calendar.
 /// Trash, with the rule that every trash states: 30 days, then erased.
 #[must_use]
-pub fn menu_rows(locale: Locale, can_stop: bool) -> Vec<wire::AgendaMoreRow> {
+pub fn menu_rows(locale: Locale, can_stop: bool, can_turn_on: bool) -> Vec<wire::AgendaMoreRow> {
     let label = shared::trash_entry(locale);
     let meta = shared::trash_entry_meta(locale);
     let export = export::entry(locale, super::super::EXPORT);
@@ -300,6 +302,18 @@ pub fn menu_rows(locale: Locale, can_stop: bool) -> Vec<wire::AgendaMoreRow> {
             spoken: label.clone(),
             label,
             icon_key: "Stop".to_owned(),
+            ..wire::AgendaMoreRow::default()
+        }
+    }))
+    // THE TURN-ON ROW takes the stop row's slot while Calendar does not read the phone, so the
+    // slot is never empty: its tap asks the phone for the permission then.
+    .chain((can_turn_on && !can_stop).then(|| {
+        let label = crate::kit::follow::turn_on_row(locale, &stop_store(locale));
+        wire::AgendaMoreRow {
+            key: MORE_TURN_ON.to_owned(),
+            spoken: label.clone(),
+            label,
+            icon_key: "Power".to_owned(),
             ..wire::AgendaMoreRow::default()
         }
     }))
