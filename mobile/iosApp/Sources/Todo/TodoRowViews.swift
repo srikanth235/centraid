@@ -308,6 +308,9 @@ struct TodoQuickAddBar: View {
     var onTool: ((String) -> Void)? = nil
     var onDue: ((String) -> Void)? = nil
     var onTag: ((String) -> Void)? = nil
+    /// The Link key's picker, and the × on a staged link or photo.
+    var onLink: ((Centraid_Core_V1_LinkEvent) -> Void)? = nil
+    var onStagedRemove: ((String) -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
     /// The title field has the keyboard. The toolbar is drawn while it does, or while a tool the
@@ -317,14 +320,23 @@ struct TodoQuickAddBar: View {
     var body: some View {
         if quickAdd.shown && quickAdd.drawn {
             VStack(spacing: 0) {
-                if let onTool, let onDue, let onTag, typing || !quickAdd.openTool.isEmpty || quickAdd.focused {
-                    QuickAddToolbar(quickAdd: quickAdd, onTool: onTool, onDue: onDue, onTag: onTag)
+                if let onTool, let onDue, let onTag, let onStagedRemove,
+                   typing || !quickAdd.openTool.isEmpty || quickAdd.focused || !quickAdd.stagedRows.isEmpty {
+                    QuickAddToolbar(
+                        quickAdd: quickAdd,
+                        onTool: onTool,
+                        onDue: onDue,
+                        onTag: onTag,
+                        onStagedRemove: onStagedRemove
+                    )
                 }
                 field
                 if quickAdd.hasChip {
                     QuickAddChipView(chip: quickAdd.chip, onDismiss: onDismissChip)
                 }
             }
+            // THE LINK KEY'S PICKER: the kit's sheet, open while Rust says so.
+            .linkPickerSheet(quickAdd.linkPicker) { link in onLink?(link) }
         }
     }
 

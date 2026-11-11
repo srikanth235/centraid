@@ -20,7 +20,7 @@ use crate::kit::schedule::rows::{self, Context};
 use crate::kit::schedule::style::{self, Draft, Subject};
 use crate::reminders::ops::NewTask;
 use crate::reminders::order;
-use crate::reminders::quick::Quick;
+use crate::reminders::quick::{Picked, Quick};
 use crate::reminders::view::{Prefs, Sort};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -414,11 +414,14 @@ impl Project {
                 ..Fields::default()
             }
         };
+        let links = self.quick.links();
         let task = NewTask {
             project_id: Some(&self.project_id),
             section_id: section.as_deref(),
             tags: self.quick.tags(),
             flagged: self.quick.flagged(),
+            links: &links,
+            photos: self.quick.photos(),
             ..NewTask::dated(&fields)
         };
         if self.ops.add_full(ctx, &task, &lands_in).is_some() {
@@ -495,8 +498,13 @@ impl Project {
             }
             Some(P::QuickAddSubmitted(_)) => self.submit_quick_add(ctx),
             // THE KEYBOARD TOOLBAR (#1173): each key stages what the next add carries.
-            Some(P::QuickTool(picked)) if self.found() => {
-                self.quick.pick_tool(&picked.key);
+            // Link and Photo: the kit's picker and the phone's, staged until Return adds the task.
+            Some(P::QuickLink(link)) if self.found() => {
+                self.quick.link_event(ctx, &link);
+                self.quick_focused = true;
+            }
+            Some(P::QuickStagedRemoved(removed)) if self.found() => {
+                self.quick.remove_staged(&removed.key);
                 self.quick_focused = true;
             }
             Some(P::QuickDue(picked)) if self.found() => {
@@ -592,6 +600,10 @@ impl Screen for Project {
                     self.show_completed = self.prefs.options.show_completed;
                     // The choice shapes the rows, so what is on the page (empty or not) follows it.
                     self.reload(ctx);
+                } else if let Some(outcome) = &result.outcome
+                    && let Picked::Refused(sentence) = self.quick.answer(ctx.locale(), outcome)
+                {
+                    self.ops.line.refuse(sentence);
                 }
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
@@ -608,6 +620,13 @@ impl Screen for Project {
                     && verb.key == rows::VERB_CATCH_UP
                 {
                     return list::verb_effects(&verb.key);
+                }
+                // A KEY OF THE TOOLBAR may need the phone (the Photo key's picker).
+                if let Some(P::QuickTool(picked)) = &project.kind
+                    && self.found()
+                {
+                    self.quick_focused = true;
+                    return self.quick.press(&picked.key);
                 }
                 self.event(project, ctx);
             }

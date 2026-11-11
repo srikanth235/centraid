@@ -292,6 +292,8 @@ public fun AgendaHomeScreen(
                     onTool = { onEvent(AgendaHomeEvent(quick_tool = AgendaHomeEvent.QuickToolPicked(key = it))) },
                     onDue = { onEvent(AgendaHomeEvent(quick_due = AgendaHomeEvent.QuickDuePicked(key = it))) },
                     onTag = { onEvent(AgendaHomeEvent(quick_tag = AgendaHomeEvent.QuickTagAdded(text = it))) },
+                    onLink = { onEvent(AgendaHomeEvent(quick_link = it)) },
+                    onStagedRemove = { onEvent(AgendaHomeEvent(quick_staged_removed = AgendaHomeEvent.QuickStagedRemoved(key = it))) },
                     onDismissChip = { onEvent(AgendaHomeEvent(quick_add_chip_dismissed = QuickAddChipDismissed())) },
                     // THE KEYBOARD LEFT: the machine puts an empty bar away.
                     onBlur = { onEvent(AgendaHomeEvent(quick_add_closed = AgendaHomeEvent.QuickAddClosed())) },

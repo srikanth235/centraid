@@ -31,7 +31,7 @@ use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::reminders::ops::NewTask;
-use crate::reminders::quick::Quick;
+use crate::reminders::quick::{Picked, Quick};
 use crate::reminders::view::Prefs;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -237,7 +237,9 @@ impl Home {
             // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep it
             // open, so nothing the member wrote is thrown away.
             H::QuickAddClosed(_) => {
-                if self.quick.title.trim().is_empty() {
+                // A picker taking the keyboard, or a link or photo staged, is not the member
+                // leaving: the staging would be lost with the bar.
+                if self.quick.title.trim().is_empty() && !self.quick.staged.holds_more() {
                     self.shut_quick_add();
                 }
             }
@@ -279,7 +281,11 @@ impl Home {
                 }
             }
             // THE KEYBOARD TOOLBAR (#1173): drawn over the bar only.
-            H::QuickTool(picked) if self.toolbar_up() => self.quick.staged.pick_tool(&picked.key),
+            // LINK AND PHOTO: the kit's picker and the phone's, staged until Return adds the task.
+            H::QuickLink(link) if self.toolbar_up() => self.quick.staged.link_event(ctx, &link),
+            H::QuickStagedRemoved(removed) if self.toolbar_up() => {
+                self.quick.staged.remove_staged(&removed.key);
+            }
             H::QuickDue(picked) if self.toolbar_up() => self.quick.staged.pick_due(&picked.key),
             H::QuickTag(added) if self.toolbar_up() => self.quick.staged.add_tag(&added.text),
             H::NextPage(_) => {
@@ -384,9 +390,12 @@ impl Home {
                 ..Fields::default()
             }
         };
+        let links = self.quick.staged.links();
         let new = NewTask {
             tags: self.quick.staged.tags(),
             flagged: self.quick.staged.flagged(),
+            links: &links,
+            photos: self.quick.staged.photos(),
             ..NewTask::dated(&fields)
         };
         if self.ops.add_full(ctx, &new, &inbox).is_some() {
@@ -532,6 +541,10 @@ impl Screen for Home {
                     }
                 }
                 Some(H::FilterMenuPicked(_) | H::FilterMenuCleared(_)) => {}
+                // A KEY OF THE TOOLBAR may need the phone (the Photo key's picker).
+                Some(H::QuickTool(picked)) if self.toolbar_up() => {
+                    return self.quick.staged.press(&picked.key);
+                }
                 Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 Some(H::StopDismissed(_)) => self.asking_stop = false,
                 Some(kind) => self.on_event(kind, ctx),
@@ -539,7 +552,13 @@ impl Screen for Home {
             },
             Some(E::EffectResult(result)) => {
                 // THE CHOICE'S OWN ANSWER.
-                self.prefs.answers(&result);
+                if !self.prefs.answers(&result)
+                    && let Some(outcome) = &result.outcome
+                    && let Picked::Refused(sentence) =
+                        self.quick.staged.answer(ctx.locale(), outcome)
+                {
+                    self.ops.line.refuse(sentence);
+                }
             }
             _ => {}
         }

@@ -372,7 +372,7 @@ impl Undo {
     }
 
     /// A refused line that still offers what is on offer (the writes before the refusal).
-    fn refuse_keeping_offer(&mut self, ctx: &Ctx, sentence: String) {
+    pub(crate) fn refuse_keeping_offer(&mut self, ctx: &Ctx, sentence: String) {
         let kept = self.offer.take();
         self.refuse(sentence);
         if let (Some(kept), Some(line)) = (kept, &mut self.line) {

@@ -288,10 +288,8 @@ impl Attachments {
             &[act::calendar::Attach::NAME, &self.item_id, &id],
             kit_act::fresh(),
         );
-        let (from, to) = (self.item_id.clone(), id);
         // Every app's `attach` has one shape, so one request serves them all.
-        let mut request = act::calendar::Attach { from, to }.request();
-        request.app = self.app.to_owned();
+        let request = attach_request(self.app, &self.item_id, &id);
         // Attach and detach are each other's inverse (`edge.add` / `edge.remove`): the line says
         // so and offers Undo, which detaches (#1185).
         let attached = self.line.act(ctx, request, &key, words::attachment_added);
@@ -456,7 +454,7 @@ fn tile(
 
 /// The member's words for a refused add: where to turn a grant on, a phone with no picker, or
 /// the file that would not go.
-fn refusal_of(locale: Locale, failed: &wire::EffectFailed) -> String {
+pub(crate) fn refusal_of(locale: Locale, failed: &wire::EffectFailed) -> String {
     if failed.denied {
         words::add_denied_error(locale)
     } else if failed.reason == UNAVAILABLE {
@@ -473,6 +471,27 @@ fn refusal_or(locale: Locale, sentence: &str) -> String {
     } else {
         sentence.to_owned()
     }
+}
+
+/// The write that files a picked image as a photo: the same one an attach makes first, for a page
+/// that holds the pick until the thing it attaches to exists (the quick add's staged photo).
+#[must_use]
+pub fn photo_request(picked: &wire::FilePicked) -> wire::ActRequest {
+    let media_type = media_type_of(&picked.name, &picked.media_type);
+    let size = i64::try_from(picked.byte_size).ok();
+    photo_upload(picked, media_type, size).into()
+}
+
+/// The write that attaches the photo or document `to` to `from`, in `app`.
+#[must_use]
+pub fn attach_request(app: &str, from: &str, to: &str) -> wire::ActRequest {
+    let mut request = act::calendar::Attach {
+        from: from.to_owned(),
+        to: to.to_owned(),
+    }
+    .request();
+    request.app = app.to_owned();
+    request
 }
 
 /// The file's name as the origin keeps it, or nothing for a file the platform named none for.

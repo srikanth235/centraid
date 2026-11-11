@@ -7,11 +7,14 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::catalog::act;
 use crate::kit::act::{self as kit_act};
+use crate::kit::attachments;
 use crate::kit::civil;
 use crate::kit::schedule::natural::Fields;
 use crate::kit::schedule::ops::Ops;
 use crate::screen::Ctx;
-use crate::strings::{Locale, agenda_reminders as reminders, task as words};
+use crate::strings::{
+    Locale, agenda_reminders as reminders, agenda_tasks as staged_words, fill, task as words,
+};
 
 /// A task as a sheet or a toolbar stages it: what one add writes. Empty text is
 /// absent and priority 0 is none.
@@ -30,6 +33,10 @@ pub struct NewTask<'a> {
     pub section_id: Option<&'a str>,
     pub tags: &'a [String],
     pub flagged: bool,
+    /// Items the new task is linked to, as `(id, title)`: the quick add's staged links.
+    pub links: &'a [(String, String)],
+    /// Photos the new task holds, as the phone staged them: filed and attached with the add.
+    pub photos: &'a [wire::FilePicked],
     /// The due is a wall clock: the request names the device's zone beside it.
     pub timed: bool,
 }
@@ -153,7 +160,60 @@ impl Ops {
                 &key,
             );
         }
+        self.attach_staged(ctx, &id, task);
         Some(id)
+    }
+
+    /// What the quick add staged for the task just made: its links, then its photos (filed, then
+    /// attached). Each write joins the add's line, so ONE Undo takes the whole add back (the links
+    /// off, the photos trashed, the task trashed). A write the vault refuses leaves the task made,
+    /// the rest still tried, and the line says in its own words what did not attach.
+    fn attach_staged(&mut self, ctx: &Ctx, id: &str, task: &NewTask) {
+        let locale = ctx.locale();
+        let mut failed: Vec<String> = Vec::new();
+        for (to, title) in task.links {
+            let key = kit_act::key(&["link-task", id, to], self.next_seq());
+            let linked = self.line.act_joining(
+                ctx,
+                act::reminders::Link {
+                    from: id.to_owned(),
+                    to: to.clone(),
+                },
+                &key,
+            );
+            if !linked.committed {
+                failed.push(fill(
+                    &staged_words::quick_link_failed(locale),
+                    &[("title", title.as_str())],
+                ));
+            }
+        }
+        for picked in task.photos {
+            let key = kit_act::key(&["quick-photo", id, &picked.blob], self.next_seq());
+            let made = self
+                .line
+                .act_joining(ctx, attachments::photo_request(picked), &key);
+            let attached = made
+                .output_text("id")
+                .filter(|_| made.committed)
+                .is_some_and(|photo| {
+                    let key = kit_act::key(&["quick-attach", id, &photo], self.next_seq());
+                    let request = attachments::attach_request("reminders", id, &photo);
+                    self.line.act_joining(ctx, request, &key).committed
+                });
+            if !attached {
+                failed.push(staged_words::quick_photo_failed(locale));
+            }
+        }
+        let sentence = match failed.as_slice() {
+            [] => return,
+            [one] => one.clone(),
+            many => fill(
+                &staged_words::quick_staged_failed(locale),
+                &[("n", many.len().to_string().as_str())],
+            ),
+        };
+        self.line.refuse_keeping_offer(ctx, sentence);
     }
 
     /// File a task: a project (and section), or the Inbox (`project_id` None).

@@ -305,9 +305,33 @@ impl Links {
         self.open.is_some()
     }
 
+    /// The title of the candidate `id` while the picker lists it: a host that keeps the pick
+    /// before there is anything to link it to (the quick add) names it from here.
+    #[must_use]
+    pub fn candidate_title(&self, id: &str) -> Option<String> {
+        let open = self.open.as_ref()?;
+        open.candidates
+            .iter()
+            .find(|candidate| candidate.id == id)
+            .map(|candidate| candidate.title.clone())
+    }
+
     /// Close the picker (the thing it served is gone).
     pub fn close(&mut self) {
         self.open = None;
+    }
+
+    /// Open the picker on its kinds, as the host's one "Add link" row does, for a host that has no
+    /// such row to tap (the quick add's Link key). A host that offers few kinds has no chooser.
+    pub fn open_chooser(&mut self) {
+        if self.chooses_a_kind() {
+            self.open = Some(Open {
+                stage: Stage::Chooser,
+                query: String::new(),
+                loaded: true,
+                candidates: Vec::new(),
+            });
+        }
     }
 
     fn chooses_a_kind(&self) -> bool {
@@ -360,12 +384,7 @@ impl Links {
         match &event.kind {
             Some(E::Add(tapped)) => {
                 if tapped.key == CHOOSER_KEY && self.chooses_a_kind() {
-                    self.open = Some(Open {
-                        stage: Stage::Chooser,
-                        query: String::new(),
-                        loaded: true,
-                        candidates: Vec::new(),
-                    });
+                    self.open_chooser();
                 } else if let Some(kind) =
                     Kind::parse(&tapped.key).filter(|kind| self.adds.contains(kind))
                 {

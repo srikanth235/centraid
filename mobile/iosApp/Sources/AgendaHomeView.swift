@@ -145,7 +145,9 @@ struct AgendaHomeView: View {
                         // THE KEYBOARD TOOLBAR (#1173).
                         onTool: { key in send(AgendaEvents.make { $0.quickTool = .with { $0.key = key } }) },
                         onDue: { key in send(AgendaEvents.make { $0.quickDue = .with { $0.key = key } }) },
-                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) }
+                        onTag: { text in send(AgendaEvents.make { $0.quickTag = .with { $0.text = text } }) },
+                        onLink: { link in send(AgendaEvents.make { $0.quickLink = link }) },
+                        onStagedRemove: { key in send(AgendaEvents.make { $0.quickStagedRemoved = .with { $0.key = key } }) }
                     )
                 }
             }

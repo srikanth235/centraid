@@ -872,6 +872,15 @@ message AgendaHomeEvent {
     // these answers it.
     StopConfirmed stop_confirmed = 62;
     StopDismissed stop_dismissed = 63;
+    // THE QUICK ADD'S LINK AND PHOTO KEYS: the link picker's taps, and the ×
+    // on a staged row.
+    LinkEvent quick_link = 64;
+    QuickStagedRemoved quick_staged_removed = 65;
+  }
+
+  message QuickStagedRemoved {
+    // `TodoStagedRow.key`.
+    string key = 1;
   }
 
   // The "‹ November" chip: back to the month the anchor is in.
@@ -2151,11 +2160,13 @@ message TodoQuickAdd {
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
   // THE KEYBOARD TOOLBAR (#1173), drawn over the keyboard while the field
-  // has it: Date, Tag and Flag. Each stages what the next add carries; Return
-  // adds it, clears the field and keeps the keyboard for the next one.
+  // has it: Date, Tag, Flag, Link and Photo. Each stages what the next add
+  // carries; Return adds it, clears the field and keeps the keyboard for the
+  // next one.
   repeated TodoQuickTool tools = 8;
   // What the next add carries, under the field: "Tomorrow · #errand ·
-  // Flagged"; empty when nothing is staged.
+  // Flagged"; empty when nothing is staged. A staged link or photo is not
+  // here: it is a row of `staged_rows`.
   string staged_label = 9;
   // The tool that is open: `date` draws `due_choices`, `tag` a tag field;
   // empty for none.
@@ -2168,11 +2179,33 @@ message TodoQuickAdd {
   // member taps Add. Absent when no phrase was read, or the member dismissed it
   // for these words.
   QuickAddChip chip = 13;
+  // THE STAGED TRAY (`ListQuickStaged`): the links and photos the next add
+  // carries, one removable row each, under the field. Empty when none are
+  // staged. They are made, and the photos filed, only when the add is
+  // submitted.
+  repeated TodoStagedRow staged_rows = 14;
+  // The tray's spoken name: "Staged for the next reminder".
+  string staged_group_label = 15;
+  // The Link key's picker (`LinkEvent` answers it), absent while closed.
+  LinkPicker link_picker = 16;
+}
+
+// One link or photo staged for the next add.
+message TodoStagedRow {
+  // What the ×, `QuickStagedRemoved`, sends back.
+  string key = 1;
+  // "Link · Note", "Photo".
+  string kind_label = 2;
+  // The item's title, or the photo's file name.
+  string title = 3;
+  string icon_key = 4;
+  // "Remove Lisbon trip".
+  string remove_label = 5;
 }
 
 // One key of the quick add's keyboard toolbar.
 message TodoQuickTool {
-  // `date`, `tag`, `flag`.
+  // `date`, `tag`, `flag`, `link`, `photo`.
   string key = 1;
   // The spoken name: "Date", "Tag", "Flag".
   string label = 2;
@@ -2473,6 +2506,13 @@ message TodoProjectEvent {
     StyleColorPicked style_color = 26;
     StyleIconPicked style_icon = 27;
     StyleSubmitted style_submitted = 28;
+    // THE QUICK ADD'S LINK AND PHOTO KEYS, as on Agenda's home.
+    LinkEvent quick_link = 29;
+    QuickStagedRemoved quick_staged_removed = 30;
+  }
+
+  message QuickStagedRemoved {
+    string key = 1;
   }
 
   message StyleRequested {}

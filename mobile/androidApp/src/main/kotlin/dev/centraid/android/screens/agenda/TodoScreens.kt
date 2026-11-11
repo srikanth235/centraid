@@ -244,6 +244,8 @@ internal fun TodoProjectScreen(
                 onTool = { onEvent(TodoProjectEvent(quick_tool = TodoProjectEvent.QuickToolPicked(key = it))) },
                 onDue = { onEvent(TodoProjectEvent(quick_due = TodoProjectEvent.QuickDuePicked(key = it))) },
                 onTag = { onEvent(TodoProjectEvent(quick_tag = TodoProjectEvent.QuickTagAdded(text = it))) },
+                onLink = { onEvent(TodoProjectEvent(quick_link = it)) },
+                onStagedRemove = { onEvent(TodoProjectEvent(quick_staged_removed = TodoProjectEvent.QuickStagedRemoved(key = it))) },
                 onDismissChip = { onEvent(TodoProjectEvent(quick_add_chip_dismissed = QuickAddChipDismissed())) },
             )
         }
