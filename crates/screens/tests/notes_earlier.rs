@@ -235,3 +235,27 @@ fn a_read_that_fails_is_the_failed_state_never_an_empty_list() {
         Some(wire::earlier_view::Content::Failure(_))
     ));
 }
+
+#[test]
+fn an_imported_note_says_its_folder_and_a_typed_one_does_not() {
+    let mut d = driver();
+    let imported = arrange(
+        &d,
+        act::notes::ImportNotes {
+            files: serde_json::json!([{ "path": "Vault/a.md", "text": "# Cabin\nlantern" }])
+                .to_string(),
+            arrived_system: Some(act::notes::ImportNotesArrivedSystem::Markdown),
+            arrived_label: Some("Vault".to_owned()),
+            ..Default::default()
+        },
+    );
+    let output: serde_json::Value = serde_json::from_slice(&imported.output).expect("json");
+    let imported = output["ids"][0].as_str().expect("an id").to_owned();
+    let typed = note(&d, "Typed", "words");
+    let i = d.push(notes::TAB, routes::editor(&imported));
+    let line = editor_state(d.view(i)).origin.clone().expect("a line");
+    assert_eq!(line.text, "From Vault");
+    assert_eq!(line.accessibility_label, "Came from Vault");
+    let i = d.push(notes::TAB, routes::editor(&typed));
+    assert_eq!(editor_state(d.view(i)).origin, None);
+}

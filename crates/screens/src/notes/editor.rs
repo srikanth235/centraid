@@ -1416,6 +1416,8 @@ impl Screen for Editor {
         if let (Some(draft), None, None) = (draft, &self.blocked, &self.denied) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
+        // WHERE IT CAME FROM (#1185): the menu's quiet "From ..." line, read with the entry.
+        state.origin = self.earlier.origin.clone();
         // THE MENU'S "Earlier versions" ROW: the kit's entry, its route naming the note as the
         // page the member comes from.
         if let (Some(id), Some(entry)) = (
