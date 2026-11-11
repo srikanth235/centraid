@@ -230,19 +230,21 @@ private fun PlacesPlot(data: PhotosPlacesData, onOpen: (Route) -> Unit) {
     ) {
         // RHYTHM, NOT REFERENCE: a graticule says "a chart of your own coordinates".
         Canvas(modifier = Modifier.fillMaxSize()) {
+            // ONE POINT, as on iOS (`lineWidth: 1`): a bare 1f is one pixel, which is hairline-thin on a dense phone.
+            val stroke = 1.dp.toPx()
             for (step in 1..3) {
                 val fraction = step / 4f
                 drawLine(
                     color = line,
                     start = Offset(0f, size.height * fraction),
                     end = Offset(size.width, size.height * fraction),
-                    strokeWidth = 1f,
+                    strokeWidth = stroke,
                 )
                 drawLine(
                     color = line,
                     start = Offset(size.width * fraction, 0f),
                     end = Offset(size.width * fraction, size.height),
-                    strokeWidth = 1f,
+                    strokeWidth = stroke,
                 )
             }
         }
@@ -270,7 +272,8 @@ private fun PlacesPlot(data: PhotosPlacesData, onOpen: (Route) -> Unit) {
                     .size(diameter)
                     .clip(shape)
                     .background(centraidColor(if (cover != null) "bgElev" else "stage"))
-                    .border(CentraidGeometry.HAIRLINE.dp, centraidColor("line"), shape)
+                    // THE OUTLINE IS THE PHOTOGRAPH'S: a count on the stage ink has none (as on iOS).
+                    .then(if (cover != null) Modifier.border(CentraidGeometry.HAIRLINE.dp, centraidColor("line"), shape) else Modifier)
                     .clickable { if (row.choices.isEmpty()) row.open_?.let(onOpen) else expanded = row.place_id }
                     .semantics { contentDescription = row.spoken },
                 contentAlignment = Alignment.Center,
