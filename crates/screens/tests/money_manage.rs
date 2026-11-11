@@ -4,6 +4,8 @@
 mod money_support;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_screens::catalog::act;
+use centraid_screens::field::Keyed;
 use centraid_screens::money::routes;
 use centraid_screens::testing::Driver;
 use money_support::*;
@@ -726,4 +728,47 @@ fn an_account_edited_and_closed_in_one_save_is_taken_back_by_one_undo() {
         (line.sentence.as_str(), line.action_label.as_str()),
         ("Undone", "")
     );
+}
+
+#[test]
+fn saving_an_account_that_changed_elsewhere_is_refused_and_the_name_is_kept_as_a_version() {
+    let mut d = driver();
+    let i = push(&mut d, routes::accounts("Money"));
+    let (id, _) = accounts(&d).remove(0);
+    event(
+        &mut d,
+        i,
+        aev(ae::Kind::Account(ae::AccountTapped {
+            account_id: id.clone(),
+        })),
+    );
+    event(
+        &mut d,
+        i,
+        aev(ae::Kind::Name(ae::NameEdited {
+            text: "Mine".into(),
+        })),
+    );
+    // Another surface renames the account after the sheet opened.
+    let request: wire::ActRequest = act::money::EditAccount {
+        account_id: id.clone(),
+        title: Some("Theirs".into()),
+        ..Default::default()
+    }
+    .into();
+    let response = d.act(request.keyed("elsewhere"));
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    event(&mut d, i, aev(ae::Kind::Save(ae::Save {})));
+    assert!(acc(d.view(i)).editor.is_none());
+    assert_eq!(
+        acc(d.view(i)).status.as_ref().unwrap().sentence,
+        "This account changed somewhere else. Your text is in Earlier versions."
+    );
+    let row = acc_data(d.view(i))
+        .sections
+        .iter()
+        .flat_map(|s| &s.rows)
+        .find(|r| r.account_id == id)
+        .unwrap();
+    assert_eq!(row.name, "Theirs", "the other surface's name stands");
 }

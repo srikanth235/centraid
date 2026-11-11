@@ -812,6 +812,8 @@ static ADD_ITEM_PRE: &[CommandCondition] = &[
 ];
 
 static EDIT_ITEM_PRE: &[CommandCondition] = &[
+    crate::commands::entity::STALE_GUARD[0],
+    crate::commands::entity::STALE_GUARD[1],
     ITEM_LIVE_CHECK,
     SEALED_CELLS_ARE_CIPHERTEXT,
     KEY_GENERATION_IS_LIVE,
@@ -1107,6 +1109,7 @@ fn edit_item() -> CommandDefinition {
             "item_id": { "type": "string", "minLength": 1 },
             "title": { "type": "string", "minLength": 1 },
             "compromised": { "type": "boolean" },
+            "expected_rev": { "type": "integer", "minimum": 0 },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{0,64}$" },
             "#,
             field_schema!(),
@@ -1226,11 +1229,15 @@ fn edit_item() -> CommandDefinition {
                 // take it back.
                 set_alias(ctx, &item_id, alias)?;
             }
-            Ok(serde_json::json!({
-                "item_id": item_id,
-                "rotated": rotated,
-                "columns": changed
-            }))
+            crate::commands::entity::with_rev(
+                ctx,
+                &item_id,
+                serde_json::json!({
+                    "item_id": item_id,
+                    "rotated": rotated,
+                    "columns": changed
+                }),
+            )
         },
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;

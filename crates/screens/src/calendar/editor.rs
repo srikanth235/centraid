@@ -66,6 +66,7 @@ use crate::kit::schedule::draft::{
     REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
 };
 use crate::kit::schedule::rule_words::{self, long_day};
+use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
@@ -103,6 +104,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         asking: Asking::None,
         scope: None,
         save_tried: false,
+        rev: None,
         undo: Undo::default(),
         dismissed: false,
     }))
@@ -127,6 +129,9 @@ struct Loaded {
 }
 
 struct Editor {
+    /// The event's revision when the draft was read: what an edit names as the one it replaces
+    /// (#1185). `None` for a new event and when it could not be read.
+    rev: Option<i64>,
     route: wire::AgendaEditorRoute,
     mode: Mode,
     phase: Phase,
@@ -180,6 +185,10 @@ impl Editor {
                 _ => None,
             },
         );
+        // The revision first, once per draft: a change between the two reads refuses the save.
+        if self.mode == Mode::Edit && self.draft.is_none() {
+            self.rev = stale::read_rev(ctx, &self.route.event_id);
+        }
         // AN EDIT READS ITS EVENT BY ID: a search hit on a repeating event is the
         // series row, which no window lists. Absent there is gone.
         let detail = (self.mode == Mode::Edit).then(|| self.read_event(ctx));
@@ -374,7 +383,10 @@ impl Editor {
             .collect();
         let occurrence = event.original_start_local.clone().unwrap_or_default();
         if !self.is_series_edit() {
-            let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
+            let request = act::calendar::EditEvent {
+                expected_rev: self.rev,
+                ..write::edit_event(&event_id, &draft, &base, &owner_ids)
+            };
             let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
             return self.committed(ctx, request, &key, editor_words::event_saved);
         }
@@ -390,7 +402,10 @@ impl Editor {
         self.close_sheet();
         match scope {
             wire::AgendaScope::Series => {
-                let request = write::edit_event(&event_id, &draft, &base, &owner_ids);
+                let request = act::calendar::EditEvent {
+                    expected_rev: self.rev,
+                    ..write::edit_event(&event_id, &draft, &base, &owner_ids)
+                };
                 let key = kit_act::key(&["edit-event", &event_id], kit_act::fresh());
                 self.committed(ctx, request, &key, editor_words::event_saved)
             }
@@ -431,8 +446,40 @@ impl Editor {
         let settled = self.undo.act_handing_down(ctx, request, key, said);
         if settled.committed {
             self.dismissed = true;
+        } else if let Some(stale) = settled.stale() {
+            self.stale(ctx, stale);
         }
         Vec::new()
+    }
+
+    /// The vault refused the save: the event changed, or went to the trash, since the draft was
+    /// read (#1185). The words typed are kept as an earlier version of the event, the event is read
+    /// again, and the line says what happened and where the words went.
+    fn stale(&mut self, ctx: &Ctx, stale: stale::Stale) {
+        let mut fields = Vec::new();
+        if let (Some(draft), Some(base)) = (&self.draft, &self.baseline) {
+            if draft.title.trim() != base.title.trim() {
+                fields.push(("entity.title".to_owned(), draft.title.trim().into()));
+            }
+            if draft.notes.trim() != base.notes.trim() {
+                let notes = Some(draft.notes.trim()).filter(|notes| !notes.is_empty());
+                fields.push(("event.description".to_owned(), notes.into()));
+            }
+        }
+        let locale = ctx.locale();
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_event(locale),
+            &self.route.event_id,
+            stale,
+            fields,
+        );
+        self.draft = None;
+        self.baseline = None;
+        self.typed_place.clear();
+        self.close_sheet();
+        self.reload(ctx);
+        self.undo.refuse(said);
     }
 
     fn skip(&mut self, ctx: &Ctx) {

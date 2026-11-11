@@ -232,6 +232,7 @@ pub mod act {
             pub calendar_id: Option<String>,
             pub description: Field<String>,
             pub ends: Field<String>,
+            pub expected_rev: Option<i64>,
             pub place_id: Field<String>,
             pub reminders: Field<String>,
             pub rule: Field<String>,
@@ -254,6 +255,7 @@ pub mod act {
                 if let Some(it) = self.calendar_id { map.insert("calendar_id".to_owned(), text(it)); }
                 put_field(&mut map, "description", self.description, |it| text(it));
                 put_field(&mut map, "ends", self.ends, |it| text(it));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 put_field(&mut map, "place_id", self.place_id, |it| text(it));
                 put_field(&mut map, "reminders", self.reminders, |it| text(it));
                 put_field(&mut map, "rule", self.rule, |it| text(it));
@@ -2246,6 +2248,7 @@ pub mod act {
             pub content: Option<String>,
             pub cvv: Option<String>,
             pub email: Option<String>,
+            pub expected_rev: Option<i64>,
             pub expiry: Option<String>,
             pub fullname: Option<String>,
             pub network: Option<String>,
@@ -2272,6 +2275,7 @@ pub mod act {
                 if let Some(it) = self.content { map.insert("content".to_owned(), text(it)); }
                 if let Some(it) = self.cvv { map.insert("cvv".to_owned(), text(it)); }
                 if let Some(it) = self.email { map.insert("email".to_owned(), text(it)); }
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 if let Some(it) = self.expiry { map.insert("expiry".to_owned(), text(it)); }
                 if let Some(it) = self.fullname { map.insert("fullname".to_owned(), text(it)); }
                 if let Some(it) = self.network { map.insert("network".to_owned(), text(it)); }
@@ -2912,6 +2916,7 @@ pub mod act {
         #[derive(Clone, Debug, Default)]
         pub struct EditAccount {
             pub account_id: String,
+            pub expected_rev: Option<i64>,
             pub external_ref: Field<String>,
             pub on_budget: Option<bool>,
             pub title: Option<String>,
@@ -2923,6 +2928,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.account_id));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
                 put_field(&mut map, "external_ref", self.external_ref, |it| text(it));
                 if let Some(it) = self.on_budget { map.insert("on_budget".to_owned(), flag(it)); }
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }

@@ -24,6 +24,7 @@ use crate::kit::earlier;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::read::{self, Reading};
 use crate::kit::share::{self, Share};
+use crate::kit::stale;
 use crate::kit::trash;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -57,6 +58,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         sheet: Sheet::None,
         name_draft: String::new(),
+        rev: None,
+        name_rev: None,
         undo: Undo::default(),
         dismissed: Vec::new(),
         links: Links::new(&[Kind::Person]),
@@ -80,6 +83,10 @@ struct Transaction {
     phase: Phase<Loaded>,
     sheet: Sheet,
     name_draft: String,
+    /// The line's revision when the page was last read, and when the name sheet opened: what a
+    /// rename names as the one it replaces (#1185).
+    rev: Option<i64>,
+    name_rev: Option<i64>,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
     /// Offers the member waved off this sitting: `transfer`, `rule`, `with`.
@@ -95,6 +102,8 @@ struct Transaction {
 impl Transaction {
     fn reload(&mut self, ctx: &Ctx) {
         use wire::app_query_response::Answer;
+        // The revision first: a change between the two reads refuses the next save.
+        self.rev = stale::read_rev(ctx, &self.txn_id);
         let txn = read::read(
             ctx,
             load::money::Transaction {
@@ -198,6 +207,37 @@ impl Transaction {
         self.reload(ctx);
     }
 
+    /// The line's own name, saved from the sheet. The save names the revision the sheet opened on; a
+    /// line that changed elsewhere since, or went to the trash, is refused, the typed name is kept
+    /// as an earlier version and the page reads the line as it is (#1185).
+    fn rename(&mut self, ctx: &Ctx, text: String) {
+        let locale = ctx.locale();
+        let key = kit_act::key(&["money", "txn", &self.txn_id], kit_act::fresh());
+        let settled = self.undo.act(
+            ctx,
+            act::money::SetDisplayName {
+                transaction_id: self.txn_id.clone(),
+                title: text.clone(),
+                expected_rev: self.name_rev,
+            },
+            &key,
+            words::done_name,
+        );
+        let said = settled.stale().map(|stale| {
+            stale::on_button(
+                ctx,
+                &crate::strings::chat_confirm::noun_transaction(locale),
+                &self.txn_id,
+                stale,
+                vec![("entity.title".to_owned(), text.into())],
+            )
+        });
+        self.reload(ctx);
+        if let Some(said) = said {
+            self.undo.refuse(said);
+        }
+    }
+
     /// MOVE TO TRASH: the title the status line names is the line's own, as its page shows it.
     fn trash_line(&mut self, ctx: &Ctx) {
         let Some(loaded) = self.phase.data() else {
@@ -228,6 +268,7 @@ impl Transaction {
                     .data()
                     .map(|l| l.txn.display_name.clone())
                     .unwrap_or_default();
+                self.name_rev = self.rev;
                 self.sheet = Sheet::Name;
             }
             ACTION_UNLINK => self.submit(
@@ -329,15 +370,7 @@ impl Transaction {
                 };
                 self.sheet = Sheet::None;
                 if !text.is_empty() {
-                    self.submit(
-                        ctx,
-                        act::money::SetDisplayName {
-                            transaction_id: self.txn_id.clone(),
-                            title: text,
-                            expected_rev: None,
-                        },
-                        words::done_name(locale),
-                    );
+                    self.rename(ctx, text);
                 }
             }
             Some(T::SheetClosed(_)) => self.sheet = Sheet::None,

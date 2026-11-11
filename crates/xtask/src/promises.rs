@@ -551,10 +551,22 @@ pub const REGISTER: &[Row] = &[
         Promise::StaleSave,
         "crates/screens/src/docs/editor.rs",
     ),
-    owed("calendar", Promise::StaleSave, STALE_SAVE_OWED),
+    kept(
+        "calendar",
+        Promise::StaleSave,
+        "crates/screens/src/calendar/editor.rs",
+    ),
     exempt("health", Promise::StaleSave, STALE_SAVE_EXEMPT[0].1),
-    owed("locker", Promise::StaleSave, STALE_SAVE_OWED),
-    owed("money", Promise::StaleSave, STALE_SAVE_OWED),
+    kept(
+        "locker",
+        Promise::StaleSave,
+        "crates/screens/src/locker/editor.rs",
+    ),
+    kept(
+        "money",
+        Promise::StaleSave,
+        "crates/screens/src/money/transaction.rs",
+    ),
     kept(
         "notes",
         Promise::StaleSave,

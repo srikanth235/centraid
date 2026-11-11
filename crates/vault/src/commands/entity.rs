@@ -112,20 +112,25 @@ fn expected_rev(ctx: &CommandCtx<'_, '_>) -> Option<i64> {
         .and_then(serde_json::Value::as_i64)
 }
 
+/// The record a guarded save is of: `id`, or `item_id` for Locker's commands.
+fn subject<'a>(ctx: &'a CommandCtx<'_, '_>) -> Option<&'a str> {
+    ctx.optional_str("id")
+        .or_else(|| ctx.optional_str("item_id"))
+}
+
 fn stale_trashed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if expected_rev(ctx).is_none() {
+    let (Some(_), Some(id)) = (expected_rev(ctx), subject(ctx)) else {
         return Ok(None);
-    }
-    Ok(find(ctx.connection(), ctx.required_str("id")?)?
+    };
+    Ok(find(ctx.connection(), id)?
         .filter(|found| found.deleted_at.is_some())
         .map(|found| format!("“{}” was moved to the trash", found.title)))
 }
 
 fn stale_revision(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let Some(expected) = expected_rev(ctx) else {
+    let (Some(expected), Some(id)) = (expected_rev(ctx), subject(ctx)) else {
         return Ok(None);
     };
-    let id = ctx.required_str("id")?;
     if find(ctx.connection(), id)?.is_none() {
         return Ok(None);
     }

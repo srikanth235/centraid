@@ -511,6 +511,10 @@
             "type": ["integer", "null"],
             "minimum": 0,
             "description": "Minutes of travel to allow before it starts; null clears it."
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["id"],

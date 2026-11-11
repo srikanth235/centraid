@@ -26,7 +26,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
-use crate::commands::entity;
+use crate::commands::entity::{self, STALE_GUARD, with_rev};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::Result;
 use crate::model::{Flag, Kind, concept_id, fold_label};
@@ -319,7 +319,7 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if changed {
         ctx.touch(id)?;
     }
-    Ok(json!({ "id": id, "changed": changed }))
+    with_rev(ctx, id, json!({ "id": id, "changed": changed }))
 }
 
 fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -917,10 +917,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "account_exists_and_opening_has_its_day",
         check: pre_set_opening,
     }];
-    const EDIT_ACCOUNT: &[CommandCondition] = &[CommandCondition {
-        predicate: "account_edit_is_sound",
-        check: pre_edit_account,
-    }];
+    const EDIT_ACCOUNT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "account_edit_is_sound",
+            check: pre_edit_account,
+        },
+    ];
     const LAYOUT: &[CommandCondition] = &[CommandCondition {
         predicate: "layout_names_its_columns",
         check: pre_layout,
@@ -1025,7 +1029,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "title": { "type": "string", "minLength": 1, "maxLength": 80 },
                 "type": { "enum": ["checking", "savings", "credit_card", "cash"] },
                 "on_budget": { "type": "boolean" },
-                "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 }
+                "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

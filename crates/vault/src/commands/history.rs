@@ -111,18 +111,14 @@ fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value
 const DOCUMENT_TEXT: &str = "document.text";
 
 /// The record is there (in the trash or not: a record trashed elsewhere keeps the words that
-/// were being written to it) and each field is one its history keeps. A Locker item is not kept
-/// this way: its secrets are sealed by the core, not here.
+/// were being written to it) and each field is one its history keeps. A sealed cell of a Locker
+/// item is never one: the vault holds no key, so a secret the member typed is not kept this way (the
+/// overlay refuses it), and a Locker item's plain fields are kept like any other record's.
 fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let id = ctx.required_str("id")?;
     let Some(found) = crate::commands::entity::find(ctx.connection(), id)? else {
         return Ok(Some(format!("there is nothing with the id `{id}`")));
     };
-    if found.kind == crate::model::Kind::LockerItem {
-        return Ok(Some(
-            "A Locker item keeps its earlier values on its own.".to_owned(),
-        ));
-    }
     let mut overlay = fields(ctx);
     if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
         let text_document = found.kind == crate::model::Kind::Document

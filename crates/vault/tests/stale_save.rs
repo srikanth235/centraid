@@ -229,3 +229,82 @@ fn the_words_of_a_refused_document_save_are_kept_as_a_version_the_document_can_r
         .expect("a hash");
     assert_eq!(held, kept_blob);
 }
+
+#[test]
+fn an_event_edit_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "event.propose",
+        json!({ "title": "Standup", "starts": "2026-03-02T09:00", "ends": "2026-03-02T09:30",
+                "zone": "Europe/Paris" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "event.edit",
+        &id,
+        |rev, title| {
+            let mut input = json!({ "id": id, "title": title });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}
+
+#[test]
+fn an_account_edit_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "account.add",
+        json!({ "title": "Current", "type": "checking", "currency": "USD" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "account.edit",
+        &id,
+        |rev, title| {
+            let mut input = json!({ "id": id, "title": title });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}
+
+#[test]
+fn a_locker_item_edit_checks_the_revision_it_replaces() {
+    let w = World::new();
+    let id = w.ok(
+        "locker.add_item",
+        json!({ "item_id": "locker-item-1", "title": "Mail", "type": "login", "username": "a" }),
+    )["item_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    w.the_four_facts(
+        "locker.edit_item",
+        &id,
+        |rev, username| {
+            let mut input = json!({ "item_id": id, "username": username });
+            if let Some(rev) = rev {
+                input["expected_rev"] = rev.into();
+            }
+            input
+        },
+        || {
+            w.ok("entity.trash", json!({ "id": id }));
+        },
+    );
+}

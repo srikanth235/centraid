@@ -41,6 +41,7 @@ use super::wall::{Change, Wall};
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
+use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, locker as words};
@@ -99,6 +100,9 @@ struct Editor {
     /// The item as the vault holds it, on EDIT.
     stored: Phase<wire::LockerItem>,
     form: Option<Form>,
+    /// The item's revision when the form was read: what an edit names as the one it replaces
+    /// (#1185). `None` for a new item.
+    rev: Option<i64>,
     confirm_discard: bool,
     finished: bool,
     /// The status line: a refusal, over the form as it still is (a save ends the sitting).
@@ -116,6 +120,7 @@ impl Editor {
             entropy,
             stored: Phase::Loading,
             form: None,
+            rev: None,
             confirm_discard: false,
             finished: false,
             undo: Undo::default(),
@@ -230,6 +235,10 @@ impl Editor {
                 self.item_id = shared::mint_id().unwrap_or_default();
             }
             return;
+        }
+        // The revision first, once per form: a change between the two reads refuses the save.
+        if self.form.is_none() {
+            self.rev = stale::read_rev(ctx, &self.item_id);
         }
         // A FORM ALREADY ON SCREEN IS THE MEMBER'S, and a re-read never replaces
         // what they typed.
@@ -423,6 +432,7 @@ impl Editor {
                 item_id: self.item_id.clone(),
                 title: Some(title),
                 compromised,
+                expected_rev: self.rev,
                 address: some("address"),
                 brand: some("brand"),
                 card_number: some("card_number"),
@@ -444,6 +454,9 @@ impl Editor {
             self.undo.act(ctx, request, &key, words::item_saved)
         };
         if !settled.committed {
+            if let Some(stale) = settled.stale() {
+                self.stale(ctx, &form, stale);
+            }
             return;
         }
         // THE ITEM IS SAVED; ITS TAGS FOLLOW, one write at a time, the editor
@@ -454,6 +467,37 @@ impl Editor {
         // THE EDITOR CLOSES: the line and its Undo are drawn by the page beneath (#1185).
         self.undo.hand_down(ctx);
         self.close();
+    }
+
+    /// The vault refused the save: the item changed, or went to the trash, since the form was read
+    /// (#1185). What was typed in the open fields is kept as an earlier version of the item, the
+    /// item is read again, and the line says what happened. A SECRET TYPED IS NEVER KEPT: the vault
+    /// holds no key and keeps no plaintext, so the member types it again; the line names no field.
+    fn stale(&mut self, ctx: &Ctx, form: &Form, stale: stale::Stale) {
+        let mut fields = Vec::new();
+        if let Some(base) = self.baseline() {
+            for (key, value) in &form.values {
+                if types::is_secret(key) || value.as_str() == base.value(key) {
+                    continue;
+                }
+                let name = if key == "title" {
+                    "entity.title".to_owned()
+                } else {
+                    format!("locker_item.{key}")
+                };
+                fields.push((name, value.trim().into()));
+            }
+        }
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_item(ctx.locale()),
+            &self.item_id,
+            stale,
+            fields,
+        );
+        self.form = None;
+        self.open(ctx);
+        self.undo.refuse(said);
     }
 
     /// The vault's `tag.add` and `tag.remove` that make the item's tags the

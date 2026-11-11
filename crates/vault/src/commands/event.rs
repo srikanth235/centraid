@@ -43,7 +43,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
 use crate::commands::edge::{self, Extras};
-use crate::commands::entity::lookup_live;
+use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind, Rel};
@@ -1279,7 +1279,7 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let row = row_of(ctx.connection(), id)?;
     let after = times(ctx, Some(&row.times)).map_err(|sentence| invalid("starts", sentence))?;
     write_event(ctx, id, &after)?;
-    Ok(json!({ "id": id }))
+    with_rev(ctx, id, json!({ "id": id }))
 }
 
 fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
@@ -1802,7 +1802,8 @@ const EDIT_SCHEMA: &str = r#"{
     "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 } },
     "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
-    "busy": { "type": "boolean" }
+    "busy": { "type": "boolean" },
+    "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
@@ -1838,10 +1839,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_free_slot,
         },
     ];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "event_is_live_and_its_change_resolves",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "event_is_live_and_its_change_resolves",
+            check: pre_edit,
+        },
+    ];
     const CANCEL: &[CommandCondition] = &[CommandCondition {
         predicate: "event_is_live",
         check: pre_cancel,

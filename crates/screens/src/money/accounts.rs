@@ -20,6 +20,7 @@ use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
 use crate::kit::read;
+use crate::kit::stale;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
@@ -36,6 +37,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         editor: None,
         confirm_remove_number: false,
+        stale: None,
         undo: Undo::default(),
     }))
 }
@@ -60,6 +62,9 @@ struct Editor {
     external_ref: String,
     has_external_ref: bool,
     closed: bool,
+    /// The account's revision when the sheet opened: what a save names as the one it replaces
+    /// (#1185). `None` for a new account.
+    rev: Option<i64>,
 }
 
 struct Accounts {
@@ -67,6 +72,9 @@ struct Accounts {
     phase: Phase<wire::MoneyAccounts>,
     editor: Option<Editor>,
     confirm_remove_number: bool,
+    /// Why the vault refused the last write, when the account had changed (or gone to the trash)
+    /// since the sheet opened.
+    stale: Option<stale::Stale>,
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
 }
@@ -112,10 +120,29 @@ impl Accounts {
         said: Option<String>,
     ) -> bool {
         let key = kit_act::key(&["money", "account"], kit_act::fresh());
-        match said {
-            Some(said) => self.undo.act(ctx, request, &key, |_| said).committed,
-            None => self.undo.act_joining(ctx, request, &key).committed,
-        }
+        let settled = match said {
+            Some(said) => self.undo.act(ctx, request, &key, |_| said),
+            None => self.undo.act_joining(ctx, request, &key),
+        };
+        self.stale = settled.stale();
+        settled.committed
+    }
+
+    /// The vault refused the save: the account changed, or went to the trash, since the sheet
+    /// opened (#1185). The name typed is kept as an earlier version, the sheet closes on the
+    /// account as it is, and the line says what happened and where the words went.
+    fn stale_edit(&mut self, ctx: &Ctx, editor: &Editor, stale: stale::Stale) {
+        let locale = ctx.locale();
+        let said = stale::on_button(
+            ctx,
+            &crate::strings::chat_confirm::noun_account(locale),
+            &editor.account_id,
+            stale,
+            vec![("entity.title".to_owned(), editor.name.trim().into())],
+        );
+        self.editor = None;
+        self.reload(ctx);
+        self.undo.refuse(said);
     }
 
     fn save(&mut self, ctx: &Ctx) {
@@ -162,6 +189,7 @@ impl Accounts {
                     account_id: editor.account_id.clone(),
                     external_ref: number.map_or(Field::Keep, Field::Is),
                     on_budget: Some(editor.on_budget),
+                    expected_rev: editor.rev,
                     title: Some(editor.name.trim().to_owned()),
                     r#type: Some(match editor.kind.as_str() {
                         "savings" => act::money::EditAccountType::Savings,
@@ -172,6 +200,10 @@ impl Accounts {
                 },
                 Some(words::done_account(locale)),
             );
+            if let Some(stale) = self.stale.take() {
+                self.stale_edit(ctx, &editor, stale);
+                return;
+            }
             // A closed account is the archived flag on it: its own action, sent beside the edit.
             if edited && before_closed != editor.closed {
                 if editor.closed {
@@ -212,13 +244,17 @@ impl Accounts {
         if self.submit(
             ctx,
             act::money::EditAccount {
-                account_id: editor.account_id,
+                account_id: editor.account_id.clone(),
                 external_ref: Field::Clear,
+                expected_rev: editor.rev,
                 ..Default::default()
             },
             Some(words::account_number_removed(ctx.locale())),
         ) {
             self.editor = None;
+        } else if let Some(stale) = self.stale.take() {
+            self.stale_edit(ctx, &editor, stale);
+            return;
         }
         self.reload(ctx);
     }
@@ -237,6 +273,7 @@ impl Accounts {
                     external_ref: String::new(),
                     has_external_ref: false,
                     closed: false,
+                    rev: None,
                 });
             }
             Some(A::Account(tapped)) => {
@@ -259,6 +296,7 @@ impl Accounts {
                     external_ref: String::new(),
                     has_external_ref: line.mask.is_some(),
                     closed: line.closed,
+                    rev: stale::read_rev(ctx, &line.account_id),
                 });
                 self.undo.clear();
             }

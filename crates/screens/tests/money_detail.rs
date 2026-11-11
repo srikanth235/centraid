@@ -630,3 +630,36 @@ fn a_payee_that_names_a_person_is_proposed_and_written_only_when_confirmed() {
     assert!(!txn_state(d.view(j)).with_picker.clone().unwrap().open);
     assert_eq!(with_fact(d.view(j)), "No one");
 }
+
+#[test]
+fn naming_a_line_that_changed_elsewhere_is_refused_and_the_typed_name_is_kept() {
+    let mut d = driver();
+    let id = a_line(&mut d);
+    let i = open(&mut d, &id);
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::Action(te::ActionPicked { key: "name".into() })),
+    );
+    event(
+        &mut d,
+        i,
+        txn_event(te::Kind::NameEdited(te::NameEdited {
+            text: "Mine".into(),
+        })),
+    );
+    arrange(
+        &d,
+        act::money::SetDisplayName {
+            transaction_id: id.clone(),
+            title: "Theirs".into(),
+            expected_rev: None,
+        },
+    );
+    event(&mut d, i, txn_event(te::Kind::NameSaved(te::NameSaved {})));
+    assert_eq!(txn_data(d.view(i)).title, "Theirs");
+    assert_eq!(
+        txn_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "This transaction changed somewhere else. Your text is in Earlier versions."
+    );
+}

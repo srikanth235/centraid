@@ -480,6 +480,40 @@ fn an_edit_leaves_a_stored_secret_alone_unless_it_is_retyped() {
 }
 
 #[test]
+fn a_save_over_an_item_that_changed_elsewhere_is_refused_and_no_secret_is_kept_or_named() {
+    let mut d = driver();
+    login(&d, "i1", "Bank");
+    d.start();
+    d.answer_effect(passed(wire::Biometry::Face));
+    let id = d.push(locker::TAB, routes::edit("i1"));
+    typed(&mut d, id, "title", "Mine");
+    typed(&mut d, id, "password", "a brand new secret");
+    // Another surface retitles the item after the form was read.
+    arrange(
+        &d,
+        act::locker::EditItem {
+            item_id: "i1".to_owned(),
+            title: Some("Theirs".to_owned()),
+            ..Default::default()
+        },
+    );
+    editor_event(
+        &mut d,
+        id,
+        K::Save(wire::locker_editor_event::SaveTapped {}),
+    );
+    // Refused: the editor stays, on the item as it is, and the line names no secret.
+    assert!(!editor(&d, id).finished);
+    let line = editor(&d, id).status.expect("a line").sentence;
+    assert_eq!(
+        line,
+        "This item changed somewhere else. Your text is in Earlier versions."
+    );
+    assert!(!line.contains("secret"), "{line}");
+    assert_eq!(editor_data(&d, id).inputs[0].value, "Theirs");
+}
+
+#[test]
 fn the_editor_says_why_it_will_not_take_a_seed() {
     let mut d = driver();
     d.start();

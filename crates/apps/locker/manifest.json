@@ -396,6 +396,10 @@
           },
           "alias": {
             "type": "string"
+          },
+          "expected_rev": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["item_id"],

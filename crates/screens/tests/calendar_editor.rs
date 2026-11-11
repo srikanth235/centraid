@@ -804,11 +804,23 @@ fn a_change_elsewhere_re_reads_and_never_overwrites_the_draft_and_a_search_hit_e
         "Mine",
         "what the member is typing stands"
     );
+    // The save names the revision the draft was read at, and the event has moved on: refused,
+    // the other surface's title stands and the member's is kept as an earlier version.
     world.save(page);
-    assert!(world.editor_state(page).dismissed);
+    assert!(!world.editor_state(page).dismissed);
     assert_eq!(
         world.event_row(&series).expect("event").summary.as_deref(),
-        Some("Mine")
+        Some("Theirs")
+    );
+    assert_eq!(world.draft(page).title, "Theirs");
+    assert_eq!(
+        world
+            .editor_state(page)
+            .status
+            .as_ref()
+            .expect("a line")
+            .sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
     );
 }
 
@@ -1830,4 +1842,49 @@ fn a_busy_event_with_no_travel_opens_as_the_defaults_and_a_title_edit_keeps_them
     assert_eq!(saved.summary.as_deref(), Some("Daily standup"));
     assert!(saved.busy);
     assert_eq!(saved.travel_min, None);
+}
+
+#[test]
+fn a_save_over_an_event_that_changed_elsewhere_is_refused_and_the_words_are_kept_as_a_version() {
+    let mut world = World::new();
+    let id = world.propose(
+        "Review",
+        "2099-06-15T14:00:00",
+        "2099-06-15T15:00:00",
+        |p| p.description = Field::Is("Old notes".to_owned()),
+    );
+    let page = world.open_edit(&id, &id, None, "2099-06-15");
+    world.title(page, "My title");
+    world.send_editor(page, notes("My notes"));
+    // Another surface edits the event after the page read it.
+    world.act(act::calendar::EditEvent {
+        event_id: id.clone(),
+        title: Some("Elsewhere".to_owned()),
+        ..Default::default()
+    });
+    world.save(page);
+    // Nothing of the member's overwrote the other edit, and the editor shows the event as it is.
+    let row = world.event_row(&id).expect("event");
+    assert_eq!(row.summary.as_deref(), Some("Elsewhere"));
+    assert_eq!(row.description.as_deref(), Some("Old notes"));
+    let state = world.editor_state(page);
+    assert!(
+        !state.dismissed,
+        "the editor stays open on the vault's event"
+    );
+    assert_eq!(
+        state.status.as_ref().expect("a line").sentence,
+        "This event changed somewhere else. Your text is in Earlier versions."
+    );
+    assert_eq!(
+        world.editor_data(page).draft.as_ref().expect("draft").title,
+        "Elsewhere"
+    );
+    // The next save is from the new revision, and lands.
+    world.title(page, "Third title");
+    world.save(page);
+    assert_eq!(
+        world.event_row(&id).expect("event").summary.as_deref(),
+        Some("Third title")
+    );
 }

@@ -14,7 +14,11 @@
 //!   the trash is shown as trashed; the words come back with it, in its Earlier versions.
 //!
 //! An autosaving editor gets all of this from [`super::autosave::Autosave`]. An editor that saves
-//! on a button (an event, an account, a Locker item) calls these directly.
+//! on a button (an event, an account, a Locker item) calls these directly: it reads the revision
+//! with [`read_rev`] before the record, names it in the save, and on a refusal
+//! ([`super::act::Settled::stale`]) calls [`on_button`], which keeps the words and returns the
+//! sentence the screen says over the record it then reads again (the Reload is done for the
+//! member, who has just pressed Save and has nothing else to press).
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -107,4 +111,56 @@ pub fn guarded(
             .or_insert_with(|| crate::field::whole(rev));
     }
     request
+}
+
+/// The record's revision, as a button-save editor reads it: how many earlier versions the
+/// record's history holds, which is the newest version's number. Read it BEFORE the record, so a
+/// change landing between the two refuses the save instead of slipping past it. `None` when the
+/// read did not land (the save then names none).
+#[must_use]
+pub fn read_rev(ctx: &Ctx, id: &str) -> Option<i64> {
+    use crate::catalog::load;
+    use crate::kit::read::{self, Reading};
+    use wire::app_query_response::Answer;
+    match read::read(
+        ctx,
+        load::shell::EarlierCount {
+            entity_id: id.to_owned(),
+        },
+        |answer| match answer {
+            Answer::EarlierCount(counted) => Some(counted.count),
+            _ => None,
+        },
+    ) {
+        Reading::Data(count) => Some(i64::from(count)),
+        _ => None,
+    }
+}
+
+/// What a button-save the vault refused as stale comes to: the words are kept as the newest
+/// earlier version (`fields`, as [`keep`] takes them; none keeps nothing) and the sentence is the
+/// one to say over the record as the vault has it now, with where the words went.
+#[must_use]
+pub fn on_button(
+    ctx: &Ctx,
+    noun: &str,
+    id: &str,
+    stale: Stale,
+    fields: Vec<(String, serde_json::Value)>,
+) -> String {
+    let locale = ctx.locale();
+    let said = sentence(locale, noun, stale);
+    if fields.is_empty() {
+        return said;
+    }
+    match keep(ctx, id, fields) {
+        Ok(Kept { written: true, .. }) => {
+            let where_to = match stale {
+                Stale::Changed => kept(locale),
+                Stale::Trashed => kept_in_trash(locale),
+            };
+            format!("{said} {where_to}")
+        }
+        _ => said,
+    }
 }
