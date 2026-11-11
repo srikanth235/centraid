@@ -76,6 +76,20 @@ struct PeopleHomeView: View {
         )) {
             PeopleHomeSheet(state: state, send: send, open: open)
         }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { shown in
+                guard !shown, state.hasStop else { return }
+                send(PeopleEvents.home { $0.stopDismissed = .init() })
+            }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(PeopleEvents.home { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(PeopleEvents.home { $0.stopDismissed = .init() }) }
+            )
+        }
     }
 
     // MARK: chrome
@@ -178,6 +192,123 @@ enum PeopleEvents {
         var event = Centraid_Core_V1_PeopleEditorEvent()
         build(&event)
         return event
+    }
+
+    static func lists(_ build: (inout Centraid_Core_V1_PeopleListsEvent) -> Void) -> Centraid_Core_V1_PeopleListsEvent {
+        var event = Centraid_Core_V1_PeopleListsEvent()
+        build(&event)
+        return event
+    }
+}
+
+// MARK: - Lists
+
+/// `people.lists` (#1185): the member's lists by name with how many people each holds, "New list"
+/// in the header, and one name sheet that makes a list or renames the one tapped (its "Move to
+/// trash" is on that sheet). The view decides nothing: every word, count and flag is Rust's, and
+/// the status line's Undo is the kit's `statusActed`, sent from `StatusLineView`.
+struct PeopleListsView: View {
+    let state: Centraid_Core_V1_PeopleListsState
+    let send: (Centraid_Core_V1_PeopleListsEvent) -> Void
+    let onBack: () -> Void
+
+    private var content: ScreenContent<Centraid_Core_V1_PeopleListsData> {
+        switch state.content {
+        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(data)?: return .data(data)
+        case nil: return .loading(true)
+        }
+    }
+
+    var body: some View {
+        let addLabel: String = {
+            if case let .data(data)? = state.content { return data.addLabel }
+            return ""
+        }()
+        PushedPage(title: state.title, parentTitle: state.backLabel, onBack: onBack) {
+            RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: addLabel,
+                identifier: "people-list-add",
+                action: { send(PeopleEvents.lists { $0.newTapped = .init() }) }
+            ), app: "people")
+        } content: {
+            VStack(spacing: 0) {
+                ReadStateView(
+                    content: content,
+                    onRetry: { send(PeopleEvents.lists { $0.refreshed = .init() }) }
+                ) { lists in
+                    if lists.hasEmpty {
+                        EmptyStateView(lists.empty)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(lists.rows, id: \.listID) { row in
+                                    let listID = row.listID
+                                    CentraidRow(
+                                        title: row.name,
+                                        meta: row.meta,
+                                        accessibility: row.accessibilityLabel,
+                                        identifier: "people-list-row-\(listID)"
+                                    ) { send(PeopleEvents.lists { $0.rowTapped = .with { $0.listID = listID } }) }
+                                }
+                            }
+                            .padding(.bottom, 16)
+                        }
+                    }
+                }
+                StatusLineView(status: state.status, identifier: "people-lists-status-action")
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { state.hasSheet },
+            set: { shown in
+                guard !shown, state.hasSheet else { return }
+                send(PeopleEvents.lists { $0.sheetClosed = .init() })
+            }
+        )) {
+            PeopleListSheetView(sheet: state.sheet, send: send)
+        }
+    }
+}
+
+/// The name sheet: a new list, or the one tapped. A name arms the verb; Move to trash asks nothing.
+private struct PeopleListSheetView: View {
+    let sheet: Centraid_Core_V1_PeopleListSheet
+    let send: (Centraid_Core_V1_PeopleListsEvent) -> Void
+
+    @State private var name = ""
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            primary: SheetPrimary(label: sheet.submitLabel, enabled: sheet.canSubmit, identifier: "people-list-submit") {
+                send(PeopleEvents.lists { $0.submitted = .init() })
+            },
+            outlines: outlines
+        ) {
+            EditableFieldRow(key: "", text: $name, placeholder: sheet.namePlaceholder, identifier: "people-list-name") { typed in
+                guard typed != sheet.name else { return }
+                send(PeopleEvents.lists { $0.nameChanged = .with { $0.text = typed } })
+            }
+            .padding(.horizontal, -CentraidGeometry.pageMargin)
+        }
+        .onAppear { name = sheet.name }
+    }
+
+    private var outlines: [SheetOutline] {
+        var outlines: [SheetOutline] = []
+        if sheet.hasTrashLabel, !sheet.trashLabel.isEmpty {
+            outlines.append(SheetOutline(label: sheet.trashLabel, tone: "net", identifier: "people-list-trash") {
+                send(PeopleEvents.lists { $0.trashTapped = .init() })
+            })
+        }
+        outlines.append(SheetOutline(label: sheet.cancelLabel, link: true, ink: true, identifier: "people-list-cancel") {
+            send(PeopleEvents.lists { $0.sheetClosed = .init() })
+        })
+        return outlines
     }
 }
 
@@ -634,8 +765,13 @@ private struct PeopleHomeSheet: View {
             }
             ForEach(state.moreRows, id: \.key) { row in
                 SheetRow(iconKey: row.iconKey, label: row.label, detail: row.meta, identifier: "people-more-\(row.key)") {
-                    send(PeopleEvents.home { $0.sheetClosed = .init() })
-                    open(row.route)
+                    if row.hasRoute {
+                        send(PeopleEvents.home { $0.sheetClosed = .init() })
+                        open(row.route)
+                    } else {
+                        // A row with no route of its own (stop): Rust decides what it opens.
+                        send(PeopleEvents.home { $0.moreRow = .with { $0.key = row.key } })
+                    }
                 }
             }
         }

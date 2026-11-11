@@ -83,6 +83,7 @@ import dev.centraid.android.screens.notes.NotesEditorScreen
 import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.android.screens.people.PeopleEditorScreen
 import dev.centraid.android.screens.people.PeopleHomeScreen
+import dev.centraid.android.screens.people.PeopleListsScreen
 import dev.centraid.android.screens.people.PeoplePersonScreen
 import dev.centraid.android.screens.photos.PhotosEditorScreen
 import dev.centraid.android.screens.photos.PhotosHomeScreen
@@ -487,6 +488,7 @@ internal class RustRoot(
         val peopleHome = view.people_home
         val peoplePerson = view.people_person
         val peopleEditor = view.people_editor
+        val peopleLists = view.people_lists
         val healthHome = view.health_home
         val healthMetric = view.health_metric
         val healthWorkout = view.health_workout
@@ -733,6 +735,11 @@ internal class RustRoot(
                 state = peopleEditor,
                 onEvent = { send(ScreenEvent(people_editor = it)) },
                 onClose = back,
+            )
+            peopleLists != null -> PeopleListsScreen(
+                state = peopleLists,
+                onEvent = { send(ScreenEvent(people_lists = it)) },
+                onBack = back,
             )
             healthHome != null -> HealthHomeScreen(
                 state = healthHome,

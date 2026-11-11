@@ -83,6 +83,7 @@ import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
+import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
@@ -205,12 +206,27 @@ public fun PeopleHomeScreen(
                     detail = row.meta,
                     testTag = "people-more-${row.key}",
                     onTap = {
-                        dismiss()
-                        row.route?.let(onOpen)
+                        val route = row.route
+                        if (route != null) {
+                            dismiss()
+                            onOpen(route)
+                        } else {
+                            // A row with no route of its own (stop): Rust decides what it opens.
+                            onEvent(PeopleHomeEvent(more_row = PeopleHomeEvent.MoreRowPicked(key = row.key)))
+                        }
                     },
                 )
             }
         }
+    }
+    // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, the same as Health's.
+    state.stop?.let { stop ->
+        ConfirmSheet(
+            confirm = stop,
+            onConfirm = { onEvent(PeopleHomeEvent(stop_confirmed = PeopleHomeEvent.StopConfirmed())) },
+            onDismiss = { onEvent(PeopleHomeEvent(stop_dismissed = PeopleHomeEvent.StopDismissed())) },
+            confirmTag = "people-stop-confirm",
+        )
     }
 }
 

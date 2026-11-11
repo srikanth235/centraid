@@ -121,7 +121,7 @@ struct RustScreenView: View {
         case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
         case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
         case .notesHome?, .notesEditor?: "notes"
-        case .peopleHome?, .peoplePerson?, .peopleEditor?: "people"
+        case .peopleHome?, .peoplePerson?, .peopleEditor?, .peopleLists?: "people"
         default: ""
         }
     }
@@ -456,6 +456,13 @@ struct RustScreenView: View {
                 state: state,
                 send: { store.send(instance, .peopleEditor($0)) },
                 onClose: pop
+            )
+            .appAccent("people")
+        case .peopleLists(let state)?:
+            PeopleListsView(
+                state: state,
+                send: { store.send(instance, .peopleLists($0)) },
+                onBack: pop
             )
             .appAccent("people")
         case .transfer(let state)?:

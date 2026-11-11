@@ -240,7 +240,6 @@ pub const REGISTER: &[Entry] = &[
     ("PhoneReminder.due", platform(Shell::Ios, REMINDERS)),
     ("PhoneReminder.due_time", platform(Shell::Ios, REMINDERS)),
     ("PhoneReminder.list_color", platform(Shell::Ios, REMINDERS)),
-    ("PhoneReminder.list_id", platform(Shell::Ios, REMINDERS)),
     (
         "RemindersRead.include_completed",
         platform(Shell::Ios, REMINDERS),
