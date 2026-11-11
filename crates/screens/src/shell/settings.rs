@@ -4,7 +4,7 @@
 //! | Section | What it holds |
 //! |---|---|
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
-//! | Units | Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); the region's until chosen |
+//! | Units | Phone's setting, Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); Phone's setting (nothing stored) follows the region |
 //! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
 //! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it; "Export everything", every app but Locker as one archive ([`super::export`]) |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
@@ -38,6 +38,8 @@ const VAULTS_ROW: &str = "vaults";
 const DOWNLOAD_ROW: &str = "download-settings";
 
 /// The Keychain key the appearance is kept under: Home's, the same three values.
+/// The units choice that stores nothing, so the phone's region decides.
+const PHONE_UNITS: &str = "phone";
 const APPEARANCE_KEY: &str = "appearance";
 
 /// The registry factory.
@@ -111,6 +113,8 @@ struct Settings {
     /// The writes to the device store that are out, oldest first: the answers come back in the
     /// same order, and each says what to do when it lands.
     keeping: std::collections::VecDeque<(Kept, Vec<wire::SecretOp>)>,
+    /// The sentence for a write the platform refused; the next pick or visit clears it.
+    refused: Option<String>,
 }
 
 impl Settings {
@@ -124,6 +128,7 @@ impl Settings {
             finished: false,
             transfer_open: false,
             keeping: std::collections::VecDeque::new(),
+            refused: None,
         }
     }
 
@@ -154,7 +159,11 @@ impl Settings {
         self.secrets.absorb(&ops, &batched.answers);
         // A write the platform refused changed nothing in the cache, so the page keeps showing
         // what is stored.
-        if batched.answers.len() >= ops.len() && batched.answers.iter().all(|answer| answer.ok) {
+        if batched.answers.len() < ops.len() || !batched.answers.iter().all(|answer| answer.ok) {
+            if kept == Kept::Units {
+                self.refused = Some(words::settings_units_refused(ctx.locale()));
+            }
+        } else {
             match kept {
                 Kept::Rule => self
                     .secrets
@@ -165,20 +174,29 @@ impl Settings {
         }
     }
 
-    /// The units row: the member's choice, else the region's, the same reading every screen's
-    /// `Ctx::units` makes.
-    fn units(&self, ctx: &Ctx, locale: crate::strings::Locale) -> wire::SettingsUnits {
-        let shown = quantity::effective(quantity::stored(&self.secrets), ctx.region());
-        let choice = |each: UnitsPref, label: String| wire::SettingsChoice {
-            id: each.stored().to_owned(),
+    /// The units row: the STORED choice, or Phone's setting when none is stored (the effective
+    /// reading every screen's `Ctx::units` makes follows the region then).
+    fn units(&self, locale: crate::strings::Locale) -> wire::SettingsUnits {
+        let shown = quantity::stored(&self.secrets);
+        let choice = |id: &str, each: Option<UnitsPref>, label: String| wire::SettingsChoice {
+            id: id.to_owned(),
             label,
             selected: each == shown,
         };
         wire::SettingsUnits {
             title: words::settings_units(locale),
             choices: vec![
-                choice(UnitsPref::Metric, words::settings_units_metric(locale)),
-                choice(UnitsPref::Imperial, words::settings_units_imperial(locale)),
+                choice(PHONE_UNITS, None, words::settings_units_phone(locale)),
+                choice(
+                    UnitsPref::Metric.stored(),
+                    Some(UnitsPref::Metric),
+                    words::settings_units_metric(locale),
+                ),
+                choice(
+                    UnitsPref::Imperial.stored(),
+                    Some(UnitsPref::Imperial),
+                    words::settings_units_imperial(locale),
+                ),
             ],
             note: words::settings_units_note(locale),
         }
@@ -268,7 +286,7 @@ impl Settings {
                     .collect(),
                 note: words::settings_appearance_note(locale),
             }),
-            units: Some(self.units(ctx, locale)),
+            units: Some(self.units(locale)),
             sections: vec![
                 wire::SettingsSection {
                     key: "vault".to_owned(),
@@ -395,6 +413,7 @@ impl Screen for Settings {
         match event.kind {
             Some(E::Appeared(_)) => {
                 self.read(ctx);
+                self.refused = None;
                 return vec![
                     effect(wire::effect::Kind::Keychain(wire::KeychainOp {
                         op: wire::keychain_op::Op::Get as i32,
@@ -468,10 +487,16 @@ impl Screen for Settings {
                     Some(S::UnitsPicked(picked)) => {
                         // ONE SWITCH, written to the phone's device store; the answer is folded in
                         // (`write_kept`) and only then do the other screens draw again.
-                        let Some(chosen) = UnitsPref::of_stored(&picked.id) else {
+                        // Phone's setting stores nothing, so the region decides again.
+                        let chosen = if picked.id == PHONE_UNITS {
+                            None
+                        } else if let Some(chosen) = UnitsPref::of_stored(&picked.id) {
+                            Some(chosen)
+                        } else {
                             return Vec::new();
                         };
-                        let ops = vec![quantity::set_op(Some(chosen))];
+                        self.refused = None;
+                        let ops = vec![quantity::set_op(chosen)];
                         self.keeping.push_back((Kept::Units, ops.clone()));
                         return vec![secrets::effect(ops)];
                     }
@@ -518,6 +543,11 @@ impl Screen for Settings {
                 content: Some(content),
                 finished: self.finished,
                 transfer_sheet: self.transfer_sheet(locale),
+                status: self.refused.clone().map(|sentence| wire::StatusLine {
+                    sentence,
+                    action_label: String::new(),
+                    refused: true,
+                }),
             })),
             ..wire::ViewState::default()
         }

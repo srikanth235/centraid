@@ -85,6 +85,13 @@ struct SettingsView: View {
                     .padding(.bottom, 24)
                 }
             }
+            // A REFUSED WRITE (units) is Rust's one sentence in the kit's status line, docked at the foot.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if state.hasStatus {
+                    StatusLineView(status: state.status, identifier: "settings-status-action")
+                        .accessibilityIdentifier("settings-status")
+                }
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-settings")
@@ -131,7 +138,7 @@ private struct GroupHead: View {
     }
 }
 
-/// SYSTEM · LIGHT · DARK, on the kit's one segmented track.
+/// The kit's one segmented track: System · Light · Dark, or Phone's setting · Metric · Imperial.
 private struct SettingsSegmented: View {
     let choices: [Centraid_Core_V1_SettingsChoice]
     var identifier: String = "settings-appearance"

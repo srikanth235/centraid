@@ -26,10 +26,10 @@ message SettingsAppearance {
 }
 
 // THE UNITS ROW: one switch, metric or imperial, for every app (never one per measure). The
-// choice shown is the effective one: the member's own, else what the phone's region measures in.
+// choice shown is the stored one: "phone" (follows the region, nothing stored) is the default.
 message SettingsUnits {
   string title = 1;
-  // "metric" or "imperial", each `SettingsChoice.id`.
+  // "phone", "metric" or "imperial", each `SettingsChoice.id`.
   repeated SettingsChoice choices = 2;
   // What the switch changes, in plain words.
   string note = 3;
@@ -87,6 +87,9 @@ message SettingsState {
   // member's one transfer rule, the same three choices Home's gear and the Backup page draw,
   // from the same store.
   optional HomeTransferSheet transfer_sheet = 6;
+  // A write the page made was refused: one sentence ("Couldn't save your units. Try again."),
+  // `refused` set, drawn as the kit's status line. Absent when there is nothing to say.
+  optional StatusLine status = 7;
 }
 
 message SettingsEvent {

@@ -465,8 +465,8 @@ fn units_answer(ok: bool) -> wire::effect_result::Outcome {
 }
 
 #[test]
-fn the_units_row_shows_the_regions_system_until_the_member_chooses() {
-    for (locale, shown) in [("en-US", "imperial"), ("de-DE", "metric")] {
+fn the_units_row_shows_phones_setting_until_the_member_chooses() {
+    for locale in ["en-US", "de-DE"] {
         let (mut d, _home, i) = started();
         units_environment(&mut d, locale);
         answer(&mut d, i, keychain_get, stored(""));
@@ -479,16 +479,16 @@ fn the_units_row_shows_the_regions_system_until_the_member_chooses() {
                 .iter()
                 .map(|choice| choice.label.as_str())
                 .collect::<Vec<_>>(),
-            ["Metric", "Imperial"]
+            ["Phone's setting", "Metric", "Imperial"]
         );
-        assert!(units.note.contains("temperatures in every app"));
+        assert!(units.note.contains("follows your region"));
         assert_eq!(
             units_choices(&data)
                 .into_iter()
                 .filter(|(_, picked)| *picked)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
-            [shown],
+            ["phone"],
             "{locale}"
         );
     }
@@ -518,7 +518,35 @@ fn choosing_units_writes_the_device_store_and_the_row_reads_it_back() {
     answer(&mut d, i, units_write, units_answer(true));
     assert_eq!(
         units_choices(&data(&d, i)),
-        [("metric".to_owned(), false), ("imperial".to_owned(), true)]
+        [
+            ("phone".to_owned(), false),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), true)
+        ]
+    );
+
+    // Phone's setting clears the stored choice: the write is an empty value, and the row is back.
+    let before = d.effects.len();
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked { id: "phone".into() }),
+    );
+    assert!(
+        d.effects[before..].iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Secrets(batch)) if batch.ops.iter().any(|op| op.key == "units" && op.value.is_empty())
+        )),
+        "Phone's setting clears the stored choice"
+    );
+    answer(&mut d, i, units_write, units_answer(true));
+    assert_eq!(
+        units_choices(&data(&d, i)),
+        [
+            ("phone".to_owned(), true),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), false)
+        ]
     );
 }
 
@@ -538,7 +566,24 @@ fn a_refused_units_write_keeps_the_old_choice() {
     answer(&mut d, i, units_write, units_answer(false));
     assert_eq!(
         units_choices(&data(&d, i)),
-        [("metric".to_owned(), false), ("imperial".to_owned(), true)],
-        "the region's system stays"
+        [
+            ("phone".to_owned(), true),
+            ("metric".to_owned(), false),
+            ("imperial".to_owned(), false)
+        ],
+        "Phone's setting stays"
     );
+    let line = state(&d, i).status.expect("a refused write says so");
+    assert_eq!(line.sentence, "Couldn't save your units. Try again.");
+    assert!(line.refused && line.action_label.is_empty());
+
+    // The next pick clears the line.
+    sheet_event(
+        &mut d,
+        i,
+        S::UnitsPicked(UnitsPicked {
+            id: "imperial".into(),
+        }),
+    );
+    assert!(state(&d, i).status.is_none());
 }

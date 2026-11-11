@@ -50,6 +50,7 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.StateColor
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
@@ -72,7 +73,13 @@ internal fun SettingsScreen(
 ) {
     // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
     LaunchedEffect(state.finished) { if (state.finished) onBack() }
-    PushedPage(title = state.title, parentTitle = state.back_label, onBack = onBack) {
+    PushedPage(
+        title = state.title,
+        parentTitle = state.back_label,
+        onBack = onBack,
+        // A REFUSED WRITE (units) is Rust's one sentence in the kit's status line.
+        statusLine = { StatusLine(state.status) },
+    ) {
         ReadStateView(
             content = screenContentOf(state.loading, null, state.data_),
             onRetry = null,
