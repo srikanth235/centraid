@@ -2,6 +2,10 @@
 //! A sentence with a hole (`{field}`, `{n}`) is filled with `strings::fill`.
 
 catalog! {
+    plain links_unread = (
+        "Couldn’t read what this item is linked to.",
+        "Couldn’t read what this item is linked to."
+    );
     plain address = ("Address", "Address");
     plain addresses_head = ("Addresses", "Addresses");
     plain add_item = ("New item", "New item");

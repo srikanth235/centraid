@@ -171,6 +171,13 @@ const fn kept(app: &'static str, promise: Promise, proof: &'static str) -> Row {
     }
 }
 
+/// A debt row. Nothing is owed today (Locker adopted the last promise), so the helper has no
+/// caller; the expectation fails the build the day a row uses it, which is the day to delete the
+/// attribute.
+#[expect(
+    dead_code,
+    reason = "no promise is owed now; the next debt row uses it"
+)]
 const fn owed(app: &'static str, promise: Promise, why: &'static str) -> Row {
     Row {
         app,
@@ -572,7 +579,7 @@ pub const REGISTER: &[Row] = &[
         Promise::Link,
         "crates/screens/src/health/workout.rs",
     ),
-    owed("locker", Promise::Link, LINK_OWED),
+    kept("locker", Promise::Link, "crates/screens/src/locker/item.rs"),
     kept(
         "money",
         Promise::Link,
@@ -637,8 +644,6 @@ pub const REGISTER: &[Row] = &[
         "crates/screens/src/reminders/detail.rs",
     ),
 ];
-
-const LINK_OWED: &str = "the detail screen does not embed the kit's general \"Linked to\" section (`kit::links::read_linked`) yet (#1185)";
 
 /// The apps with no editor, with the ruling that says so (the Stale save promise's only
 /// exceptions). Health logs figures and imports workouts; it edits no record a member typed.

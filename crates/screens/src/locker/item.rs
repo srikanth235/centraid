@@ -118,8 +118,15 @@ struct Item {
     /// A chat card's member action, run once after the first load under an open
     /// Locker.
     follow: String,
-    /// The Linked to section's picker (#1173).
+    /// The Linked to section's picker (#1173, #1185): every kind but Locker, so an item starts a
+    /// link to anything and is never one's target (owner ruling D11).
     links: Links,
+    /// The links the item started with rel `links` (`links::read_linked`), beside the account,
+    /// place and person it carries as `about` and `with` (`LockerItem.links`). `None` until read,
+    /// and while a read did not land.
+    linked: Option<Vec<wire::LinkedItem>>,
+    /// The read of `linked` was refused or failed: the status line says so.
+    linked_unread: bool,
     /// The vault's owner, read once an item links to a person, so the row can say "You".
     owner_id: Option<String>,
     /// The entry to the item's earlier versions (#1185), read only while the Locker is open.
@@ -140,7 +147,9 @@ impl Item {
             memo: None,
             field: None,
             passkey_name: None,
-            links: Links::new(&[Kind::Account, Kind::Place, Kind::Person]),
+            links: Links::new(&Kind::ALL),
+            linked: None,
+            linked_unread: false,
             owner_id: None,
             earlier: earlier::Foot::default(),
         }
@@ -188,6 +197,7 @@ impl Item {
             Reading::Failed => Reading::Failed,
         };
         shared::reread(&mut self.loaded, ctx.locale(), reading);
+        self.read_linked(ctx);
         // THE ITEM MOVED UNDER A REVEAL (an edit, a trash): the revealed value
         // is for the item as it was, so it goes.
         let mut effects = Vec::new();
@@ -203,6 +213,47 @@ impl Item {
             }
         }
         effects
+    }
+
+    /// What the item started a link to with rel `links` (any kind but Locker), read only while
+    /// the Locker is open and the item is live. An item's links are seen only here: the far end's
+    /// page never lists a Locker item (`vault::links::linked`). A refused or failed read is said
+    /// on the status line; the account, place and person rows the item carries are drawn as ever.
+    fn read_linked(&mut self, ctx: &Ctx) {
+        let id = self.route.item_id.clone();
+        if self.item().is_none_or(|item| item.trashed) {
+            self.linked = None;
+            self.linked_unread = false;
+            self.links.close();
+            return;
+        }
+        self.links = self.links.clone().for_entity(&id);
+        match links::read_linked(ctx, &id) {
+            Reading::Data(items) => {
+                self.linked = Some(items);
+                self.linked_unread = false;
+            }
+            Reading::Denied(_) | Reading::Failed => {
+                self.linked = None;
+                self.linked_unread = true;
+                self.links.close();
+            }
+        }
+        self.links.reload(ctx);
+    }
+
+    /// Every id the item is linked to, however the link was made: the picker marks them chosen.
+    fn linked_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .item()
+            .map(|item| item.links.iter().map(|link| link.id.clone()).collect())
+            .unwrap_or_default();
+        for id in self.linked.as_deref().map(links::ids).unwrap_or_default() {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        ids
     }
 
     /// Run what the opener asked, once: a chat card's `reveal:password`.
@@ -244,6 +295,8 @@ impl Item {
         self.field = None;
         self.passkey_name = None;
         self.links.close();
+        self.linked = None;
+        self.linked_unread = false;
         self.owner_id = None;
         self.earlier = earlier::Foot::default();
         ctx.cancel_timer(TICK);
@@ -744,29 +797,29 @@ impl Item {
         let Some(item) = self.item().filter(|item| !item.trashed).cloned() else {
             return Vec::new();
         };
-        let linked: Vec<String> = item.links.iter().map(|link| link.id.clone()).collect();
+        let linked = self.linked_ids();
         let from = self.id();
         match self.links.update(event, &linked, ctx) {
             Outcome::Add { id, .. } => {
+                // A new link is a rel `links` link, like every other app's.
                 self.submit(
                     ctx,
                     "add-link",
                     act::locker::AddLink {
                         from,
-                        rel: act::locker::AddLinkRel::About,
+                        rel: act::locker::AddLinkRel::Links,
                         to: id,
                     },
                     link_words::saved,
                 );
             }
             Outcome::Remove { id } => {
-                let Some(link) = item.links.iter().find(|link| link.id == id) else {
-                    return Vec::new();
-                };
-                let rel = if link.relation == "with" {
-                    act::locker::RemoveLinkRel::With
-                } else {
-                    act::locker::RemoveLinkRel::About
+                // A row removes by the relation it was made with: about and with for the account,
+                // place or person the item carried, links for any other.
+                let rel = match item.links.iter().find(|link| link.id == id) {
+                    Some(link) if link.relation == "with" => act::locker::RemoveLinkRel::With,
+                    Some(_) => act::locker::RemoveLinkRel::About,
+                    None => act::locker::RemoveLinkRel::Links,
                 };
                 self.submit(
                     ctx,
@@ -780,9 +833,10 @@ impl Item {
         self.reload(ctx)
     }
 
-    /// The Linked to section: an account, a place, a person, each row saying which.
+    /// The Linked to section: the account, place and person the item carries (each row saying
+    /// which), then everything else it started a link to, each once.
     fn link_section(&self, locale: Locale, item: &wire::LockerItem) -> wire::LinkSection {
-        let rows = item
+        let mut rows: Vec<wire::LinkRow> = item
             .links
             .iter()
             .map(|link| {
@@ -807,6 +861,12 @@ impl Item {
                 }
             })
             .collect();
+        let carried: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+        rows.extend(
+            links::rows(locale, self.linked.as_deref().unwrap_or_default())
+                .into_iter()
+                .filter(|row| !carried.contains(&row.id)),
+        );
         let mut section = self.links.section(
             locale,
             link_words::section_linked(locale),
@@ -1844,7 +1904,17 @@ impl Screen for Item {
                 words::item_gone_body(locale),
             )));
         }
-        let status = self.undo.status().or_else(|| self.earlier.status(locale));
+        let status = self
+            .undo
+            .status()
+            .or_else(|| self.earlier.status(locale))
+            .or_else(|| {
+                (open && self.linked_unread).then(|| wire::StatusLine {
+                    sentence: words::links_unread(locale),
+                    action_label: String::new(),
+                    refused: false,
+                })
+            });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerItem(Box::new(
                 wire::LockerItemState {
@@ -1876,16 +1946,7 @@ impl Screen for Item {
                     memo: self.memo_sheet(locale),
                     field_sheet: self.field_sheet(locale),
                     passkey_name: self.passkey_sheet(locale),
-                    link_picker: Some(
-                        self.links.picker(
-                            locale,
-                            &item
-                                .map(|item| {
-                                    item.links.iter().map(|l| l.id.clone()).collect::<Vec<_>>()
-                                })
-                                .unwrap_or_default(),
-                        ),
-                    ),
+                    link_picker: Some(self.links.picker(locale, &self.linked_ids())),
                     finished: false,
                 },
             ))),

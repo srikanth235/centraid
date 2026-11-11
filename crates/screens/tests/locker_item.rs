@@ -610,56 +610,223 @@ fn the_compromised_flag_is_sent_only_when_it_changed() {
     let _ = Duration::from_secs(0);
 }
 
+/// A note made as another surface would; its id.
+fn a_note(d: &centraid_screens::testing::Driver, title: &str) -> String {
+    let response = arrange(
+        d,
+        act::notes::CreateNote {
+            title: title.to_owned(),
+            body: "words".to_owned(),
+            ..Default::default()
+        },
+    );
+    serde_json::from_slice::<serde_json::Value>(&response.output).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+fn a_person(d: &centraid_screens::testing::Driver, name: &str) -> String {
+    let response = arrange(
+        d,
+        act::people::AddPerson {
+            title: name.to_owned(),
+            ..Default::default()
+        },
+    );
+    serde_json::from_slice::<serde_json::Value>(&response.output).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+fn linked_section(d: &centraid_screens::testing::Driver, id: u64) -> wire::LinkSection {
+    item_data(d, id).links.expect("a Linked to section")
+}
+
+fn link_to(kind: wire::link_event::Kind) -> I {
+    I::Link(wire::LinkEvent { kind: Some(kind) })
+}
+
 #[test]
-fn an_item_is_linked_to_an_account_a_place_and_a_person_behind_the_wall() {
+fn an_item_is_linked_to_any_kind_from_one_add_link_row_behind_the_wall() {
     use wire::link_event as le;
     let (mut d, id) = opened_item();
-    let person = {
-        let response = arrange(
-            &d,
-            act::people::AddPerson {
-                title: "Maya Rao".into(),
-                ..Default::default()
-            },
-        );
-        serde_json::from_slice::<serde_json::Value>(&response.output).unwrap()["id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
-    let section = |d: &centraid_screens::testing::Driver| {
-        item_data(d, id).links.expect("a Linked to section")
-    };
-    let link = |kind: le::Kind| I::Link(wire::LinkEvent { kind: Some(kind) });
-    let first = section(&d);
+    let person = a_person(&d, "Maya Rao");
+    let first = linked_section(&d, id);
     assert_eq!(first.title, "Linked to");
     let adds: Vec<&str> = first.adds.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(adds, ["Add account", "Add place", "Add person"]);
+    assert_eq!(adds, ["Add link"], "one row for every kind but Locker");
     assert!(first.rows.is_empty());
     item_event(
         &mut d,
         id,
-        link(le::Kind::Add(le::AddTapped {
-            key: "person".into(),
-        })),
+        link_to(le::Kind::Add(le::AddTapped { key: "link".into() })),
     );
-    let picker = item(&d, id).link_picker.unwrap();
-    assert!(picker.open && picker.candidates.iter().any(|c| c.id == person));
+    let chooser = item(&d, id).link_picker.unwrap();
+    assert!(
+        chooser.open && chooser.candidates.iter().any(|c| c.id == "note"),
+        "an item may link to a note"
+    );
+    assert!(
+        chooser.candidates.iter().all(|c| c.id != "locker_item"),
+        "a Locker item is never a link's target"
+    );
     item_event(
         &mut d,
         id,
-        link(le::Kind::Pick(le::Picked { id: person.clone() })),
+        link_to(le::Kind::Pick(le::Picked {
+            id: "person".into(),
+        })),
+    );
+    let picker = item(&d, id).link_picker.unwrap();
+    assert!(picker.candidates.iter().any(|c| c.id == person));
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Pick(le::Picked { id: person.clone() })),
     );
     assert!(!item(&d, id).link_picker.unwrap().open);
-    let linked = section(&d);
+    let linked = linked_section(&d, id);
     assert_eq!(linked.rows.len(), 1);
     assert_eq!(linked.rows[0].meta, "Person");
     assert_eq!(linked.rows[0].title, "Maya Rao");
+    let status = item(&d, id).status.expect("a status line");
+    assert_eq!(status.action_label, "Undo", "a link can be taken back");
     // Nothing sealed rides in the link: the row is a name and a kind.
     item_event(
         &mut d,
         id,
-        link(le::Kind::Remove(le::RemoveTapped { id: person })),
+        link_to(le::Kind::Remove(le::RemoveTapped { id: person })),
     );
-    assert!(section(&d).rows.is_empty());
+    assert!(linked_section(&d, id).rows.is_empty());
+}
+
+#[test]
+fn the_account_place_and_person_an_item_carries_stay_beside_the_links_it_started() {
+    use wire::link_event as le;
+    let (mut d, id) = opened_item();
+    let (person, note) = (
+        a_person(&d, "Maya Rao"),
+        a_note(&d, "Statement PIN reminder"),
+    );
+    // The relation an item carried before: about a person.
+    arrange(
+        &d,
+        act::locker::AddLink {
+            from: "i1".to_owned(),
+            rel: act::locker::AddLinkRel::About,
+            to: person.clone(),
+        },
+    );
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Add(le::AddTapped { key: "link".into() })),
+    );
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Pick(le::Picked { id: "note".into() })),
+    );
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Pick(le::Picked { id: note.clone() })),
+    );
+    let rows: Vec<(String, String)> = linked_section(&d, id)
+        .rows
+        .into_iter()
+        .map(|row| (row.title, row.meta))
+        .collect();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows.contains(&("Maya Rao".to_owned(), "Person".to_owned())));
+    assert!(rows.contains(&("Statement PIN reminder".to_owned(), "Note".to_owned())));
+
+    // Each row comes off by the relation it was made with, and the other stays.
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Remove(le::RemoveTapped { id: note })),
+    );
+    let left: Vec<String> = linked_section(&d, id)
+        .rows
+        .into_iter()
+        .map(|row| row.title)
+        .collect();
+    assert_eq!(left, ["Maya Rao"]);
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Remove(le::RemoveTapped { id: person })),
+    );
+    assert!(linked_section(&d, id).rows.is_empty());
+}
+
+#[test]
+fn a_link_an_item_started_never_shows_the_item_on_the_other_apps_page() {
+    use wire::app_query_response::Answer;
+    use wire::link_event as le;
+    let (mut d, id) = opened_item();
+    let note = a_note(&d, "Statement PIN reminder");
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Add(le::AddTapped { key: "link".into() })),
+    );
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Pick(le::Picked { id: "note".into() })),
+    );
+    item_event(
+        &mut d,
+        id,
+        link_to(le::Kind::Pick(le::Picked { id: note.clone() })),
+    );
+    assert_eq!(linked_section(&d, id).rows.len(), 1);
+
+    let load = |request: wire::LoadRequest| {
+        let mut request = request;
+        request.zone = "UTC".to_owned();
+        let answered = d
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Load(Box::new(request))),
+            })
+            .expect("the load door answers");
+        let Some(wire::response::Kind::Load(loaded)) = answered.kind else {
+            panic!("a load answered {:?}", answered.kind);
+        };
+        loaded.answer.and_then(|a| a.answer).expect("an answer")
+    };
+    // THE NOTE'S OWN PAGE: its Linked to read lists nothing, and never the item's title.
+    let Answer::LinkedItems(there) = load(
+        centraid_screens::catalog::load::shell::Links {
+            entity_id: note.clone(),
+        }
+        .into(),
+    ) else {
+        panic!("links")
+    };
+    assert!(
+        there.items.is_empty(),
+        "a Locker item is seen only inside Locker: {:?}",
+        there.items
+    );
+    // The notes library carries no backlink to the item either.
+    let Answer::NotesLibrary(library) = load(
+        centraid_screens::catalog::load::notes::Library {
+            limit: 50,
+            ..Default::default()
+        }
+        .into(),
+    ) else {
+        panic!("library")
+    };
+    let seen = format!("{:?}", library);
+    assert!(
+        !seen.contains("Bank"),
+        "the notes library named a Locker item: {seen}"
+    );
 }
