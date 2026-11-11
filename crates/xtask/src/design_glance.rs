@@ -29,7 +29,7 @@ pub const GLANCE_SOURCE: &str = "crates/screens/src/strings/agenda_glance.rs";
 /// Member name to the Rust key, for every static word that is not a Siri
 /// phrase. Exactly what a platform file names; a word nothing names stays
 /// Rust's alone.
-const CONSTANTS: [(&str, &str); 11] = [
+const CONSTANTS: [(&str, &str); 13] = [
     ("INTENT_ADD_TITLE", "intent_add_title"),
     ("INTENT_ADD_TITLE_PARAMETER", "intent_add_title_parameter"),
     ("INTENT_NEXT_TITLE", "intent_next_title"),
@@ -38,6 +38,8 @@ const CONSTANTS: [(&str, &str); 11] = [
     ("INTENT_NEXT_UNAVAILABLE", "siri_unavailable"),
     ("SHORTCUT_ADD_LONG", "shortcut_add_long"),
     ("SHORTCUT_ADD_SHORT", "shortcut_add_short"),
+    ("SHORTCUT_NEXT_LONG", "shortcut_next_long"),
+    ("SHORTCUT_NEXT_SHORT", "shortcut_next_short"),
     (
         "WIDGET_REMINDERS_DESCRIPTION",
         "widget_reminders_description",

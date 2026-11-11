@@ -146,8 +146,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcut
-                 sends `dev.centraid.action.ADD_REMINDER` and a widget's rows, body and button send
+            <!-- "ADD A REMINDER" AND A WIDGET'S TAPS (#1173): the launcher's long-press shortcuts
+                 send `dev.centraid.action.ADD_REMINDER` ("What's next" sends AGENDA_OPEN with no key) and a widget's rows, body and button send
                  `dev.centraid.action.AGENDA_OPEN` with one opaque key, both aimed at this activity,
                  which hands them to the core (`glance/AgendaIntents.kt`). There is no filter for
                  them, but the activity is exported, so ANY app may send either: nothing here is

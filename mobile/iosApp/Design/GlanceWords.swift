@@ -15,6 +15,8 @@ public enum GlanceWords {
     public static let INTENT_NEXT_UNAVAILABLE = "Open Centraid to see your day."
     public static let SHORTCUT_ADD_LONG = "Add a reminder"
     public static let SHORTCUT_ADD_SHORT = "New reminder"
+    public static let SHORTCUT_NEXT_LONG = "What's next"
+    public static let SHORTCUT_NEXT_SHORT = "What's next"
     public static let WIDGET_REMINDERS_DESCRIPTION = "Today's and overdue reminders."
     public static let WIDGET_REMINDERS_NAME = "Reminders"
     public static let WIDGET_UP_NEXT_DESCRIPTION = "What's next today, from your Calendar."
