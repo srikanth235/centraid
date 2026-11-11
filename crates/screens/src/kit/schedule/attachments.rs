@@ -263,16 +263,7 @@ impl Attachments {
         let (made, subject): (wire::ActRequest, &str) = match pick {
             Pick::Photo => (photo_upload(picked, media_type, size).into(), "photo"),
             Pick::File => (
-                act::docs::Upload {
-                    blob: picked.blob.clone(),
-                    media_type,
-                    title: Some(picked.name.trim())
-                        .filter(|name| !name.is_empty())
-                        .map_or_else(|| words::attachment_untitled(locale), str::to_owned),
-                    size,
-                    ..Default::default()
-                }
-                .into(),
+                file_upload(picked, media_type, size, words::attachment_untitled(locale)).into(),
                 "document",
             ),
         };
@@ -492,6 +483,28 @@ fn photo_upload(
     }
 }
 
+/// The document a picked file becomes: it arrived as an upload, under its file name (untitled
+/// when the platform named none, and then it names no arrival rather than half of one).
+fn file_upload(
+    picked: &wire::FilePicked,
+    media_type: String,
+    size: Option<i64>,
+    untitled: String,
+) -> act::docs::Upload {
+    let label = arrival_label(&picked.name);
+    act::docs::Upload {
+        blob: picked.blob.clone(),
+        media_type,
+        title: label.clone().unwrap_or(untitled),
+        size,
+        arrived_system: label
+            .is_some()
+            .then_some(act::docs::UploadArrivedSystem::Upload),
+        arrived_label: label,
+        ..Default::default()
+    }
+}
+
 /// A media type for a file the platform named none for, off its name: the core has no sniffer,
 /// and bytes promoted as `application/octet-stream` are ones no stage will draw.
 #[must_use]
@@ -541,6 +554,24 @@ mod tests {
         };
         assert_eq!(text("arrived_system"), "picker");
         assert_eq!(text("arrived_label"), "IMG_0042.jpg");
+    }
+
+    #[test]
+    fn a_picked_file_arrives_as_an_upload_under_its_file_name() {
+        let request: wire::ActRequest = file_upload(
+            &picked("Lease.pdf"),
+            "application/pdf".to_owned(),
+            Some(9),
+            "Untitled".to_owned(),
+        )
+        .into();
+        let text = |key: &str| match &request.input[key].kind {
+            Some(wire::value::Kind::Text(text)) => text.clone(),
+            other => panic!("{key}: {other:?}"),
+        };
+        assert_eq!(text("arrived_system"), "upload");
+        assert_eq!(text("arrived_label"), "Lease.pdf");
+        assert_eq!(text("title"), "Lease.pdf");
     }
 
     #[test]

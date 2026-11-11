@@ -225,7 +225,11 @@ pub const REGISTER: &[Row] = &[
         Promise::Arrive,
         "crates/vault/src/commands/follow.rs",
     ),
-    owed("docs", Promise::Arrive, ARRIVE_OWED),
+    kept(
+        "docs",
+        Promise::Arrive,
+        "crates/screens/src/docs/drive/ingest.rs",
+    ),
     kept(
         "health",
         Promise::Arrive,

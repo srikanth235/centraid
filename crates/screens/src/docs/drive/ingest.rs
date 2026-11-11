@@ -216,15 +216,7 @@ impl Ingest {
                 self.title.clone(),
             ),
             (Some(file), _) => (
-                act::docs::Upload {
-                    blob: file.blob.clone(),
-                    media_type: file.media_type.clone(),
-                    title: self.title.clone(),
-                    folder_id,
-                    size: i64::try_from(file.size).ok(),
-                    ..Default::default()
-                }
-                .into(),
+                upload_request(ctx.locale(), self.kind, file, &self.title, folder_id).into(),
                 file.blob.clone(),
             ),
             (None, _) => {
@@ -304,6 +296,35 @@ impl Ingest {
     }
 }
 
+/// The document a picked file or a scan becomes. It arrived as a scan (every scan under one
+/// origin, "Scanned document") or as an upload (under its file name).
+fn upload_request(
+    locale: Locale,
+    kind: Kind,
+    file: &Staged,
+    title: &str,
+    folder_id: Option<String>,
+) -> act::docs::Upload {
+    let (system, label) = if kind == Kind::Scan {
+        (
+            act::docs::UploadArrivedSystem::Scan,
+            words::ingest_scan_title(locale),
+        )
+    } else {
+        (act::docs::UploadArrivedSystem::Upload, title.to_owned())
+    };
+    act::docs::Upload {
+        blob: file.blob.clone(),
+        media_type: file.media_type.clone(),
+        title: title.to_owned(),
+        folder_id,
+        size: i64::try_from(file.size).ok(),
+        arrived_system: Some(system),
+        arrived_label: Some(label),
+        ..Default::default()
+    }
+}
+
 /// The file's name as its title; a scan with none is "Scanned document".
 fn title_of(locale: Locale, kind: Kind, name: &str) -> String {
     let name = name.trim();
@@ -375,6 +396,32 @@ mod tests {
         assert_eq!(media_type_of("Lease.PDF", ""), "application/pdf");
         assert_eq!(media_type_of("notes", ""), OCTET_STREAM);
         assert_eq!(media_type_of("x.pdf", " image/png "), "image/png");
+    }
+
+    #[test]
+    fn a_scan_and_an_upload_record_how_they_arrived() {
+        let file = Staged {
+            blob: "a".repeat(64),
+            size: 3,
+            media_type: "application/pdf".to_owned(),
+        };
+        let say = |kind: Kind, title: &str| -> (String, String) {
+            let request: wire::ActRequest =
+                upload_request(Locale::En, kind, &file, title, None).into();
+            let text = |key: &str| match &request.input[key].kind {
+                Some(wire::value::Kind::Text(text)) => text.clone(),
+                other => panic!("{key}: {other:?}"),
+            };
+            (text("arrived_system"), text("arrived_label"))
+        };
+        assert_eq!(
+            say(Kind::Upload, "Lease.pdf"),
+            ("upload".to_owned(), "Lease.pdf".to_owned())
+        );
+        assert_eq!(
+            say(Kind::Scan, "Scan 2026-11-11"),
+            ("scan".to_owned(), "Scanned document".to_owned())
+        );
     }
 
     #[test]
