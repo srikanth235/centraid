@@ -616,7 +616,12 @@ impl Screen for Home {
                         .calendar
                         .status()
                         .cloned()
-                        .or_else(|| self.ops.status.clone()),
+                        .or_else(|| self.ops.status.clone())
+                        .or_else(|| {
+                            ctx.follows()
+                                .report(Store::Calendar)
+                                .status(ctx, Store::Calendar)
+                        }),
                     quick_add: Some(wire::TodoQuickAdd::default()),
                     file_choices: Vec::new(),
                     style: self

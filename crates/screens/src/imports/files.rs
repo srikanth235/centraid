@@ -128,6 +128,10 @@ pub struct Outcome {
     pub updated: u32,
     pub trashed: u32,
     pub refused: u32,
+    /// Rows the vault doubted: a complete read that lost most of what the folder followed.
+    pub doubted: u32,
+    /// A listing or a file that would not read: the read did not cover the whole folder.
+    pub incomplete: bool,
 }
 
 /// A folder the vault follows, as `files-followed` answered it.
@@ -244,7 +248,10 @@ impl Files {
     /// a trigger came during this one.
     fn finish(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         ctx.cancel_timer(READ_TIMER);
-        self.pass = None;
+        if let Some(pass) = self.pass.take() {
+            ctx.follows()
+                .judged(Store::Files, pass.outcome.doubted, pass.outcome.incomplete);
+        }
         self.reload(ctx);
         ctx.follows().files_ended(ctx);
         Vec::new()
@@ -364,6 +371,7 @@ impl Files {
             return;
         };
         let sent = plan.records.len();
+        pass.outcome.incomplete |= !plan.whole;
         let request = act::shell::FollowFiles {
             origin: json!({
                 "ref": plan.origin,
@@ -381,6 +389,7 @@ impl Files {
             pass.outcome.added += count(&output, "added") + count(&output, "matched");
             pass.outcome.updated += count(&output, "updated");
             pass.outcome.trashed += count(&output, "trashed");
+            pass.outcome.doubted += count(&output, "doubted");
             pass.outcome.refused += plan.refused;
         } else {
             // The vault refusing a folder counts its records as refused; the next folder still goes.

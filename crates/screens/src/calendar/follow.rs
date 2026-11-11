@@ -874,6 +874,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
         ..Outcome::default()
     };
     let mut told = false;
+    let mut doubted = 0;
     for origin in &batch.origins {
         let records: Vec<&EventRecord> = batch
             .records
@@ -896,7 +897,10 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> (Outcome, boo
         outcome.refused += count(&output, "refused");
         outcome.updated += count(&output, "updated");
         outcome.trashed += count(&output, "trashed");
+        doubted += count(&output, "doubted");
     }
+    ctx.follows()
+        .judged(Store::Calendar, doubted, !batch.complete);
     (outcome, told)
 }
 

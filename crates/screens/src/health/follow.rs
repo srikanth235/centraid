@@ -386,6 +386,8 @@ pub struct Outcome {
     pub forgotten: u64,
     pub refused: usize,
     pub read: bool,
+    /// Workouts the vault doubted: a complete read that lost most of what the store followed.
+    pub doubted: u64,
 }
 
 fn count(output: &Value, name: &str) -> u64 {
@@ -458,6 +460,12 @@ pub fn run(
     outcome.added = count(&output, "added") + count(&output, "matched");
     outcome.updated = count(&output, "updated");
     outcome.forgotten = count(&output, "forgotten");
+    outcome.doubted = count(&output, "doubted");
+    ctx.follows().judged(
+        Followed::Health,
+        u32::try_from(outcome.doubted).unwrap_or(u32::MAX),
+        snapshot.store_present && !snapshot.workouts_complete,
+    );
     outcome.refused += usize::try_from(count(&output, "refused")).unwrap_or(0);
     outcome
 }

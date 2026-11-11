@@ -60,7 +60,11 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                 } else {
                     sheets::view(drive, locale)
                 }),
-                status: drive.status.clone(),
+                status: drive.status.clone().or_else(|| {
+                    ctx.follows()
+                        .report(crate::follow::Store::Files)
+                        .status(ctx, crate::follow::Store::Files)
+                }),
                 confirm: drive.asking.as_ref().map(|_| wire::Confirm {
                     title: words::trash_confirm_title(locale),
                     body: words::trash_confirm_body(locale),

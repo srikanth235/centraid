@@ -49,4 +49,16 @@ catalog! {
         "Couldn’t check what {store} says.",
         "Couldn’t check what {store} says."
     );
+    plain doubted_status = (
+        "Far fewer items than before in {source}, so nothing was removed.",
+        "Far fewer items than before in {source}, so nothing was removed."
+    );
+    plain incomplete_status = (
+        "Only part of {source} was readable, so this shows what was read.",
+        "Only part of {source} was readable, so this shows what was read."
+    );
+    plain source_calendar = ("your phone’s calendars", "your phone’s calendars");
+    plain source_contacts = ("your phone’s contacts", "your phone’s contacts");
+    plain source_files = ("the folder", "the folder");
+    plain source_health = ("your health store", "your health store");
 }

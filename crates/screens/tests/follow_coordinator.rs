@@ -47,6 +47,10 @@ struct Rig {
     /// The watches the coordinator asked for, by store.
     watches: Vec<(u64, u64, i32)>,
     contacts: Vec<wire::PhoneContact>,
+    /// Whether the contacts read says it covered the whole address book.
+    contacts_complete: bool,
+    /// The accounts the contacts read lists, even one with nobody in it.
+    containers: Vec<wire::PhoneContactContainer>,
     reads: Reads,
 }
 
@@ -93,6 +97,8 @@ impl Rig {
             habits: BTreeMap::new(),
             watches,
             contacts: Vec::new(),
+            contacts_complete: true,
+            containers: Vec::new(),
             reads: Reads::default(),
         }
     }
@@ -194,9 +200,9 @@ impl Rig {
                 self.reads.contacts += 1;
                 self.reads.permission_asked += u32::from(read.ask_permission);
                 O::Contacts(wire::ContactsSnapshot {
-                    complete: true,
+                    complete: self.contacts_complete,
                     device_id: "this-install".to_owned(),
-                    containers: Vec::new(),
+                    containers: self.containers.clone(),
                     contacts: self.contacts.clone(),
                 })
             }
@@ -444,6 +450,88 @@ fn a_read_the_phone_refuses_is_said_on_the_row_and_changes_nothing() {
             .iter()
             .all(|person| person.name != "Ana")
     );
+}
+
+// ---- a pass that was doubted or partial is said, in the same words -----------------------------
+
+fn people(count: usize) -> Vec<wire::PhoneContact> {
+    (0..count)
+        .map(|n| wire::PhoneContact {
+            name: format!("Person {n}"),
+            phone_id: format!("lookup:{n}"),
+            container_key: "icloud".to_owned(),
+            ..wire::PhoneContact::default()
+        })
+        .collect()
+}
+
+/// One pass over the address book, as the OS's change notice asks for it.
+fn followed_pass(rig: &mut Rig) {
+    rig.changed(wire::ImportSource::Contacts);
+    rig.settle();
+    rig.serve();
+}
+
+fn status_of(rig: &mut Rig) -> Option<String> {
+    let home = people_support::root(&rig.d);
+    rig.d
+        .send(home, E::DataChanged(wire::DataChanged { tables: vec![] }));
+    home_state(rig.d.view(home))
+        .status
+        .clone()
+        .map(|line| line.sentence)
+}
+
+#[test]
+fn a_read_that_lost_most_of_what_is_followed_is_doubted_and_says_so_without_removing_anyone() {
+    let mut rig = Rig::with_people_home().connected(CONTACTS_KEY, b"1");
+    rig.contacts = people(6);
+    rig.containers = vec![wire::PhoneContactContainer {
+        key: "icloud".to_owned(),
+        name: "iCloud".to_owned(),
+        ..wire::PhoneContactContainer::default()
+    }];
+    followed_pass(&mut rig);
+    assert_eq!(status_of(&mut rig), None);
+    // The next complete read holds nobody: the vault doubts all six and trashes none.
+    rig.contacts = Vec::new();
+    followed_pass(&mut rig);
+    assert_eq!(
+        status_of(&mut rig).as_deref(),
+        Some("Far fewer items than before in your phone’s contacts, so nothing was removed.")
+    );
+    let kept = roster_of(&rig.d)
+        .people
+        .iter()
+        .filter(|person| person.name.starts_with("Person "))
+        .count();
+    assert_eq!(kept, 6);
+    // A read that holds them again clears the line.
+    rig.contacts = people(6);
+    followed_pass(&mut rig);
+    assert_eq!(status_of(&mut rig), None);
+}
+
+#[test]
+fn an_incomplete_read_is_a_banner_over_what_was_read_and_not_a_failure() {
+    let mut rig = Rig::with_people_home().connected(CONTACTS_KEY, b"1");
+    rig.contacts = people(2);
+    rig.contacts_complete = false;
+    followed_pass(&mut rig);
+    assert_eq!(
+        status_of(&mut rig).as_deref(),
+        Some("Only part of your phone’s contacts was readable, so this shows what was read.")
+    );
+    // What was read is there.
+    assert!(
+        roster_of(&rig.d)
+            .people
+            .iter()
+            .any(|p| p.name == "Person 1")
+    );
+    rig.contacts_complete = true;
+    followed_pass(&mut rig);
+    assert_eq!(status_of(&mut rig), None);
 }
 
 // ---- the backstop, and an answer that arrives after it ------------------------------------------

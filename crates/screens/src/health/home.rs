@@ -955,7 +955,11 @@ impl Screen for Home {
                         confirm_label: words::stop_confirm(locale),
                         destructive: true,
                     }),
-                    status: self.status.clone(),
+                    status: self.status.clone().or_else(|| {
+                        ctx.follows()
+                            .report(Followed::Health)
+                            .status(ctx, Followed::Health)
+                    }),
                 },
             ))),
             ..wire::ViewState::default()

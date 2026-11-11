@@ -415,10 +415,15 @@ impl Home {
         state
     }
 
-    fn status(&self) -> Option<wire::StatusLine> {
+    fn status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
         self.status
             .clone()
             .or_else(|| self.contacts.status().cloned())
+            .or_else(|| {
+                ctx.follows()
+                    .report(Store::Contacts)
+                    .status(ctx, Store::Contacts)
+            })
     }
 }
 
@@ -531,7 +536,7 @@ impl Screen for Home {
                 ]
             },
             sheet: self.sheet as i32,
-            status: self.status(),
+            status: self.status(ctx),
             contacts: (!denied_now).then(|| self.contacts.row(ctx)),
             add_person: Some(routes::new_person()),
             filter_menu: self.filter_menu(locale),

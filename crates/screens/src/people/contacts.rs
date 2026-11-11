@@ -639,6 +639,7 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
         ..Outcome::default()
     };
     let mut told = false;
+    let mut doubted = 0;
     for origin in &batch.origins {
         let records: Vec<&Record> = batch
             .records
@@ -658,7 +659,10 @@ pub(crate) fn run(ctx: &Ctx, snapshot: &wire::ContactsSnapshot) -> (Outcome, boo
         outcome.refused += count(&output, "refused");
         outcome.updated += count(&output, "updated");
         outcome.trashed += count(&output, "trashed");
+        doubted += count(&output, "doubted");
     }
+    ctx.follows()
+        .judged(Store::Contacts, doubted, !batch.complete);
     (outcome, told)
 }
 

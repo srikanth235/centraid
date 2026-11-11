@@ -44,6 +44,8 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::Registry;
 use crate::screen::Ctx;
+use crate::strings::Locale;
+use crate::strings::follow as words;
 
 /// The route name of the coordinator.
 pub const NAME: &str = coordinator::NAME;
@@ -79,13 +81,26 @@ impl Store {
     ];
 
     /// The home screen that draws what a pass over this store found (contacts' row, health's
-    /// refused types), told to draw again when a pass ends.
+    /// refused types, the status line a doubted or incomplete pass leaves), told to draw again when a pass ends.
     #[must_use]
     pub(crate) fn shown_by(self) -> Option<&'static str> {
         match self {
             Store::Contacts => Some(crate::people::HOME),
             Store::Health => Some(crate::health::HOME),
-            Store::Calendar | Store::Files => None,
+            Store::Calendar => Some(crate::calendar::HOME),
+            Store::Files => Some(crate::docs::DRIVE),
+        }
+    }
+
+    /// What a sentence about a pass calls the store it read: "only part of your phone’s
+    /// contacts could be read".
+    #[must_use]
+    pub(crate) fn source(self, locale: Locale) -> String {
+        match self {
+            Store::Contacts => words::source_contacts(locale),
+            Store::Calendar => words::source_calendar(locale),
+            Store::Files => words::source_files(locale),
+            Store::Health => words::source_health(locale),
         }
     }
 
@@ -116,6 +131,35 @@ pub struct Report {
     pub denied: bool,
     /// The types the OS refused, as the last health read said.
     pub refused: Vec<String>,
+    /// How many followed rows the last pass doubted: a complete read that lost most of what the
+    /// vault follows changes nothing and says how many it doubts.
+    pub doubted: u32,
+    /// The last read did not cover the whole store (limited access, a file that would not
+    /// read): what it did read was merged, and nothing was removed for what it missed.
+    pub incomplete: bool,
+}
+
+impl Report {
+    /// The plain status line a store's screen draws when the last pass was doubted or
+    /// incomplete (D12: a partial result shows what was read under a banner; it is not a
+    /// failure). The same words in every store.
+    #[must_use]
+    pub fn status(&self, ctx: &Ctx, store: Store) -> Option<wire::StatusLine> {
+        let locale = ctx.locale();
+        let source = store.source(locale);
+        let sentence = if self.doubted > 0 {
+            crate::strings::fill(&words::doubted_status(locale), &[("source", &source)])
+        } else if self.incomplete {
+            crate::strings::fill(&words::incomplete_status(locale), &[("source", &source)])
+        } else {
+            return None;
+        };
+        Some(wire::StatusLine {
+            sentence,
+            action_label: String::new(),
+            refused: false,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -185,6 +229,15 @@ impl Follows {
     /// The phone refused (or allowed again) a read of `store`.
     pub fn denied(&self, store: Store, denied: bool) {
         self.lock().reports.entry(store).or_default().denied = denied;
+    }
+
+    /// What the last pass over `store` found of its own reading: how many rows the vault doubted
+    /// and whether the read missed part of the store.
+    pub fn judged(&self, store: Store, doubted: u32, incomplete: bool) {
+        let mut inner = self.lock();
+        let report = inner.reports.entry(store).or_default();
+        report.doubted = doubted;
+        report.incomplete = incomplete;
     }
 
     /// The types the OS refused in the last read of `store`.

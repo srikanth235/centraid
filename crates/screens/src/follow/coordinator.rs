@@ -205,6 +205,14 @@ impl Coordinator {
         if follows.take_files_ended() && self.files_running {
             self.files_running = false;
             self.end(ctx, Store::Files);
+            if let Some(screen) = Store::Files.shown_by() {
+                ctx.post(
+                    screen,
+                    wire::ScreenEvent {
+                        kind: Some(E::Signalled(wire::Signalled {})),
+                    },
+                );
+            }
         }
         for window in follows.take_windows() {
             ctx.start_timer(WINDOW_TIMER, READ_TIMEOUT);
