@@ -12,6 +12,8 @@ catalog! {
     plain settings_units = ("Units", "Units");
     plain settings_units_phone = ("Phone's setting", "Phone's setting");
     plain settings_units_refused = ("Couldn't save your units. Try again.", "Couldn't save your units. Try again.");
+    plain settings_rule_refused = ("Couldn't save your download settings. Try again.", "Couldn't save your download settings. Try again.");
+    plain settings_appearance_refused = ("Couldn't save your appearance. Try again.", "Couldn't save your appearance. Try again.");
     plain settings_units_metric = ("Metric", "Metric");
     plain settings_units_imperial = ("Imperial", "Imperial");
     plain settings_units_note = ("Distances, weights and temperatures. Phone's setting follows your region.", "Distances, weights and temperatures. Phone's setting follows your region.");

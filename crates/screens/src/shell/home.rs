@@ -66,15 +66,6 @@ impl Appearance {
             _ => Self::System,
         }
     }
-
-    /// What is written: nothing for "follow the phone".
-    fn stored(self) -> &'static str {
-        match self {
-            Self::System => "",
-            Self::Light => "light",
-            Self::Dark => "dark",
-        }
-    }
 }
 
 /// The step after a vault was picked in the sheet.
@@ -233,10 +224,10 @@ impl Home {
             H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
             H::EntryAsked(asked) => return entry_route(asked.entry()),
-            // SETTINGS CHOSE IT: kept in the Keychain, the one store, and drawn at once.
+            // SETTINGS CHOSE IT AND KEPT IT in the Keychain, the one store (a refused write is
+            // Settings' to say); Home draws it at once.
             H::AppearanceChosen(chosen) => {
                 self.appearance = Appearance::of(&chosen.stored);
-                return vec![keychain_set(self.appearance.stored())];
             }
             // Following the phone is the shell's to draw: Home no longer words a switch
             // that depends on where the phone is.
@@ -751,14 +742,6 @@ fn keychain_get() -> wire::Effect {
     }))
 }
 
-fn keychain_set(value: &str) -> wire::Effect {
-    effect(wire::effect::Kind::Keychain(wire::KeychainOp {
-        op: wire::keychain_op::Op::Set as i32,
-        key: APPEARANCE_KEY.to_owned(),
-        value: value.as_bytes().to_vec(),
-    }))
-}
-
 /// A widget's name: its app's.
 fn widget_name(locale: Locale, _widget: &str, app: &str) -> String {
     app_name(locale, app)
@@ -913,9 +896,8 @@ mod tests {
 
     #[test]
     fn the_stored_appearance_round_trips_and_an_unknown_one_follows_the_phone() {
-        for a in [Appearance::Light, Appearance::Dark] {
-            assert_eq!(Appearance::of(a.stored()), a);
-        }
+        assert_eq!(Appearance::of("light"), Appearance::Light);
+        assert_eq!(Appearance::of("dark"), Appearance::Dark);
         assert_eq!(Appearance::of(""), Appearance::System);
         assert_eq!(Appearance::of("sepia"), Appearance::System);
     }

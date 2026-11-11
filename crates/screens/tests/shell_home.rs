@@ -563,8 +563,14 @@ fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
     assert_eq!(bar.settings_label, "Settings");
     assert_eq!(bar.settings_route.unwrap().screen, "home.settings");
     assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
-    // Settings chose Dark: kept in the Keychain, drawn at once.
-    d.effects.clear();
+    // Settings chose Dark and kept it in the Keychain itself: Home only draws it, writes nothing.
+    d.effects.retain(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(op)) if op.op == wire::keychain_op::Op::Get as i32
+        )
+    });
+    let pending = d.effects.len();
     tell(
         &mut d,
         i,
@@ -573,11 +579,8 @@ fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
         }),
     );
     assert_eq!(state(&d, i).scheme, wire::HomeScheme::Dark as i32);
-    assert!(matches!(
-        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::Keychain(op)) if op.value == b"dark".to_vec() && op.op == wire::keychain_op::Op::Set as i32
-    ));
-    // Following the phone again stores nothing.
+    assert_eq!(d.effects.len(), pending, "Settings owns the write");
+    // Following the phone again.
     tell(
         &mut d,
         i,
@@ -586,10 +589,7 @@ fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
         }),
     );
     assert_eq!(state(&d, i).scheme, wire::HomeScheme::System as i32);
-    assert!(matches!(
-        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::Keychain(op)) if op.value.is_empty() && op.op == wire::keychain_op::Op::Set as i32
-    ));
+    assert_eq!(d.effects.len(), pending, "Settings owns the write");
     // The stored choice comes back from the Keychain as an effect result.
     d.answer_effect(wire::effect_result::Outcome::Keychain(
         wire::KeychainValue {
