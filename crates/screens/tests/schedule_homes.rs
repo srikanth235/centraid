@@ -1667,6 +1667,13 @@ fn inbox_rows(r: &mut Rig) -> Vec<wire::TodoRow> {
     let Some(wire::view_state::Kind::TodoList(state)) = &r.driver.view(page).kind else {
         panic!("not a list");
     };
+    // An Inbox with nothing in it is the page's empty state, which holds no rows.
+    if matches!(
+        state.page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Empty(_))
+    ) {
+        return Vec::new();
+    }
     let Some(wire::todo_list_state::Content::Data(data)) = &state.content else {
         panic!("the Inbox has no data");
     };

@@ -19,7 +19,7 @@ use wire::screen_event::Kind as E;
 use wire::todo_detail_event::Kind as D;
 use wire::todo_detail_state::Asking;
 
-use super::list::{self, Phase};
+use super::list;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
 use crate::catalog::{act, load};
@@ -32,7 +32,7 @@ use crate::kit::earlier;
 use crate::kit::follow;
 use crate::kit::links::{self, Kind, Links, Outcome};
 use crate::kit::quantity::UnitsPref;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::schedule::custom::{Custom, Done};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::repeat::{REPEAT_CUSTOM, normalize_url};
@@ -213,7 +213,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }
     Some(Box::new(Detail {
         task_id: args.task_id.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        gone: false,
         projects: None,
         autosave: Autosave::new(),
         asking: Asking::None,
@@ -234,7 +235,10 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 struct Detail {
     task_id: String,
-    phase: Phase<Answered>,
+    /// The read. A task that is gone is [`Page::Failed`] (`gone`), in its own words.
+    page: Page<Answered>,
+    /// No live task has the id: never made, deleted, or in the trash.
+    gone: bool,
     /// The last projects read that landed, kept over a read that does not.
     projects: Option<wire::AgendaTaskProjects>,
     autosave: Autosave<Typed>,
@@ -296,15 +300,32 @@ impl Detail {
             self.autosave.vault_moved();
             return;
         }
-        self.phase = match (detail, projects) {
-            (Reading::Data(detail), _) => Phase::Ready(Answered {
+        let reading = match (detail, projects) {
+            (Reading::Data(detail), _) => Reading::Data(Answered {
                 detail: *detail,
                 projects: self.projects.clone(),
             }),
-            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Phase::Denied(denial),
-            (Reading::Failed, _) => Phase::Failed,
+            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Reading::Denied(denial),
+            (Reading::Failed, _) => Reading::Failed,
         };
-        let Phase::Ready(answer) = &self.phase else {
+        // GONE is the page's failure in its own words, never an empty page: never made, deleted,
+        // or in the trash.
+        if let Reading::Data(answer) = &reading
+            && answer.task().is_none()
+        {
+            self.gone = true;
+            self.page = Page::Failed;
+            return;
+        }
+        self.gone = false;
+        let landed = matches!(reading, Reading::Data(_));
+        // A re-read never blanks the page shown: a failed one keeps it under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |_| false);
+        if !landed {
+            return;
+        }
+        let Page::Ready { data: answer, .. } = &self.page else {
             return;
         };
         let Some(task) = answer.task() else {
@@ -387,11 +408,11 @@ impl Detail {
     }
 
     fn task(&self) -> Option<wire::AgendaTask> {
-        self.phase.data().and_then(Answered::task).cloned()
+        self.page.data().and_then(Answered::task).cloned()
     }
 
     fn today(&self) -> String {
-        self.phase
+        self.page
             .data()
             .map(|answer| answer.today().to_owned())
             .unwrap_or_default()
@@ -692,7 +713,7 @@ impl Detail {
         if task.parent_task_id.is_some() {
             return;
         }
-        let Some(answer) = self.phase.data() else {
+        let Some(answer) = self.page.data() else {
             return;
         };
         let (projects, sections) = answer.lists();
@@ -1152,29 +1173,41 @@ impl Screen for Detail {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::todo_detail_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            // GONE is drawn, not failed: never made, deleted, or in the trash.
-            Phase::Ready(answer) => match answer.task() {
-                Some(task) => Content::Data(Box::new(self.data(
+        // A check of what the phone says that was not made is a note over the task.
+        let page = self.page.clone().noted(Note::unchecked(
+            &self.differences,
+            locale,
+            follow::Source::Phone,
+        ));
+        let content = match page.data() {
+            Some(answer) => answer.task().map(|task| {
+                Content::Data(Box::new(self.data(
                     locale,
                     ctx.units(),
                     ctx.hour_cycle(),
                     answer,
                     task,
-                ))),
-                None => Content::Gone(wire::EmptyState {
-                    headline: words::task_gone(locale),
-                    ..wire::EmptyState::default()
-                }),
-            },
+                )))
+            }),
+            None => None,
         };
+        let mut wired = page.wire(
+            locale,
+            |denial| list::denied(locale, denial),
+            wire::EmptyState::default,
+        );
+        // A task that is gone (never made, deleted, or in the trash) says so in its own words.
+        if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
+            wired.state = Some(wire::page_state::State::Failed(wire::Failure {
+                sentence: words::task_gone(locale),
+                remedy: String::new(),
+            }));
+        }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoDetail(wire::TodoDetailState {
                 task_id: self.task_id.clone(),
-                content: Some(content),
+                content,
+                page: Some(wired),
                 autosave: Some(self.autosave.view(locale)),
                 confirm: self.confirm(locale),
                 open_field: self.open_field.clone(),
@@ -1182,7 +1215,6 @@ impl Screen for Detail {
                 status: self
                     .ops
                     .status()
-                    .or_else(|| self.differences.status(locale, follow::Source::Phone))
                     .or_else(|| self.share.status())
                     .or_else(|| self.earlier.status(locale))
                     .or_else(|| {

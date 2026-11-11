@@ -10,10 +10,10 @@ use wire::screen_event::Kind as E;
 use wire::todo_project_event::Kind as P;
 use wire::todo_project_state::Sheet;
 
-use super::list::{self, Phase};
+use super::list;
 use crate::catalog::{act, load};
 use crate::kit::civil::HourCycle;
-use crate::kit::read;
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::schedule::natural::{Chipper, Fields};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::rows::{self, Context};
@@ -38,7 +38,9 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Project {
         project_id: args.project_id.clone(),
         name: args.name.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
+        held: None,
+        gone: false,
         ops: Ops::default(),
         quick_title: String::new(),
         quick: Quick::default(),
@@ -59,7 +61,14 @@ struct Project {
     project_id: String,
     /// The name riding along from the route, until the answer names it.
     name: String,
-    phase: Phase<wire::AgendaTaskBoard>,
+    /// The read. A project with nothing in it is [`Page::Empty`]; one that is gone is
+    /// [`Page::Failed`] (`gone`), in its own words.
+    page: Page<()>,
+    /// The last board that named this project: what the page draws from while it is on the page
+    /// (ready or empty), so an empty project still has its list to file in and its look to edit.
+    held: Option<wire::AgendaTaskBoard>,
+    /// The answer names no live project by this id.
+    gone: bool,
     ops: Ops,
     quick_title: String,
     /// What the keyboard toolbar has staged for the next add.
@@ -86,13 +95,34 @@ struct Project {
 
 impl Project {
     fn reload(&mut self, ctx: &Ctx) {
-        self.phase = Phase::of(list::board(
+        let reading = list::board(
             ctx,
             load::reminders::BoardView::Project,
             Some(self.project_id.clone()),
             rows::MAX_WINDOW,
-        ));
-        if let Phase::Ready(board) = &self.phase {
+        );
+        self.load_completed(ctx);
+        let locale = ctx.locale();
+        // A board that names no live project: it is gone, never an empty list.
+        if let Reading::Data(board) = &reading
+            && !board
+                .projects
+                .iter()
+                .any(|project| project.project_id == self.project_id)
+        {
+            self.gone = true;
+            self.held = None;
+            self.page = Page::Failed;
+            return;
+        }
+        self.gone = false;
+        let nothing = match &reading {
+            Reading::Data(board) => {
+                self.groups(locale, ctx.hour_cycle(), board).is_empty() && self.completed.is_empty()
+            }
+            _ => false,
+        };
+        if let Reading::Data(board) = &reading {
             if let Some(project) = board
                 .projects
                 .iter()
@@ -110,9 +140,25 @@ impl Project {
                 self.target_section_id.clear();
             }
             self.ops
-                .answered(ctx.locale(), &list::open_tasks(board), &board.today);
+                .answered(locale, &list::open_tasks(board), &board.today);
+            self.held = Some(board.clone());
         }
-        self.load_completed(ctx);
+        // A refresh never blanks what is shown: a failed one keeps it under a note.
+        let reading = match reading {
+            Reading::Data(_) => Reading::Data(()),
+            Reading::Denied(denial) => Reading::Denied(denial),
+            Reading::Failed => Reading::Failed,
+        };
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, locale, |()| nothing);
+    }
+
+    /// The board the page draws from: while the page shows the project, ready or empty.
+    fn board(&self) -> Option<&wire::AgendaTaskBoard> {
+        match self.page {
+            Page::Ready { .. } | Page::Empty => self.held.as_ref(),
+            _ => None,
+        }
     }
 
     /// The Logbook's done tasks filed in this list: the summary counts them and
@@ -172,7 +218,7 @@ impl Project {
         if self.prefs.options.sort != Sort::Manual {
             return;
         }
-        let Some(board) = self.phase.data() else {
+        let Some(board) = self.board() else {
             return;
         };
         let Some(group) = board
@@ -200,8 +246,7 @@ impl Project {
 
     /// The core's today, for a staged due.
     fn today(&self) -> String {
-        self.phase
-            .data()
+        self.board()
             .map(|board| board.today.clone())
             .unwrap_or_default()
     }
@@ -215,7 +260,7 @@ impl Project {
 
     /// "Edit List": the draft starts from what the list stores.
     fn open_style(&mut self) {
-        let Some(board) = self.phase.data() else {
+        let Some(board) = self.board() else {
             return;
         };
         let Some(project) = self.stored(board) else {
@@ -257,18 +302,14 @@ impl Project {
         rows::list_color_of(&self.project_id, project)
     }
 
+    /// The project is on the page (ready or empty).
     fn found(&self) -> bool {
-        self.phase.data().is_some_and(|board| {
-            board
-                .projects
-                .iter()
-                .any(|project| project.project_id == self.project_id)
-        })
+        self.board().is_some()
     }
 
     /// "Garden" or "Garden · Beds": where a quick add lands.
     fn lands_in(&self) -> String {
-        let section = self.phase.data().and_then(|board| {
+        let section = self.board().and_then(|board| {
             board.sections.iter().find(|s| {
                 !self.target_section_id.is_empty() && s.section_id == self.target_section_id
             })
@@ -279,52 +320,49 @@ impl Project {
         }
     }
 
+    /// The rows the page draws, after the Reminders choice shaped them: unsectioned first, then
+    /// every section.
+    fn groups(
+        &self,
+        locale: Locale,
+        cycle: HourCycle,
+        board: &wire::AgendaTaskBoard,
+    ) -> Vec<wire::TodoRowGroup> {
+        let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
+        row_ctx.show_project = false;
+        row_ctx.cycle = cycle;
+        let mut shaped = board.groups.clone();
+        self.prefs.options.shape(&mut shaped);
+        rows::groups(locale, &shaped, &row_ctx)
+    }
+
     fn data(
         &self,
         locale: Locale,
         cycle: HourCycle,
         board: &wire::AgendaTaskBoard,
     ) -> wire::TodoProjectData {
-        let rename = |data: wire::TodoProjectData| wire::TodoProjectData {
+        let groups = self.groups(locale, cycle, board);
+        wire::TodoProjectData {
+            today: board.today.clone(),
+            count_label: rows::count(locale, rows::root_count(&groups)),
+            groups,
+            completed: Some(self.completed_state(locale, cycle, board)),
+        }
+    }
+
+    /// The header's words and look, with the project on the page.
+    fn head(&self, locale: Locale, board: &wire::AgendaTaskBoard) -> wire::TodoProjectHead {
+        wire::TodoProjectHead {
+            add_section_label: words::add_section(locale),
             rename_label: agenda_todo::rename(locale),
             rename_title: agenda_todo::rename_title(locale),
             rename_placeholder: agenda_todo::rename_placeholder(locale),
             rename_verb: agenda_todo::rename(locale),
-            ..data
-        };
-        if !self.found() {
-            return wire::TodoProjectData {
-                today: board.today.clone(),
-                found: false,
-                empty: Some(wire::EmptyState {
-                    headline: words::project_gone(locale),
-                    ..wire::EmptyState::default()
-                }),
-                ..wire::TodoProjectData::default()
-            };
-        }
-        let mut row_ctx = Context::of(&board.today, &board.projects, &board.sections);
-        row_ctx.show_project = false;
-        row_ctx.cycle = cycle;
-        let mut shaped = board.groups.clone();
-        self.prefs.options.shape(&mut shaped);
-        let groups = rows::groups(locale, &shaped, &row_ctx);
-        rename(wire::TodoProjectData {
-            today: board.today.clone(),
-            count_label: rows::count(locale, rows::root_count(&groups)),
-            empty: groups.is_empty().then(|| wire::EmptyState {
-                headline: words::project_empty(locale),
-                ..wire::EmptyState::default()
-            }),
-            groups,
-            add_section_label: words::add_section(locale),
-            found: true,
             list_color_key: self.color_key(board),
             icon_key: style::icon_of(self.stored(board).and_then(|p| p.icon.as_deref())),
             style_label: words_lists::edit_list_title(locale),
-            completed: Some(self.completed_state(locale, cycle, board)),
-            ..wire::TodoProjectData::default()
-        })
+        }
     }
 
     fn quick_add(&self, locale: Locale, cycle: HourCycle) -> wire::TodoQuickAdd {
@@ -439,8 +477,7 @@ impl Project {
             Some(P::Refreshed(_)) => self.reload(ctx),
             Some(P::RowChecked(checked)) => {
                 let Some(task) = self
-                    .phase
-                    .data()
+                    .board()
                     .and_then(|board| list::find(board, &checked.task_id))
                 else {
                     return;
@@ -510,8 +547,7 @@ impl Project {
             }
             Some(P::RowFlagged(flagged)) => {
                 if self
-                    .phase
-                    .data()
+                    .board()
                     .and_then(|board| list::find(board, &flagged.task_id))
                     .is_some()
                 {
@@ -521,8 +557,7 @@ impl Project {
             }
             Some(P::RowDeleted(deleted)) => {
                 if let Some(task) = self
-                    .phase
-                    .data()
+                    .board()
                     .and_then(|board| list::find(board, &deleted.task_id))
                 {
                     self.ops.delete(ctx, &deleted.task_id, &task.title);
@@ -556,6 +591,8 @@ impl Screen for Project {
             Some(E::EffectResult(result)) => {
                 if self.prefs.answers(&result) {
                     self.show_completed = self.prefs.options.show_completed;
+                    // The choice shapes the rows, so what is on the page (empty or not) follows it.
+                    self.reload(ctx);
                 }
             }
             Some(E::DataChanged(_) | E::EnvironmentChanged(_)) => {
@@ -583,19 +620,37 @@ impl Screen for Project {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::todo_project_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            Phase::Ready(board) => {
-                Content::Data(Box::new(self.data(locale, ctx.hour_cycle(), board)))
-            }
+        let board = self.board();
+        let content = match (&self.page, board) {
+            (Page::Ready { .. }, Some(board)) => Some(Content::Data(Box::new(self.data(
+                locale,
+                ctx.hour_cycle(),
+                board,
+            )))),
+            _ => None,
         };
+        let mut page = self.page.wire(
+            locale,
+            |denial| list::denied(locale, denial),
+            || wire::EmptyState {
+                headline: words::project_empty(locale),
+                ..wire::EmptyState::default()
+            },
+        );
+        // A project that is gone says so in its own words, not the generic failure.
+        if self.gone && matches!(page.state, Some(wire::page_state::State::Failed(_))) {
+            page.state = Some(wire::page_state::State::Failed(wire::Failure {
+                sentence: words::project_gone(locale),
+                remedy: String::new(),
+            }));
+        }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoProject(
                 wire::TodoProjectState {
                     title: self.name.clone(),
-                    content: Some(content),
+                    content,
+                    page: Some(page),
+                    head: board.map(|board| self.head(locale, board)),
                     chrome: Some(rows::chrome(locale)),
                     status: self.ops.status(),
                     quick_add: Some(self.quick_add(locale, ctx.hour_cycle())),

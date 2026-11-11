@@ -692,6 +692,8 @@ impl Screen for Home {
                     add_opens_quick_add: false,
                     new_event,
                     content,
+                    // Calendar still draws `content`'s loading, failure and denied arms (#1185).
+                    page: None,
                 },
             ))),
             ..wire::ViewState::default()

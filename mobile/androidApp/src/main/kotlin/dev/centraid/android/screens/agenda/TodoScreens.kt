@@ -28,7 +28,6 @@ import centraid.core.v1.TodoProjectState
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitLink
@@ -43,7 +42,6 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -72,15 +70,13 @@ internal fun TodoListScreen(
     ) {
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(TodoListEvent(refreshed = TodoListEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 modifier = Modifier.weight(1f),
-            ) { list ->
-                val empty = list.empty
-                if (list.groups.isEmpty() && empty != null) {
-                    EmptyStateView(empty, onAction = null)
-                } else {
+            ) {
+                val list = state.data_
+                if (list != null) {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-list")) {
                         // THE TITLE IS IN THE TOP ROW, in the smart list's colour (round 9); its date line is first.
                         if (list.subtitle.isNotEmpty()) {
@@ -131,15 +127,17 @@ internal fun TodoProjectScreen(
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    val data = state.data_
-    val addSection = data?.add_section_label.orEmpty()
-    val rename = data?.rename_label.orEmpty()
+    // The header's words and look stand while the project is on the page, ready or empty.
+    val head = state.head
+    val addSection = head?.add_section_label.orEmpty()
+    val rename = head?.rename_label.orEmpty()
+    val styleLabel = head?.style_label.orEmpty()
     PushedPage(
         title = state.title,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        titleColor = agendaListColor(data?.list_color_key.orEmpty()),
-        titleIcon = data?.icon_key.orEmpty(),
+        titleColor = agendaListColor(head?.list_color_key.orEmpty()),
+        titleIcon = head?.icon_key.orEmpty(),
         trailing = if (addSection.isNotEmpty()) {
             RoomAction("FolderPlus", addSection, "tasks-add-section") { onEvent(TodoProjectEvent(add_section = TodoProjectEvent.AddSectionRequested())) }
         } else {
@@ -147,17 +145,36 @@ internal fun TodoProjectScreen(
         },
     ) {
         Column(Modifier.fillMaxSize()) {
+            // "EDIT LIST" (#1173 wave 2) opens the style sheet: name, colour and icon. The header holds
+            // one action (Add section), so this and Rename are quiet links under it, which an empty
+            // project keeps too.
+            if (styleLabel.isNotEmpty() || rename.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER / 2)) {
+                    if (styleLabel.isNotEmpty()) {
+                        KitLink(
+                            label = styleLabel,
+                            onClick = { onEvent(TodoProjectEvent(style_requested = TodoProjectEvent.StyleRequested())) },
+                            modifier = Modifier.testTag("tasks-project-edit"),
+                        )
+                    }
+                    // THE RENAME VERB.
+                    if (rename.isNotEmpty()) {
+                        KitLink(
+                            label = rename,
+                            onClick = { onEvent(TodoProjectEvent(rename = TodoProjectEvent.RenameRequested())) },
+                            modifier = Modifier.testTag("tasks-rename"),
+                        )
+                    }
+                }
+            }
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(TodoProjectEvent(refreshed = TodoProjectEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 modifier = Modifier.weight(1f),
-            ) { project ->
-                val empty = project.empty
-                if (project.groups.isEmpty() && empty != null) {
-                    EmptyStateView(empty, onAction = null)
-                } else {
-                    val listColor = agendaListColor(project.list_color_key)
+            ) {
+                val project = state.data_
+                if (project != null) {
                     val listState = rememberLazyListState()
                     val reorder = remember(listState, onEvent) {
                         TodoReorderState(listState) { id, before ->
@@ -169,26 +186,6 @@ internal fun TodoProjectScreen(
                         if (project.count_label.isNotEmpty()) {
                             item(key = "count") {
                                 Text(project.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
-                            }
-                        }
-                        // "EDIT LIST" (#1173 wave 2) opens the style sheet: name, colour and icon.
-                        if (project.style_label.isNotEmpty()) {
-                            item(key = "style") {
-                                KitLink(
-                                    label = project.style_label,
-                                    onClick = { onEvent(TodoProjectEvent(style_requested = TodoProjectEvent.StyleRequested())) },
-                                    modifier = Modifier.testTag("tasks-project-edit").padding(horizontal = KitGeometry.GUTTER / 2),
-                                )
-                            }
-                        }
-                        // THE RENAME VERB: the header holds one action (Add section), so this one is a quiet link under it.
-                        if (rename.isNotEmpty()) {
-                            item(key = "rename") {
-                                KitLink(
-                                    label = rename,
-                                    onClick = { onEvent(TodoProjectEvent(rename = TodoProjectEvent.RenameRequested())) },
-                                    modifier = Modifier.testTag("tasks-rename").padding(horizontal = KitGeometry.GUTTER / 2),
-                                )
                             }
                         }
                         todoGroups(
@@ -279,10 +276,10 @@ internal fun TodoProjectScreen(
                 onCancel = closeSheet,
             )
         }
-        state.sheet == TodoProjectState.Sheet.SHEET_RENAME && data != null -> SheetRoom(
-            title = data.rename_title,
+        state.sheet == TodoProjectState.Sheet.SHEET_RENAME && head != null -> SheetRoom(
+            title = head.rename_title,
             onDismiss = closeSheet,
-            primary = SheetPrimary(data.rename_verb, enabled = state.rename_can_submit) {
+            primary = SheetPrimary(head.rename_verb, enabled = state.rename_can_submit) {
                 onEvent(TodoProjectEvent(rename_submitted = TodoProjectEvent.RenameSubmitted()))
             },
         ) {
@@ -291,7 +288,7 @@ internal fun TodoProjectScreen(
                 key = "",
                 value = state.rename_name,
                 reload = null,
-                placeholder = data.rename_placeholder,
+                placeholder = head.rename_placeholder,
                 onEdit = { onEvent(TodoProjectEvent(rename_name = TodoProjectEvent.RenameNameChanged(name = it))) },
                 testTag = "tasks-rename-field",
             )
@@ -311,15 +308,13 @@ internal fun TodoCatchUpScreen(
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack, titleTag = "tasks-catch-up-title") {
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(TodoCatchUpEvent(refreshed = TodoCatchUpEvent.Refreshed())) },
                 retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
                 modifier = Modifier.weight(1f),
-            ) { catchUp ->
-                val empty = catchUp.empty
-                if (catchUp.piles.isEmpty() && empty != null) {
-                    EmptyStateView(empty, onAction = null)
-                } else {
+            ) {
+                val catchUp = state.data_
+                if (catchUp != null) {
                     LazyColumn(Modifier.fillMaxSize().testTag("tasks-catch-up")) {
                         // THE TITLE IS IN THE TOP ROW (round 9); the head line is first.
                         if (catchUp.head.isNotEmpty()) {

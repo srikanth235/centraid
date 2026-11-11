@@ -31,16 +31,19 @@ struct AgendaHomeView: View {
 
     var body: some View {
         let content = readContent(state)
+        // Reminders' read is `page`, Calendar's still `content`'s arms; either way the gate has no band,
+        // search or add.
+        let denied = isDenied(state, content)
         // THE SHARED HEADER (Day, Week and Reminders) stands in the bar; Reminders keeps its title under it.
         let header = state.hasCalendarHeader && state.calendarHeader.shown ? state.calendarHeader : nil
         let eventCountText = eventCountLabel(state)
         AppPlace(
             app: state.appKey,
             title: header?.title.isEmpty == false ? header?.title ?? "" : state.chrome.title,
-            trailing: addAction(state, denied: content.isDenied),
+            trailing: addAction(state, denied: denied),
             // SEARCH IS THE BAND'S TRAILING KEY (R-CHROME-2); a tap opens the field
             // through Rust, at the foot. None on the gate, which has nothing to search.
-            search: content.isDenied ? nil : SearchSlot(
+            search: denied ? nil : SearchSlot(
                 field: searchField(state),
                 placeholder: state.chrome.searchPlaceholder,
                 closeLabel: state.chrome.searchClose,
@@ -57,7 +60,7 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
+            showsBand: !denied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
                 app: state.appKey,
@@ -100,27 +103,43 @@ struct AgendaHomeView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
-                ReadStateView(
-                    content: content,
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
-                ) { home in
-                    homeContent(home, state: state)
+                Group {
+                    if state.hasPage {
+                        // REMINDERS' HOME (#1185): the kit's page state draws loading, failure, the gate and
+                        // a search that matched nothing.
+                        PageReadStateView(
+                            page: state.page,
+                            loadingLabel: state.chrome.loading,
+                            onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
+                        ) {
+                            if case let .data(home)? = state.content {
+                                homeContent(home, state: state)
+                            }
+                        }
+                    } else {
+                        ReadStateView(
+                            content: content,
+                            loadingLabel: state.chrome.loading,
+                            onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) }
+                        ) { home in
+                            homeContent(home, state: state)
+                        }
+                    }
                 }
                 // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
                 .overlay(alignment: .bottomLeading) {
                     if let header {
-                        if header.todayShown, !content.isDenied {
+                        if header.todayShown, !denied {
                             AgendaTodayButton(label: header.todayLabel, send: send)
                         }
-                    } else if state.toolbar.shown, !state.toolbar.atToday, !content.isDenied {
+                    } else if state.toolbar.shown, !state.toolbar.atToday, !denied {
                         AgendaTodayButton(label: state.chrome.today, send: send)
                     }
                 }
                 StatusLineView(status: state.status, identifier: "agenda-status-action") {
                     send(AgendaEvents.make { $0.statusActed = .init() })
                 }
-                if !content.isDenied {
+                if !denied {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
                         placeholder: state.chrome.tasks.quickAddPlaceholder,
@@ -229,6 +248,18 @@ struct AgendaHomeView: View {
             },
             onClear: { send(AgendaEvents.make { $0.filterMenuCleared = .init() }) }
         )
+    }
+
+    /// The vault refused Agenda: the page's gate, or `content`'s denied arm.
+    private func isDenied(
+        _ state: Centraid_Core_V1_AgendaHomeState,
+        _ content: ScreenContent<Centraid_Core_V1_AgendaHomeData>
+    ) -> Bool {
+        if state.hasPage {
+            if case .refused? = state.page.state { return true }
+            return false
+        }
+        return content.isDenied
     }
 
     /// The state's four content branches as the kit's one read shape.

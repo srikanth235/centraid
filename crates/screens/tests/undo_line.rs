@@ -1483,8 +1483,7 @@ fn reminders_a_task_added_from_the_sheet_leaves_its_line_with_undo_on_the_list_a
     assert!(status.sentence.starts_with("Added to"), "{status:?}");
     assert_eq!(status.action_label, "Undo");
     let titles = |d: &Driver| -> Vec<String> {
-        let data = reminders_support::list_data(d.view(list));
-        reminders_support::rows(&data.groups)
+        reminders_support::rows(reminders_support::list_groups(d.view(list)))
             .iter()
             .map(|row| row.title.clone())
             .collect()

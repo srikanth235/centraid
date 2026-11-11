@@ -58,9 +58,8 @@ fn flagging_a_row_puts_it_in_the_flagged_list_and_undo_takes_it_out() {
     send_list(&mut d, all, le::Kind::StatusActed(le::StatusActed {}));
     assert!(!task_of(&d, &keep).flagged);
     send_list(&mut d, flagged, le::Kind::Refreshed(le::Refreshed {}));
-    assert!(list_data(d.view(flagged)).groups.is_empty());
     assert_eq!(
-        list_data(d.view(flagged)).empty.as_ref().unwrap().headline,
+        page_empty(&list(d.view(flagged)).page).headline,
         "Nothing is flagged."
     );
 }
@@ -97,7 +96,8 @@ fn the_swipes_delete_trashes_the_task_and_undo_restores_it() {
         list(d.view(i)).status.as_ref().unwrap().sentence,
         "Clear out the garage moved to trash"
     );
-    assert!(rows(&list_data(d.view(i)).groups).is_empty());
+    // Nothing left to show is the page's empty state, which holds no rows.
+    page_empty(&list(d.view(i)).page);
     send_list(&mut d, i, le::Kind::StatusActed(le::StatusActed {}));
     assert_eq!(rows(&list_data(d.view(i)).groups).len(), 1);
 }
@@ -463,7 +463,7 @@ fn an_imported_red_list_is_drawn_raspberry_and_a_list_never_has_a_state_colour()
     );
     let id = id_of(&red);
     let i = d.push(agenda::TAB, routes::project(&id, "Imported red"));
-    assert_eq!(project_data(d.view(i)).list_color_key, "raspberry");
+    assert_eq!(project_head(d.view(i)).list_color_key, "raspberry");
 }
 
 #[test]

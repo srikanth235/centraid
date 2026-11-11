@@ -23,9 +23,9 @@ use wire::agenda_home_state::Sheet;
 use wire::screen_event::Kind as E;
 
 use self::held::Held;
+use crate::kit::read::Page;
 use crate::kit::schedule::natural::{Chipper, Fields};
 use crate::kit::schedule::ops::Ops;
-use crate::kit::schedule::phase::Phase;
 use crate::kit::schedule::rows;
 use crate::kit::schedule::style::{Draft, Subject};
 use crate::reminders::ops::NewTask;
@@ -50,7 +50,13 @@ struct QuickAdd {
 }
 
 pub(super) struct Home {
-    phase: Phase,
+    /// The read of the place on screen (the lists, or what a term found). A search that matched
+    /// nothing is [`Page::Empty`]; the lists themselves always have the smart lists and the Inbox
+    /// to show, so the home's own "nothing waiting" sentence stays inside its data.
+    page: Page<()>,
+    /// What `page` was asked for: data read for another place or term is not shown under a failed
+    /// read of this one.
+    asked: String,
     /// The day the core last named as today.
     today: String,
     search_open: bool,
@@ -86,7 +92,8 @@ impl Home {
         let seed = args.quick_add_title.trim().to_owned();
         let bar = !seed.is_empty() || args.open_quick_add;
         Self {
-            phase: Phase::Loading,
+            page: Page::loading(),
+            asked: String::new(),
             today: String::new(),
             search_open: false,
             search_term: String::new(),
@@ -115,7 +122,7 @@ impl Home {
     }
 
     fn denied(&self) -> bool {
-        matches!(self.phase, Phase::Denied(_))
+        matches!(self.page, Page::Refused(_))
     }
 
     /// A pull, or a row moved: the held answers are stale whatever search is
@@ -266,7 +273,7 @@ impl Home {
                 if self.limit < rows::MAX_WINDOW {
                     self.limit = (self.limit + rows::PAGE).min(rows::MAX_WINDOW);
                     self.held.todo = false;
-                    self.read(ctx);
+                    self.read_wider(ctx);
                 }
             }
             // Calendar's gestures: a days-and-hours home Reminders does not have.
@@ -490,30 +497,33 @@ impl Screen for Home {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
         let denied = self.denied();
-        let data = match self.phase {
-            Phase::Ready => self.data(ctx),
-            _ => None,
+        let ready = matches!(self.page, Page::Ready { .. });
+        let data = if ready { self.data(ctx) } else { None };
+        // A ready page with nothing to draw is a failure, never a blank.
+        let page = if ready && data.is_none() {
+            Page::Failed
+        } else {
+            self.page.clone()
         };
+        let on_page = matches!(page, Page::Ready { .. } | Page::Empty);
         let searching = self.active_term().is_some();
-        let content = match &self.phase {
-            Phase::Loading => Some(wire::agenda_home_state::Content::Loading(wire::Loading {
-                first_load: true,
-            })),
-            Phase::Denied(denial) => Some(wire::agenda_home_state::Content::Denied(wire::Denied {
+        let content = data
+            .clone()
+            .map(|data| wire::agenda_home_state::Content::Data(Box::new(data)));
+        // A search that matched nothing is the page's empty state, with its own sentence.
+        let page = page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            })),
-            Phase::Failed => Some(wire::agenda_home_state::Content::Failure(
-                crate::kit::read::failure(locale),
-            )),
-            Phase::Ready => match data.clone() {
-                Some(data) => Some(wire::agenda_home_state::Content::Data(Box::new(data))),
-                None => Some(wire::agenda_home_state::Content::Failure(
-                    crate::kit::read::incomplete(locale),
-                )),
             },
-        };
+            || wire::EmptyState {
+                headline: words::empty_no_match(locale),
+                body: words::empty_no_match_body(locale),
+                ..wire::EmptyState::default()
+            },
+        );
         let term = self.active_term();
         let held_search = term.is_some() && self.held.search.is_some();
         let corrected = if held_search {
@@ -561,7 +571,7 @@ impl Screen for Home {
                     },
                     search_corrected: corrected,
                     // THE ASK ROW: for the answer to the term on screen, matched or not.
-                    search_ask_row: (held_search && data.is_some()).then(|| {
+                    search_ask_row: (held_search && on_page).then(|| {
                         crate::kit::search::offer(
                             locale,
                             term.as_deref().unwrap_or_default(),
@@ -616,6 +626,7 @@ impl Screen for Home {
                     // Stopping the phone's calendars is Calendar's.
                     stop: None,
                     content,
+                    page: Some(page),
                 },
             ))),
             ..wire::ViewState::default()

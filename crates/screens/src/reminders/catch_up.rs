@@ -11,10 +11,10 @@ use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 use wire::todo_catch_up_event::Kind as C;
 
-use super::list::{self, Phase};
+use super::list;
 use crate::catalog::load;
 use crate::kit::civil::HourCycle;
-use crate::kit::read::{self, Reading};
+use crate::kit::read::{self, Page, Reading};
 use crate::kit::schedule::ops::Ops;
 use crate::kit::schedule::rows::{self, Context};
 use crate::screen::{Ctx, Screen};
@@ -34,7 +34,7 @@ struct Answered {
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(CatchUp {
-        phase: Phase::Loading,
+        page: Page::loading(),
         incomplete: false,
         ops: Ops::default(),
         asking: None,
@@ -42,13 +42,29 @@ pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
 }
 
 struct CatchUp {
-    phase: Phase<Answered>,
+    /// The read. Nothing behind, repeating or sitting is [`Page::Empty`].
+    page: Page<Answered>,
     /// The catch-up came and the projects its rows name did not: neither can
-    /// be made up.
+    /// be made up, so with nothing shown it is the failure, in its own words.
     incomplete: bool,
     ops: Ops,
     /// The pile the confirm asks about.
     asking: Option<String>,
+}
+
+/// A pile's tasks in an answer: the repeating pile keeps only what is behind.
+fn pile_of<'a>(answer: &'a Answered, key: &str) -> Vec<&'a wire::AgendaTask> {
+    let catch_up = &answer.catch_up;
+    match key {
+        PILE_DATED => catch_up.dated.iter().collect(),
+        PILE_REPEATING => catch_up
+            .repeating
+            .iter()
+            .filter(|task| behind(task))
+            .collect(),
+        PILE_SITTING => catch_up.sitting.iter().collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Is this repeating task actually behind?
@@ -75,18 +91,18 @@ impl CatchUp {
                 _ => None,
             },
         );
-        self.phase = match (catch_up, projects) {
+        let reading = match (catch_up, projects) {
             (Reading::Data(catch_up), Reading::Data(projects)) => {
-                Phase::Ready(Answered { catch_up, projects })
+                Reading::Data(Answered { catch_up, projects })
             }
-            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Phase::Denied(denial),
-            (Reading::Failed, _) => Phase::Failed,
+            (Reading::Denied(denial), _) | (_, Reading::Denied(denial)) => Reading::Denied(denial),
+            (Reading::Failed, _) => Reading::Failed,
             (Reading::Data(_), Reading::Failed) => {
                 self.incomplete = true;
-                Phase::Failed
+                Reading::Failed
             }
         };
-        if let Phase::Ready(answer) = &self.phase {
+        if let Reading::Data(answer) = &reading {
             let open: Vec<&wire::AgendaTask> = answer
                 .catch_up
                 .dated
@@ -98,24 +114,21 @@ impl CatchUp {
             self.ops
                 .answered(ctx.locale(), &open, &answer.catch_up.today);
         }
+        // A refresh never blanks the piles shown: a failed one keeps them under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |answer| {
+            [PILE_DATED, PILE_REPEATING, PILE_SITTING]
+                .iter()
+                .all(|key| pile_of(answer, key).is_empty())
+        });
+        self.incomplete = self.incomplete && matches!(self.page, Page::Failed);
     }
 
     /// A pile's tasks, as the screen draws them.
     fn pile(&self, key: &str) -> Vec<&wire::AgendaTask> {
-        let Some(answer) = self.phase.data() else {
-            return Vec::new();
-        };
-        let catch_up = &answer.catch_up;
-        match key {
-            PILE_DATED => catch_up.dated.iter().collect(),
-            PILE_REPEATING => catch_up
-                .repeating
-                .iter()
-                .filter(|task| behind(task))
-                .collect(),
-            PILE_SITTING => catch_up.sitting.iter().collect(),
-            _ => Vec::new(),
-        }
+        self.page
+            .data()
+            .map_or_else(Vec::new, |answer| pile_of(answer, key))
     }
 
     fn find(&self, id: &str) -> Option<wire::AgendaTask> {
@@ -171,10 +184,6 @@ impl CatchUp {
         wire::TodoCatchUpData {
             today: catch_up.today.clone(),
             head,
-            empty: piles.is_empty().then(|| wire::EmptyState {
-                headline: words::catch_up_empty(locale),
-                ..wire::EmptyState::default()
-            }),
             piles,
         }
     }
@@ -258,17 +267,27 @@ impl Screen for CatchUp {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::todo_catch_up_state::Content;
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
-            Phase::Failed if self.incomplete => Content::Failure(read::incomplete(locale)),
-            Phase::Failed => Content::Failure(read::failure(locale)),
-            Phase::Denied(denial) => Content::Denied(list::denied(locale, denial)),
-            Phase::Ready(answer) => Content::Data(self.data(locale, ctx.hour_cycle(), answer)),
-        };
+        let content = self
+            .page
+            .data()
+            .map(|answer| Content::Data(self.data(locale, ctx.hour_cycle(), answer)));
+        let mut page = self.page.wire(
+            locale,
+            |denial| list::denied(locale, denial),
+            || wire::EmptyState {
+                headline: words::catch_up_empty(locale),
+                ..wire::EmptyState::default()
+            },
+        );
+        // The catch-up came and its lists did not: the failure says so.
+        if self.incomplete && matches!(page.state, Some(wire::page_state::State::Failed(_))) {
+            page.state = Some(wire::page_state::State::Failed(read::incomplete(locale)));
+        }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::TodoCatchUp(
                 wire::TodoCatchUpState {
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     chrome: Some(wire::TodoChrome {
                         title: words::catch_up(locale),
                         ..rows::chrome(locale)

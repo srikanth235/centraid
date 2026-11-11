@@ -25,7 +25,7 @@ use wire::screen_event::Kind as E;
 
 use crate::catalog::load;
 use crate::kit::civil::{self, HourCycle};
-use crate::kit::read::{self as kit_read, Reading};
+use crate::kit::read::{self as kit_read, Page, Reading};
 use crate::kit::schedule::draft::{
     self, Draft, LIST_INBOX, PRIORITY_MAX, REPEAT_BIWEEKLY, REPEAT_CUSTOM, REPEAT_DAILY,
     REPEAT_MONTHLY, REPEAT_NONE, REPEAT_WEEKLY, REPEAT_YEARLY, RULES,
@@ -51,7 +51,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     };
     Some(Box::new(Editor {
         route: args.clone(),
-        phase: Phase::Loading,
+        page: Page::loading(),
         projects: Vec::new(),
         baseline: None,
         draft: None,
@@ -66,16 +66,11 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     }))
 }
 
-enum Phase {
-    Loading,
-    Failed,
-    Denied(wire::AppQueryDenial),
-    Ready,
-}
-
 struct Editor {
     route: wire::AgendaEditorRoute,
-    phase: Phase,
+    /// The read of the lists a reminder can be filed in. The draft is what the page shows, so a
+    /// re-read that failed keeps it under a note.
+    page: Page<()>,
     /// The projects a reminder can be filed in; empty when the read did not land, and then the
     /// Inbox is the one list.
     projects: Vec<wire::AgendaTaskProject>,
@@ -102,29 +97,28 @@ impl Editor {
     /// Read the projects. A re-read keeps the draft: a change elsewhere never overwrites what the
     /// member is typing.
     fn reload(&mut self, ctx: &Ctx) {
-        match kit_read::read(
-            ctx,
-            load::reminders::Projects::default(),
-            |answer| match answer {
-                Answer::AgendaTaskProjects(projects) => Some(projects),
-                _ => None,
-            },
-        ) {
-            Reading::Data(projects) => self.projects = projects.projects,
-            Reading::Denied(denial) => {
-                self.phase = Phase::Denied(denial);
-                return;
-            }
-            // A refused or missing read leaves the Inbox; a first read that failed has nothing to show.
-            Reading::Failed => {
-                if self.draft.is_none() {
-                    self.phase = Phase::Failed;
-                    return;
+        let reading =
+            match kit_read::read(
+                ctx,
+                load::reminders::Projects::default(),
+                |answer| match answer {
+                    Answer::AgendaTaskProjects(projects) => Some(projects),
+                    _ => None,
+                },
+            ) {
+                Reading::Data(projects) => {
+                    self.projects = projects.projects;
+                    Reading::Data(())
                 }
-            }
-        }
-        self.phase = Phase::Ready;
-        if self.draft.is_none() {
+                Reading::Denied(denial) => Reading::Denied(denial),
+                // A refused or missing read leaves the Inbox; a first read that failed has nothing to show.
+                Reading::Failed => Reading::Failed,
+            };
+        let landed = matches!(reading, Reading::Data(()));
+        // A re-read never blanks the page shown: a failed one keeps the draft under a note.
+        let held = std::mem::replace(&mut self.page, Page::loading());
+        self.page = held.after(reading, ctx.locale(), |()| false);
+        if landed && self.draft.is_none() {
             self.baseline = Some(draft::new_task(&self.route.day));
             self.draft.clone_from(&self.baseline);
         }
@@ -522,29 +516,22 @@ impl Screen for Editor {
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         let locale = ctx.locale();
-        let content = match &self.phase {
-            Phase::Loading => {
-                wire::agenda_editor_state::Content::Loading(wire::Loading { first_load: true })
-            }
-            Phase::Failed => {
-                wire::agenda_editor_state::Content::Failure(kit_read::incomplete(locale))
-            }
-            Phase::Denied(denial) => wire::agenda_editor_state::Content::Denied(wire::Denied {
+        // The draft is there once the lists were read; a gate or a failed first read shows none.
+        let content = match (&self.page, &self.draft) {
+            (Page::Ready { .. }, Some(draft)) => Some(wire::agenda_editor_state::Content::Data(
+                Box::new(self.data(locale, ctx.hour_cycle(), draft)),
+            )),
+            _ => None,
+        };
+        let page = self.page.wire(
+            locale,
+            |denial| wire::Denied {
                 title: words::denied_title(locale),
                 body: words::denied_body(locale),
                 receipt: denial.code.clone().unwrap_or_default(),
-            }),
-            Phase::Ready => match &self.draft {
-                Some(draft) => wire::agenda_editor_state::Content::Data(Box::new(self.data(
-                    locale,
-                    ctx.hour_cycle(),
-                    draft,
-                ))),
-                None => {
-                    wire::agenda_editor_state::Content::Loading(wire::Loading { first_load: true })
-                }
             },
-        };
+            wire::EmptyState::default,
+        );
         let confirm = (self.asking == Asking::Discard).then(|| wire::Confirm {
             title: words::confirm_discard_new_task_title(locale),
             body: words::confirm_discard_body(locale),
@@ -555,7 +542,8 @@ impl Screen for Editor {
             kind: Some(wire::view_state::Kind::AgendaEditor(
                 wire::AgendaEditorState {
                     mode: Mode::Create as i32,
-                    content: Some(content),
+                    content,
+                    page: Some(page),
                     sheet: self.sheet as i32,
                     confirm,
                     chrome: Some(chrome(locale)),

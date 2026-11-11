@@ -13,6 +13,18 @@ use crate::strings::{Locale, agenda as words, shared};
 /// The index entity a project container carries.
 const PROJECT_ENTITY: &str = "project";
 
+/// The term found nothing: no task and no project by name.
+#[must_use]
+pub fn nothing(held: &Held) -> bool {
+    held.search.as_ref().is_some_and(|tasks| {
+        tasks.tasks.is_empty()
+            && !tasks
+                .containers
+                .iter()
+                .any(|hit| hit.entity == PROJECT_ENTITY)
+    })
+}
+
 /// The tasks a search term found, as one group; `None` when it found none.
 #[must_use]
 pub fn hits_group(locale: Locale, held: &Held, ctx: &rows::Context) -> Option<wire::TodoRowGroup> {

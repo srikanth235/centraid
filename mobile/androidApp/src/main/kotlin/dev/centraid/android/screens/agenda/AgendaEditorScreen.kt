@@ -119,13 +119,28 @@ internal fun AgendaEditorScreen(
             return@EditorRoom
         }
         StatusLine(state.status)
-        ReadStateView(
-            content = screenContentOf(state.loading, state.failure, data, state.denied),
-            onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
-            retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
-            skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
-            modifier = Modifier.weight(1f),
-        ) { editor -> EditorBody(state, editor, onEvent) }
+        // Reminders' new-reminder sheet sends its read as `page` (#1185); Calendar's editor still
+        // sends `content`'s loading, failure and denied arms.
+        val page = state.page
+        if (page != null) {
+            ReadStateView(
+                page = page,
+                onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
+                retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
+                skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
+                modifier = Modifier.weight(1f),
+            ) {
+                if (data != null) EditorBody(state, data, onEvent)
+            }
+        } else {
+            ReadStateView(
+                content = screenContentOf(state.loading, state.failure, data, state.denied),
+                onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
+                retryLabel = chrome?.retry?.ifEmpty { null } ?: KitWords.RETRY,
+                skeleton = { RowSkeleton(rows = 6, label = chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
+                modifier = Modifier.weight(1f),
+            ) { editor -> EditorBody(state, editor, onEvent) }
+        }
     }
     EditorSheets(state, onEvent)
     val confirm = state.confirm

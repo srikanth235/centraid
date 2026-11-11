@@ -63,6 +63,7 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
@@ -121,7 +122,8 @@ import dev.centraid.android.theme.LocalCentraidTokens
  *
  * **FOUR BRANCHES, NEVER TWO**: loading draws skeleton rows (not a spinner),
  * failure a sentence and a retry, denied the gate with no band, data the list
- * or its one empty.
+ * or its one empty. Reminders' home sends them as `page` and draws them through the kit's
+ * `ReadStateView`; Calendar's still sends `content`'s arms.
  */
 @Composable
 public fun AgendaHomeScreen(
@@ -131,6 +133,12 @@ public fun AgendaHomeScreen(
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome ?: AgendaChrome()
+    // REMINDERS' HOME READS THROUGH THE KIT'S PAGE STATE (`page`, #1185): the gate, the failure, a
+    // search that matched nothing and the first load are drawn by `ReadStateView`. Calendar's home
+    // still sends `content`'s arms (and no page), which are drawn below until it moves too.
+    val page = state.page
+    // The gate has no band and nothing to search or add to (Rust left the band empty).
+    val gated = page?.refused != null
     val denied = state.denied
     if (denied != null) {
         // THE DENIED GATE KEEPS THE HEADER AND HAS NO BAND, iOS's shape: there
@@ -196,22 +204,30 @@ public fun AgendaHomeScreen(
             },
             // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
             // bar; a tap opens the field through the machine.
-            search = RoomSearch(
-                field = SearchField(open_ = state.search_open, term = state.search_term, corrected = state.search_corrected, corrected_label = state.search_corrected),
-                placeholder = chrome.search_placeholder,
-                onTerm = { onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = it))) },
-                onClose = { onEvent(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())) },
-                label = chrome.search_label,
-                closeLabel = chrome.search_close,
-                onOpen = { onEvent(AgendaHomeEvent(search_opened = AgendaHomeEvent.SearchOpened())) },
-            ),
-            band = {
-                AppBand(
-                    app = state.app_key,
-                    tabs = state.band.map { it.toTab() },
-                    onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
-                    onHome = onHome,
+            search = if (gated) {
+                null
+            } else {
+                RoomSearch(
+                    field = SearchField(open_ = state.search_open, term = state.search_term, corrected = state.search_corrected, corrected_label = state.search_corrected),
+                    placeholder = chrome.search_placeholder,
+                    onTerm = { onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = it))) },
+                    onClose = { onEvent(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())) },
+                    label = chrome.search_label,
+                    closeLabel = chrome.search_close,
+                    onOpen = { onEvent(AgendaHomeEvent(search_opened = AgendaHomeEvent.SearchOpened())) },
                 )
+            },
+            band = if (gated) {
+                null
+            } else {
+                {
+                    AppBand(
+                        app = state.app_key,
+                        tabs = state.band.map { it.toTab() },
+                        onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
+                        onHome = onHome,
+                    )
+                }
             },
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -241,38 +257,33 @@ public fun AgendaHomeScreen(
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    val loading = state.loading
-                    val failure = state.failure
                     val data = state.data_
-                    when {
-                        loading != null -> AgendaSkeleton(chrome)
-                        failure != null -> Column(Modifier.padding(KitGeometry.GUTTER).testTag("agenda-failure")) {
-                            Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
-                            if (failure.remedy.isNotEmpty()) {
-                                Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
-                            }
-                            OutlineButton(
-                                label = chrome.retry,
-                                testTag = "agenda-retry",
-                                modifier = Modifier.padding(top = 12.dp),
-                            ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
+                    if (page != null) {
+                        ReadStateView(
+                            page = page,
+                            onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
+                            retryLabel = chrome.retry,
+                            skeleton = { AgendaSkeleton(chrome) },
+                        ) {
+                            if (data != null) AgendaHomeBody(state, data, words, actions, onEvent, onOpen)
                         }
-                        data != null -> {
-                            val todo = data.todo
-                            val timeGrid = data.time_grid
-                            val month = data.month
-                            val year = data.year
-                            if (todo != null) {
-                                AgendaTodoPlace(todo, words, actions, onEvent)
-                            } else if (timeGrid != null) {
-                                AgendaTimeView(data.week_strip, state.calendar_header, timeGrid, onEvent, onOpen, actions.onCheck)
-                            } else if (month != null) {
-                                AgendaMonthView(month, actions, onEvent, onOpen)
-                            } else if (year != null) {
-                                AgendaYearView(year, onEvent)
-                            } else {
-                                AgendaList(state, data, actions, onEvent, onOpen)
+                    } else {
+                        val loading = state.loading
+                        val failure = state.failure
+                        when {
+                            loading != null -> AgendaSkeleton(chrome)
+                            failure != null -> Column(Modifier.padding(KitGeometry.GUTTER).testTag("agenda-failure")) {
+                                Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
+                                if (failure.remedy.isNotEmpty()) {
+                                    Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
+                                }
+                                OutlineButton(
+                                    label = chrome.retry,
+                                    testTag = "agenda-retry",
+                                    modifier = Modifier.padding(top = 12.dp),
+                                ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
                             }
+                            data != null -> AgendaHomeBody(state, data, words, actions, onEvent, onOpen)
                         }
                     }
                     // THE FLOATING TODAY: over the content's bottom-start, above the band.
@@ -331,6 +342,33 @@ public fun AgendaHomeScreen(
             onDismiss = { onEvent(AgendaHomeEvent(stop_dismissed = AgendaHomeEvent.StopDismissed())) },
             confirmTag = "agenda-stop-confirm",
         )
+    }
+}
+
+/** The data of whichever place is showing: To-do, the hour grid, the Month, the Year, or the day list. */
+@Composable
+private fun AgendaHomeBody(
+    state: AgendaHomeState,
+    data: AgendaHomeData,
+    words: TodoChrome,
+    actions: AgendaTaskActions,
+    onEvent: (AgendaHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+) {
+    val todo = data.todo
+    val timeGrid = data.time_grid
+    val month = data.month
+    val year = data.year
+    if (todo != null) {
+        AgendaTodoPlace(todo, words, actions, onEvent)
+    } else if (timeGrid != null) {
+        AgendaTimeView(data.week_strip, state.calendar_header, timeGrid, onEvent, onOpen, actions.onCheck)
+    } else if (month != null) {
+        AgendaMonthView(month, actions, onEvent, onOpen)
+    } else if (year != null) {
+        AgendaYearView(year, onEvent)
+    } else {
+        AgendaList(state, data, actions, onEvent, onOpen)
     }
 }
 

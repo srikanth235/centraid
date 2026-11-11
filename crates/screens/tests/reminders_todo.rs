@@ -167,8 +167,7 @@ fn the_list_reads_its_view_and_names_it() {
         let state = list(d.view(i));
         assert_eq!(state.title, title);
         assert_eq!(state.view, view as i32);
-        let data = list_data(d.view(i));
-        let ids: Vec<&str> = rows(&data.groups)
+        let ids: Vec<&str> = rows(list_groups(d.view(i)))
             .iter()
             .map(|r| r.task_id.as_str())
             .collect();
@@ -347,13 +346,12 @@ fn each_list_view_says_its_own_empty_sentence() {
         (wire::TodoView::Reminders, "No open task has a reminder."),
     ] {
         let i = d.push(agenda::TAB, routes::todo_list(view));
-        let data = list_data(d.view(i));
-        assert_eq!(
-            data.empty.as_ref().expect("an empty state").headline,
-            sentence
-        );
-        assert!(data.groups.is_empty());
-        assert_eq!(data.count_label, "0 tasks");
+        // A view with no task is the page's empty state: it holds no rows and no count.
+        let state = list(d.view(i));
+        assert_eq!(page_empty(&state.page).headline, sentence);
+        assert!(state.content.is_none());
+        // The plus still adds against the core's day.
+        assert!(!state.add_label.is_empty() && state.add_route.is_some());
     }
 }
 
@@ -380,7 +378,7 @@ fn a_task_another_surface_adds_arrives_without_a_refresh() {
     let mut d = driver();
     clear_tasks(&d);
     let i = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Anytime));
-    assert!(list_data(d.view(i)).empty.is_some());
+    page_empty(&list(d.view(i)).page);
     task(&d, "Fresh idea");
     d.pump(Duration::from_millis(400));
     assert_eq!(rows(&list_data(d.view(i)).groups)[0].title, "Fresh idea");
@@ -439,7 +437,7 @@ fn a_project_draws_its_unsectioned_work_then_every_section_each_with_add_task() 
     let state = project_state(d.view(i));
     assert_eq!(state.title, "Garden");
     let data = project_data(d.view(i));
-    assert!(data.found);
+    assert!(state.head.is_some());
     let titles: Vec<&str> = data.groups.iter().map(|g| g.title.as_str()).collect();
     assert_eq!(titles, ["No section", "Beds"]);
     let verbs: Vec<String> = data.groups.iter().map(|g| g.verb_key.clone()).collect();
@@ -450,8 +448,10 @@ fn a_project_draws_its_unsectioned_work_then_every_section_each_with_add_task() 
     );
     // Inside the project, a row does not name the project again.
     assert_eq!(data.groups[0].rows[0].meta, "");
-    assert_eq!(data.add_section_label, "Add section");
-    assert!(data.empty.is_none());
+    assert_eq!(
+        state.head.as_ref().unwrap().add_section_label,
+        "Add section"
+    );
     assert_eq!(data.count_label, "1 task");
 }
 
@@ -460,13 +460,15 @@ fn a_project_with_nothing_filed_says_so() {
     let mut d = driver();
     let empty = project(&d, "Someday");
     let i = d.push(agenda::TAB, routes::project(&empty, "Someday"));
-    let data = project_data(d.view(i));
-    assert!(data.found);
-    assert!(data.groups.is_empty());
+    // Nothing filed is the page's empty state; the header's verbs stay for the project.
+    let state = project_state(d.view(i));
     assert_eq!(
-        data.empty.as_ref().unwrap().headline,
+        page_empty(&state.page).headline,
         "Nothing is filed here yet."
     );
+    assert!(state.content.is_none());
+    assert_eq!(state.head.as_ref().unwrap().rename_label, "Rename");
+    assert!(state.quick_add.as_ref().unwrap().shown);
 }
 
 #[test]
@@ -478,12 +480,14 @@ fn a_project_the_answer_does_not_name_is_gone() {
         state.title, "Ghost",
         "the route's name stands until the answer names it"
     );
-    let data = project_data(d.view(i));
-    assert!(!data.found);
-    assert_eq!(
-        data.empty.as_ref().unwrap().headline,
-        "This project is gone."
-    );
+    // Gone is the page's failure, in its own sentence (never an empty project).
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => {
+            assert_eq!(failure.sentence, "This project is gone.");
+        }
+        other => panic!("a project that is gone is failed: {other:?}"),
+    }
+    assert!(state.content.is_none() && state.head.is_none());
     let bar = state.quick_add.as_ref().unwrap();
     assert!(
         !bar.shown && !bar.drawn,
@@ -617,7 +621,7 @@ fn a_blank_quick_add_is_nothing() {
         pe::Kind::QuickAddSubmitted(pe::QuickAddSubmitted {}),
     );
     assert!(project_state(d.view(i)).status.is_none());
-    assert!(project_data(d.view(i)).groups.is_empty());
+    assert!(project_groups(d.view(i)).is_empty());
 }
 
 #[test]
@@ -695,9 +699,9 @@ fn rename_opens_on_the_name_and_retitles_the_project() {
     let mut d = driver();
     let garden = project(&d, "Garden");
     let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
-    let data = project_data(d.view(i));
+    let head = project_state(d.view(i)).head.as_ref().unwrap();
     assert_eq!(
-        (data.rename_label.as_str(), data.rename_title.as_str()),
+        (head.rename_label.as_str(), head.rename_title.as_str()),
         ("Rename", "Rename project")
     );
     send_project(&mut d, i, pe::Kind::Rename(pe::RenameRequested {}));
@@ -897,7 +901,6 @@ fn catch_up_piles_what_came_due_and_names_the_absence() {
         .map(|r| r.title.as_str())
         .collect();
     assert_eq!(repeating, ["Water"]);
-    assert!(data.empty.is_none());
 }
 
 #[test]
@@ -1008,10 +1011,10 @@ fn nothing_overdue_says_so_and_names_no_absence() {
     clear_tasks(&d);
     task(&d, "Undated");
     let i = d.push(agenda::TAB, routes::catch_up());
-    let data = catch_up_data(d.view(i));
-    assert_eq!(data.empty.as_ref().unwrap().headline, "Nothing is overdue.");
-    assert_eq!(data.head, "");
-    assert!(data.piles.is_empty());
+    // Nothing behind is the page's empty state: no head, no piles.
+    let state = catch_up(d.view(i));
+    assert_eq!(page_empty(&state.page).headline, "Nothing is overdue.");
+    assert!(state.content.is_none());
 }
 
 #[test]
@@ -1034,7 +1037,7 @@ fn a_catch_up_row_checks_off_with_undo_and_opens_its_task() {
         (status.sentence.as_str(), status.action_label.as_str()),
         ("Task done", "Undo")
     );
-    assert!(catch_up_data(d.view(i)).piles.is_empty());
+    assert!(catch_up_piles(d.view(i)).is_empty());
     send_catch_up(&mut d, i, cu::Kind::StatusActed(cu::StatusActed {}));
     assert_eq!(task_of(&d, &id).status, "open");
     assert_eq!(catch_up_data(d.view(i)).piles[0].rows[0].task_id, id);
@@ -1055,7 +1058,7 @@ fn the_board_view_of_the_project_page_is_the_projects_own() {
         },
     );
     let i = d.push(agenda::TAB, routes::project(&garden, "Garden"));
-    assert!(rows(&project_data(d.view(i)).groups).is_empty());
+    assert!(rows(project_groups(d.view(i))).is_empty());
     let board = load_board(&d, load::reminders::BoardView::Project, Some(&garden));
     assert!(board.groups.iter().all(|g| g.tasks.is_empty()));
 }

@@ -244,26 +244,31 @@ fn priority_chips_run_none_soon_next_now() {
     assert_eq!(keys, expect);
 }
 
+/// The sentence a page failed with, when it failed.
+fn failed_with(state: &wire::TodoDetailState) -> Option<&str> {
+    match state.page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Failed(failure)) => Some(failure.sentence.as_str()),
+        _ => None,
+    }
+}
+
 #[test]
-fn a_task_no_live_row_has_is_drawn_as_gone_not_as_a_failed_read() {
+fn a_task_no_live_row_has_is_failed_in_its_own_words_and_never_a_blank_page() {
     let mut d = driver();
     let i = open(&mut d, "no-such-task");
     let state = detail(d.view(i));
-    match &state.content {
-        Some(wire::todo_detail_state::Content::Gone(gone)) => {
-            assert_eq!(gone.headline, "This task is gone.")
-        }
-        other => panic!("expected gone, got {other:?}"),
-    }
+    assert_eq!(failed_with(state), Some("This task is gone."));
+    assert!(state.content.is_none());
     // A trashed task is gone too.
     let id = task(&d, "Doomed");
     let page = open(&mut d, &id);
+    assert_eq!(failed_with(detail(d.view(page))), None);
     arrange(&d, act::reminders::DeleteTask { task_id: id });
     d.pump(Duration::from_millis(400));
-    assert!(matches!(
-        detail(d.view(page)).content,
-        Some(wire::todo_detail_state::Content::Gone(_))
-    ));
+    assert_eq!(
+        failed_with(detail(d.view(page))),
+        Some("This task is gone.")
+    );
 }
 
 #[test]

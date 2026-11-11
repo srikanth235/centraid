@@ -8,9 +8,9 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
 
-use super::{Home, Phase};
+use super::{Home, search};
 use crate::catalog::load::reminders as query_rem;
-use crate::kit::read::read;
+use crate::kit::read::{Note, Page, Reading, read};
 use crate::kit::schedule::phase::{Stop, get};
 use crate::kit::schedule::rows;
 use crate::screen::Ctx;
@@ -87,12 +87,23 @@ impl Held {
 }
 
 impl Home {
-    /// Read whatever the place needs and does not hold, and settle the phase: data, a failure, or
+    /// Read whatever the place needs and does not hold, and settle the page: data, a failure, or
     /// the gate. Everything is synchronous, so a view never draws a window under another's heading.
     pub(super) fn read(&mut self, ctx: &Ctx) {
-        self.phase = match self.fill(ctx) {
-            Ok(()) => Phase::Ready,
-            Err(Stop::Failed) => Phase::Failed,
+        self.land(ctx, false);
+    }
+
+    /// [`Self::read`] after the window grew: a read that did not come keeps the rows already shown
+    /// under the "more did not load" note.
+    pub(super) fn read_wider(&mut self, ctx: &Ctx) {
+        self.land(ctx, true);
+    }
+
+    fn land(&mut self, ctx: &Ctx, wider: bool) {
+        let locale = ctx.locale();
+        let reading = match self.fill(ctx) {
+            Ok(()) => Reading::Data(()),
+            Err(Stop::Failed) => Reading::Failed,
             Err(Stop::Denied(denial)) => {
                 // The gate has no search and no sheet.
                 self.search_open = false;
@@ -100,23 +111,46 @@ impl Home {
                 self.held.search = None;
                 self.held.search_term = None;
                 self.sheet = wire::agenda_home_state::Sheet::None;
-                Phase::Denied(denial)
+                Reading::Denied(denial)
             }
         };
-        if matches!(self.phase, Phase::Ready) {
+        if matches!(reading, Reading::Data(())) {
             let tasks = self.held.tasks();
             let open: Vec<&wire::AgendaTask> = tasks
                 .into_iter()
                 .filter(|task| rows::is_open(task))
                 .collect();
             let today = self.today.clone();
-            self.ops.answered(ctx.locale(), &open, &today);
+            self.ops.answered(locale, &open, &today);
         }
+        // A refresh never blanks the rows shown (a failed one keeps them under a note); a read
+        // for another place or term starts from nothing, so a failure of it is the failure and
+        // never the old rows.
+        let asked = self
+            .active_term()
+            .map_or_else(|| "lists".to_owned(), |term| format!("search/{term}"));
+        let kept = std::mem::replace(&mut self.page, Page::loading());
+        let held = if self.asked == asked {
+            kept.refreshing()
+        } else {
+            Page::loading()
+        };
+        self.asked = asked;
+        let nothing = self.active_term().is_some() && search::nothing(&self.held);
+        self.page = match (held, reading) {
+            (Page::Ready { data, .. }, Reading::Failed) if wider => Page::Ready {
+                data,
+                note: Some(Note::more_failed(locale)),
+            },
+            (held, reading) => held.after(reading, locale, |()| nothing),
+        };
     }
 
-    /// Forget every held answer: a pull, or a row moved.
+    /// The held answers are stale: the next read asks again. What is held stays until that read
+    /// lands, so a refresh that fails still has the rows to keep under its note.
     pub(super) fn invalidate(&mut self) {
-        self.held = Held::default();
+        self.held.todo = false;
+        self.held.search_term = None;
     }
 
     fn fill(&mut self, ctx: &Ctx) -> Result<(), Stop> {

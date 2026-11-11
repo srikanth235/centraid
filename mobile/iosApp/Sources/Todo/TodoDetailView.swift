@@ -45,14 +45,13 @@ struct TodoDetailView: View {
                 }
             }
         } content: {
-            if case let .gone(gone)? = state.content {
-                EmptyStateView(gone, onAction: onClose)
-            } else {
-                ReadStateView(
-                    content: readContent(state),
-                    loadingLabel: state.chrome.loading,
-                    onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { detail in
+            // THE TASK'S READ (#1185): a task that is gone is the page's failure, in its own words.
+            PageReadStateView(
+                page: state.page,
+                loadingLabel: state.chrome.loading,
+                onRetry: { send(event { $0.refreshed = .init() }) }
+            ) {
+                if case let .data(detail)? = state.content {
                     editor(detail, state: state)
                 }
             }
@@ -106,16 +105,6 @@ struct TodoDetailView: View {
     private func hasCustomRepeat(_ state: Centraid_Core_V1_TodoDetailState) -> Bool {
         if case let .data(detail)? = state.content { return detail.hasCustomRepeat }
         return false
-    }
-
-    private func readContent(_ state: Centraid_Core_V1_TodoDetailState) -> ScreenContent<Centraid_Core_V1_TodoDetailData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case .gone?, nil: return .loading(true)
-        }
     }
 
     @ViewBuilder

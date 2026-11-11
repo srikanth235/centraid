@@ -823,6 +823,8 @@ impl Screen for Editor {
         let state = wire::AgendaEditorState {
             mode: self.mode as i32,
             content: Some(content),
+            // Calendar still draws `content`'s loading, failure and denied arms (#1185).
+            page: None,
             sheet: self.sheet as i32,
             confirm: self.confirm(locale),
             chrome: Some(chrome(locale)),

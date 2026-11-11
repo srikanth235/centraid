@@ -51,7 +51,6 @@ import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
@@ -64,7 +63,6 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
 import dev.centraid.android.theme.centraidColor
@@ -84,24 +82,23 @@ internal fun TodoDetailScreen(
     onClose: () -> Unit,
     onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
-    val gone = state.gone
     EditorRoom(
         title = state.chrome?.title.orEmpty(),
         status = state.autosave,
         onClose = onClose,
         onDeparted = {},
     ) {
-        if (gone != null) {
-            EmptyStateView(gone, onAction = onClose)
-            return@EditorRoom
-        }
         Column(Modifier.weight(1f).fillMaxWidth()) {
+            // THE TASK'S READ (#1185): a task that is gone is the page's failure, in its own words.
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                page = state.page!!,
                 onRetry = { onEvent(TodoDetailEvent(refreshed = TodoDetailEvent.Refreshed())) },
                 skeleton = { RowSkeleton(rows = 6, label = state.chrome?.loading?.ifEmpty { null } ?: KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
-            ) { data -> TodoDetailBody(state, data, onEvent, onOpen, onPhoneSays) }
+            ) {
+                val data = state.data_ ?: return@ReadStateView
+                TodoDetailBody(state, data, onEvent, onOpen, onPhoneSays)
+            }
             StatusLine(state.status) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
         }
     }

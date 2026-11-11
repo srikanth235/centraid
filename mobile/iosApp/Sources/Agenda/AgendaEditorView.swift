@@ -64,6 +64,18 @@ struct AgendaEditorView: View {
             if case let .gone(gone)? = state.content {
                 EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onDone)
                     .accessibilityIdentifier("agenda-editor-gone")
+            } else if state.hasPage {
+                // Reminders' new-reminder sheet sends its read as `page` (#1185); Calendar's editor
+                // still sends `content`'s loading, failure and denied arms.
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: chrome.loading,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) {
+                    if let editorData {
+                        form(editorData, state: state)
+                    }
+                }
             } else {
                 ReadStateView(
                     content: readContent(state),

@@ -202,6 +202,45 @@ pub fn list(v: &wire::ViewState) -> &wire::TodoListState {
     }
 }
 
+/// The empty state a page drew, when the page is empty.
+pub fn page_empty(page: &Option<wire::PageState>) -> &wire::EmptyState {
+    match page.as_ref().and_then(|page| page.state.as_ref()) {
+        Some(wire::page_state::State::Empty(empty)) => empty,
+        other => panic!("the page is not empty: {other:?}"),
+    }
+}
+
+fn is_empty_page(page: &Option<wire::PageState>) -> bool {
+    matches!(
+        page.as_ref().and_then(|page| page.state.as_ref()),
+        Some(wire::page_state::State::Empty(_))
+    )
+}
+
+/// The list's groups; an empty view (the page's empty state) holds none.
+pub fn list_groups(v: &wire::ViewState) -> &[wire::TodoRowGroup] {
+    if is_empty_page(&list(v).page) {
+        return &[];
+    }
+    &list_data(v).groups
+}
+
+/// The project's groups; an empty project (the page's empty state) holds none.
+pub fn project_groups(v: &wire::ViewState) -> &[wire::TodoRowGroup] {
+    if is_empty_page(&project_state(v).page) {
+        return &[];
+    }
+    &project_data(v).groups
+}
+
+/// Catch up's piles; nothing behind (the page's empty state) holds none.
+pub fn catch_up_piles(v: &wire::ViewState) -> &[wire::TodoPile] {
+    if is_empty_page(&catch_up(v).page) {
+        return &[];
+    }
+    &catch_up_data(v).piles
+}
+
 pub fn list_data(v: &wire::ViewState) -> &wire::TodoListData {
     match &list(v).content {
         Some(wire::todo_list_state::Content::Data(data)) => data,
@@ -221,6 +260,11 @@ pub fn project_data(v: &wire::ViewState) -> &wire::TodoProjectData {
         Some(wire::todo_project_state::Content::Data(data)) => data,
         other => panic!("the project has no data: {other:?}"),
     }
+}
+
+/// The project's header words and look (set while the project is on the page, ready or empty).
+pub fn project_head(v: &wire::ViewState) -> &wire::TodoProjectHead {
+    project_state(v).head.as_ref().expect("the project's head")
 }
 
 pub fn detail(v: &wire::ViewState) -> &wire::TodoDetailState {

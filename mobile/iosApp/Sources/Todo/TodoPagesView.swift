@@ -25,16 +25,6 @@ struct TodoListView: View {
         state.colorKey.isEmpty ? nil : AgendaPalette.token(state.colorKey)
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_TodoListData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         // THE TITLE IS THE PAGE'S OWN, LARGE, IN THE SMART LIST'S COLOUR (#1173): the bar
         // carries the back chevron and the plus, and no small title.
@@ -49,11 +39,12 @@ struct TodoListView: View {
             }
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { list in
+                ) {
+                    if case let .data(list)? = state.content {
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
                             if !list.subtitle.isEmpty {
@@ -65,10 +56,6 @@ struct TodoListView: View {
                             }
                             if !list.countLabel.isEmpty || !list.windowLabel.isEmpty {
                                 TodoCountLine(count: list.countLabel, window: list.windowLabel)
-                                    .todoPlainRow()
-                            }
-                            if list.groups.isEmpty, list.hasEmpty, !list.empty.headline.isEmpty {
-                                EmptyStateView(list.empty)
                                     .todoPlainRow()
                             }
                             ForEach(list.groups, id: \.key) { group in
@@ -95,10 +82,19 @@ struct TodoListView: View {
                     .environment(\.defaultMinListRowHeight, 0)
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("tasks-list")
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
             }
         }
+    }
+}
+
+private extension Centraid_Core_V1_TodoProjectState {
+    /// The vault refused Reminders: the page is the gate.
+    var isRefused: Bool {
+        if case .refused? = page.state { return true }
+        return false
     }
 }
 
@@ -117,16 +113,6 @@ struct TodoProjectView: View {
         var event = Centraid_Core_V1_TodoProjectEvent()
         build(&event)
         return event
-    }
-
-    private var content: ScreenContent<Centraid_Core_V1_TodoProjectData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
     }
 
     /// "2 completed · Show · Clear", and the rows while shown.
@@ -166,24 +152,26 @@ struct TodoProjectView: View {
             title: state.title,
             parentTitle: state.chrome.back,
             onBack: onBack,
-            titleColor: { if case let .data(p) = content { return AgendaPalette.list(p.listColorKey) } else { return nil } }(),
-            titleIcon: { if case let .data(p) = content { return p.iconKey } else { return "" } }()
+            titleColor: state.hasHead ? AgendaPalette.list(state.head.listColorKey) : nil,
+            titleIcon: state.hasHead ? state.head.iconKey : ""
         ) {
-            if case let .data(project) = content, project.found {
+            // The header's verbs stand while the project is on the page, ready or empty.
+            if state.hasHead {
+                let head = state.head
                 HStack(spacing: 4) {
                     // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
-                    if !project.styleLabel.isEmpty {
-                        ToolbarVerb(label: project.styleLabel, identifier: "tasks-project-edit") {
+                    if !head.styleLabel.isEmpty {
+                        ToolbarVerb(label: head.styleLabel, identifier: "tasks-project-edit") {
                             send(event { $0.styleRequested = .init() })
                         }
                     }
-                    if !project.renameLabel.isEmpty {
-                        ToolbarVerb(label: project.renameLabel, identifier: "tasks-rename-project") {
+                    if !head.renameLabel.isEmpty {
+                        ToolbarVerb(label: head.renameLabel, identifier: "tasks-rename-project") {
                             send(event { $0.rename = .init() })
                         }
                     }
-                    if !project.addSectionLabel.isEmpty {
-                        ToolbarVerb(label: project.addSectionLabel, identifier: "tasks-add-section") {
+                    if !head.addSectionLabel.isEmpty {
+                        ToolbarVerb(label: head.addSectionLabel, identifier: "tasks-add-section") {
                             send(event { $0.addSection = .init() })
                         }
                     }
@@ -191,19 +179,16 @@ struct TodoProjectView: View {
             }
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { project in
+                ) {
+                    if case let .data(project)? = state.content {
                     // A LIST, so a row can be swiped (#1173): each task is a row of its own.
                     List {
                             if !project.countLabel.isEmpty {
                                 TodoCountLine(count: project.countLabel, window: "")
-                                    .todoPlainRow()
-                            }
-                            if project.groups.isEmpty, project.hasEmpty, !project.empty.headline.isEmpty {
-                                EmptyStateView(project.empty)
                                     .todoPlainRow()
                             }
                             ForEach(project.groups, id: \.key) { group in
@@ -229,9 +214,11 @@ struct TodoProjectView: View {
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .scrollDismissesKeyboard(.interactively)
                     .accessibilityIdentifier("tasks-project")
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
-                if !content.isDenied {
+                // The gate has nothing to add to (reading the page only to choose what the bar draws).
+                if !state.isRefused {
                     TodoQuickAddBar(
                         quickAdd: state.quickAdd,
                         placeholder: state.chrome.newReminder,
@@ -287,21 +274,21 @@ struct TodoProjectView: View {
             get: { state.sheet == .rename },
             set: { open in if !open, state.sheet == .rename { send(event { $0.sheetClosed = .init() }) } }
         )) {
-            if case let .data(project) = content {
+            if state.hasHead {
                 SheetRoom(
-                    title: project.renameTitle,
+                    title: state.head.renameTitle,
                     primary: state.renameCanSubmit
-                        ? SheetPrimary(label: project.renameVerb) { send(event { $0.renameSubmitted = .init() }) }
+                        ? SheetPrimary(label: state.head.renameVerb) { send(event { $0.renameSubmitted = .init() }) }
                         : nil
                 ) {
                     MachineTextField(
-                        placeholder: project.renamePlaceholder,
+                        placeholder: state.head.renamePlaceholder,
                         value: state.renameName,
                         focusOnAppear: true,
                         onEdit: { name in send(event { $0.renameName = .with { $0.name = name } }) }
                     )
                     .centraidType("body")
-                    .accessibilityLabel(project.renamePlaceholder)
+                    .accessibilityLabel(state.head.renamePlaceholder)
                     .accessibilityIdentifier("tasks-rename-field")
                 }
             }
@@ -324,26 +311,17 @@ struct TodoCatchUpView: View {
         return event
     }
 
-    private var content: ScreenContent<Centraid_Core_V1_TodoCatchUpData> {
-        switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .gated(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
-        }
-    }
-
     var body: some View {
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                ReadStateView(
-                    content: content,
+                PageReadStateView(
+                    page: state.page,
                     loadingLabel: state.chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
-                ) { catchUp in
+                ) {
+                    if case let .data(catchUp)? = state.content {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             if !catchUp.head.isEmpty {
@@ -352,9 +330,6 @@ struct TodoCatchUpView: View {
                                     .foregroundStyle(Theme.color("textSoft", scheme))
                                     .padding(.horizontal, CentraidGeometry.pageMargin)
                                     .padding(.top, 8)
-                            }
-                            if catchUp.piles.isEmpty, catchUp.hasEmpty, !catchUp.empty.headline.isEmpty {
-                                EmptyStateView(catchUp.empty)
                             }
                             ForEach(catchUp.piles, id: \.key) { pile in
                                 SectionHeader(title: pile.title, count: UInt32(pile.meta), verb: pile.verbLabel, sentenceCase: true) {
@@ -380,6 +355,7 @@ struct TodoCatchUpView: View {
                     }
                     .refreshable { send(event { $0.refreshed = .init() }) }
                     .accessibilityIdentifier("tasks-catch-up")
+                    }
                 }
                 StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
             }
