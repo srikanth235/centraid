@@ -35,7 +35,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.Denied
 import centraid.core.v1.EmptyState
 import centraid.core.v1.Loading
+import centraid.core.v1.PageNote
+import centraid.core.v1.PageState
 import centraid.core.v1.Failure as ReadFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.design.CentraidGeometry
@@ -105,6 +109,93 @@ public fun <V> ReadStateView(
             is ScreenContent.Failure -> FailureView(content.sentence, content.remedy, onRetry, retryLabel = retryLabel)
             is ScreenContent.Gate -> DeniedGate(content.denied)
             is ScreenContent.Data -> data(content.value)
+        }
+    }
+}
+
+/**
+ * THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's [PageState], which the
+ * screen's Rust builds from `Page::wire`. A first load draws [skeleton]; a gate draws
+ * [DeniedGate] (no retry, it never retries itself); a failed read draws [FailureView] with
+ * Retry; an empty one draws [EmptyStateView]; none of those set means ready, and [data] is drawn
+ * under the [PageNoteBanner] when the state carries a note.
+ *
+ * [onRetry] is the screen's own re-read event and also answers a note's action; [onEmptyAction]
+ * answers the empty state's one action. The shell decides nothing: every word is the state's.
+ */
+@Composable
+public fun ReadStateView(
+    page: PageState,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    onEmptyAction: (() -> Unit)? = null,
+    onNoteAction: (() -> Unit)? = onRetry,
+    retryLabel: String = KitWords.RETRY,
+    skeleton: @Composable () -> Unit = { RowSkeleton() },
+    data: @Composable () -> Unit,
+) {
+    val failed = page.failed
+    val refused = page.refused
+    val empty = page.empty
+    val note = page.note
+    Box(modifier.fillMaxSize()) {
+        when {
+            page.loading != null -> skeleton()
+            refused != null -> DeniedGate(refused)
+            failed != null -> FailureView(failed.sentence, failed.remedy, onRetry, retryLabel = retryLabel)
+            empty != null -> EmptyStateView(empty, onEmptyAction)
+            else -> Column(Modifier.fillMaxSize()) {
+                if (note != null) {
+                    PageNoteBanner(note, onNoteAction)
+                }
+                Box(Modifier.weight(1f)) { data() }
+            }
+        }
+    }
+}
+
+/**
+ * ONE SENTENCE OVER DATA, and at most one action. It is a polite live region and speaks its
+ * sentence (the action reads "{sentence}" then its label as a button). It is drawn in place with
+ * no entry animation, so reduced motion needs nothing: there is no motion to remove.
+ */
+@Composable
+public fun PageNoteBanner(
+    note: PageNote,
+    onAction: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+            .clip(shape)
+            .background(Surface.fill, shape)
+            .border(KitGeometry.HAIRLINE, Surface.border, shape)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .testTag(if (note.kind == PageNote.Kind.NOT_CHECKED) "kit-note-unchecked" else "kit-note-partial")
+            .semantics {
+                contentDescription = note.sentence
+                liveRegion = LiveRegionMode.Polite
+            },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KitText(note.sentence, KitType.Meta, Surface.ink, Modifier.weight(1f).clearAndSetSemantics { })
+        if (note.action_label.isNotEmpty() && onAction != null) {
+            Text(
+                note.action_label,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = Surface.ink,
+                modifier = Modifier
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = 6.dp, vertical = 12.dp)
+                    .testTag("kit-note-action")
+                    .semantics { role = Role.Button },
+            )
         }
     }
 }

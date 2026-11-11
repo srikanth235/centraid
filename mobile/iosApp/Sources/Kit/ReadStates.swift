@@ -67,6 +67,129 @@ extension ReadStateView where Skeleton == RowSkeleton {
     }
 }
 
+/// THE PAGE'S READ, DRAWN ONCE (#1185): the same switch over the kit's `PageState`, which the
+/// screen's Rust builds from `Page::wire`. A first load draws the skeleton; a gate draws
+/// `DeniedGate` (it never retries itself); a failed read draws `FailureView` with Retry; an empty
+/// one draws `EmptyStateView`; none of those set is ready, and `data` is drawn under the
+/// `PageNoteBanner` when the state carries a note.
+///
+/// `onRetry` is the screen's own re-read event and answers a note's action unless `onNoteAction`
+/// says otherwise; `onEmptyAction` answers the empty state's one action. Every word is the
+/// state's: the view decides nothing.
+struct PageReadStateView<Skeleton: View, Content: View>: View {
+    let page: Centraid_Core_V1_PageState
+    let onRetry: (() -> Void)?
+    var onEmptyAction: (() -> Void)? = nil
+    var onNoteAction: (() -> Void)? = nil
+    var retryLabel: String = KitWords.RETRY
+    let skeleton: () -> Skeleton
+    let data: () -> Content
+
+    init(
+        page: Centraid_Core_V1_PageState,
+        onRetry: (() -> Void)?,
+        onEmptyAction: (() -> Void)? = nil,
+        onNoteAction: (() -> Void)? = nil,
+        retryLabel: String = KitWords.RETRY,
+        @ViewBuilder skeleton: @escaping () -> Skeleton,
+        @ViewBuilder data: @escaping () -> Content
+    ) {
+        self.page = page
+        self.onRetry = onRetry
+        self.onEmptyAction = onEmptyAction
+        self.onNoteAction = onNoteAction
+        self.retryLabel = retryLabel
+        self.skeleton = skeleton
+        self.data = data
+    }
+
+    var body: some View {
+        switch page.state {
+        case .loading:
+            skeleton()
+        case let .refused(denied):
+            DeniedGate(denied)
+        case let .failed(failure):
+            FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: onRetry)
+        case let .empty(empty):
+            EmptyStateView(empty, onAction: onEmptyAction)
+        case nil:
+            VStack(spacing: 0) {
+                if page.hasNote {
+                    PageNoteBanner(note: page.note, onAction: onNoteAction ?? onRetry)
+                }
+                data()
+            }
+        }
+    }
+}
+
+extension PageReadStateView where Skeleton == RowSkeleton {
+    /// The common case: a list, so its skeleton is rows.
+    init(
+        page: Centraid_Core_V1_PageState,
+        loadingLabel: String = KitWords.OPENING,
+        onRetry: (() -> Void)?,
+        onEmptyAction: (() -> Void)? = nil,
+        onNoteAction: (() -> Void)? = nil,
+        retryLabel: String = KitWords.RETRY,
+        @ViewBuilder data: @escaping () -> Content
+    ) {
+        self.init(
+            page: page,
+            onRetry: onRetry,
+            onEmptyAction: onEmptyAction,
+            onNoteAction: onNoteAction,
+            retryLabel: retryLabel,
+            skeleton: { RowSkeleton(label: loadingLabel) },
+            data: data
+        )
+    }
+}
+
+/// ONE SENTENCE OVER DATA, and at most one action. The sentence reads as itself to a screen reader
+/// and the action is a button beside it. It is drawn in place with no entry
+/// animation, so reduced motion has no motion to remove.
+struct PageNoteBanner: View {
+    let note: Centraid_Core_V1_PageNote
+    var onAction: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(note.sentence)
+                .kitType(.meta)
+                .foregroundStyle(Surface.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !note.actionLabel.isEmpty, let onAction {
+                Button(action: onAction) {
+                    Text(note.actionLabel)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Surface.ink)
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("kit-note-action")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
+        )
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 8)
+        // A CONTAINER: the sentence reads as itself and the action stays a button.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(note.kind == .notChecked ? "kit-note-unchecked" : "kit-note-partial")
+    }
+}
+
 /// SKELETONS AT ROW GEOMETRY — the handoff's word, and the reason there is no
 /// `ProgressView` in a kit screen.
 ///
