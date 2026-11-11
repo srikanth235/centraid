@@ -403,6 +403,8 @@ internal class HealthConnectReader(private val context: Context) {
             }
         }
         val sums = setOf(HealthConnectAccess.Key.STEPS, HealthConnectAccess.Key.ENERGY, HealthConnectAccess.Key.EXERCISE, HealthConnectAccess.Key.SLEEP)
+        // A metric or workout read that failed leaves the cursor where it was: the next read covers it.
+        var incomplete = false
         val days = buildList {
             (dailyReads().map { it.first } + HealthConnectAccess.Key.SLEEP + HealthConnectAccess.Key.WEIGHT).filter { it in allowed }.forEach { key ->
                 val wanted = (if (changed.deleted.isNotEmpty()) window else touched[key].orEmpty()).filter { it in window }.sorted()
@@ -414,7 +416,10 @@ internal class HealthConnectReader(private val context: Context) {
                     else -> dailyReads().firstOrNull { it.first == key }?.let { (_, reader) ->
                         effectAttempt { daily(client, first, last, reader) }.getOrNull()?.map { (day, value) -> HealthDayTotal(day = day, metric = key, value_ = value) }
                     }
-                } ?: return@forEach
+                } ?: run {
+                    incomplete = true
+                    return@forEach
+                }
                 val found = read.filter { it.day in wanted }
                 addAll(found)
                 if (key in sums) addAll(wanted.filter { day -> found.none { it.day == day } }.map { HealthDayTotal(day = it, metric = key, value_ = 0.0) })
@@ -422,7 +427,8 @@ internal class HealthConnectReader(private val context: Context) {
         }
         val workouts = if (HealthConnectAccess.Key.WORKOUTS in allowed) {
             val sessions = changed.upserted.filterIsInstance<ExerciseSessionRecord>().filter { it.startTime.toEpochMilli() >= request.workouts_since_ms }
-            effectAttempt { workoutsOf(client, granted, sessions) }.getOrNull()?.first.orEmpty()
+            effectAttempt { workoutsOf(client, granted, sessions) }.getOrNull()?.takeIf { it.second }?.first
+                ?: emptyList<HealthPhoneWorkout>().also { incomplete = true }
         } else {
             emptyList()
         }
@@ -435,7 +441,7 @@ internal class HealthConnectReader(private val context: Context) {
             workouts = workouts,
             workouts_complete = true,
             deleted_workout_ids = if (HealthConnectAccess.Key.WORKOUTS in allowed) changed.deleted else emptyList(),
-            next_cursor = changed.next,
+            next_cursor = if (incomplete) request.cursor else changed.next,
             device_id = InstallId.of(context),
             background_refused = request.ask_background && HealthConnectAccess.READ_HEALTH_DATA_IN_BACKGROUND !in granted,
         )

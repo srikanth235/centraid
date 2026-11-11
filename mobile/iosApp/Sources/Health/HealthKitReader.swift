@@ -167,7 +167,7 @@ enum HealthKitReader {
             let none = HKQuery.predicateForSamples(withStart: .distantFuture, end: nil, options: [])
             var anchors: [String: HKQueryAnchor] = [:]
             for type in types {
-                guard let anchor = await changes(store: store, type: type, anchor: nil, predicate: none)?.anchor else { return "" }
+                guard let anchor = await HealthKitReader.changes(store: store, type: type, anchor: nil, predicate: none)?.anchor else { return "" }
                 anchors[type.identifier] = anchor
             }
             return encode(anchors)
