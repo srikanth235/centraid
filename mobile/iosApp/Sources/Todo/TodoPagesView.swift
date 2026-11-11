@@ -153,7 +153,7 @@ struct TodoProjectView: View {
             parentTitle: state.chrome.back,
             onBack: onBack,
             titleColor: state.hasHead ? AgendaPalette.list(state.head.listColorKey) : nil,
-            titleIcon: state.hasHead ? state.head.iconKey : ""
+            titleIcon: state.head.iconKey
         ) {
             // The header's verbs stand while the project is on the page, ready or empty.
             if state.hasHead {
