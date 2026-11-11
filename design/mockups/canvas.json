@@ -1585,6 +1585,22 @@
       "x": 470,
       "y": 13920
     },
+    "PersonMenu.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A person, its menu",
+      "w": 390,
+      "x": 940,
+      "y": 5800
+    },
+    "PersonMenuDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A person, its menu · dark",
+      "w": 390,
+      "x": 940,
+      "y": 5800
+    },
     "PersonLinks.dc.html": {
       "h": 760,
       "page": "light",
@@ -2962,6 +2978,7 @@
     "LockerItemDark.dc.html",
     "PeopleDark.dc.html",
     "PersonDark.dc.html",
+    "PersonMenuDark.dc.html",
     "DocsDark.dc.html",
     "DocsFolderDark.dc.html",
     "HealthDark.dc.html",
@@ -3036,6 +3053,7 @@
     "Reconnect.dc.html",
     "HealthSearch.dc.html",
     "PersonLinks.dc.html",
+    "PersonMenu.dc.html",
     "TrashNotes.dc.html",
     "TrashPeople.dc.html",
     "TrashReminders.dc.html",
