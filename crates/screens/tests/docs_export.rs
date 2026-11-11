@@ -218,3 +218,23 @@ fn a_cancelled_check_makes_no_file() {
     )));
     assert!(transfer(d.view(i)).status.is_none());
 }
+
+#[test]
+fn a_save_says_how_many_originals_were_not_on_this_phone() {
+    let mut d = driver();
+    text(&d, "Here.txt", "here");
+    pdf(&d, "Far.pdf", 'a');
+    pdf(&d, "Farther.pdf", 'b');
+    let i = open(&mut d);
+    tap(&mut d, i, "all");
+    pass_owner_check(&mut d);
+    let _ = staged(&d);
+    d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
+    assert_eq!(
+        transfer(d.view(i))
+            .status
+            .as_ref()
+            .map(|s| s.sentence.as_str()),
+        Some("Export saved. 2 originals were not on this phone and are left out")
+    );
+}

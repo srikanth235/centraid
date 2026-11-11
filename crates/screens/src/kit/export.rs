@@ -61,6 +61,8 @@ pub struct StagedFile {
     pub path: String,
     pub name: String,
     pub media_type: String,
+    /// Originals the file leaves out because their bytes are not on this phone; 0 for none.
+    pub missing: u64,
 }
 
 /// What a spec's `export` made: bytes in memory (a small file) or a file already on disk (a
@@ -191,6 +193,7 @@ pub fn staged_of(
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| fallback_name.to_owned()),
         media_type: media_type.to_owned(),
+        missing: u64::from(super::transfer::count(&settled.output, "missing")),
     })
 }
 
@@ -208,6 +211,7 @@ pub fn build(spec: &'static ExportSpec, route: &wire::Route) -> Option<Box<dyn S
         stage: Stage::Choosing,
         chosen: String::new(),
         warning: String::new(),
+        missing: 0,
         status: None,
     }))
 }
@@ -232,6 +236,8 @@ struct Export {
     chosen: String,
     /// What a phone with no passcode warned, said with the saved line.
     warning: String,
+    /// Originals the file just made leaves out (not on this phone), said with the saved line.
+    missing: u64,
     status: Option<wire::StatusLine>,
 }
 
@@ -257,6 +263,7 @@ impl Export {
         }
         self.chosen = key.to_owned();
         self.warning.clear();
+        self.missing = 0;
         self.status = None;
         self.stage = Stage::Checking;
         self.gate.begin(ctx.locale(), Leaving::Export)
@@ -295,6 +302,10 @@ impl Export {
                     let warning = self.warning.clone();
                     self.say(warning, false);
                 }
+                self.missing = match &made {
+                    Made::Staged(file) => file.missing,
+                    Made::Bytes(_) => 0,
+                };
                 let kind = match made {
                     Made::Bytes(file) => wire::effect::Kind::SaveFile(wire::SaveFile {
                         name: file.name,
@@ -331,11 +342,16 @@ impl Export {
         match &result.outcome {
             Some(wire::effect_result::Outcome::Done(_)) => {
                 let done = shared::export_done(locale);
-                let sentence = if self.warning.is_empty() {
-                    done
-                } else {
-                    format!("{done}. {}", self.warning)
-                };
+                let mut sentence = done;
+                if self.missing > 0 {
+                    sentence = format!(
+                        "{sentence}. {}",
+                        shared::export_missing(locale, self.missing)
+                    );
+                }
+                if !self.warning.is_empty() {
+                    sentence = format!("{sentence}. {}", self.warning);
+                }
                 self.say(sentence, false);
             }
             Some(wire::effect_result::Outcome::Failed(failure)) if !failure.cancelled => {
@@ -344,6 +360,7 @@ impl Export {
             _ => self.status = None,
         }
         self.warning.clear();
+        self.missing = 0;
     }
 }
 

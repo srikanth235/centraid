@@ -54,6 +54,8 @@ fn staged(_: &Ctx, key: &str) -> Result<Made, String> {
         path: format!("/staging/{key}.zip"),
         name: format!("{key}.zip"),
         media_type: "application/zip".to_owned(),
+        // "All" has originals that are not on this phone.
+        missing: if key == "all" { 3 } else { 0 },
     }))
 }
 
@@ -329,6 +331,28 @@ fn a_staged_file_goes_to_the_save_sheet_by_its_path_after_the_owner_check() {
         "Export saved"
     );
     assert!(!view(&d, i).busy);
+}
+
+#[test]
+fn a_saved_export_names_the_originals_that_were_not_on_this_phone() {
+    let (mut d, i) = open(&STREAMS);
+    d.effects.clear();
+    tap(&mut d, i, "all");
+    answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
+    assert_eq!(
+        view(&d, i).status.clone().expect("a line").sentence,
+        "Export saved. 3 originals were not on this phone and are left out"
+    );
+    // The next export starts clean.
+    d.effects.clear();
+    tap(&mut d, i, "one");
+    answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
+    assert_eq!(
+        view(&d, i).status.clone().expect("a line").sentence,
+        "Export saved"
+    );
 }
 
 #[test]
