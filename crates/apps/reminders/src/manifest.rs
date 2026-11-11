@@ -47,7 +47,7 @@ mod tests {
     fn it_declares_ten_queries_and_twenty_three_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 10);
-        assert_eq!(manifest.actions.len(), 23);
+        assert_eq!(manifest.actions.len(), 25);
         for name in [
             "board",
             "task",

@@ -624,6 +624,14 @@ fn read(
         // arrival (#1185): where one record came from, a followed store or a one-shot arrival
         ("shell", "origin-of") => app_query::follow::origin_of(vault, &p.text("entity_id")?)?,
         ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,
+        // the general link (#1185): what an item is linked to, and the picker's rows
+        ("shell", "links") => app_query::links::linked(vault, &p.text("entity_id")?)?,
+        ("shell", "link-candidates") => {
+            let kind = p.text("kind")?;
+            let term = p.text("term")?;
+            let limit = p.limit(centraid_vault::links::MAX_CANDIDATES as u32);
+            app_query::links::candidates(vault, &kind, &term, limit as usize)?
+        }
         // chat (lane I): the drawer's list or search, one stored chat, and a card's liveness
         ("shell", "chats") => app_query::chat::threads(
             vault,

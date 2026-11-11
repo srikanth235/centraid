@@ -1195,6 +1195,42 @@
   "catalog": {
     "actions": [
       {
+        "action": "link",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "event",
+        "phrasings": [
+          "link the dentist event to Sam",
+          "connect the trip event to my packing note",
+          "link Friday's event to the plumber task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "calendar",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "event",
+        "phrasings": [
+          "unlink the dentist event from Sam",
+          "disconnect the trip event from my packing note",
+          "take the link off Friday's event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
         "action": "propose",
         "also": [],
         "app": "calendar",
@@ -1935,6 +1971,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "workout",
+        "phrasings": [
+          "link this run to my race note",
+          "connect Tuesday's workout to the physio event",
+          "link this ride to the bike photo"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "workout",
+        "phrasings": [
+          "unlink this run from my race note",
+          "disconnect Tuesday's workout from the physio event",
+          "take the link off this ride"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       },
       {
         "action": "record-days",
@@ -3401,7 +3473,7 @@
         "bulk": false,
         "chat": "card",
         "command": "edge.add",
-        "inverse": "detach",
+        "inverse": "unlink",
         "kind": "note",
         "phrasings": [
           "link my trip note to Sam",
@@ -3411,6 +3483,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "notes",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "note",
+        "phrasings": [
+          "unlink my trip note from Sam",
+          "disconnect the book ideas note from the reading list task",
+          "take the link off the plumber note"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       },
       {
         "action": "send-to-tasks",
@@ -3537,6 +3627,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "log"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "person",
+        "phrasings": [
+          "link Sam to my trip note",
+          "connect Maya to the school event",
+          "link Priya to the lease document"
+        ],
+        "qualifier": "rel",
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "people",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "person",
+        "phrasings": [
+          "unlink Sam from my trip note",
+          "disconnect Maya from the school event",
+          "take the link off Priya"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       },
       {
         "action": "add-person",
@@ -4619,6 +4745,42 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "unlink",
+        "kind": "task",
+        "phrasings": [
+          "link the passport task to Sam",
+          "connect the dentist task to my trip note",
+          "link the rent task to Friday's event"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink",
+        "also": [],
+        "app": "reminders",
+        "bulk": false,
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "link",
+        "kind": "task",
+        "phrasings": [
+          "unlink the passport task from Sam",
+          "disconnect the dentist task from my trip note",
+          "take the link off the rent task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unlink"
       },
       {
         "action": "add-task",

@@ -1581,7 +1581,7 @@
         "this payment was with Maya",
         "put Priya on the coffee payment"
       ],
-      "description": "Say who a transaction was with through edge.add (rel with, from the transaction to a person): the app proposes the person the payee names and writes the link only when the member confirms. Adding it twice changes nothing.",
+      "description": "Say who a transaction was with through edge.add (rel with, from the transaction to a person): the app proposes the person the payee names and writes the link only when the member confirms. Adding it twice changes nothing. With rel links it joins the transaction to any other item but a Locker item instead (a link, not a person it was with).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1652,7 +1652,7 @@
         "this payment was not with Maya",
         "this coffee payment was not with Priya"
       ],
-      "description": "Take a person off a transaction through edge.remove (rel with). The transaction keeps its place in Activity.",
+      "description": "Take a person off a transaction through edge.remove (rel with), or any other item it is linked to (rel links). The transaction keeps its place in Activity.",
       "confirmation": "none",
       "input": {
         "type": "object",

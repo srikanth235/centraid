@@ -178,6 +178,7 @@ impl Document {
                     ctx,
                     act::docs::AddAbout {
                         from: id,
+                        rel: act::docs::AddAboutRel::About,
                         to: person,
                     },
                 );
@@ -187,6 +188,7 @@ impl Document {
                     ctx,
                     act::docs::RemoveAbout {
                         from: id,
+                        rel: act::docs::RemoveAboutRel::About,
                         to: person,
                     },
                 );

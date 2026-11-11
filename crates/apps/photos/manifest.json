@@ -1203,7 +1203,7 @@
         "tag Ravi in this picture",
         "tag Maya in the beach photo"
       ],
-      "description": "Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing.",
+      "description": "Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing. With rel links it joins the photograph to any other item but a Locker item instead (a link, not a face).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1214,7 +1214,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts"]
+            "enum": ["depicts", "links"]
           },
           "to": {
             "type": "string",
@@ -1251,7 +1251,7 @@
         "take Ravi off this picture",
         "untag Maya from the beach photo"
       ],
-      "description": "Take a person off a photograph through edge.remove (rel depicts).",
+      "description": "Take a person off a photograph through edge.remove (rel depicts), or any other item it is linked to (rel links).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1262,7 +1262,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts"]
+            "enum": ["depicts", "links"]
           },
           "to": {
             "type": "string",

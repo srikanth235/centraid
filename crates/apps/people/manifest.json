@@ -239,6 +239,102 @@
   "actionSideEffect": "vault-write",
   "actions": [
     {
+      "name": "link",
+      "verb": "link:rel",
+      "kind": "person",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link Sam to my trip note",
+        "connect Maya to the school event",
+        "link Priya to the lease document"
+      ],
+      "description": "Link a person to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the person); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "person",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink Sam from my trip note",
+        "disconnect Maya from the school event",
+        "take the link off Priya"
+      ],
+      "description": "Take the link between a person and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "add-person",
       "verb": "create",
       "kind": "person",

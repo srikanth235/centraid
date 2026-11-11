@@ -468,6 +468,7 @@ impl Lightbox {
                     &[&id, &person],
                     act::photos::AddPerson {
                         from: id.clone(),
+                        rel: act::photos::AddPersonRel::Depicts,
                         to: person.clone(),
                     },
                 );
@@ -479,6 +480,7 @@ impl Lightbox {
                     &[&id, &person],
                     act::photos::RemovePerson {
                         from: id.clone(),
+                        rel: act::photos::RemovePersonRel::Depicts,
                         to: person.clone(),
                     },
                 );

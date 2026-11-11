@@ -282,6 +282,10 @@ message AppQueryResponse {
     EarlierCount earlier_count = 1704;
     // Where one record came from (#1185): `shell.origin-of`.
     OriginOf origin_of = 1706;
+    // The general link (#1185): what an item is linked to, `shell.links`, and the items the
+    // picker offers, `shell.link-candidates`.
+    LinkedItems linked_items = 1710;
+    LinkCandidates link_candidates = 1711;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

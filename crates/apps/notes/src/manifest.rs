@@ -48,7 +48,7 @@ mod tests {
     fn it_declares_nine_queries_and_nineteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 10);
-        assert_eq!(manifest.actions.len(), 21);
+        assert_eq!(manifest.actions.len(), 22);
         for name in [
             "link-targets",
             "library",

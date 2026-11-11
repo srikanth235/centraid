@@ -32,6 +32,8 @@ const EDITED_IN_PLACE: &str = "MediaStore reports an item edited in place under 
 const CERT_PIN: &str = "iOS pins the gateway certificate for its OS-owned uploads when `backup.destinations` is announced; Android's `custody.filing` files the key in Rust";
 
 /// One reason, several rows.
+const LINK_READS: &str = "the general link's reads (`shell.links`, `shell.link-candidates`): the core answers them and the kit's link section words the rows, so a shell draws the finished `LinkRow`";
+/// One reason, several rows.
 const REMINDERS: &str = "iOS reads the phone's Reminders (EventKit); Android has no such store";
 
 /// One reason, several rows.
@@ -403,6 +405,8 @@ pub const REGISTER: &[Entry] = &[
         rust_only_named(ORIGIN_OF_NAMED, Missing::Android),
     ),
     ("EarlierVersions.versions", rust_only(EARLIER_VERSIONS)),
+    ("LinkedItem.is_owner", rust_only(LINK_READS)),
+    ("LinkCandidate.is_owner", rust_only(LINK_READS)),
     ("EarlierVersion.replaced_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.since_local", rust_only(EARLIER_VERSIONS)),
     ("EarlierVersion.store_system", rust_only(EARLIER_VERSIONS)),

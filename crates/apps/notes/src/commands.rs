@@ -107,7 +107,7 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Seventeen actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 21] = [
+pub const ACTIONS: [ActionRow; 22] = [
     act("create-note", "note.create"),
     act("edit-note", "note.edit"),
     act("move-note", "note.move"),
@@ -127,6 +127,7 @@ pub const ACTIONS: [ActionRow; 21] = [
     act("send-to-tasks", "task.add"),
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
+    act("unlink", "edge.remove"),
     act("add-tag", "tag.add"),
     act("remove-tag", "tag.remove"),
     // Item 14 (#1173): the More page's Import and Export. An import is not taken back by an action
@@ -182,7 +183,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_note_verbs_are_the_notes_own() {
-        assert_eq!(ACTIONS.len(), 21);
+        assert_eq!(ACTIONS.len(), 22);
         let note_own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)

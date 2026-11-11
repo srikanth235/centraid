@@ -134,6 +134,138 @@
   "actionSideEffect": "vault-write",
   "actions": [
     {
+      "name": "link",
+      "verb": "link",
+      "kind": "workout",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link this run to my race note",
+        "connect Tuesday's workout to the physio event",
+        "link this ride to the bike photo"
+      ],
+      "description": "Link a workout to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the workout); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          },
+          "position": {
+            "type": ["number", "null"]
+          },
+          "state": {
+            "type": ["string", "null"],
+            "enum": ["needs-action", "accepted", "declined", "tentative", null]
+          },
+          "anchor": {
+            "type": ["object", "null"]
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "workout",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink this run from my race note",
+        "disconnect Tuesday's workout from the physio event",
+        "take the link off this ride"
+      ],
+      "description": "Take the link between a workout and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "about",
+              "links",
+              "attached",
+              "attendee",
+              "with",
+              "related",
+              "depicts"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "record-days",
       "verb": "log",
       "kind": "daily_figure",

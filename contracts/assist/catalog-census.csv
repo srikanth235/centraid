@@ -1,4 +1,6 @@
 app,action,verb,kind,chat_surface,reachable_from_screen_today,reachable_from_chat_today
+calendar,link,link,event,card,no,no
+calendar,unlink,unlink,event,card,no,no
 calendar,propose,create,event,direct,yes: crates/screens/src/calendar/editor.rs,yes
 calendar,rsvp,respond,event,card,yes: crates/screens/src/calendar/event.rs,no
 calendar,edit-event,edit,event,direct,yes: crates/screens/src/calendar/editor.rs,yes
@@ -40,6 +42,8 @@ docs,add-about,link,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,remove-about,unlink,document,card,yes: crates/screens/src/docs/document.rs,no
 docs,attach,attach,document,card,no,no
 docs,detach,detach,document,card,no,no
+health,link,link,workout,card,no,no
+health,unlink,unlink,workout,card,no,no
 health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
 health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,direct,yes: crates/screens/src/health/trash.rs; crates/screens/src/health/workout.rs,yes
@@ -121,6 +125,7 @@ notes,restore-note-version,restore,note,card,no,no
 notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
 notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
 notes,link,link,note,card,no,no
+notes,unlink,unlink,note,card,no,no
 notes,send-to-tasks,create,task,card,yes: crates/screens/src/reminders/ops.rs,yes
 notes,attach,attach,note,card,no,no
 notes,detach,detach,note,card,no,no
@@ -128,6 +133,8 @@ notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 notes,import-notes,log,note,card,no,no
 notes,export-notes,log,note,card,no,no
+people,link,link:rel,person,card,no,no
+people,unlink,unlink,person,card,no,no
 people,add-person,create,person,direct,yes: crates/screens/src/people/editor.rs,yes
 people,edit-person,edit,person,direct,yes: crates/screens/src/people/editor.rs,yes
 people,set-cadence,edit:cadence,person,direct,yes: crates/screens/src/people/editor.rs,yes
@@ -188,6 +195,8 @@ photos,add-person,link,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,remove-person,unlink,photo,card,yes: crates/screens/src/photos/lightbox.rs,no
 photos,attach,attach,photo,card,no,no
 photos,detach,detach,photo,card,no,no
+reminders,link,link,task,card,no,no
+reminders,unlink,unlink,task,card,no,no
 reminders,add-task,create,task,direct,yes: crates/screens/src/reminders/ops.rs,yes
 reminders,edit-task,edit,task,direct,yes: crates/screens/src/reminders/detail.rs,yes
 reminders,complete-task,complete,task,direct,yes: crates/screens/src/kit/schedule/ops.rs,yes

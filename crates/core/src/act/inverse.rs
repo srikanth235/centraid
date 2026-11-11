@@ -98,6 +98,9 @@ pub(crate) enum Input {
     /// A figure cleared (`measurement.clear`), which answers the value it removed under
     /// `replaced`: taken back by logging that value for the same day and metric.
     Cleared,
+    /// A link taken off again (#1185): the same two items and the same relation, and none of the
+    /// extras the link carried (a note's anchor names a place in its text; the inverse takes none).
+    Ends,
 }
 
 /// The shell action that puts a record back to a named earlier version. Any app's act can run it.
@@ -123,6 +126,8 @@ const CALENDAR: &[Row] = &[
     // A calendar is a holder: taking its creation back moves it, and its events, to the trash.
     ("create-calendar", "undo-create", Input::Created),
     ("follow-calendar", "stop-following", Input::Stops("calendar")),
+    ("link", "unlink", Input::Same),
+    ("unlink", "link", Input::Same),
 ];
 
 #[rustfmt::skip]
@@ -142,6 +147,8 @@ const REMINDERS: &[Row] = &[
     ("create-section", "delete-task", Input::Created),
     ("add-task-tag", "remove-task-tag", Input::Same),
     ("remove-task-tag", "add-task-tag", Input::Same),
+    ("link", "unlink", Input::Same),
+    ("unlink", "link", Input::Same),
     ("edit-task", "edit-task", Input::Earlier),
     ("organize-task", "organize-task", Input::Earlier),
     ("rename-list", "rename-list", Input::Earlier),
@@ -200,6 +207,8 @@ const LOCKER: &[Row] = &[
 const HEALTH: &[Row] = &[
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
+    ("link", "unlink", Input::Same),
+    ("unlink", "link", Input::Same),
     // The follow pass writes the store's day totals and its workouts, and is taken back by
     // disconnecting the store. A day total names no origin, so it offers none of its own.
     ("record-days", "stop-following", Input::Stops("health")),
@@ -253,7 +262,8 @@ const NOTES: &[Row] = &[
     ("restore-note", "delete-note", Input::Id),
     ("flag-note", "unflag-note", Input::Same),
     ("unflag-note", "flag-note", Input::Same),
-    ("link", "detach", Input::Same),
+    ("link", "unlink", Input::Ends),
+    ("unlink", "link", Input::Same),
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
     ("add-tag", "remove-tag", Input::Same),
@@ -274,6 +284,8 @@ const NOTES: &[Row] = &[
 const PEOPLE: &[Row] = &[
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
+    ("link", "unlink", Input::Same),
+    ("unlink", "link", Input::Same),
     ("add-person", "trash-person", Input::Created),
     ("trash-person", "restore-person", Input::Id),
     ("restore-person", "trash-person", Input::Id),
@@ -352,6 +364,13 @@ pub(crate) fn of(
     let mut inverse = *inverse;
     let built = match from {
         Input::Same => input.clone(),
+        Input::Ends => {
+            let mut ends = Map::new();
+            for key in ["from", "rel", "to"] {
+                ends.insert(key.to_owned(), input.get(key)?.clone());
+            }
+            ends
+        }
         Input::Earlier | Input::Asks => return None,
         Input::CreatedElseEarlier(key) | Input::CreatedAs(key) => {
             id_only(output.get(*key).filter(|id| id.is_string())?)?
@@ -573,6 +592,17 @@ mod tests {
                         "{}.{inverse} takes more than an id to undo {action}",
                         app.id
                     ),
+                    Input::Ends => {
+                        for name in ["from", "rel", "to"] {
+                            assert!(
+                                back.input["properties"]
+                                    .as_object()
+                                    .is_some_and(|offered| offered.contains_key(name)),
+                                "{}.{inverse} does not take `{name}`",
+                                app.id
+                            );
+                        }
+                    }
                     Input::Same => {
                         let offered = forward.input["properties"]
                             .as_object()

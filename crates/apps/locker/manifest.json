@@ -1288,7 +1288,7 @@
         "this passport is about Maya",
         "link the bank login to my home"
       ],
-      "description": "Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. A link is plain: it carries no sealed value, and it is seen only inside Locker.",
+      "description": "Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. With rel links it joins the item to any other item (a note, a task, an event, a photo, a document, a transaction, a workout), from the item only: nothing can link to a Locker item. A link is plain: it carries no sealed value, and it is seen only inside Locker.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1299,7 +1299,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with"]
+            "enum": ["about", "with", "links"]
           },
           "to": {
             "type": "string",
@@ -1347,7 +1347,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with"]
+            "enum": ["about", "with", "links"]
           },
           "to": {
             "type": "string",

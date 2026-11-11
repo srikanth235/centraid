@@ -17,7 +17,10 @@ pub const MANIFEST_JSON: &str = include_str!("../manifest.json");
 pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
-pub const ACTIONS: [ActionRow; 14] = [
+pub const ACTIONS: [ActionRow; 16] = [
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("record-days", "measurement.record"),
     act("follow-workouts", "follow.health"),
     act("delete-workout", "entity.trash"),

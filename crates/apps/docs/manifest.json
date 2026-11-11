@@ -1088,7 +1088,7 @@
         "the school form is about Ravi",
         "mark the lease as about Maya"
       ],
-      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing.",
+      "description": "Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing. With rel links it joins the document to any other item but a Locker item instead (a link, not an about).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1099,7 +1099,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about"]
+            "enum": ["about", "links"]
           },
           "to": {
             "type": "string",
@@ -1136,7 +1136,7 @@
         "take Ravi off the school form",
         "the lease is not about Maya"
       ],
-      "description": "Take a person off a document through edge.remove (rel about).",
+      "description": "Take a person off a document through edge.remove (rel about), or any other item it is linked to (rel links).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1147,7 +1147,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": ["about"]
+            "enum": ["about", "links"]
           },
           "to": {
             "type": "string",

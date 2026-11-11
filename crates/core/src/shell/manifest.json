@@ -147,6 +147,49 @@
       }
     },
     {
+      "name": "links",
+      "kind": "link",
+      "figures": ["items"],
+      "description": "(links, #1185) What one item is linked to by hand, in either direction (a link made on a note shows on the event it points at), in name order, each thing once. A trashed item is left out; a Locker item is listed only on its own page. Any app's detail screen reads it for its page's links.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "link-candidates",
+      "kind": "link",
+      "figures": ["candidates"],
+      "description": "(links, #1185) The picker's rows: the items of one kind a link may end at, whose title holds the typed term (any case; an empty term lists the first by name), at most 50, in name order, the member's own person first. Never a Locker item and never a trashed one.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["person", "place", "event", "task", "note", "document", "photo", "account", "transaction", "workout"]
+          },
+          "term": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "files-followed",
       "kind": "followed_folder",
       "figures": ["folders"],

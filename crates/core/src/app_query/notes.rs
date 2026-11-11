@@ -1038,7 +1038,8 @@ mod tests {
         };
         assert!(filtered.notes.is_empty(), "the one live note is filed");
 
-        // A LOCKER ITEM IS A LINK TARGET (#1135), found by its plain title.
+        // A LOCKER ITEM IS NEVER A LINK TARGET (#1185, D11): a note cannot link to one, so the
+        // powerbox does not offer it, though its plain title would match.
         scratch.run(
             "locker.add_item",
             serde_json::json!({"item_id": "tomato-login", "type": "login",
@@ -1059,12 +1060,10 @@ mod tests {
                 .any(|target| target.entity == "note" && target.id == kept)
         );
         assert!(
-            targets
+            !targets
                 .targets
                 .iter()
-                .any(|target| target.entity == "locker_item"
-                    && target.id == "tomato-login"
-                    && target.app_id == "locker"),
+                .any(|target| target.entity == "locker_item"),
             "{:?}",
             targets.targets
         );

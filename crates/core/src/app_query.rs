@@ -74,6 +74,8 @@ pub(crate) mod imports;
 pub(crate) mod follow;
 // A record's earlier values (#1185).
 pub(crate) mod history;
+// The general link's two reads (#1185).
+pub(crate) mod links;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
 // projects, Docs folders and chat threads, for Home and the
 // owning apps.

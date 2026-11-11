@@ -116,6 +116,9 @@ use centraid_apps_kit::actions::{act, confirmed};
 
 /// The eighteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("propose", "event.propose"),
     act("rsvp", "event.respond"),
     act("edit-event", "event.edit"),
@@ -176,7 +179,7 @@ mod tests {
 
     #[test]
     fn the_events_own_are_the_verbs_the_rest_are_shared_and_no_task_is_written() {
-        assert_eq!(ACTIONS.len(), 18);
+        assert_eq!(ACTIONS.len(), 20);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("task.")),
             "Calendar reads a reminder and never writes one"

@@ -18,6 +18,52 @@ pub mod act {
         use super::*;
         pub const APP: &str = "calendar";
 
+        /// Link a event to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the event); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct Link {
+            pub from: String,
+            pub to: String,
+        }
+        impl Link {
+            pub const NAME: &str = "link";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Link> for wire::ActRequest {
+            fn from(value: Link) -> Self {
+                value.request()
+            }
+        }
+
+        /// Take the link between a event and another item off through edge.remove (rel links, from either end); both items stay.
+        #[derive(Clone, Debug, Default)]
+        pub struct Unlink {
+            pub from: String,
+            pub to: String,
+        }
+        impl Unlink {
+            pub const NAME: &str = "unlink";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Unlink> for wire::ActRequest {
+            fn from(value: Unlink) -> Self {
+                value.request()
+            }
+        }
+
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum ProposeStatus {
             #[default]
@@ -1242,10 +1288,26 @@ pub mod act {
             }
         }
 
-        /// Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum AddAboutRel {
+            #[default]
+            About,
+            Links,
+        }
+        impl AddAboutRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::About => "about",
+                    Self::Links => "links",
+                }
+            }
+        }
+
+        /// Say who a document is about through edge.add (rel about, from the document to a person). The document keeps its place in Recents; adding it twice changes nothing. With rel links it joins the document to any other item but a Locker item instead (a link, not an about).
         #[derive(Clone, Debug, Default)]
         pub struct AddAbout {
             pub from: String,
+            pub rel: AddAboutRel,
             pub to: String,
         }
         impl AddAbout {
@@ -1254,7 +1316,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("from".to_owned(), text(self.from));
-                map.insert("rel".to_owned(), text("about"));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
                 map.insert("to".to_owned(), text(self.to));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -1265,10 +1327,26 @@ pub mod act {
             }
         }
 
-        /// Take a person off a document through edge.remove (rel about).
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum RemoveAboutRel {
+            #[default]
+            About,
+            Links,
+        }
+        impl RemoveAboutRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::About => "about",
+                    Self::Links => "links",
+                }
+            }
+        }
+
+        /// Take a person off a document through edge.remove (rel about), or any other item it is linked to (rel links).
         #[derive(Clone, Debug, Default)]
         pub struct RemoveAbout {
             pub from: String,
+            pub rel: RemoveAboutRel,
             pub to: String,
         }
         impl RemoveAbout {
@@ -1277,7 +1355,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("from".to_owned(), text(self.from));
-                map.insert("rel".to_owned(), text("about"));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
                 map.insert("to".to_owned(), text(self.to));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -1338,6 +1416,137 @@ pub mod act {
     pub mod health {
         use super::*;
         pub const APP: &str = "health";
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum LinkRel {
+            #[default]
+            Contains,
+            About,
+            Links,
+            Attached,
+            Attendee,
+            With,
+            Related,
+            Depicts,
+        }
+        impl LinkRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Contains => "contains",
+                    Self::About => "about",
+                    Self::Links => "links",
+                    Self::Attached => "attached",
+                    Self::Attendee => "attendee",
+                    Self::With => "with",
+                    Self::Related => "related",
+                    Self::Depicts => "depicts",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum LinkState {
+            #[default]
+            NeedsAction,
+            Accepted,
+            Declined,
+            Tentative,
+        }
+        impl LinkState {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::NeedsAction => "needs-action",
+                    Self::Accepted => "accepted",
+                    Self::Declined => "declined",
+                    Self::Tentative => "tentative",
+                }
+            }
+        }
+
+        /// Link a workout to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the workout); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct Link {
+            pub from: String,
+            pub rel: LinkRel,
+            pub to: String,
+            pub anchor: Field<String>,
+            pub label: Field<String>,
+            pub position: Field<f64>,
+            pub state: Field<LinkState>,
+        }
+        impl Link {
+            pub const NAME: &str = "link";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
+                map.insert("to".to_owned(), text(self.to));
+                put_field(&mut map, "anchor", self.anchor, |it| text(it));
+                put_field(&mut map, "label", self.label, |it| text(it));
+                put_field(&mut map, "position", self.position, |it| real(it));
+                put_field(&mut map, "state", self.state, |it| text(it.wire()));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Link> for wire::ActRequest {
+            fn from(value: Link) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum UnlinkRel {
+            #[default]
+            Contains,
+            About,
+            Links,
+            Attached,
+            Attendee,
+            With,
+            Related,
+            Depicts,
+        }
+        impl UnlinkRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Contains => "contains",
+                    Self::About => "about",
+                    Self::Links => "links",
+                    Self::Attached => "attached",
+                    Self::Attendee => "attendee",
+                    Self::With => "with",
+                    Self::Related => "related",
+                    Self::Depicts => "depicts",
+                }
+            }
+        }
+
+        /// Take the link between a workout and another item off through edge.remove (rel links, from either end); both items stay.
+        #[derive(Clone, Debug, Default)]
+        pub struct Unlink {
+            pub from: String,
+            pub rel: UnlinkRel,
+            pub to: String,
+            pub label: Field<String>,
+        }
+        impl Unlink {
+            pub const NAME: &str = "unlink";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
+                map.insert("to".to_owned(), text(self.to));
+                put_field(&mut map, "label", self.label, |it| text(it));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Unlink> for wire::ActRequest {
+            fn from(value: Unlink) -> Self {
+                value.request()
+            }
+        }
 
         /// Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted. It is the follow pass writing the store's totals, never a member's own act (a figure by hand is log-figure), so its Undo is stopping the follow.
         #[derive(Clone, Debug, Default)]
@@ -2457,17 +2666,19 @@ pub mod act {
             #[default]
             About,
             With,
+            Links,
         }
         impl AddLinkRel {
             fn wire(self) -> &'static str {
                 match self {
                     Self::About => "about",
                     Self::With => "with",
+                    Self::Links => "links",
                 }
             }
         }
 
-        /// Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. A link is plain: it carries no sealed value, and it is seen only inside Locker.
+        /// Link an item to an account, a place or a person through edge.add (rel about, or with for a person it is shared with), from the item. With rel links it joins the item to any other item (a note, a task, an event, a photo, a document, a transaction, a workout), from the item only: nothing can link to a Locker item. A link is plain: it carries no sealed value, and it is seen only inside Locker.
         #[derive(Clone, Debug, Default)]
         pub struct AddLink {
             pub from: String,
@@ -2496,12 +2707,14 @@ pub mod act {
             #[default]
             About,
             With,
+            Links,
         }
         impl RemoveLinkRel {
             fn wire(self) -> &'static str {
                 match self {
                     Self::About => "about",
                     Self::With => "with",
+                    Self::Links => "links",
                 }
             }
         }
@@ -3358,7 +3571,7 @@ pub mod act {
             }
         }
 
-        /// Say who a transaction was with through edge.add (rel with, from the transaction to a person): the app proposes the person the payee names and writes the link only when the member confirms. Adding it twice changes nothing.
+        /// Say who a transaction was with through edge.add (rel with, from the transaction to a person): the app proposes the person the payee names and writes the link only when the member confirms. Adding it twice changes nothing. With rel links it joins the transaction to any other item but a Locker item instead (a link, not a person it was with).
         #[derive(Clone, Debug, Default)]
         pub struct AddWith {
             pub from: String,
@@ -3417,7 +3630,7 @@ pub mod act {
             }
         }
 
-        /// Take a person off a transaction through edge.remove (rel with). The transaction keeps its place in Activity.
+        /// Take a person off a transaction through edge.remove (rel with), or any other item it is linked to (rel links). The transaction keeps its place in Activity.
         #[derive(Clone, Debug, Default)]
         pub struct RemoveWith {
             pub from: String,
@@ -3858,7 +4071,7 @@ pub mod act {
             }
         }
 
-        /// Link a note to anything it names through edge.add (rel links), with an optional anchor naming the text range the link points at.
+        /// Link a note to any other item it names through edge.add (rel links; never a Locker item), with an optional anchor naming the text range the link points at.
         #[derive(Clone, Debug, Default)]
         pub struct Link {
             pub from: String,
@@ -3879,6 +4092,29 @@ pub mod act {
         }
         impl From<Link> for wire::ActRequest {
             fn from(value: Link) -> Self {
+                value.request()
+            }
+        }
+
+        /// Take the link between a note and another item off through edge.remove (rel links, from either end); both items stay.
+        #[derive(Clone, Debug, Default)]
+        pub struct Unlink {
+            pub from: String,
+            pub to: String,
+        }
+        impl Unlink {
+            pub const NAME: &str = "unlink";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Unlink> for wire::ActRequest {
+            fn from(value: Unlink) -> Self {
                 value.request()
             }
         }
@@ -4062,6 +4298,52 @@ pub mod act {
     pub mod people {
         use super::*;
         pub const APP: &str = "people";
+
+        /// Link a person to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the person); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct Link {
+            pub from: String,
+            pub to: String,
+        }
+        impl Link {
+            pub const NAME: &str = "link";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Link> for wire::ActRequest {
+            fn from(value: Link) -> Self {
+                value.request()
+            }
+        }
+
+        /// Take the link between a person and another item off through edge.remove (rel links, from either end); both items stay.
+        #[derive(Clone, Debug, Default)]
+        pub struct Unlink {
+            pub from: String,
+            pub to: String,
+        }
+        impl Unlink {
+            pub const NAME: &str = "unlink";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Unlink> for wire::ActRequest {
+            fn from(value: Unlink) -> Self {
+                value.request()
+            }
+        }
 
         /// Add a person to your circle through person.add, optionally filed into a list. A cadence of 0 is no cadence.
         #[derive(Clone, Debug, Default)]
@@ -5472,10 +5754,26 @@ pub mod act {
             }
         }
 
-        /// Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum AddPersonRel {
+            #[default]
+            Depicts,
+            Links,
+        }
+        impl AddPersonRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Depicts => "depicts",
+                    Self::Links => "links",
+                }
+            }
+        }
+
+        /// Say who is in a photograph through edge.add (rel depicts, from the photograph to a person), by hand: nothing recognises a face. Adding it twice changes nothing. With rel links it joins the photograph to any other item but a Locker item instead (a link, not a face).
         #[derive(Clone, Debug, Default)]
         pub struct AddPerson {
             pub from: String,
+            pub rel: AddPersonRel,
             pub to: String,
         }
         impl AddPerson {
@@ -5484,7 +5782,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("from".to_owned(), text(self.from));
-                map.insert("rel".to_owned(), text("depicts"));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
                 map.insert("to".to_owned(), text(self.to));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -5495,10 +5793,26 @@ pub mod act {
             }
         }
 
-        /// Take a person off a photograph through edge.remove (rel depicts).
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum RemovePersonRel {
+            #[default]
+            Depicts,
+            Links,
+        }
+        impl RemovePersonRel {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Depicts => "depicts",
+                    Self::Links => "links",
+                }
+            }
+        }
+
+        /// Take a person off a photograph through edge.remove (rel depicts), or any other item it is linked to (rel links).
         #[derive(Clone, Debug, Default)]
         pub struct RemovePerson {
             pub from: String,
+            pub rel: RemovePersonRel,
             pub to: String,
         }
         impl RemovePerson {
@@ -5507,7 +5821,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("from".to_owned(), text(self.from));
-                map.insert("rel".to_owned(), text("depicts"));
+                map.insert("rel".to_owned(), text(self.rel.wire()));
                 map.insert("to".to_owned(), text(self.to));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -5568,6 +5882,52 @@ pub mod act {
     pub mod reminders {
         use super::*;
         pub const APP: &str = "reminders";
+
+        /// Link a task to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the task); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.
+        #[derive(Clone, Debug, Default)]
+        pub struct Link {
+            pub from: String,
+            pub to: String,
+        }
+        impl Link {
+            pub const NAME: &str = "link";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Link> for wire::ActRequest {
+            fn from(value: Link) -> Self {
+                value.request()
+            }
+        }
+
+        /// Take the link between a task and another item off through edge.remove (rel links, from either end); both items stay.
+        #[derive(Clone, Debug, Default)]
+        pub struct Unlink {
+            pub from: String,
+            pub to: String,
+        }
+        impl Unlink {
+            pub const NAME: &str = "unlink";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("from".to_owned(), text(self.from));
+                map.insert("rel".to_owned(), text("links"));
+                map.insert("to".to_owned(), text(self.to));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Unlink> for wire::ActRequest {
+            fn from(value: Unlink) -> Self {
+                value.request()
+            }
+        }
 
         #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         pub enum AddTaskAnchor {
@@ -8295,6 +8655,80 @@ pub mod load {
         }
         impl From<EarlierCount> for wire::LoadRequest {
             fn from(value: EarlierCount) -> Self {
+                value.request()
+            }
+        }
+
+        /// (links, #1185) What one item is linked to by hand, in either direction (a link made on a note shows on the event it points at), in name order, each thing once. A trashed item is left out; a Locker item is listed only on its own page. Any app's detail screen reads it for its page's links.
+        #[derive(Clone, Debug, Default)]
+        pub struct Links {
+            pub entity_id: String,
+        }
+        impl Links {
+            pub const NAME: &str = "links";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("entity_id".to_owned(), text(self.entity_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Links> for wire::LoadRequest {
+            fn from(value: Links) -> Self {
+                value.request()
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum LinkCandidatesKind {
+            #[default]
+            Person,
+            Place,
+            Event,
+            Task,
+            Note,
+            Document,
+            Photo,
+            Account,
+            Transaction,
+            Workout,
+        }
+        impl LinkCandidatesKind {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Person => "person",
+                    Self::Place => "place",
+                    Self::Event => "event",
+                    Self::Task => "task",
+                    Self::Note => "note",
+                    Self::Document => "document",
+                    Self::Photo => "photo",
+                    Self::Account => "account",
+                    Self::Transaction => "transaction",
+                    Self::Workout => "workout",
+                }
+            }
+        }
+
+        /// (links, #1185) The picker's rows: the items of one kind a link may end at, whose title holds the typed term (any case; an empty term lists the first by name), at most 50, in name order, the member's own person first. Never a Locker item and never a trashed one.
+        #[derive(Clone, Debug, Default)]
+        pub struct LinkCandidates {
+            pub kind: LinkCandidatesKind,
+            pub limit: u32,
+            pub term: Option<String>,
+        }
+        impl LinkCandidates {
+            pub const NAME: &str = "link-candidates";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("kind".to_owned(), text(self.kind.wire()));
+                if let Some(it) = self.term { map.insert("term".to_owned(), text(it)); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<LinkCandidates> for wire::LoadRequest {
+            fn from(value: LinkCandidates) -> Self {
                 value.request()
             }
         }

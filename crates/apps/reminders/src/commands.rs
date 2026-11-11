@@ -100,6 +100,9 @@ use centraid_apps_kit::actions::{act, confirmed};
 
 /// The twenty-three, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("add-task", "task.add"),
     act("edit-task", "task.edit"),
     // AN ACTION SAYS THE STATE IT WANTS (R-1135-3-10): the v0 `set-status` took a
@@ -169,7 +172,7 @@ mod tests {
 
     #[test]
     fn the_tasks_own_are_the_verbs_the_rest_are_shared_and_no_event_is_touched() {
-        assert_eq!(ACTIONS.len(), 23);
+        assert_eq!(ACTIONS.len(), 25);
         assert!(
             ACTIONS.iter().all(|row| !row.command.starts_with("event.")),
             "Reminders never writes an event"

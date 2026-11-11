@@ -112,7 +112,10 @@ pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Thirty-two actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 34] = [
+pub const ACTIONS: [ActionRow; 36] = [
+    // THE GENERAL LINK (#1185): any item to any other, and the link taken off.
+    act("link", "edge.add"),
+    act("unlink", "edge.remove"),
     act("add-person", "person.add"),
     act("edit-person", "person.edit"),
     act("set-cadence", "person.edit"),
@@ -214,7 +217,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_one_command_and_the_person_verbs_are_the_persons_own() {
-        assert_eq!(ACTIONS.len(), 34);
+        assert_eq!(ACTIONS.len(), 36);
         assert_eq!(
             commands("person."),
             [

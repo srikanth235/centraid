@@ -707,3 +707,37 @@ message PhoneSaysTake {
 message PhoneSaysTaken {
   PhoneSaysTake take = 1;
 }
+
+// ---------------------------------------------------------------------------
+// The general link (#1185): any item linked to any other, one read each way
+// ---------------------------------------------------------------------------
+
+// `shell.links`: what one item is linked to, both ways, in name order. A Locker item is listed only
+// on its own page.
+message LinkedItems {
+  repeated LinkedItem items = 1;
+}
+
+message LinkedItem {
+  // The linked item's entity id.
+  string id = 1;
+  // `person`, `place`, `event`, `task`, `note`, `document`, `photo`, `account`, `transaction`,
+  // `workout`, or `locker_item` on a Locker item's own page. A screen routes by it.
+  string kind = 2;
+  string title = 3;
+  // The member's own person: "You".
+  bool is_owner = 4;
+}
+
+// `shell.link-candidates`: the items of one kind the picker offers for a typed term, at most 50,
+// in name order. Never a Locker item.
+message LinkCandidates {
+  repeated LinkCandidate candidates = 1;
+}
+
+message LinkCandidate {
+  string id = 1;
+  string title = 2;
+  // The member's own person: listed first, said as "You".
+  bool is_owner = 3;
+}

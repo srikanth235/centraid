@@ -772,7 +772,7 @@
       "name": "link",
       "verb": "link",
       "kind": "note",
-      "inverse": "detach",
+      "inverse": "unlink",
       "sealed": [],
       "command": "edge.add",
       "phrasings": [
@@ -780,7 +780,7 @@
         "connect the book ideas note to the reading list task",
         "link the plumber note to Friday's event"
       ],
-      "description": "Link a note to anything it names through edge.add (rel links), with an optional anchor naming the text range the link points at.",
+      "description": "Link a note to any other item it names through edge.add (rel links; never a Locker item), with an optional anchor naming the text range the link points at.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -799,6 +799,54 @@
           },
           "anchor": {
             "type": "object"
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "note",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink my trip note from Sam",
+        "disconnect the book ideas note from the reading list task",
+        "take the link off the plumber note"
+      ],
+      "description": "Take the link between a note and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": ["from", "rel", "to"],

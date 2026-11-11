@@ -164,6 +164,102 @@
   "actionSideEffect": "vault-write",
   "actions": [
     {
+      "name": "link",
+      "verb": "link",
+      "kind": "event",
+      "inverse": "unlink",
+      "sealed": [],
+      "command": "edge.add",
+      "phrasings": [
+        "link the dentist event to Sam",
+        "connect the trip event to my packing note",
+        "link Friday's event to the plumber task"
+      ],
+      "description": "Link a event to any other item (a person, place, event, task, note, document, photo, account, transaction or workout) through edge.add (rel links, from the event); never to a Locker item. A link has no direction: it shows on both pages, and linking twice changes nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "verb": "unlink",
+      "kind": "event",
+      "inverse": "link",
+      "sealed": [],
+      "command": "edge.remove",
+      "phrasings": [
+        "unlink the dentist event from Sam",
+        "disconnect the trip event from my packing note",
+        "take the link off Friday's event"
+      ],
+      "description": "Take the link between a event and another item off through edge.remove (rel links, from either end); both items stay.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["links"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["from", "rel", "to"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "propose",
       "verb": "create",
       "kind": "event",
