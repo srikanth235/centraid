@@ -72,6 +72,19 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                     confirm_label: words::trash_confirm(locale),
                     destructive: true,
                 }),
+                // THE STOP CONFIRM (#1185): the kit's sheet, named for the folder.
+                stop: drive
+                    .asking_stop
+                    .as_ref()
+                    .and_then(|origin| drive.followed.iter().find(|f| &f.origin_id == origin))
+                    .map(|folder| {
+                        crate::kit::follow::stop_confirm(
+                            locale,
+                            &words::app_title(locale),
+                            &folder.name,
+                            &words::followed_kept(locale),
+                        )
+                    }),
                 rename: drive.rename.as_ref().map(|rename| rename.view(locale)),
                 band: if is_denied {
                     Vec::new()

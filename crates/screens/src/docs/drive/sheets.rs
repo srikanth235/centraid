@@ -11,7 +11,7 @@ use super::{
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
 use crate::kit::export;
-use crate::strings::{Locale, docs as words, fill, shared};
+use crate::strings::{Locale, docs as words, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Sheet {
@@ -114,7 +114,7 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                     ),
                     ..fold::action(
                         &format!("{KEY_STOP_PREFIX}{}", folder.origin_id),
-                        fill(&words::followed_stop(locale), &[("name", &folder.name)]),
+                        crate::kit::follow::stop_row(locale, &folder.name),
                         "Folder",
                     )
                 })

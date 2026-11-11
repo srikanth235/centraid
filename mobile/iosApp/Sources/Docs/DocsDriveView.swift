@@ -245,6 +245,17 @@ struct DocsDriveView: View {
                 onDismiss: { send(Self.event { $0.dismissed = .init() }) }
             )
         }
+        // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, named for the folder.
+        .sheet(isPresented: Binding(
+            get: { state.hasStop },
+            set: { open in if !open, state.hasStop { send(Self.event { $0.stopDismissed = .init() }) } }
+        )) {
+            ConfirmSheet(
+                state.stop,
+                onConfirm: { send(Self.event { $0.stopConfirmed = .init() }) },
+                onDismiss: { send(Self.event { $0.stopDismissed = .init() }) }
+            )
+        }
     }
 
     /// The head's subtitle — one line over the list. Search and the filter menu are the

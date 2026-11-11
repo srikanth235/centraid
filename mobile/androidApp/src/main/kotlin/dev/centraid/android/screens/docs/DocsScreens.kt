@@ -385,6 +385,16 @@ internal fun DocsDriveScreen(
             onDismiss = { onEvent(DocsDriveEvent(dismissed = DocsDriveEvent.Dismissed())) },
         )
     }
+    // THE STOP CONFIRM (#1185): the kit's sheet in Rust's own sentences, named for the folder.
+    val stop = state.stop
+    if (stop != null) {
+        ConfirmSheet(
+            confirm = stop,
+            onConfirm = { onEvent(DocsDriveEvent(stop_confirmed = DocsDriveEvent.StopConfirmed())) },
+            onDismiss = { onEvent(DocsDriveEvent(stop_dismissed = DocsDriveEvent.StopDismissed())) },
+            confirmTag = "docs-stop-confirm",
+        )
+    }
 }
 
 @Composable

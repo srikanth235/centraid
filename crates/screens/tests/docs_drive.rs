@@ -757,13 +757,16 @@ fn the_add_sheet_rows_follow_the_os_grants_as_state() {
     assert_eq!(upload.detail, "File access is blocked on this phone.");
 }
 
-#[test]
-fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
+/// The drive with two folders the vault follows (as `imports.files` records them), open on the
+/// Followed folders sheet.
+fn following_two() -> (Driver, u64) {
     let mut d = driver();
     let i = root(&d);
     band(&mut d, i, "more");
-    assert!(!sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
-    // THE VAULT FOLLOWS TWO FOLDERS (as `imports.files` records them); the drive reads them.
+    assert!(
+        !sheet_keys(state(&d, i)).contains(&"followed".to_owned()),
+        "nothing followed: no Followed folders row, so no stop row"
+    );
     for (origin, label) in [("folder:abc", "Scans"), ("folder:def", "Receipts")] {
         arrange(
             &d,
@@ -778,20 +781,76 @@ fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forge
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     assert!(sheet_keys(state(&d, i)).contains(&"followed".to_owned()));
     pick(&mut d, i, "followed");
+    (d, i)
+}
+
+fn followed_labels(d: &Driver, i: u64) -> Vec<String> {
+    let sheet = state(d, i).sheet.as_ref().unwrap();
+    let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
+        panic!();
+    };
+    list.actions
+        .iter()
+        .map(|action| action.label.clone())
+        .collect()
+}
+
+#[test]
+fn a_followed_folder_is_a_stop_row_in_the_shared_words_and_tapping_it_asks_first() {
+    let (mut d, i) = following_two();
     let sheet = state(&d, i).sheet.as_ref().unwrap();
     assert_eq!(sheet.title, "Followed folders");
     let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
         panic!();
     };
-    // In the name's order, as the vault lists them.
-    assert_eq!(list.actions[0].label, "Stop following Receipts");
-    assert_eq!(list.actions[1].label, "Stop following Scans");
+    // In the name's order, as the vault lists them, in the words every followed store shares.
+    assert_eq!(list.actions[0].label, "Stop reading Receipts");
+    assert_eq!(list.actions[1].label, "Stop reading Scans");
     assert_eq!(
         list.footer,
         "Files added, changed or removed in these folders reach Docs. Stopping keeps every document."
     );
+    assert!(state(&d, i).stop.is_none());
+
+    // Tapping a row stops nothing yet: the sheet goes and the kit's confirm asks, naming the folder.
     d.effects.clear();
     pick(&mut d, i, "stop:folder:abc");
+    assert!(waiting(&d).is_empty(), "asked first: {:?}", waiting(&d));
+    assert!(matches!(
+        state(&d, i).sheet.as_ref().unwrap().kind(),
+        Sheet::None
+    ));
+    let confirm = state(&d, i).stop.clone().expect("asked first");
+    assert_eq!(confirm.title, "Stop reading Scans?");
+    assert_eq!(
+        confirm.body,
+        "Docs stops reading Scans on this phone. The documents already here stay."
+    );
+    assert_eq!(confirm.confirm_label, "Stop reading");
+    assert!(confirm.destructive);
+    // The trash confirm is its own and is not up.
+    assert!(state(&d, i).confirm.is_none());
+}
+
+#[test]
+fn dismissing_the_stop_confirm_keeps_following_and_confirming_stops_the_folder() {
+    let (mut d, i) = following_two();
+    d.effects.clear();
+    pick(&mut d, i, "stop:folder:abc");
+    drive_send(&mut d, i, D::StopDismissed(de::StopDismissed {}));
+    assert!(state(&d, i).stop.is_none());
+    assert!(waiting(&d).is_empty(), "dismissing stops nothing");
+    // Both folders are still followed.
+    band(&mut d, i, "more");
+    pick(&mut d, i, "followed");
+    assert_eq!(
+        followed_labels(&d, i),
+        ["Stop reading Receipts", "Stop reading Scans"]
+    );
+
+    // Confirming runs the existing stop: the shell forgets its access, the vault the folder's links.
+    pick(&mut d, i, "stop:folder:abc");
+    drive_send(&mut d, i, D::StopConfirmed(de::StopConfirmed {}));
     let asked = waiting(&d);
     assert!(
         matches!(
@@ -800,10 +859,16 @@ fn a_folder_the_vault_follows_is_a_stop_row_and_stopping_asks_the_shell_to_forge
         ),
         "{asked:?}"
     );
-    assert!(matches!(
-        state(&d, i).sheet.as_ref().unwrap().kind(),
-        Sheet::None
-    ));
+    assert_eq!(asked.len(), 1);
+    assert!(state(&d, i).stop.is_none());
+    band(&mut d, i, "more");
+    pick(&mut d, i, "followed");
+    assert_eq!(followed_labels(&d, i), ["Stop reading Receipts"]);
+
+    // A confirm that was never asked stops nothing.
+    d.effects.clear();
+    drive_send(&mut d, i, D::StopConfirmed(de::StopConfirmed {}));
+    assert!(waiting(&d).is_empty());
 }
 
 #[test]

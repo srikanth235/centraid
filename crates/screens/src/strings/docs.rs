@@ -94,7 +94,7 @@ catalog! {
     plain folder_empty_count = ("Empty", "Empty");
     plain folder_placeholder = ("Folder name", "Folder name");
     plain followed_footer = ("Files added, changed or removed in these folders reach Docs. Stopping keeps every document.", "Files added, changed or removed in these folders reach Docs. Stopping keeps every document.");
-    plain followed_stop = ("Stop following {name}", "Stop following {name}");
+    plain followed_kept = ("documents", "documents");
     plain followed_title = ("Followed folders", "Followed folders");
     plain follow_failed = ("That folder couldn't be followed. Try again.", "That folder couldn't be followed. Try again.");
     plain follow_no_vault = ("Make a vault first, then follow a folder.", "Make a vault first, then follow a folder.");

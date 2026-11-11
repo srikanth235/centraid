@@ -152,6 +152,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         sheet: Sheet::None,
         undo: Undo::default(),
         asking: None,
+        asking_stop: None,
         rename: None,
         camera: wire::DocsPermission::NotAsked,
         files: wire::DocsPermission::NotAsked,
@@ -179,6 +180,8 @@ struct Drive {
     undo: Undo,
     /// The document a trash confirm asks about.
     asking: Option<String>,
+    /// The followed folder's origin a stop-reading confirm asks about (#1185).
+    asking_stop: Option<String>,
     rename: Option<Rename>,
     camera: wire::DocsPermission,
     files: wire::DocsPermission,
@@ -399,6 +402,8 @@ impl Drive {
                 }
             }
             Some(D::Dismissed(_)) => self.asking = None,
+            Some(D::StopConfirmed(_)) => return self.stop(ctx),
+            Some(D::StopDismissed(_)) => self.asking_stop = None,
             Some(D::Permission(changed)) => self.permission(&changed),
             Some(D::IngestRetried(_)) => {
                 let effects = self.ingest.retry(ctx);
@@ -525,31 +530,45 @@ impl Drive {
             },
             Sheet::Add => return self.add(ctx, key),
             Sheet::RowMenu(document_id) => self.row_action(ctx, &document_id, key),
+            // A FOLLOWED FOLDER'S ROW ASKS FIRST (#1185): the kit's stop confirm, in the shared
+            // words, then `stop` runs. A row for a folder the list no longer holds asks nothing.
             Sheet::Followed => {
                 self.sheet = Sheet::None;
-                if let Some(origin) = key.strip_prefix(KEY_STOP_PREFIX).filter(|o| !o.is_empty()) {
-                    // The shell forgets its access and tells the core to forget
-                    // the folder's links; every document stays.
-                    self.followed.retain(|folder| folder.origin_id != origin);
-                    // THE VAULT FORGETS THE FOLDER'S LINKS (`imports.files`); the shell, its access.
-                    tell_files(
-                        ctx,
-                        wire::imports_files_event::Kind::FolderStopped(
-                            wire::imports_files_event::FolderStopped {
-                                origin: origin.to_owned(),
-                            },
-                        ),
-                    );
-                    return vec![wire::Effect {
-                        kind: Some(wire::effect::Kind::StopFollowing(wire::StopFollowing {
-                            origin: origin.to_owned(),
-                        })),
-                    }];
+                if let Some(origin) = key.strip_prefix(KEY_STOP_PREFIX).filter(|o| !o.is_empty())
+                    && self
+                        .followed
+                        .iter()
+                        .any(|folder| folder.origin_id == origin)
+                {
+                    self.asking_stop = Some(origin.to_owned());
                 }
             }
             _ => {}
         }
         Vec::new()
+    }
+
+    /// STOP READING a followed folder, once the member said so: the shell forgets its access and
+    /// the vault forgets the folder's links; every document stays.
+    fn stop(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
+        let Some(origin) = self.asking_stop.take() else {
+            return Vec::new();
+        };
+        self.followed.retain(|folder| folder.origin_id != origin);
+        // THE VAULT FORGETS THE FOLDER'S LINKS (`imports.files`); the shell, its access.
+        tell_files(
+            ctx,
+            wire::imports_files_event::Kind::FolderStopped(
+                wire::imports_files_event::FolderStopped {
+                    origin: origin.clone(),
+                },
+            ),
+        );
+        vec![wire::Effect {
+            kind: Some(wire::effect::Kind::StopFollowing(wire::StopFollowing {
+                origin,
+            })),
+        }]
     }
 
     /// The Add sheet's row: a capture is the ingest's, a folder is a sheet.
