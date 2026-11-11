@@ -227,6 +227,10 @@ struct AgendaEditorView: View {
                         ) {
                             send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
                         }
+                        // AN ALERT NEEDS A TIME: Rust says when the event has none.
+                        if !editor.reminderNote.isEmpty {
+                            note(editor.reminderNote)
+                        }
                         // THE SECOND ALERT waits for the first: Rust says when it is drawn.
                         if editor.showSecondReminder {
                             AgendaTileChoiceRow(

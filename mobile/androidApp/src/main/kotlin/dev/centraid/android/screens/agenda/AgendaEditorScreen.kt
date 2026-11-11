@@ -277,6 +277,8 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
                     tiles.tileOf("reminder"),
                     "agenda-editor-reminder",
                 ) { openSheet(AgendaEditorState.Sheet.SHEET_REMINDER) }
+                // AN ALERT NEEDS A TIME: Rust says when the event has none.
+                if (data.reminder_note.isNotEmpty()) Note(data.reminder_note)
                 // THE SECOND ALERT is drawn only once the first is set.
                 if (data.show_second_reminder) {
                     AgendaTileChoiceRow(chrome.field_second_alert, data.second_reminder_label, tiles.tileOf("second_reminder"), "agenda-editor-second-reminder") {

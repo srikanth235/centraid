@@ -178,6 +178,39 @@ fn a_one_off_repeats_never_and_a_date_only_reminder_is_on_the_day() {
 }
 
 #[test]
+fn the_reminder_row_says_no_alert_will_sound_for_a_date_with_no_time() {
+    let mut d = driver();
+    let silent = "No alert will sound because no time is set";
+    let dated = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Bins".into(),
+            due: due(&day(&d, 2)),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &dated);
+    let reminder = field(d.view(i), "reminder");
+    assert_eq!(reminder.note, silent);
+    assert!(reminder.enabled, "the choice is told, not hidden");
+
+    // A DUE WITH A TIME is a moment: the row is the normal one.
+    let timed = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Call".into(),
+            due: Field::Is(format!("{}T09:00", day(&d, 2))),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &timed);
+    let reminder = field(d.view(i), "reminder");
+    assert_eq!(reminder.note, "Delivered on your phone.");
+}
+
+#[test]
 fn an_undated_task_opens_pickers_on_today_and_a_reminder_needs_a_due() {
     let mut d = driver();
     let id = task(&d, "Someday");

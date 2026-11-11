@@ -37,7 +37,8 @@ use crate::reminders::routes;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
     Locale, agenda_editor as editor_words, agenda_event as link_words,
-    agenda_repeat as repeat_words, agenda_tasks as card_words, task as words,
+    agenda_notify as notify_words, agenda_repeat as repeat_words, agenda_tasks as card_words,
+    task as words,
 };
 
 /// `TodoField.key`s.
@@ -1166,10 +1167,13 @@ fn fields(
         key: REMINDER.to_owned(),
         label: words::field_reminder(locale),
         value: reminder_value(locale, cycle, task, today),
-        note: if dated {
-            words::reminder_note_a(locale)
-        } else {
+        // A DATE IS NOT A MOMENT: a date-only reminder never sounds, and the row says so.
+        note: if !dated {
             words::reminder_needs_due(locale)
+        } else if task.due_time.is_empty() {
+            notify_words::no_alert_without_time(locale)
+        } else {
+            words::reminder_note_a(locale)
         },
         choices: reminder_choices,
         enabled: dated,

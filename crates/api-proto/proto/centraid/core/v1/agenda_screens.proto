@@ -1647,6 +1647,9 @@ message AgendaEditorData {
   // What Save will write for the address ("https://example.com"), empty when
   // none or when it is refused.
   string url_saved_as = 56;
+  // Under the first alert: says no alert will sound when the event is all-day (an alert needs a
+  // time). Empty when the event is timed.
+  string reminder_note = 57;
 }
 
 // THE CUSTOM REPEAT SHEET. Every choice list marks what is picked; the shell

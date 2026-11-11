@@ -1190,6 +1190,24 @@ fn a_timed_event_has_a_zone_the_phones_by_default_and_all_day_has_none() {
 }
 
 #[test]
+fn the_alert_row_says_so_when_the_event_is_all_day_and_a_timed_one_has_no_such_sentence() {
+    let mut world = World::new();
+    let page = world.open_new("2099-06-18", Kind::Event);
+    // A TIMED EVENT: the alert control is as it always was.
+    assert_eq!(world.editor_data(page).reminder_note, "");
+    // ALL DAY HAS NO MOMENT: the row says no alert will sound, and keeps the choice it was given.
+    world.send_editor(page, all_day(true));
+    let data = world.editor_data(page);
+    assert_eq!(
+        data.reminder_note,
+        "No alert will sound because no time is set"
+    );
+    assert!(!data.reminders.is_empty(), "the choice is told, not hidden");
+    world.send_editor(page, all_day(false));
+    assert_eq!(world.editor_data(page).reminder_note, "");
+}
+
+#[test]
 fn an_event_in_another_zone_opens_in_its_own_wall_clock_and_a_zone_change_edits_it() {
     let mut world = World::new();
     let id = world.propose(

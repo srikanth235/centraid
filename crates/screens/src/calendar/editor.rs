@@ -68,7 +68,8 @@ use crate::kit::schedule::draft::{
 use crate::kit::schedule::rule_words::{self, long_day};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{
-    Locale, agenda as words, agenda_editor as editor_words, agenda_repeat as repeat_words, fill,
+    Locale, agenda as words, agenda_editor as editor_words, agenda_notify as notify_words,
+    agenda_repeat as repeat_words, fill,
 };
 
 /// The editor reads calendars and the clock, never events: a window the vault
@@ -983,6 +984,12 @@ impl Editor {
                 |choice| choice.label.clone(),
             ),
             reminders,
+            // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
+            reminder_note: if draft.all_day {
+                notify_words::no_alert_without_time(locale)
+            } else {
+                String::new()
+            },
             scope_armed: saved_scopes.iter().any(|c| c.selected && c.enabled),
             scopes: saved_scopes,
             dirty: self.dirty(),
